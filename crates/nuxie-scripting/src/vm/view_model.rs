@@ -4,8 +4,9 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use luaur_rt::{
-    Function, Lua, MultiValue, Table, UserData, UserDataFields, UserDataMethods, Value,
+    AnyUserData, Function, Lua, MultiValue, Table, UserData, UserDataFields, UserDataMethods, Value,
 };
+use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
 use nuxie_runtime::{
     RuntimeOwnedViewModelInstance, ScriptImage, ScriptViewModel, ScriptViewModelProperty,
 };
@@ -369,9 +370,10 @@ fn create_scripted_view_model_with_parent(
         "getList",
         lua.create_function(move |lua, (_self, name): (Table, String)| {
             match get_list_model.property(&name) {
-                Some(ScriptViewModelProperty::List) => lua
-                    .create_userdata(ScriptedPropertyList::new(get_list_model.clone(), name))
-                    .map(Value::UserData),
+                Some(ScriptViewModelProperty::List) => {
+                    create_scripted_property_list(lua, get_list_model.clone(), name)
+                        .map(Value::UserData)
+                }
                 _ => Ok(Value::Nil),
             }
         })?,
@@ -452,7 +454,24 @@ fn create_scripted_view_model_with_parent(
         })?,
     )?;
 
+    let symbol_list_index_names = model
+        .properties()
+        .iter()
+        .filter_map(|(name, kind)| {
+            (*kind == ScriptViewModelProperty::SymbolListIndex).then(|| name.clone())
+        })
+        .collect::<BTreeSet<_>>();
     for (name, kind) in model.properties() {
+        if *kind == ScriptViewModelProperty::SymbolListIndex {
+            continue;
+        }
+        if *kind == ScriptViewModelProperty::List {
+            table.set(
+                name.as_str(),
+                create_scripted_property_list(lua, model.clone(), name.clone())?,
+            )?;
+            continue;
+        }
         let property = match kind {
             ScriptViewModelProperty::Number => {
                 lua.create_userdata(ScriptedPropertyNumber::new(model.clone(), name.clone()))?
@@ -472,9 +491,7 @@ fn create_scripted_view_model_with_parent(
             ScriptViewModelProperty::Image => {
                 lua.create_userdata(ScriptedPropertyImage::new(model.clone(), name.clone()))?
             }
-            ScriptViewModelProperty::List => {
-                lua.create_userdata(ScriptedPropertyList::new(model.clone(), name.clone()))?
-            }
+            ScriptViewModelProperty::List => unreachable!("lists are installed before wrapping"),
             ScriptViewModelProperty::ViewModel => {
                 let nested = model.view_model(name).ok_or_else(|| {
                     luaur_rt::Error::runtime(format!(
@@ -483,8 +500,33 @@ fn create_scripted_view_model_with_parent(
                 })?;
                 lua.create_userdata(ScriptedPropertyViewModel::new(nested, model.clone()))?
             }
+            ScriptViewModelProperty::SymbolListIndex => unreachable!(
+                "symbol-list indices are exposed as scalar values before property wrapping"
+            ),
         };
         table.set(name.as_str(), property)?;
+    }
+    if !symbol_list_index_names.is_empty() {
+        let index_model = model.clone();
+        let metatable = lua.create_table();
+        metatable.set(
+            "__index",
+            lua.create_function(move |_, (_table, key): (Table, Value)| {
+                let Value::String(key) = key else {
+                    return Ok(Value::Nil);
+                };
+                if !symbol_list_index_names.contains(key.to_str()?.as_str()) {
+                    return Ok(Value::Nil);
+                }
+                Ok(Value::Integer(
+                    index_model
+                        .component_list_item_index()
+                        .and_then(|index| i64::try_from(index).ok())
+                        .unwrap_or(-1),
+                ))
+            })?,
+        )?;
+        table.set_metatable(Some(metatable))?;
     }
     Ok(table)
 }
@@ -662,22 +704,89 @@ impl UserData for ScriptedPropertyImage {
 struct ScriptedPropertyList {
     model: ScriptViewModel,
     name: String,
+    item_refs: BTreeMap<ViewModelInstanceKey, Table>,
 }
 
 impl ScriptedPropertyList {
     fn new(model: ScriptViewModel, name: String) -> Self {
-        Self { model, name }
+        Self {
+            model,
+            name,
+            item_refs: BTreeMap::new(),
+        }
     }
 
-    fn item_value(&self, lua: &Lua, index: usize) -> luaur_rt::Result<Value> {
-        match self.model.list_item(&self.name, index) {
+    fn retain_current_item_refs(&mut self) {
+        let current = (0..self.model.list_len(&self.name).unwrap_or_default())
+            .filter_map(|index| self.model.list_item(&self.name, index))
+            .map(|item| instance_key(&item.owned_instance()))
+            .collect::<BTreeSet<_>>();
+        self.item_refs.retain(|key, _| current.contains(key));
+    }
+
+    fn item_value(&mut self, lua: &Lua, index: usize) -> luaur_rt::Result<Value> {
+        self.retain_current_item_refs();
+        let item = self.model.list_item(&self.name, index);
+        match item {
             // Registration of the parent table synchronizes all current list
             // edges. Do not add an explicit edge here: removing the item must
             // make a retained wrapper detached immediately.
-            Some(item) => create_scripted_view_model(lua, item).map(Value::Table),
+            Some(item) => {
+                let key = instance_key(&item.owned_instance());
+                if let Some(table) = self.item_refs.get(&key) {
+                    return Ok(Value::Table(table.clone()));
+                }
+                let table = create_scripted_view_model(lua, item)?;
+                self.item_refs.insert(key, table.clone());
+                Ok(Value::Table(table))
+            }
             None => Ok(Value::Nil),
         }
     }
+}
+
+fn create_scripted_property_list(
+    lua: &Lua,
+    model: ScriptViewModel,
+    name: String,
+) -> luaur_rt::Result<AnyUserData> {
+    let property = lua.create_userdata(ScriptedPropertyList::new(model, name))?;
+
+    // luaur-rt synthesizes an `__index` dispatcher for registered fields and
+    // methods, overwriting a UserData-provided `__index` metamethod. Preserve
+    // that dispatcher for `length` and method lookup, then layer C++'s numeric
+    // list indexing in front of it on this userdata instance.
+    let metatable: Table = unsafe {
+        lua.exec_raw(Value::UserData(property.clone()), |state| {
+            let has_metatable = lua_getmetatable(state, 1);
+            debug_assert_ne!(has_metatable, 0);
+        })?
+    };
+    let fallback: Function = metatable.get("__index")?;
+    let index = lua.create_function(
+        move |lua, (property, key): (AnyUserData, Value)| match key {
+            Value::Integer(index) => usize::try_from(index)
+                .ok()
+                .and_then(|index| index.checked_sub(1))
+                .map_or(Ok(Value::Nil), |index| {
+                    property
+                        .borrow_mut::<ScriptedPropertyList>()?
+                        .item_value(lua, index)
+                }),
+            Value::Number(index) if index.fract() == 0.0 => {
+                if index < 1.0 || index > usize::MAX as f64 {
+                    return Ok(Value::Nil);
+                }
+                property
+                    .borrow_mut::<ScriptedPropertyList>()?
+                    .item_value(lua, index as usize - 1)
+            }
+            Value::Number(_) => Err(luaur_rt::Error::runtime("integer expected")),
+            key => fallback.call((Value::UserData(property), key)),
+        },
+    )?;
+    metatable.set("__index", index)?;
+    Ok(property)
 }
 
 impl UserData for ScriptedPropertyList {
@@ -761,16 +870,6 @@ impl UserData for ScriptedPropertyList {
             this.model.remove_list_item(&this.name, &item, true);
             ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             Ok(())
-        });
-        methods.add_meta_method("__index", |lua, this, key: Value| match key {
-            Value::Integer(index) => usize::try_from(index)
-                .ok()
-                .and_then(|index| index.checked_sub(1))
-                .map_or(Ok(Value::Nil), |index| this.item_value(lua, index)),
-            Value::Number(index) if index >= 1.0 && index.fract() == 0.0 => {
-                this.item_value(lua, index as usize - 1)
-            }
-            _ => Ok(Value::Nil),
         });
     }
 }
@@ -1132,7 +1231,9 @@ mod tests {
         let lua = Lua::new();
         let table = create_scripted_view_model(&lua, model).expect("scripted model");
         lua.globals().set("model", table).expect("model global");
-        lua.globals().set("listName", list).expect("list name global");
+        lua.globals()
+            .set("listName", list)
+            .expect("list name global");
 
         lua.load(
             "local list = model:getList(listName)\n\
@@ -1141,6 +1242,34 @@ mod tests {
         )
         .exec()
         .expect("nil removals are no-ops");
+    }
+
+    #[test]
+    fn list_numeric_index_returns_a_stable_removable_view_model() {
+        let (model, list) = model_with_property(ScriptViewModelProperty::List);
+        let (child, _) = model_with_property(ScriptViewModelProperty::String);
+        assert!(model.push_list_item(&list, &child));
+
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        lua.globals().set("model", table).expect("model global");
+        lua.globals()
+            .set("listName", list.clone())
+            .expect("list name global");
+
+        let stable: bool = lua
+            .load(
+                "local list = model:getList(listName)\n\
+                 local first = list[1]\n\
+                 local same = first ~= nil and first == list[1] and model[listName][1] ~= nil\n\
+                 list:remove(first)\n\
+                 return same",
+            )
+            .eval()
+            .expect("numeric list access");
+
+        assert!(stable);
+        assert_eq!(model.list_len(&list), Some(0));
     }
 
     #[test]
@@ -1196,16 +1325,44 @@ mod tests {
             .find(|model| model.component_list_item_index().is_some())
             .expect("fixture has an item-index model");
         let expected = model.component_list_item_index().unwrap() as i64;
+        let index_name = model
+            .properties()
+            .iter()
+            .find_map(|(name, kind)| {
+                (*kind == ScriptViewModelProperty::SymbolListIndex).then(|| name.clone())
+            })
+            .expect("fixture has a named item-index property");
         let lua = Lua::new();
-        let table = create_scripted_view_model(&lua, model).expect("scripted model");
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
         lua.globals().set("model", table).expect("model global");
+        lua.globals()
+            .set("indexName", index_name)
+            .expect("index name global");
 
-        let actual: i64 = lua
-            .load("return model:getIndex()")
+        let actual: Table = lua
+            .load("return { model:getIndex(), model[indexName] }")
             .eval()
-            .expect("getIndex runs");
+            .expect("index reads run");
 
-        assert_eq!(actual, expected);
+        assert_eq!(actual.get::<i64>(1).unwrap(), expected);
+        assert_eq!(actual.get::<i64>(2).unwrap(), expected);
+
+        let next = expected + 1;
+        assert!(
+            model
+                .owned_instance()
+                .borrow_mut()
+                .set_symbol_list_index_by_property_name(
+                    lua.globals().get::<String>("indexName").unwrap().as_str(),
+                    next as u64,
+                )
+        );
+        let updated: Table = lua
+            .load("return { model:getIndex(), model[indexName] }")
+            .eval()
+            .expect("updated index reads run");
+        assert_eq!(updated.get::<i64>(1).unwrap(), next);
+        assert_eq!(updated.get::<i64>(2).unwrap(), next);
     }
 
     #[test]
@@ -1260,12 +1417,8 @@ mod tests {
             .enumerate()
             .find_map(|(index, asset)| {
                 let index = u64::try_from(index).ok()?;
-                (asset.type_name == "ImageAsset" && index != current.file_asset_index()).then(|| {
-                    (
-                        asset.string_property("name").unwrap().to_owned(),
-                        index,
-                    )
-                })
+                (asset.type_name == "ImageAsset" && index != current.file_asset_index())
+                    .then(|| (asset.string_property("name").unwrap().to_owned(), index))
             })
             .expect("fixture has a replacement image");
 
@@ -1281,7 +1434,9 @@ mod tests {
             .expect("scripted context");
         lua.globals().set("model", table).unwrap();
         lua.globals().set("context", context).unwrap();
-        lua.globals().set("propertyName", property_name.clone()).unwrap();
+        lua.globals()
+            .set("propertyName", property_name.clone())
+            .unwrap();
         lua.globals().set("assetName", asset_name).unwrap();
 
         lua.load(

@@ -610,6 +610,7 @@ pub enum ScriptViewModelProperty {
     Image,
     List,
     ViewModel,
+    SymbolListIndex,
 }
 
 pub fn script_view_models(file: &RuntimeFile) -> BTreeMap<String, ScriptViewModel> {
@@ -675,6 +676,7 @@ fn build_script_view_model_shared(
                 "ViewModelPropertyAssetImage" => ScriptViewModelProperty::Image,
                 "ViewModelPropertyList" => ScriptViewModelProperty::List,
                 "ViewModelPropertyViewModel" => ScriptViewModelProperty::ViewModel,
+                "ViewModelPropertySymbolListIndex" => ScriptViewModelProperty::SymbolListIndex,
                 _ => return None,
             };
             Some((property.string_property("name")?.to_owned(), kind))

@@ -10171,7 +10171,7 @@ fn component_list_render_cache_key(
     global_id: Option<u32>,
     local_id: Option<usize>,
     referenced_artboard_global: u32,
-    item_index: usize,
+    _item_index: usize,
     instance_revision: u64,
 ) -> RuntimeNestedRenderCacheKey {
     let mut key = nested_render_cache_key(
@@ -10180,7 +10180,13 @@ fn component_list_render_cache_key(
         referenced_artboard_global,
         instance_revision,
     );
-    key.instance_revision = (1_u64 << 63) | ((item_index as u64) << 32) | instance_revision;
+    // C++ retains an artboard (and therefore its render resources) by the
+    // ViewModelInstanceListItem wrapper identity. A logical index is mutable:
+    // removing or reordering a preceding row must not make every surviving
+    // occurrence look like a fresh artboard. `instance_revision` is the
+    // wrapper occurrence identity and is already unique for duplicate VMI
+    // entries, so keep the component-list namespace bit but not the index.
+    key.instance_revision = (1_u64 << 63) | instance_revision;
     key
 }
 
@@ -22528,6 +22534,20 @@ mod tests {
         assert_eq!(
             authored,
             nested_render_cache_key(Some(33), Some(14), 105, 0)
+        );
+    }
+
+    #[test]
+    fn component_list_render_cache_follows_occurrence_identity_not_logical_index() {
+        let original = component_list_render_cache_key(Some(33), Some(14), 105, 0, 7);
+        let shifted = component_list_render_cache_key(Some(33), Some(14), 105, 4, 7);
+        let replacement = component_list_render_cache_key(Some(33), Some(14), 105, 0, 8);
+
+        assert_eq!(original, shifted);
+        assert_ne!(original, replacement);
+        assert_ne!(
+            original,
+            nested_render_cache_key(Some(33), Some(14), 105, 7)
         );
     }
 

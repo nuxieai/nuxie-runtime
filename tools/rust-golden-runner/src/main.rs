@@ -454,6 +454,18 @@ fn run() -> Result<String> {
                         &mut current_seconds,
                     )
                 })?;
+                #[cfg(feature = "scripting")]
+                if let Some(state) = script_artboard_render_state.as_ref() {
+                    initialize_nested_scripted_drawables(
+                        &runtime,
+                        artboard_index,
+                        &graph.artboards,
+                        &mut instance,
+                        factory.as_factory(),
+                        state,
+                        registered_script_file.as_mut(),
+                    )?;
+                }
                 timed(options.benchmark, &mut input_elapsed, || {
                     apply_input_event(
                         event,
@@ -487,6 +499,19 @@ fn run() -> Result<String> {
             })?;
             #[cfg(feature = "scripting")]
             if let Some(state) = script_artboard_render_state.as_ref() {
+                // Component-list rows are live artboard occurrences. A script
+                // can mutate their backing list during `advance`, so mirror
+                // C++ Artboard::initialize by attaching scripts to any newly
+                // mounted rows before their first update/draw.
+                initialize_nested_scripted_drawables(
+                    &runtime,
+                    artboard_index,
+                    &graph.artboards,
+                    &mut instance,
+                    factory.as_factory(),
+                    state,
+                    registered_script_file.as_mut(),
+                )?;
                 refresh_bound_script_artboard_inputs(
                     &runtime,
                     artboard,
@@ -2075,6 +2100,7 @@ fn initialize_scripted_drawables(
         root_context_model,
         Vec::new(),
         false,
+        false,
         registered_file,
     )?;
     Ok(Some(render_state))
@@ -2094,14 +2120,19 @@ fn initialize_nested_scripted_drawables(
     let root_context_model = selected_script_view_model(runtime, root_artboard_index);
     let mut context_models_by_depth = vec![root_context_model];
     let mut bound_nested_contexts = Vec::new();
-    instance.try_visit_nested_artboard_instances_mut(
+    let mut initialized_any = false;
+    instance.try_visit_artboard_tree_instances_mut(
         &mut |depth, graph_global_id, child_instance| {
             let child_index = artboards
                 .iter()
                 .position(|candidate| candidate.global_id == graph_global_id)
                 .with_context(|| format!("missing nested artboard graph {graph_global_id}"))?;
             context_models_by_depth.truncate(depth);
-            let child_context_model = selected_script_view_model(runtime, child_index);
+            let child_context_model = child_instance
+                .owned_view_model_context()
+                .and_then(RuntimeOwnedViewModelContext::main_handle)
+                .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context))
+                .or_else(|| selected_script_view_model(runtime, child_index));
             let parent_context_models = context_models_by_depth
                 .iter()
                 .rev()
@@ -2111,7 +2142,7 @@ fn initialize_nested_scripted_drawables(
                 context_models_by_depth.push(child_context_model);
                 return Ok::<(), anyhow::Error>(());
             }
-            initialize_scripted_drawables_for_artboard(
+            let initialized = initialize_scripted_drawables_for_artboard(
                 runtime,
                 child_index,
                 &artboards[child_index],
@@ -2123,8 +2154,14 @@ fn initialize_nested_scripted_drawables(
                 child_context_model.clone(),
                 parent_context_models,
                 true,
+                true,
                 registered_file.as_deref_mut(),
             )?;
+            if !initialized {
+                context_models_by_depth.push(child_context_model);
+                return Ok::<(), anyhow::Error>(());
+            }
+            initialized_any = true;
             if let Some(model) = child_context_model.as_ref() {
                 bound_nested_contexts.push((graph_global_id, model.clone()));
             }
@@ -2132,6 +2169,9 @@ fn initialize_nested_scripted_drawables(
             Ok::<(), anyhow::Error>(())
         },
     )?;
+    if !initialized_any {
+        return Ok(());
+    }
     for (graph_global_id, model) in bound_nested_contexts {
         let owned = model.owned_instance();
         instance.set_nested_script_owned_context_for_graph(graph_global_id, owned.borrow().clone());
@@ -2195,8 +2235,20 @@ fn initialize_scripted_drawables_for_artboard(
     context_model: Option<ScriptViewModel>,
     parent_context_models: Vec<ScriptViewModel>,
     script_context_is_bound: bool,
+    initialize_only_missing: bool,
     registered_file: Option<&mut RegisteredScriptFile>,
-) -> Result<()> {
+) -> Result<bool> {
+    if initialize_only_missing
+        && !artboard.local_objects.iter().any(|local_object| {
+            local_object
+                .type_name
+                .is_some_and(is_scripted_drawable_type)
+                && !instance.has_script_instance_for_global(local_object.global_id)
+        })
+    {
+        return Ok(false);
+    }
+
     let mut local_registered_file;
     let registered_file = match registered_file {
         Some(registered_file) => registered_file,
@@ -2226,6 +2278,11 @@ fn initialize_scripted_drawables_for_artboard(
         if !local_object
             .type_name
             .is_some_and(is_scripted_drawable_type)
+        {
+            continue;
+        }
+        if initialize_only_missing
+            && instance.has_script_instance_for_global(local_object.global_id)
         {
             continue;
         }
@@ -2337,8 +2394,7 @@ fn initialize_scripted_drawables_for_artboard(
     }
 
     if let Some(model) = bound_context_model {
-        let owned = model.owned_instance();
-        let mut contexts = RuntimeOwnedViewModelContext::from_main(owned.borrow().clone());
+        let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(model.owned_handle());
         contexts.complete_for_artboard(runtime, artboard_index);
         bind_selected_artboard_view_model_context(instance, runtime, &contexts);
         instance.advance_artboard_data_binds();
@@ -2349,7 +2405,7 @@ fn initialize_scripted_drawables_for_artboard(
         .borrow_mut()
         .retain_detached_view_model_frame(vm.detached_view_model_frame());
 
-    Ok(())
+    Ok(true)
 }
 
 #[cfg(feature = "scripting")]

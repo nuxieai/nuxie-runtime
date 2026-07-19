@@ -463,18 +463,15 @@ The C++ Lua binding (`src/lua/math/lua_vec2d.cpp`) evaluates through the
 interpreter with no geometry-path contraction, so the Rust Luau binding must use
 plain `+`/`*`.
 
-The `Mat2D` multiply family encodes the same lore, **selected by transform shape**
-at `draw.rs:3505`:
-
-- `multiply` (`components.rs:279`) — fused rotation columns, unfused translation.
-- `multiply_path_local_fused` (`components.rs:292`) — translation *also* fused.
-- `multiply_path_local_contracted` (`components.rs:305`) — translation unfused.
-
-These three exist because `juice.riv` (axis-aligned) and `rocket.riv`
-(rotated/skewed) needed different contraction to match C++. The
-`mat2d_has_visible_skew_or_rotation` epsilon gate (`draw.rs:10090`) picks the
-variant. `transform_point` (`components.rs:383`) uses plain `*`/`+` while
-`map_point` fuses — intentional and shape-driven.
+`Mat2D::invert` and `Mat2D::multiply` have an important contraction asymmetry.
+Clang contracts the determinant and inverse translation cross-product
+subtractions. Matrix multiplication contracts each two-term dot product, but
+adds the left-hand translation separately. Rust therefore uses `mul_add` for
+the inverse cross products and the first two terms of each multiply column,
+then a separate `+ a[4]`/`+ a[5]` for translation. Local path composition uses
+that same `multiply`; transform-shape heuristics can mask a missing contraction
+in `invert`, but do not reflect any C++ branch. `transform_point` uses plain
+`*`/`+` while `map_point` fuses, matching their distinct C++ call sites.
 
 **Perf caveat (`docs/v2-log-archive.md` item 18):** closing the FMA gap globally
 (bulk `mul_add`) changes float results and can flip exact files. Treat any new

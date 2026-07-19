@@ -303,32 +303,6 @@ impl Mat2D {
         ])
     }
 
-    pub(crate) fn multiply_path_local_fused(self, rhs: Self) -> Self {
-        let a = self.0;
-        let b = rhs.0;
-        Self([
-            a[0].mul_add(b[0], a[2] * b[1]),
-            a[1].mul_add(b[0], a[3] * b[1]),
-            a[0].mul_add(b[2], a[2] * b[3]),
-            a[1].mul_add(b[2], a[3] * b[3]),
-            a[0].mul_add(b[4], a[2].mul_add(b[5], a[4])),
-            a[1].mul_add(b[4], a[3].mul_add(b[5], a[5])),
-        ])
-    }
-
-    pub(crate) fn multiply_path_local_contracted(self, rhs: Self) -> Self {
-        let a = self.0;
-        let b = rhs.0;
-        Self([
-            a[0].mul_add(b[0], a[2] * b[1]),
-            a[1].mul_add(b[0], a[3] * b[1]),
-            a[0].mul_add(b[2], a[2] * b[3]),
-            a[1].mul_add(b[2], a[3] * b[3]),
-            a[0].mul_add(b[4], a[2] * b[5]) + a[4],
-            a[1].mul_add(b[4], a[3] * b[5]) + a[5],
-        ])
-    }
-
     pub fn scale_by_values(&mut self, scale_x: f32, scale_y: f32) {
         self.0[0] *= scale_x;
         self.0[1] *= scale_x;
@@ -373,7 +347,7 @@ impl Mat2D {
     }
 
     pub fn determinant(self) -> f32 {
-        self.0[0] * self.0[3] - self.0[1] * self.0[2]
+        self.0[0].mul_add(self.0[3], -(self.0[1] * self.0[2]))
     }
 
     pub fn invert_or_identity(self) -> Self {
@@ -389,8 +363,8 @@ impl Mat2D {
             -b * determinant,
             -c * determinant,
             a * determinant,
-            (c * f - d * e) * determinant,
-            (b * e - a * f) * determinant,
+            c.mul_add(f, -(d * e)) * determinant,
+            b.mul_add(e, -(a * f)) * determinant,
         ])
     }
 
@@ -420,6 +394,60 @@ impl Mat2D {
 impl Default for Mat2D {
     fn default() -> Self {
         Self::IDENTITY
+    }
+}
+
+#[cfg(test)]
+mod mat2d_tests {
+    use super::Mat2D;
+
+    #[test]
+    fn inverse_and_multiply_match_cpp_contraction_order() {
+        // Values from the first local path in joel_signed.riv. These expected
+        // bits come from C++ Mat2D::invert and Mat2D::multiply compiled with
+        // the release runner's default `-ffp-contract=on` on arm64.
+        let shape_world = Mat2D([
+            0.6845234,
+            0.35772082,
+            -0.35772082,
+            0.6845234,
+            -130.04749,
+            -135.59448,
+        ]);
+        let path_world = Mat2D([
+            0.6845234,
+            0.35772082,
+            -0.35772082,
+            0.6845234,
+            6.7375793,
+            -313.59125,
+        ]);
+
+        let inverse = shape_world.invert_or_identity();
+        assert_eq!(
+            inverse.0.map(f32::to_bits),
+            [
+                0x3f92_e129,
+                0xbf19_8383,
+                0x3f19_8383,
+                0x3f92_e129,
+                0x4366_8a3d,
+                0x429b_3811,
+            ]
+        );
+
+        let local = inverse.multiply(path_world);
+        assert_eq!(
+            local.0.map(f32::to_bits),
+            [
+                0x3f80_0000,
+                0x2fc5_dc80,
+                0xb19c_ac38,
+                0x3f80_0000,
+                0x4248_e3a0,
+                0xc38f_2347,
+            ]
+        );
     }
 }
 

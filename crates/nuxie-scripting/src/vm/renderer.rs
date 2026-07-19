@@ -12,9 +12,11 @@ use luaur_rt::{
     AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
     Value, Vector as LuaVector,
 };
+use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory as RenderFactory, FillRule, Mat2D, RawPath,
+    BlendMode, ColorInt, Factory as RenderFactory, FillRule, Mat2D, PathVerb, RawPath,
     RenderPaint as RenderPaintTrait, RenderPaintStyle, RenderPath, Renderer, StrokeCap, StrokeJoin,
+    Vec2D,
 };
 use nuxie_runtime::{
     RuntimeContourMeasure, RuntimePathMeasure, ScriptAnimation, ScriptAnimationTime,
@@ -451,6 +453,149 @@ impl ScriptedPath {
     fn commands(&self) -> Vec<nuxie_runtime::RuntimePathCommand> {
         runtime_path_commands_from_raw_path(&self.raw_path)
     }
+
+    fn command(&self, lua_index: i64) -> ScriptedPathCommand {
+        let Some(verb_index) = lua_index
+            .checked_sub(1)
+            .and_then(|index| usize::try_from(index).ok())
+        else {
+            return ScriptedPathCommand::none();
+        };
+        let Some(verb) = self.raw_path.verbs().get(verb_index).copied() else {
+            return ScriptedPathCommand::none();
+        };
+
+        let point_index = self.raw_path.verbs()[..verb_index]
+            .iter()
+            .map(|verb| path_verb_point_count(*verb))
+            .sum::<usize>();
+        let point_count = path_verb_point_count(verb);
+        let points = self
+            .raw_path
+            .points()
+            .get(point_index..point_index + point_count)
+            .map_or_else(Vec::new, <[Vec2D]>::to_vec);
+
+        ScriptedPathCommand {
+            command_type: match verb {
+                PathVerb::Move => "moveTo",
+                PathVerb::Line => "lineTo",
+                PathVerb::Quad => "quadTo",
+                PathVerb::Cubic => "cubicTo",
+                PathVerb::Close => "close",
+            },
+            points,
+        }
+    }
+}
+
+fn path_verb_point_count(verb: PathVerb) -> usize {
+    match verb {
+        PathVerb::Move | PathVerb::Line => 1,
+        PathVerb::Quad => 2,
+        PathVerb::Cubic => 3,
+        PathVerb::Close => 0,
+    }
+}
+
+struct ScriptedPathCommand {
+    command_type: &'static str,
+    points: Vec<Vec2D>,
+}
+
+impl ScriptedPathCommand {
+    fn none() -> Self {
+        Self {
+            command_type: "none",
+            points: Vec::new(),
+        }
+    }
+}
+
+impl UserData for ScriptedPathCommand {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method("__len", |_, this, ()| Ok(this.points.len()));
+    }
+}
+
+fn userdata_metatable(lua: &Lua, userdata: AnyUserData) -> Result<Table> {
+    // luaur-rt intentionally keeps userdata metatables private. We only need
+    // the table it just created so Path can layer C++'s numeric indexing over
+    // luaur's ordinary method table without replacing its typed userdata cell.
+    unsafe {
+        lua.exec_raw(userdata, |state| {
+            lua_getmetatable(state, 1);
+        })
+    }
+}
+
+fn lua_path_index(key: &Value) -> Result<Option<i64>> {
+    match key {
+        Value::Integer(index) => Ok(Some(*index)),
+        // C++ uses luaL_checkinteger, whose Luau implementation converts the
+        // number to an integer rather than requiring a mathematically integral
+        // value.
+        Value::Number(index) => Ok(Some(*index as i64)),
+        Value::String(_) => Ok(None),
+        _ => Err(Error::runtime("Path index must be a string or number")),
+    }
+}
+
+fn create_scripted_path(lua: &Lua, path: ScriptedPath) -> Result<AnyUserData> {
+    let userdata = lua.create_userdata(path)?;
+    let metatable = userdata_metatable(lua, userdata.clone())?;
+    let methods: Table = metatable.get("__index")?;
+    let index =
+        lua.create_function(
+            move |lua, (userdata, key): (AnyUserData, Value)| match lua_path_index(&key)? {
+                Some(index) => {
+                    let command = {
+                        let path = userdata.borrow::<ScriptedPath>()?;
+                        path.command(index)
+                    };
+                    create_scripted_path_command(lua, command).map(Value::UserData)
+                }
+                None => methods.get(key),
+            },
+        )?;
+    metatable.set("__index", index)?;
+    metatable.set_readonly(true);
+    Ok(userdata)
+}
+
+fn create_scripted_path_command(lua: &Lua, command: ScriptedPathCommand) -> Result<AnyUserData> {
+    let userdata = lua.create_userdata(command)?;
+    let metatable = userdata_metatable(lua, userdata.clone())?;
+    let index = lua.create_function(|_, (userdata, key): (AnyUserData, Value)| {
+        let command = userdata.borrow::<ScriptedPathCommand>()?;
+        match key {
+            Value::Integer(index) => command
+                .points
+                .get(index.saturating_sub(1) as usize)
+                .map_or(Ok(Value::Nil), |point| {
+                    Ok(Value::Vector(LuaVector::new(point.x, point.y, 0.0)))
+                }),
+            Value::Number(index) => command
+                .points
+                .get((index as i64).saturating_sub(1) as usize)
+                .map_or(Ok(Value::Nil), |point| {
+                    Ok(Value::Vector(LuaVector::new(point.x, point.y, 0.0)))
+                }),
+            Value::String(name) if name.as_bytes() == b"type" => Ok(Value::String(
+                userdata.lua().create_string(command.command_type),
+            )),
+            Value::String(name) => Err(Error::runtime(format!(
+                "'{}' is not a valid index of PathCommand",
+                name.to_string_lossy()
+            ))),
+            _ => Err(Error::runtime(
+                "PathCommand index must be a string or number",
+            )),
+        }
+    })?;
+    metatable.set("__index", index)?;
+    metatable.set_readonly(true);
+    Ok(userdata)
 }
 
 struct ScriptedNode {
@@ -471,9 +616,10 @@ impl UserData for ScriptedNode {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("asPath", |lua, this, ()| {
             Ok(match this.path.clone() {
-                Some(path) => {
-                    Value::UserData(lua.create_userdata(ScriptedPath::from_raw_path(path))?)
-                }
+                Some(path) => Value::UserData(create_scripted_path(
+                    lua,
+                    ScriptedPath::from_raw_path(path),
+                )?),
                 None => Value::Nil,
             })
         });
@@ -504,6 +650,7 @@ impl UserData for ScriptedPaintData {
 
 impl UserData for ScriptedPath {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method("__len", |_, this, ()| Ok(this.raw_path.verbs().len()));
         methods.add_method_mut("moveTo", |_, this, point: LuaVector| {
             this.raw_path.move_to(point.x(), point.y());
             this.mark_dirty();
@@ -695,7 +842,7 @@ pub(super) fn call_path_effect_update(
 ) -> Result<RawPath> {
     let lua = table.lua();
     let function: luaur_rt::Function = table.get("update")?;
-    let source = lua.create_userdata(ScriptedPath::from_raw_path(source))?;
+    let source = create_scripted_path(&lua, ScriptedPath::from_raw_path(source))?;
     let node = lua.create_userdata(ScriptedNode::new(node))?;
     let output: AnyUserData = function.call((table.clone(), source, node))?;
     let output = output.borrow::<ScriptedPath>()?;
@@ -706,7 +853,7 @@ fn install_path_global(lua: &Lua) -> Result<()> {
     let table = lua.create_table();
     table.set(
         "new",
-        lua.create_function(|lua, ()| lua.create_userdata(ScriptedPath::new()))?,
+        lua.create_function(|lua, ()| create_scripted_path(lua, ScriptedPath::new()))?,
     )?;
     table.set_readonly(true);
     lua.globals().set("Path", table)?;

@@ -2624,18 +2624,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if artboard
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("ScriptedPathEffect"))
-        && runtime.file_assets().iter().any(|asset| {
-            asset.type_name == "ScriptAsset"
-                && asset.string_property("name") == Some("FlipPathEffect")
-        })
-    {
-        bail!("unsupported: script-path-commands in Rust golden runner");
-    }
-
     if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {
         let type_name = object.type_name?;
         (type_name.ends_with("Constraint")

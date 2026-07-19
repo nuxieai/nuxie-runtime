@@ -134,8 +134,6 @@ pub const NUX_FLOW_OUTPUT_KIND_STATE_CHANGE: NuxFlowOutputKind = 3;
 pub const NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE: NuxFlowOutputKind = 4;
 pub const NUX_FLOW_OUTPUT_KIND_HOST_COMMAND: NuxFlowOutputKind = 5;
 pub const NUX_FLOW_OUTPUT_KIND_RENDER_REQUEST: NuxFlowOutputKind = 6;
-pub const NUX_FLOW_OUTPUT_KIND_QUERY_RESULT: NuxFlowOutputKind = 7;
-pub const NUX_FLOW_OUTPUT_KIND_METADATA: NuxFlowOutputKind = 8;
 pub const NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED: NuxFlowOutputKind = 9;
 
 /// Stable-width schema property kind. Values intentionally share the recursive
@@ -1524,11 +1522,14 @@ struct FlowSessionResultHandle {
     is_settled: bool,
     wake_after: Option<f64>,
     player_metadata: Option<OwnedPlayerMetadata>,
+    has_player_inputs: bool,
     player_inputs: Vec<OwnedPlayerInput>,
+    has_catalog: bool,
     schemas: Vec<OwnedSchema>,
     schema_properties: Vec<OwnedSchemaProperty>,
     instance_templates: Vec<OwnedInstanceTemplate>,
     instances: Vec<OwnedInstance>,
+    has_values: bool,
     value_arena: OwnedValueArena,
     value_roots: Vec<OwnedValueRoot>,
     created_instances: Vec<OwnedCreatedInstance>,
@@ -1546,11 +1547,14 @@ impl FlowSessionResultHandle {
             is_settled: false,
             wake_after: None,
             player_metadata: None,
+            has_player_inputs: false,
             player_inputs: Vec::new(),
+            has_catalog: false,
             schemas: Vec::new(),
             schema_properties: Vec::new(),
             instance_templates: Vec::new(),
             instances: Vec::new(),
+            has_values: false,
             value_arena: OwnedValueArena::default(),
             value_roots: Vec::new(),
             created_instances: Vec::new(),
@@ -1569,11 +1573,14 @@ impl FlowSessionResultHandle {
             is_settled: false,
             wake_after: None,
             player_metadata: None,
+            has_player_inputs: false,
             player_inputs: Vec::new(),
+            has_catalog: false,
             schemas: Vec::new(),
             schema_properties: Vec::new(),
             instance_templates: Vec::new(),
             instances: Vec::new(),
+            has_values: false,
             value_arena: OwnedValueArena::default(),
             value_roots: Vec::new(),
             created_instances: Vec::new(),
@@ -1817,8 +1824,6 @@ impl FlowSessionResultHandle {
                     | NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE
                     | NUX_FLOW_OUTPUT_KIND_HOST_COMMAND
                     | NUX_FLOW_OUTPUT_KIND_RENDER_REQUEST
-                    | NUX_FLOW_OUTPUT_KIND_QUERY_RESULT
-                    | NUX_FLOW_OUTPUT_KIND_METADATA
                     | NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED
             ) {
                 return Err(NuxStatus::RuntimeError);
@@ -2200,6 +2205,7 @@ mod configured_session_seam {
                 }
                 if let Some(inputs) = deferred_player_inputs {
                     replace_player_inputs(&mut combined, inputs)?;
+                    combined.has_player_inputs = true;
                     combined.validate().map_err(|_| {
                         RuntimeFailure::runtime("query result exceeds ABI 1.2 bounds")
                     })?;
@@ -2583,7 +2589,9 @@ mod configured_session_seam {
             max_y,
         });
         append_value_arena(&mut result, &bootstrap.values)?;
+        result.has_values = true;
         replace_catalog(&mut result, &bootstrap.catalog)?;
+        result.has_catalog = true;
         synchronize_instance_roots(&mut result);
         Ok(result)
     }
@@ -2859,10 +2867,12 @@ mod configured_session_seam {
         if let Some(snapshot) = result.snapshot.as_ref() {
             let bootstrap = result_from_bootstrap(snapshot)?;
             translated.player_metadata = bootstrap.player_metadata;
+            translated.has_catalog = bootstrap.has_catalog;
             translated.schemas = bootstrap.schemas;
             translated.schema_properties = bootstrap.schema_properties;
             translated.instance_templates = bootstrap.instance_templates;
             translated.instances = bootstrap.instances;
+            translated.has_values = bootstrap.has_values;
             translated.value_arena = bootstrap.value_arena;
             translated.value_roots = bootstrap.value_roots;
         }
@@ -2870,12 +2880,15 @@ mod configured_session_seam {
             translated.value_arena = OwnedValueArena::default();
             translated.value_roots.clear();
             append_value_arena(translated, values)?;
+            translated.has_values = true;
         }
         if let Some(catalog) = result.catalog.as_ref() {
             replace_catalog(translated, catalog)?;
+            translated.has_catalog = true;
         }
         if let Some(inputs) = result.player_inputs {
             replace_player_inputs(translated, inputs)?;
+            translated.has_player_inputs = true;
         }
         synchronize_instance_roots(translated);
         translated
@@ -2934,7 +2947,8 @@ mod configured_session_seam {
             };
             let mut translated = OwnedOutput {
                 phase,
-                kind: NUX_FLOW_OUTPUT_KIND_QUERY_RESULT,
+                // Every payload branch below overwrites this placeholder.
+                kind: NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT,
                 payload_root_index: None,
                 sequence: output.sequence,
                 cycle: output.cycle,
@@ -2990,11 +3004,6 @@ mod configured_session_seam {
                 }
                 core::FlowOutputPayload::RenderRequested { .. } => {
                     translated.kind = NUX_FLOW_OUTPUT_KIND_RENDER_REQUEST;
-                }
-                core::FlowOutputPayload::Metadata(metadata) => {
-                    translated.kind = NUX_FLOW_OUTPUT_KIND_METADATA;
-                    translated.event_type = player_kind_from_core(metadata.kind);
-                    translated.name = metadata.name.unwrap_or_default().into_bytes();
                 }
                 core::FlowOutputPayload::RuntimeAdvanced { delta_seconds } => {
                     translated.kind = NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED;
@@ -3284,6 +3293,52 @@ pub unsafe extern "C" fn nux_flow_session_result_is_settled(
 ) -> bool {
     ffi_guard(false, || {
         !result.is_null() && unsafe { (*result.cast::<FlowSessionResultHandle>()).is_settled }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Whether this result carries a canonical catalog snapshot, including a
+/// valid present-but-empty snapshot.
+///
+/// # Safety
+///
+/// A non-null pointer must identify a live result owned by this library.
+pub unsafe extern "C" fn nux_flow_session_result_has_catalog(
+    result: *const NuxFlowSessionResult,
+) -> bool {
+    ffi_guard(false, || {
+        !result.is_null() && unsafe { (*result.cast::<FlowSessionResultHandle>()).has_catalog }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Whether this result carries a player-input snapshot, including a valid
+/// present-but-empty snapshot for a static or animation player.
+///
+/// # Safety
+///
+/// A non-null pointer must identify a live result owned by this library.
+pub unsafe extern "C" fn nux_flow_session_result_has_player_inputs(
+    result: *const NuxFlowSessionResult,
+) -> bool {
+    ffi_guard(false, || {
+        !result.is_null()
+            && unsafe { (*result.cast::<FlowSessionResultHandle>()).has_player_inputs }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Whether this result carries a canonical value snapshot, including a valid
+/// present-but-empty snapshot. Output payload nodes alone do not set this.
+///
+/// # Safety
+///
+/// A non-null pointer must identify a live result owned by this library.
+pub unsafe extern "C" fn nux_flow_session_result_has_values(
+    result: *const NuxFlowSessionResult,
+) -> bool {
+    ffi_guard(false, || {
+        !result.is_null() && unsafe { (*result.cast::<FlowSessionResultHandle>()).has_values }
     })
 }
 
@@ -4719,6 +4774,7 @@ mod tests {
     #[test]
     fn result_views_borrow_owned_storage_until_explicit_free() {
         let mut result = FlowSessionResultHandle::empty_success();
+        result.has_player_inputs = true;
         result.player_metadata = Some(OwnedPlayerMetadata {
             kind: NUX_FLOW_PLAYER_KIND_STATIC,
             selection: NUX_FLOW_PLAYER_SELECTION_STATIC,
@@ -4783,6 +4839,39 @@ mod tests {
         let input_name = unsafe { slice::from_raw_parts(input.name.data, input.name.len as usize) };
         assert_eq!(input_name, b"enabled");
         unsafe { nux_flow_session_result_free(result) };
+    }
+
+    #[test]
+    fn result_presence_accessors_distinguish_absent_from_present_empty_snapshots() {
+        let absent = Box::into_raw(Box::new(FlowSessionResultHandle::empty_success()))
+            .cast::<NuxFlowSessionResult>();
+        assert!(!unsafe { nux_flow_session_result_has_values(absent) });
+        assert!(!unsafe { nux_flow_session_result_has_catalog(absent) });
+        assert!(!unsafe { nux_flow_session_result_has_player_inputs(absent) });
+        unsafe { nux_flow_session_result_free(absent) };
+
+        let mut present = FlowSessionResultHandle::empty_success();
+        present.has_values = true;
+        present.has_catalog = true;
+        present.has_player_inputs = true;
+        let present = Box::into_raw(Box::new(present)).cast::<NuxFlowSessionResult>();
+        assert!(unsafe { nux_flow_session_result_has_values(present) });
+        assert!(unsafe { nux_flow_session_result_has_catalog(present) });
+        assert!(unsafe { nux_flow_session_result_has_player_inputs(present) });
+        assert_eq!(
+            unsafe { nux_flow_session_result_value_root_count(present) },
+            0
+        );
+        assert_eq!(unsafe { nux_flow_session_result_schema_count(present) }, 0);
+        assert_eq!(
+            unsafe { nux_flow_session_result_player_input_count(present) },
+            0
+        );
+        unsafe { nux_flow_session_result_free(present) };
+
+        assert!(!unsafe { nux_flow_session_result_has_values(ptr::null()) });
+        assert!(!unsafe { nux_flow_session_result_has_catalog(ptr::null()) });
+        assert!(!unsafe { nux_flow_session_result_has_player_inputs(ptr::null()) });
     }
 
     #[test]
@@ -4896,6 +4985,9 @@ mod tests {
             NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE
         );
         assert_ne!(metadata.player_index, u32::MAX);
+        assert!(unsafe { nux_flow_session_result_has_values(create_result) });
+        assert!(unsafe { nux_flow_session_result_has_catalog(create_result) });
+        assert!(!unsafe { nux_flow_session_result_has_player_inputs(create_result) });
         assert_eq!(
             unsafe { nux_flow_session_result_output_count(create_result) },
             0
@@ -4934,6 +5026,9 @@ mod tests {
             NuxStatus::Ok
         );
         assert_eq!(metadata.kind, NUX_FLOW_PLAYER_KIND_STATE_MACHINE);
+        assert!(unsafe { nux_flow_session_result_has_values(query_result) });
+        assert!(unsafe { nux_flow_session_result_has_catalog(query_result) });
+        assert!(unsafe { nux_flow_session_result_has_player_inputs(query_result) });
         assert!(unsafe { nux_flow_session_result_player_input_count(query_result) } >= 3);
         unsafe { nux_flow_session_result_free(query_result) };
 

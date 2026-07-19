@@ -264,7 +264,6 @@ pub enum FlowOutputPayload {
     RenderRequested {
         artboard_index: usize,
     },
-    Metadata(FlowPlayerMetadata),
     RuntimeAdvanced {
         delta_seconds: f32,
     },
@@ -2059,9 +2058,6 @@ fn validate_output_payload(payload: &FlowOutputPayload) -> Result<(), FlowSessio
                 ));
             }
         }
-        FlowOutputPayload::Metadata(metadata) => {
-            validate_optional_selector(metadata.name.as_deref(), "player name")?;
-        }
         FlowOutputPayload::RuntimeAdvanced { delta_seconds } => {
             if !delta_seconds.is_finite() || *delta_seconds < 0.0 {
                 return Err(FlowSessionError::new(
@@ -2138,9 +2134,6 @@ fn flow_output_payload_bytes(payload: &FlowOutputPayload) -> usize {
         }
         FlowOutputPayload::HostCommand { name, payload } => {
             name.len().saturating_add(payload.len())
-        }
-        FlowOutputPayload::Metadata(metadata) => {
-            metadata.name.as_deref().map(str::len).unwrap_or(0)
         }
         FlowOutputPayload::RenderRequested { .. } | FlowOutputPayload::RuntimeAdvanced { .. } => 16,
     }

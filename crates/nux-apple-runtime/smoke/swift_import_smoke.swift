@@ -139,7 +139,7 @@ func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
     var outputView = NuxFlowOutputView(
         struct_size: UInt32(MemoryLayout<NuxFlowOutputView>.size),
         phase: UInt32(NUX_FLOW_OUTPUT_PHASE_DELAYED_EVENT_CALLBACKS),
-        kind: UInt32(NUX_FLOW_OUTPUT_KIND_QUERY_RESULT),
+        kind: UInt32(NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT),
         payload_root_index: UInt32.max,
         has_origin_mutation_id: 0,
         has_instance_id: 0,

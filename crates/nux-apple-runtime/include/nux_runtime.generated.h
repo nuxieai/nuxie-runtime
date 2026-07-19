@@ -631,10 +631,6 @@ typedef uint32_t NuxScriptAuthorization;
 
 #define NUX_FLOW_OUTPUT_KIND_HOST_COMMAND 5
 
-#define NUX_FLOW_OUTPUT_KIND_METADATA 8
-
-#define NUX_FLOW_OUTPUT_KIND_QUERY_RESULT 7
-
 #define NUX_FLOW_OUTPUT_KIND_RENDER_REQUEST 6
 
 #define NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT 2
@@ -1062,6 +1058,36 @@ uint64_t nux_flow_session_result_event_property_count(const struct NuxFlowSessio
  * not have been freed before. No borrowed view may be used after this call.
  */
 void nux_flow_session_result_free(struct NuxFlowSessionResult *result);
+
+/**
+ * Whether this result carries a canonical catalog snapshot, including a
+ * valid present-but-empty snapshot.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+bool nux_flow_session_result_has_catalog(const struct NuxFlowSessionResult *result);
+
+/**
+ * Whether this result carries a player-input snapshot, including a valid
+ * present-but-empty snapshot for a static or animation player.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+bool nux_flow_session_result_has_player_inputs(const struct NuxFlowSessionResult *result);
+
+/**
+ * Whether this result carries a canonical value snapshot, including a valid
+ * present-but-empty snapshot. Output payload nodes alone do not set this.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+bool nux_flow_session_result_has_values(const struct NuxFlowSessionResult *result);
 
 /**
  * Borrows one stable external instance by result order.

@@ -2447,10 +2447,7 @@ impl ArtboardInstance {
                 }
 
                 if sorted_drawable_is_nested_artboard(drawable.type_name) {
-                    return runtime_nested_artboard_will_draw(
-                        drawable.referenced_artboard_global,
-                        self.runtime_drawable_render_opacity(drawable),
-                    );
+                    return drawable.referenced_artboard_global.is_some();
                 }
 
                 if sorted_drawable_uses_render_opacity(drawable.type_name) {
@@ -19548,13 +19545,6 @@ fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
     )
 }
 
-fn runtime_nested_artboard_will_draw(
-    referenced_artboard_global: Option<u32>,
-    render_opacity: Option<f32>,
-) -> bool {
-    referenced_artboard_global.is_some_and(|_| render_opacity.is_some_and(|opacity| opacity != 0.0))
-}
-
 fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool {
     command.object_kind.is_nested_artboard() || command.referenced_artboard_global.is_some()
 }
@@ -19562,15 +19552,6 @@ fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn nested_artboard_will_draw_requires_a_reference_and_nonzero_render_opacity() {
-        assert!(runtime_nested_artboard_will_draw(Some(41), Some(1.0)));
-        assert!(runtime_nested_artboard_will_draw(Some(41), Some(0.5)));
-        assert!(!runtime_nested_artboard_will_draw(Some(41), Some(0.0)));
-        assert!(!runtime_nested_artboard_will_draw(None, Some(1.0)));
-        assert!(!runtime_nested_artboard_will_draw(Some(41), None));
-    }
 
     #[test]
     fn format_7_2_layout_images_compose_fit_on_top_of_authored_scale() {
@@ -23110,6 +23091,137 @@ mod tests {
             push_f32(bytes, "Vertex", "y", 10.0);
         });
         bytes
+    }
+
+    // A zero-opacity parent host with a gradient-filled child artboard. C++
+    // still queues NestedArtboard::draw(), which emits the host transform; the
+    // referenced Artboard::drawInternal() then returns before drawing content.
+    fn synthetic_zero_opacity_nested_gradient_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9632);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "NestedArtboard", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "NestedArtboard", "artboardId", 1);
+            push_f32(bytes, "Node", "opacity", 0.0);
+        });
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+        });
+        push_object(&mut bytes, "LinearGradient", |bytes| {
+            push_uint(bytes, "Component", "parentId", 2);
+            push_f32(bytes, "LinearGradient", "endX", 10.0);
+        });
+        push_object(&mut bytes, "GradientStop", |bytes| {
+            push_uint(bytes, "Component", "parentId", 3);
+            push_color(bytes, "GradientStop", "colorValue", 0xffff_0000);
+            push_f32(bytes, "GradientStop", "position", 0.0);
+        });
+        push_object(&mut bytes, "GradientStop", |bytes| {
+            push_uint(bytes, "Component", "parentId", 3);
+            push_color(bytes, "GradientStop", "colorValue", 0xff00_00ff);
+            push_f32(bytes, "GradientStop", "position", 1.0);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "ParametricPath", "width", 10.0);
+            push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+        bytes
+    }
+
+    #[test]
+    fn zero_opacity_nested_host_prepares_child_paints_and_replays_only_host_envelope() {
+        let bytes = synthetic_zero_opacity_nested_gradient_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic nested riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic nested riv graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic nested riv has a parent artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("parent artboard instance builds");
+        instance.update_components();
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+
+        let prepared = path_cache.prepared_artboard_frame(&instance, graph, Some(&file));
+        assert_eq!(
+            prepared
+                .commands
+                .iter()
+                .filter(|command| runtime_draw_command_is_nested_artboard(command))
+                .count(),
+            1,
+            "NestedArtboard::willDraw() depends on visibility and reference, not opacity"
+        );
+        assert!(stats.linear_gradients.borrow().is_empty());
+
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("nested paint preparation succeeds");
+        assert!(
+            !stats.linear_gradients.borrow().is_empty(),
+            "paint-allocation lifecycle must configure the nested child gradient"
+        );
+
+        let ops = Rc::new(RefCell::new(Vec::new()));
+        let mut renderer = RecordingRenderer {
+            ops: Rc::clone(&ops),
+        };
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("zero-opacity parent draw succeeds");
+        assert!(
+            !ops.borrow().iter().any(|op| op == "draw_path"),
+            "the zero-opacity referenced artboard must not draw child content"
+        );
+        assert!(
+            ops.borrow().iter().any(|op| op.starts_with("transform:")),
+            "the nested host envelope must still replay its transform"
+        );
     }
 
     struct FillRuleRecordingRenderer {

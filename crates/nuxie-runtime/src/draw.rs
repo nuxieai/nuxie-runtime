@@ -13276,10 +13276,7 @@ fn runtime_current_solid_render_color(
         RuntimeShapePaintState::SolidColor { color, .. } => {
             let color = paint
                 .mutator_local
-                .zip(solid_color_value_property_key())
-                .and_then(|(local_id, property_key)| {
-                    instance.color_property(local_id, property_key)
-                })
+                .and_then(|local_id| instance.solid_color_value(local_id))
                 .unwrap_or(*color);
             Some(color_modulate_opacity(color, paint.render_opacity))
         }

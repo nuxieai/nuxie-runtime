@@ -108,6 +108,11 @@ impl InstanceObjectArena {
             .and_then(|object| object.color_property(property_key))
     }
 
+    pub(crate) fn solid_color_value(&self, local_id: usize) -> Option<u32> {
+        self.object(local_id)
+            .and_then(InstanceObjectStorage::solid_color_value)
+    }
+
     pub(crate) fn set_color_property(
         &mut self,
         local_id: usize,

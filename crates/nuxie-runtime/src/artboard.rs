@@ -1271,6 +1271,10 @@ impl ArtboardInstance {
         self.objects.color_property(local_id, property_key)
     }
 
+    pub(crate) fn solid_color_value(&self, local_id: usize) -> Option<u32> {
+        self.objects.solid_color_value(local_id)
+    }
+
     /// Typed property write with dirt propagation — the write path the
     /// data-bind pipeline uses. Public for authoring hosts (editors, FFI
     /// embeddings): returns whether a matching property existed and its

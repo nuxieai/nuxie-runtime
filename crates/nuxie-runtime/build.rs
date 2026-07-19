@@ -161,6 +161,28 @@ fn render_runtime_objects() -> String {
     out.push_str("        }\n");
     out.push_str("    }\n\n");
 
+    let solid_color_value_key = definitions
+        .iter()
+        .find(|definition| definition.name == "SolidColor")
+        .and_then(|definition| {
+            properties_in_resolution_order(definition)
+                .into_iter()
+                .find(|property| property.name == "colorValue")
+        })
+        .expect("SolidColor.colorValue is present in generated schema")
+        .key
+        .int;
+    out.push_str("    pub(crate) fn solid_color_value(&self) -> Option<u32> {\n");
+    out.push_str("        match self {\n");
+    out.push_str(&format!(
+        "            Self::SolidColor(object) => object.color_property({solid_color_value_key}),\n"
+    ));
+    out.push_str(&format!(
+        "            object => object.color_property({solid_color_value_key}),\n"
+    ));
+    out.push_str("        }\n");
+    out.push_str("    }\n\n");
+
     render_enum_getter(
         &mut out,
         &definitions,

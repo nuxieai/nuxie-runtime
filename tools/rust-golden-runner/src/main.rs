@@ -2169,14 +2169,19 @@ fn initialize_scripted_drawables_for_artboard(
                 Rc::clone(&render_state),
             )?;
             if has_init {
-                script_instance
-                    .call_init_with_factory(&mut host, factory)
-                    .with_context(|| {
-                        format!(
-                            "script init failed for ScriptedDrawable global {}",
-                            local_object.global_id
-                        )
-                    })?;
+                let initialized = match script_instance.call_init_with_factory(&mut host, factory) {
+                    Ok(initialized) => initialized,
+                    Err(error) => {
+                        // C++'s ScriptedObject::tryLuaUserInit contains user-code
+                        // failures to the scripted object: it reports the Lua error,
+                        // disposes that occurrence, and lets the file keep running.
+                        eprintln!(":: {error}");
+                        false
+                    }
+                };
+                if !initialized {
+                    continue;
+                }
             }
         } else if has_init {
             script_instance.invalidate_for_init_retry();

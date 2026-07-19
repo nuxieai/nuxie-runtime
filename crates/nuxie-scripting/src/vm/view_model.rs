@@ -730,8 +730,13 @@ impl UserData for ScriptedPropertyList {
             ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             Ok(())
         });
-        methods.add_method("remove", |lua, this, item: Table| {
-            let item = model_from_table(&item)?;
+        methods.add_method("remove", |lua, this, item: Value| {
+            let Value::Table(item) = item else {
+                return Ok(());
+            };
+            let Ok(item) = model_from_table(&item) else {
+                return Ok(());
+            };
             this.model.remove_list_item(&this.name, &item, false);
             ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             Ok(())
@@ -746,8 +751,13 @@ impl UserData for ScriptedPropertyList {
             ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             Ok(())
         });
-        methods.add_method("removeAllOf", |lua, this, item: Table| {
-            let item = model_from_table(&item)?;
+        methods.add_method("removeAllOf", |lua, this, item: Value| {
+            let Value::Table(item) = item else {
+                return Ok(());
+            };
+            let Ok(item) = model_from_table(&item) else {
+                return Ok(());
+            };
             this.model.remove_list_item(&this.name, &item, true);
             ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             Ok(())
@@ -1114,6 +1124,23 @@ mod tests {
         assert!(parent.remove_list_item(&list, &child, false));
         assert!(context.advance_detached());
         assert_eq!(child.trigger(&trigger), Some(0));
+    }
+
+    #[test]
+    fn list_remove_ignores_nil_like_cpp() {
+        let (model, list) = model_with_property(ScriptViewModelProperty::List);
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model).expect("scripted model");
+        lua.globals().set("model", table).expect("model global");
+        lua.globals().set("listName", list).expect("list name global");
+
+        lua.load(
+            "local list = model:getList(listName)\n\
+             list:remove(nil)\n\
+             list:removeAllOf(nil)",
+        )
+        .exec()
+        .expect("nil removals are no-ops");
     }
 
     #[test]

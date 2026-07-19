@@ -1425,14 +1425,12 @@ impl ArtboardInstance {
         // World-space gradients must reconfigure when only world transforms
         // moved (prepared_epoch); local-space-only graphs keep the pure
         // cache_epoch key so the M7 skip still holds.
-        let preparation_world_epoch = if render_cache
-            .gradient_preparation_frame(graph)
-            .has_world_space_gradient_paints
-        {
-            self.prepared_epoch()
-        } else {
-            0
-        };
+        let preparation_world_epoch =
+            if render_cache.gradient_preparation_has_world_space_paints(graph) {
+                self.prepared_epoch()
+            } else {
+                0
+            };
         if paint_preparation
             .as_ref()
             .and_then(|preparation| preparation.as_ref())
@@ -8927,6 +8925,18 @@ impl RuntimeRenderPathCache {
         &mut self,
         graph: &ArtboardGraph,
     ) -> RuntimeGradientPreparationFrame {
+        self.ensure_gradient_preparation_frame(graph).clone()
+    }
+
+    fn gradient_preparation_has_world_space_paints(&mut self, graph: &ArtboardGraph) -> bool {
+        self.ensure_gradient_preparation_frame(graph)
+            .has_world_space_gradient_paints
+    }
+
+    fn ensure_gradient_preparation_frame(
+        &mut self,
+        graph: &ArtboardGraph,
+    ) -> &RuntimeGradientPreparationFrame {
         let key = RuntimeGradientPreparationCacheKey {
             graph_global_id: graph.global_id,
             graph_identity: graph as *const ArtboardGraph as usize,
@@ -8961,7 +8971,6 @@ impl RuntimeRenderPathCache {
         self.gradient_preparation
             .as_ref()
             .expect("gradient preparation frame was just populated")
-            .clone()
     }
 
     fn retained_render_path_key(

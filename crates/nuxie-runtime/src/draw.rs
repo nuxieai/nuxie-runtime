@@ -1364,6 +1364,21 @@ impl ArtboardInstance {
             );
         }
 
+        let nested_structure_epoch = self.nested_structure_epoch();
+        if paint_cache.paint_preparation_is_solid_only_tree
+            && nested_structure_epoch.is_some()
+            && paint_cache.solid_only_tree_structure_epoch == nested_structure_epoch
+        {
+            return self.prepare_static_artboard_slice_meshes(
+                runtime,
+                graph,
+                factory,
+                &paint_cache.images,
+                &mut paint_cache.meshes,
+                render_cache,
+            );
+        }
+
         // Seed the nested-artboard cycle guard with the root artboard's global id
         // (see nested_artboard_cycle: the ancestor set that mirrors C++
         // Artboard::isAncestor).
@@ -1398,6 +1413,9 @@ impl ArtboardInstance {
             true,
             &nested_ancestors,
         )?;
+        if paint_cache.paint_preparation_is_solid_only_tree {
+            paint_cache.solid_only_tree_structure_epoch = nested_structure_epoch;
+        }
         self.prepare_static_artboard_slice_meshes(
             runtime,
             graph,
@@ -7838,6 +7856,12 @@ pub struct RuntimeRenderPaintCache {
     // hosts can materialize child caches during preparation, even when neither
     // the parent nor child contains a gradient.
     paint_preparation_is_noop: bool,
+    // A file containing no gradient paints only needs the recursive paint
+    // preparation walk when its mounted instance tree changes. SolidColor
+    // updates are applied to retained paints during draw, just as C++ mutates
+    // its attached RenderPaint directly in SolidColor::colorValueChanged.
+    paint_preparation_is_solid_only_tree: bool,
+    solid_only_tree_structure_epoch: Option<u64>,
     image_decode_error: Option<ImageDecodeError>,
 }
 
@@ -9828,6 +9852,8 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     cache.requires_nested_layout_prepass =
         runtime_artboard_set_contains_nested_layout(graph, artboards);
     cache.paint_preparation_is_noop = runtime_artboard_paint_preparation_is_noop(graph);
+    cache.paint_preparation_is_solid_only_tree =
+        runtime_artboard_set_paint_preparation_is_solid_only(artboards);
     preallocate_artboard_mesh_render_buffer_tree_batch_into(
         runtime,
         graph,
@@ -9867,6 +9893,8 @@ pub fn preallocate_render_paint_cache_for_artboard_instance(
     cache.requires_nested_layout_prepass =
         runtime_artboard_set_contains_nested_layout(graph, artboards);
     cache.paint_preparation_is_noop = runtime_artboard_paint_preparation_is_noop(graph);
+    cache.paint_preparation_is_solid_only_tree =
+        runtime_artboard_set_paint_preparation_is_solid_only(artboards);
     preallocate_artboard_render_paint_tree_batch_into(
         runtime,
         graph,
@@ -9910,6 +9938,24 @@ fn runtime_artboard_paint_preparation_is_noop(graph: &ArtboardGraph) -> bool {
                     )
                 )
             })
+}
+
+fn runtime_artboard_set_paint_preparation_is_solid_only(artboards: &[ArtboardGraph]) -> bool {
+    artboards.iter().all(|graph| {
+        graph
+            .shape_paint_containers
+            .iter()
+            .flat_map(|container| container.paints.iter())
+            .all(|paint| {
+                !matches!(
+                    paint.paint_state,
+                    Some(
+                        ShapePaintStateNode::LinearGradient { .. }
+                            | ShapePaintStateNode::RadialGradient { .. }
+                    )
+                )
+            })
+    })
 }
 
 fn pre_source_image_asset_globals(
@@ -22261,6 +22307,25 @@ mod tests {
             resized_max_x > baseline_max_x,
             "layout path width did not grow: {baseline_max_x} -> {resized_max_x}"
         );
+    }
+
+    #[test]
+    fn paint_preparation_classifies_solid_only_files_without_hiding_gradients() {
+        let solid_file = read_runtime_file(&synthetic_painted_layout_geometry_riv())
+            .expect("synthetic solid-only riv imports");
+        let solid_graphs =
+            GraphFile::from_runtime_file(&solid_file).expect("synthetic solid-only graphs");
+        assert!(runtime_artboard_set_paint_preparation_is_solid_only(
+            &solid_graphs.artboards
+        ));
+
+        let gradient_file = read_runtime_file(&synthetic_zero_opacity_nested_gradient_riv())
+            .expect("synthetic gradient riv imports");
+        let gradient_graphs =
+            GraphFile::from_runtime_file(&gradient_file).expect("synthetic gradient graphs");
+        assert!(!runtime_artboard_set_paint_preparation_is_solid_only(
+            &gradient_graphs.artboards
+        ));
     }
 
     #[test]

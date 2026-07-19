@@ -3,7 +3,8 @@
 Companion to `docs/porting-map-v2.md`. Defines the recurring workflow that
 keeps Nuxie runtime current with `rive-app/rive-runtime` after the V2/M8
 migration completes. M8 and renderer Phase R are complete. The first run is
-manual; write-capable automation is enabled only after two clean manual cycles.
+manual. A read-only weekly drift scout may run immediately; the write-capable
+parity worker remains paused until two clean manual cycles are recorded.
 
 ## Why this works here
 
@@ -116,15 +117,19 @@ Check these in product-risk order:
    can move golden text streams — attribute and re-verify tolerances
    deliberately.
 
-## Scheduled automation (after two clean manual cycles)
+## Scheduled automation
 
-A scheduled job runs steps 1-2 only: fetch, probe pin-bump on a throwaway
-branch, write/refresh the triage report, and notify the user with the
-summary + top recommendations. Ports still require the step-3 approval —
-the nightly job never writes to the main branch. Once trust is established,
-the user may pre-approve categories (e.g. "auto-port critical-fix +
-schema-mechanical with green ratchet"); record any such standing approval
-as a Decision here before acting on it.
+The active weekly drift scout is read-only: it inventories new upstream work,
+checks the repository's pin consistency, and reports a ranked delta queue. It
+does not edit a checkout, port code, or open a pull request.
+
+The write-capable Phase S parity worker remains paused until two clean manual
+cycles have been recorded. When enabled, it may run steps 1-2 and act only on
+standing approvals recorded below; it never infers approval from an earlier
+cycle and never merges its own pull request. Once trust is established, the
+user may pre-approve categories (for example, "auto-port critical-fix +
+schema-mechanical with green ratchet"); record the decision here before the
+worker is enabled.
 
 ## State
 
@@ -136,13 +141,19 @@ as a Decision here before acting on it.
   an ad hoc exact sync through `d788e8ec6e8b598526607d6a1e8818e8b637b60c`,
   including applicable renderer changes and the final pin advance. This
   authorization expires when that cycle closes.
-- Active pin registry (advance deliberately; do not blanket-rewrite historical
-  evidence or fixture provenance):
-  - `.github/workflows/ci.yml`
+- Current cycle status: the implementation audit is closed and the candidate
+  runtime pin is staged in CI. The final full default and scripted candidate
+  ratchets have not yet been recorded, so `LAST_SYNCED_SHA`, the manual-cycle
+  count, and this authorization remain open.
+- Current-revision pin registry (advance with each completed Phase S cycle):
+  - `.github/workflows/ci.yml` top-level `RIVE_RUNTIME_REF`
   - `tools/fetch-test-assets.sh`
   - `tools/check-renderer-decoder-provenance.sh`
   - `tools/generate-renderer-shaders.sh`
+- Historical Phase R oracle registry (do not advance during a runtime sync;
+  regenerate and review the reference artifacts first):
+  - `.github/workflows/ci.yml` `renderer-golden` override
   - `tools/cpp-atlas-mask-oracle/build.sh`
-  - `tools/golden-compare/format_test.py`
-  - `tools/inventory_msaa_references.py`
-  - `crates/nuxie-renderer/src/lib.rs`
+  - `tools/cpp-atlas-mask-oracle/format_test.py`
+  - `tools/cpp-atlas-mask-oracle/inventory_msaa_references.py`
+  - `crates/nuxie-renderer/src/lib.rs` provenance assertion

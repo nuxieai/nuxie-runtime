@@ -32,7 +32,8 @@ use mat4::install_mat4_global;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
     ScriptArtboard, ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance,
-    ScriptMethod, ScriptValue, ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
+    ScriptListenerInvocation, ScriptMethod, ScriptValue, ScriptViewModel,
+    ScriptingVm as RuntimeScriptingVm,
 };
 use renderer::RendererBindings;
 use view_model::{ScriptedContext, create_scripted_view_model};
@@ -84,6 +85,96 @@ pub struct LuaScriptInstance {
 #[derive(Debug, Clone)]
 struct ScriptedDataValue {
     value: ScriptValue,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ScriptedPointerEvent {
+    invocation: ScriptListenerInvocation,
+}
+
+impl ScriptedPointerEvent {
+    fn new(invocation: ScriptListenerInvocation) -> Self {
+        Self { invocation }
+    }
+
+    fn pointer(self) -> Option<(i32, (f32, f32), (f32, f32), &'static str, f32)> {
+        match self.invocation {
+            ScriptListenerInvocation::None => None,
+            ScriptListenerInvocation::Pointer {
+                pointer_id,
+                position,
+                previous_position,
+                kind,
+                time_stamp,
+            } => Some((
+                pointer_id,
+                position,
+                previous_position,
+                kind.as_str(),
+                time_stamp,
+            )),
+        }
+    }
+}
+
+impl UserData for ScriptedPointerEvent {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("id", |_, this| {
+            Ok(this.pointer().map(|value| value.0).unwrap_or(0))
+        });
+        fields.add_field_method_get("position", |_, this| {
+            let (x, y) = this.pointer().map(|value| value.1).unwrap_or((0.0, 0.0));
+            Ok(LuaVector::new(x, y, 0.0))
+        });
+        fields.add_field_method_get("previousPosition", |_, this| {
+            let (x, y) = this.pointer().map(|value| value.2).unwrap_or((0.0, 0.0));
+            Ok(LuaVector::new(x, y, 0.0))
+        });
+        fields.add_field_method_get("type", |_, this| {
+            Ok(this.pointer().map(|value| value.3).unwrap_or("unknown"))
+        });
+        fields.add_field_method_get("timeStamp", |_, this| {
+            Ok(this.pointer().map(|value| value.4).unwrap_or(0.0))
+        });
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        // Hit opacity feeds the C++ hit-test result. State-machine listener
+        // actions run after the hit has already been resolved, so retaining
+        // the callable surface is sufficient here.
+        methods.add_method_mut("hit", |_, _, _: Option<bool>| Ok(()));
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ScriptedInvocation {
+    invocation: ScriptListenerInvocation,
+}
+
+impl ScriptedInvocation {
+    fn new(invocation: ScriptListenerInvocation) -> Self {
+        Self { invocation }
+    }
+}
+
+impl UserData for ScriptedInvocation {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("isPointerEvent", |_, this, ()| {
+            Ok(matches!(
+                this.invocation,
+                ScriptListenerInvocation::Pointer { .. }
+            ))
+        });
+        methods.add_method("isNone", |_, this, ()| {
+            Ok(matches!(this.invocation, ScriptListenerInvocation::None))
+        });
+        methods.add_method("asPointerEvent", |lua, this, ()| match this.invocation {
+            ScriptListenerInvocation::Pointer { .. } => Ok(Some(
+                lua.create_userdata(ScriptedPointerEvent::new(this.invocation))?,
+            )),
+            ScriptListenerInvocation::None => Ok(None),
+        });
+    }
 }
 
 impl ScriptedDataValue {
@@ -911,6 +1002,36 @@ impl ScriptInstance for LuaScriptInstance {
     ) -> std::result::Result<ScriptValue, ScriptError> {
         let value = self.call_method_value(method, args)?;
         script_value_from_lua(value).map_err(script_error)
+    }
+
+    fn call_listener_action(
+        &mut self,
+        invocation: ScriptListenerInvocation,
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<(), ScriptError> {
+        let perform_action: Value = self.table.get("performAction").map_err(script_error)?;
+        if let Value::Function(function) = perform_action {
+            let lua = self.table.lua();
+            let invocation = lua
+                .create_userdata(ScriptedInvocation::new(invocation))
+                .map_err(script_error)?;
+            let _: () = function
+                .call((self.table.clone(), invocation))
+                .map_err(script_error)?;
+            return Ok(());
+        }
+
+        let perform: Value = self.table.get("perform").map_err(script_error)?;
+        if let Value::Function(function) = perform {
+            let lua = self.table.lua();
+            let pointer = lua
+                .create_userdata(ScriptedPointerEvent::new(invocation))
+                .map_err(script_error)?;
+            let _: () = function
+                .call((self.table.clone(), pointer))
+                .map_err(script_error)?;
+        }
+        Ok(())
     }
 
     fn call_method_with_factory(

@@ -68,6 +68,9 @@ pub enum ScriptMethod {
     Advance,
     Update,
     Draw,
+    Evaluate,
+    Perform,
+    PerformAction,
     PointerDown,
     PointerMove,
     PointerUp,
@@ -83,11 +86,54 @@ impl ScriptMethod {
             ScriptMethod::Advance => "advance",
             ScriptMethod::Update => "update",
             ScriptMethod::Draw => "draw",
+            ScriptMethod::Evaluate => "evaluate",
+            ScriptMethod::Perform => "perform",
+            ScriptMethod::PerformAction => "performAction",
             ScriptMethod::PointerDown => "pointerDown",
             ScriptMethod::PointerMove => "pointerMove",
             ScriptMethod::PointerUp => "pointerUp",
             ScriptMethod::PointerEnter => "pointerEnter",
             ScriptMethod::PointerExit => "pointerExit",
+        }
+    }
+}
+
+/// The state-machine invocation supplied to a scripted listener action.
+///
+/// Scheduled state/transition actions use [`Self::None`]. Pointer listeners
+/// retain the concrete pointer payload so scripting backends can expose the
+/// same legacy `PointerEvent` shape as the C++ runtime.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ScriptListenerInvocation {
+    None,
+    Pointer {
+        pointer_id: i32,
+        position: (f32, f32),
+        previous_position: (f32, f32),
+        kind: ScriptPointerEventKind,
+        time_stamp: f32,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptPointerEventKind {
+    Enter,
+    Exit,
+    Down,
+    Up,
+    Move,
+    Click,
+}
+
+impl ScriptPointerEventKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Enter => "pointerEnter",
+            Self::Exit => "pointerExit",
+            Self::Down => "pointerDown",
+            Self::Up => "pointerUp",
+            Self::Move => "pointerMove",
+            Self::Click => "click",
         }
     }
 }
@@ -776,6 +822,23 @@ pub trait ScriptInstance {
         args: &[ScriptValue],
         host: &mut dyn ScriptHost,
     ) -> Result<ScriptValue, ScriptError>;
+
+    /// Invoke a scripted listener action. Backends override this to construct
+    /// their native `PointerEvent`/`Invocation` userdata. The default keeps
+    /// non-VM test doubles and future backends source-compatible.
+    fn call_listener_action(
+        &mut self,
+        invocation: ScriptListenerInvocation,
+        host: &mut dyn ScriptHost,
+    ) -> Result<(), ScriptError> {
+        let _ = invocation;
+        if self.has_method(ScriptMethod::PerformAction)? {
+            self.call_method(ScriptMethod::PerformAction, &[], host)?;
+        } else if self.has_method(ScriptMethod::Perform)? {
+            self.call_method(ScriptMethod::Perform, &[], host)?;
+        }
+        Ok(())
+    }
 
     fn call_method_with_factory(
         &mut self,

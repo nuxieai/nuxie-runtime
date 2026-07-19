@@ -2,7 +2,7 @@
 // Mirrors /Users/levi/dev/oss/rive-runtime/src/animation/state_machine_instance.cpp.
 use super::*;
 use crate::{
-    ArtboardInstance, RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase,
+    ArtboardInstance, NoopScriptHost, RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase,
     RuntimeDataBindGraphTargetsMut, RuntimeDataBindGraphValue,
     RuntimeDefaultViewModelArtboardSourceHandle, RuntimeDefaultViewModelAssetSourceHandle,
     RuntimeDefaultViewModelBooleanSourceHandle, RuntimeDefaultViewModelColorSourceHandle,
@@ -10,7 +10,8 @@ use crate::{
     RuntimeDefaultViewModelNumberSourceHandle, RuntimeDefaultViewModelStringSourceHandle,
     RuntimeDefaultViewModelSymbolListIndexSourceHandle, RuntimeDefaultViewModelTriggerSourceHandle,
     RuntimeDefaultViewModelViewModelSourceHandle, RuntimeImportedViewModelInstanceContext,
-    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance, ScriptError, ScriptInstance,
+    ScriptListenerInvocation, ScriptPointerEventKind, ScriptValue,
     runtime_default_view_model_artboard_property_path_for_name,
     runtime_default_view_model_artboard_property_path_for_name_path,
     runtime_default_view_model_asset_property_path_for_name,
@@ -62,6 +63,8 @@ pub struct StateMachineInstance {
     data_bind_graph: RuntimeDataBindGraph,
     pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
     pointer_listener_states: Vec<RuntimePointerListenerState>,
+    pointer_positions: Vec<RuntimePointerPosition>,
+    scripted_instances_by_global: BTreeMap<u32, RuntimeScriptInstanceHandle>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +78,13 @@ struct RuntimePointerListenerState {
     pointer_id: i32,
     listener_index: usize,
     is_hovered: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimePointerPosition {
+    pointer_id: i32,
+    x: f32,
+    y: f32,
 }
 
 impl StateMachineInstance {
@@ -196,7 +206,34 @@ impl StateMachineInstance {
             data_bind_graph,
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
+            pointer_positions: Vec::new(),
+            scripted_instances_by_global: BTreeMap::new(),
         }
+    }
+
+    /// Attach one VM-owned scripted object table to this concrete state
+    /// machine instance. Shared definitions only retain the authored global
+    /// id; callers must instantiate a fresh table for every instance.
+    pub fn set_script_instance_for_global(
+        &mut self,
+        global_id: u32,
+        instance: Box<dyn ScriptInstance>,
+    ) {
+        self.scripted_instances_by_global
+            .insert(global_id, RuntimeScriptInstanceHandle::new(instance));
+    }
+
+    pub fn set_script_input_for_global(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        value: ScriptValue,
+    ) -> Result<(), ScriptError> {
+        let instance = self
+            .scripted_instances_by_global
+            .get(&global_id)
+            .ok_or_else(|| ScriptError::new(format!("missing state-machine script {global_id}")))?;
+        instance.borrow_mut().set_input(name, value)
     }
 
     pub fn state_machine_index(&self) -> usize {
@@ -324,11 +361,19 @@ impl StateMachineInstance {
                 && self.perform_listener_actions(
                     &listener.listener_actions,
                     owned_context.as_deref_mut(),
+                    self.script_pointer_invocation(
+                        pointer_id,
+                        x,
+                        y,
+                        action_type.and_then(RuntimeListenerType::script_pointer_kind),
+                        0.0,
+                    ),
                 )
             {
                 self.needs_advance = true;
             }
         }
+        self.remember_pointer_position(pointer_id, x, y);
         hit
     }
 
@@ -337,10 +382,18 @@ impl StateMachineInstance {
         artboard: &ArtboardInstance,
         x: f32,
         y: f32,
-        _seconds: f32,
+        seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        self.update_pointer_listeners(artboard, RuntimeListenerType::Move, x, y, pointer_id, None)
+        self.update_pointer_listeners(
+            artboard,
+            RuntimeListenerType::Move,
+            x,
+            y,
+            seconds,
+            pointer_id,
+            None,
+        )
     }
 
     pub fn pointer_move_with_owned_view_model_context(
@@ -352,12 +405,12 @@ impl StateMachineInstance {
         pointer_id: i32,
         context: &mut RuntimeOwnedViewModelInstance,
     ) -> bool {
-        let _ = seconds;
         self.update_pointer_listeners(
             artboard,
             RuntimeListenerType::Move,
             x,
             y,
+            seconds,
             pointer_id,
             Some(context),
         )
@@ -422,11 +475,19 @@ impl StateMachineInstance {
                 && self.perform_listener_actions(
                     &listener.listener_actions,
                     owned_context.as_deref_mut(),
+                    self.script_pointer_invocation(
+                        pointer_id,
+                        x,
+                        y,
+                        action_type.and_then(RuntimeListenerType::script_pointer_kind),
+                        0.0,
+                    ),
                 )
             {
                 self.needs_advance = true;
             }
         }
+        self.remember_pointer_position(pointer_id, x, y);
         self.pointer_down_listener_hits
             .retain(|hit| hit.pointer_id != pointer_id);
         hit
@@ -444,6 +505,7 @@ impl StateMachineInstance {
             RuntimeListenerType::Exit,
             x,
             y,
+            0.0,
             pointer_id,
             None,
         );
@@ -465,6 +527,7 @@ impl StateMachineInstance {
             RuntimeListenerType::Exit,
             x,
             y,
+            0.0,
             pointer_id,
             Some(context),
         );
@@ -479,6 +542,7 @@ impl StateMachineInstance {
         listener_type: RuntimeListenerType,
         x: f32,
         y: f32,
+        time_stamp: f32,
         pointer_id: i32,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
@@ -505,11 +569,19 @@ impl StateMachineInstance {
                 && self.perform_listener_actions(
                     &listener.listener_actions,
                     owned_context.as_deref_mut(),
+                    self.script_pointer_invocation(
+                        pointer_id,
+                        x,
+                        y,
+                        action_type.and_then(RuntimeListenerType::script_pointer_kind),
+                        time_stamp,
+                    ),
                 )
             {
                 self.needs_advance = true;
             }
         }
+        self.remember_pointer_position(pointer_id, x, y);
         hit
     }
 
@@ -541,7 +613,11 @@ impl StateMachineInstance {
                     .event_local_indices
                     .contains(&event.event_local_index())
             }) {
-                changed |= self.perform_listener_actions(&listener.listener_actions, None);
+                changed |= self.perform_listener_actions(
+                    &listener.listener_actions,
+                    None,
+                    ScriptListenerInvocation::None,
+                );
             }
         }
         if changed {
@@ -590,6 +666,7 @@ impl StateMachineInstance {
         &mut self,
         listener_actions: &[RuntimeScheduledListenerAction],
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        invocation: ScriptListenerInvocation,
     ) -> bool {
         let mut changed = false;
         for action in listener_actions {
@@ -628,12 +705,70 @@ impl StateMachineInstance {
                         owned_context.as_deref_mut(),
                     );
                 }
+                RuntimeScheduledListenerAction::Scripted { global_id, .. } => {
+                    changed |= self.perform_scripted_listener_action(*global_id, invocation);
+                }
             }
         }
         if changed {
             self.needs_advance = true;
         }
         changed
+    }
+
+    fn perform_scripted_listener_action(
+        &mut self,
+        global_id: u32,
+        invocation: ScriptListenerInvocation,
+    ) -> bool {
+        let Some(instance) = self.scripted_instances_by_global.get(&global_id) else {
+            return false;
+        };
+        // C++ consumes script errors inside ScriptedListenerAction::perform;
+        // a failing callback never aborts state-machine dispatch.
+        let _ = instance
+            .borrow_mut()
+            .call_listener_action(invocation, &mut NoopScriptHost);
+        true
+    }
+
+    fn script_pointer_invocation(
+        &self,
+        pointer_id: i32,
+        x: f32,
+        y: f32,
+        kind: Option<ScriptPointerEventKind>,
+        time_stamp: f32,
+    ) -> ScriptListenerInvocation {
+        let previous_position = self
+            .pointer_positions
+            .iter()
+            .find(|position| position.pointer_id == pointer_id)
+            .map(|position| (position.x, position.y))
+            .unwrap_or((x, y));
+        kind.map_or(ScriptListenerInvocation::None, |kind| {
+            ScriptListenerInvocation::Pointer {
+                pointer_id,
+                position: (x, y),
+                previous_position,
+                kind,
+                time_stamp,
+            }
+        })
+    }
+
+    fn remember_pointer_position(&mut self, pointer_id: i32, x: f32, y: f32) {
+        if let Some(position) = self
+            .pointer_positions
+            .iter_mut()
+            .find(|position| position.pointer_id == pointer_id)
+        {
+            position.x = x;
+            position.y = y;
+        } else {
+            self.pointer_positions
+                .push(RuntimePointerPosition { pointer_id, x, y });
+        }
     }
 
     fn perform_scheduled_view_model_actions(
@@ -643,17 +778,25 @@ impl StateMachineInstance {
     ) -> bool {
         let mut changed = false;
         for action in listener_actions {
-            if let RuntimeScheduledListenerAction::ViewModelChange {
-                data_bind_index,
-                value,
-                ..
-            } = action
-            {
-                changed |= self.perform_scheduled_listener_view_model_change(
-                    artboard,
-                    *data_bind_index,
+            match action {
+                RuntimeScheduledListenerAction::ViewModelChange {
+                    data_bind_index,
                     value,
-                );
+                    ..
+                } => {
+                    changed |= self.perform_scheduled_listener_view_model_change(
+                        artboard,
+                        *data_bind_index,
+                        value,
+                    );
+                }
+                RuntimeScheduledListenerAction::Scripted { global_id, .. } => {
+                    changed |= self.perform_scripted_listener_action(
+                        *global_id,
+                        ScriptListenerInvocation::None,
+                    );
+                }
+                _ => {}
             }
         }
         if changed {
@@ -3109,6 +3252,7 @@ impl StateMachineInstance {
             let layer_result = {
                 let layer_instance = &mut self.layers[layer_index];
                 layer_instance.advance(
+                    &self.scripted_instances_by_global,
                     artboard,
                     layer,
                     elapsed_seconds,

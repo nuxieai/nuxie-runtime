@@ -1008,9 +1008,8 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "listener_action_inputs"
 path = "tests/unit_tests/assets/listener_action_inputs.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "gated"
-features = ["rust-runner-unsupported:scripted-transition-condition", "type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:611:ScriptInputNumber", "type-key:61:AnimationState", "type-key:627:ScriptInputString", "type-key:62:AnyState", "type-key:631:ScriptInputBoolean", "type-key:63:EntryState", "type-key:646:ScriptedListenerAction", "type-key:647:ScriptedTransitionCondition", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
+status = "exact"
+features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:611:ScriptInputNumber", "type-key:61:AnimationState", "type-key:627:ScriptInputString", "type-key:62:AnyState", "type-key:631:ScriptInputBoolean", "type-key:63:EntryState", "type-key:646:ScriptedListenerAction", "type-key:647:ScriptedTransitionCondition", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
 
 [[file]]
 id = "listener_view_model"
@@ -1577,9 +1576,8 @@ features = ["type-key:1:Artboard", "type-key:23:Backboard", "type-key:31:LinearA
 id = "scripted_transition_condition"
 path = "tests/unit_tests/assets/scripted_transition_condition.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "gated"
-features = ["rust-runner-unsupported:scripted-transition-condition", "type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:647:ScriptedTransitionCondition", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
+status = "exact"
+features = ["type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:647:ScriptedTransitionCondition", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
 
 [[file]]
 id = "scripted_viewmodel_cache"

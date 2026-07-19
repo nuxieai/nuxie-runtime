@@ -261,6 +261,19 @@ fn run() -> Result<String> {
         .transpose()?;
     let mut owned_view_model_context =
         selected_artboard_owned_view_model_context(&runtime, artboard_index);
+    #[cfg(feature = "scripting")]
+    if let (Some(state_machine_index), Some(state_machine)) =
+        (scene.state_machine_index, state_machine.as_mut())
+    {
+        initialize_state_machine_scripted_objects(
+            &runtime,
+            artboard,
+            state_machine_index,
+            state_machine,
+            factory.as_factory(),
+            owned_view_model_context.as_ref(),
+        )?;
+    }
     instance.bind_default_view_model_artboard_list_context(&runtime);
     #[cfg(feature = "scripting")]
     if let Some(state) = script_artboard_render_state.as_ref() {
@@ -603,6 +616,19 @@ fn run_benchmark_repeat_pass(
     let (mut instance, mut state_machine, owned_view_model_context) =
         instantiate_scene_state(runtime, artboard_index, artboard, &graph.artboards, scene)?;
     let mut factory = NullFactory::new();
+    #[cfg(feature = "scripting")]
+    if let (Some(state_machine_index), Some(state_machine)) =
+        (scene.state_machine_index, state_machine.as_mut())
+    {
+        initialize_state_machine_scripted_objects(
+            runtime,
+            artboard,
+            state_machine_index,
+            state_machine,
+            &mut factory,
+            owned_view_model_context.as_ref(),
+        )?;
+    }
     let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
         runtime,
         artboard,
@@ -2114,18 +2140,116 @@ fn scripted_data_converter_inputs(
 #[cfg(feature = "scripting")]
 fn default_script_input_value(input: &nuxie_binary::RuntimeObject) -> Option<ScriptValue> {
     match input.type_name {
-        "ScriptInputBoolean" => input.bool_property("propertyValue").map(ScriptValue::Bool),
-        "ScriptInputColor" => input
-            .color_property("propertyValue")
-            .map(|value| ScriptValue::Number(value as f64)),
-        "ScriptInputNumber" => input
-            .double_property("propertyValue")
-            .map(|value| ScriptValue::Number(f64::from(value))),
-        "ScriptInputString" => input
-            .string_property("propertyValue")
-            .map(|value| ScriptValue::String(value.to_owned())),
+        "ScriptInputBoolean" => Some(ScriptValue::Bool(
+            input.bool_property("propertyValue").unwrap_or(false),
+        )),
+        "ScriptInputColor" => Some(ScriptValue::Number(
+            input.color_property("propertyValue").unwrap_or(0) as f64,
+        )),
+        "ScriptInputNumber" => Some(ScriptValue::Number(f64::from(
+            input.double_property("propertyValue").unwrap_or(0.0),
+        ))),
+        "ScriptInputString" => Some(ScriptValue::String(
+            input
+                .string_property("propertyValue")
+                .unwrap_or_default()
+                .to_owned(),
+        )),
         _ => None,
     }
+}
+
+#[cfg(feature = "scripting")]
+#[allow(clippy::too_many_arguments)]
+fn initialize_state_machine_scripted_objects(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    state_machine_index: usize,
+    state_machine: &mut StateMachineInstance,
+    factory: &mut dyn RenderFactory,
+    owned_context: Option<&RuntimeOwnedViewModelContext>,
+) -> Result<()> {
+    let Some(definition) = artboard.state_machines.get(state_machine_index) else {
+        return Ok(());
+    };
+    if definition.scripted_objects.is_empty() {
+        return Ok(());
+    }
+
+    let script_assets = extract_script_assets(runtime);
+    let mut vm = ScriptVm::new();
+    vm.set_view_models(nuxie_runtime::script_view_models(runtime));
+    let context_model = owned_context
+        .and_then(RuntimeOwnedViewModelContext::main)
+        .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context));
+    vm.set_default_context_view_model(context_model);
+    let mut host = NoopScriptHost;
+
+    for scripted_object in &definition.scripted_objects {
+        let object = runtime
+            .object(scripted_object.global_id as usize)
+            .with_context(|| {
+                format!(
+                    "missing {} global {}",
+                    scripted_object.type_name, scripted_object.global_id
+                )
+            })?;
+        let script_asset_id = object.uint_property("scriptAssetId").unwrap_or(0);
+        let script = script_assets.get(&script_asset_id).with_context(|| {
+            format!(
+                "{} global {} references missing ScriptAsset id {}",
+                scripted_object.type_name, scripted_object.global_id, script_asset_id
+            )
+        })?;
+        let mut script_instance = vm
+            .instantiate_script_with_factory(&script.name, &script.payload, &mut host, factory)
+            .with_context(|| {
+                format!(
+                    "failed to instantiate ScriptAsset '{}' for {} global {}",
+                    script.name, scripted_object.type_name, scripted_object.global_id
+                )
+            })?;
+
+        for input_node in &scripted_object.inputs {
+            let Some(input) = runtime.object(input_node.global_id as usize) else {
+                continue;
+            };
+            let Some(name) = input.string_property("name") else {
+                continue;
+            };
+            let value = owned_context
+                .and_then(RuntimeOwnedViewModelContext::main)
+                .and_then(|context| {
+                    nuxie_runtime::bound_script_input_value(runtime, context, input)
+                })
+                .or_else(|| default_script_input_value(input));
+            if let Some(value) = value {
+                script_instance.set_input(name, value).with_context(|| {
+                    format!(
+                        "failed to hydrate input '{name}' for {} global {}",
+                        scripted_object.type_name, scripted_object.global_id
+                    )
+                })?;
+            }
+        }
+
+        if script_instance
+            .has_method(ScriptMethod::Init)
+            .context("failed to inspect state-machine script init method")?
+            && !script_instance
+                .call_init_with_factory(&mut host, factory)
+                .with_context(|| {
+                    format!(
+                        "script init failed for {} global {}",
+                        scripted_object.type_name, scripted_object.global_id
+                    )
+                })?
+        {
+            continue;
+        }
+        state_machine.set_script_instance_for_global(scripted_object.global_id, script_instance);
+    }
+    Ok(())
 }
 
 #[cfg(feature = "scripting")]
@@ -2612,6 +2736,7 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
+    #[cfg(not(feature = "scripting"))]
     if let Some(scripted_object) = artboard
         .state_machines
         .iter()

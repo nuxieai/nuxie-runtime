@@ -4,6 +4,7 @@ use crate::animation::{
 };
 use crate::data_bind_graph::data_bind_flags_apply_target_to_source;
 use crate::properties::{artboard_index_for_graph, property_key_for_name};
+use crate::scripting::RuntimeScriptInstanceHandle;
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use nuxie_graph::{ArtboardGraph, ParametricPathNode};
 use std::collections::BTreeMap;
@@ -531,6 +532,18 @@ impl RuntimeListenerType {
                 | Self::Drag
         )
     }
+
+    pub(crate) fn script_pointer_kind(self) -> Option<crate::ScriptPointerEventKind> {
+        match self {
+            Self::Enter => Some(crate::ScriptPointerEventKind::Enter),
+            Self::Exit => Some(crate::ScriptPointerEventKind::Exit),
+            Self::Down => Some(crate::ScriptPointerEventKind::Down),
+            Self::Up => Some(crate::ScriptPointerEventKind::Up),
+            Self::Move => Some(crate::ScriptPointerEventKind::Move),
+            Self::Click => Some(crate::ScriptPointerEventKind::Click),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -894,6 +907,7 @@ impl RuntimeStateTransition {
 
     fn allow(
         &self,
+        scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
@@ -914,6 +928,7 @@ impl RuntimeStateTransition {
     ) -> TransitionAllowance {
         for condition in &self.conditions {
             if !condition.evaluate(
+                scripted_instances,
                 artboard,
                 inputs,
                 bindable_numbers,
@@ -1738,6 +1753,10 @@ pub(crate) enum RuntimeScheduledListenerAction {
         data_bind_index: usize,
         value: RuntimeListenerViewModelChangeValue,
     },
+    Scripted {
+        flags: u64,
+        global_id: u32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -1796,6 +1815,10 @@ impl RuntimeScheduledListenerAction {
                 action,
                 flags,
             ),
+            "ScriptedListenerAction" => Some(Self::Scripted {
+                flags,
+                global_id: action.object.id,
+            }),
             _ => None,
         }
     }
@@ -1927,7 +1950,8 @@ pub(crate) fn perform_scheduled_listener_actions(
             | RuntimeScheduledListenerAction::BoolChange { flags, .. }
             | RuntimeScheduledListenerAction::NumberChange { flags, .. }
             | RuntimeScheduledListenerAction::TriggerChange { flags, .. }
-            | RuntimeScheduledListenerAction::ViewModelChange { flags, .. } => *flags,
+            | RuntimeScheduledListenerAction::ViewModelChange { flags, .. }
+            | RuntimeScheduledListenerAction::Scripted { flags, .. } => *flags,
         };
         if flags & 1 != occurrence.value() {
             continue;
@@ -1955,7 +1979,8 @@ pub(crate) fn perform_scheduled_listener_actions(
                     changed_input |= input.fire_trigger();
                 }
             }
-            RuntimeScheduledListenerAction::ViewModelChange { .. } => {
+            RuntimeScheduledListenerAction::ViewModelChange { .. }
+            | RuntimeScheduledListenerAction::Scripted { .. } => {
                 pending_view_model_actions.push(action.clone());
             }
         }
@@ -2380,6 +2405,7 @@ impl StateMachineLayerInstance {
 
     pub(crate) fn advance(
         &mut self,
+        scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         elapsed_seconds: f32,
@@ -2431,6 +2457,7 @@ impl StateMachineLayerInstance {
         let mut changed_state = false;
         for _ in 0..100 {
             if !self.update_state(
+                scripted_instances,
                 artboard,
                 layer,
                 layer_index,
@@ -2472,6 +2499,7 @@ impl StateMachineLayerInstance {
 
     fn update_state(
         &mut self,
+        scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         layer_index: usize,
@@ -2498,6 +2526,7 @@ impl StateMachineLayerInstance {
         }
         self.waiting_for_exit = false;
         if self.try_change_state(
+            scripted_instances,
             artboard,
             layer,
             layer.any_state_index,
@@ -2523,6 +2552,7 @@ impl StateMachineLayerInstance {
             return true;
         }
         self.try_change_state(
+            scripted_instances,
             artboard,
             layer,
             self.current_state_index,
@@ -2549,6 +2579,7 @@ impl StateMachineLayerInstance {
 
     fn try_change_state(
         &mut self,
+        scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         state_index: Option<usize>,
@@ -2580,6 +2611,7 @@ impl StateMachineLayerInstance {
 
         if state.uses_random_transition_selection() {
             let Some((transition_index, state_to_index)) = self.find_random_transition(
+                scripted_instances,
                 artboard,
                 state,
                 state_index,
@@ -2635,6 +2667,7 @@ impl StateMachineLayerInstance {
                 self.current_state_index == Some(state_index),
             );
             match transition.allow(
+                scripted_instances,
                 artboard,
                 inputs,
                 bindable_numbers,
@@ -2683,6 +2716,7 @@ impl StateMachineLayerInstance {
 
     fn find_random_transition(
         &mut self,
+        scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
         artboard: &ArtboardInstance,
         state: &RuntimeLayerState,
         state_index: usize,
@@ -2723,6 +2757,7 @@ impl StateMachineLayerInstance {
                 self.current_state_index == Some(state_index),
             );
             match transition.allow(
+                scripted_instances,
                 artboard,
                 inputs,
                 bindable_numbers,

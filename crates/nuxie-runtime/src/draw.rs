@@ -1602,7 +1602,9 @@ impl ArtboardInstance {
         // while a virtualized list first mounts its seed row for layout and
         // mounts the rest of the visible window after sibling list updates.
         // Preserve that two-phase instance lifecycle because render-paint
-        // identity is allocated when each child artboard is created.
+        // identity is allocated when each child artboard is created. C++ has
+        // mounted every row before its first gradient update, so allocate all
+        // phase-ordered paint caches before configuring any of them.
         for phase in [
             RuntimeComponentListPreparationPhase::Initial,
             RuntimeComponentListPreparationPhase::DeferredVirtualized,
@@ -1618,6 +1620,26 @@ impl ArtboardInstance {
                     apply_nested_layout_bounds,
                     nested_ancestors,
                     phase,
+                    true,
+                )?;
+            }
+        }
+        for phase in [
+            RuntimeComponentListPreparationPhase::Initial,
+            RuntimeComponentListPreparationPhase::DeferredVirtualized,
+        ] {
+            for command in &commands {
+                self.prepare_static_component_list_paints(
+                    runtime,
+                    artboards,
+                    factory,
+                    nested_paint_caches.as_deref_mut(),
+                    render_cache,
+                    command,
+                    apply_nested_layout_bounds,
+                    nested_ancestors,
+                    phase,
+                    false,
                 )?;
             }
         }
@@ -1638,6 +1660,7 @@ impl ArtboardInstance {
         apply_nested_layout_bounds: bool,
         nested_ancestors: &[u32],
         phase: RuntimeComponentListPreparationPhase,
+        preallocate_only: bool,
     ) -> Result<()> {
         let Some(local_id) = command.local_id else {
             return Ok(());
@@ -1685,6 +1708,9 @@ impl ArtboardInstance {
                             factory,
                         ),
                     );
+                }
+                if preallocate_only {
+                    continue;
                 }
                 let child_paint_cache = caches.entry(cache_key).or_default();
                 item.child.prepare_static_artboard_tree_paints_internal(

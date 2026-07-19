@@ -389,8 +389,14 @@ impl ScriptVm {
         }
     }
 
+    /// Register the file's view-model definitions and keep `Data` current even
+    /// when this VM's globals were initialized before the file was attached.
     pub fn set_view_models(&mut self, view_models: BTreeMap<String, ScriptViewModel>) {
         self.view_models = view_models;
+        if self.rive_globals_installed.get() {
+            view_model::install_data_global(&self.lua, &self.view_models)
+                .expect("refreshing the initialized Data global should succeed");
+        }
     }
 
     pub fn set_default_context_view_model(&mut self, view_model: Option<ScriptViewModel>) {

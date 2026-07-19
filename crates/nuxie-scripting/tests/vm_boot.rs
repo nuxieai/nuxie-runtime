@@ -3,7 +3,10 @@
 #![cfg(feature = "luau")]
 
 use luaur_rt::{Function, Table, Value};
-use nuxie_runtime::{ScriptDataConverterMethod, ScriptInstance, ScriptValue};
+use nuxie_runtime::{
+    NoopScriptHost, ScriptDataConverterMethod, ScriptInstance, ScriptListenerInvocation,
+    ScriptPointerEventKind, ScriptValue,
+};
 use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
 
 #[test]
@@ -315,4 +318,136 @@ fn rejects_garbage_bytecode_with_an_error_not_a_crash() {
         message.contains("bytecode") || message.contains("version"),
         "unexpected error: {message}"
     );
+}
+
+#[test]
+fn scripted_listener_prefers_perform_action_and_preserves_pointer_payload() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+    let table: Table = vm
+        .eval(
+            r#"
+            return {
+                legacyCalled = false,
+                actionCalled = false,
+                perform = function(self, event)
+                    self.legacyCalled = true
+                end,
+                performAction = function(self, invocation)
+                    self.actionCalled = invocation:isPointerEvent()
+                    local event = invocation:asPointerEvent()
+                    self.pointerId = event.id
+                    self.pointerType = event.type
+                    self.positionX = event.position.x
+                    self.previousX = event.previousPosition.x
+                    self.timeStamp = event.timeStamp
+                end,
+            }
+            "#,
+        )
+        .unwrap();
+    let mut instance = LuaScriptInstance::new(table);
+    instance
+        .call_listener_action(
+            ScriptListenerInvocation::Pointer {
+                pointer_id: 9,
+                position: (20.0, 30.0),
+                previous_position: (10.0, 15.0),
+                kind: ScriptPointerEventKind::Click,
+                time_stamp: 0.25,
+            },
+            &mut NoopScriptHost,
+        )
+        .unwrap();
+
+    assert!(instance.table().get::<bool>("actionCalled").unwrap());
+    assert!(!instance.table().get::<bool>("legacyCalled").unwrap());
+    assert_eq!(instance.table().get::<i64>("pointerId").unwrap(), 9);
+    assert_eq!(
+        instance.table().get::<String>("pointerType").unwrap(),
+        "click"
+    );
+    assert_eq!(instance.table().get::<f64>("positionX").unwrap(), 20.0);
+    assert_eq!(instance.table().get::<f64>("previousX").unwrap(), 10.0);
+    assert_eq!(instance.table().get::<f64>("timeStamp").unwrap(), 0.25);
+}
+
+#[test]
+fn protocol_generator_tables_are_fresh_per_state_machine_instance() {
+    let vm = ScriptVm::new();
+    let generator: Function = vm
+        .eval(
+            r#"
+            return function(context)
+                return {
+                    input = 0,
+                    init = function(self, initContext)
+                        self.initializedWith = self.input
+                        return true
+                    end,
+                    evaluate = function(self)
+                        return self.input == 7
+                    end,
+                }
+            end
+            "#,
+        )
+        .unwrap();
+    let context = vm.lua().create_table();
+    let first: Table = generator.call(context.clone()).unwrap();
+    let second: Table = generator.call(context).unwrap();
+    let mut first = LuaScriptInstance::new(first);
+    let mut second = LuaScriptInstance::new(second);
+
+    first.set_input("input", ScriptValue::Number(7.0)).unwrap();
+    first
+        .call_method(nuxie_runtime::ScriptMethod::Init, &[], &mut NoopScriptHost)
+        .unwrap();
+
+    assert_eq!(first.get_input("input").unwrap(), ScriptValue::Number(7.0));
+    assert_eq!(second.get_input("input").unwrap(), ScriptValue::Number(0.0));
+    assert_eq!(
+        second
+            .call_method(
+                nuxie_runtime::ScriptMethod::Evaluate,
+                &[],
+                &mut NoopScriptHost,
+            )
+            .unwrap(),
+        ScriptValue::Bool(false)
+    );
+}
+
+#[test]
+fn setting_file_models_refreshes_data_on_an_already_initialized_vm() {
+    let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+        .join("tests/unit_tests/assets/script_create_viewmodel_instance.riv");
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+    let file = nuxie_binary::read_runtime_file(&bytes).expect("fixture parses");
+    let models = nuxie_runtime::script_view_models(&file);
+    let model_name = models
+        .keys()
+        .next()
+        .cloned()
+        .expect("fixture contains a view-model definition");
+
+    // Mirrors an externally supplied VM: globals already exist before this
+    // file's view-model definitions are registered.
+    let mut vm = ScriptVm::new();
+    vm.install_rive_globals().expect("globals install");
+    vm.set_view_models(models);
+
+    let data: Table = vm.lua().globals().get("Data").expect("Data global");
+    let definition: Table = data
+        .get(model_name.as_str())
+        .expect("late-registered model is visible through Data");
+    assert!(matches!(
+        definition
+            .get::<Value>("new")
+            .expect("Data model constructor"),
+        Value::Function(_)
+    ));
 }

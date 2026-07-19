@@ -127,9 +127,11 @@ impl FileScriptRuntime {
 
     fn build_candidate(
         &self,
+        runtime: &RuntimeFile,
         factory: &mut dyn Factory,
     ) -> std::result::Result<ReadyFileScripts, nuxie_runtime::ScriptError> {
-        let vm = ScriptVm::new();
+        let mut vm = ScriptVm::new();
+        vm.set_view_models(nuxie_runtime::script_view_models(runtime));
         let mut pending = self
             .assets
             .iter()
@@ -177,6 +179,7 @@ impl FileScriptRuntime {
 
     fn prepare_mounts(
         &mut self,
+        runtime: &RuntimeFile,
         groups: &[ScriptMountGroup],
         factory: &mut dyn Factory,
     ) -> std::result::Result<PreparedFileScriptMounts, nuxie_runtime::ScriptError> {
@@ -196,7 +199,7 @@ impl FileScriptRuntime {
         // Keep the candidate cold until every concrete occurrence has a
         // generated table and successful init. Any error drops all tables and
         // the candidate VM, leaving this File retryable with zero attachments.
-        let candidate = self.build_candidate(factory)?;
+        let candidate = self.build_candidate(runtime, factory)?;
         let groups = instantiate_script_mounts(&candidate, groups, factory)?;
         Ok(PreparedFileScriptMounts {
             // Drop table handles before their candidate VM on a failed
@@ -579,7 +582,10 @@ fn prepare_scripted_artboard_tree(
     if !has_scripted_drawable {
         return Ok(false);
     }
-    let mut prepared = file.scripts.borrow_mut().prepare_mounts(&groups, factory)?;
+    let mut prepared = file
+        .scripts
+        .borrow_mut()
+        .prepare_mounts(&file.runtime, &groups, factory)?;
     validate_prepared_script_mount_topology(instance, &prepared.groups)?;
 
     // Validation is the final fallible step. Publish a cold candidate before
@@ -1846,5 +1852,35 @@ mod owned_instance_tests {
         // Nonexistent property key: the typed write path must report false
         // (no match), never panic.
         assert!(!instance.raw_mut().set_double_property(0, u16::MAX, 1.0));
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn file_script_bootstrap_seeds_data_before_registration() {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets/script_create_viewmodel_instance.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        let runtime = read_runtime_file_for_facade(&bytes).expect("fixture imports");
+        let scripts = FileScriptRuntime::new(&runtime, true);
+        let model_name = nuxie_runtime::script_view_models(&runtime)
+            .keys()
+            .next()
+            .cloned()
+            .expect("fixture contains a view-model definition");
+        let mut factory = RecordingFactory::new();
+
+        let ready = scripts
+            .build_candidate(&runtime, &mut factory)
+            .expect("scripts register with Data initialized");
+        let has_constructor: bool = ready
+            .vm
+            .eval(&format!(
+                "return Data[{model_name:?}] ~= nil and type(Data[{model_name:?}].new) == 'function'"
+            ))
+            .expect("Data constructor probe runs");
+        assert!(has_constructor);
     }
 }

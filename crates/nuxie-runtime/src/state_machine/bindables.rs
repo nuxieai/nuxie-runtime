@@ -808,12 +808,23 @@ fn runtime_bindable_number_unresolved_view_model_source(
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+    let converter = runtime_data_bind_graph_converter(file, data_bind);
+    let value = if matches!(converter, Some(RuntimeDataBindGraphConverter::ListToLength)) {
+        // The source side of ListToLength is still a list even when its
+        // parent-relative context is unavailable while the child artboard is
+        // constructed. Preserve that source kind so the later parent-context
+        // bind resolves the live item count instead of trying to read a
+        // number from the list property.
+        RuntimeDataBindGraphValue::ListLength(0)
+    } else {
+        RuntimeDataBindGraphValue::Number(target_value)
+    };
     Some(RuntimeBindableNumberDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
         flags: data_bind.uint_property("flags").unwrap_or(0),
-        converter: runtime_data_bind_graph_converter(file, data_bind),
-        value: RuntimeDataBindGraphValue::Number(target_value),
+        converter,
+        value,
         view_model_instance_ids: Vec::new(),
     })
 }
@@ -1862,6 +1873,53 @@ mod tests {
         assert!(matches!(
             source.value,
             RuntimeDataBindGraphValue::Number(7.0)
+        ));
+    }
+
+    #[test]
+    fn unresolved_parent_list_to_length_bind_retains_its_list_source_kind() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "DataBindContext",
+                vec![
+                    property(
+                        "DataBindContext",
+                        "propertyKey",
+                        AuthoringValue::Uint(u64::from(
+                            property_key_for_name("BindablePropertyNumber", "propertyValue")
+                                .expect("number property key"),
+                        )),
+                    ),
+                    property(
+                        "DataBindContext",
+                        "sourcePathIds",
+                        AuthoringValue::Bytes(vec![1, 0]),
+                    ),
+                    property("DataBindContext", "flags", AuthoringValue::Uint(4)),
+                    property("DataBindContext", "converterId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            record("DataConverterListToLength", Vec::new()),
+        ])
+        .expect("unresolved list-to-length fixture imports");
+        let data_bind = file
+            .objects
+            .iter()
+            .flatten()
+            .find(|object| object.type_name == "DataBindContext")
+            .expect("fixture has a data bind");
+
+        let source = runtime_bindable_number_unresolved_view_model_source(&file, 3, data_bind, 7.0)
+            .expect("a parent-relative list source is retained before binding its parent");
+
+        assert!(matches!(
+            source.converter,
+            Some(RuntimeDataBindGraphConverter::ListToLength)
+        ));
+        assert!(matches!(
+            source.value,
+            RuntimeDataBindGraphValue::ListLength(0)
         ));
     }
 

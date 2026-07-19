@@ -2992,7 +2992,15 @@ impl RuntimeDataBindGraphValue {
                     .list_item_count_by_property_path(&property_path)
                     .map(|item_count| Self::List { item_count })
             }
-            Self::ListLength(_) => None,
+            Self::ListLength(_) => {
+                let property_path = path[1..]
+                    .iter()
+                    .map(|property_index| usize::try_from(*property_index).ok())
+                    .collect::<Option<Vec<_>>>()?;
+                context
+                    .list_item_count_by_property_path(&property_path)
+                    .map(Self::ListLength)
+            }
             Self::Asset(_) => {
                 let property_path = path[1..]
                     .iter()
@@ -3066,7 +3074,9 @@ impl RuntimeDataBindGraphValue {
             Self::List { .. } => context
                 .list_item_count_by_context_source_path(file, context_path, path, false)
                 .map(|item_count| Self::List { item_count }),
-            Self::ListLength(_) => None,
+            Self::ListLength(_) => context
+                .list_item_count_by_context_source_path(file, context_path, path, false)
+                .map(Self::ListLength),
             Self::Asset(_) => context
                 .asset_value_by_context_source_path(file, context_path, path, false)
                 .or_else(|| {

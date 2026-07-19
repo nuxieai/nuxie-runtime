@@ -20,8 +20,8 @@ use std::collections::BTreeSet;
 
 use crate::data_bind_flags_apply_source_to_target;
 use crate::draw::{
-    RuntimeLayoutBounds, RuntimePathMeasure, runtime_path_geometry_commands,
-    runtime_shape_paint_command,
+    RuntimeLayoutBounds, RuntimePathMeasure, RuntimeTextPaintPoolSpec, RuntimeTextPaintPoolUse,
+    runtime_path_geometry_commands, runtime_shape_paint_command,
 };
 use crate::properties::{joystick_x_property_key, joystick_y_property_key, property_key_for_name};
 use crate::{ArtboardInstance, Mat2D, RuntimeDrawCommand, RuntimePathCommand};
@@ -293,20 +293,33 @@ pub(crate) fn runtime_text_shape_paint_commands(
     let style_order = slice.ordered_style_indices(runtime, instance)?;
 
     let mut commands = Vec::new();
+    let mut next_path_bucket_slot = 0usize;
     for style_index in style_order {
         let style = &slice.styles[style_index];
         let path_buckets = render_data.path_buckets_by_style[style_index].clone();
         let Some(container) = style.container else {
             continue;
         };
-        let mut allocated_text_paint_pool = false;
-        for path_bucket in order_opacity_buckets_like_cpp(path_buckets) {
-            commands.extend(container.paints.iter().filter_map(|paint| {
+        let path_buckets = order_opacity_buckets_like_cpp(path_buckets);
+        let paint_pool = RuntimeTextPaintPoolSpec {
+            style_local: style.local_id,
+            // C++ reserves one pooled paint per opacity bucket, including the
+            // opaque bucket even though that bucket uses the authored paint.
+            paint_count: path_buckets.len(),
+        };
+        let path_bucket_slot_start = next_path_bucket_slot;
+        next_path_bucket_slot += path_buckets.len();
+        let opaque_bucket = path_buckets
+            .iter()
+            .enumerate()
+            .find(|(_, path_bucket)| path_bucket.opacity == 1.0);
+        for paint in &container.paints {
+            if let Some((bucket_index, path_bucket)) = opaque_bucket {
                 let mut path_commands = path_bucket.commands.clone();
                 if paint.path_kind == Some(ShapePaintPathKind::World) {
                     transform_path_commands(&mut path_commands, shape_world);
                 }
-                let mut command = runtime_shape_paint_command(
+                if let Some(mut command) = runtime_shape_paint_command(
                     instance,
                     paint,
                     text_blend_mode_value,
@@ -317,18 +330,53 @@ pub(crate) fn runtime_text_shape_paint_commands(
                     true,
                     false,
                     true,
-                )?;
+                ) {
+                    command.shape_world_override = Some(shape_world);
+                    if command.paint_type == RuntimeShapePaintKind::Fill {
+                        command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
+                    }
+                    command.text_path_bucket_slot = Some(path_bucket_slot_start + bucket_index);
+                    command.ensure_text_paint_pool_after_draw = Some(paint_pool);
+                    commands.push(command);
+                }
+            }
+
+            for (paint_index, (bucket_index, path_bucket)) in path_buckets
+                .iter()
+                .enumerate()
+                .filter(|(_, path_bucket)| path_bucket.opacity != 1.0)
+                .enumerate()
+            {
+                let mut path_commands = path_bucket.commands.clone();
+                if paint.path_kind == Some(ShapePaintPathKind::World) {
+                    transform_path_commands(&mut path_commands, shape_world);
+                }
+                let Some(mut command) = runtime_shape_paint_command(
+                    instance,
+                    paint,
+                    text_blend_mode_value,
+                    needs_save_operation,
+                    render_opacity * path_bucket.opacity,
+                    shape_world,
+                    path_commands,
+                    true,
+                    false,
+                    true,
+                ) else {
+                    continue;
+                };
                 command.shape_world_override = Some(shape_world);
                 if command.paint_type == RuntimeShapePaintKind::Fill {
                     command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
                 }
-                command.uses_temporary_paint = path_bucket.opacity != 1.0;
-                if !command.uses_temporary_paint && !allocated_text_paint_pool {
-                    command.allocates_text_paint_pool = true;
-                    allocated_text_paint_pool = true;
-                }
-                Some(command)
-            }));
+                command.uses_temporary_paint = true;
+                command.text_path_bucket_slot = Some(path_bucket_slot_start + bucket_index);
+                command.text_paint_pool = Some(RuntimeTextPaintPoolUse {
+                    spec: paint_pool,
+                    paint_index,
+                });
+                commands.push(command);
+            }
         }
     }
     Ok(commands)

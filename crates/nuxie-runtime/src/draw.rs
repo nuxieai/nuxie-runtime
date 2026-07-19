@@ -7194,6 +7194,26 @@ pub enum RuntimeShapePaintPathKind {
     World,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RuntimeTextPaintPoolSpec {
+    pub(crate) style_local: usize,
+    pub(crate) paint_count: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RuntimeTextPaintPoolUse {
+    pub(crate) spec: RuntimeTextPaintPoolSpec,
+    pub(crate) paint_index: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct RuntimeTextPaintPoolKey {
+    graph_global_id: u32,
+    instance_identity: u64,
+    text_local: usize,
+    style_local: usize,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeShapePaintCommand {
     pub paint_local: usize,
@@ -7217,7 +7237,9 @@ pub struct RuntimeShapePaintCommand {
     pub shape_world_override: Option<Mat2D>,
     pub aliases_local_clockwise_path: bool,
     pub uses_temporary_paint: bool,
-    pub allocates_text_paint_pool: bool,
+    pub(crate) text_path_bucket_slot: Option<usize>,
+    pub(crate) text_paint_pool: Option<RuntimeTextPaintPoolUse>,
+    pub(crate) ensure_text_paint_pool_after_draw: Option<RuntimeTextPaintPoolSpec>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -7274,6 +7296,7 @@ pub struct RuntimeRenderPaintCache {
 #[derive(Default)]
 pub struct RuntimeRenderPaints {
     paints_by_global: Vec<Option<Box<dyn RenderPaint>>>,
+    text_paint_pools: BTreeMap<RuntimeTextPaintPoolKey, Vec<Box<dyn RenderPaint>>>,
 }
 
 impl RuntimeRenderPaints {
@@ -7491,7 +7514,6 @@ pub struct RuntimeRenderPathCache {
     world_transforms: RuntimeWorldTransformSlots,
     image_layout_transforms: RuntimeImageLayoutTransformSlots,
     text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
-    allocated_text_paint_pools: BTreeSet<(u32, usize, u32)>,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
     nested_artboards: BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPathCache>,
@@ -9806,7 +9828,9 @@ fn runtime_background_shape_paint_command(
         shape_world_override: None,
         aliases_local_clockwise_path: false,
         uses_temporary_paint: false,
-        allocates_text_paint_pool: false,
+        text_path_bucket_slot: None,
+        text_paint_pool: None,
+        ensure_text_paint_pool_after_draw: None,
     })
 }
 
@@ -9859,7 +9883,9 @@ fn runtime_prepare_gradient_paint_command(
         shape_world_override: None,
         aliases_local_clockwise_path: false,
         uses_temporary_paint: false,
-        allocates_text_paint_pool: false,
+        text_path_bucket_slot: None,
+        text_paint_pool: None,
+        ensure_text_paint_pool_after_draw: None,
     }
 }
 
@@ -10110,12 +10136,12 @@ fn runtime_draw_command(
         text_temporary_paints.reserve(
             shape_paints
                 .iter()
-                .filter(|paint| paint.uses_temporary_paint)
+                .filter(|paint| paint.uses_temporary_paint && paint.text_paint_pool.is_none())
                 .count(),
         );
         for _ in shape_paints
             .iter()
-            .filter(|paint| paint.uses_temporary_paint)
+            .filter(|paint| paint.uses_temporary_paint && paint.text_paint_pool.is_none())
         {
             text_temporary_paints.push(factory.make_render_paint());
         }
@@ -10128,9 +10154,26 @@ fn runtime_draw_command(
                 .and_then(|local_id| runtime_foreground_layout_parent_local(instance, local_id))
         } else {
             None
-        };
+    };
     for paint in shape_paints {
         let global_id = paint.paint_global_id;
+        let text_paint_pool_slot = if draws_text {
+            paint.text_paint_pool.map(|pool_use| {
+                let key = RuntimeTextPaintPoolKey {
+                    graph_global_id: graph.global_id,
+                    instance_identity: instance.instance_identity(),
+                    text_local: command.local_id.unwrap_or_default(),
+                    style_local: pool_use.spec.style_local,
+                };
+                let pool = paint_by_global.text_paint_pools.entry(key).or_default();
+                while pool.len() < pool_use.spec.paint_count {
+                    pool.push(factory.make_render_paint());
+                }
+                (key, pool_use.paint_index)
+            })
+        } else {
+            None
+        };
         let draw_path_revision = runtime_draw_path_revision(instance, paint.path_kind);
         let effect_or_shape_path_commands = if paint.has_effect_path {
             &paint.effect_path_commands
@@ -10143,7 +10186,10 @@ fn runtime_draw_command(
             .filter(|feather| feather.inner)
             .map(|feather| feather.inner_path_commands.as_slice())
             .unwrap_or(effect_or_shape_path_commands);
-        let temporary_paint_index = if draws_text && paint.uses_temporary_paint {
+        let temporary_paint_index = if draws_text
+            && paint.uses_temporary_paint
+            && text_paint_pool_slot.is_none()
+        {
             let object = runtime
                 .object(global_id as usize)
                 .with_context(|| format!("missing paint global {global_id}"))?;
@@ -10187,6 +10233,17 @@ fn runtime_draw_command(
             }
             None
         };
+        if let Some((key, paint_index)) = text_paint_pool_slot {
+            let object = runtime
+                .object(global_id as usize)
+                .with_context(|| format!("missing paint global {global_id}"))?;
+            let render_paint = paint_by_global
+                .text_paint_pools
+                .get_mut(&key)
+                .and_then(|pool| pool.get_mut(paint_index))
+                .context("missing pooled text render paint")?;
+            runtime_configure_paint(render_paint.as_mut(), instance, object, paint, None)?;
+        }
         let mut saved = !paint.needs_save_operation;
         let paint_shape_world = paint.shape_world_override.unwrap_or(shape_world);
         // Ported from C++ src/shapes/paint/shape_paint.cpp and feather.cpp.
@@ -10276,7 +10333,14 @@ fn runtime_draw_command(
             RenderFillRule::Clockwise,
             replay_fill_rule,
         );
-        let render_paint = if let Some(index) = temporary_paint_index {
+        let render_paint = if let Some((key, paint_index)) = text_paint_pool_slot {
+            paint_by_global
+                .text_paint_pools
+                .get(&key)
+                .and_then(|pool| pool.get(paint_index))
+                .context("missing pooled text render paint")?
+                .as_ref()
+        } else if let Some(index) = temporary_paint_index {
             text_temporary_paints[index].as_ref()
         } else {
             paint_by_global
@@ -10289,14 +10353,18 @@ fn runtime_draw_command(
             renderer.restore();
         }
         if draws_text
-            && paint.allocates_text_paint_pool
-            && path_cache.allocated_text_paint_pools.insert((
-                graph.global_id,
-                command.local_id.unwrap_or_default(),
-                paint.paint_global_id,
-            ))
+            && let Some(spec) = paint.ensure_text_paint_pool_after_draw
         {
-            let _ = factory.make_render_paint();
+            let key = RuntimeTextPaintPoolKey {
+                graph_global_id: graph.global_id,
+                instance_identity: instance.instance_identity(),
+                text_local: command.local_id.unwrap_or_default(),
+                style_local: spec.style_local,
+            };
+            let pool = paint_by_global.text_paint_pools.entry(key).or_default();
+            while pool.len() < spec.paint_count {
+                pool.push(factory.make_render_paint());
+            }
         }
     }
     if text_needs_save_operation {
@@ -11696,6 +11764,11 @@ fn runtime_clipping_shape(graph: &ArtboardGraph, local_id: usize) -> Option<&Cli
 }
 
 fn assign_shape_paint_path_slot_indices(commands: &mut [RuntimeShapePaintCommand]) {
+    let explicit_slot_count = commands
+        .iter()
+        .filter_map(|command| command.text_path_bucket_slot)
+        .max()
+        .map_or(0, |slot| slot + 1);
     let mut path_slots = Vec::<&[RuntimePathCommand]>::new();
     for command in commands {
         let effect_or_shape_path_commands = if command.has_effect_path {
@@ -11708,15 +11781,19 @@ fn assign_shape_paint_path_slot_indices(commands: &mut [RuntimeShapePaintCommand
             .as_ref()
             .filter(|feather| feather.inner)
         {
-            command.clip_path_slot_index =
-                runtime_cached_path_slot_index(&mut path_slots, effect_or_shape_path_commands);
-            command.path_slot_index = runtime_cached_path_slot_index(
-                &mut path_slots,
-                feather.inner_path_commands.as_slice(),
-            );
+            command.clip_path_slot_index = explicit_slot_count
+                + runtime_cached_path_slot_index(&mut path_slots, effect_or_shape_path_commands);
+            command.path_slot_index = explicit_slot_count
+                + runtime_cached_path_slot_index(
+                    &mut path_slots,
+                    feather.inner_path_commands.as_slice(),
+                );
+        } else if let Some(slot) = command.text_path_bucket_slot {
+            command.path_slot_index = slot;
+            command.clip_path_slot_index = slot;
         } else {
-            command.path_slot_index =
-                runtime_cached_path_slot_index(&mut path_slots, effect_or_shape_path_commands);
+            command.path_slot_index = explicit_slot_count
+                + runtime_cached_path_slot_index(&mut path_slots, effect_or_shape_path_commands);
             command.clip_path_slot_index = command.path_slot_index;
         }
     }
@@ -12672,7 +12749,9 @@ pub(crate) fn runtime_shape_paint_command(
         shape_world_override: None,
         aliases_local_clockwise_path,
         uses_temporary_paint: false,
-        allocates_text_paint_pool: false,
+        text_path_bucket_slot: None,
+        text_paint_pool: None,
+        ensure_text_paint_pool_after_draw: None,
     })
 }
 

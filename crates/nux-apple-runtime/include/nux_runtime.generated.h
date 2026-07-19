@@ -11,7 +11,7 @@
 
 #define NUX_RUNTIME_ABI_MAJOR 1
 
-#define NUX_RUNTIME_ABI_MINOR 0
+#define NUX_RUNTIME_ABI_MINOR 1
 
 /**
  * Opaque C handle. It retains the logical render session across detach.
@@ -84,6 +84,42 @@ typedef struct NuxFlowSessionDescriptor {
   struct NuxByteView state_machine_name;
 } NuxFlowSessionDescriptor;
 
+typedef struct NuxFlowAuthorizationKey {
+  uint32_t struct_size;
+  struct NuxByteView key_id;
+  /**
+   * Exactly 32 raw Ed25519 public-key bytes.
+   */
+  struct NuxByteView ed25519_public_key;
+} NuxFlowAuthorizationKey;
+
+/**
+ * Stable-width external artifact asset kind.
+ */
+typedef uint32_t NuxFlowExternalAssetKind;
+
+/**
+ * One element of `NuxFlowImportRequest.external_assets`. Because the array has
+ * no independent stride, every element must use this exact published size.
+ */
+typedef struct NuxFlowExternalAsset {
+  uint32_t struct_size;
+  NuxFlowExternalAssetKind kind;
+  /**
+   * Serialized `FileAsset.assetId`, not an asset-list ordinal.
+   */
+  uint32_t asset_id;
+  bool required;
+  /**
+   * Distinguishes explicitly omitted optional content from supplied empty bytes.
+   */
+  bool provided;
+  struct NuxByteView unique_name;
+  struct NuxByteView source_key;
+  struct NuxByteView expected_sha256;
+  struct NuxByteView bytes;
+} NuxFlowExternalAsset;
+
 typedef struct NuxFlowImportRequest {
   uint32_t struct_size;
   /**
@@ -91,12 +127,76 @@ typedef struct NuxFlowImportRequest {
    * the current RIV adapter can later be replaced without changing sessions.
    */
   struct NuxByteView artifact_bytes;
+  /**
+   * UTF-8 acquisition identity used to prevent cross-flow replay.
+   */
+  struct NuxByteView expected_flow_id;
+  /**
+   * UTF-8 acquisition identity used to prevent cross-build replay.
+   */
+  struct NuxByteView expected_build_id;
+  /**
+   * Exact signed artifact manifest bytes.
+   */
+  struct NuxByteView manifest_bytes;
+  /**
+   * Optional exact detached signature-envelope bytes. Only `{NULL, 0}` is
+   * absent; a non-null empty view is present malformed evidence.
+   */
+  struct NuxByteView signature_envelope_bytes;
+  /**
+   * Optional Nuxie-selected validation material. This is evidence, never a
+   * caller-supplied authorization decision.
+   */
+  const struct NuxFlowAuthorizationKey *selected_key;
+  /**
+   * Ordered manifest asset inputs, already resolved to bytes or an explicit omission.
+   */
+  const struct NuxFlowExternalAsset *external_assets;
+  uint64_t external_asset_count;
 } NuxFlowImportRequest;
+
+/**
+ * Stable-width structured diagnostic severity.
+ */
+typedef uint32_t NuxDiagnosticSeverity;
+
+/**
+ * Frozen ABI-major-1 diagnostic output layout. Callers initialize
+ * `struct_size` to the exact published size before invoking an accessor.
+ */
+typedef struct NuxDiagnosticView {
+  uint32_t struct_size;
+  NuxDiagnosticSeverity severity;
+  struct NuxByteView code;
+  struct NuxByteView message;
+} NuxDiagnosticView;
+
+/**
+ * Stable-width script authorization result set during artifact import.
+ */
+typedef uint32_t NuxScriptAuthorization;
 
 /**
  * Stable-width C presentation outcome.
  */
 typedef uint32_t NuxSurfaceDisposition;
+
+#define NUX_DIAGNOSTIC_SEVERITY_DEBUG 0
+
+#define NUX_DIAGNOSTIC_SEVERITY_FATAL 2
+
+#define NUX_DIAGNOSTIC_SEVERITY_WARNING 1
+
+#define NUX_FLOW_EXTERNAL_ASSET_KIND_FONT 2
+
+#define NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE 1
+
+#define NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED 2
+
+#define NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE 0
+
+#define NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY 1
 
 #define NUX_STATUS_ABI_MISMATCH (NuxStatus)6
 
@@ -279,6 +379,17 @@ NuxStatus nux_flow_runtime_context_create(const struct NuxFlowImportRequest *req
 void nux_flow_runtime_context_free(struct NuxFlowRuntimeContext *context);
 
 /**
+ * Borrows the authenticated key ID stored by an import result.
+ *
+ * # Safety
+ *
+ * `result` must be live and `out_key_id` writable. The returned view expires
+ * when `result` is released.
+ */
+NuxStatus nux_operation_result_authenticated_key_id(const struct NuxOperationResult *result,
+                                                    struct NuxByteView *out_key_id);
+
+/**
  * Returns whether an operation changed logical runtime state.
  *
  * # Safety
@@ -299,6 +410,28 @@ NuxStatus nux_operation_result_diagnostic(const struct NuxOperationResult *resul
                                           struct NuxByteView *out_diagnostic);
 
 /**
+ * Borrows one structured diagnostic by stable result order.
+ *
+ * # Safety
+ *
+ * `result` must be live and `out_diagnostic` writable with `struct_size`
+ * initialized to the exact ABI-major-1 layout size. Returned views expire when
+ * `result` is released.
+ */
+NuxStatus nux_operation_result_diagnostic_at(const struct NuxOperationResult *result,
+                                             uint64_t index,
+                                             struct NuxDiagnosticView *out_diagnostic);
+
+/**
+ * Returns the number of phase-ordered structured diagnostics in a result.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+uint64_t nux_operation_result_diagnostic_count(const struct NuxOperationResult *result);
+
+/**
  * Releases one operation result. Null is a no-op.
  *
  * # Safety
@@ -307,6 +440,15 @@ NuxStatus nux_operation_result_diagnostic(const struct NuxOperationResult *resul
  * must not have been released before.
  */
 void nux_operation_result_free(struct NuxOperationResult *result);
+
+/**
+ * Returns the artifact import's script authorization, or `NOT_APPLICABLE`.
+ *
+ * # Safety
+ *
+ * A non-null pointer must identify a live result owned by this library.
+ */
+NuxScriptAuthorization nux_operation_result_script_authorization(const struct NuxOperationResult *result);
 
 /**
  * Returns an operation result's status, or `NULL_ARGUMENT` for null.

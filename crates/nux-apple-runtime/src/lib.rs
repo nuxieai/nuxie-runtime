@@ -1,5 +1,8 @@
 //! Product C ABI for the Nuxie Apple flow runtime.
 
+#[cfg(feature = "apple-product")]
+mod artifact;
+
 #[cfg(all(feature = "apple-product", panic = "abort"))]
 compile_error!(
     "nux-apple-runtime's apple-product feature requires panic=unwind; use the release-apple profile"
@@ -10,6 +13,12 @@ use std::panic::{self, AssertUnwindSafe};
 use std::ptr;
 use std::slice;
 
+#[cfg(feature = "apple-product")]
+use artifact::{
+    ArtifactAuthorization, ArtifactDiagnosticSeverity, ExternalAssetInput, ExternalAssetKind,
+    FlowArtifactImportInput, MAX_EXTERNAL_ASSET_COUNT, SelectedArtifactSigningKey,
+    validate_flow_artifact_import,
+};
 #[cfg(feature = "apple-product")]
 use nuxie::{
     ApplePresentationCompletion, AppleSurface, ArtboardRenderCache, File, Mat2D,
@@ -27,10 +36,16 @@ use std::{
 };
 
 pub const NUX_RUNTIME_ABI_MAJOR: u16 = 1;
-pub const NUX_RUNTIME_ABI_MINOR: u16 = 0;
+pub const NUX_RUNTIME_ABI_MINOR: u16 = 1;
 
 const MAX_ARTIFACT_BYTE_LENGTH: usize = 67_108_864;
+const MAX_MANIFEST_BYTE_LENGTH: usize = 4_194_304;
+const MAX_SIGNATURE_BYTE_LENGTH: usize = 65_536;
+const MAX_AUTHORIZATION_KEY_ID_BYTE_LENGTH: usize = 256;
+const ED25519_PUBLIC_KEY_BYTE_LENGTH: usize = 32;
+const MAX_EXTERNAL_ASSET_TOTAL_BYTE_LENGTH: usize = 134_217_728;
 const MAX_SELECTOR_BYTE_LENGTH: usize = 4_096;
+const MAX_ASSET_SOURCE_KEY_BYTE_LENGTH: usize = MAX_MANIFEST_BYTE_LENGTH;
 const PANIC_DIAGNOSTIC: &str = "runtime panicked; the affected flow session is terminated";
 const BUILD_PROVENANCE: &str = env!("NUX_RUNTIME_BUILD_PROVENANCE");
 
@@ -72,6 +87,26 @@ pub const NUX_STATUS_RUNTIME_ERROR: NuxStatus = 4 as NuxStatus;
 pub const NUX_STATUS_INVALID_ARGUMENT: NuxStatus = 5 as NuxStatus;
 pub const NUX_STATUS_ABI_MISMATCH: NuxStatus = 6 as NuxStatus;
 pub const NUX_STATUS_SURFACE_ERROR: NuxStatus = 7 as NuxStatus;
+
+/// Stable-width script authorization result set during artifact import.
+pub type NuxScriptAuthorization = u32;
+
+pub const NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE: NuxScriptAuthorization = 0;
+pub const NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY: NuxScriptAuthorization = 1;
+pub const NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED: NuxScriptAuthorization = 2;
+
+/// Stable-width structured diagnostic severity.
+pub type NuxDiagnosticSeverity = u32;
+
+pub const NUX_DIAGNOSTIC_SEVERITY_DEBUG: NuxDiagnosticSeverity = 0;
+pub const NUX_DIAGNOSTIC_SEVERITY_WARNING: NuxDiagnosticSeverity = 1;
+pub const NUX_DIAGNOSTIC_SEVERITY_FATAL: NuxDiagnosticSeverity = 2;
+
+/// Stable-width external artifact asset kind.
+pub type NuxFlowExternalAssetKind = u32;
+
+pub const NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE: NuxFlowExternalAssetKind = 1;
+pub const NUX_FLOW_EXTERNAL_ASSET_KIND_FONT: NuxFlowExternalAssetKind = 2;
 
 /// Stable-width C presentation outcome.
 pub type NuxSurfaceDisposition = u32;
@@ -160,11 +195,75 @@ impl NuxByteView {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
+pub struct NuxFlowAuthorizationKey {
+    pub struct_size: u32,
+    pub key_id: NuxByteView,
+    /// Exactly 32 raw Ed25519 public-key bytes.
+    pub ed25519_public_key: NuxByteView,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+/// One element of `NuxFlowImportRequest.external_assets`. Because the array has
+/// no independent stride, every element must use this exact published size.
+pub struct NuxFlowExternalAsset {
+    pub struct_size: u32,
+    pub kind: NuxFlowExternalAssetKind,
+    /// Serialized `FileAsset.assetId`, not an asset-list ordinal.
+    pub asset_id: u32,
+    pub required: bool,
+    /// Distinguishes explicitly omitted optional content from supplied empty bytes.
+    pub provided: bool,
+    pub unique_name: NuxByteView,
+    pub source_key: NuxByteView,
+    pub expected_sha256: NuxByteView,
+    pub bytes: NuxByteView,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct NuxFlowImportRequest {
     pub struct_size: u32,
     /// Exact verified visual-runtime bytes. The field is container-neutral so
     /// the current RIV adapter can later be replaced without changing sessions.
     pub artifact_bytes: NuxByteView,
+    /// UTF-8 acquisition identity used to prevent cross-flow replay.
+    pub expected_flow_id: NuxByteView,
+    /// UTF-8 acquisition identity used to prevent cross-build replay.
+    pub expected_build_id: NuxByteView,
+    /// Exact signed artifact manifest bytes.
+    pub manifest_bytes: NuxByteView,
+    /// Optional exact detached signature-envelope bytes. Only `{NULL, 0}` is
+    /// absent; a non-null empty view is present malformed evidence.
+    pub signature_envelope_bytes: NuxByteView,
+    /// Optional Nuxie-selected validation material. This is evidence, never a
+    /// caller-supplied authorization decision.
+    pub selected_key: *const NuxFlowAuthorizationKey,
+    /// Ordered manifest asset inputs, already resolved to bytes or an explicit omission.
+    pub external_assets: *const NuxFlowExternalAsset,
+    pub external_asset_count: u64,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+/// Frozen ABI-major-1 diagnostic output layout. Callers initialize
+/// `struct_size` to the exact published size before invoking an accessor.
+pub struct NuxDiagnosticView {
+    pub struct_size: u32,
+    pub severity: NuxDiagnosticSeverity,
+    pub code: NuxByteView,
+    pub message: NuxByteView,
+}
+
+impl Default for NuxDiagnosticView {
+    fn default() -> Self {
+        Self {
+            struct_size: size_u32::<Self>(),
+            severity: NUX_DIAGNOSTIC_SEVERITY_DEBUG,
+            code: NuxByteView::default(),
+            message: NuxByteView::default(),
+        }
+    }
 }
 
 #[repr(C)]
@@ -352,9 +451,116 @@ enum WorkerCallError {
 
 #[cfg(feature = "apple-product")]
 enum WorkerStartError {
-    Import(String),
+    Import { code: String, message: String },
     Runtime(String),
     Panicked,
+}
+
+#[cfg(feature = "apple-product")]
+enum RuntimeImportInput {
+    LegacyVisualOnly(Vec<u8>),
+    Verified(FlowArtifactImportInput),
+}
+
+#[cfg(feature = "apple-product")]
+struct RuntimeImportDiagnostic {
+    severity: NuxDiagnosticSeverity,
+    code: String,
+    message: String,
+}
+
+#[cfg(feature = "apple-product")]
+struct RuntimeImportMetadata {
+    authorization: NuxScriptAuthorization,
+    authenticated_key_id: Option<String>,
+    diagnostics: Vec<RuntimeImportDiagnostic>,
+}
+
+#[cfg(feature = "apple-product")]
+struct WorkerInitialization {
+    thread_id: ThreadId,
+    metadata: RuntimeImportMetadata,
+}
+
+#[cfg(feature = "apple-product")]
+fn import_runtime_input(
+    input: RuntimeImportInput,
+) -> Result<(File, RuntimeImportMetadata), WorkerStartError> {
+    match input {
+        RuntimeImportInput::LegacyVisualOnly(bytes) => {
+            let file = File::import(&bytes).map_err(|error| WorkerStartError::Import {
+                code: "artifact.riv.import_failed".to_owned(),
+                message: error.to_string(),
+            })?;
+            Ok((
+                file,
+                RuntimeImportMetadata {
+                    authorization: NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY,
+                    authenticated_key_id: None,
+                    diagnostics: vec![RuntimeImportDiagnostic {
+                        severity: NUX_DIAGNOSTIC_SEVERITY_WARNING,
+                        code: "artifact.authentication.legacy_unverified".to_owned(),
+                        message: "ABI 1.0 import has no signed manifest evidence".to_owned(),
+                    }],
+                },
+            ))
+        }
+        RuntimeImportInput::Verified(input) => {
+            let validated =
+                validate_flow_artifact_import(input).map_err(|error| WorkerStartError::Import {
+                    code: error.code.to_owned(),
+                    message: error.message,
+                })?;
+            let mut file = validated.file;
+            for asset in validated.external_assets {
+                let Some(bytes) = asset.bytes else {
+                    continue;
+                };
+                let attachment = match asset.kind {
+                    ExternalAssetKind::Image => {
+                        file.attach_external_image_asset_bytes(asset.asset_id, bytes)
+                    }
+                    ExternalAssetKind::Font => {
+                        file.attach_external_font_asset_bytes(asset.asset_id, bytes)
+                    }
+                };
+                attachment.map_err(|error| WorkerStartError::Import {
+                    code: "artifact.asset.attach_failed".to_owned(),
+                    message: format!(
+                        "asset {} '{}' could not be attached: {error}",
+                        asset.asset_id, asset.unique_name
+                    ),
+                })?;
+            }
+            let (authorization, authenticated_key_id) = match validated.authorization {
+                ArtifactAuthorization::Authenticated { key_id } => {
+                    (NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED, Some(key_id))
+                }
+                ArtifactAuthorization::VisualOnly { .. } => {
+                    (NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY, None)
+                }
+            };
+            let diagnostics = validated
+                .diagnostics
+                .into_iter()
+                .map(|diagnostic| RuntimeImportDiagnostic {
+                    severity: match diagnostic.severity {
+                        ArtifactDiagnosticSeverity::Warning => NUX_DIAGNOSTIC_SEVERITY_WARNING,
+                    },
+                    code: diagnostic.code.to_owned(),
+                    message: diagnostic.message,
+                })
+                .collect();
+            Ok((
+                file,
+                RuntimeImportMetadata {
+                    authorization,
+                    authenticated_key_id,
+                    diagnostics,
+                },
+            ))
+        }
+    }
 }
 
 #[cfg(feature = "apple-product")]
@@ -626,22 +832,28 @@ impl Drop for WorkerState {
 
 #[cfg(feature = "apple-product")]
 impl RuntimeWorker {
+    #[cfg(test)]
     fn spawn(artifact_bytes: Vec<u8>) -> Result<Arc<Self>, WorkerStartError> {
+        Self::spawn_input(RuntimeImportInput::LegacyVisualOnly(artifact_bytes))
+            .map(|(worker, _)| worker)
+    }
+
+    fn spawn_input(
+        input: RuntimeImportInput,
+    ) -> Result<(Arc<Self>, RuntimeImportMetadata), WorkerStartError> {
         let (sender, receiver) = mpsc::channel();
         let (initialization_sender, initialization_receiver) = mpsc::sync_channel(1);
         let join_handle = thread::Builder::new()
             .name("nuxie-flow-runtime".to_owned())
             .spawn(move || {
                 let state = panic::catch_unwind(AssertUnwindSafe(|| {
-                    File::import(&artifact_bytes)
-                        .map(WorkerState::new)
-                        .map_err(|error| error.to_string())
+                    import_runtime_input(input)
+                        .map(|(file, metadata)| (WorkerState::new(file), metadata))
                 }));
-                let state = match state {
-                    Ok(Ok(state)) => state,
-                    Ok(Err(diagnostic)) => {
-                        let _ =
-                            initialization_sender.send(Err(WorkerStartError::Import(diagnostic)));
+                let (state, metadata) = match state {
+                    Ok(Ok(initialized)) => initialized,
+                    Ok(Err(error)) => {
+                        let _ = initialization_sender.send(Err(error));
                         return;
                     }
                     Err(_) => {
@@ -649,7 +861,10 @@ impl RuntimeWorker {
                         return;
                     }
                 };
-                let _ = initialization_sender.send(Ok(thread::current().id()));
+                let _ = initialization_sender.send(Ok(WorkerInitialization {
+                    thread_id: thread::current().id(),
+                    metadata,
+                }));
                 worker_loop(state, receiver);
             })
             .map_err(|error| WorkerStartError::Runtime(error.to_string()))?;
@@ -657,8 +872,8 @@ impl RuntimeWorker {
         let initialization = initialization_receiver.recv().map_err(|_| {
             WorkerStartError::Runtime("runtime worker stopped during initialization".to_owned())
         });
-        let thread_id = match initialization {
-            Ok(Ok(thread_id)) => thread_id,
+        let initialization = match initialization {
+            Ok(Ok(initialization)) => initialization,
             Ok(Err(error)) => {
                 let _ = join_handle.join();
                 return Err(error);
@@ -668,11 +883,14 @@ impl RuntimeWorker {
                 return Err(error);
             }
         };
-        Ok(Arc::new(Self {
-            sender,
-            join_handle: Mutex::new(Some(join_handle)),
-            thread_id,
-        }))
+        Ok((
+            Arc::new(Self {
+                sender,
+                join_handle: Mutex::new(Some(join_handle)),
+                thread_id: initialization.thread_id,
+            }),
+            initialization.metadata,
+        ))
     }
 
     fn call<R: Send + 'static>(
@@ -783,10 +1001,20 @@ fn assert_opaque_handle_storage_is_send_and_sync() {
     assert_send_and_sync::<AppleSurfaceHandle>();
 }
 
+struct OwnedDiagnostic {
+    severity: NuxDiagnosticSeverity,
+    code: Vec<u8>,
+    message: Vec<u8>,
+}
+
 pub struct NuxOperationResult {
     status: NuxStatus,
     surface_disposition: NuxSurfaceDisposition,
     changed: bool,
+    script_authorization: NuxScriptAuthorization,
+    authenticated_key_id: Vec<u8>,
+    diagnostics: Vec<OwnedDiagnostic>,
+    // ABI 1.0 compatibility view: the first diagnostic message.
     diagnostic: Vec<u8>,
 }
 
@@ -796,17 +1024,92 @@ impl NuxOperationResult {
             status: NuxStatus::Ok,
             surface_disposition,
             changed,
+            script_authorization: NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE,
+            authenticated_key_id: Vec::new(),
+            diagnostics: Vec::new(),
             diagnostic: Vec::new(),
         }
     }
 
+    #[cfg(feature = "apple-product")]
+    fn import_success(metadata: RuntimeImportMetadata) -> Self {
+        let diagnostics = metadata
+            .diagnostics
+            .into_iter()
+            .map(|diagnostic| OwnedDiagnostic {
+                severity: diagnostic.severity,
+                code: diagnostic.code.into_bytes(),
+                message: diagnostic.message.into_bytes(),
+            })
+            .collect::<Vec<_>>();
+        let diagnostic = diagnostics
+            .first()
+            .map(|diagnostic| diagnostic.message.clone())
+            .unwrap_or_default();
+        Self {
+            status: NuxStatus::Ok,
+            surface_disposition: NuxSurfaceDisposition::None,
+            changed: false,
+            script_authorization: metadata.authorization,
+            authenticated_key_id: metadata
+                .authenticated_key_id
+                .map(String::into_bytes)
+                .unwrap_or_default(),
+            diagnostics,
+            diagnostic,
+        }
+    }
+
     fn failure(status: NuxStatus, diagnostic: impl Into<Vec<u8>>) -> Self {
+        let diagnostic = diagnostic.into();
         Self {
             status,
             surface_disposition: NuxSurfaceDisposition::Fatal,
             changed: false,
-            diagnostic: diagnostic.into(),
+            script_authorization: NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE,
+            authenticated_key_id: Vec::new(),
+            diagnostics: vec![OwnedDiagnostic {
+                severity: NUX_DIAGNOSTIC_SEVERITY_FATAL,
+                code: diagnostic_code_for_status(status).to_vec(),
+                message: diagnostic.clone(),
+            }],
+            diagnostic,
         }
+    }
+
+    fn import_failure(
+        status: NuxStatus,
+        code: impl Into<Vec<u8>>,
+        message: impl Into<Vec<u8>>,
+    ) -> Self {
+        let message = message.into();
+        Self {
+            status,
+            surface_disposition: NuxSurfaceDisposition::Fatal,
+            changed: false,
+            script_authorization: NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE,
+            authenticated_key_id: Vec::new(),
+            diagnostics: vec![OwnedDiagnostic {
+                severity: NUX_DIAGNOSTIC_SEVERITY_FATAL,
+                code: code.into(),
+                message: message.clone(),
+            }],
+            diagnostic: message,
+        }
+    }
+}
+
+fn diagnostic_code_for_status(status: NuxStatus) -> &'static [u8] {
+    match status {
+        NUX_STATUS_OK => b"nux_runtime.ok",
+        NUX_STATUS_NULL_ARGUMENT => b"nux_runtime.null_argument",
+        NUX_STATUS_IMPORT_ERROR => b"nux_runtime.import_error",
+        NUX_STATUS_NOT_FOUND => b"nux_runtime.not_found",
+        NUX_STATUS_RUNTIME_ERROR => b"nux_runtime.runtime_error",
+        NUX_STATUS_INVALID_ARGUMENT => b"nux_runtime.invalid_argument",
+        NUX_STATUS_ABI_MISMATCH => b"nux_runtime.abi_mismatch",
+        NUX_STATUS_SURFACE_ERROR => b"nux_runtime.surface_error",
+        _ => b"nux_runtime.unknown",
     }
 }
 
@@ -877,31 +1180,28 @@ pub unsafe extern "C" fn nux_flow_runtime_context_create(
             if request.is_null() || out_context.is_null() {
                 return NuxStatus::NullArgument;
             }
-            let struct_size = unsafe { read_struct_size(request) };
-            if struct_size < size_u32::<NuxFlowImportRequest>() {
-                return write_failure(
-                    out_result,
-                    NuxStatus::InvalidArgument,
-                    "flow import request is smaller than this ABI requires",
-                );
-            }
-            let request = unsafe { *request };
-            let bytes = match byte_vec(request.artifact_bytes, MAX_ARTIFACT_BYTE_LENGTH) {
-                Ok(bytes) => bytes,
+            let input = match unsafe { copy_runtime_import_input(request) } {
+                Ok(input) => input,
                 Err(status) => {
-                    return write_failure(out_result, status, "artifact byte view is invalid");
+                    return write_import_failure(
+                        out_result,
+                        status,
+                        "artifact.request.invalid",
+                        "flow import request contains an invalid or oversized view",
+                    );
                 }
             };
-            match RuntimeWorker::spawn(bytes) {
-                Ok(worker) => {
+            match RuntimeWorker::spawn_input(input) {
+                Ok((worker, metadata)) => {
                     let context = Box::new(FlowRuntimeContextHandle { worker });
                     unsafe {
                         *out_context = Box::into_raw(context).cast();
                     }
-                    write_success(out_result, NuxSurfaceDisposition::None, false)
+                    replace_result(out_result, NuxOperationResult::import_success(metadata));
+                    NuxStatus::Ok
                 }
-                Err(WorkerStartError::Import(diagnostic)) => {
-                    write_failure(out_result, NuxStatus::ImportError, diagnostic)
+                Err(WorkerStartError::Import { code, message }) => {
+                    write_import_failure(out_result, NuxStatus::ImportError, code, message)
                 }
                 Err(WorkerStartError::Runtime(diagnostic)) => {
                     write_failure(out_result, NuxStatus::RuntimeError, diagnostic)
@@ -1480,6 +1780,128 @@ pub unsafe extern "C" fn nux_operation_result_changed(result: *const NuxOperatio
 }
 
 #[unsafe(no_mangle)]
+/// Returns the artifact import's script authorization, or `NOT_APPLICABLE`.
+///
+/// # Safety
+///
+/// A non-null pointer must identify a live result owned by this library.
+pub unsafe extern "C" fn nux_operation_result_script_authorization(
+    result: *const NuxOperationResult,
+) -> NuxScriptAuthorization {
+    ffi_guard(NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE, || {
+        if result.is_null() {
+            NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE
+        } else {
+            unsafe { (*result).script_authorization }
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Borrows the authenticated key ID stored by an import result.
+///
+/// # Safety
+///
+/// `result` must be live and `out_key_id` writable. The returned view expires
+/// when `result` is released.
+pub unsafe extern "C" fn nux_operation_result_authenticated_key_id(
+    result: *const NuxOperationResult,
+    out_key_id: *mut NuxByteView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_key_id.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        unsafe {
+            *out_key_id = NuxByteView::default();
+        }
+        if result.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        let key_id = unsafe { &(*result).authenticated_key_id };
+        if key_id.is_empty() {
+            return NuxStatus::NotFound;
+        }
+        unsafe {
+            *out_key_id = NuxByteView {
+                data: key_id.as_ptr(),
+                len: u64::try_from(key_id.len()).unwrap_or(u64::MAX),
+            };
+        }
+        NuxStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Returns the number of phase-ordered structured diagnostics in a result.
+///
+/// # Safety
+///
+/// A non-null pointer must identify a live result owned by this library.
+pub unsafe extern "C" fn nux_operation_result_diagnostic_count(
+    result: *const NuxOperationResult,
+) -> u64 {
+    ffi_guard(0, || {
+        if result.is_null() {
+            0
+        } else {
+            u64::try_from(unsafe { (*result).diagnostics.len() }).unwrap_or(u64::MAX)
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Borrows one structured diagnostic by stable result order.
+///
+/// # Safety
+///
+/// `result` must be live and `out_diagnostic` writable with `struct_size`
+/// initialized to the exact ABI-major-1 layout size. Returned views expire when
+/// `result` is released.
+pub unsafe extern "C" fn nux_operation_result_diagnostic_at(
+    result: *const NuxOperationResult,
+    index: u64,
+    out_diagnostic: *mut NuxDiagnosticView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_diagnostic.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        let caller_struct_size = unsafe { read_struct_size(out_diagnostic) };
+        if caller_struct_size != size_u32::<NuxDiagnosticView>() {
+            return NuxStatus::InvalidArgument;
+        }
+        unsafe {
+            *out_diagnostic = NuxDiagnosticView::default();
+        }
+        if result.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        let Ok(index) = usize::try_from(index) else {
+            return NuxStatus::NotFound;
+        };
+        let Some(diagnostic) = (unsafe { &(*result).diagnostics }).get(index) else {
+            return NuxStatus::NotFound;
+        };
+        unsafe {
+            *out_diagnostic = NuxDiagnosticView {
+                struct_size: size_u32::<NuxDiagnosticView>(),
+                severity: diagnostic.severity,
+                code: NuxByteView {
+                    data: diagnostic.code.as_ptr(),
+                    len: u64::try_from(diagnostic.code.len()).unwrap_or(u64::MAX),
+                },
+                message: NuxByteView {
+                    data: diagnostic.message.as_ptr(),
+                    len: u64::try_from(diagnostic.message.len()).unwrap_or(u64::MAX),
+                },
+            };
+        }
+        NuxStatus::Ok
+    })
+}
+
+#[unsafe(no_mangle)]
 /// Borrows the diagnostic bytes stored by an operation result.
 ///
 /// # Safety
@@ -1557,6 +1979,165 @@ fn byte_vec(view: NuxByteView, maximum_length: usize) -> Result<Vec<u8>, NuxStat
     Ok(unsafe { slice::from_raw_parts(view.data, len) }.to_vec())
 }
 
+#[cfg(feature = "apple-product")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct NuxFlowImportRequestV1_0 {
+    struct_size: u32,
+    artifact_bytes: NuxByteView,
+}
+
+#[cfg(feature = "apple-product")]
+fn required_utf8_string(view: NuxByteView, maximum_length: usize) -> Result<String, NuxStatus> {
+    let bytes = byte_vec(view, maximum_length)?;
+    if bytes.is_empty() {
+        return Err(NuxStatus::InvalidArgument);
+    }
+    String::from_utf8(bytes).map_err(|_| NuxStatus::InvalidArgument)
+}
+
+#[cfg(feature = "apple-product")]
+fn optional_byte_vec(
+    view: NuxByteView,
+    maximum_length: usize,
+) -> Result<Option<Vec<u8>>, NuxStatus> {
+    if view.data.is_null() && view.len == 0 {
+        return Ok(None);
+    }
+    byte_vec(view, maximum_length).map(Some)
+}
+
+#[cfg(feature = "apple-product")]
+unsafe fn copy_runtime_import_input(
+    request: *const NuxFlowImportRequest,
+) -> Result<RuntimeImportInput, NuxStatus> {
+    let struct_size = unsafe { read_struct_size(request) };
+    if struct_size < size_u32::<NuxFlowImportRequestV1_0>() {
+        return Err(NuxStatus::InvalidArgument);
+    }
+    if struct_size == size_u32::<NuxFlowImportRequestV1_0>() {
+        let prefix = unsafe { request.cast::<NuxFlowImportRequestV1_0>().read() };
+        return byte_vec(prefix.artifact_bytes, MAX_ARTIFACT_BYTE_LENGTH)
+            .map(RuntimeImportInput::LegacyVisualOnly);
+    }
+    if struct_size < size_u32::<NuxFlowImportRequest>() {
+        return Err(NuxStatus::InvalidArgument);
+    }
+
+    let request = unsafe { request.read() };
+    let artifact_bytes = byte_vec(request.artifact_bytes, MAX_ARTIFACT_BYTE_LENGTH)?;
+    if request.manifest_bytes.len == 0 {
+        return Err(NuxStatus::InvalidArgument);
+    }
+    let expected_flow_id =
+        required_utf8_string(request.expected_flow_id, MAX_SELECTOR_BYTE_LENGTH)?;
+    let expected_build_id =
+        required_utf8_string(request.expected_build_id, MAX_SELECTOR_BYTE_LENGTH)?;
+    let manifest_bytes = byte_vec(request.manifest_bytes, MAX_MANIFEST_BYTE_LENGTH)?;
+    let signature_envelope_bytes =
+        optional_byte_vec(request.signature_envelope_bytes, MAX_SIGNATURE_BYTE_LENGTH)?;
+    let selected_key = if request.selected_key.is_null() {
+        None
+    } else {
+        let struct_size = unsafe { read_struct_size(request.selected_key) };
+        if struct_size < size_u32::<NuxFlowAuthorizationKey>() {
+            return Err(NuxStatus::InvalidArgument);
+        }
+        let selected_key = unsafe { request.selected_key.read() };
+        let key_id =
+            required_utf8_string(selected_key.key_id, MAX_AUTHORIZATION_KEY_ID_BYTE_LENGTH)?;
+        let public_key = byte_vec(
+            selected_key.ed25519_public_key,
+            ED25519_PUBLIC_KEY_BYTE_LENGTH,
+        )?;
+        let public_key: [u8; ED25519_PUBLIC_KEY_BYTE_LENGTH] = public_key
+            .try_into()
+            .map_err(|_| NuxStatus::InvalidArgument)?;
+        Some(SelectedArtifactSigningKey { key_id, public_key })
+    };
+    let external_asset_count =
+        usize::try_from(request.external_asset_count).map_err(|_| NuxStatus::InvalidArgument)?;
+    if external_asset_count > MAX_EXTERNAL_ASSET_COUNT
+        || (external_asset_count != 0 && request.external_assets.is_null())
+    {
+        return Err(NuxStatus::InvalidArgument);
+    }
+    let external_asset_array_size = external_asset_count
+        .checked_mul(std::mem::size_of::<NuxFlowExternalAsset>())
+        .ok_or(NuxStatus::InvalidArgument)?;
+    if external_asset_array_size > isize::MAX as usize {
+        return Err(NuxStatus::InvalidArgument);
+    }
+    let external_asset_views = if external_asset_count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: the caller promises an array of `external_asset_count`
+        // readable elements for this synchronous call. Every nested view is
+        // copied below before the runtime worker can retain the import.
+        unsafe { slice::from_raw_parts(request.external_assets, external_asset_count) }
+    };
+    let mut external_assets = Vec::with_capacity(external_asset_count);
+    let mut cumulative_asset_bytes = 0usize;
+    for asset in external_asset_views {
+        // Array elements have no separate stride parameter. Accepting a larger
+        // element declaration would make the second element start ambiguous,
+        // so this ABI revision requires the exact published element size.
+        if asset.struct_size != size_u32::<NuxFlowExternalAsset>() {
+            return Err(NuxStatus::InvalidArgument);
+        }
+        let kind = match asset.kind {
+            NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE => ExternalAssetKind::Image,
+            NUX_FLOW_EXTERNAL_ASSET_KIND_FONT => ExternalAssetKind::Font,
+            _ => return Err(NuxStatus::InvalidArgument),
+        };
+        let unique_name = required_utf8_string(asset.unique_name, MAX_SELECTOR_BYTE_LENGTH)?;
+        let source_key = required_utf8_string(asset.source_key, MAX_ASSET_SOURCE_KEY_BYTE_LENGTH)?;
+        let expected_sha256 =
+            required_utf8_string(asset.expected_sha256, MAX_SELECTOR_BYTE_LENGTH)?;
+        let input = if asset.provided {
+            let bytes = byte_vec(asset.bytes, MAX_EXTERNAL_ASSET_TOTAL_BYTE_LENGTH)?;
+            cumulative_asset_bytes = cumulative_asset_bytes
+                .checked_add(bytes.len())
+                .ok_or(NuxStatus::InvalidArgument)?;
+            if cumulative_asset_bytes > MAX_EXTERNAL_ASSET_TOTAL_BYTE_LENGTH {
+                return Err(NuxStatus::InvalidArgument);
+            }
+            ExternalAssetInput::Supplied {
+                kind,
+                asset_id: asset.asset_id,
+                unique_name,
+                source_key,
+                expected_sha256,
+                required: asset.required,
+                bytes,
+            }
+        } else {
+            if !asset.bytes.data.is_null() || asset.bytes.len != 0 {
+                return Err(NuxStatus::InvalidArgument);
+            }
+            ExternalAssetInput::Omitted {
+                kind,
+                asset_id: asset.asset_id,
+                unique_name,
+                source_key,
+                expected_sha256,
+                required: asset.required,
+            }
+        };
+        external_assets.push(input);
+    }
+
+    Ok(RuntimeImportInput::Verified(FlowArtifactImportInput {
+        expected_flow_id,
+        expected_build_id,
+        artifact_bytes,
+        manifest_bytes,
+        signature_envelope_bytes,
+        selected_key,
+        external_assets,
+    }))
+}
+
 fn optional_utf8_string(view: NuxByteView) -> Result<Option<String>, NuxStatus> {
     if view.data.is_null() && view.len == 0 {
         return Ok(None);
@@ -1615,6 +2196,19 @@ fn write_failure(
     diagnostic: impl Into<Vec<u8>>,
 ) -> NuxStatus {
     replace_result(out_result, NuxOperationResult::failure(status, diagnostic));
+    status
+}
+
+fn write_import_failure(
+    out_result: *mut *mut NuxOperationResult,
+    status: NuxStatus,
+    code: impl Into<Vec<u8>>,
+    message: impl Into<Vec<u8>>,
+) -> NuxStatus {
+    replace_result(
+        out_result,
+        NuxOperationResult::import_failure(status, code, message),
+    );
     status
 }
 
@@ -1697,6 +2291,116 @@ mod tests {
     }
 
     #[cfg(feature = "apple-product")]
+    fn current_import_request_without_manifest(bytes: &[u8]) -> NuxFlowImportRequest {
+        NuxFlowImportRequest {
+            struct_size: size_u32::<NuxFlowImportRequest>(),
+            artifact_bytes: NuxByteView {
+                data: bytes.as_ptr(),
+                len: bytes.len() as u64,
+            },
+            expected_flow_id: NuxByteView::default(),
+            expected_build_id: NuxByteView::default(),
+            manifest_bytes: NuxByteView::default(),
+            signature_envelope_bytes: NuxByteView::default(),
+            selected_key: ptr::null(),
+            external_assets: ptr::null(),
+            external_asset_count: 0,
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn legacy_import_request(bytes: &[u8]) -> NuxFlowImportRequestV1_0 {
+        NuxFlowImportRequestV1_0 {
+            struct_size: size_u32::<NuxFlowImportRequestV1_0>(),
+            artifact_bytes: NuxByteView {
+                data: bytes.as_ptr(),
+                len: bytes.len() as u64,
+            },
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn push_test_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            bytes.push(byte);
+            if value == 0 {
+                break;
+            }
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn test_property_key(type_name: &str, property_name: &str) -> u16 {
+        let definition = nuxie_schema::definition_by_name(type_name).expect("fixture type exists");
+        definition
+            .properties
+            .iter()
+            .chain(definition.ancestors.iter().flat_map(|ancestor| {
+                nuxie_schema::definition_by_name(ancestor)
+                    .expect("fixture ancestor exists")
+                    .properties
+                    .iter()
+            }))
+            .find(|property| property.name == property_name)
+            .expect("fixture property exists")
+            .key
+            .int
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn push_test_object(
+        bytes: &mut Vec<u8>,
+        type_name: &str,
+        properties: impl FnOnce(&mut Vec<u8>),
+    ) {
+        push_test_var_uint(
+            bytes,
+            u64::from(
+                nuxie_schema::definition_by_name(type_name)
+                    .expect("fixture type exists")
+                    .type_key
+                    .int,
+            ),
+        );
+        properties(bytes);
+        push_test_var_uint(bytes, 0);
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn push_test_uint(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: u64) {
+        push_test_var_uint(bytes, u64::from(test_property_key(type_name, name)));
+        push_test_var_uint(bytes, value);
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn push_test_string(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &str) {
+        push_test_var_uint(bytes, u64::from(test_property_key(type_name, name)));
+        push_test_var_uint(bytes, value.len() as u64);
+        bytes.extend_from_slice(value.as_bytes());
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn external_image_artifact_bytes() -> Vec<u8> {
+        let mut bytes = b"RIVE".to_vec();
+        push_test_var_uint(&mut bytes, 7);
+        push_test_var_uint(&mut bytes, 0);
+        push_test_var_uint(&mut bytes, 992);
+        push_test_var_uint(&mut bytes, 0);
+        push_test_object(&mut bytes, "Backboard", |_| {});
+        push_test_object(&mut bytes, "ImageAsset", |bytes| {
+            push_test_uint(bytes, "ImageAsset", "assetId", 1);
+            push_test_string(bytes, "ImageAsset", "name", "image.png");
+        });
+        push_test_object(&mut bytes, "Artboard", |_| {});
+        bytes
+    }
+
+    #[cfg(feature = "apple-product")]
     fn product_fixture_worker() -> Arc<RuntimeWorker> {
         match RuntimeWorker::spawn(product_fixture_bytes()) {
             Ok(worker) => worker,
@@ -1707,8 +2411,420 @@ mod tests {
     #[test]
     fn abi_compatibility_requires_exact_major_and_at_least_the_requested_minor() {
         assert_eq!(nux_runtime_require_abi(1, 0), NuxStatus::Ok);
+        assert_eq!(nux_runtime_require_abi(1, 1), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(2, 0), NuxStatus::AbiMismatch);
-        assert_eq!(nux_runtime_require_abi(1, 1), NuxStatus::AbiMismatch);
+        assert_eq!(nux_runtime_require_abi(1, 2), NuxStatus::AbiMismatch);
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn signed_import_crosses_the_public_c_seam_as_authenticated() {
+        use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+        use ed25519_dalek::{Signer as _, SigningKey};
+        use sha2::{Digest as _, Sha256};
+
+        let artifact_bytes = product_fixture_bytes();
+        let artifact_sha256 = Sha256::digest(&artifact_bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "flowId": "flow-c-abi",
+            "buildId": "build-c-abi",
+            "renderer": "rive",
+            "riv": {
+                "path": "flow.riv",
+                "sha256": artifact_sha256,
+                "sizeBytes": artifact_bytes.len(),
+            },
+            "assets": { "images": [], "fonts": [] },
+        }))
+        .expect("manifest encodes");
+        let signing_key = SigningKey::from_bytes(&[9; 32]);
+        let signature = signing_key.sign(&manifest_bytes);
+        let signature_bytes = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "signs": "nuxie-manifest.json",
+            "algorithm": "ed25519",
+            "keyId": "test-key",
+            "signatureBase64": BASE64.encode(signature.to_bytes()),
+        }))
+        .expect("signature envelope encodes");
+        let flow_id = b"flow-c-abi";
+        let build_id = b"build-c-abi";
+        let key_id = b"test-key";
+        let public_key = signing_key.verifying_key().to_bytes();
+        let selected_key = NuxFlowAuthorizationKey {
+            struct_size: size_u32::<NuxFlowAuthorizationKey>(),
+            key_id: NuxByteView {
+                data: key_id.as_ptr(),
+                len: key_id.len() as u64,
+            },
+            ed25519_public_key: NuxByteView {
+                data: public_key.as_ptr(),
+                len: public_key.len() as u64,
+            },
+        };
+        let request = NuxFlowImportRequest {
+            struct_size: size_u32::<NuxFlowImportRequest>(),
+            artifact_bytes: NuxByteView {
+                data: artifact_bytes.as_ptr(),
+                len: artifact_bytes.len() as u64,
+            },
+            expected_flow_id: NuxByteView {
+                data: flow_id.as_ptr(),
+                len: flow_id.len() as u64,
+            },
+            expected_build_id: NuxByteView {
+                data: build_id.as_ptr(),
+                len: build_id.len() as u64,
+            },
+            manifest_bytes: NuxByteView {
+                data: manifest_bytes.as_ptr(),
+                len: manifest_bytes.len() as u64,
+            },
+            signature_envelope_bytes: NuxByteView {
+                data: signature_bytes.as_ptr(),
+                len: signature_bytes.len() as u64,
+            },
+            selected_key: &selected_key,
+            external_assets: ptr::null(),
+            external_asset_count: 0,
+        };
+        let mut context = ptr::null_mut();
+        let mut result = ptr::null_mut();
+
+        assert_eq!(
+            unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+            NuxStatus::Ok
+        );
+        assert!(!context.is_null());
+        assert_eq!(
+            unsafe { nux_operation_result_script_authorization(result) },
+            NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED
+        );
+        assert_eq!(unsafe { nux_operation_result_diagnostic_count(result) }, 0);
+        let mut authenticated_key_id = NuxByteView::default();
+        assert_eq!(
+            unsafe { nux_operation_result_authenticated_key_id(result, &mut authenticated_key_id) },
+            NuxStatus::Ok
+        );
+        let authenticated_key_id = unsafe {
+            slice::from_raw_parts(authenticated_key_id.data, authenticated_key_id.len as usize)
+        };
+        assert_eq!(authenticated_key_id, key_id);
+
+        unsafe {
+            nux_operation_result_free(result);
+            nux_flow_runtime_context_free(context);
+        }
+
+        let signature_sentinel = 0u8;
+        let malformed_signature_request = NuxFlowImportRequest {
+            signature_envelope_bytes: NuxByteView {
+                data: &signature_sentinel,
+                len: 0,
+            },
+            ..request
+        };
+        context = ptr::null_mut();
+        result = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_flow_runtime_context_create(
+                    &malformed_signature_request,
+                    &mut context,
+                    &mut result,
+                )
+            },
+            NuxStatus::Ok
+        );
+        let mut diagnostic = NuxDiagnosticView::default();
+        assert_eq!(
+            unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
+            NuxStatus::Ok
+        );
+        let code =
+            unsafe { slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize) };
+        assert_eq!(code, b"artifact.authentication.malformed");
+        unsafe {
+            nux_operation_result_free(result);
+            nux_flow_runtime_context_free(context);
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn signed_external_asset_views_are_copied_validated_and_attached() {
+        use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+        use ed25519_dalek::{Signer as _, SigningKey};
+        use sha2::{Digest as _, Sha256};
+
+        let artifact_bytes = external_image_artifact_bytes();
+        let image_bytes = b"encoded image bytes";
+        let artifact_sha256 = Sha256::digest(&artifact_bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let image_sha256 = Sha256::digest(image_bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "flowId": "flow-assets",
+            "buildId": "build-assets",
+            "renderer": "rive",
+            "riv": {
+                "path": "flow.riv",
+                "sha256": artifact_sha256,
+                "sizeBytes": artifact_bytes.len(),
+            },
+            "assets": {
+                "images": [{
+                    "riveAssetId": 1,
+                    "riveUniqueName": "image-1",
+                    "sourceAssetKey": "hero",
+                    "sha256": image_sha256,
+                    "required": true,
+                }],
+                "fonts": [],
+            },
+        }))
+        .expect("manifest encodes");
+        let signing_key = SigningKey::from_bytes(&[11; 32]);
+        let signature = signing_key.sign(&manifest_bytes);
+        let signature_bytes = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "signs": "nuxie-manifest.json",
+            "algorithm": "ed25519",
+            "keyId": "test-assets-key",
+            "signatureBase64": BASE64.encode(signature.to_bytes()),
+        }))
+        .expect("signature envelope encodes");
+        let flow_id = b"flow-assets";
+        let build_id = b"build-assets";
+        let key_id = b"test-assets-key";
+        let unique_name = b"image-1";
+        let source_key = b"hero";
+        let public_key = signing_key.verifying_key().to_bytes();
+        let selected_key = NuxFlowAuthorizationKey {
+            struct_size: size_u32::<NuxFlowAuthorizationKey>(),
+            key_id: NuxByteView {
+                data: key_id.as_ptr(),
+                len: key_id.len() as u64,
+            },
+            ed25519_public_key: NuxByteView {
+                data: public_key.as_ptr(),
+                len: public_key.len() as u64,
+            },
+        };
+        let external_asset = NuxFlowExternalAsset {
+            struct_size: size_u32::<NuxFlowExternalAsset>(),
+            kind: NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE,
+            asset_id: 1,
+            required: true,
+            provided: true,
+            unique_name: NuxByteView {
+                data: unique_name.as_ptr(),
+                len: unique_name.len() as u64,
+            },
+            source_key: NuxByteView {
+                data: source_key.as_ptr(),
+                len: source_key.len() as u64,
+            },
+            expected_sha256: NuxByteView {
+                data: image_sha256.as_ptr(),
+                len: image_sha256.len() as u64,
+            },
+            bytes: NuxByteView {
+                data: image_bytes.as_ptr(),
+                len: image_bytes.len() as u64,
+            },
+        };
+        let request = NuxFlowImportRequest {
+            struct_size: size_u32::<NuxFlowImportRequest>(),
+            artifact_bytes: NuxByteView {
+                data: artifact_bytes.as_ptr(),
+                len: artifact_bytes.len() as u64,
+            },
+            expected_flow_id: NuxByteView {
+                data: flow_id.as_ptr(),
+                len: flow_id.len() as u64,
+            },
+            expected_build_id: NuxByteView {
+                data: build_id.as_ptr(),
+                len: build_id.len() as u64,
+            },
+            manifest_bytes: NuxByteView {
+                data: manifest_bytes.as_ptr(),
+                len: manifest_bytes.len() as u64,
+            },
+            signature_envelope_bytes: NuxByteView {
+                data: signature_bytes.as_ptr(),
+                len: signature_bytes.len() as u64,
+            },
+            selected_key: &selected_key,
+            external_assets: &external_asset,
+            external_asset_count: 1,
+        };
+        let mut context = ptr::null_mut();
+        let mut result = ptr::null_mut();
+
+        assert_eq!(
+            unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+            NuxStatus::Ok
+        );
+        assert!(!context.is_null());
+        assert_eq!(
+            unsafe { nux_operation_result_script_authorization(result) },
+            NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED
+        );
+
+        unsafe {
+            nux_operation_result_free(result);
+            nux_flow_runtime_context_free(context);
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn missing_signature_returns_visual_only_with_a_structured_warning() {
+        use sha2::{Digest as _, Sha256};
+
+        let artifact_bytes = product_fixture_bytes();
+        let artifact_sha256 = Sha256::digest(&artifact_bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "flowId": "flow-unsigned",
+            "buildId": "build-unsigned",
+            "renderer": "rive",
+            "riv": {
+                "path": "flow.riv",
+                "sha256": artifact_sha256,
+                "sizeBytes": artifact_bytes.len(),
+            },
+            "assets": { "images": [], "fonts": [] },
+        }))
+        .expect("manifest encodes");
+        let flow_id = b"flow-unsigned";
+        let build_id = b"build-unsigned";
+        let request = NuxFlowImportRequest {
+            struct_size: size_u32::<NuxFlowImportRequest>(),
+            artifact_bytes: NuxByteView {
+                data: artifact_bytes.as_ptr(),
+                len: artifact_bytes.len() as u64,
+            },
+            expected_flow_id: NuxByteView {
+                data: flow_id.as_ptr(),
+                len: flow_id.len() as u64,
+            },
+            expected_build_id: NuxByteView {
+                data: build_id.as_ptr(),
+                len: build_id.len() as u64,
+            },
+            manifest_bytes: NuxByteView {
+                data: manifest_bytes.as_ptr(),
+                len: manifest_bytes.len() as u64,
+            },
+            signature_envelope_bytes: NuxByteView::default(),
+            selected_key: ptr::null(),
+            external_assets: ptr::null(),
+            external_asset_count: 0,
+        };
+        let mut context = ptr::null_mut();
+        let mut result = ptr::null_mut();
+
+        assert_eq!(
+            unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_operation_result_script_authorization(result) },
+            NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY
+        );
+        assert_eq!(unsafe { nux_operation_result_diagnostic_count(result) }, 1);
+        let mut diagnostic = NuxDiagnosticView::default();
+        assert_eq!(
+            unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
+            NuxStatus::Ok
+        );
+        assert_eq!(diagnostic.severity, NUX_DIAGNOSTIC_SEVERITY_WARNING);
+        let code =
+            unsafe { slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize) };
+        assert_eq!(code, b"artifact.authentication.missing");
+
+        unsafe {
+            nux_operation_result_free(result);
+            nux_flow_runtime_context_free(context);
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn artifact_integrity_failure_returns_a_structured_fatal_diagnostic() {
+        let artifact_bytes = product_fixture_bytes();
+        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "flowId": "flow-tampered",
+            "buildId": "build-tampered",
+            "renderer": "rive",
+            "riv": {
+                "path": "flow.riv",
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                "sizeBytes": artifact_bytes.len(),
+            },
+            "assets": { "images": [], "fonts": [] },
+        }))
+        .expect("manifest encodes");
+        let flow_id = b"flow-tampered";
+        let build_id = b"build-tampered";
+        let request = NuxFlowImportRequest {
+            struct_size: size_u32::<NuxFlowImportRequest>(),
+            artifact_bytes: NuxByteView {
+                data: artifact_bytes.as_ptr(),
+                len: artifact_bytes.len() as u64,
+            },
+            expected_flow_id: NuxByteView {
+                data: flow_id.as_ptr(),
+                len: flow_id.len() as u64,
+            },
+            expected_build_id: NuxByteView {
+                data: build_id.as_ptr(),
+                len: build_id.len() as u64,
+            },
+            manifest_bytes: NuxByteView {
+                data: manifest_bytes.as_ptr(),
+                len: manifest_bytes.len() as u64,
+            },
+            signature_envelope_bytes: NuxByteView::default(),
+            selected_key: ptr::null(),
+            external_assets: ptr::null(),
+            external_asset_count: 0,
+        };
+        let mut context = ptr::null_mut();
+        let mut result = ptr::null_mut();
+
+        assert_eq!(
+            unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+            NuxStatus::ImportError
+        );
+        assert!(context.is_null());
+        assert_eq!(unsafe { nux_operation_result_diagnostic_count(result) }, 1);
+        let mut diagnostic = NuxDiagnosticView::default();
+        assert_eq!(
+            unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
+            NuxStatus::Ok
+        );
+        assert_eq!(diagnostic.severity, NUX_DIAGNOSTIC_SEVERITY_FATAL);
+        let code =
+            unsafe { slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize) };
+        assert_eq!(code, b"artifact.riv.hash_mismatch");
+        unsafe { nux_operation_result_free(result) };
     }
 
     #[test]
@@ -1761,6 +2877,33 @@ mod tests {
         );
         let bytes = unsafe { slice::from_raw_parts(diagnostic.data, diagnostic.len as usize) };
         assert_eq!(bytes, b"bad request");
+        assert_eq!(unsafe { nux_operation_result_diagnostic_count(result) }, 1);
+        let mut undersized = NuxDiagnosticView {
+            struct_size: size_u32::<u32>(),
+            ..NuxDiagnosticView::default()
+        };
+        assert_eq!(
+            unsafe { nux_operation_result_diagnostic_at(result, 0, &mut undersized) },
+            NuxStatus::InvalidArgument
+        );
+        let mut structured = NuxDiagnosticView::default();
+        assert_eq!(
+            unsafe { nux_operation_result_diagnostic_at(result, 0, &mut structured) },
+            NuxStatus::Ok
+        );
+        assert_eq!(structured.severity, NUX_DIAGNOSTIC_SEVERITY_FATAL);
+        let code =
+            unsafe { slice::from_raw_parts(structured.code.data, structured.code.len as usize) };
+        assert_eq!(code, b"nux_runtime.invalid_argument");
+        assert_eq!(
+            unsafe { nux_operation_result_diagnostic_at(result, 1, &mut structured) },
+            NuxStatus::NotFound
+        );
+        assert!(structured.code.data.is_null());
+        assert_eq!(
+            unsafe { nux_operation_result_script_authorization(ptr::null()) },
+            NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE
+        );
         unsafe { nux_operation_result_free(result) };
     }
 
@@ -1797,6 +2940,139 @@ mod tests {
         let mut result = ptr::null_mut();
         assert_eq!(
             unsafe { nux_flow_runtime_context_create(storage.as_ptr(), &mut context, &mut result) },
+            NuxStatus::InvalidArgument
+        );
+        assert!(context.is_null());
+        assert!(!result.is_null());
+        unsafe { nux_operation_result_free(result) };
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn abi_one_zero_import_prefix_remains_visual_only_compatible() {
+        let artifact_bytes = product_fixture_bytes();
+        let request = NuxFlowImportRequestV1_0 {
+            struct_size: size_u32::<NuxFlowImportRequestV1_0>(),
+            artifact_bytes: NuxByteView {
+                data: artifact_bytes.as_ptr(),
+                len: artifact_bytes.len() as u64,
+            },
+        };
+        let mut context = ptr::null_mut();
+        let mut result = ptr::null_mut();
+
+        assert_eq!(
+            unsafe {
+                nux_flow_runtime_context_create(
+                    (&request as *const NuxFlowImportRequestV1_0).cast(),
+                    &mut context,
+                    &mut result,
+                )
+            },
+            NuxStatus::Ok
+        );
+        assert!(!context.is_null());
+        assert_eq!(
+            unsafe { nux_operation_result_script_authorization(result) },
+            NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY
+        );
+        assert_eq!(unsafe { nux_operation_result_diagnostic_count(result) }, 1);
+        let mut diagnostic = NuxDiagnosticView::default();
+        assert_eq!(
+            unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
+            NuxStatus::Ok
+        );
+        let code =
+            unsafe { slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize) };
+        assert_eq!(code, b"artifact.authentication.legacy_unverified");
+        unsafe {
+            nux_operation_result_free(result);
+            nux_flow_runtime_context_free(context);
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn current_and_truncated_import_requests_cannot_bypass_manifest_validation() {
+        let artifact_bytes = product_fixture_bytes();
+        for struct_size in [
+            size_u32::<NuxFlowImportRequestV1_0>() + 1,
+            size_u32::<NuxFlowImportRequest>(),
+        ] {
+            let mut request = current_import_request_without_manifest(&artifact_bytes);
+            request.struct_size = struct_size;
+            let mut context = ptr::null_mut();
+            let mut result = ptr::null_mut();
+
+            assert_eq!(
+                unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+                NuxStatus::InvalidArgument,
+                "request size {struct_size} must not enter the ABI 1.0 path"
+            );
+            assert!(context.is_null());
+            assert!(!result.is_null());
+            unsafe { nux_operation_result_free(result) };
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn external_asset_arrays_reject_unknown_element_strides() {
+        let artifact_bytes = b"RIVE";
+        let manifest_bytes = b"{}";
+        let flow_id = b"flow";
+        let build_id = b"build";
+        let unique_name = b"image";
+        let source_key = b"hero";
+        let expected_sha256 = b"0000000000000000000000000000000000000000000000000000000000000000";
+        let external_asset = NuxFlowExternalAsset {
+            struct_size: size_u32::<NuxFlowExternalAsset>() + 1,
+            kind: NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE,
+            asset_id: 1,
+            required: false,
+            provided: false,
+            unique_name: NuxByteView {
+                data: unique_name.as_ptr(),
+                len: unique_name.len() as u64,
+            },
+            source_key: NuxByteView {
+                data: source_key.as_ptr(),
+                len: source_key.len() as u64,
+            },
+            expected_sha256: NuxByteView {
+                data: expected_sha256.as_ptr(),
+                len: expected_sha256.len() as u64,
+            },
+            bytes: NuxByteView::default(),
+        };
+        let request = NuxFlowImportRequest {
+            struct_size: size_u32::<NuxFlowImportRequest>(),
+            artifact_bytes: NuxByteView {
+                data: artifact_bytes.as_ptr(),
+                len: artifact_bytes.len() as u64,
+            },
+            expected_flow_id: NuxByteView {
+                data: flow_id.as_ptr(),
+                len: flow_id.len() as u64,
+            },
+            expected_build_id: NuxByteView {
+                data: build_id.as_ptr(),
+                len: build_id.len() as u64,
+            },
+            manifest_bytes: NuxByteView {
+                data: manifest_bytes.as_ptr(),
+                len: manifest_bytes.len() as u64,
+            },
+            signature_envelope_bytes: NuxByteView::default(),
+            selected_key: ptr::null(),
+            external_assets: &external_asset,
+            external_asset_count: 1,
+        };
+        let mut context = ptr::null_mut();
+        let mut result = ptr::null_mut();
+
+        assert_eq!(
+            unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
             NuxStatus::InvalidArgument
         );
         assert!(context.is_null());
@@ -1847,7 +3123,7 @@ mod tests {
             }
         }
         assert_eq!(
-            checked, 20,
+            checked, 24,
             "update the firewall audit for every new export"
         );
     }
@@ -1999,17 +3275,17 @@ mod tests {
     fn public_c_abi_renders_to_cametal_layer_and_preserves_parent_first_ownership() {
         autoreleasepool(|_| {
             let bytes = product_fixture_bytes();
-            let request = NuxFlowImportRequest {
-                struct_size: size_u32::<NuxFlowImportRequest>(),
-                artifact_bytes: NuxByteView {
-                    data: bytes.as_ptr(),
-                    len: bytes.len() as u64,
-                },
-            };
+            let request = legacy_import_request(&bytes);
             let mut context = ptr::null_mut();
             let mut result = ptr::null_mut();
             assert_eq!(
-                unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+                unsafe {
+                    nux_flow_runtime_context_create(
+                        (&request as *const NuxFlowImportRequestV1_0).cast(),
+                        &mut context,
+                        &mut result,
+                    )
+                },
                 NuxStatus::Ok
             );
             unsafe { nux_operation_result_free(result) };
@@ -2241,17 +3517,17 @@ mod tests {
     #[test]
     fn context_import_session_advance_and_parent_first_teardown_use_the_product_handles() {
         let bytes = product_fixture_bytes();
-        let request = NuxFlowImportRequest {
-            struct_size: size_u32::<NuxFlowImportRequest>(),
-            artifact_bytes: NuxByteView {
-                data: bytes.as_ptr(),
-                len: bytes.len() as u64,
-            },
-        };
+        let request = legacy_import_request(&bytes);
         let mut context = ptr::null_mut();
         let mut result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+            unsafe {
+                nux_flow_runtime_context_create(
+                    (&request as *const NuxFlowImportRequestV1_0).cast(),
+                    &mut context,
+                    &mut result,
+                )
+            },
             NuxStatus::Ok
         );
         assert!(!context.is_null());

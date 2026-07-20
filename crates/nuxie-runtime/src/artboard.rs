@@ -1072,6 +1072,7 @@ impl ArtboardInstance {
                     .apply_external_font_asset_snapshot(Arc::clone(&external_font_assets));
             }
         }
+        self.mark_text_changed();
         self.mark_path_changed();
         self.mark_layout_changed();
     }
@@ -8820,32 +8821,10 @@ mod tests {
 
     #[test]
     fn replacing_file_owned_fonts_updates_existing_nested_children() {
-        let child = synthetic_instance(Vec::new(), Vec::new());
         let mut instance = synthetic_instance(Vec::new(), Vec::new());
-        instance.nested_artboards.insert(
-            7,
-            RuntimeNestedArtboardInstance {
-                child: Box::new(child),
-                render_cache_revision: 0,
-                initial_layout_paint_frame: RefCell::new(None),
-                layout_data_transferred: false,
-                layout_data_transfer_key: None,
-                data_bind_path_ids: None,
-                data_bind_path_is_relative: false,
-                stateful_view_model_instance_local: None,
-                stateful_view_model_instance_locals_by_id: BTreeMap::new(),
-                stateful_view_model_context: None,
-                stateful_global_view_model_contexts: BTreeMap::new(),
-                data_bind_property_source_locals: Vec::new(),
-                data_bind_image_source_locals: Vec::new(),
-                data_bind_context_source_locals_by_path: BTreeMap::new(),
-                animations: Vec::new(),
-                is_paused: false,
-                speed: 1.0,
-                quantize: -1.0,
-                cumulated_seconds: 0.0,
-            },
-        );
+        instance
+            .nested_artboards
+            .insert(7, synthetic_nested_artboard_instance(0));
         let font_bytes = Arc::<[u8]>::from(vec![1, 2, 3]);
         let external_fonts = BTreeMap::from([(7, Arc::clone(&font_bytes))]);
 

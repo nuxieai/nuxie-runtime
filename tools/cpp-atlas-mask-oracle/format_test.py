@@ -2882,6 +2882,15 @@ frame
             ),
         )
 
+    def test_dawn_build_policy_covers_every_darwin_toolchain(self):
+        source = BUILD_SCRIPT.read_text()
+        self.assertIn("needs_darwin_dawn_args()", source)
+        self.assertIn('[[ "$(uname -s)" == "Darwin" ]]', source)
+        self.assertIn("configure_darwin_dawn_args", source)
+        self.assertNotIn("xcode_major()", source)
+        self.assertNotIn("needs_xcode26_patch", source)
+        self.assertNotIn("configure_xcode26_dawn_args", source)
+
     def test_build_pins_and_discovers_naga(self):
         source = BUILD_SCRIPT.read_text()
         for fragment in (

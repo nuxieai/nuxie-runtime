@@ -7,12 +7,15 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::error::Error;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::sync::{atomic::AtomicBool, atomic::Ordering, mpsc};
 use std::thread;
+use std::time::{Duration, Instant};
+
+const DEFAULT_REPLAY_TIMEOUT_SECONDS: u64 = 60;
 
 #[derive(Debug, Deserialize)]
 struct Manifest {
@@ -158,6 +161,12 @@ struct ChildDiagnostics {
 }
 
 #[derive(Debug)]
+struct ReplayError {
+    message: String,
+    diagnostics: ChildDiagnostics,
+}
+
+#[derive(Debug)]
 struct EntryExecution {
     diagnostics: ChildDiagnostics,
     outcome: Result<EntryOutcome, String>,
@@ -219,9 +228,9 @@ fn run_entry(
     let actual = options.output_dir.join(format!("{}.png", entry.id));
     let mut diagnostics = ChildDiagnostics::default();
     let reference_output = if let Some(reference_replay) = dynamic_reference {
-        let output = match run_replay(reference_replay, entry, &reference) {
+        let output = match run_replay(reference_replay, entry, &reference, options.replay_timeout) {
             Ok(output) => output,
-            Err(error) => return EntryExecution::failed(error),
+            Err(error) => return EntryExecution::replay_failed(error),
         };
         diagnostics.append(&output);
         if !output.status.success() {
@@ -238,12 +247,13 @@ fn run_entry(
         replay: &options.replay,
         backend: &options.backend,
     };
-    let output = match run_replay(candidate_replay, entry, &actual) {
+    let output = match run_replay(candidate_replay, entry, &actual, options.replay_timeout) {
         Ok(output) => output,
         Err(error) => {
+            diagnostics.merge(error.diagnostics);
             return EntryExecution {
                 diagnostics,
-                outcome: Err(error),
+                outcome: Err(error.message),
             };
         }
     };
@@ -297,29 +307,189 @@ fn run_replay(
     invocation: ReplayInvocation<'_>,
     entry: &Entry,
     output: &Path,
-) -> Result<std::process::Output, String> {
-    let stream = path_str(&entry.stream).map_err(|error| error.to_string())?;
-    let output = path_str(output).map_err(|error| error.to_string())?;
-    Command::new(invocation.replay)
+    timeout: Duration,
+) -> Result<Output, ReplayError> {
+    let stream = path_str(&entry.stream)
+        .map_err(|error| ReplayError::without_diagnostics(error.to_string()))?;
+    let output =
+        path_str(output).map_err(|error| ReplayError::without_diagnostics(error.to_string()))?;
+    let mut child = Command::new(invocation.replay)
         .args(["--stream", stream])
         .args(["--output", output])
         .args(["--backend", invocation.backend])
         .args(["--frame", &entry.frame.to_string()])
         .args(["--mode", &entry.mode])
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|error| {
-            format!(
-                "failed to launch renderer replay `{}` with backend `{}`: {error}",
+            ReplayError::without_diagnostics(format!(
+                "failed to launch renderer replay `{}` for entry `{}` with backend `{}`: {error}",
                 invocation.replay.display(),
+                entry.id,
+                invocation.backend
+            ))
+        })?;
+    let stdout = child
+        .stdout
+        .take()
+        .expect("piped renderer stdout must be available");
+    let stderr = child
+        .stderr
+        .take()
+        .expect("piped renderer stderr must be available");
+    // Drain both pipes while the replay runs. Waiting first can deadlock when a
+    // verbose child fills either OS pipe buffer before it exits.
+    let stdout_reader = thread::spawn(move || read_to_end(stdout));
+    let stderr_reader = thread::spawn(move || read_to_end(stderr));
+
+    let wait_result = wait_with_timeout(&mut child, timeout);
+    let lifecycle_error = match &wait_result {
+        Ok(Some(_)) => None,
+        Ok(None) => terminate_and_reap(&mut child).err(),
+        Err(_) => terminate_and_reap(&mut child).err(),
+    };
+    let (diagnostics, capture_error) = collect_child_diagnostics(stdout_reader, stderr_reader);
+
+    match wait_result {
+        Ok(Some(status)) => {
+            if let Some(error) = capture_error {
+                return Err(ReplayError {
+                    message: format!(
+                        "failed to collect renderer replay output for entry `{}` with backend `{}`: {error}",
+                        entry.id, invocation.backend
+                    ),
+                    diagnostics,
+                });
+            }
+            Ok(Output {
+                status,
+                stdout: diagnostics.stdout,
+                stderr: diagnostics.stderr,
+            })
+        }
+        Ok(None) => Err(ReplayError {
+            message: format!(
+                "renderer replay timed out after {} for entry `{}` with backend `{}`{}",
+                display_duration(timeout),
+                entry.id,
                 invocation.backend,
-            )
-        })
+                failure_details(lifecycle_error, capture_error)
+            ),
+            diagnostics,
+        }),
+        Err(error) => Err(ReplayError {
+            message: format!(
+                "failed while waiting for renderer replay for entry `{}` with backend `{}`: {error}{}",
+                entry.id,
+                invocation.backend,
+                failure_details(lifecycle_error, capture_error)
+            ),
+            diagnostics,
+        }),
+    }
+}
+
+fn read_to_end(mut stream: impl Read) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    stream.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+fn collect_child_diagnostics(
+    stdout_reader: thread::JoinHandle<io::Result<Vec<u8>>>,
+    stderr_reader: thread::JoinHandle<io::Result<Vec<u8>>>,
+) -> (ChildDiagnostics, Option<String>) {
+    let stdout = join_reader(stdout_reader, "stdout");
+    let stderr = join_reader(stderr_reader, "stderr");
+    let mut errors = Vec::new();
+    let stdout = stdout.unwrap_or_else(|error| {
+        errors.push(error);
+        Vec::new()
+    });
+    let stderr = stderr.unwrap_or_else(|error| {
+        errors.push(error);
+        Vec::new()
+    });
+    (
+        ChildDiagnostics { stdout, stderr },
+        (!errors.is_empty()).then(|| errors.join("; ")),
+    )
+}
+
+fn join_reader(
+    reader: thread::JoinHandle<io::Result<Vec<u8>>>,
+    stream_name: &str,
+) -> Result<Vec<u8>, String> {
+    reader
+        .join()
+        .map_err(|_| format!("{stream_name} reader panicked"))?
+        .map_err(|error| format!("could not read {stream_name}: {error}"))
+}
+
+fn wait_with_timeout(child: &mut Child, timeout: Duration) -> io::Result<Option<ExitStatus>> {
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(Some(status));
+        }
+        if started.elapsed() >= timeout {
+            return Ok(None);
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn terminate_and_reap(child: &mut Child) -> Result<(), String> {
+    let kill_error = child.kill().err();
+    let wait_error = child.wait().err();
+    match (kill_error, wait_error) {
+        (_, None) => Ok(()),
+        (None, Some(wait_error)) => Err(format!("failed to reap child: {wait_error}")),
+        (Some(kill_error), Some(wait_error)) => Err(format!(
+            "failed to kill child: {kill_error}; failed to reap child: {wait_error}"
+        )),
+    }
+}
+
+fn display_duration(duration: Duration) -> String {
+    let seconds = duration.as_secs();
+    format!("{seconds} second{}", if seconds == 1 { "" } else { "s" })
+}
+
+fn failure_details(lifecycle_error: Option<String>, capture_error: Option<String>) -> String {
+    let mut details = Vec::new();
+    if let Some(error) = lifecycle_error {
+        details.push(format!("cleanup failed: {error}"));
+    }
+    if let Some(error) = capture_error {
+        details.push(format!("output capture failed: {error}"));
+    }
+    if details.is_empty() {
+        String::new()
+    } else {
+        format!("; {}", details.join("; "))
+    }
 }
 
 impl ChildDiagnostics {
-    fn append(&mut self, output: &std::process::Output) {
+    fn append(&mut self, output: &Output) {
         self.stdout.extend_from_slice(&output.stdout);
         self.stderr.extend_from_slice(&output.stderr);
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.stdout.extend(other.stdout);
+        self.stderr.extend(other.stderr);
+    }
+}
+
+impl ReplayError {
+    fn without_diagnostics(message: String) -> Self {
+        Self {
+            message,
+            diagnostics: ChildDiagnostics::default(),
+        }
     }
 }
 
@@ -497,6 +667,13 @@ impl EntryExecution {
         Self {
             diagnostics: ChildDiagnostics::default(),
             outcome: Err(error),
+        }
+    }
+
+    fn replay_failed(error: ReplayError) -> Self {
+        Self {
+            diagnostics: error.diagnostics,
+            outcome: Err(error.message),
         }
     }
 }
@@ -924,6 +1101,7 @@ struct Options {
     probe_gated: Vec<String>,
     reference_replay: Option<PathBuf>,
     reference_backend: Option<String>,
+    replay_timeout: Duration,
 }
 
 impl Options {
@@ -941,6 +1119,7 @@ impl Options {
         let mut probe_gated = Vec::new();
         let mut reference_replay = None;
         let mut reference_backend = None;
+        let mut replay_timeout = Duration::from_secs(DEFAULT_REPLAY_TIMEOUT_SECONDS);
         let mut args = args.into_iter();
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -963,6 +1142,21 @@ impl Options {
                     reference_replay = Some(PathBuf::from(args.next().ok_or(usage())?))
                 }
                 "--reference-backend" => reference_backend = Some(args.next().ok_or(usage())?),
+                "--replay-timeout-seconds" => {
+                    let value = args.next().ok_or(usage())?;
+                    let seconds = value.parse::<u64>().map_err(|_| {
+                        format!(
+                            "--replay-timeout-seconds must be a positive integer, got `{value}`"
+                        )
+                    })?;
+                    if seconds == 0 {
+                        return Err(format!(
+                            "--replay-timeout-seconds must be a positive integer, got `{value}`"
+                        )
+                        .into());
+                    }
+                    replay_timeout = Duration::from_secs(seconds);
+                }
                 _ => return Err(format!("unknown argument `{arg}`\n{}", usage()).into()),
             }
         }
@@ -987,6 +1181,7 @@ impl Options {
             probe_gated,
             reference_replay,
             reference_backend,
+            replay_timeout,
         })
     }
 
@@ -1004,7 +1199,7 @@ fn path_str(path: &Path) -> Result<&str, Box<dyn Error + Send + Sync>> {
 }
 
 fn usage() -> &'static str {
-    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal|ffi-dawn] [--reference-replay FILE --reference-backend BACKEND] [--output-dir DIR] [--jobs N] [--expect-all-fail] [--probe-gated ID ...]"
+    "usage: corpus-r [--manifest FILE] [--replay FILE] [--backend stub|rust-wgpu|ffi-metal|ffi-dawn] [--reference-replay FILE --reference-backend BACKEND] [--output-dir DIR] [--jobs N] [--replay-timeout-seconds N] [--expect-all-fail] [--probe-gated ID ...]"
 }
 
 #[cfg(test)]
@@ -1507,6 +1702,20 @@ mod tests {
             .err()
             .unwrap();
         assert!(error.to_string().contains("positive integer"));
+    }
+
+    #[test]
+    fn replay_timeout_defaults_to_sixty_seconds_and_accepts_an_override() {
+        assert_eq!(
+            Options::parse_args([]).unwrap().replay_timeout,
+            Duration::from_secs(60)
+        );
+        assert_eq!(
+            Options::parse_args(["--replay-timeout-seconds".to_owned(), "17".to_owned()])
+                .unwrap()
+                .replay_timeout,
+            Duration::from_secs(17)
+        );
     }
 
     #[test]

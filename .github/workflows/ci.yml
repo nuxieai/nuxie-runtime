@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,78 +20,18 @@ env:
   DEPOT_TOOLS_REF: 1709e20d5ca2afe97bfa726168719c3b77eb9883
 
 jobs:
-  v2-golden:
-    name: V2 golden compare
-    runs-on: macos-14
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - name: Checkout rive-rust
-        uses: actions/checkout@v4
-        with:
-          path: rive-rust
-
-      - name: Checkout reference rive-runtime
-        uses: actions/checkout@v4
-        with:
-          repository: rive-app/rive-runtime
-          ref: ${{ env.RIVE_RUNTIME_REF }}
-          path: rive-runtime
-
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-
-      - name: Build reference Rive runtime
-        working-directory: ${{ env.RIVE_RUNTIME_DIR }}
-        run: |
-          RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" build/build_rive.sh debug
-          echo "${RIVE_RUNTIME_DIR}/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release" >> "${GITHUB_PATH}"
-
-      - name: Fetch pinned test assets
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: make fixtures
-
-      - name: Run golden compare
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: make golden-compare
-
-      - name: Run forced-scripted golden compare
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: make scripted-golden-compare
-
-      - name: Run Rust workspace tests
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: cargo test --workspace
-
-  capi-smoke:
-    name: C ABI smoke test
-    runs-on: macos-14
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - name: Checkout rive-rust
-        uses: actions/checkout@v4
-
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-
-      - name: Fetch pinned test assets
-        run: make fixtures
-
-      - name: Build and run C smoke test
-        run: make capi-smoke
+  # Pin the immutable, administrator-reviewed workflow boundary. Its internal
+  # event check keeps fork pull requests on GitHub-hosted macOS while trusted
+  # same-repository changes can use the selected Nuxie runner group.
+  apple-runtime-ci:
+    name: Apple runtime
+    uses: nuxieai/nuxie-runtime/.github/workflows/_trusted-macos.yml@a99754b0de18aadba25f29b1ee7a9b1727742a3f
 
   browser-renderer:
     name: Browser WebGPU and WebGL2
     runs-on: macos-14
+    env:
+      RUSTUP_TOOLCHAIN: stable
     defaults:
       run:
         shell: bash
@@ -100,8 +43,7 @@ jobs:
       - name: Install Rust stable with wasm target
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-          rustup target add wasm32-unknown-unknown
+          rustup target add --toolchain stable wasm32-unknown-unknown
 
       - name: Fetch pinned test assets
         run: make fixtures
@@ -115,6 +57,7 @@ jobs:
     name: Phase R pixel golden
     runs-on: macos-14
     env:
+      RUSTUP_TOOLCHAIN: stable
       # Do not relabel the checked-in Phase R Dawn references. Advancing this
       # oracle requires a separate deterministic regeneration and review.
       RIVE_RUNTIME_REF: 7c778d13c5d903b3b74eec1dd6bb68a811dea5f2
@@ -144,9 +87,7 @@ jobs:
           path: rive-runtime-shaders
 
       - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
+        run: rustup toolchain install stable --profile minimal --no-self-update
 
       - name: Install pinned renderer shader tools
         run: |
@@ -223,6 +164,10 @@ jobs:
       - name: Verify dual fuzz replay, stub baseline, and same-runner renderer pixels
         env:
           RENDERER_JOBS: 4
+          # Stub rendering remains parallel. The same-runner gate serializes its
+          # C++ Dawn oracle to avoid four concurrent GPU replays wedging Metal.
+          RENDERER_SAME_RUNNER_JOBS: 1
+          RENDERER_REPLAY_TIMEOUT_SECONDS: 60
         run: |
           make renderer-fuzz-replay
           make renderer-stub-baseline
@@ -244,6 +189,8 @@ jobs:
     name: Perf JSON artifact (optional)
     runs-on: macos-14
     continue-on-error: true
+    env:
+      RUSTUP_TOOLCHAIN: stable
     defaults:
       run:
         shell: bash
@@ -262,9 +209,7 @@ jobs:
           path: rive-runtime
 
       - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
+        run: rustup toolchain install stable --profile minimal --no-self-update
 
       - name: Build reference Rive runtime (release)
         working-directory: ${{ env.RIVE_RUNTIME_DIR }}
@@ -288,14 +233,16 @@ jobs:
   # Negative-input fuzz smoke gate. This is additive and self-contained: it
   # fetches its pinned upstream seed corpus before running and needs no built
   # C++ reference runtime. cargo-fuzz requires the nightly
-  # toolchain (libFuzzer + `-Z sanitizer`), pinned here via `rustup default
-  # nightly`. The time budget is deliberately short -- this proves the harness
-  # builds and runs, it is not a fuzzing campaign. If the nightly install ever
-  # becomes disproportionate, drop the `make fuzz-smoke` step to `make
-  # fuzz-build` for a build-only gate.
+  # toolchain (libFuzzer + `-Z sanitizer`), selected per job through
+  # `RUSTUP_TOOLCHAIN`. The time budget is deliberately short -- this proves
+  # the harness builds and runs, it is not a fuzzing campaign. If the nightly
+  # install ever becomes disproportionate, drop the `make fuzz-smoke` step to
+  # `make fuzz-build` for a build-only gate.
   fuzz-smoke:
     name: Fuzz smoke gate
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: nightly
     defaults:
       run:
         shell: bash
@@ -307,7 +254,6 @@ jobs:
       - name: Install Rust nightly + cargo-fuzz
         run: |
           rustup toolchain install nightly --profile minimal --no-self-update
-          rustup default nightly
           cargo install cargo-fuzz --locked
 
       - name: Fetch pinned test assets
@@ -324,6 +270,8 @@ jobs:
   lint-gate:
     name: Clippy lint gate
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: stable
     defaults:
       run:
         shell: bash
@@ -333,9 +281,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust stable + clippy
-        run: |
-          rustup toolchain install stable --profile minimal --component clippy --no-self-update
-          rustup default stable
+        run: rustup toolchain install stable --profile minimal --component clippy --no-self-update
 
       - name: Run the clippy lint gate
         run: make lint-gate

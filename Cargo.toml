@@ -8,6 +8,7 @@ members = [
     "crates/nuxie-renderer-ffi",
     "crates/nuxie",
     "crates/nux-capi",
+    "crates/nux-apple-runtime",
     "crates/nuxie-runtime",
     "crates/nuxie-schema",
     "crates/nuxie-scripting",
@@ -71,3 +72,11 @@ panic = "unwind"
 inherits = "release"
 opt-level = "z"
 strip = "symbols"
+
+# Customer Apple binaries must contain panics at the C boundary instead of
+# aborting the host process. Keep the release optimizer/LTO settings while
+# overriding the workspace release profile's panic strategy.
+[profile.release-apple]
+inherits = "release"
+panic = "unwind"
+strip = "debuginfo"

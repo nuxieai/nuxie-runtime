@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 runtime="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}"
 patch="$script_dir/runtime.patch"
-dawn_patch="$script_dir/dawn-xcode26.patch"
+dawn_patch="$script_dir/dawn-apple-visibility.patch"
 dawn_dir="$runtime/renderer/dependencies/dawn"
 injected_dir="$runtime/renderer/atlas_mask_oracle"
 build_out="${RIVE_ATLAS_MASK_BUILD_OUT:-out/cpp-atlas-mask-oracle}"
@@ -99,10 +99,6 @@ expected_hunter_x_sha256="3544c61ac8a12790bc1b865074c5ea140caa05502a03f9bca7b5ca
 expected_runtime_revision="7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"
 expected_dawn_revision="211333b2e3e429c3508f25c81c547f602adf448c"
 
-xcode_major() {
-    xcodebuild -version 2>/dev/null | awk '/Xcode/ { split($2, version, "."); print version[1]; exit }'
-}
-
 sha256_file() {
     python3 -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$1"
 }
@@ -148,8 +144,12 @@ if len(schedule) != 24 + count * 24:
 PY
 }
 
-needs_xcode26_patch() {
-    [[ "$(uname -s)" == "Darwin" ]] && [[ "$(xcode_major)" =~ ^[0-9]+$ ]] && (( $(xcode_major) >= 26 ))
+needs_darwin_dawn_args() {
+    [[ "$(uname -s)" == "Darwin" ]]
+}
+
+needs_dawn_visibility_patch() {
+    [[ "$(uname -s)" == "Darwin" ]] && dawn_patch_needed
 }
 
 dawn_patch_needed() {
@@ -180,8 +180,8 @@ dawn_args="$dawn_dir/out/release/args.gn"
 dawn_args_snapshot=""
 dawn_args_snapshot_candidate=""
 
-configure_xcode26_dawn_args() {
-    if ! needs_xcode26_patch; then
+configure_darwin_dawn_args() {
+    if ! needs_darwin_dawn_args; then
         return
     fi
     if grep -Eq '^treat_warnings_as_errors[[:space:]]*=' "$dawn_args"; then
@@ -190,7 +190,7 @@ configure_xcode26_dawn_args() {
             return 2
         fi
     else
-        printf '\n# cpp-atlas-mask-oracle: Xcode 26 promotes legacy unsafe-buffer warnings.\ntreat_warnings_as_errors=false\n' >> "$dawn_args"
+        printf '\n# cpp-atlas-mask-oracle: Dawn clang plugin diagnostics cannot be demoted under -Werror.\ntreat_warnings_as_errors=false\n' >> "$dawn_args"
     fi
     grep -Eq '^treat_warnings_as_errors[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$dawn_args"
 
@@ -333,15 +333,15 @@ preflight() {
             missing=1
         fi
     done
-    if needs_xcode26_patch; then
-        if dawn_patch_needed; then
-            if ! git -C "$dawn_dir" apply --check "$dawn_patch"; then
-                echo "Dawn Xcode-26 compatibility patch does not apply cleanly" >&2
-                return 2
-            fi
-        else
-            echo "Dawn Xcode-26 compatibility patch: already present"
+    if needs_dawn_visibility_patch; then
+        if ! git -C "$dawn_dir" apply --check "$dawn_patch"; then
+            echo "Dawn Apple visibility patch does not apply cleanly" >&2
+            return 2
         fi
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
+        echo "Dawn Apple visibility patch: already present"
+    fi
+    if needs_darwin_dawn_args; then
         if grep -Eq '^treat_warnings_as_errors[[:space:]]*=' "$dawn_args" &&
             ! grep -Eq '^treat_warnings_as_errors[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$dawn_args"; then
             echo "Dawn args explicitly enable warnings-as-errors; refusing to override them" >&2
@@ -352,7 +352,7 @@ preflight() {
             echo "Dawn args explicitly enable lld; refusing to produce Apple-ld-incompatible thin archives" >&2
             return 2
         fi
-        echo "Dawn Xcode-26 compatibility: treat_warnings_as_errors=false and use_lld=false will be verified before GN generation"
+        echo "Dawn Darwin compatibility: treat_warnings_as_errors=false and use_lld=false will be verified before GN generation"
     fi
     if (( missing )); then
         echo "preflight: BLOCKED (patch applies; Dawn build/runtime execution was not attempted)" >&2
@@ -548,14 +548,14 @@ python3 "$msaa_reference_generator" \
     --output "$injected_dir/generated_msaa_reference_registry.inc"
 git -C "$runtime" apply "$patch"
 applied=1
-if needs_xcode26_patch && dawn_patch_needed; then
+if needs_dawn_visibility_patch; then
     git -C "$dawn_dir" apply "$dawn_patch"
     dawn_patch_applied=1
 fi
 dawn_args_snapshot_candidate="$(mktemp "${TMPDIR:-/tmp}/cpp-atlas-mask-dawn-args.XXXXXX")"
 cp "$dawn_args" "$dawn_args_snapshot_candidate"
 dawn_args_snapshot="$dawn_args_snapshot_candidate"
-configure_xcode26_dawn_args
+configure_darwin_dawn_args
 
 (
     cd "$dawn_dir"

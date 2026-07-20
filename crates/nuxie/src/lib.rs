@@ -34,6 +34,10 @@ pub use nuxie_render_api::{
     RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
     Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
+#[cfg(all(feature = "renderer", any(target_os = "ios", target_os = "macos")))]
+pub use nuxie_renderer::{
+    ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError,
+};
 #[cfg(all(feature = "renderer", target_arch = "wasm32"))]
 pub use nuxie_renderer::{
     BrowserBackend, BrowserBackendPreference, BrowserFactory,
@@ -972,6 +976,10 @@ impl<'a> ArtboardInstance<'a> {
         &mut self.raw
     }
 
+    pub fn artboard_dimensions(&self) -> (f32, f32) {
+        self.raw.artboard_dimensions()
+    }
+
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
         self.raw.advance_nested_artboards(elapsed_seconds)
     }
@@ -1459,6 +1467,10 @@ impl OwnedArtboardInstance {
 
     pub fn raw_mut(&mut self) -> &mut RuntimeArtboardInstance {
         &mut self.raw
+    }
+
+    pub fn artboard_dimensions(&self) -> (f32, f32) {
+        self.raw.artboard_dimensions()
     }
 
     /// Attach host-supplied bytes to an external `FontAsset` in this instance.

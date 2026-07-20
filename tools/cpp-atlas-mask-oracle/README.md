@@ -577,19 +577,23 @@ to the build `PATH`; the caller's `PATH` does not need to include Cargo's bin
 directory. `RIVE_ATLAS_MASK_NAGA=/absolute/path/to/naga` selects another
 executable named `naga`, still subject to the exact version check.
 
-On macOS with Xcode 26 or later, `build.sh` temporarily changes Dawn
+On macOS, `build.sh` temporarily changes Dawn
 PartitionAlloc's `mac_no_default_new_delete_symbols` setting from
 `-fvisibility-global-new-delete=force-hidden` to an empty `cflags` list.
-Xcode 26's SDK libc++ declares these symbols with default visibility, so
-forcing hidden visibility causes the known declaration mismatch. The patch is
+Apple SDK libc++ declares these symbols with default visibility, so forcing
+hidden visibility with Dawn's bundled clang causes the known declaration
+mismatch on both the Xcode 15.4 CI image and Xcode 26 hosts. The patch is
 checked before use, skipped when Dawn is already compatible, and reversed on
 exit.
 
-The same Xcode-26 branch temporarily appends
+On every macOS host, the harness also temporarily appends
 `treat_warnings_as_errors=false` to Dawn's generated `out/release/args.gn`.
-This keeps legacy unsafe-buffer diagnostics visible but prevents the new clang
-default from promoting them to build-stopping errors. An explicit user value is
-never overwritten. It also sets `use_lld=false`, making Dawn emit regular
+Dawn uses its own pinned clang rather than Xcode's compiler, and that clang's
+unsafe-buffers plugin can emit diagnostics that `-Wno-error=unsafe-buffer-usage`
+does not demote while global `-Werror` is active. The setting keeps those
+diagnostics visible without making them build-stopping errors on either the
+Xcode 15.4 CI image or newer Xcode hosts. An explicit user value is never
+overwritten. The harness also sets `use_lld=false`, making Dawn emit regular
 archives that the Premake executable's Apple `ld` link step can consume. Before
 either temporary edit, the harness snapshots `args.gn`; its exit trap restores
 that snapshot and verifies byte equality with `cmp`, including blank lines.

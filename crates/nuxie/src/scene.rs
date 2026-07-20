@@ -16,7 +16,10 @@ use nuxie_runtime::{
     embedded_font_is_parseable,
 };
 
-use crate::{ArtboardRenderCache, File, OwnedArtboardInstance, ViewModelInstance};
+use crate::{
+    ArtboardRenderCache, File, OwnedArtboardInstance, RuntimeOwnedViewModelContext,
+    ViewModelInstance,
+};
 
 /// Stable identity of an authored artboard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -2631,6 +2634,7 @@ struct LiveInstance {
 struct RetainedViewModelInstance {
     authored_instance: ViewModelInstanceId,
     value: ViewModelInstance,
+    context: RuntimeOwnedViewModelContext,
     numbers: Vec<RetainedViewModelNumber>,
     dirty: bool,
 }
@@ -2751,12 +2755,25 @@ fn instantiate_runtime_mount_with_carry(
             }
 
             let _ = runtime.bind_view_model(&value);
+            // `Artboard::bindViewModelInstance` is deliberately main-only.
+            // The retained Scene mount also binds state machines, so mirror
+            // C++ `StateMachineInstance::completeViewModelInstances` here and
+            // install the completed composite context on both participants.
+            let mut context = runtime.owned_view_model_context().cloned().ok_or(())?;
+            let _ = context.complete(
+                &materialized.file.runtime,
+                Some(value.raw().view_model_index()),
+            );
+            let _ = runtime
+                .raw_mut()
+                .bind_owned_view_model_artboard_contexts(&materialized.file.runtime, &context);
             for machine in &mut machines.values {
-                let _ = machine.bind_owned_view_model_handle(value.handle());
+                let _ = machine.bind_owned_view_model_contexts(&context);
             }
             Ok(RetainedViewModelInstance {
                 authored_instance: default.authored_instance,
                 value,
+                context,
                 numbers,
                 dirty: false,
             })
@@ -2810,9 +2827,20 @@ fn flush_view_model(live: &mut LiveInstance) -> bool {
     if !view_model.dirty {
         return false;
     }
-    let mut changed = live.runtime.bind_view_model(&view_model.value);
+    view_model
+        .context
+        .set_main_handle(view_model.value.handle().clone());
+    let file = Arc::clone(live.runtime.file());
+    let mut changed = live
+        .runtime
+        .raw_mut()
+        .bind_default_view_model_artboard_list_context(&file.runtime);
+    changed |= live
+        .runtime
+        .raw_mut()
+        .bind_owned_view_model_artboard_contexts(&file.runtime, &view_model.context);
     for machine in &mut live.machines.values {
-        changed |= machine.bind_owned_view_model_handle(view_model.value.handle());
+        changed |= machine.bind_owned_view_model_contexts(&view_model.context);
     }
     view_model.dirty = false;
     changed

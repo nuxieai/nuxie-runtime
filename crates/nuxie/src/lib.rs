@@ -63,15 +63,16 @@ pub use nuxie_renderer::{
 };
 pub use nuxie_runtime::{
     ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, RuntimeLayerState,
-    RuntimeStateMachineInput, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,
-    ScriptModuleFailure, ScriptValue, ScriptingVm, StateMachineInputInstance,
-    StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
+    RuntimeOwnedViewModelContext, RuntimeStateMachineInput, ScriptError, ScriptHost,
+    ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm,
+    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
+    StateMachineReportedEvent,
 };
 
 #[cfg(feature = "scripting")]
 use nuxie_scripting::vm::ScriptProgram;
 #[cfg(feature = "scripting")]
-pub use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
+pub use nuxie_scripting::vm::{LuaScriptInstance, ScopeKey, ScriptVm};
 
 #[cfg(feature = "scripting")]
 #[derive(Debug, Clone)]
@@ -80,8 +81,17 @@ struct FileScriptAsset {
     global_id: u32,
     type_name: &'static str,
     name: String,
+    scope: ScopeKey,
     is_module: bool,
     payload: Option<Vec<u8>>,
+}
+
+#[cfg(feature = "scripting")]
+#[derive(Debug, Clone)]
+struct FileScriptLibraryImport {
+    caller: ScopeKey,
+    name: String,
+    target: ScopeKey,
 }
 
 #[cfg(feature = "scripting")]
@@ -95,6 +105,7 @@ struct ReadyFileScripts {
 #[cfg(feature = "scripting")]
 struct FileScriptRuntime {
     assets: Arc<[FileScriptAsset]>,
+    imports: Arc<[FileScriptLibraryImport]>,
     authorization: ScriptExecutionAuthorization,
     ready: Option<ReadyFileScripts>,
 }
@@ -105,6 +116,7 @@ impl std::fmt::Debug for FileScriptRuntime {
         formatter
             .debug_struct("FileScriptRuntime")
             .field("assets", &self.assets)
+            .field("imports", &self.imports)
             .field("authorization", &self.authorization)
             .field("ready", &self.ready.is_some())
             .finish_non_exhaustive()
@@ -113,29 +125,73 @@ impl std::fmt::Debug for FileScriptRuntime {
 
 #[cfg(feature = "scripting")]
 impl FileScriptRuntime {
-    fn imported_assets(runtime: &RuntimeFile) -> Arc<[FileScriptAsset]> {
-        runtime
-            .scripting_file_assets_with_contents()
+    fn import(runtime: &RuntimeFile, authorization: ScriptExecutionAuthorization) -> Self {
+        let entries = runtime.scripting_file_assets_with_contents();
+        let assets = entries
+            .iter()
+            .copied()
+            .map(|entry| {
+                let name = entry.asset.string_property("name").unwrap_or_default();
+                let folder = entry
+                    .asset
+                    .string_property("folderPath")
+                    .unwrap_or_default();
+                FileScriptAsset {
+                    ordinal: entry.ordinal,
+                    global_id: entry.asset.id,
+                    type_name: entry.asset.type_name,
+                    name: if folder.is_empty() {
+                        name.to_owned()
+                    } else {
+                        format!("{folder}/{name}")
+                    },
+                    scope: ScopeKey::new(
+                        entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
+                        entry
+                            .asset
+                            .uint_property("scopeLibraryVersionId")
+                            .unwrap_or(0),
+                    ),
+                    is_module: entry.asset.bool_property("isModule").unwrap_or(false),
+                    payload: entry.contents.map(ToOwned::to_owned),
+                }
+            })
+            .collect::<Vec<_>>()
+            .into();
+        let imports = entries
             .into_iter()
-            .map(|entry| FileScriptAsset {
-                ordinal: entry.ordinal,
-                global_id: entry.asset.id,
-                type_name: entry.asset.type_name,
+            .filter(|entry| entry.asset.type_name == "LibraryAsset")
+            .map(|entry| FileScriptLibraryImport {
+                caller: ScopeKey::new(
+                    entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
+                    entry
+                        .asset
+                        .uint_property("scopeLibraryVersionId")
+                        .unwrap_or(0),
+                ),
                 name: entry
                     .asset
                     .string_property("name")
                     .unwrap_or_default()
                     .to_owned(),
-                is_module: entry.asset.bool_property("isModule").unwrap_or(false),
-                payload: entry.contents.map(ToOwned::to_owned),
+                target: ScopeKey::new(
+                    entry.asset.uint_property("libraryId").unwrap_or(0),
+                    entry.asset.uint_property("libraryVersionId").unwrap_or(0),
+                ),
             })
             .collect::<Vec<_>>()
-            .into()
+            .into();
+        Self::new(assets, imports, authorization)
     }
 
-    fn new(assets: Arc<[FileScriptAsset]>, authorization: ScriptExecutionAuthorization) -> Self {
+    fn new(
+        assets: Arc<[FileScriptAsset]>,
+        imports: Arc<[FileScriptLibraryImport]>,
+        authorization: ScriptExecutionAuthorization,
+    ) -> Self {
         Self {
             assets,
+            imports,
             authorization,
             ready: None,
         }
@@ -147,9 +203,17 @@ impl FileScriptRuntime {
 
     fn build_candidate(
         &self,
+        runtime: &RuntimeFile,
         factory: &mut dyn Factory,
     ) -> std::result::Result<ReadyFileScripts, nuxie_runtime::ScriptError> {
-        let vm = ScriptVm::new();
+        let mut vm = ScriptVm::new();
+        vm.set_view_models(nuxie_runtime::script_view_models(runtime));
+        // LibraryAsset records are serialized import edges. Seed every pin
+        // before executing any module so both eager and lazy requires observe
+        // the exact per-caller dependency graph from the file.
+        for import in self.imports.iter() {
+            vm.add_import(import.caller, &import.name, import.target);
+        }
         let mut pending = self
             .assets
             .iter()
@@ -161,7 +225,12 @@ impl FileScriptRuntime {
             let mut failures = Vec::new();
             for asset in pending {
                 let payload = required_script_payload(asset, "module registration")?;
-                if let Err(error) = vm.register_module_with_factory(&asset.name, payload, factory) {
+                if let Err(error) = vm.register_module_with_factory_scoped(
+                    &asset.name,
+                    asset.scope,
+                    payload,
+                    factory,
+                ) {
                     failures.push((asset, error));
                 }
             }
@@ -183,8 +252,15 @@ impl FileScriptRuntime {
         {
             let payload = required_script_payload(asset, "protocol registration")?;
             let program = vm
-                .register_protocol_script_with_factory(&asset.name, payload, factory)
-                .map_err(|error| asset_phase_error(asset, "protocol registration", error))?;
+                .register_protocol_script_with_factory_scoped(
+                    &asset.name,
+                    asset.scope,
+                    payload,
+                    factory,
+                )
+                .map_err(|error| {
+                    asset_phase_error(asset, "protocol registration", error.to_string())
+                })?;
             programs.insert(asset.ordinal, program);
         }
 
@@ -197,6 +273,7 @@ impl FileScriptRuntime {
 
     fn prepare_mounts(
         &mut self,
+        runtime: &RuntimeFile,
         groups: &[ScriptMountGroup],
         factory: &mut dyn Factory,
     ) -> std::result::Result<PreparedFileScriptMounts, nuxie_runtime::ScriptError> {
@@ -216,7 +293,7 @@ impl FileScriptRuntime {
         // Keep the candidate cold until every concrete occurrence has a
         // generated table and successful init. Any error drops all tables and
         // the candidate VM, leaving this File retryable with zero attachments.
-        let candidate = self.build_candidate(factory)?;
+        let candidate = self.build_candidate(runtime, factory)?;
         let groups = instantiate_script_mounts(&candidate, groups, factory)?;
         Ok(PreparedFileScriptMounts {
             // Drop table handles before their candidate VM on a failed
@@ -596,7 +673,10 @@ fn prepare_scripted_artboard_tree(
     if !has_scripted_drawable {
         return Ok(false);
     }
-    let mut prepared = file.scripts.borrow_mut().prepare_mounts(&groups, factory)?;
+    let mut prepared = file
+        .scripts
+        .borrow_mut()
+        .prepare_mounts(&file.runtime, &groups, factory)?;
     validate_prepared_script_mount_topology(instance, &prepared.groups)?;
 
     // Validation is the final fallible step. Publish a cold candidate before
@@ -748,6 +828,7 @@ impl Clone for File {
             let scripts = self.scripts.borrow();
             RefCell::new(FileScriptRuntime::new(
                 Arc::clone(&scripts.assets),
+                Arc::clone(&scripts.imports),
                 scripts.authorization,
             ))
         };
@@ -806,11 +887,9 @@ impl File {
         _authorization: ScriptExecutionAuthorization,
     ) -> Result<Self> {
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
-        #[cfg(feature = "scripting")]
-        let script_assets = FileScriptRuntime::imported_assets(&runtime);
         Ok(Self {
             #[cfg(feature = "scripting")]
-            scripts: RefCell::new(FileScriptRuntime::new(script_assets, _authorization)),
+            scripts: RefCell::new(FileScriptRuntime::import(&runtime, _authorization)),
             runtime: Arc::new(runtime),
             graph: Arc::new(graph),
             external_image_assets: BTreeMap::new(),
@@ -901,6 +980,15 @@ impl File {
     /// Low-level graph projection for advanced integrations.
     pub fn graph(&self) -> &GraphFile {
         self.graph.as_ref()
+    }
+
+    #[cfg(feature = "scripting")]
+    fn advance_detached_view_models(&self) -> bool {
+        self.scripts
+            .borrow()
+            .ready
+            .as_ref()
+            .is_some_and(|ready| ready.vm.advance_detached_view_models())
     }
 
     pub fn artboard_count(&self) -> usize {
@@ -1085,6 +1173,10 @@ impl<'a> ArtboardInstance<'a> {
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         changed
     }
 
@@ -1123,6 +1215,10 @@ impl<'a> ArtboardInstance<'a> {
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         Ok(changed)
     }
 
@@ -1277,6 +1373,12 @@ impl<'a> ArtboardInstance<'a> {
         changed
     }
 
+    /// Return the main-only context retained by the most recent
+    /// [`ArtboardInstance::bind_view_model`] call.
+    pub fn owned_view_model_context(&self) -> Option<&RuntimeOwnedViewModelContext> {
+        self.raw.owned_view_model_context()
+    }
+
     /// Advance the scene while driving `state_machine`, mirroring the golden
     /// runner's advance order (state machine, nested artboards, data binds,
     /// update pass). Returns whether anything changed.
@@ -1320,6 +1422,10 @@ impl<'a> ArtboardInstance<'a> {
         changed |= self
             .raw
             .settle_state_machine_update_passes_after_main_advance(state_machines);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         changed
     }
 
@@ -1378,6 +1484,10 @@ impl<'a> ArtboardInstance<'a> {
         changed |= self
             .raw
             .settle_state_machine_update_passes_after_main_advance(state_machines);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         Ok(changed)
     }
 
@@ -1441,16 +1551,18 @@ impl<'a> ArtboardInstance<'a> {
             .as_mut()
             .context("render paint cache disappeared after successful allocation")?;
         self.raw.update_pass();
-        self.raw
-            .prepare_static_artboard_tree_paints(
-                &self.file.runtime,
-                artboard,
-                &self.file.graph.artboards,
-                factory,
-                paint,
-                &mut cache.path,
-            )
-            .context("failed to prepare Rive paints")?;
+        if paint.needs_paint_preparation(&self.raw, artboard) {
+            self.raw
+                .prepare_static_artboard_tree_paints(
+                    &self.file.runtime,
+                    artboard,
+                    &self.file.graph.artboards,
+                    factory,
+                    paint,
+                    &mut cache.path,
+                )
+                .context("failed to prepare Rive paints")?;
+        }
         self.raw
             .draw_prepared_static_artboard_with_render_cache(
                 &self.file.runtime,
@@ -1597,6 +1709,10 @@ impl OwnedArtboardInstance {
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         changed
     }
 
@@ -1628,6 +1744,10 @@ impl OwnedArtboardInstance {
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
         changed |= self.raw.update_pass();
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         Ok(changed)
     }
 
@@ -1749,6 +1869,11 @@ impl OwnedArtboardInstance {
         changed
     }
 
+    /// See [`ArtboardInstance::owned_view_model_context`].
+    pub fn owned_view_model_context(&self) -> Option<&RuntimeOwnedViewModelContext> {
+        self.raw.owned_view_model_context()
+    }
+
     /// See [`ArtboardInstance::advance_with_state_machine`].
     pub fn advance_with_state_machine(
         &mut self,
@@ -1782,6 +1907,10 @@ impl OwnedArtboardInstance {
         changed |= self
             .raw
             .settle_state_machine_update_passes_after_main_advance(state_machines);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         changed
     }
 
@@ -1840,6 +1969,10 @@ impl OwnedArtboardInstance {
         changed |= self
             .raw
             .settle_state_machine_update_passes_after_main_advance(state_machines);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= self.file.advance_detached_view_models();
+        }
         Ok(changed)
     }
 
@@ -1893,16 +2026,18 @@ impl OwnedArtboardInstance {
             .as_mut()
             .context("render paint cache disappeared after successful allocation")?;
         self.raw.update_pass();
-        self.raw
-            .prepare_static_artboard_tree_paints(
-                &self.file.runtime,
-                artboard,
-                &self.file.graph.artboards,
-                factory,
-                paint,
-                &mut cache.path,
-            )
-            .context("failed to prepare Rive paints")?;
+        if paint.needs_paint_preparation(&self.raw, artboard) {
+            self.raw
+                .prepare_static_artboard_tree_paints(
+                    &self.file.runtime,
+                    artboard,
+                    &self.file.graph.artboards,
+                    factory,
+                    paint,
+                    &mut cache.path,
+                )
+                .context("failed to prepare Rive paints")?;
+        }
         self.raw
             .draw_prepared_static_artboard_with_render_cache(
                 &self.file.runtime,
@@ -1988,6 +2123,8 @@ impl ViewModelInstance {
 #[cfg(test)]
 mod owned_instance_tests {
     use super::*;
+    #[cfg(feature = "scripting")]
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
     use nuxie_render_api::RecordingFactory;
 
     const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
@@ -2090,6 +2227,124 @@ mod owned_instance_tests {
         // Nonexistent property key: the typed write path must report false
         // (no match), never panic.
         assert!(!instance.raw_mut().set_double_property(0, u16::MAX, 1.0));
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn file_script_runtime_extracts_scopes_and_nested_library_edges() {
+        let property = |key, value| AuthoringProperty { key, value };
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: 23,
+                properties: vec![],
+            },
+            AuthoringRecord {
+                type_key: 558,
+                properties: vec![
+                    property(203, AuthoringValue::String("InnerLib".to_owned())),
+                    property(798, AuthoringValue::Uint(21)),
+                    property(799, AuthoringValue::Uint(4)),
+                    property(1037, AuthoringValue::Uint(20)),
+                    property(1038, AuthoringValue::Uint(6)),
+                ],
+            },
+            AuthoringRecord {
+                type_key: 529,
+                properties: vec![
+                    property(203, AuthoringValue::String("mesh".to_owned())),
+                    property(926, AuthoringValue::String("config".to_owned())),
+                    property(914, AuthoringValue::Bool(true)),
+                    property(1037, AuthoringValue::Uint(21)),
+                    property(1038, AuthoringValue::Uint(4)),
+                ],
+            },
+        ])
+        .expect("authored scripting asset graph imports");
+
+        let scripts =
+            FileScriptRuntime::import(&runtime, ScriptExecutionAuthorization::Authenticated);
+        let mesh = scripts
+            .assets
+            .iter()
+            .find(|asset| asset.type_name == "ScriptAsset")
+            .expect("script asset extracted");
+        assert_eq!(mesh.name, "config/mesh");
+        assert_eq!(mesh.scope, ScopeKey::new(21, 4));
+
+        assert_eq!(scripts.imports.len(), 1);
+        let import = &scripts.imports[0];
+        assert_eq!(import.name, "InnerLib");
+        assert_eq!(import.caller, ScopeKey::new(20, 6));
+        assert_eq!(import.target, ScopeKey::new(21, 4));
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn file_script_runtime_resolves_exported_library_scope_probe() {
+        let Some(rive_runtime_dir) = std::env::var_os("RIVE_RUNTIME_DIR") else {
+            // The candidate-only fixture is exercised by the upstream-sync
+            // gates; hermetic scope behavior is covered by nuxie-scripting.
+            return;
+        };
+        let fixture = std::path::PathBuf::from(rive_runtime_dir)
+            .join("tests/unit_tests/assets/scope_probe.riv");
+        if !fixture.exists() {
+            return;
+        }
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", fixture.display()));
+        let runtime = read_runtime_file_for_facade(&bytes).expect("scope probe imports");
+        let scripts =
+            FileScriptRuntime::import(&runtime, ScriptExecutionAuthorization::Authenticated);
+        let mut factory = RecordingFactory::new();
+
+        let ready = scripts
+            .build_candidate(&runtime, &mut factory)
+            .expect("scoped modules register through serialized library pins");
+        let (lib, has_decode, cached, bare_leaked): (i64, i64, i64, bool) = ready
+            .vm
+            .eval(
+                "local probe = require('scope_probe')\n\
+                 local bareLeaked = pcall(require, 'draco')\n\
+                 return probe.lib, probe.hasDecode, probe.cached, bareLeaked",
+            )
+            .expect("root scope probe reads registered results");
+        assert_eq!((lib, has_decode, cached), (1, 1, 1));
+        assert!(
+            !bare_leaked,
+            "a root bare require leaked into library scope"
+        );
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn file_script_bootstrap_seeds_data_before_registration() {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets/script_create_viewmodel_instance.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        let runtime = read_runtime_file_for_facade(&bytes).expect("fixture imports");
+        let scripts =
+            FileScriptRuntime::import(&runtime, ScriptExecutionAuthorization::Authenticated);
+        let model_name = nuxie_runtime::script_view_models(&runtime)
+            .keys()
+            .next()
+            .cloned()
+            .expect("fixture contains a view-model definition");
+        let mut factory = RecordingFactory::new();
+
+        let ready = scripts
+            .build_candidate(&runtime, &mut factory)
+            .expect("scripts register with Data initialized");
+        let has_constructor: bool = ready
+            .vm
+            .eval(&format!(
+                "return Data[{model_name:?}] ~= nil and type(Data[{model_name:?}].new) == 'function'"
+            ))
+            .expect("Data constructor probe runs");
+        assert!(has_constructor);
     }
 
     #[test]

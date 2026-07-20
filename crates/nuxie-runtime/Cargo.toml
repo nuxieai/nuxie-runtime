@@ -14,6 +14,8 @@ nuxie-render-api = { path = "../nuxie-render-api" }
 nuxie-schema = { path = "../nuxie-schema" }
 skrifa = "0.44"
 taffy = "0.12.1"
+unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
+unicode-script = "0.5.8"
 
 [build-dependencies]
 nuxie-schema = { path = "../nuxie-schema" }

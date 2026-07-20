@@ -34,7 +34,8 @@ if [[ "${RIVE_GOLDEN_WITH_SCRIPTING:-0}" == "1" ]]; then
             --with_rive_text \
             --with_rive_layout \
             --with_rive_scripting
-        make -C "$runtime_out" -j"$jobs" rive luau_vm
+        make -C "$runtime_out" -j"$jobs" \
+            rive rive_harfbuzz rive_sheenbidi rive_yoga luau_vm
     )
     export RIVE_GOLDEN_SCRIPTING_LIBDIR="$rive_runtime/$runtime_out"
     echo "==== Building scripted rive_decoders ($config) ===="
@@ -45,7 +46,8 @@ if [[ "${RIVE_GOLDEN_WITH_SCRIPTING:-0}" == "1" ]]; then
             --file=premake5_v2.lua \
             --config="$config" \
             --out="$decoders_out"
-        make -C "$decoders_out" -j"$jobs" rive_decoders libpng
+        make -C "$decoders_out" -j"$jobs" \
+            rive_decoders libpng zlib libjpeg libwebp
     )
     export RIVE_GOLDEN_DECODERS_LIBDIR="$rive_runtime/decoders/$decoders_out"
 fi

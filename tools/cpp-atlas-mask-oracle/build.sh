@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 runtime="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}"
 patch="$script_dir/runtime.patch"
-dawn_patch="$script_dir/dawn-xcode26.patch"
+dawn_patch="$script_dir/dawn-apple-visibility.patch"
 dawn_dir="$runtime/renderer/dependencies/dawn"
 injected_dir="$runtime/renderer/atlas_mask_oracle"
 build_out="${RIVE_ATLAS_MASK_BUILD_OUT:-out/cpp-atlas-mask-oracle}"
@@ -150,6 +150,10 @@ PY
 
 needs_xcode26_patch() {
     [[ "$(uname -s)" == "Darwin" ]] && [[ "$(xcode_major)" =~ ^[0-9]+$ ]] && (( $(xcode_major) >= 26 ))
+}
+
+needs_dawn_visibility_patch() {
+    [[ "$(uname -s)" == "Darwin" ]] && dawn_patch_needed
 }
 
 dawn_patch_needed() {
@@ -333,15 +337,15 @@ preflight() {
             missing=1
         fi
     done
-    if needs_xcode26_patch; then
-        if dawn_patch_needed; then
-            if ! git -C "$dawn_dir" apply --check "$dawn_patch"; then
-                echo "Dawn Xcode-26 compatibility patch does not apply cleanly" >&2
-                return 2
-            fi
-        else
-            echo "Dawn Xcode-26 compatibility patch: already present"
+    if needs_dawn_visibility_patch; then
+        if ! git -C "$dawn_dir" apply --check "$dawn_patch"; then
+            echo "Dawn Apple visibility patch does not apply cleanly" >&2
+            return 2
         fi
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
+        echo "Dawn Apple visibility patch: already present"
+    fi
+    if needs_xcode26_patch; then
         if grep -Eq '^treat_warnings_as_errors[[:space:]]*=' "$dawn_args" &&
             ! grep -Eq '^treat_warnings_as_errors[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$dawn_args"; then
             echo "Dawn args explicitly enable warnings-as-errors; refusing to override them" >&2
@@ -548,7 +552,7 @@ python3 "$msaa_reference_generator" \
     --output "$injected_dir/generated_msaa_reference_registry.inc"
 git -C "$runtime" apply "$patch"
 applied=1
-if needs_xcode26_patch && dawn_patch_needed; then
+if needs_dawn_visibility_patch; then
     git -C "$dawn_dir" apply "$dawn_patch"
     dawn_patch_applied=1
 fi

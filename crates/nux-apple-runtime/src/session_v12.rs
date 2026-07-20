@@ -4599,6 +4599,16 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "apple-product")]
+    fn flow_fixture(name: &str) -> Vec<u8> {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("fixtures/flow")
+            .join(name);
+        std::fs::read(&path)
+            .unwrap_or_else(|error| panic!("read flow fixture {}: {error}", path.display()))
+    }
+
     fn configured_descriptor() -> NuxFlowConfiguredSessionDescriptor {
         NuxFlowConfiguredSessionDescriptor {
             struct_size: size_u32::<NuxFlowConfiguredSessionDescriptor>(),
@@ -5789,14 +5799,7 @@ mod tests {
     #[cfg(feature = "apple-product")]
     #[test]
     fn configured_session_round_trips_list_index_values_as_their_own_abi_kind() {
-        let fixture = std::fs::read(
-            std::path::PathBuf::from(
-                std::env::var_os("RIVE_RUNTIME_DIR")
-                    .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
-            )
-            .join("tests/unit_tests/assets/component_list_2.riv"),
-        )
-        .expect("read component-list fixture");
+        let fixture = flow_fixture("component_list_2.riv");
         let worker = match RuntimeWorker::spawn(fixture) {
             Ok(worker) => worker,
             Err(_) => panic!("import fixture"),
@@ -5939,15 +5942,7 @@ mod tests {
             *mut NuxFlowRenderSession,
             *mut NuxFlowSessionResult,
         ) {
-            let fixture = std::fs::read(
-                std::path::PathBuf::from(
-                    std::env::var_os("RIVE_RUNTIME_DIR")
-                        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
-                )
-                .join("tests/unit_tests/assets")
-                .join(fixture_name),
-            )
-            .expect("read catalog fixture");
+            let fixture = flow_fixture(fixture_name);
             let worker = match RuntimeWorker::spawn(fixture) {
                 Ok(worker) => worker,
                 Err(_) => panic!("import catalog fixture"),
@@ -6059,14 +6054,7 @@ mod tests {
     #[cfg(feature = "apple-product")]
     #[test]
     fn configured_session_replaces_a_nested_view_model_with_a_shared_instance() {
-        let fixture = std::fs::read(
-            std::path::PathBuf::from(
-                std::env::var_os("RIVE_RUNTIME_DIR")
-                    .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
-            )
-            .join("tests/unit_tests/assets/replace_view_model.riv"),
-        )
-        .expect("read replacement fixture");
+        let fixture = flow_fixture("replace_view_model.riv");
         let worker = match RuntimeWorker::spawn(fixture) {
             Ok(worker) => worker,
             Err(_) => panic!("import replacement fixture"),

@@ -3,7 +3,7 @@
 use crate::work_metrics::CountedDeviceExt;
 use crate::{
     atomic_pipeline::image_sampler,
-    gpu::{FlushUniforms, ImageDrawUniforms},
+    gpu::{FlushUniforms, ImageDrawInstance},
 };
 use nuxie_render_api::ImageSampler;
 use std::sync::Arc;
@@ -14,6 +14,8 @@ pub(crate) struct MsaaImageMeshPipeline {
     advanced_hsl: PipelineVariants,
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
+    _dummy_destination: wgpu::Texture,
+    dummy_destination_view: wgpu::TextureView,
 }
 
 struct PipelineVariants {
@@ -30,6 +32,12 @@ pub(crate) struct PreparedImageMesh {
     pub uvs: Arc<wgpu::Buffer>,
     pub indices: Arc<wgpu::Buffer>,
     pub index_count: u32,
+    pub instance_index: u32,
+}
+
+pub(crate) struct PreparedImageMeshResources {
+    fixed_flush_group: wgpu::BindGroup,
+    advanced_flush_group: wgpu::BindGroup,
 }
 
 impl MsaaImageMeshPipeline {
@@ -63,15 +71,14 @@ impl MsaaImageMeshPipeline {
             label: Some("nuxie-msaa-image-mesh-flush-layout"),
             entries: &[
                 uniform_entry(0),
-                uniform_entry(2),
-                texture_entry(13, wgpu::TextureSampleType::Float { filterable: false }),
+                texture_entry(12, wgpu::TextureSampleType::Float { filterable: false }),
             ],
         });
         let image_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-msaa-image-mesh-image-layout"),
             entries: &[
-                texture_entry(12, wgpu::TextureSampleType::Float { filterable: true }),
-                sampler_entry(14),
+                texture_entry(11, wgpu::TextureSampleType::Float { filterable: true }),
+                sampler_entry(13),
             ],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -124,6 +131,7 @@ impl MsaaImageMeshPipeline {
                     buffers: &[
                         Some(image_mesh_vertex_layout(0)),
                         Some(image_mesh_vertex_layout(1)),
+                        Some(ImageDrawInstance::layout()),
                     ],
                 },
                 primitive: wgpu::PrimitiveState {
@@ -190,6 +198,21 @@ impl MsaaImageMeshPipeline {
                     create_pipeline(label, vertex, fragment, true, true, advanced, hsl)
                 }),
             };
+        let dummy_destination = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("nuxie-msaa-image-mesh-dummy-destination"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let dummy_destination_view = dummy_destination.create_view(&Default::default());
         Self {
             fixed: make_variants(
                 "nuxie-msaa-image-mesh-fixed-pipeline",
@@ -211,6 +234,8 @@ impl MsaaImageMeshPipeline {
             ),
             flush_layout,
             image_layout,
+            _dummy_destination: dummy_destination,
+            dummy_destination_view,
         }
     }
 
@@ -248,69 +273,74 @@ impl MsaaImageMeshPipeline {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn prepare(
+    pub(crate) fn prepare_resources(
         &self,
         device: &wgpu::Device,
         uniforms: &FlushUniforms,
-        image_uniforms: &ImageDrawUniforms,
         destination: Option<&wgpu::TextureView>,
+    ) -> PreparedImageMeshResources {
+        let uniform_buffer = upload(device, "nuxie-msaa-image-mesh-uniforms", uniforms);
+        let make_flush_group = |destination: &wgpu::TextureView| {
+            device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("nuxie-msaa-image-mesh-flush-group"),
+                layout: &self.flush_layout,
+                entries: &[
+                    binding(0, uniform_buffer.as_entire_binding()),
+                    binding(12, wgpu::BindingResource::TextureView(destination)),
+                ],
+            })
+        };
+        let fixed_flush_group = make_flush_group(&self.dummy_destination_view);
+        let advanced_flush_group = destination
+            .map(make_flush_group)
+            .unwrap_or_else(|| fixed_flush_group.clone());
+        PreparedImageMeshResources {
+            fixed_flush_group,
+            advanced_flush_group,
+        }
+    }
+
+    pub(crate) fn prepare_image_group(
+        &self,
+        device: &wgpu::Device,
         image: &wgpu::TextureView,
         sampler: ImageSampler,
+    ) -> wgpu::BindGroup {
+        let sampler = device.create_sampler(&image_sampler(sampler));
+        device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nuxie-msaa-image-mesh-image-group"),
+            layout: &self.image_layout,
+            entries: &[
+                binding(11, wgpu::BindingResource::TextureView(image)),
+                binding(13, wgpu::BindingResource::Sampler(&sampler)),
+            ],
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn prepare(
+        &self,
+        resources: &PreparedImageMeshResources,
+        image_group: &wgpu::BindGroup,
+        advanced_blend: bool,
         vertices: &Arc<wgpu::Buffer>,
         uvs: &Arc<wgpu::Buffer>,
         indices: &Arc<wgpu::Buffer>,
         index_count: u32,
+        instance_index: u32,
     ) -> PreparedImageMesh {
-        let uniform_buffer = upload(device, "nuxie-msaa-image-mesh-uniforms", uniforms);
-        let image_uniform_buffer = upload(
-            device,
-            "nuxie-msaa-image-mesh-draw-uniforms",
-            image_uniforms,
-        );
-        let dummy = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("nuxie-msaa-image-mesh-dummy-destination"),
-            size: wgpu::Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let dummy_view = dummy.create_view(&Default::default());
-        let flush_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("nuxie-msaa-image-mesh-flush-group"),
-            layout: &self.flush_layout,
-            entries: &[
-                binding(0, uniform_buffer.as_entire_binding()),
-                binding(2, image_uniform_buffer.as_entire_binding()),
-                binding(
-                    13,
-                    wgpu::BindingResource::TextureView(destination.unwrap_or(&dummy_view)),
-                ),
-            ],
-        });
-        let sampler = device.create_sampler(&image_sampler(sampler));
-        let image_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("nuxie-msaa-image-mesh-image-group"),
-            layout: &self.image_layout,
-            entries: &[
-                binding(12, wgpu::BindingResource::TextureView(image)),
-                binding(14, wgpu::BindingResource::Sampler(&sampler)),
-            ],
-        });
         PreparedImageMesh {
-            flush_group,
-            image_group,
+            flush_group: if advanced_blend {
+                resources.advanced_flush_group.clone()
+            } else {
+                resources.fixed_flush_group.clone()
+            },
+            image_group: image_group.clone(),
             vertices: Arc::clone(vertices),
             uvs: Arc::clone(uvs),
             indices: Arc::clone(indices),
             index_count,
+            instance_index,
         }
     }
 }

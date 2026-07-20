@@ -158,12 +158,13 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         }
     }
 
-    assert_eq!(runtime_definition_count, 336);
-    assert_eq!(runtime_property_count, 588);
+    assert_eq!(runtime_definition_count, 342);
+    assert_eq!(runtime_property_count, 596);
     assert_eq!(
         declared_types,
         [
             "bool", "Bytes", "callback", "Color", "double", "Id", "List<Id>", "String", "uint",
+            "uint8", "uint64",
         ]
         .into_iter()
         .map(str::to_owned)
@@ -173,7 +174,7 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
     assert_eq!(
         runtime_types,
         [
-            "bool", "Bytes", "callback", "Color", "double", "String", "uint"
+            "bool", "Bytes", "callback", "Color", "double", "String", "uint", "uint8", "uint64"
         ]
         .into_iter()
         .map(str::to_owned)
@@ -187,13 +188,15 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         (("Bytes", None), 4),
         (("callback", None), 4),
         (("Color", None), 7),
-        (("double", None), 222),
+        (("double", None), 224),
         (("Id", Some("uint")), 83),
         (("List<Id>", Some("Bytes")), 8),
         (("String", None), 23),
         (("String", Some("String")), 1),
-        (("uint", None), 159),
+        (("uint", None), 121),
         (("uint", Some("uint")), 4),
+        (("uint8", None), 40),
+        (("uint64", None), 4),
     ]
     .into_iter()
     .map(|((declared, runtime), count)| ((declared.to_owned(), runtime.map(str::to_owned)), count))
@@ -285,7 +288,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
     );
 
     let properties = runtime_json_properties(&runtime_dir.join("dev/defs"));
-    assert_eq!(properties.len(), 588);
+    assert_eq!(properties.len(), 596);
 
     let encoded = properties
         .iter()
@@ -465,6 +468,9 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
         })
         .collect::<BTreeSet<_>>();
     let expected_bitmasks = [
+        ("focus_data.json", "canFocus", 953, "focusFlags", 0, 1),
+        ("focus_data.json", "canTouch", 954, "focusFlags", 1, 1),
+        ("focus_data.json", "canTraverse", 955, "focusFlags", 2, 1),
         (
             "semantic/semantic_data.json",
             "isCheckable",
@@ -672,7 +678,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| json_bool_or_default(&entry.property, "bindable", false))
             .count(),
-        247,
+        258,
         "dev/defs bindable property count changed; audit generated bindable metadata"
     );
 
@@ -681,7 +687,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| json_bool_or_default(&entry.property, "animates", false))
             .count(),
-        212,
+        218,
         "dev/defs animates property count changed; audit generated animates metadata and animation-keyed property support"
     );
     let animates_runtime_types = properties
@@ -705,12 +711,13 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             counts
         });
     let expected_animates_runtime_types = [
-        ("bool", 25usize),
+        ("bool", 28usize),
         ("callback", 4),
         ("Color", 4),
-        ("double", 147),
+        ("double", 149),
         ("String", 6),
-        ("uint", 26),
+        ("uint", 14),
+        ("uint8", 13),
     ]
     .into_iter()
     .map(|(value, count)| (value.to_owned(), count))
@@ -765,7 +772,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("description").is_some())
             .count(),
-        438,
+        446,
         "dev/defs description coverage changed; audit generated description metadata"
     );
     assert_eq!(
@@ -773,7 +780,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("journal").is_some())
             .count(),
-        3,
+        5,
         "dev/defs journal annotation count changed; audit generated journal metadata"
     );
     assert_eq!(
@@ -807,7 +814,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("initialValue").is_some())
             .count(),
-        547,
+        552,
         "dev/defs initialValue coverage changed; audit generated stored-field initializers"
     );
 
@@ -1069,6 +1076,49 @@ fn duplicate_and_reserved_keys_are_rejected_like_cpp_generator() {
             "expected stderr for {name} to contain {expected_stderr:?}\nstderr:\n{stderr}"
         );
     }
+}
+
+#[test]
+fn uint8_and_uint64_share_uint_registry_metadata_without_losing_declared_width() {
+    let defs_dir = write_codegen_defs_fixture(
+        "uint_width_aliases",
+        r#"
+        {
+          "name": "TestObject",
+          "key": { "int": 5000, "string": "test" },
+          "properties": {
+            "compact": {
+              "type": "uint8",
+              "key": { "int": 5001, "string": "compact" }
+            },
+            "wide": {
+              "type": "uint64",
+              "key": { "int": 5002, "string": "wide" }
+            }
+          }
+        }
+        "#,
+    );
+    let out_path = defs_dir.join("schema.rs");
+    let output = run_codegen(&defs_dir, &out_path);
+    assert!(
+        output.status.success(),
+        "nuxie-codegen failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let generated = std::fs::read_to_string(&out_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", out_path.display()));
+    let _ = std::fs::remove_dir_all(&defs_dir);
+
+    assert!(generated.contains("5001 => Some(CoreRegistryFieldKind::Uint)"));
+    assert!(generated.contains("5002 => Some(CoreRegistryFieldKind::Uint)"));
+    assert!(generated.contains("declared_type: \"uint8\",\n        runtime_type: FieldKind::Uint"));
+    assert!(
+        generated.contains("declared_type: \"uint64\",\n        runtime_type: FieldKind::Uint")
+    );
+    assert!(generated.contains("5001 => Some(FieldKind::Uint)"));
+    assert!(generated.contains("5002 => Some(FieldKind::Uint)"));
 }
 
 fn first_mismatch(actual: &str, expected: &str) -> String {

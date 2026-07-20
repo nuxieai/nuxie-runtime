@@ -1,4 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail};
+#[cfg(feature = "scripting")]
+use nuxie_binary::read_runtime_file_with_scripting;
 use nuxie_binary::{RuntimeFile, RuntimeObject, read_runtime_file};
 use nuxie_graph::{
     ArtboardGraph, GraphFile, ShapePaintContainerNode, ShapePaintKind, ShapePaintPathKind,
@@ -8,20 +10,21 @@ use nuxie_render_api::{
     Factory as RenderFactory, NullFactory, RecordingFactory, Renderer as RenderRenderer,
 };
 use nuxie_runtime::{
-    ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelContextHandle,
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeRenderPathCache,
-    StateMachineInstance, preallocate_render_paint_cache_for_artboard_tree,
-    static_text_support_error,
+    ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelContext,
+    RuntimeOwnedViewModelInstance, RuntimeRenderPathCache, StateMachineInstance,
+    preallocate_render_paint_cache_for_artboard_tree, static_text_support_error,
 };
 #[cfg(feature = "scripting")]
 use nuxie_runtime::{
-    NoopScriptHost, ScriptArtboard, ScriptError, ScriptMethod, ScriptValue, ScriptViewModel,
+    NoopScriptHost, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
+    ScriptArtboard, ScriptError, ScriptMethod, ScriptValue, ScriptViewModel,
     preallocate_render_paint_cache_for_artboard_instance,
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
+    preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration,
     preallocate_source_render_paints,
 };
 #[cfg(feature = "scripting")]
-use nuxie_scripting::vm::ScriptVm;
+use nuxie_scripting::vm::{DetachedViewModelFrame, ScopeKey, ScriptProgram, ScriptVm};
 #[cfg(feature = "scripting")]
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -156,7 +159,8 @@ fn run() -> Result<String> {
         .unwrap_or_default();
     let bytes = std::fs::read(&options.file)
         .with_context(|| format!("failed to read {}", options.file.display()))?;
-    let runtime = read_runtime_file(&bytes).context("failed to import runtime file")?;
+    let runtime = read_runtime_for_options(&bytes, options.execute_scripts)
+        .context("failed to import runtime file")?;
     let graph = GraphFile::from_runtime_file(&runtime).context("failed to build graph")?;
     let (artboard_index, artboard) = select_artboard(&graph, options.artboard.as_deref())?;
     if !options.layout_bounds {
@@ -181,8 +185,19 @@ fn run() -> Result<String> {
         .iter()
         .any(|object| object.type_name == Some("ScriptInputArtboard"));
     #[cfg(feature = "scripting")]
+    let script_assets = extract_script_assets(&runtime);
+    #[cfg(feature = "scripting")]
+    let mut registered_script_file = None;
+    #[cfg(feature = "scripting")]
     let (script_artboard_render_state, mut paint_cache) = if has_scripted_layout {
         let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
+        if !script_assets.is_empty() {
+            registered_script_file = Some(register_script_file(
+                &runtime,
+                &script_assets,
+                factory.as_factory(),
+            )?);
+        }
         let state = initialize_scripted_drawables_and_realize(
             &runtime,
             artboard_index,
@@ -190,6 +205,7 @@ fn run() -> Result<String> {
             &graph.artboards,
             &mut instance,
             factory.as_factory(),
+            registered_script_file.as_mut(),
         )?;
         let cache = preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
             &runtime,
@@ -200,6 +216,13 @@ fn run() -> Result<String> {
         (state, cache)
     } else if has_script_artboard_input {
         let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
+        if !script_assets.is_empty() {
+            registered_script_file = Some(register_script_file(
+                &runtime,
+                &script_assets,
+                factory.as_factory(),
+            )?);
+        }
         let state = initialize_scripted_drawables(
             &runtime,
             artboard_index,
@@ -207,6 +230,7 @@ fn run() -> Result<String> {
             &graph.artboards,
             &mut instance,
             factory.as_factory(),
+            registered_script_file.as_mut(),
         )
         .context("failed to initialize scripted drawables")?;
         let cache = preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
@@ -223,12 +247,21 @@ fn run() -> Result<String> {
         }
         (state, cache)
     } else {
-        let cache = nuxie_runtime::preallocate_render_paint_cache_for_scripted_artboard_tree(
-            &runtime,
-            artboard,
-            &graph.artboards,
-            factory.as_factory(),
-        );
+        let mut registration_result = None;
+        let cache =
+            preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration(
+                &runtime,
+                artboard,
+                &graph.artboards,
+                factory.as_factory(),
+                |factory| {
+                    if !script_assets.is_empty() {
+                        registration_result =
+                            Some(register_script_file(&runtime, &script_assets, factory));
+                    }
+                },
+            );
+        registered_script_file = registration_result.transpose()?;
         let state = initialize_scripted_drawables_and_realize(
             &runtime,
             artboard_index,
@@ -236,6 +269,7 @@ fn run() -> Result<String> {
             &graph.artboards,
             &mut instance,
             factory.as_factory(),
+            registered_script_file.as_mut(),
         )?;
         (state, cache)
     };
@@ -252,6 +286,31 @@ fn run() -> Result<String> {
         artboard,
         options.state_machine.as_deref(),
     )?;
+    let mut owned_view_model_context =
+        selected_artboard_owned_view_model_context(&runtime, artboard_index);
+    if let Some(context) = owned_view_model_context.as_ref() {
+        bind_selected_artboard_view_model_context(&mut instance, &runtime, context);
+    } else {
+        instance.bind_default_view_model_artboard_list_context(&runtime);
+    }
+    #[cfg(feature = "scripting")]
+    if let Some(state) = script_artboard_render_state.as_ref() {
+        // `Artboard::bindViewModelInstance` rehydrates inputs against the new
+        // DataContext, but candidate C++ preserves an already-completed user
+        // init. Only cold-deferred scripts initialize during this bind.
+        bind_scripted_drawable_context(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &mut instance,
+            state,
+            factory.as_factory(),
+            owned_view_model_context.as_ref(),
+            true,
+        )?;
+    }
+    // Candidate C++ binds the artboard before `defaultStateMachine()`, so the
+    // state-machine instance attaches to the already-populated DataContext.
     let mut state_machine = scene
         .state_machine_index
         .map(|index| {
@@ -260,36 +319,35 @@ fn run() -> Result<String> {
                 .with_context(|| format!("failed to instantiate state machine index {index}"))
         })
         .transpose()?;
-    let mut owned_view_model_context =
-        selected_artboard_owned_view_model_context(&runtime, artboard_index);
-    instance.bind_default_view_model_artboard_list_context(&runtime);
     #[cfg(feature = "scripting")]
-    if let Some(state) = script_artboard_render_state.as_ref() {
-        // Mirrors RIVLoader's Artboard::bindViewModelInstance rehydration.
-        rebind_scripted_drawables(
+    if let (Some(state_machine_index), Some(state_machine)) =
+        (scene.state_machine_index, state_machine.as_mut())
+    {
+        initialize_state_machine_scripted_objects(
             &runtime,
             artboard,
-            &graph.artboards,
-            &mut instance,
-            state,
+            state_machine_index,
+            state_machine,
             factory.as_factory(),
             owned_view_model_context.as_ref(),
+            script_artboard_render_state.as_ref(),
+            registered_script_file.as_mut(),
         )?;
     }
     if let Some(state_machine) = state_machine.as_mut() {
         if let Some(context) = owned_view_model_context.as_ref() {
-            state_machine.bind_owned_view_model_handle(context);
+            state_machine.bind_owned_view_model_contexts(context);
         }
         state_machine.advance_data_context();
     }
-    if let Some(context) = owned_view_model_context.as_ref() {
-        bind_selected_artboard_view_model_context(&mut instance, &runtime, context);
-    }
     #[cfg(feature = "scripting")]
-    if owned_view_model_context.is_some()
+    if state_machine.is_some()
         && let Some(state) = script_artboard_render_state.as_ref()
     {
-        rebind_scripted_drawables(
+        // `Scene::bindViewModelInstance` repoints the DataContext shared by
+        // the candidate artboard and state machine. Attached artboard scripts
+        // hydrate once more, while their completed user init remains set.
+        bind_scripted_drawable_context(
             &runtime,
             artboard,
             &graph.artboards,
@@ -297,6 +355,7 @@ fn run() -> Result<String> {
             state,
             factory.as_factory(),
             owned_view_model_context.as_ref(),
+            false,
         )?;
     }
     #[cfg(feature = "scripting")]
@@ -308,6 +367,7 @@ fn run() -> Result<String> {
             &mut instance,
             factory.as_factory(),
             state,
+            registered_script_file.as_mut(),
         )?;
         state
             .borrow_mut()
@@ -331,6 +391,10 @@ fn run() -> Result<String> {
             &mut instance,
             &mut state_machine,
             &mut owned_view_model_context,
+            #[cfg(feature = "scripting")]
+            script_artboard_render_state
+                .as_ref()
+                .map(|state| state as &dyn RootScriptFrameTail),
             &input_events,
         );
     }
@@ -379,16 +443,32 @@ fn run() -> Result<String> {
                         &runtime,
                         state_machine.as_mut(),
                         owned_view_model_context.as_ref(),
+                        #[cfg(feature = "scripting")]
+                        script_artboard_render_state
+                            .as_ref()
+                            .map(|state| state as &dyn RootScriptFrameTail),
                         event.seconds,
                         &mut current_seconds,
                     )
                 })?;
+                #[cfg(feature = "scripting")]
+                if let Some(state) = script_artboard_render_state.as_ref() {
+                    initialize_nested_scripted_drawables(
+                        &runtime,
+                        artboard_index,
+                        &graph.artboards,
+                        &mut instance,
+                        factory.as_factory(),
+                        state,
+                        registered_script_file.as_mut(),
+                    )?;
+                }
                 timed(options.benchmark, &mut input_elapsed, || {
                     apply_input_event(
                         event,
                         &instance,
                         state_machine.as_mut(),
-                        owned_view_model_context.as_ref(),
+                        owned_view_model_context.as_mut(),
                     );
                     factory.add_input_event(
                         event.kind.name(),
@@ -406,19 +486,38 @@ fn run() -> Result<String> {
                     &runtime,
                     state_machine.as_mut(),
                     owned_view_model_context.as_ref(),
+                    #[cfg(feature = "scripting")]
+                    script_artboard_render_state
+                        .as_ref()
+                        .map(|state| state as &dyn RootScriptFrameTail),
                     *sample,
                     &mut current_seconds,
                 )
             })?;
             #[cfg(feature = "scripting")]
             if let Some(state) = script_artboard_render_state.as_ref() {
+                // Component-list rows are live artboard occurrences. A script
+                // can mutate their backing list during `advance`, so mirror
+                // C++ Artboard::initialize by attaching scripts to any newly
+                // mounted rows before their first update/draw.
+                initialize_nested_scripted_drawables(
+                    &runtime,
+                    artboard_index,
+                    &graph.artboards,
+                    &mut instance,
+                    factory.as_factory(),
+                    state,
+                    registered_script_file.as_mut(),
+                )?;
                 refresh_bound_script_artboard_inputs(
                     &runtime,
                     artboard,
                     &graph.artboards,
                     &mut instance,
                     state,
-                    owned_view_model_context.as_ref(),
+                    owned_view_model_context
+                        .as_ref()
+                        .and_then(RuntimeOwnedViewModelContext::main_handle),
                     &mut bound_script_artboards,
                 )?;
                 state.borrow_mut().realize_pending(
@@ -427,16 +526,18 @@ fn run() -> Result<String> {
                     factory.as_factory(),
                 )?;
             }
-            timed_result(options.benchmark, &mut prepare_elapsed, || {
-                instance.prepare_static_artboard_tree_paints(
-                    &runtime,
-                    artboard,
-                    &graph.artboards,
-                    factory.as_factory(),
-                    &mut paint_cache,
-                    &mut path_cache,
-                )
-            })?;
+            if paint_cache.needs_paint_preparation(&instance, artboard) {
+                timed_result(options.benchmark, &mut prepare_elapsed, || {
+                    instance.prepare_static_artboard_tree_paints(
+                        &runtime,
+                        artboard,
+                        &graph.artboards,
+                        factory.as_factory(),
+                        &mut paint_cache,
+                        &mut path_cache,
+                    )
+                })?;
+            }
             factory.add_sample(*sample);
             timed_result(options.benchmark, &mut draw_elapsed, || {
                 instance
@@ -598,6 +699,23 @@ fn run_benchmark_repeat_pass(
     let (mut instance, mut state_machine, owned_view_model_context) =
         instantiate_scene_state(runtime, artboard_index, artboard, &graph.artboards, scene)?;
     let mut factory = NullFactory::new();
+    #[cfg(feature = "scripting")]
+    let script_frame_state = Rc::new(RefCell::new(RunnerScriptArtboardRenderState::default()));
+    #[cfg(feature = "scripting")]
+    if let (Some(state_machine_index), Some(state_machine)) =
+        (scene.state_machine_index, state_machine.as_mut())
+    {
+        initialize_state_machine_scripted_objects(
+            runtime,
+            artboard,
+            state_machine_index,
+            state_machine,
+            &mut factory,
+            owned_view_model_context.as_ref(),
+            Some(&script_frame_state),
+            None,
+        )?;
+    }
     let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
         runtime,
         artboard,
@@ -605,6 +723,20 @@ fn run_benchmark_repeat_pass(
         &mut factory,
     );
     let mut path_cache = RuntimeRenderPathCache::default();
+    // C++ constructs retained render objects while the artboard instance is
+    // loaded, before the benchmark clock starts. Prime Rust's lazy retained
+    // topology at the same lifecycle boundary; the first timed advance still
+    // invalidates every dynamic value that differs from the authored state.
+    if paint_cache.needs_paint_preparation(&instance, artboard) {
+        instance.prepare_static_artboard_tree_paints(
+            runtime,
+            artboard,
+            &graph.artboards,
+            &mut factory,
+            &mut paint_cache,
+            &mut path_cache,
+        )?;
+    }
     let mut renderer = factory.make_renderer();
 
     let mut advance_elapsed = Duration::ZERO;
@@ -622,20 +754,24 @@ fn run_benchmark_repeat_pass(
                         runtime,
                         state_machine.as_mut(),
                         owned_view_model_context.as_ref(),
+                        #[cfg(feature = "scripting")]
+                        Some(&script_frame_state as &dyn RootScriptFrameTail),
                         *sample,
                         &mut current_seconds,
                     )
                 })?;
-                timed_result(true, &mut prepare_elapsed, || {
-                    instance.prepare_static_artboard_tree_paints(
-                        runtime,
-                        artboard,
-                        &graph.artboards,
-                        &mut factory,
-                        &mut paint_cache,
-                        &mut path_cache,
-                    )
-                })?;
+                if paint_cache.needs_paint_preparation(&instance, artboard) {
+                    timed_result(true, &mut prepare_elapsed, || {
+                        instance.prepare_static_artboard_tree_paints(
+                            runtime,
+                            artboard,
+                            &graph.artboards,
+                            &mut factory,
+                            &mut paint_cache,
+                            &mut path_cache,
+                        )
+                    })?;
+                }
                 timed_result(true, &mut draw_elapsed, || {
                     instance
                         .draw_prepared_static_artboard_with_render_cache(
@@ -655,17 +791,21 @@ fn run_benchmark_repeat_pass(
                     runtime,
                     state_machine.as_mut(),
                     owned_view_model_context.as_ref(),
+                    #[cfg(feature = "scripting")]
+                    Some(&script_frame_state as &dyn RootScriptFrameTail),
                     *sample,
                     &mut current_seconds,
                 )?;
-                instance.prepare_static_artboard_tree_paints(
-                    runtime,
-                    artboard,
-                    &graph.artboards,
-                    &mut factory,
-                    &mut paint_cache,
-                    &mut path_cache,
-                )?;
+                if paint_cache.needs_paint_preparation(&instance, artboard) {
+                    instance.prepare_static_artboard_tree_paints(
+                        runtime,
+                        artboard,
+                        &graph.artboards,
+                        &mut factory,
+                        &mut paint_cache,
+                        &mut path_cache,
+                    )?;
+                }
                 instance
                     .draw_prepared_static_artboard_with_render_cache(
                         runtime,
@@ -699,7 +839,7 @@ fn instantiate_scene_state(
 ) -> Result<(
     ArtboardInstance,
     Option<StateMachineInstance>,
-    Option<RuntimeOwnedViewModelHandle>,
+    Option<RuntimeOwnedViewModelContext>,
 )> {
     let mut instance = ArtboardInstance::from_graph_with_artboards(runtime, artboard, artboards)
         .context("failed to instantiate artboard")?;
@@ -716,7 +856,7 @@ fn instantiate_scene_state(
     instance.bind_default_view_model_artboard_list_context(runtime);
     if let Some(state_machine) = state_machine.as_mut() {
         if let Some(context) = owned_view_model_context.as_ref() {
-            state_machine.bind_owned_view_model_handle(context);
+            state_machine.bind_owned_view_model_contexts(context);
         }
         state_machine.advance_data_context();
     }
@@ -729,15 +869,15 @@ fn instantiate_scene_state(
 fn bind_selected_artboard_view_model_context(
     instance: &mut ArtboardInstance,
     runtime: &RuntimeFile,
-    context: &RuntimeOwnedViewModelHandle,
+    context: &RuntimeOwnedViewModelContext,
 ) {
     #[cfg(feature = "scripting")]
     {
-        instance.bind_owned_view_model_artboard_handle(runtime, context);
+        instance.bind_owned_view_model_artboard_contexts(runtime, context);
         instance.rebind_nested_script_owned_contexts(runtime);
     }
     #[cfg(not(feature = "scripting"))]
-    instance.bind_owned_view_model_nested_artboard_contexts(runtime, &context.borrow());
+    instance.bind_owned_view_model_artboard_contexts(runtime, context);
 }
 
 fn timed_result<T>(
@@ -772,7 +912,8 @@ fn write_layout_bounds_report(
     scene_name: &str,
     instance: &mut ArtboardInstance,
     state_machine: &mut Option<StateMachineInstance>,
-    owned_view_model_context: &mut Option<RuntimeOwnedViewModelHandle>,
+    owned_view_model_context: &mut Option<RuntimeOwnedViewModelContext>,
+    #[cfg(feature = "scripting")] script_frame_tail: Option<&dyn RootScriptFrameTail>,
     input_events: &[InputEvent],
 ) -> Result<String> {
     let mut out = String::new();
@@ -797,6 +938,8 @@ fn write_layout_bounds_report(
                 runtime,
                 state_machine.as_mut(),
                 owned_view_model_context.as_ref(),
+                #[cfg(feature = "scripting")]
+                script_frame_tail,
                 event.seconds,
                 &mut current_seconds,
             )?;
@@ -804,7 +947,7 @@ fn write_layout_bounds_report(
                 event,
                 instance,
                 state_machine.as_mut(),
-                owned_view_model_context.as_ref(),
+                owned_view_model_context.as_mut(),
             );
             next_input += 1;
         }
@@ -814,6 +957,8 @@ fn write_layout_bounds_report(
             runtime,
             state_machine.as_mut(),
             owned_view_model_context.as_ref(),
+            #[cfg(feature = "scripting")]
+            script_frame_tail,
             *sample,
             &mut current_seconds,
         )?;
@@ -946,16 +1091,15 @@ fn selected_artboard_view_model_index(
 fn selected_artboard_owned_view_model_context(
     runtime: &RuntimeFile,
     artboard_index: usize,
-) -> Option<RuntimeOwnedViewModelHandle> {
+) -> Option<RuntimeOwnedViewModelContext> {
     let view_model_index = selected_artboard_view_model_index(runtime, artboard_index)?;
     #[cfg(feature = "scripting")]
-    {
-        return RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0)
-            .map(RuntimeOwnedViewModelHandle::new);
-    }
+    let main = RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0)?;
     #[cfg(not(feature = "scripting"))]
-    RuntimeOwnedViewModelInstance::new(runtime, view_model_index)
-        .map(RuntimeOwnedViewModelHandle::new)
+    let main = RuntimeOwnedViewModelInstance::new(runtime, view_model_index)?;
+    let mut context = RuntimeOwnedViewModelContext::from_main(main);
+    context.complete_for_artboard(runtime, artboard_index);
+    Some(context)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1064,15 +1208,16 @@ fn apply_input_event(
     event: &InputEvent,
     instance: &ArtboardInstance,
     state_machine: Option<&mut StateMachineInstance>,
-    owned_view_model_context: Option<&RuntimeOwnedViewModelHandle>,
+    owned_view_model_context: Option<&mut RuntimeOwnedViewModelContext>,
 ) {
     let Some(state_machine) = state_machine else {
         return;
     };
     match event.kind {
         InputKind::PointerDown => {
-            if let Some(context) = owned_view_model_context {
-                let mut context = context.borrow_mut();
+            if let Some(mut context) =
+                owned_view_model_context.and_then(|context| context.main_mut())
+            {
                 state_machine.pointer_down_with_owned_view_model_context(
                     instance,
                     event.x,
@@ -1085,8 +1230,9 @@ fn apply_input_event(
             }
         }
         InputKind::PointerMove => {
-            if let Some(context) = owned_view_model_context {
-                let mut context = context.borrow_mut();
+            if let Some(mut context) =
+                owned_view_model_context.and_then(|context| context.main_mut())
+            {
                 state_machine.pointer_move_with_owned_view_model_context(
                     instance,
                     event.x,
@@ -1106,8 +1252,9 @@ fn apply_input_event(
             }
         }
         InputKind::PointerUp => {
-            if let Some(context) = owned_view_model_context {
-                let mut context = context.borrow_mut();
+            if let Some(mut context) =
+                owned_view_model_context.and_then(|context| context.main_mut())
+            {
                 state_machine.pointer_up_with_owned_view_model_context(
                     instance,
                     event.x,
@@ -1120,8 +1267,9 @@ fn apply_input_event(
             }
         }
         InputKind::PointerExit => {
-            if let Some(context) = owned_view_model_context {
-                let mut context = context.borrow_mut();
+            if let Some(mut context) =
+                owned_view_model_context.and_then(|context| context.main_mut())
+            {
                 state_machine.pointer_exit_with_owned_view_model_context(
                     instance,
                     event.x,
@@ -1221,6 +1369,94 @@ mod tests {
         .unwrap_err();
         assert!(error.to_string().contains("exactly one sample"));
     }
+
+    #[test]
+    fn active_script_import_is_explicit() {
+        let plain = Options::parse(vec!["--file".to_owned(), "fixture.riv".to_owned()])
+            .expect("parse plain runner options");
+        assert!(!plain.execute_scripts);
+
+        let active = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--execute-scripts".to_owned(),
+        ])
+        .expect("parse active script import");
+        assert!(active.execute_scripts);
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn zero_duration_root_frames_advance_detached_view_models_exactly_once() {
+        #[derive(Default)]
+        struct CountingFrameTail(std::cell::Cell<usize>);
+
+        impl RootScriptFrameTail for CountingFrameTail {
+            fn advance_detached_view_models(&self) -> bool {
+                self.0.set(self.0.get() + 1);
+                false
+            }
+        }
+
+        let bytes = include_bytes!("../../../fixtures/graph/dependency_test.riv");
+        let runtime = read_runtime_file(bytes).expect("fixture imports");
+        let graph = GraphFile::from_runtime_file(&runtime).expect("fixture graph builds");
+        let artboard = graph.artboards.first().expect("fixture has an artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
+                .expect("fixture artboard instantiates");
+        let frame_tail = CountingFrameTail::default();
+        let mut current_seconds = 0.0;
+
+        advance_scene_to(
+            &mut instance,
+            &runtime,
+            None,
+            None,
+            Some(&frame_tail),
+            0.0,
+            &mut current_seconds,
+        )
+        .expect("zero-duration frame advances");
+        assert_eq!(frame_tail.0.get(), 1);
+
+        // Event boundaries can produce another root frame at the same time.
+        advance_scene_to(
+            &mut instance,
+            &runtime,
+            None,
+            None,
+            Some(&frame_tail),
+            0.0,
+            &mut current_seconds,
+        )
+        .expect("same-time event boundary advances");
+        assert_eq!(frame_tail.0.get(), 2);
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn scripted_data_converter_ignores_the_unbound_asset_sentinel() {
+        let assets = BTreeMap::from([(
+            1,
+            ExtractedScriptAsset {
+                asset_id: 1,
+                name: "real-converter".to_owned(),
+                scope: ScopeKey::ROOT,
+                is_module: false,
+                payload: Vec::new(),
+            },
+        )]);
+
+        assert!(
+            resolved_scripted_data_converter_asset(&assets, Some(u64::from(u32::MAX))).is_none()
+        );
+        assert_eq!(
+            resolved_scripted_data_converter_asset(&assets, Some(1))
+                .map(|asset| asset.name.as_str()),
+            Some("real-converter")
+        );
+    }
 }
 
 #[derive(Debug)]
@@ -1278,7 +1514,8 @@ fn advance_scene_to(
     instance: &mut ArtboardInstance,
     runtime: &RuntimeFile,
     mut state_machine: Option<&mut StateMachineInstance>,
-    owned_view_model_context: Option<&RuntimeOwnedViewModelHandle>,
+    owned_view_model_context: Option<&RuntimeOwnedViewModelContext>,
+    #[cfg(feature = "scripting")] script_frame_tail: Option<&dyn RootScriptFrameTail>,
     target_seconds: f32,
     current_seconds: &mut f32,
 ) -> Result<()> {
@@ -1294,9 +1531,7 @@ fn advance_scene_to(
     } else {
         instance.advance_nested_artboards(elapsed_seconds);
     }
-    if let Some(context) = owned_view_model_context {
-        bind_selected_artboard_view_model_context(instance, runtime, context);
-    }
+    let _ = (runtime, owned_view_model_context);
     instance.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
     instance
         .advance_script_instances(elapsed_seconds)
@@ -1305,11 +1540,15 @@ fn advance_scene_to(
         .update_script_instances()
         .context("scripted drawable update failed")?;
     if let Some(state_machine) = state_machine.as_deref_mut() {
-        instance.settle_state_machine_update_passes_with_state_machines(std::slice::from_mut(
+        instance.settle_state_machine_update_passes_after_main_advance(std::slice::from_mut(
             state_machine,
         ));
     } else {
         instance.update_pass();
+    }
+    #[cfg(feature = "scripting")]
+    if let Some(script_frame_tail) = script_frame_tail {
+        script_frame_tail.advance_detached_view_models();
     }
     *current_seconds = target_seconds;
     Ok(())
@@ -1325,6 +1564,7 @@ struct Options {
     layout_bounds: bool,
     benchmark: bool,
     benchmark_repeat: usize,
+    execute_scripts: bool,
 }
 
 impl Options {
@@ -1337,6 +1577,7 @@ impl Options {
         let mut layout_bounds = false;
         let mut benchmark = false;
         let mut benchmark_repeat = 1usize;
+        let mut execute_scripts = false;
 
         let mut index = 0;
         while index < args.len() {
@@ -1356,12 +1597,13 @@ impl Options {
                 "--samples" => samples = parse_samples(&value(arg)?)?,
                 "--layout-bounds" => layout_bounds = true,
                 "--benchmark" => benchmark = true,
+                "--execute-scripts" => execute_scripts = true,
                 "--benchmark-repeat" => {
                     benchmark_repeat = parse_positive_usize(&value(arg)?, arg)?;
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--benchmark] [--benchmark-repeat N]"
+                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--execute-scripts] [--benchmark] [--benchmark-repeat N]"
                     );
                     std::process::exit(0);
                 }
@@ -1397,7 +1639,23 @@ impl Options {
             layout_bounds,
             benchmark,
             benchmark_repeat,
+            execute_scripts,
         })
+    }
+}
+
+fn read_runtime_for_options(bytes: &[u8], execute_scripts: bool) -> Result<RuntimeFile> {
+    if !execute_scripts {
+        return read_runtime_file(bytes).map_err(Into::into);
+    }
+
+    #[cfg(feature = "scripting")]
+    {
+        read_runtime_file_with_scripting(bytes).map_err(Into::into)
+    }
+    #[cfg(not(feature = "scripting"))]
+    {
+        bail!("--execute-scripts requires the scripting feature")
     }
 }
 
@@ -1457,8 +1715,19 @@ fn select_artboard<'a>(
 #[cfg(feature = "scripting")]
 #[derive(Clone)]
 struct ExtractedScriptAsset {
+    /// `FileAsset` ordinal: the stable identity C++ uses when registering a
+    /// protocol script. Names are only for diagnostics and module resolution.
+    asset_id: u64,
     name: String,
+    scope: ScopeKey,
+    is_module: bool,
     payload: Vec<u8>,
+}
+
+#[cfg(feature = "scripting")]
+struct RegisteredScriptFile {
+    vm: ScriptVm,
+    script_programs: BTreeMap<u64, ScriptProgram>,
 }
 
 #[cfg(feature = "scripting")]
@@ -1483,15 +1752,37 @@ struct RunnerScriptArtboardRenderState {
     next_instance_id: u64,
     pending: Vec<(u64, usize)>,
     caches: BTreeMap<u64, nuxie_runtime::RuntimeRenderPaintCache>,
+    deferred_script_inits: BTreeSet<u32>,
+    detached_view_model_frames: Vec<DetachedViewModelFrame>,
 }
 
 #[cfg(feature = "scripting")]
 impl RunnerScriptArtboardRenderState {
+    fn retain_detached_view_model_frame(&mut self, frame: DetachedViewModelFrame) {
+        self.detached_view_model_frames.push(frame);
+    }
+
+    fn advance_detached_view_models(&self) -> bool {
+        let mut changed = false;
+        for frame in &self.detached_view_model_frames {
+            changed |= frame.advance();
+        }
+        changed
+    }
+
     fn register(&mut self, artboard_index: usize) -> u64 {
         let instance_id = self.next_instance_id;
         self.next_instance_id += 1;
         self.pending.push((instance_id, artboard_index));
         instance_id
+    }
+
+    fn defer_script_init(&mut self, global_id: u32) {
+        self.deferred_script_inits.insert(global_id);
+    }
+
+    fn take_deferred_script_init(&mut self, global_id: u32) -> bool {
+        self.deferred_script_inits.remove(&global_id)
     }
 
     fn realize_pending(
@@ -1510,6 +1801,18 @@ impl RunnerScriptArtboardRenderState {
             self.caches.insert(instance_id, cache);
         }
         Ok(())
+    }
+}
+
+#[cfg(feature = "scripting")]
+trait RootScriptFrameTail {
+    fn advance_detached_view_models(&self) -> bool;
+}
+
+#[cfg(feature = "scripting")]
+impl RootScriptFrameTail for Rc<RefCell<RunnerScriptArtboardRenderState>> {
+    fn advance_detached_view_models(&self) -> bool {
+        self.borrow().advance_detached_view_models()
     }
 }
 
@@ -1545,6 +1848,7 @@ impl RunnerScriptArtboard {
             state_machine,
             view_model: selected_artboard_owned_view_model_context(runtime, artboard_index)
                 .as_ref()
+                .and_then(RuntimeOwnedViewModelContext::main_handle)
                 .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context)),
             width: object
                 .and_then(|object| object.double_property("width"))
@@ -1563,13 +1867,14 @@ impl RunnerScriptArtboard {
         let Some(view_model) = self.view_model.as_ref() else {
             return;
         };
-        let owned = view_model.owned_instance();
+        let owned = view_model.owned_handle();
+        let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(owned.root_handle());
+        contexts.complete_for_artboard(&self.runtime, self.artboard_index);
         if let Some(state_machine) = self.state_machine.as_mut() {
-            state_machine.bind_owned_view_model_context_handle(&owned);
+            state_machine.bind_owned_view_model_contexts(&contexts);
             state_machine.advance_data_context();
         }
-        self.instance
-            .bind_owned_view_model_artboard_context_handle(&self.runtime, &owned);
+        bind_selected_artboard_view_model_context(&mut self.instance, &self.runtime, &contexts);
     }
 }
 
@@ -1624,7 +1929,9 @@ impl ScriptArtboard for RunnerScriptArtboard {
     }
 
     fn advance(&mut self, seconds: f32) -> std::result::Result<bool, ScriptError> {
-        self.bind_view_model();
+        // Construction paths bind the selected model once. C++ child artboards
+        // use advanceAndApply(..., false), so a child step must not consume its
+        // data context or the VM-wide detached-model frame.
         let mut changed = if let Some(state_machine) = self.state_machine.as_mut() {
             self.instance
                 .advance_state_machine_instance(state_machine, seconds)
@@ -1704,33 +2011,36 @@ impl ScriptArtboard for RunnerScriptArtboard {
                     factory,
                 )
             });
-        let result = self
-            .instance
-            .prepare_static_artboard_tree_paints(
-                &self.runtime,
-                graph,
-                &self.artboards,
-                factory,
-                &mut paint_cache,
-                &mut self.path_cache,
-            )
-            .map_err(|error| ScriptError::new(error.to_string()))
-            .and_then(|()| {
-                let result = self
-                    .instance
-                    .draw_prepared_static_artboard_with_render_cache_and_origin(
-                        &self.runtime,
-                        graph,
-                        &self.artboards,
-                        factory,
-                        renderer,
-                        &mut paint_cache,
-                        &mut self.path_cache,
-                        self.frame_origin,
-                    )
-                    .map_err(|error| ScriptError::new(error.to_string()));
-                result
-            });
+        let result = if paint_cache.needs_paint_preparation(&self.instance, graph) {
+            self.instance
+                .prepare_static_artboard_tree_paints(
+                    &self.runtime,
+                    graph,
+                    &self.artboards,
+                    factory,
+                    &mut paint_cache,
+                    &mut self.path_cache,
+                )
+                .map_err(|error| ScriptError::new(error.to_string()))
+        } else {
+            Ok(())
+        }
+        .and_then(|()| {
+            let result = self
+                .instance
+                .draw_prepared_static_artboard_with_render_cache_and_origin(
+                    &self.runtime,
+                    graph,
+                    &self.artboards,
+                    factory,
+                    renderer,
+                    &mut paint_cache,
+                    &mut self.path_cache,
+                    self.frame_origin,
+                )
+                .map_err(|error| ScriptError::new(error.to_string()));
+            result
+        });
         self.render_state
             .borrow_mut()
             .caches
@@ -1747,6 +2057,7 @@ fn initialize_scripted_drawables_and_realize(
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
     factory: &mut dyn RenderFactory,
+    registered_file: Option<&mut RegisteredScriptFile>,
 ) -> Result<Option<Rc<RefCell<RunnerScriptArtboardRenderState>>>> {
     let state = initialize_scripted_drawables(
         runtime,
@@ -1755,6 +2066,7 @@ fn initialize_scripted_drawables_and_realize(
         artboards,
         instance,
         factory,
+        registered_file,
     )
     .context("failed to initialize scripted drawables")?;
     if let Some(state) = state.as_ref() {
@@ -1774,6 +2086,7 @@ fn initialize_scripted_drawables(
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
     factory: &mut dyn RenderFactory,
+    registered_file: Option<&mut RegisteredScriptFile>,
 ) -> Result<Option<Rc<RefCell<RunnerScriptArtboardRenderState>>>> {
     let script_assets = extract_script_assets(runtime);
     if script_assets.is_empty() {
@@ -1794,6 +2107,8 @@ fn initialize_scripted_drawables(
         root_context_model,
         Vec::new(),
         false,
+        false,
+        registered_file,
     )?;
     Ok(Some(render_state))
 }
@@ -1806,34 +2121,35 @@ fn initialize_nested_scripted_drawables(
     instance: &mut ArtboardInstance,
     factory: &mut dyn RenderFactory,
     render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    mut registered_file: Option<&mut RegisteredScriptFile>,
 ) -> Result<()> {
     let script_assets = extract_script_assets(runtime);
     let root_context_model = selected_script_view_model(runtime, root_artboard_index);
     let mut context_models_by_depth = vec![root_context_model];
     let mut bound_nested_contexts = Vec::new();
-    instance.try_visit_nested_artboard_instances_mut(
+    let mut initialized_any = false;
+    instance.try_visit_artboard_tree_instances_mut(
         &mut |depth, graph_global_id, child_instance| {
             let child_index = artboards
                 .iter()
                 .position(|candidate| candidate.global_id == graph_global_id)
                 .with_context(|| format!("missing nested artboard graph {graph_global_id}"))?;
             context_models_by_depth.truncate(depth);
-            let child_context_model = selected_script_view_model(runtime, child_index);
+            let child_context_model = child_instance
+                .owned_view_model_context()
+                .and_then(RuntimeOwnedViewModelContext::main_handle)
+                .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context))
+                .or_else(|| selected_script_view_model(runtime, child_index));
             let parent_context_models = context_models_by_depth
                 .iter()
                 .rev()
                 .filter_map(Clone::clone)
                 .collect();
-            if !artboard_script_payloads_contain(
-                runtime,
-                &artboards[child_index],
-                &script_assets,
-                b"dataContext",
-            ) {
+            if !artboard_scripts_request_context(runtime, &artboards[child_index], &script_assets) {
                 context_models_by_depth.push(child_context_model);
                 return Ok::<(), anyhow::Error>(());
             }
-            initialize_scripted_drawables_for_artboard(
+            let initialized = initialize_scripted_drawables_for_artboard(
                 runtime,
                 child_index,
                 &artboards[child_index],
@@ -1845,7 +2161,14 @@ fn initialize_nested_scripted_drawables(
                 child_context_model.clone(),
                 parent_context_models,
                 true,
+                true,
+                registered_file.as_deref_mut(),
             )?;
+            if !initialized {
+                context_models_by_depth.push(child_context_model);
+                return Ok::<(), anyhow::Error>(());
+            }
+            initialized_any = true;
             if let Some(model) = child_context_model.as_ref() {
                 bound_nested_contexts.push((graph_global_id, model.clone()));
             }
@@ -1853,8 +2176,11 @@ fn initialize_nested_scripted_drawables(
             Ok::<(), anyhow::Error>(())
         },
     )?;
+    if !initialized_any {
+        return Ok(());
+    }
     for (graph_global_id, model) in bound_nested_contexts {
-        let owned = model.owned_instance();
+        let owned = model.owned_handle();
         if let Some(snapshot) = owned.detached_snapshot() {
             instance.set_nested_script_owned_context_for_graph(graph_global_id, snapshot);
         }
@@ -1862,6 +2188,17 @@ fn initialize_nested_scripted_drawables(
     instance.rebind_nested_script_owned_contexts(runtime);
     instance.update_pass();
     Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn artboard_scripts_request_context(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+) -> bool {
+    [b"dataContext".as_slice(), b"viewModel", b"rootViewModel"]
+        .into_iter()
+        .any(|marker| artboard_script_payloads_contain(runtime, artboard, script_assets, marker))
 }
 
 #[cfg(feature = "scripting")]
@@ -1897,7 +2234,7 @@ fn artboard_script_payloads_contain(
 #[allow(clippy::too_many_arguments)]
 fn initialize_scripted_drawables_for_artboard(
     runtime: &RuntimeFile,
-    _artboard_index: usize,
+    artboard_index: usize,
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
@@ -1907,9 +2244,32 @@ fn initialize_scripted_drawables_for_artboard(
     context_model: Option<ScriptViewModel>,
     parent_context_models: Vec<ScriptViewModel>,
     script_context_is_bound: bool,
-) -> Result<()> {
-    let mut vm = ScriptVm::new();
-    vm.set_view_models(nuxie_runtime::script_view_models(runtime));
+    initialize_only_missing: bool,
+    registered_file: Option<&mut RegisteredScriptFile>,
+) -> Result<bool> {
+    if initialize_only_missing
+        && !artboard.local_objects.iter().any(|local_object| {
+            local_object
+                .type_name
+                .is_some_and(is_scripted_drawable_type)
+                && !instance.has_script_instance_for_global(local_object.global_id)
+        })
+    {
+        return Ok(false);
+    }
+
+    let mut local_registered_file;
+    let registered_file = match registered_file {
+        Some(registered_file) => registered_file,
+        None => {
+            local_registered_file = register_script_file(runtime, script_assets, factory)?;
+            &mut local_registered_file
+        }
+    };
+    let RegisteredScriptFile {
+        vm,
+        script_programs,
+    } = registered_file;
     let bound_context_model = context_model.clone();
     vm.set_default_context_view_model_chain(context_model, parent_context_models);
     let mut host = NoopScriptHost;
@@ -1919,13 +2279,19 @@ fn initialize_scripted_drawables_for_artboard(
         factory,
         script_assets,
         bound_context_model.as_ref(),
-        &mut vm,
+        vm,
+        script_programs,
         &mut host,
     )?;
     for local_object in &artboard.local_objects {
         if !local_object
             .type_name
             .is_some_and(is_scripted_drawable_type)
+        {
+            continue;
+        }
+        if initialize_only_missing
+            && instance.has_script_instance_for_global(local_object.global_id)
         {
             continue;
         }
@@ -1941,14 +2307,14 @@ fn initialize_scripted_drawables_for_artboard(
                 local_object.global_id, script_asset_id
             )
         })?;
-        let mut script_instance = vm
-            .instantiate_script_with_factory(&script.name, &script.payload, &mut host, factory)
-            .with_context(|| {
-                format!(
-                    "failed to instantiate ScriptAsset '{}' for ScriptedDrawable global {}",
-                    script.name, local_object.global_id
-                )
-            })?;
+        let mut script_instance =
+            instantiate_extracted_script(vm, script_programs, script, &mut host, factory)
+                .with_context(|| {
+                    format!(
+                        "failed to instantiate ScriptAsset '{}' for ScriptedDrawable global {}",
+                        script.name, local_object.global_id
+                    )
+                })?;
         if !script_context_is_bound {
             script_instance
                 .set_context_view_model(None)
@@ -1960,6 +2326,14 @@ fn initialize_scripted_drawables_for_artboard(
             artboards,
             local_object.local_id,
         );
+        let has_init = script_instance
+            .has_method(ScriptMethod::Init)
+            .context("failed to inspect script init method")?;
+        if defer_cold_hydration && has_init {
+            render_state
+                .borrow_mut()
+                .defer_script_init(local_object.global_id);
+        }
         if !defer_cold_hydration {
             hydrate_script_inputs(
                 runtime,
@@ -1969,19 +2343,26 @@ fn initialize_scripted_drawables_for_artboard(
                 script_instance.as_mut(),
                 Rc::clone(&render_state),
             )?;
-            if script_instance
-                .has_method(ScriptMethod::Init)
-                .context("failed to inspect script init method")?
-            {
-                script_instance
-                    .call_method_with_factory(ScriptMethod::Init, &[], &mut host, factory)
-                    .with_context(|| {
-                        format!(
-                            "script init failed for ScriptedDrawable global {}",
-                            local_object.global_id
-                        )
-                    })?;
+            if has_init {
+                let initialized = match script_instance.call_init_with_factory(&mut host, factory) {
+                    Ok(initialized) => initialized,
+                    Err(error) => {
+                        // C++'s ScriptedObject::tryLuaUserInit contains user-code
+                        // failures to the scripted object: it reports the Lua error,
+                        // disposes that occurrence, and lets the file keep running.
+                        eprintln!(":: {error}");
+                        continue;
+                    }
+                };
+                if !initialized {
+                    script_instance.invalidate_for_init_retry();
+                    render_state
+                        .borrow_mut()
+                        .defer_script_init(local_object.global_id);
+                }
             }
+        } else if has_init {
+            script_instance.invalidate_for_init_retry();
         }
         if local_object.type_name == Some("ScriptedLayout")
             && script_instance
@@ -2022,13 +2403,19 @@ fn initialize_scripted_drawables_for_artboard(
     }
 
     if let Some(model) = bound_context_model {
-        let owned = model.owned_instance();
-        instance.bind_owned_view_model_artboard_context_handle(runtime, &owned);
+        let owned = model.owned_handle();
+        let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(owned.root_handle());
+        contexts.complete_for_artboard(runtime, artboard_index);
+        bind_selected_artboard_view_model_context(instance, runtime, &contexts);
         instance.advance_artboard_data_binds();
         instance.update_pass();
     }
 
-    Ok(())
+    render_state
+        .borrow_mut()
+        .retain_detached_view_model_frame(vm.detached_view_model_frame());
+
+    Ok(true)
 }
 
 #[cfg(feature = "scripting")]
@@ -2039,6 +2426,7 @@ fn initialize_scripted_data_converters(
     script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
     context_model: Option<&ScriptViewModel>,
     vm: &mut ScriptVm,
+    script_programs: &mut BTreeMap<u64, ScriptProgram>,
     host: &mut NoopScriptHost,
 ) -> Result<()> {
     for converter in runtime
@@ -2046,28 +2434,36 @@ fn initialize_scripted_data_converters(
         .into_iter()
         .filter(|converter| converter.type_name == "ScriptedDataConverter")
     {
-        let script_asset_id = converter.uint_property("scriptAssetId").unwrap_or(0);
-        let script = script_assets.get(&script_asset_id).with_context(|| {
+        // C++ leaves an unbound converter's inherited `scriptAssetId` at its
+        // UINT_MAX default. It is a schema/template record, not a script
+        // instance to initialize; only a resolved ScriptAsset creates the
+        // converter-side generator reference.
+        let Some(script) = resolved_scripted_data_converter_asset(
+            script_assets,
+            converter.uint_property("scriptAssetId"),
+        ) else {
+            continue;
+        };
+        let mut script_instance = instantiate_extracted_script(
+            vm,
+            script_programs,
+            script,
+            host,
+            factory,
+        )
+        .with_context(|| {
             format!(
-                "ScriptedDataConverter global {} references missing ScriptAsset id {}",
-                converter.id, script_asset_id
+                "failed to instantiate ScriptAsset '{}' for ScriptedDataConverter global {}",
+                script.name, converter.id
             )
         })?;
-        let mut script_instance = vm
-            .instantiate_script_with_factory(&script.name, &script.payload, host, factory)
-            .with_context(|| {
-                format!(
-                    "failed to instantiate ScriptAsset '{}' for ScriptedDataConverter global {}",
-                    script.name, converter.id
-                )
-            })?;
         for input in scripted_data_converter_inputs(runtime, converter.id) {
             let Some(name) = input.string_property("name") else {
                 continue;
             };
             let value = context_model
                 .and_then(|model| {
-                    let owned = model.owned_instance();
+                    let owned = model.owned_handle();
                     let root = owned.root_handle();
                     nuxie_runtime::bound_script_input_value(runtime, &root.borrow(), input)
                 })
@@ -2100,6 +2496,16 @@ fn initialize_scripted_data_converters(
 }
 
 #[cfg(feature = "scripting")]
+fn resolved_scripted_data_converter_asset<'a>(
+    script_assets: &'a BTreeMap<u64, ExtractedScriptAsset>,
+    script_asset_id: Option<u64>,
+) -> Option<&'a ExtractedScriptAsset> {
+    script_asset_id
+        .filter(|&id| id != u64::from(u32::MAX))
+        .and_then(|id| script_assets.get(&id))
+}
+
+#[cfg(feature = "scripting")]
 fn scripted_data_converter_inputs(
     runtime: &RuntimeFile,
     converter_global_id: u32,
@@ -2118,18 +2524,133 @@ fn scripted_data_converter_inputs(
 #[cfg(feature = "scripting")]
 fn default_script_input_value(input: &nuxie_binary::RuntimeObject) -> Option<ScriptValue> {
     match input.type_name {
-        "ScriptInputBoolean" => input.bool_property("propertyValue").map(ScriptValue::Bool),
-        "ScriptInputColor" => input
-            .color_property("propertyValue")
-            .map(|value| ScriptValue::Number(value as f64)),
-        "ScriptInputNumber" => input
-            .double_property("propertyValue")
-            .map(|value| ScriptValue::Number(f64::from(value))),
-        "ScriptInputString" => input
-            .string_property("propertyValue")
-            .map(|value| ScriptValue::String(value.to_owned())),
+        "ScriptInputBoolean" => Some(ScriptValue::Bool(
+            input.bool_property("propertyValue").unwrap_or(false),
+        )),
+        "ScriptInputColor" => Some(ScriptValue::Number(
+            input.color_property("propertyValue").unwrap_or(0) as f64,
+        )),
+        "ScriptInputNumber" => Some(ScriptValue::Number(f64::from(
+            input.double_property("propertyValue").unwrap_or(0.0),
+        ))),
+        "ScriptInputString" => Some(ScriptValue::String(
+            input
+                .string_property("propertyValue")
+                .unwrap_or_default()
+                .to_owned(),
+        )),
         _ => None,
     }
+}
+
+#[cfg(feature = "scripting")]
+#[allow(clippy::too_many_arguments)]
+fn initialize_state_machine_scripted_objects(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    state_machine_index: usize,
+    state_machine: &mut StateMachineInstance,
+    factory: &mut dyn RenderFactory,
+    owned_context: Option<&RuntimeOwnedViewModelContext>,
+    script_frame_state: Option<&Rc<RefCell<RunnerScriptArtboardRenderState>>>,
+    registered_file: Option<&mut RegisteredScriptFile>,
+) -> Result<()> {
+    let Some(definition) = artboard.state_machines.get(state_machine_index) else {
+        return Ok(());
+    };
+    if definition.scripted_objects.is_empty() {
+        return Ok(());
+    }
+
+    let script_assets = extract_script_assets(runtime);
+    let mut local_registered_file;
+    let registered_file = match registered_file {
+        Some(registered_file) => registered_file,
+        None => {
+            local_registered_file = register_script_file(runtime, &script_assets, factory)?;
+            &mut local_registered_file
+        }
+    };
+    let RegisteredScriptFile {
+        vm,
+        script_programs,
+    } = registered_file;
+    let context_model = owned_context
+        .and_then(RuntimeOwnedViewModelContext::main_handle)
+        .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context));
+    vm.set_default_context_view_model(context_model);
+    let mut host = NoopScriptHost;
+
+    for scripted_object in &definition.scripted_objects {
+        let object = runtime
+            .object(scripted_object.global_id as usize)
+            .with_context(|| {
+                format!(
+                    "missing {} global {}",
+                    scripted_object.type_name, scripted_object.global_id
+                )
+            })?;
+        let script_asset_id = object.uint_property("scriptAssetId").unwrap_or(0);
+        let script = script_assets.get(&script_asset_id).with_context(|| {
+            format!(
+                "{} global {} references missing ScriptAsset id {}",
+                scripted_object.type_name, scripted_object.global_id, script_asset_id
+            )
+        })?;
+        let mut script_instance =
+            instantiate_extracted_script(vm, script_programs, script, &mut host, factory)
+                .with_context(|| {
+                    format!(
+                        "failed to instantiate ScriptAsset '{}' for {} global {}",
+                        script.name, scripted_object.type_name, scripted_object.global_id
+                    )
+                })?;
+
+        for input_node in &scripted_object.inputs {
+            let Some(input) = runtime.object(input_node.global_id as usize) else {
+                continue;
+            };
+            let Some(name) = input.string_property("name") else {
+                continue;
+            };
+            let value = owned_context
+                .and_then(RuntimeOwnedViewModelContext::main)
+                .and_then(|context| {
+                    nuxie_runtime::bound_script_input_value(runtime, &context, input)
+                })
+                .or_else(|| default_script_input_value(input));
+            if let Some(value) = value {
+                script_instance.set_input(name, value).with_context(|| {
+                    format!(
+                        "failed to hydrate input '{name}' for {} global {}",
+                        scripted_object.type_name, scripted_object.global_id
+                    )
+                })?;
+            }
+        }
+
+        if script_instance
+            .has_method(ScriptMethod::Init)
+            .context("failed to inspect state-machine script init method")?
+            && !script_instance
+                .call_init_with_factory(&mut host, factory)
+                .with_context(|| {
+                    format!(
+                        "script init failed for {} global {}",
+                        scripted_object.type_name, scripted_object.global_id
+                    )
+                })?
+        {
+            continue;
+        }
+        state_machine.set_script_instance_for_global(scripted_object.global_id, script_instance);
+    }
+    if let Some(script_frame_state) = script_frame_state {
+        script_frame_state
+            .borrow_mut()
+            .retain_detached_view_model_frame(vm.detached_view_model_frame());
+    }
+    Ok(())
 }
 
 #[cfg(feature = "scripting")]
@@ -2139,6 +2660,7 @@ fn selected_script_view_model(
 ) -> Option<ScriptViewModel> {
     selected_artboard_owned_view_model_context(runtime, artboard_index)
         .as_ref()
+        .and_then(RuntimeOwnedViewModelContext::main_handle)
         .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context))
 }
 
@@ -2159,61 +2681,162 @@ fn scripted_object_has_view_model_input(
 
 #[cfg(feature = "scripting")]
 fn extract_script_assets(runtime: &RuntimeFile) -> BTreeMap<u64, ExtractedScriptAsset> {
-    let mut scripts = BTreeMap::new();
-    let script_asset_indices_by_global = runtime
-        .file_assets()
+    runtime
+        .scripting_file_assets_with_contents()
         .into_iter()
-        .enumerate()
-        .filter_map(|(index, object)| {
-            (object.type_name == "ScriptAsset").then_some((object.id, index as u64))
+        .filter(|entry| entry.asset.type_name == "ScriptAsset")
+        .filter_map(|entry| {
+            let payload = entry.contents?;
+            let name = entry.asset.string_property("name").unwrap_or("unnamed");
+            let folder = entry
+                .asset
+                .string_property("folderPath")
+                .unwrap_or_default();
+            Some((
+                entry.ordinal as u64,
+                ExtractedScriptAsset {
+                    asset_id: entry.ordinal as u64,
+                    name: if folder.is_empty() {
+                        name.to_owned()
+                    } else {
+                        format!("{folder}/{name}")
+                    },
+                    scope: ScopeKey::new(
+                        entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
+                        entry
+                            .asset
+                            .uint_property("scopeLibraryVersionId")
+                            .unwrap_or(0),
+                    ),
+                    is_module: entry.asset.bool_property("isModule").unwrap_or(false),
+                    payload: payload.to_vec(),
+                },
+            ))
         })
-        .collect::<BTreeMap<_, _>>();
-    let file_asset_globals = runtime
-        .file_assets()
-        .into_iter()
-        .map(|object| object.id)
-        .collect::<BTreeSet<_>>();
-    let mut latest_script: Option<(u64, String)> = None;
+        .collect()
+}
 
-    for id in 0..runtime.object_count() {
-        let Some(object) = runtime.object(id) else {
-            continue;
-        };
-        match object.type_name {
-            "ScriptAsset" => {
-                latest_script = Some((
-                    script_asset_indices_by_global
-                        .get(&object.id)
-                        .copied()
-                        .or_else(|| object.uint_property("assetId"))
-                        .unwrap_or(0),
-                    object
-                        .string_property("name")
-                        .unwrap_or("unnamed")
-                        .to_owned(),
-                ));
-            }
-            "FileAssetContents" => {
-                if let Some((asset_id, name)) = latest_script.take()
-                    && let Some(payload) = object.bytes_property("bytes")
-                {
-                    scripts.insert(
-                        asset_id,
-                        ExtractedScriptAsset {
-                            name,
-                            payload: payload.to_vec(),
-                        },
-                    );
-                }
-            }
-            _ if file_asset_globals.contains(&object.id) => {
-                latest_script = None;
-            }
-            _ => {}
-        }
+#[cfg(feature = "scripting")]
+fn prepare_script_vm(
+    runtime: &RuntimeFile,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    factory: &mut dyn RenderFactory,
+) -> Result<ScriptVm> {
+    let mut vm = ScriptVm::new();
+    vm.set_view_models(nuxie_runtime::script_view_models(runtime));
+
+    // LibraryAsset records are serialized, caller-relative dependency pins.
+    // Seed every edge before module top-level code runs so eager and lazy
+    // requires both resolve in the same scope as the C++ scripting context.
+    for entry in runtime
+        .scripting_file_assets_with_contents()
+        .into_iter()
+        .filter(|entry| entry.asset.type_name == "LibraryAsset")
+    {
+        vm.add_import(
+            ScopeKey::new(
+                entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
+                entry
+                    .asset
+                    .uint_property("scopeLibraryVersionId")
+                    .unwrap_or(0),
+            ),
+            entry.asset.string_property("name").unwrap_or_default(),
+            ScopeKey::new(
+                entry.asset.uint_property("libraryId").unwrap_or(0),
+                entry.asset.uint_property("libraryVersionId").unwrap_or(0),
+            ),
+        );
     }
 
-    scripts
+    // C++ retries module registration until the dependency graph converges.
+    // Preserve the original FileAsset ordering within each pass.
+    let mut pending = script_assets
+        .values()
+        .filter(|asset| asset.is_module)
+        .collect::<Vec<_>>();
+    loop {
+        let before = pending.len();
+        let mut failures = Vec::new();
+        for asset in pending {
+            if let Err(error) = vm.register_module_with_factory_scoped(
+                &asset.name,
+                asset.scope,
+                &asset.payload,
+                factory,
+            ) {
+                failures.push((asset, error));
+            }
+        }
+        if failures.is_empty() {
+            break;
+        }
+        if failures.len() == before {
+            let (asset, error) = failures.remove(0);
+            return Err(anyhow!(
+                "failed to register scoped ScriptAsset module '{}' ({}-{}): {error}",
+                asset.name,
+                asset.scope.library_id,
+                asset.scope.library_version_id,
+            ));
+        }
+        pending = failures.into_iter().map(|(asset, _)| asset).collect();
+    }
+
+    Ok(vm)
+}
+
+#[cfg(feature = "scripting")]
+fn register_script_file(
+    runtime: &RuntimeFile,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    factory: &mut dyn RenderFactory,
+) -> Result<RegisteredScriptFile> {
+    let vm = prepare_script_vm(runtime, script_assets, factory)?;
+    let mut script_programs = BTreeMap::new();
+    for script in script_assets.values().filter(|asset| !asset.is_module) {
+        let program = vm
+            .register_protocol_script_with_factory_scoped(
+                &script.name,
+                script.scope,
+                &script.payload,
+                factory,
+            )
+            .with_context(|| {
+                format!(
+                    "failed to register protocol ScriptAsset '{}' ({}-{})",
+                    script.name, script.scope.library_id, script.scope.library_version_id,
+                )
+            })?;
+        script_programs.insert(script.asset_id, program);
+    }
+    Ok(RegisteredScriptFile {
+        vm,
+        script_programs,
+    })
+}
+
+#[cfg(feature = "scripting")]
+fn instantiate_extracted_script(
+    vm: &ScriptVm,
+    script_programs: &mut BTreeMap<u64, ScriptProgram>,
+    script: &ExtractedScriptAsset,
+    host: &mut dyn nuxie_runtime::ScriptHost,
+    factory: &mut dyn RenderFactory,
+) -> std::result::Result<Box<dyn nuxie_runtime::ScriptInstance>, ScriptError> {
+    let program = if let Some(program) = script_programs.get(&script.asset_id) {
+        program.clone()
+    } else {
+        let program = vm.register_protocol_script_with_factory_scoped(
+            &script.name,
+            script.scope,
+            &script.payload,
+            factory,
+        )?;
+        script_programs.insert(script.asset_id, program.clone());
+        program
+    };
+    vm.instantiate_registered_script_with_factory(&program, host, factory)
 }
 
 #[cfg(feature = "scripting")]
@@ -2244,12 +2867,13 @@ fn hydrate_script_inputs(
             let Some(artboard_index) = object.uint_property("artboardId") else {
                 continue;
             };
-            let artboard = RunnerScriptArtboard::new(
+            let mut artboard = RunnerScriptArtboard::new(
                 runtime,
                 artboards,
                 artboard_index as usize,
                 Rc::clone(&render_state),
             )?;
+            artboard.bind_view_model();
             script_instance
                 .set_artboard_input(name, Box::new(artboard))
                 .with_context(|| format!("failed to hydrate artboard script input '{name}'"))?;
@@ -2279,18 +2903,21 @@ fn hydrate_script_inputs(
 }
 
 #[cfg(feature = "scripting")]
-fn rebind_scripted_drawables(
+fn bind_scripted_drawable_context(
     runtime: &RuntimeFile,
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
     render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
     factory: &mut dyn RenderFactory,
-    owned_view_model_context: Option<&RuntimeOwnedViewModelHandle>,
+    owned_view_model_context: Option<&RuntimeOwnedViewModelContext>,
+    _initialize_deferred: bool,
 ) -> Result<()> {
-    let context_view_model = owned_view_model_context
+    let owned_view_model_handle =
+        owned_view_model_context.and_then(RuntimeOwnedViewModelContext::main_handle);
+    let context_view_model = owned_view_model_handle
         .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context));
-    let owned_view_model_context = owned_view_model_context
+    let owned_view_model_context = owned_view_model_handle
         .map(|context| RuntimeOwnedViewModelContextHandle::root(runtime, context.clone()));
     instance
         .set_script_context_view_model(context_view_model)
@@ -2302,6 +2929,14 @@ fn rebind_scripted_drawables(
         {
             continue;
         }
+        let init_pending = instance
+            .script_user_init_pending_for_global(local_object.global_id)
+            .context("failed to inspect deferred scripted drawable init")?;
+        if init_pending {
+            instance
+                .prepare_script_init_retry_with_factory(local_object.global_id, factory)
+                .context("failed to recreate deferred scripted drawable")?;
+        }
         rehydrate_script_inputs(
             runtime,
             artboard,
@@ -2312,21 +2947,39 @@ fn rebind_scripted_drawables(
             Rc::clone(render_state),
             owned_view_model_context.as_ref(),
         )?;
-        if owned_view_model_context.is_some() {
-            instance
+        // C++'s `hydrateScriptInputs` calls user `init` only until it has
+        // succeeded once. A plain root view-model bind therefore must not
+        // replay `init` for every drawable; only scripts whose cold hydration
+        // was intentionally deferred need their first post-bind init here.
+        if init_pending
+            && owned_view_model_context.is_some()
+            && render_state
+                .borrow_mut()
+                .take_deferred_script_init(local_object.global_id)
+        {
+            match instance
                 .reinitialize_script_instance_with_factory(local_object.global_id, factory)
-                .context("scripted drawable rebind init failed")?;
+            {
+                Ok(true) => {}
+                Ok(false) => render_state
+                    .borrow_mut()
+                    .defer_script_init(local_object.global_id),
+                Err(error) => {
+                    // C++ contains user init failures on the scripted object.
+                    // Keep the occurrence cold so a later context bind can
+                    // recreate it without aborting the file.
+                    eprintln!(":: {error}");
+                    render_state
+                        .borrow_mut()
+                        .defer_script_init(local_object.global_id);
+                }
+            }
         }
-    }
-    if owned_view_model_context.is_none() {
-        instance
-            .update_script_instances()
-            .context("scripted drawable rebind update failed")?;
     }
     render_state
         .borrow_mut()
         .realize_pending(runtime, artboards, factory)
-        .context("failed to allocate rebound script artboard paints")
+        .context("failed to allocate bound script artboard paints")
 }
 
 #[cfg(feature = "scripting")]
@@ -2512,16 +3165,6 @@ fn ensure_static_draw_supported_for_artboard(
                 data_bind.target_type_name
             );
         }
-        if let Some(focus_object) = artboard
-            .local_objects
-            .iter()
-            .find(|object| object.type_name == Some("FocusData") && has_input_events)
-        {
-            bail!(
-                "unsupported: focus-data in Rust golden runner (nested child global {})",
-                focus_object.global_id
-            );
-        }
     }
 
     if let Some(data_bind) = nested_artboard_host_control_data_bind(graph, artboard) {
@@ -2620,6 +3263,7 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
+    #[cfg(not(feature = "scripting"))]
     if let Some(scripted_object) = artboard
         .state_machines
         .iter()
@@ -2630,18 +3274,6 @@ fn ensure_static_draw_supported_for_artboard(
             "unsupported: scripted-transition-condition in Rust golden runner (global {})",
             scripted_object.global_id
         );
-    }
-
-    if artboard
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("ScriptedPathEffect"))
-        && runtime.file_assets().iter().any(|asset| {
-            asset.type_name == "ScriptAsset"
-                && asset.string_property("name") == Some("FlipPathEffect")
-        })
-    {
-        bail!("unsupported: script-path-commands in Rust golden runner");
     }
 
     if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {
@@ -3396,7 +4028,24 @@ fn nested_stateful_view_model_object(
 }
 
 fn nested_child_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bool {
+    if matches!(
+        (data_bind.target_type_name, data_bind.property_key),
+        (Some("KeyFrameDouble"), 70)
+            | (Some("KeyFrameColor"), 88)
+            | (Some("KeyFrameBool"), 181)
+            | (Some("KeyFrameString"), 280)
+    ) {
+        // State-machine-driven nested animation instances use the same typed
+        // keyframe value-holder binding path as root artboards.
+        return true;
+    }
     if data_bind.target_type_name == Some("SolidColor") {
+        return true;
+    }
+    if data_bind.target_type_name == Some("CustomPropertyColor")
+        // CustomPropertyColorBase::propertyValuePropertyKey.
+        && data_bind.property_key == 836
+    {
         return true;
     }
     if data_bind.target_type_name == Some("ArtboardComponentList")
@@ -3547,8 +4196,10 @@ fn nested_child_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bo
             && (data_bind.converter_global.is_none()
                 || data_bind.converter_type_name == Some("DataConverterInterpolator")))
         || (data_bind.target_type_name == Some("LayoutComponentStyle")
-            // LayoutComponentStyleBase::displayValuePropertyKey in C++ generated/layout/layout_component_style_base.hpp.
-            && data_bind.property_key == 596
+            // LayoutComponentStyleBase::gapHorizontal/gapVertical/displayValue
+            // property keys. Runtime layout reads all three from instance
+            // storage and invalidates the layout epoch on a data-bind write.
+            && matches!(data_bind.property_key, 498 | 499 | 596)
             && data_bind.converter_global.is_none())
 }
 
@@ -3579,12 +4230,10 @@ fn nested_child_data_bind_unsupported_feature(
 fn solid_color_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bool {
     // SolidColorBase::colorValuePropertyKey in C++ generated/shapes/paint/solid_color_base.hpp.
     const SOLID_COLOR_VALUE_PROPERTY_KEY: u64 = 37;
-    let source_to_target = data_bind.flags & DATA_BIND_FLAG_TWO_WAY != 0
-        || data_bind.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE == 0;
+    // RuntimeDataBindGraph now mirrors both C++ directions and converter
+    // families for typed Color values. Keep this guard structural only so the
+    // golden comparison, rather than a stale allow-list, proves behavior.
     data_bind.property_key == SOLID_COLOR_VALUE_PROPERTY_KEY
-        && source_to_target
-        && (data_bind.converter_global.is_none()
-            || data_bind.converter_type_name == Some("DataConverterInterpolator"))
 }
 
 fn custom_property_enum_data_bind_supported(data_bind: &nuxie_graph::DataBindNode) -> bool {

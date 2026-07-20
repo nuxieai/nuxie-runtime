@@ -5,6 +5,7 @@ mod components;
 mod constraints;
 mod data_bind_graph;
 mod draw;
+mod focus;
 mod objects;
 mod properties;
 mod scripting;
@@ -39,15 +40,21 @@ pub use draw::{
     preallocate_render_paint_cache_for_artboard_tree,
     preallocate_render_paint_cache_for_scripted_artboard_tree,
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
+    preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration,
     preallocate_render_paints, preallocate_render_paints_for_artboard_tree,
     preallocate_source_render_paints, runtime_path_commands_from_raw_path,
+};
+pub use focus::{
+    FocusBounds, FocusDirection, FocusEdgeBehavior, FocusEvent, FocusEventKind, FocusManager,
+    FocusNode, FocusNodeId, FocusPoint,
 };
 pub use objects::InstanceSlot;
 pub use scripting::{
     NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
-    ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,
-    ScriptModuleFailure, ScriptNode, ScriptPaint, ScriptValue, ScriptViewModel,
-    ScriptViewModelProperty, ScriptingVm, bound_script_artboard_input, bound_script_input_value,
+    ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptImage, ScriptInstance,
+    ScriptListenerInvocation, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode,
+    ScriptPaint, ScriptPointerEventKind, ScriptValue, ScriptViewModel, ScriptViewModelProperty,
+    ScriptingVm, bound_script_artboard_input, bound_script_input_value,
     bound_script_view_model_from_owned_context, bound_script_view_model_snapshot,
     script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_snapshot,
     script_view_models,
@@ -84,12 +91,14 @@ pub use view_model::{
     RuntimeImportedViewModelTriggerSourceHandle, RuntimeImportedViewModelViewModelSourceHandle,
     RuntimeOwnedViewModelArtboardSourceHandle, RuntimeOwnedViewModelAssetSourceHandle,
     RuntimeOwnedViewModelBooleanSourceHandle, RuntimeOwnedViewModelColorSourceHandle,
-    RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelEnumSourceHandle,
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
-    RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelNumberSourceHandle,
-    RuntimeOwnedViewModelStringSourceHandle, RuntimeOwnedViewModelSymbolListIndexSourceHandle,
-    RuntimeOwnedViewModelTriggerSourceHandle, RuntimeOwnedViewModelViewModelSourceHandle,
-    RuntimeViewModelLinkError, runtime_data_context_lookup_reports,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle,
+    RuntimeOwnedViewModelEnumSourceHandle, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, RuntimeOwnedViewModelListSourceHandle,
+    RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
+    RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTriggerSourceHandle,
+    RuntimeOwnedViewModelViewModelSourceHandle, RuntimeViewModelLinkError,
+    runtime_data_context_lookup_reports, runtime_global_view_model_indices,
+    runtime_global_view_model_names,
 };
 pub(crate) use view_model::{
     RuntimeViewModelPointer, runtime_default_view_model_artboard_property_path_for_name,

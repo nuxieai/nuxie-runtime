@@ -1,12 +1,11 @@
 //! Clockwise-atomic draw and resolve translated from Rive's WebGPU shaders.
 
 use crate::gpu::{
-    ImageDrawUniforms, ImageRectVertex, PaintAuxData, PaintData, PatchVertex, TriangleVertex,
+    ImageDrawInstance, ImageRectVertex, PaintAuxData, PaintData, PatchVertex, TriangleVertex,
     PAINT_FLAG_HAS_CLIP_RECT,
 };
 use crate::tessellator::{FrameUploadPayload, TessellationFlushResources, TessellationUploadFrame};
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedRenderPass};
-use bytemuck::Zeroable;
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -101,7 +100,6 @@ pub(crate) struct AtomicPipeline {
     atomic_layout: wgpu::BindGroupLayout,
     _dummy_image_texture: wgpu::Texture,
     dummy_image_view: wgpu::TextureView,
-    dummy_image_uniforms: wgpu::Buffer,
     dummy_image_group: wgpu::BindGroup,
     image_samplers: Vec<wgpu::Sampler>,
     sampler_group: wgpu::BindGroup,
@@ -222,7 +220,7 @@ pub(crate) struct AtomicDraw<'a> {
     pub hsl_blend: bool,
     pub image: Option<&'a wgpu::TextureView>,
     pub image_sampler: ImageSampler,
-    pub image_uniforms: Option<ImageDrawUniforms>,
+    pub image_instance: Option<ImageDrawInstance>,
     pub image_mesh: Option<ImageMeshBuffers<'a>>,
 }
 
@@ -394,7 +392,10 @@ impl AtomicPipeline {
                 module: &image_rect_vertex,
                 entry_point: Some("main"),
                 compilation_options: Default::default(),
-                buffers: &[Some(ImageRectVertex::layout())],
+                buffers: &[
+                    Some(ImageRectVertex::layout()),
+                    Some(ImageDrawInstance::layout()),
+                ],
             },
             primitive: Default::default(),
             depth_stencil: None,
@@ -427,6 +428,7 @@ impl AtomicPipeline {
                 buffers: &[
                     Some(image_mesh_vertex_layout(0)),
                     Some(image_mesh_vertex_layout(1)),
+                    Some(ImageDrawInstance::layout()),
                 ],
             },
             primitive: Default::default(),
@@ -550,6 +552,7 @@ impl AtomicPipeline {
                 buffers: &[
                     Some(image_mesh_vertex_layout(0)),
                     Some(image_mesh_vertex_layout(1)),
+                    Some(ImageDrawInstance::layout()),
                 ],
             },
             primitive: Default::default(),
@@ -571,7 +574,10 @@ impl AtomicPipeline {
                 module: &image_rect_vertex,
                 entry_point: Some("main"),
                 compilation_options: Default::default(),
-                buffers: &[Some(ImageRectVertex::layout())],
+                buffers: &[
+                    Some(ImageRectVertex::layout()),
+                    Some(ImageDrawInstance::layout()),
+                ],
             },
             primitive: Default::default(),
             depth_stencil: None,
@@ -680,12 +686,6 @@ impl AtomicPipeline {
             view_formats: &[],
         });
         let dummy_image_view = dummy_image_texture.create_view(&Default::default());
-        let dummy_image_uniforms = upload(
-            device,
-            "nuxie-atomic-dummy-image-uniforms",
-            &[ImageDrawUniforms::zeroed()],
-            wgpu::BufferUsages::UNIFORM,
-        );
         let image_samplers = [ImageFilter::Bilinear, ImageFilter::Nearest]
             .into_iter()
             .flat_map(|filter| {
@@ -708,17 +708,17 @@ impl AtomicPipeline {
             label: Some("nuxie-atomic-sampler-group"),
             layout: &sampler_layout,
             entries: &[
+                binding(8, wgpu::BindingResource::Sampler(&image_samplers[0])),
                 binding(9, wgpu::BindingResource::Sampler(&image_samplers[0])),
                 binding(10, wgpu::BindingResource::Sampler(&image_samplers[0])),
-                binding(11, wgpu::BindingResource::Sampler(&image_samplers[0])),
             ],
         });
         let dummy_image_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atomic-dummy-image-group"),
             layout: &image_layout,
             entries: &[
-                binding(12, wgpu::BindingResource::TextureView(&dummy_image_view)),
-                binding(14, wgpu::BindingResource::Sampler(&image_samplers[0])),
+                binding(11, wgpu::BindingResource::TextureView(&dummy_image_view)),
+                binding(13, wgpu::BindingResource::Sampler(&image_samplers[0])),
             ],
         });
         let image_rect_vertices = upload(
@@ -948,7 +948,6 @@ impl AtomicPipeline {
             atomic_layout,
             _dummy_image_texture: dummy_image_texture,
             dummy_image_view,
-            dummy_image_uniforms,
             dummy_image_group,
             image_samplers,
             sampler_group,
@@ -1051,8 +1050,8 @@ impl AtomicPipeline {
         // flush to storage-buffer color when fixedFunctionColorOutput is false.
         let advanced_blend = paints.iter().any(|paint| (paint.params >> 4) & 0xf != 0)
             || draws.iter().any(|draw| {
-                draw.image_uniforms
-                    .is_some_and(|uniforms| uniforms.blend_mode != 0)
+                draw.image_instance
+                    .is_some_and(|instance| instance.packed[2] != 0)
             });
         let fixed_features = fixed_atomic_features(batch_shared_draws, paints);
         // C++ specializes ENABLE_CLIPPING from the flush-wide shader features.
@@ -1072,7 +1071,6 @@ impl AtomicPipeline {
             std::ptr::eq(draw.tessellation, draws[0].tessellation)
                 && draw.atlas.is_none()
                 && draws[0].atlas.is_none()
-                && draw.image.is_none()
         });
         #[cfg(feature = "perf-diagnostics")]
         let buffer_upload_started = Instant::now();
@@ -1099,9 +1097,30 @@ impl AtomicPipeline {
         // C++ maps paints, paint auxiliaries, and triangle vertices from its
         // guarded flush-wide buffer rings. Keep the same topology by packing
         // every nonempty payload into one retained upload-page write.
-        let mut payloads = Vec::with_capacity(2 + draws.len());
+        let mut image_instances = Vec::with_capacity(draws.len());
+        let image_instance_indices = draws
+            .iter()
+            .map(|draw| {
+                draw.image_instance.map(|instance| {
+                    assert!(draw.image.is_some());
+                    let index = u32::try_from(image_instances.len())
+                        .expect("atomic image instance index overflow");
+                    image_instances.push(instance);
+                    index
+                })
+            })
+            .collect::<Vec<_>>();
+        debug_assert!(draws
+            .iter()
+            .all(|draw| draw.image.is_some() == draw.image_instance.is_some()));
+        let mut payloads = Vec::with_capacity(3 + draws.len());
         payloads.push(FrameUploadPayload::Storage(bytemuck::cast_slice(paints)));
         payloads.push(FrameUploadPayload::Storage(bytemuck::cast_slice(paint_aux)));
+        if !image_instances.is_empty() {
+            payloads.push(FrameUploadPayload::Vertex(bytemuck::cast_slice(
+                &image_instances,
+            )));
+        }
         if shared_flush_group {
             if !shared_triangle_vertices.is_empty() {
                 payloads.push(FrameUploadPayload::Vertex(bytemuck::cast_slice(
@@ -1124,6 +1143,11 @@ impl AtomicPipeline {
         let paint_aux = uploaded
             .next()
             .expect("atomic paint auxiliary upload is present");
+        let image_instance_buffer = (!image_instances.is_empty()).then(|| {
+            uploaded
+                .next()
+                .expect("atomic image instance upload is present")
+        });
         let (shared_triangle_buffer, triangle_buffers) = if shared_flush_group {
             let shared = (!shared_triangle_vertices.is_empty()).then(|| {
                 uploaded
@@ -1203,55 +1227,26 @@ impl AtomicPipeline {
             }),
             word_count: color_word_count,
         });
-        #[cfg(feature = "perf-diagnostics")]
-        let image_uniform_upload_started = Instant::now();
-        let image_uniform_buffers = draws
-            .iter()
-            .map(|draw| {
-                draw.image_uniforms.map(|uniforms| {
-                    upload(
-                        device,
-                        "nuxie-atomic-image-uniforms",
-                        std::slice::from_ref(&uniforms),
-                        wgpu::BufferUsages::UNIFORM,
-                    )
-                })
-            })
-            .collect::<Vec<_>>();
-        #[cfg(feature = "perf-diagnostics")]
-        {
-            backing.diagnostics.buffer_upload_ns = backing
-                .diagnostics
-                .buffer_upload_ns
-                .saturating_add(elapsed_ns(image_uniform_upload_started));
-        }
-        let make_flush_group = |draw_index: usize, draw: &AtomicDraw<'_>| {
+        let make_flush_group = |draw: &AtomicDraw<'_>| {
             device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("nuxie-atomic-flush-group"),
                 layout: &self.flush_layout,
                 entries: &[
                     binding(0, flush_resources.uniform_binding()),
+                    binding(2, flush_resources.path_binding()),
+                    binding(3, paints.binding()),
+                    binding(4, paint_aux.binding()),
+                    binding(5, flush_resources.contour_binding()),
+                    binding(7, wgpu::BindingResource::TextureView(draw.tessellation)),
                     binding(
-                        2,
-                        image_uniform_buffers[draw_index]
-                            .as_ref()
-                            .unwrap_or(&self.dummy_image_uniforms)
-                            .as_entire_binding(),
-                    ),
-                    binding(3, flush_resources.path_binding()),
-                    binding(4, paints.binding()),
-                    binding(5, paint_aux.binding()),
-                    binding(6, flush_resources.contour_binding()),
-                    binding(8, wgpu::BindingResource::TextureView(draw.tessellation)),
-                    binding(
-                        9,
+                        8,
                         wgpu::BindingResource::TextureView(
                             gradient.unwrap_or(&self.dummy_image_view),
                         ),
                     ),
-                    binding(10, wgpu::BindingResource::TextureView(feather_lut)),
+                    binding(9, wgpu::BindingResource::TextureView(feather_lut)),
                     binding(
-                        11,
+                        10,
                         wgpu::BindingResource::TextureView(
                             draw.atlas.unwrap_or(&self.dummy_image_view),
                         ),
@@ -1262,13 +1257,9 @@ impl AtomicPipeline {
         #[cfg(feature = "perf-diagnostics")]
         let flush_bind_group_started = Instant::now();
         let flush_groups = if shared_flush_group {
-            vec![make_flush_group(0, &draws[0])]
+            vec![make_flush_group(&draws[0])]
         } else {
-            draws
-                .iter()
-                .enumerate()
-                .map(|(index, draw)| make_flush_group(index, draw))
-                .collect::<Vec<_>>()
+            draws.iter().map(make_flush_group).collect::<Vec<_>>()
         };
         #[cfg(feature = "perf-diagnostics")]
         {
@@ -1284,24 +1275,39 @@ impl AtomicPipeline {
         let flush_group_index = |draw_index: usize| if shared_flush_group { 0 } else { draw_index };
         #[cfg(feature = "perf-diagnostics")]
         let image_bind_group_started = Instant::now();
-        let image_groups = draws
+        let mut image_groups = Vec::new();
+        let mut previous_image: Option<(&wgpu::TextureView, ImageSampler, usize)> = None;
+        let image_group_indices = draws
             .iter()
             .map(|draw| {
-                draw.image.map(|image| {
+                let Some(image) = draw.image else {
+                    previous_image = None;
+                    return None;
+                };
+                if let Some((previous_view, previous_sampler, group_index)) = previous_image {
+                    if std::ptr::eq(previous_view, image) && previous_sampler == draw.image_sampler
+                    {
+                        return Some(group_index);
+                    }
+                }
+                let group_index = image_groups.len();
+                image_groups.push(
                     device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
                         label: Some("nuxie-atomic-image-group"),
                         layout: &self.image_layout,
                         entries: &[
-                            binding(12, wgpu::BindingResource::TextureView(image)),
+                            binding(11, wgpu::BindingResource::TextureView(image)),
                             binding(
-                                14,
+                                13,
                                 wgpu::BindingResource::Sampler(
                                     &self.image_samplers[draw.image_sampler.as_key() as usize],
                                 ),
                             ),
                         ],
-                    })
-                })
+                    }),
+                );
+                previous_image = Some((image, draw.image_sampler, group_index));
+                Some(group_index)
             })
             .collect::<Vec<_>>();
         #[cfg(feature = "perf-diagnostics")]
@@ -1309,15 +1315,15 @@ impl AtomicPipeline {
             backing.diagnostics.image_bind_groups = backing
                 .diagnostics
                 .image_bind_groups
-                .saturating_add(image_groups.iter().flatten().count() as u64);
+                .saturating_add(image_groups.len() as u64);
             backing.diagnostics.image_bind_group_ns = backing
                 .diagnostics
                 .image_bind_group_ns
                 .saturating_add(elapsed_ns(image_bind_group_started));
         }
         let image_group = |draw_index: usize| {
-            image_groups[draw_index]
-                .as_ref()
+            image_group_indices[draw_index]
+                .map(|index| &image_groups[index])
                 .unwrap_or(&self.dummy_image_group)
         };
         #[cfg(feature = "perf-diagnostics")]
@@ -1327,8 +1333,8 @@ impl AtomicPipeline {
                 label: Some("nuxie-atomic-load-color-group"),
                 layout: &self.image_layout,
                 entries: &[
-                    binding(12, wgpu::BindingResource::TextureView(view)),
-                    binding(14, wgpu::BindingResource::Sampler(&self.image_samplers[0])),
+                    binding(11, wgpu::BindingResource::TextureView(view)),
+                    binding(13, wgpu::BindingResource::Sampler(&self.image_samplers[0])),
                 ],
             })
         });
@@ -1398,7 +1404,11 @@ impl AtomicPipeline {
                 needs_init = false;
             }
         };
-        if batch_shared_draws && shared_flush_group && draws.iter().all(|draw| draw.atlas.is_none())
+        if batch_shared_draws
+            && shared_flush_group
+            && draws
+                .iter()
+                .all(|draw| draw.atlas.is_none() && draw.image.is_none())
         {
             for (group_index, &group_start) in draw_group_starts.iter().enumerate() {
                 let group_end = draw_group_starts
@@ -1552,6 +1562,20 @@ impl AtomicPipeline {
                     pass.set_bind_group(3, &self.sampler_group, &[]);
                     pass.set_vertex_buffer(0, mesh.vertices.slice(..));
                     pass.set_vertex_buffer(1, mesh.uvs.slice(..));
+                    let instance_index = image_instance_indices[draw_index]
+                        .expect("atomic image mesh is missing its instance record");
+                    let instance_offset =
+                        u64::from(instance_index) * std::mem::size_of::<ImageDrawInstance>() as u64;
+                    pass.set_vertex_buffer(
+                        2,
+                        image_instance_buffer
+                            .as_ref()
+                            .expect("atomic image instance buffer is present")
+                            .slice_at(
+                                instance_offset,
+                                std::mem::size_of::<ImageDrawInstance>() as u64,
+                            ),
+                    );
                     pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint16);
                     pass.draw_indexed(0..mesh.index_count, 0, 0..1);
                     continue;
@@ -1578,6 +1602,20 @@ impl AtomicPipeline {
                     pass.set_bind_group(2, &atomics, &[]);
                     pass.set_bind_group(3, &self.sampler_group, &[]);
                     pass.set_vertex_buffer(0, self.image_rect_vertices.slice(..));
+                    let instance_index = image_instance_indices[draw_index]
+                        .expect("atomic image rect is missing its instance record");
+                    let instance_offset =
+                        u64::from(instance_index) * std::mem::size_of::<ImageDrawInstance>() as u64;
+                    pass.set_vertex_buffer(
+                        1,
+                        image_instance_buffer
+                            .as_ref()
+                            .expect("atomic image instance buffer is present")
+                            .slice_at(
+                                instance_offset,
+                                std::mem::size_of::<ImageDrawInstance>() as u64,
+                            ),
+                    );
                     pass.set_index_buffer(
                         self.image_rect_indices.slice(..),
                         wgpu::IndexFormat::Uint16,
@@ -1810,31 +1848,30 @@ fn binding(binding: u32, resource: wgpu::BindingResource<'_>) -> wgpu::BindGroup
     wgpu::BindGroupEntry { binding, resource }
 }
 
-fn atomic_flush_layout_entries() -> [wgpu::BindGroupLayoutEntry; 10] {
+fn atomic_flush_layout_entries() -> [wgpu::BindGroupLayoutEntry; 9] {
     let vertex = wgpu::ShaderStages::VERTEX;
     let fragment = wgpu::ShaderStages::FRAGMENT;
     let vertex_fragment = wgpu::ShaderStages::VERTEX_FRAGMENT;
 
     [
         uniform_entry(0, vertex_fragment),
-        uniform_entry(2, vertex_fragment),
-        storage_entry(3, true, vertex_fragment),
+        storage_entry(2, true, vertex_fragment),
+        storage_entry(3, true, fragment),
         storage_entry(4, true, fragment),
-        storage_entry(5, true, fragment),
-        storage_entry(6, true, vertex),
-        texture_entry(8, wgpu::TextureSampleType::Uint, vertex),
+        storage_entry(5, true, vertex),
+        texture_entry(7, wgpu::TextureSampleType::Uint, vertex),
         texture_entry(
-            9,
+            8,
             wgpu::TextureSampleType::Float { filterable: true },
             fragment,
         ),
         texture_entry(
-            10,
+            9,
             wgpu::TextureSampleType::Float { filterable: true },
             vertex_fragment,
         ),
         texture_entry(
-            11,
+            10,
             wgpu::TextureSampleType::Float { filterable: true },
             fragment,
         ),
@@ -1844,11 +1881,11 @@ fn atomic_flush_layout_entries() -> [wgpu::BindGroupLayoutEntry; 10] {
 fn atomic_image_layout_entries() -> [wgpu::BindGroupLayoutEntry; 2] {
     [
         texture_entry(
-            12,
+            11,
             wgpu::TextureSampleType::Float { filterable: true },
             wgpu::ShaderStages::FRAGMENT,
         ),
-        sampler_entry(14, wgpu::ShaderStages::FRAGMENT),
+        sampler_entry(13, wgpu::ShaderStages::FRAGMENT),
     ]
 }
 
@@ -1862,9 +1899,9 @@ fn atomic_plane_layout_entries() -> [wgpu::BindGroupLayoutEntry; 3] {
 
 fn atomic_sampler_layout_entries() -> [wgpu::BindGroupLayoutEntry; 3] {
     [
-        sampler_entry(9, wgpu::ShaderStages::FRAGMENT),
-        sampler_entry(10, wgpu::ShaderStages::VERTEX_FRAGMENT),
-        sampler_entry(11, wgpu::ShaderStages::FRAGMENT),
+        sampler_entry(8, wgpu::ShaderStages::FRAGMENT),
+        sampler_entry(9, wgpu::ShaderStages::VERTEX_FRAGMENT),
+        sampler_entry(10, wgpu::ShaderStages::FRAGMENT),
     ]
 }
 
@@ -1998,19 +2035,18 @@ mod tests {
             &[
                 (0, Stages::VERTEX_FRAGMENT),
                 (2, Stages::VERTEX_FRAGMENT),
-                (3, Stages::VERTEX_FRAGMENT),
+                (3, Stages::FRAGMENT),
                 (4, Stages::FRAGMENT),
-                (5, Stages::FRAGMENT),
-                (6, Stages::VERTEX),
-                (8, Stages::VERTEX),
-                (9, Stages::FRAGMENT),
-                (10, Stages::VERTEX_FRAGMENT),
-                (11, Stages::FRAGMENT),
+                (5, Stages::VERTEX),
+                (7, Stages::VERTEX),
+                (8, Stages::FRAGMENT),
+                (9, Stages::VERTEX_FRAGMENT),
+                (10, Stages::FRAGMENT),
             ],
         );
         assert_binding_stages(
             &atomic_image_layout_entries(),
-            &[(12, Stages::FRAGMENT), (14, Stages::FRAGMENT)],
+            &[(11, Stages::FRAGMENT), (13, Stages::FRAGMENT)],
         );
         assert_binding_stages(
             &atomic_plane_layout_entries(),
@@ -2023,9 +2059,9 @@ mod tests {
         assert_binding_stages(
             &atomic_sampler_layout_entries(),
             &[
-                (9, Stages::FRAGMENT),
-                (10, Stages::VERTEX_FRAGMENT),
-                (11, Stages::FRAGMENT),
+                (8, Stages::FRAGMENT),
+                (9, Stages::VERTEX_FRAGMENT),
+                (10, Stages::FRAGMENT),
             ],
         );
     }

@@ -12,9 +12,11 @@ use luaur_rt::{
     AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
     Value, Vector as LuaVector,
 };
+use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory as RenderFactory, FillRule, Mat2D, RawPath,
-    RenderPaint as RenderPaintTrait, RenderPaintStyle, RenderPath, Renderer, StrokeCap, StrokeJoin,
+    BlendMode, ColorInt, Factory as RenderFactory, FillRule, Mat2D, PathVerb, RawPath,
+    RenderPaint as RenderPaintTrait, RenderPaintStyle, RenderPath, RenderShader, Renderer,
+    StrokeCap, StrokeJoin, Vec2D,
 };
 use nuxie_runtime::{
     RuntimeContourMeasure, RuntimePathMeasure, ScriptAnimation, ScriptAnimationTime,
@@ -22,14 +24,25 @@ use nuxie_runtime::{
     runtime_path_commands_from_raw_path,
 };
 
-use super::view_model::{create_scripted_view_model, model_from_table};
+use super::view_model::{
+    ScriptViewModelFrameContext, ScriptViewModelRegistration, create_scripted_view_model,
+    model_from_table,
+};
 
 #[derive(Clone, Default)]
 pub(crate) struct RendererBindings {
     factory: Rc<Cell<Option<NonNull<dyn RenderFactory>>>>,
+    view_model_frame_context: ScriptViewModelFrameContext,
 }
 
 impl RendererBindings {
+    pub(crate) fn new(view_model_frame_context: ScriptViewModelFrameContext) -> Self {
+        Self {
+            factory: Rc::new(Cell::new(None)),
+            view_model_frame_context,
+        }
+    }
+
     pub(crate) fn with_factory_context<R>(
         &self,
         factory: &mut dyn RenderFactory,
@@ -47,6 +60,7 @@ impl RendererBindings {
         install_color_global(lua)?;
         install_mat2d_global(lua)?;
         install_path_global(lua)?;
+        self.install_gradient_global(lua)?;
         self.install_paint_global(lua)?;
         Ok(())
     }
@@ -120,6 +134,55 @@ impl RendererBindings {
         Ok(())
     }
 
+    fn install_gradient_global(&self, lua: &Lua) -> Result<()> {
+        let table = lua.create_table();
+
+        let bindings = self.clone();
+        table.set(
+            "linear",
+            lua.create_function(
+                move |lua, (from, to, stops): (LuaVector, LuaVector, Table)| {
+                    let (colors, positions) = gradient_stops(stops)?;
+                    let shader = bindings.with_factory(|factory| {
+                        Ok(factory.make_linear_gradient(
+                            from.x(),
+                            from.y(),
+                            to.x(),
+                            to.y(),
+                            &colors,
+                            &positions,
+                        ))
+                    })?;
+                    lua.create_userdata(ScriptedGradient(Rc::from(shader)))
+                },
+            )?,
+        )?;
+
+        let bindings = self.clone();
+        table.set(
+            "radial",
+            lua.create_function(
+                move |lua, (center, radius, stops): (LuaVector, f32, Table)| {
+                    let (colors, positions) = gradient_stops(stops)?;
+                    let shader = bindings.with_factory(|factory| {
+                        Ok(factory.make_radial_gradient(
+                            center.x(),
+                            center.y(),
+                            radius,
+                            &colors,
+                            &positions,
+                        ))
+                    })?;
+                    lua.create_userdata(ScriptedGradient(Rc::from(shader)))
+                },
+            )?,
+        )?;
+
+        table.set_readonly(true);
+        lua.globals().set("Gradient", table)?;
+        Ok(())
+    }
+
     fn with_factory<R>(&self, f: impl FnOnce(&mut dyn RenderFactory) -> Result<R>) -> Result<R> {
         let Some(mut factory) = self.factory.get() else {
             return Err(Error::runtime(
@@ -136,9 +199,7 @@ impl RendererBindings {
         lua: &Lua,
         artboard: Box<dyn ScriptArtboard>,
     ) -> Result<AnyUserData> {
-        lua.create_userdata(ScriptedArtboard {
-            artboard: Rc::new(RefCell::new(artboard)),
-        })
+        lua.create_userdata(ScriptedArtboard::new(artboard, self.clone()))
     }
 }
 
@@ -167,12 +228,18 @@ impl Drop for FactoryContextGuard {
     }
 }
 
+struct ScriptedArtboardOwner {
+    artboard: RefCell<Box<dyn ScriptArtboard>>,
+    _registration: Option<ScriptViewModelRegistration>,
+}
+
 struct ScriptedArtboard {
-    artboard: Rc<RefCell<Box<dyn ScriptArtboard>>>,
+    owner: Rc<ScriptedArtboardOwner>,
+    bindings: RendererBindings,
 }
 
 struct ScriptedAnimation {
-    artboard: Rc<RefCell<Box<dyn ScriptArtboard>>>,
+    owner: Rc<ScriptedArtboardOwner>,
     animation: ScriptAnimation,
 }
 
@@ -183,7 +250,8 @@ impl UserData for ScriptedAnimation {
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("advance", |_, this, seconds: f32| {
-            this.artboard
+            this.owner
+                .artboard
                 .borrow_mut()
                 .advance_animation(&mut this.animation, seconds)
                 .map_err(|error| Error::runtime(error.to_string()))
@@ -194,7 +262,8 @@ impl UserData for ScriptedAnimation {
             ("setTimePercentage", ScriptAnimationTime::Percentage),
         ] {
             methods.add_method_mut(name, move |_, this, value: f32| {
-                this.artboard
+                this.owner
+                    .artboard
                     .borrow_mut()
                     .set_animation_time(&mut this.animation, value, mode)
                     .map_err(|error| Error::runtime(error.to_string()))
@@ -204,34 +273,44 @@ impl UserData for ScriptedAnimation {
 }
 
 impl ScriptedArtboard {
-    fn new(artboard: Box<dyn ScriptArtboard>) -> Self {
+    fn new(artboard: Box<dyn ScriptArtboard>, bindings: RendererBindings) -> Self {
+        let registration = artboard
+            .data()
+            .as_ref()
+            .map(|model| bindings.view_model_frame_context.register(model));
         Self {
-            artboard: Rc::new(RefCell::new(artboard)),
+            owner: Rc::new(ScriptedArtboardOwner {
+                artboard: RefCell::new(artboard),
+                _registration: registration,
+            }),
+            bindings,
         }
     }
 }
 
 impl UserData for ScriptedArtboard {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("width", |_, this| Ok(this.artboard.borrow().width()));
+        fields.add_field_method_get("width", |_, this| Ok(this.owner.artboard.borrow().width()));
         fields.add_field_method_set("width", |_, this, value: f32| {
-            this.artboard.borrow_mut().set_width(value);
+            this.owner.artboard.borrow_mut().set_width(value);
             Ok(())
         });
-        fields.add_field_method_get("height", |_, this| Ok(this.artboard.borrow().height()));
+        fields.add_field_method_get("height", |_, this| {
+            Ok(this.owner.artboard.borrow().height())
+        });
         fields.add_field_method_set("height", |_, this, value: f32| {
-            this.artboard.borrow_mut().set_height(value);
+            this.owner.artboard.borrow_mut().set_height(value);
             Ok(())
         });
         fields.add_field_method_get("frameOrigin", |_, this| {
-            Ok(this.artboard.borrow().frame_origin())
+            Ok(this.owner.artboard.borrow().frame_origin())
         });
         fields.add_field_method_set("frameOrigin", |_, this, value: bool| {
-            this.artboard.borrow_mut().set_frame_origin(value);
+            this.owner.artboard.borrow_mut().set_frame_origin(value);
             Ok(())
         });
         fields.add_field_method_get("data", |lua, this| {
-            Ok(match this.artboard.borrow().data() {
+            Ok(match this.owner.artboard.borrow().data() {
                 Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
                 None => Value::Nil,
             })
@@ -242,27 +321,30 @@ impl UserData for ScriptedArtboard {
         methods.add_method("instance", |lua, this, view_model: Option<Table>| {
             let view_model = view_model.as_ref().map(model_from_table).transpose()?;
             let instance = this
+                .owner
                 .artboard
                 .borrow()
                 .instance(view_model)
                 .map_err(|error| Error::runtime(error.to_string()))?;
-            lua.create_userdata(ScriptedArtboard::new(instance))
+            lua.create_userdata(ScriptedArtboard::new(instance, this.bindings.clone()))
         });
         methods.add_method_mut("advance", |_, this, seconds: f32| {
-            this.artboard
+            this.owner
+                .artboard
                 .borrow_mut()
                 .advance(seconds)
                 .map_err(|error| Error::runtime(error.to_string()))
         });
         methods.add_method("animation", |lua, this, name: String| {
             let animation = this
+                .owner
                 .artboard
                 .borrow()
                 .animation(&name)
                 .map_err(|error| Error::runtime(error.to_string()))?;
             Ok(match animation {
                 Some(animation) => Value::UserData(lua.create_userdata(ScriptedAnimation {
-                    artboard: Rc::clone(&this.artboard),
+                    owner: Rc::clone(&this.owner),
                     animation,
                 })?),
                 None => Value::Nil,
@@ -270,6 +352,7 @@ impl UserData for ScriptedArtboard {
         });
         methods.add_method("node", |lua, this, name: String| {
             let node = this
+                .owner
                 .artboard
                 .borrow()
                 .node(&name)
@@ -310,7 +393,8 @@ impl UserData for ScriptedArtboard {
             let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
             scripted_renderer.bindings.with_factory(|factory| {
                 let mut renderer_ref = scripted_renderer.renderer_mut()?;
-                this.artboard
+                this.owner
+                    .artboard
                     .borrow_mut()
                     .draw(factory, unsafe { renderer_ref.as_mut() })
                     .map_err(|error| Error::runtime(error.to_string()))
@@ -451,6 +535,149 @@ impl ScriptedPath {
     fn commands(&self) -> Vec<nuxie_runtime::RuntimePathCommand> {
         runtime_path_commands_from_raw_path(&self.raw_path)
     }
+
+    fn command(&self, lua_index: i64) -> ScriptedPathCommand {
+        let Some(verb_index) = lua_index
+            .checked_sub(1)
+            .and_then(|index| usize::try_from(index).ok())
+        else {
+            return ScriptedPathCommand::none();
+        };
+        let Some(verb) = self.raw_path.verbs().get(verb_index).copied() else {
+            return ScriptedPathCommand::none();
+        };
+
+        let point_index = self.raw_path.verbs()[..verb_index]
+            .iter()
+            .map(|verb| path_verb_point_count(*verb))
+            .sum::<usize>();
+        let point_count = path_verb_point_count(verb);
+        let points = self
+            .raw_path
+            .points()
+            .get(point_index..point_index + point_count)
+            .map_or_else(Vec::new, <[Vec2D]>::to_vec);
+
+        ScriptedPathCommand {
+            command_type: match verb {
+                PathVerb::Move => "moveTo",
+                PathVerb::Line => "lineTo",
+                PathVerb::Quad => "quadTo",
+                PathVerb::Cubic => "cubicTo",
+                PathVerb::Close => "close",
+            },
+            points,
+        }
+    }
+}
+
+fn path_verb_point_count(verb: PathVerb) -> usize {
+    match verb {
+        PathVerb::Move | PathVerb::Line => 1,
+        PathVerb::Quad => 2,
+        PathVerb::Cubic => 3,
+        PathVerb::Close => 0,
+    }
+}
+
+struct ScriptedPathCommand {
+    command_type: &'static str,
+    points: Vec<Vec2D>,
+}
+
+impl ScriptedPathCommand {
+    fn none() -> Self {
+        Self {
+            command_type: "none",
+            points: Vec::new(),
+        }
+    }
+}
+
+impl UserData for ScriptedPathCommand {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method("__len", |_, this, ()| Ok(this.points.len()));
+    }
+}
+
+fn userdata_metatable(lua: &Lua, userdata: AnyUserData) -> Result<Table> {
+    // luaur-rt intentionally keeps userdata metatables private. We only need
+    // the table it just created so Path can layer C++'s numeric indexing over
+    // luaur's ordinary method table without replacing its typed userdata cell.
+    unsafe {
+        lua.exec_raw(userdata, |state| {
+            lua_getmetatable(state, 1);
+        })
+    }
+}
+
+fn lua_path_index(key: &Value) -> Result<Option<i64>> {
+    match key {
+        Value::Integer(index) => Ok(Some(*index)),
+        // C++ uses luaL_checkinteger, whose Luau implementation converts the
+        // number to an integer rather than requiring a mathematically integral
+        // value.
+        Value::Number(index) => Ok(Some(*index as i64)),
+        Value::String(_) => Ok(None),
+        _ => Err(Error::runtime("Path index must be a string or number")),
+    }
+}
+
+fn create_scripted_path(lua: &Lua, path: ScriptedPath) -> Result<AnyUserData> {
+    let userdata = lua.create_userdata(path)?;
+    let metatable = userdata_metatable(lua, userdata.clone())?;
+    let methods: Table = metatable.get("__index")?;
+    let index =
+        lua.create_function(
+            move |lua, (userdata, key): (AnyUserData, Value)| match lua_path_index(&key)? {
+                Some(index) => {
+                    let command = {
+                        let path = userdata.borrow::<ScriptedPath>()?;
+                        path.command(index)
+                    };
+                    create_scripted_path_command(lua, command).map(Value::UserData)
+                }
+                None => methods.get(key),
+            },
+        )?;
+    metatable.set("__index", index)?;
+    metatable.set_readonly(true);
+    Ok(userdata)
+}
+
+fn create_scripted_path_command(lua: &Lua, command: ScriptedPathCommand) -> Result<AnyUserData> {
+    let userdata = lua.create_userdata(command)?;
+    let metatable = userdata_metatable(lua, userdata.clone())?;
+    let index = lua.create_function(|_, (userdata, key): (AnyUserData, Value)| {
+        let command = userdata.borrow::<ScriptedPathCommand>()?;
+        match key {
+            Value::Integer(index) => command
+                .points
+                .get(index.saturating_sub(1) as usize)
+                .map_or(Ok(Value::Nil), |point| {
+                    Ok(Value::Vector(LuaVector::new(point.x, point.y, 0.0)))
+                }),
+            Value::Number(index) => command
+                .points
+                .get((index as i64).saturating_sub(1) as usize)
+                .map_or(Ok(Value::Nil), |point| {
+                    Ok(Value::Vector(LuaVector::new(point.x, point.y, 0.0)))
+                }),
+            Value::String(name) if name.as_bytes() == b"type" => Ok(Value::String(
+                userdata.lua().create_string(command.command_type),
+            )),
+            Value::String(name) => Err(Error::runtime(format!(
+                "'{}' is not a valid index of PathCommand",
+                name.to_string_lossy()
+            ))),
+            _ => Err(Error::runtime(
+                "PathCommand index must be a string or number",
+            )),
+        }
+    })?;
+    metatable.set("__index", index)?;
+    metatable.set_readonly(true);
+    Ok(userdata)
 }
 
 struct ScriptedNode {
@@ -471,9 +698,10 @@ impl UserData for ScriptedNode {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("asPath", |lua, this, ()| {
             Ok(match this.path.clone() {
-                Some(path) => {
-                    Value::UserData(lua.create_userdata(ScriptedPath::from_raw_path(path))?)
-                }
+                Some(path) => Value::UserData(create_scripted_path(
+                    lua,
+                    ScriptedPath::from_raw_path(path),
+                )?),
                 None => Value::Nil,
             })
         });
@@ -504,6 +732,7 @@ impl UserData for ScriptedPaintData {
 
 impl UserData for ScriptedPath {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method("__len", |_, this, ()| Ok(this.raw_path.verbs().len()));
         methods.add_method_mut("moveTo", |_, this, point: LuaVector| {
             this.raw_path.move_to(point.x(), point.y());
             this.mark_dirty();
@@ -695,7 +924,7 @@ pub(super) fn call_path_effect_update(
 ) -> Result<RawPath> {
     let lua = table.lua();
     let function: luaur_rt::Function = table.get("update")?;
-    let source = lua.create_userdata(ScriptedPath::from_raw_path(source))?;
+    let source = create_scripted_path(&lua, ScriptedPath::from_raw_path(source))?;
     let node = lua.create_userdata(ScriptedNode::new(node))?;
     let output: AnyUserData = function.call((table.clone(), source, node))?;
     let output = output.borrow::<ScriptedPath>()?;
@@ -706,7 +935,7 @@ fn install_path_global(lua: &Lua) -> Result<()> {
     let table = lua.create_table();
     table.set(
         "new",
-        lua.create_function(|lua, ()| lua.create_userdata(ScriptedPath::new()))?,
+        lua.create_function(|lua, ()| create_scripted_path(lua, ScriptedPath::new()))?,
     )?;
     table.set_readonly(true);
     lua.globals().set("Path", table)?;
@@ -723,6 +952,7 @@ struct ScriptedPaint {
     cap: StrokeCap,
     feather: f32,
     blend_mode: BlendMode,
+    gradient: Option<Rc<dyn RenderShader>>,
 }
 
 impl ScriptedPaint {
@@ -737,6 +967,7 @@ impl ScriptedPaint {
             cap: StrokeCap::Butt,
             feather: 0.0,
             blend_mode: BlendMode::SrcOver,
+            gradient: None,
         }
     }
 
@@ -754,6 +985,7 @@ impl ScriptedPaint {
         copy.set_cap(source.cap);
         copy.set_feather(source.feather);
         copy.set_blend_mode(source.blend_mode);
+        copy.set_gradient(source.gradient.clone());
         copy
     }
 
@@ -773,7 +1005,7 @@ impl ScriptedPaint {
             "thickness" => self.set_thickness(number_value(value, "thickness")?),
             "blendMode" => self.set_blend_mode(parse_blend_mode(value)?),
             "feather" => self.set_feather(number_value(value, "feather")?),
-            "gradient" => self.render_paint.shader(None),
+            "gradient" => self.set_gradient_value(value)?,
             "color" => self.set_color(color_value(value)?),
             _ => {}
         }
@@ -814,6 +1046,38 @@ impl ScriptedPaint {
         self.blend_mode = blend_mode;
         self.render_paint.blend_mode(blend_mode);
     }
+
+    fn set_gradient(&mut self, gradient: Option<Rc<dyn RenderShader>>) {
+        self.gradient = gradient;
+        self.render_paint.shader(self.gradient.as_deref());
+    }
+
+    fn set_gradient_value(&mut self, value: Value) -> Result<()> {
+        match value {
+            Value::Nil => self.set_gradient(None),
+            Value::UserData(gradient) => {
+                let gradient = Rc::clone(&gradient.borrow::<ScriptedGradient>()?.0);
+                self.set_gradient(Some(gradient));
+            }
+            _ => return Err(Error::runtime("expected Gradient userdata or nil")),
+        }
+        Ok(())
+    }
+}
+
+struct ScriptedGradient(Rc<dyn RenderShader>);
+
+impl UserData for ScriptedGradient {}
+
+fn gradient_stops(stops: Table) -> Result<(Vec<ColorInt>, Vec<f32>)> {
+    let mut colors = Vec::with_capacity(stops.raw_len());
+    let mut positions = Vec::with_capacity(stops.raw_len());
+    for stop in stops.sequence_values::<Table>() {
+        let stop = stop?;
+        positions.push(stop.get("position")?);
+        colors.push(stop.get("color")?);
+    }
+    Ok((colors, positions))
 }
 
 impl UserData for ScriptedPaint {
@@ -853,6 +1117,17 @@ impl UserData for ScriptedPaint {
             this.set_color(color_value(value)?);
             Ok(())
         });
+        fields.add_field_method_get("gradient", |lua, this| {
+            Ok(match &this.gradient {
+                Some(gradient) => {
+                    Value::UserData(lua.create_userdata(ScriptedGradient(Rc::clone(gradient)))?)
+                }
+                None => Value::Nil,
+            })
+        });
+        fields.add_field_method_set("gradient", |_, this, value: Value| {
+            this.set_gradient_value(value)
+        });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
@@ -870,18 +1145,79 @@ impl UserData for ScriptedPaint {
 
 fn install_color_global(lua: &Lua) -> Result<()> {
     let table = lua.create_table();
+
+    for (name, shift) in [("red", 16), ("green", 8), ("blue", 0), ("alpha", 24)] {
+        table.set(
+            name,
+            lua.create_function(move |lua, args: MultiValue| {
+                let color = required_unsigned(lua, args.front(), "color")?;
+                let replacement = optional_unsigned(lua, args.get(1))?;
+                Ok(match replacement {
+                    Some(component) => replace_color_component(color, shift, component),
+                    None => color_component(color, shift),
+                })
+            })?,
+        )?;
+    }
+
+    table.set(
+        "opacity",
+        lua.create_function(|lua, args: MultiValue| {
+            let color = required_unsigned(lua, args.front(), "color")?;
+            Ok(match optional_number(lua, args.get(1))? {
+                Some(opacity) => {
+                    Value::Integer(
+                        replace_color_component(color, 24, opacity_to_alpha(opacity)) as i64,
+                    )
+                }
+                None => Value::Number((color_component(color, 24) as f32 / 255.0) as f64),
+            })
+        })?,
+    )?;
+
+    table.set(
+        "lerp",
+        lua.create_function(|lua, args: MultiValue| {
+            let from = required_unsigned(lua, args.front(), "from color")?;
+            let to = required_unsigned(lua, args.get(1), "to color")?;
+            let mix = required_number(lua, args.get(2), "mix")?;
+            Ok(color_lerp(from, to, mix) as f64)
+        })?,
+    )?;
+
     table.set(
         "rgb",
-        lua.create_function(|_, (red, green, blue): (u32, u32, u32)| {
+        lua.create_function(|lua, args: MultiValue| {
+            let red = required_unsigned(lua, args.front(), "red")?;
+            let green = required_unsigned(lua, args.get(1), "green")?;
+            let blue = required_unsigned(lua, args.get(2), "blue")?;
             Ok(rgba(red, green, blue, 255))
         })?,
     )?;
     table.set(
         "rgba",
-        lua.create_function(|_, (red, green, blue, alpha): (u32, u32, u32, u32)| {
+        lua.create_function(|lua, args: MultiValue| {
+            let red = required_unsigned(lua, args.front(), "red")?;
+            let green = required_unsigned(lua, args.get(1), "green")?;
+            let blue = required_unsigned(lua, args.get(2), "blue")?;
+            let alpha = required_unsigned(lua, args.get(3), "alpha")?;
             Ok(rgba(red, green, blue, alpha))
         })?,
     )?;
+
+    table.set(
+        "toFloat",
+        lua.create_function(|lua, args: MultiValue| {
+            let color = required_unsigned(lua, args.front(), "color")?;
+            let components = lua.create_table();
+            components.set(1, color_component(color, 16) as f64 / 255.0)?;
+            components.set(2, color_component(color, 8) as f64 / 255.0)?;
+            components.set(3, color_component(color, 0) as f64 / 255.0)?;
+            components.set(4, color_component(color, 24) as f64 / 255.0)?;
+            Ok(components)
+        })?,
+    )?;
+
     table.set_readonly(true);
     lua.globals().set("Color", table)?;
     Ok(())
@@ -889,6 +1225,78 @@ fn install_color_global(lua: &Lua) -> Result<()> {
 
 fn rgba(red: u32, green: u32, blue: u32, alpha: u32) -> ColorInt {
     ((alpha & 0xff) << 24) | ((red & 0xff) << 16) | ((green & 0xff) << 8) | (blue & 0xff)
+}
+
+fn required_unsigned(lua: &Lua, value: Option<&Value>, name: &str) -> Result<u32> {
+    let value = value
+        .cloned()
+        .ok_or_else(|| Error::runtime(format!("expected numeric {name}")))?;
+    lua.coerce_number(value)?
+        .map(|value| (value as i64) as u32)
+        .ok_or_else(|| Error::runtime(format!("expected numeric {name}")))
+}
+
+fn optional_unsigned(lua: &Lua, value: Option<&Value>) -> Result<Option<u32>> {
+    value
+        .cloned()
+        .map(|value| {
+            lua.coerce_number(value)
+                .map(|value| value.map(|value| (value as i64) as u32))
+        })
+        .transpose()
+        .map(Option::flatten)
+}
+
+fn required_number(lua: &Lua, value: Option<&Value>, name: &str) -> Result<f32> {
+    let value = value
+        .cloned()
+        .ok_or_else(|| Error::runtime(format!("expected numeric {name}")))?;
+    lua.coerce_number(value)?
+        .map(|value| value as f32)
+        .ok_or_else(|| Error::runtime(format!("expected numeric {name}")))
+}
+
+fn optional_number(lua: &Lua, value: Option<&Value>) -> Result<Option<f32>> {
+    value
+        .cloned()
+        .map(|value| {
+            lua.coerce_number(value)
+                .map(|value| value.map(|value| value as f32))
+        })
+        .transpose()
+        .map(Option::flatten)
+}
+
+fn color_component(color: ColorInt, shift: u32) -> u32 {
+    (color >> shift) & 0xff
+}
+
+fn replace_color_component(color: ColorInt, shift: u32, component: u32) -> ColorInt {
+    (color & !(0xff << shift)) | ((component & 0xff) << shift)
+}
+
+fn opacity_to_alpha(opacity: f32) -> u32 {
+    // Keep the comparison order from C++ std::min/std::max, including its
+    // behavior for NaN, before applying std::lround-equivalent rounding.
+    let opacity = if opacity < 1.0 { opacity } else { 1.0 };
+    let opacity = if 0.0 < opacity { opacity } else { 0.0 };
+    (255.0 * opacity).round() as u32
+}
+
+fn color_lerp(from: ColorInt, to: ColorInt, mix: f32) -> ColorInt {
+    fn lerp_component(from: u32, to: u32, mix: f32) -> u32 {
+        let value = from as f32 * (1.0 - mix) + to as f32 * mix;
+        let value = if value < 255.0 { value } else { 255.0 };
+        let value = if 0.0 < value { value } else { 0.0 };
+        value.round() as u32
+    }
+
+    rgba(
+        lerp_component(color_component(from, 16), color_component(to, 16), mix),
+        lerp_component(color_component(from, 8), color_component(to, 8), mix),
+        lerp_component(color_component(from, 0), color_component(to, 0), mix),
+        lerp_component(color_component(from, 24), color_component(to, 24), mix),
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -937,12 +1345,12 @@ fn multiply_mat2d(lhs: Mat2D, rhs: Mat2D) -> Mat2D {
     let a = lhs.0;
     let b = rhs.0;
     Mat2D([
-        a[0] * b[0] + a[2] * b[1],
-        a[1] * b[0] + a[3] * b[1],
-        a[0] * b[2] + a[2] * b[3],
-        a[1] * b[2] + a[3] * b[3],
-        a[0] * b[4] + a[2] * b[5] + a[4],
-        a[1] * b[4] + a[3] * b[5] + a[5],
+        a[0].mul_add(b[0], a[2] * b[1]),
+        a[1].mul_add(b[0], a[3] * b[1]),
+        a[0].mul_add(b[2], a[2] * b[3]),
+        a[1].mul_add(b[2], a[3] * b[3]),
+        a[0].mul_add(b[4], a[2] * b[5]) + a[4],
+        a[1].mul_add(b[4], a[3] * b[5]) + a[5],
     ])
 }
 
@@ -1160,5 +1568,247 @@ fn string_value(value: Value) -> Result<String> {
     match value {
         Value::String(value) => Ok(value.to_str()?),
         _ => Err(Error::runtime("expected string")),
+    }
+}
+
+#[cfg(test)]
+mod matrix_tests {
+    use super::*;
+
+    #[test]
+    fn matrix_multiplication_matches_cpp_contraction_order() {
+        let matrix = Mat2D([0.8660254, 0.5, -0.5, 0.8660254, 12.124355, 7.0]);
+        let result = multiply_mat2d(matrix, matrix);
+
+        assert_eq!(
+            result.0.map(f32::to_bits),
+            [
+                0x3eff_ffff,
+                0x3f5d_b3d7,
+                0xbf5d_b3d7,
+                0x3f00_0000,
+                0x4198_feae,
+                0x4198_feae,
+            ]
+        );
+    }
+}
+
+#[cfg(test)]
+mod color_tests {
+    use super::*;
+
+    fn color_lua() -> Lua {
+        let lua = Lua::new();
+        install_color_global(&lua).expect("Color global installs");
+        lua
+    }
+
+    #[test]
+    fn color_construction_and_component_overloads_match_cpp() {
+        let lua = color_lua();
+        let result: Table = lua
+            .load(
+                r#"
+                local original = Color.rgba(225, 48, 108, 255)
+                local red = Color.red(original, 129)
+                local green = Color.green(original, 129)
+                local blue = Color.blue(original, 129)
+                local alpha = Color.alpha(original, 129)
+                local wrapped = Color.red(original, -1)
+                local truncated = Color.green(original, 129.9)
+                return {
+                    white = Color.rgba(255, 255, 255, 255),
+                    yellow = Color.rgba(255, 255, 0, 255),
+                    opaqueRed = Color.rgb(255, 0, 0),
+                    original = original,
+                    red = Color.red(original),
+                    redSet = Color.red(red),
+                    green = Color.green(original, nil),
+                    greenSet = Color.green(green),
+                    blue = Color.blue(original, false),
+                    blueSet = Color.blue(blue),
+                    alpha = Color.alpha(original),
+                    alphaSet = Color.alpha(alpha),
+                    wrapped = Color.red(wrapped),
+                    truncated = Color.green(truncated),
+                }
+                "#,
+            )
+            .eval()
+            .expect("Color component script runs");
+
+        assert_eq!(result.get::<u32>("white").unwrap(), 0xffff_ffff);
+        assert_eq!(result.get::<u32>("yellow").unwrap(), 0xffff_ff00);
+        assert_eq!(result.get::<u32>("opaqueRed").unwrap(), 0xffff_0000);
+        assert_eq!(result.get::<u32>("original").unwrap(), 0xffe1_306c);
+        assert_eq!(result.get::<u32>("red").unwrap(), 225);
+        assert_eq!(result.get::<u32>("redSet").unwrap(), 129);
+        assert_eq!(result.get::<u32>("green").unwrap(), 48);
+        assert_eq!(result.get::<u32>("greenSet").unwrap(), 129);
+        assert_eq!(result.get::<u32>("blue").unwrap(), 108);
+        assert_eq!(result.get::<u32>("blueSet").unwrap(), 129);
+        assert_eq!(result.get::<u32>("alpha").unwrap(), 255);
+        assert_eq!(result.get::<u32>("alphaSet").unwrap(), 129);
+        assert_eq!(result.get::<u32>("wrapped").unwrap(), 255);
+        assert_eq!(result.get::<u32>("truncated").unwrap(), 129);
+    }
+
+    #[test]
+    fn color_opacity_lerp_and_float_conversion_match_cpp() {
+        let lua = color_lua();
+        let result: Table = lua
+            .load(
+                r#"
+                local color = Color.rgba(225, 48, 108, 255)
+                local sixtyPercent = Color.opacity(color, 0.6)
+                local floats = Color.toFloat(Color.rgba(255, 128, 0, 64))
+                return {
+                    opaque = Color.opacity(color),
+                    sixtyPercent = Color.opacity(sixtyPercent),
+                    sixtyPercentAlpha = Color.alpha(sixtyPercent),
+                    clampedLow = Color.alpha(Color.opacity(color, -1)),
+                    clampedHigh = Color.alpha(Color.opacity(color, 2)),
+                    halfway = Color.lerp(Color.rgb(0, 0, 0), Color.rgb(255, 255, 255), 0.5),
+                    extrapolatedLow = Color.lerp(Color.rgb(64, 64, 64), Color.rgb(255, 255, 255), -1),
+                    extrapolatedHigh = Color.lerp(Color.rgb(0, 0, 0), Color.rgb(192, 192, 192), 2),
+                    floats = floats,
+                }
+                "#,
+            )
+            .eval()
+            .expect("Color opacity/lerp script runs");
+
+        assert_eq!(result.get::<f64>("opaque").unwrap(), 1.0);
+        assert!((result.get::<f64>("sixtyPercent").unwrap() - 0.6).abs() < 1e-6);
+        assert_eq!(result.get::<u32>("sixtyPercentAlpha").unwrap(), 153);
+        assert_eq!(result.get::<u32>("clampedLow").unwrap(), 0);
+        assert_eq!(result.get::<u32>("clampedHigh").unwrap(), 255);
+        assert_eq!(result.get::<u32>("halfway").unwrap(), 0xff80_8080);
+        assert_eq!(result.get::<u32>("extrapolatedLow").unwrap(), 0xff00_0000);
+        assert_eq!(result.get::<u32>("extrapolatedHigh").unwrap(), 0xffff_ffff);
+
+        let floats = result.get::<Table>("floats").unwrap();
+        assert_eq!(floats.get::<f64>(1).unwrap(), 1.0);
+        assert_eq!(floats.get::<f64>(2).unwrap(), 128.0 / 255.0);
+        assert_eq!(floats.get::<f64>(3).unwrap(), 0.0);
+        assert_eq!(floats.get::<f64>(4).unwrap(), 64.0 / 255.0);
+    }
+}
+
+#[cfg(test)]
+mod artboard_owner_tests {
+    use super::*;
+    use nuxie_runtime::{ScriptError, ScriptViewModel, ScriptViewModelProperty};
+
+    struct TestScriptArtboard {
+        model: ScriptViewModel,
+    }
+
+    impl ScriptArtboard for TestScriptArtboard {
+        fn width(&self) -> f32 {
+            0.0
+        }
+
+        fn height(&self) -> f32 {
+            0.0
+        }
+
+        fn frame_origin(&self) -> bool {
+            false
+        }
+
+        fn set_width(&mut self, _width: f32) {}
+
+        fn set_height(&mut self, _height: f32) {}
+
+        fn set_frame_origin(&mut self, _frame_origin: bool) {}
+
+        fn data(&self) -> Option<ScriptViewModel> {
+            Some(self.model.clone())
+        }
+
+        fn instance(
+            &self,
+            _view_model: Option<ScriptViewModel>,
+        ) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
+            Err(ScriptError::new("not used by owner-lifetime test"))
+        }
+
+        fn draw(
+            &mut self,
+            _factory: &mut dyn RenderFactory,
+            _renderer: &mut dyn Renderer,
+        ) -> std::result::Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    fn trigger_model() -> (ScriptViewModel, String) {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets/script_create_viewmodel_instance.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        let file = nuxie_binary::read_runtime_file(&bytes).expect("fixture parses");
+        nuxie_runtime::script_view_models(&file)
+            .into_values()
+            .find_map(|model| {
+                let trigger = model.properties().iter().find_map(|(name, kind)| {
+                    (*kind == ScriptViewModelProperty::Trigger).then(|| name.clone())
+                })?;
+                Some((model.named_instance(None)?, trigger))
+            })
+            .expect("fixture has a trigger model")
+    }
+
+    #[test]
+    fn scripted_artboard_keeps_its_bound_instance_registered_for_its_lifetime() {
+        let (model, trigger) = trigger_model();
+        let context = ScriptViewModelFrameContext::default();
+        let artboard = ScriptedArtboard::new(
+            Box::new(TestScriptArtboard {
+                model: model.clone(),
+            }),
+            RendererBindings::new(context.clone()),
+        );
+
+        assert!(model.fire_trigger(&trigger));
+        assert!(context.advance_detached());
+        assert_eq!(model.trigger(&trigger), Some(0));
+
+        drop(artboard);
+        assert!(model.fire_trigger(&trigger));
+        assert!(!context.advance_detached());
+        assert_eq!(model.trigger(&trigger), Some(1));
+    }
+
+    #[test]
+    fn scripted_child_artboard_advance_does_not_consume_detached_view_models() {
+        let (model, trigger) = trigger_model();
+        let context = ScriptViewModelFrameContext::default();
+        let artboard = ScriptedArtboard::new(
+            Box::new(TestScriptArtboard {
+                model: model.clone(),
+            }),
+            RendererBindings::new(context.clone()),
+        );
+        let lua = Lua::new();
+        let userdata = lua
+            .create_userdata(artboard)
+            .expect("scripted artboard userdata");
+        lua.globals()
+            .set("child", userdata)
+            .expect("publish scripted child");
+
+        assert!(model.fire_trigger(&trigger));
+        lua.load("child:advance(0)")
+            .exec()
+            .expect("child advance succeeds");
+        assert_eq!(model.trigger(&trigger), Some(1));
+
+        assert!(context.advance_detached());
+        assert_eq!(model.trigger(&trigger), Some(0));
     }
 }

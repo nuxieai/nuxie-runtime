@@ -29,6 +29,11 @@ fn main() {
     } else {
         "none"
     };
+    let luaur_version = if std::env::var_os("CARGO_FEATURE_APPLE_PRODUCT").is_some() {
+        "\"0.1.8\""
+    } else {
+        "null"
+    };
     let provenance = format!(
         concat!(
             "{{\"schemaVersion\":1,\"runtimeVersion\":\"{}\",",
@@ -37,7 +42,7 @@ fn main() {
             "\"sourceRevision\":\"{}\",\"target\":\"{}\",",
             "\"profile\":\"{}\",\"rustc\":\"{}\",",
             "\"features\":\"{}\",\"wgpuVersion\":\"30.0.0\",",
-            "\"luaurVersion\":null}}"
+            "\"luaurVersion\":{}}}"
         ),
         env!("CARGO_PKG_VERSION"),
         json_escape(&revision),
@@ -45,6 +50,7 @@ fn main() {
         json_escape(&profile),
         json_escape(&rustc),
         features,
+        luaur_version,
     );
     println!("cargo:rustc-env=NUX_RUNTIME_BUILD_PROVENANCE={provenance}");
 

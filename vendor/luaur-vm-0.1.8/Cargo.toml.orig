@@ -1,0 +1,25 @@
+[package]
+name = "luaur-vm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "The Luau register virtual machine and standard library (Rust)."
+keywords = ["luau", "lua", "vm", "interpreter", "bytecode"]
+categories = ["compilers", "emulators"]
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+luaur-common = { path = "../luaur-common", version = "0.1.8" }
+
+[features]
+default = ["std"]
+std = []
+native = ["std"]
+cli = ["native"]
+native-codegen = ["native"]
+wasm = ["dep:wasm-bindgen"]

@@ -43,6 +43,26 @@ simulator_dir="${build_root}/simulator"
 xcframework_path="${output_root}/NuxieRuntime.xcframework"
 archive_path="${output_root}/NuxieRuntime.xcframework.zip"
 metadata_path="${output_root}/artifact.json"
+license_path="${xcframework_path}/LICENSE"
+third_party_notices_path="${xcframework_path}/THIRD_PARTY_NOTICES.md"
+luaur_version="$(
+    awk '
+        $0 == "name = \"luaur-vm\"" { found = 1; next }
+        found && /^version = / {
+            value = $0
+            sub(/^version = \"/, "", value)
+            sub(/\"$/, "", value)
+            print value
+            exit
+        }
+        found && /^\[\[package\]\]/ { exit 1 }
+    ' "${repo_root}/Cargo.lock"
+)"
+
+if [[ -z "${luaur_version}" ]]; then
+    echo "cannot determine the pinned luaur-vm version from Cargo.lock" >&2
+    exit 10
+fi
 
 if [[ ! -x "${rust_llvm_nm}" ]]; then
     echo "missing llvm-nm for Rust toolchain ${rust_toolchain}" >&2
@@ -155,6 +175,10 @@ xcodebuild -create-xcframework \
     -library "${simulator_library}" \
     -headers "${headers_dir}" \
     -output "${xcframework_path}"
+
+phase "Attach license notices"
+cp "${repo_root}/LICENSE" "${license_path}"
+cp "${repo_root}/THIRD_PARTY_NOTICES.md" "${third_party_notices_path}"
 report_disk
 
 phase "Archive the XCFramework"
@@ -163,10 +187,11 @@ checksum="$(swift package compute-checksum "${archive_path}")"
 report_disk
 
 phase "Write artifact provenance"
-printf '{\n  "schemaVersion": 1,\n  "abiMajor": %s,\n  "abiMinor": %s,\n  "runtimeVersion": "%s",\n  "sourceRevision": "%s",\n  "buildProfile": "%s",\n  "rustToolchain": "%s",\n  "xcodeVersion": "%s",\n  "xcodeBuild": "%s",\n  "iphoneOSSDKVersion": "%s",\n  "iphoneOSSDKBuild": "%s",\n  "iphoneSimulatorSDKVersion": "%s",\n  "iphoneSimulatorSDKBuild": "%s",\n  "minimumIOSVersion": "%s",\n  "swiftPackageChecksum": "%s"\n}\n' \
+printf '{\n  "schemaVersion": 1,\n  "abiMajor": %s,\n  "abiMinor": %s,\n  "runtimeVersion": "%s",\n  "luaurVersion": "%s",\n  "sourceRevision": "%s",\n  "buildProfile": "%s",\n  "rustToolchain": "%s",\n  "xcodeVersion": "%s",\n  "xcodeBuild": "%s",\n  "iphoneOSSDKVersion": "%s",\n  "iphoneOSSDKBuild": "%s",\n  "iphoneSimulatorSDKVersion": "%s",\n  "iphoneSimulatorSDKBuild": "%s",\n  "minimumIOSVersion": "%s",\n  "thirdPartyNoticesPath": "NuxieRuntime.xcframework/THIRD_PARTY_NOTICES.md",\n  "swiftPackageChecksum": "%s"\n}\n' \
     "$(sed -n 's/^#define NUX_RUNTIME_ABI_MAJOR //p' "${headers_dir}/nux_runtime.generated.h")" \
     "$(sed -n 's/^#define NUX_RUNTIME_ABI_MINOR //p' "${headers_dir}/nux_runtime.generated.h")" \
     "$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${repo_root}/crates/nux-apple-runtime/Cargo.toml" | head -1)" \
+    "${luaur_version}" \
     "${runtime_revision}" \
     "${profile}" \
     "${rust_toolchain}" \

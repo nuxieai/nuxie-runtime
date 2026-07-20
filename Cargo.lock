@@ -872,8 +872,6 @@ dependencies = [
 [[package]]
 name = "luaur-common"
 version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d9c24d960012cf14bd4cfd056a89d41758d5548305e91552fc71aa0318edae7"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
@@ -906,8 +904,6 @@ dependencies = [
 [[package]]
 name = "luaur-vm"
 version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "945d6993538f99bc25a424b7a7a55b9db953d609f7fc869e6d80495326e46ae2"
 dependencies = [
  "luaur-common",
 ]
@@ -1027,6 +1023,7 @@ name = "nuxie"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ed25519-dalek",
  "luaur-common",
  "luaur-compiler",
  "nuxie-binary",
@@ -1037,6 +1034,9 @@ dependencies = [
  "nuxie-runtime",
  "nuxie-schema",
  "nuxie-scripting",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

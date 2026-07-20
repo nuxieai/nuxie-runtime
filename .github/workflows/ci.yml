@@ -20,15 +20,12 @@ env:
   DEPOT_TOOLS_REF: 1709e20d5ca2afe97bfa726168719c3b77eb9883
 
 jobs:
-  # Bootstrap safely: this PR's reusable workflow is not trusted by the
-  # selected runner group yet, so every pull request runs on GitHub-hosted
-  # macOS. Once this file is on main, callers can pin that protected reusable
-  # workflow and let it route same-repository PRs to the Nuxie runner pool.
+  # Pin the immutable, administrator-reviewed workflow boundary. Its internal
+  # event check keeps fork pull requests on GitHub-hosted macOS while trusted
+  # same-repository changes can use the selected Nuxie runner group.
   apple-runtime-ci:
     name: Apple runtime
-    uses: ./.github/workflows/_trusted-macos.yml
-    with:
-      force_hosted: ${{ github.event_name == 'pull_request' }}
+    uses: nuxieai/nuxie-runtime/.github/workflows/_trusted-macos.yml@a99754b0de18aadba25f29b1ee7a9b1727742a3f
 
   browser-renderer:
     name: Browser WebGPU and WebGL2

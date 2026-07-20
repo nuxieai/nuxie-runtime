@@ -5633,7 +5633,14 @@ impl ArtboardInstance {
         // width/height are pushed through non-Node containers into parametric
         // paths before those paths build render geometry.
         let mut current_local = self.component(path_local)?.parent_local?;
+        let mut visited = BTreeSet::new();
         loop {
+            // A malformed-but-accepted file can make this parent chain cyclic.
+            // Match the topology guards in `components.rs`: terminate as if
+            // the chain ended instead of hanging the embedding application.
+            if !visited.insert(current_local) {
+                return None;
+            }
             let component = self.component(current_local)?;
             match component.type_name {
                 "LayoutComponent" => {
@@ -20616,7 +20623,13 @@ fn runtime_nsliced_node_layout_control_size(
         .iter()
         .find(|component| component.local_id == nsliced_local)?
         .parent_local?;
+    let mut visited = BTreeSet::new();
     loop {
+        // Same malformed parent-cycle boundary as
+        // `runtime_layout_control_size_for_path` above.
+        if !visited.insert(current_local) {
+            return None;
+        }
         let component = graph
             .components
             .iter()
@@ -23432,6 +23445,51 @@ mod tests {
                 )
                 .is_empty(),
             "the authored transform must not be used in place of the settled layout transform"
+        );
+    }
+
+    #[test]
+    fn cyclic_parametric_path_parent_chain_falls_back_without_layout_control() {
+        let bytes = synthetic_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let local_for_type = |type_name| {
+            instance
+                .components
+                .iter()
+                .find(|component| component.type_name == type_name)
+                .unwrap_or_else(|| panic!("fixture has a {type_name}"))
+                .local_id
+        };
+        let rectangle_local = local_for_type("Rectangle");
+        let fill_local = local_for_type("Fill");
+        let solid_color_local = local_for_type("SolidColor");
+
+        instance
+            .components
+            .iter_mut()
+            .find(|component| component.local_id == rectangle_local)
+            .expect("fixture rectangle is instantiated")
+            .parent_local = Some(fill_local);
+        instance
+            .components
+            .iter_mut()
+            .find(|component| component.local_id == fill_local)
+            .expect("fixture fill is instantiated")
+            .parent_local = Some(solid_color_local);
+        instance
+            .components
+            .iter_mut()
+            .find(|component| component.local_id == solid_color_local)
+            .expect("fixture solid color is instantiated")
+            .parent_local = Some(fill_local);
+
+        assert_eq!(
+            instance.runtime_layout_control_size_for_path(rectangle_local, &BTreeMap::new()),
+            None,
+            "a cyclic non-layout parent chain must use the authored path size fallback"
         );
     }
 

@@ -919,7 +919,10 @@ NuxStatus nux_apple_surface_detach(const struct NuxAppleSurface *surface,
 void nux_apple_surface_free(struct NuxAppleSurface *surface);
 
 /**
- * Reattaches logical presentation state after a detach.
+ * Reattaches logical presentation state after a detach. If the session's GPU
+ * domain reported device loss, this call transactionally replaces the
+ * session's renderer and presentation resources, refreshing the shared base
+ * device when needed while preserving logical flow state and factory address.
  *
  * # Safety
  *

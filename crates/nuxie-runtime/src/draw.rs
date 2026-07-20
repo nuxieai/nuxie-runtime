@@ -2,17 +2,18 @@ use anyhow::{Context, Result};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use nuxie_graph::{
     ArtboardGraph, ClippingShapeNode, DashNode, DrawableOrderKind, DrawableOrderNode, FeatherNode,
-    GradientStopNode, MeshGeometryNode, MeshVertexNode, NSlicerAxisNode, ParametricPathNode,
-    PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode,
+    GradientStopNode, MeshGeometryNode, MeshVertexNode, NSlicerAxisNode, NSlicerDetailsNode,
+    ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode,
     ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
     ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
 };
 use nuxie_render_api::{
     Aabb as RenderAabb, BlendMode as RenderBlendMode, Factory as RenderFactory,
     FillRule as RenderFillRule, ImageDecodeError, ImageSampler as RenderImageSampler,
-    Mat2D as RenderMat2D, PathVerb as RenderPathVerb, RawPath, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
-    Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
+    Mat2D as RenderMat2D, PathVerb as RenderPathVerb, RawPath, RawPathBuilder, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
+    RenderShader, Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin,
+    Vec2D as RenderVec2D,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
@@ -23,11 +24,13 @@ use taffy::prelude::{
 };
 use taffy::style::Direction as TaffyDirection;
 
+use crate::artboard::RuntimeLegacyImageLayoutScaleKey;
 use crate::properties::{
-    RuntimeLayoutComputedProperty, cached_property_key_for_name, property_key_for_name,
-    runtime_object_explicit_bool_property_by_key, runtime_object_explicit_double_property_by_key,
-    runtime_object_explicit_uint_property_by_key, runtime_object_uint_property_by_key,
-    shape_paint_is_visible_property_key, solid_color_value_property_key,
+    RuntimeLayoutComputedProperty, artboard_index_for_graph, cached_property_key_for_name,
+    property_key_for_name, runtime_object_explicit_bool_property_by_key,
+    runtime_object_explicit_double_property_by_key, runtime_object_explicit_uint_property_by_key,
+    runtime_object_uint_property_by_key, shape_paint_is_visible_property_key,
+    solid_color_value_property_key,
 };
 use crate::scripting::{ScriptNode, script_paint_for_shape};
 use crate::text::{
@@ -37,7 +40,7 @@ use crate::text::{
     static_text_layout_measure_bounds, static_text_selection_rects,
     text_input_layout_measure_bounds,
 };
-use crate::{ArtboardInstance, ComponentDirt, Mat2D};
+use crate::{ArtboardInstance, ComponentDirt, Mat2D, TransformProperty};
 
 // Nested-artboard cycle guard (`nested_ancestors`).
 //
@@ -76,6 +79,12 @@ enum RuntimeGradientPaintFilter {
     OnlyRootArtboard,
 }
 
+#[derive(Clone, Copy)]
+enum RuntimeComponentListPreparationPhase {
+    Initial,
+    DeferredVirtualized,
+}
+
 impl RuntimeGradientPaintFilter {
     fn includes_container(self, container: &ShapePaintContainerNode) -> bool {
         match self {
@@ -109,6 +118,9 @@ fn runtime_draw_property_key_for_name(type_name: &str, property_name: &str) -> O
             cached_runtime_property_key!("WorldTransformComponent", "parentId")
         }
         ("Fill", "fillRule") => cached_runtime_property_key!("Fill", "fillRule"),
+        ("ClippingShape", "fillRule") => {
+            cached_runtime_property_key!("ClippingShape", "fillRule")
+        }
         ("Stroke", "thickness") => {
             static KEY: OnceLock<Option<u16>> = OnceLock::new();
             cached_property_key_for_name(&KEY, "Stroke", "thickness")
@@ -531,6 +543,34 @@ fn runtime_nested_artboard_layout_property_key_for_name(property_name: &str) -> 
     }
 }
 
+fn runtime_component_list_override_property_key_for_name(property_name: &str) -> Option<u16> {
+    match property_name {
+        "artboardId" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "artboardId")
+        }
+        "instanceWidth" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "instanceWidth")
+        }
+        "instanceHeight" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "instanceHeight")
+        }
+        "instanceWidthUnitsValue" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "instanceWidthUnitsValue")
+        }
+        "instanceHeightUnitsValue" => cached_runtime_property_key!(
+            "ArtboardComponentListOverride",
+            "instanceHeightUnitsValue"
+        ),
+        "instanceWidthScaleType" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "instanceWidthScaleType")
+        }
+        "instanceHeightScaleType" => {
+            cached_runtime_property_key!("ArtboardComponentListOverride", "instanceHeightScaleType")
+        }
+        _ => property_key_for_name("ArtboardComponentListOverride", property_name),
+    }
+}
+
 impl ArtboardInstance {
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawCommand> {
         let layout_bounds = self.runtime_taffy_layout_bounds(graph, None);
@@ -635,7 +675,12 @@ impl ArtboardInstance {
                             runtime_path_contains(
                                 commands.as_slice(),
                                 point,
-                                runtime_geometry_fill_rule(clipping_shape.fill_rule),
+                                runtime_geometry_fill_rule(
+                                    runtime_live_clipping_shape_fill_rule_value(
+                                        self,
+                                        clipping_shape,
+                                    ),
+                                ),
                             )
                         })
                         .unwrap_or(true);
@@ -765,14 +810,14 @@ impl ArtboardInstance {
             let Some(local_id) = command.local_id else {
                 continue;
             };
-            let shape_world = command.world_transform.unwrap_or_else(|| {
-                cache.paths.component_world_transform_with_bounds(
-                    self,
-                    graph,
-                    local_id,
-                    layout_bounds,
-                )
-            });
+            let shape_world = runtime_live_command_world_transform(
+                self,
+                graph,
+                command,
+                layout_bounds,
+                &mut cache.paths,
+                prepared.world_dependent,
+            );
             if command.shape_paints.iter().any(|paint| {
                 runtime_geometry_shape_paint_contains(runtime, self, paint, shape_world, point)
             }) {
@@ -1007,7 +1052,28 @@ impl ArtboardInstance {
         sorted_drawable_order: &[SortedDrawableNode],
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Vec<RuntimeDrawCommand> {
-        let mut commands = Vec::new();
+        self.draw_commands_with_sorted_drawable_order_reusing(
+            graph,
+            layout_bounds,
+            sorted_drawable_order,
+            path_cache,
+            Vec::new(),
+        )
+    }
+
+    /// Rebuild a prepared command list while retaining its outer allocation
+    /// when the caller can hand it back exclusively. Command contents still
+    /// come from the current instance, so every prepared-frame invalidation
+    /// keeps its existing output and dirt semantics.
+    fn draw_commands_with_sorted_drawable_order_reusing(
+        &self,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        sorted_drawable_order: &[SortedDrawableNode],
+        path_cache: &mut RuntimeRenderPathCache,
+        mut commands: Vec<RuntimeDrawCommand>,
+    ) -> Vec<RuntimeDrawCommand> {
+        commands.clear();
         let mut pending_clip_operations = Vec::<&SortedDrawableNode>::new();
         let mut empty_clips = 0i32;
 
@@ -1176,6 +1242,84 @@ impl ArtboardInstance {
         )
     }
 
+    /// Capture the shader-only state C++ observes immediately before a
+    /// `NestedArtboardLayout` transfers layout ownership to its mounted child.
+    ///
+    /// The returned frame is deliberately independent of `ArtboardInstance`:
+    /// it cannot retain or execute scripts, mutate view models, traverse a
+    /// nested tree, or provide geometry for drawing.
+    pub(crate) fn capture_initial_nested_layout_paint_frame(
+        &self,
+    ) -> RuntimeInitialNestedLayoutPaintFrame {
+        let Some(graph) = self.runtime_graph() else {
+            return RuntimeInitialNestedLayoutPaintFrame::default();
+        };
+        let mut render_cache = RuntimeRenderPathCache::default();
+        let prepared = render_cache.prepared_artboard_frame(self, graph, self.runtime_file());
+        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        let gradient_preparation = render_cache.gradient_preparation_frame(graph);
+        let mut seen = Vec::new();
+        let mut gradients = Vec::new();
+
+        for local_id in gradient_preparation.dependency_order.iter().copied() {
+            let Some(paints) = gradient_preparation.paints_by_mutator.get(&local_id) else {
+                continue;
+            };
+            for paint_ref in paints {
+                let Some(container) = graph.shape_paint_containers.get(paint_ref.container_index)
+                else {
+                    continue;
+                };
+                let Some(paint) = container.paints.get(paint_ref.paint_index) else {
+                    continue;
+                };
+                if self.runtime_gradient_paint_is_collapsed(container, paint)
+                    || !runtime_mark_seen_u32(&mut seen, paint.global_id)
+                {
+                    continue;
+                }
+                let opacity_local = shape_paint_container_opacity_local(graph, container.local_id);
+                let shape_world = runtime_shape_paint_container_world_transform(
+                    self,
+                    graph,
+                    container,
+                    layout_bounds,
+                    &mut render_cache,
+                );
+                let render_opacity = runtime_retained_gradient_render_opacity(
+                    self,
+                    opacity_local,
+                    paint.global_id,
+                    &render_cache,
+                );
+                let command = runtime_prepare_gradient_paint_command(
+                    self,
+                    graph,
+                    render_opacity,
+                    container,
+                    paint,
+                    shape_world,
+                    layout_bounds,
+                );
+                let Some(paint_state) = command.paint_state else {
+                    continue;
+                };
+                if matches!(paint_state, RuntimeShapePaintState::SolidColor { .. }) {
+                    continue;
+                }
+                gradients.push(RuntimeInitialGradientPaintState {
+                    paint_global_id: paint.global_id,
+                    paint_state,
+                    inherited_opacity: render_opacity,
+                    opacity_local,
+                    paint_space_transform: command.paint_space_transform,
+                });
+            }
+        }
+
+        RuntimeInitialNestedLayoutPaintFrame { gradients }
+    }
+
     fn prepare_static_artboard_paints_with_filter(
         &self,
         runtime: &RuntimeFile,
@@ -1227,10 +1371,16 @@ impl ArtboardInstance {
                     layout_bounds,
                     render_cache,
                 );
+                let render_opacity = runtime_retained_gradient_render_opacity(
+                    self,
+                    opacity_local,
+                    paint.global_id,
+                    render_cache,
+                );
                 let runtime_paint = runtime_prepare_gradient_paint_command(
                     self,
                     graph,
-                    opacity_local,
+                    render_opacity,
                     container,
                     paint,
                     shape_world,
@@ -1270,24 +1420,67 @@ impl ArtboardInstance {
         paint_cache: &mut RuntimeRenderPaintCache,
         render_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
+        // C++ Artboard::drawInternal returns before touching retained paths
+        // when the artboard itself is transparent. Besides avoiding needless
+        // work, this keeps an as-yet unsettled instance from retaining local
+        // paths against its all-identity construction transforms.
+        if self
+            .component(0)
+            .is_some_and(|component| component.transform.render_opacity == 0.0)
+        {
+            return Ok(());
+        }
+
+        if !paint_cache.needs_paint_preparation(self, graph) {
+            return Ok(());
+        }
+
+        if paint_cache.paint_preparation_is_noop {
+            return self.prepare_static_artboard_slice_meshes(
+                runtime,
+                graph,
+                factory,
+                &paint_cache.images,
+                &mut paint_cache.meshes,
+                render_cache,
+            );
+        }
+
+        let nested_structure_epoch = self.nested_structure_epoch();
+        if paint_cache.paint_preparation_is_solid_only_tree
+            && nested_structure_epoch.is_some()
+            && paint_cache.solid_only_tree_structure_epoch == nested_structure_epoch
+        {
+            return self.prepare_static_artboard_slice_meshes(
+                runtime,
+                graph,
+                factory,
+                &paint_cache.images,
+                &mut paint_cache.meshes,
+                render_cache,
+            );
+        }
+
         // Seed the nested-artboard cycle guard with the root artboard's global id
         // (see nested_artboard_cycle: the ancestor set that mirrors C++
         // Artboard::isAncestor).
-        let nested_ancestors = BTreeSet::from([graph.global_id]);
-        self.prepare_static_artboard_tree_paints_internal(
-            runtime,
-            graph,
-            artboards,
-            factory,
-            &mut paint_cache.paints,
-            Some(&mut paint_cache.paint_configurations),
-            None,
-            Some(&mut paint_cache.nested_artboards),
-            render_cache,
-            true,
-            false,
-            &nested_ancestors,
-        )?;
+        let nested_ancestors = [graph.global_id];
+        if paint_cache.requires_nested_layout_prepass {
+            self.prepare_static_artboard_tree_paints_internal(
+                runtime,
+                graph,
+                artboards,
+                factory,
+                &mut paint_cache.paints,
+                Some(&mut paint_cache.paint_configurations),
+                Some(&mut paint_cache.preparation_without_nested_layout),
+                Some(&mut paint_cache.nested_artboards),
+                render_cache,
+                true,
+                false,
+                &nested_ancestors,
+            )?;
+        }
         self.prepare_static_artboard_tree_paints_internal(
             runtime,
             graph,
@@ -1301,6 +1494,48 @@ impl ArtboardInstance {
             true,
             true,
             &nested_ancestors,
+        )?;
+        if paint_cache.paint_preparation_is_solid_only_tree {
+            paint_cache.solid_only_tree_structure_epoch = nested_structure_epoch;
+        }
+        self.prepare_static_artboard_slice_meshes(
+            runtime,
+            graph,
+            factory,
+            &paint_cache.images,
+            &mut paint_cache.meshes,
+            render_cache,
+        )
+    }
+
+    fn prepare_static_artboard_slice_meshes(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        factory: &mut dyn RenderFactory,
+        image_by_global: &RuntimeRenderImages,
+        mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
+        path_cache: &mut RuntimeRenderPathCache,
+    ) -> Result<()> {
+        // C++ only enters NSlicer mesh preparation for authored slicers. Keep
+        // the empty case ahead of prepared-frame acquisition so ordinary
+        // artboards, including mounted children, do no slice work at draw
+        // time.
+        if graph.n_slicer_details.is_empty() {
+            return Ok(());
+        }
+        let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        runtime_prepare_slice_meshes(
+            runtime,
+            self,
+            graph,
+            prepared.commands.as_slice(),
+            layout_bounds,
+            factory,
+            image_by_global,
+            mesh_by_local,
+            path_cache,
         )
     }
 
@@ -1319,21 +1554,20 @@ impl ArtboardInstance {
         render_cache: &mut RuntimeRenderPathCache,
         defer_root_layout_gradients: bool,
         apply_nested_layout_bounds: bool,
-        nested_ancestors: &BTreeSet<u32>,
+        nested_ancestors: &[u32],
     ) -> Result<()> {
         let preparation_graph_global_id = graph.global_id;
         let preparation_instance_epoch = self.cache_epoch();
         // World-space gradients must reconfigure when only world transforms
         // moved (prepared_epoch); local-space-only graphs keep the pure
         // cache_epoch key so the M7 skip still holds.
-        let preparation_world_epoch = if render_cache
-            .gradient_preparation_frame(graph)
-            .has_world_space_gradient_paints
-        {
-            self.prepared_epoch()
-        } else {
-            0
-        };
+        let preparation_world_epoch =
+            if render_cache.gradient_preparation_has_world_space_paints(graph) {
+                self.prepared_epoch()
+            } else {
+                0
+            };
+        let preparation_tree_epoch = self.tree_paint_preparation_epoch();
         if paint_preparation
             .as_ref()
             .and_then(|preparation| preparation.as_ref())
@@ -1342,6 +1576,7 @@ impl ArtboardInstance {
                     preparation_graph_global_id,
                     preparation_instance_epoch,
                     preparation_world_epoch,
+                    preparation_tree_epoch,
                 )
             })
         {
@@ -1357,8 +1592,9 @@ impl ArtboardInstance {
             graph_global_id: preparation_graph_global_id,
             instance_epoch: preparation_instance_epoch,
             world_epoch: preparation_world_epoch,
-            nested_epoch: if defer_layout_gradients {
-                self.runtime_nested_paint_preparation_epoch(commands)
+            nested_epoch: if has_nested_artboards {
+                preparation_tree_epoch
+                    .unwrap_or_else(|| self.runtime_nested_paint_preparation_epoch(commands))
             } else {
                 0
             },
@@ -1413,19 +1649,6 @@ impl ArtboardInstance {
         )?;
 
         for command in commands {
-            if command.object_kind == RuntimeDrawCommandObjectKind::ArtboardComponentList {
-                self.prepare_static_component_list_paints(
-                    runtime,
-                    artboards,
-                    factory,
-                    nested_paint_caches.as_deref_mut(),
-                    render_cache,
-                    command,
-                    apply_nested_layout_bounds,
-                    nested_ancestors,
-                )?;
-                continue;
-            }
             if command.referenced_artboard_global.is_none()
                 || !runtime_draw_command_is_nested_artboard(&command)
             {
@@ -1445,6 +1668,22 @@ impl ArtboardInstance {
                 nested_ancestors,
             )?;
         }
+
+        // C++ updates nested artboard hosts recursively before advancing the
+        // owning artboard's DataBindContainer. A nested host can therefore
+        // materialize its component-list children before a list on this
+        // artboard, independent of draw order. Preserve that construction
+        // order because render-paint identity belongs to each child instance.
+        self.prepare_static_component_list_paints_in_lifecycle_order(
+            runtime,
+            artboards,
+            factory,
+            nested_paint_caches.as_deref_mut(),
+            render_cache,
+            commands,
+            apply_nested_layout_bounds,
+            nested_ancestors,
+        )?;
 
         if let Some(preparation) = paint_preparation.as_deref_mut() {
             *preparation = Some(RuntimePaintPreparationFrame {
@@ -1470,6 +1709,69 @@ impl ArtboardInstance {
     }
 
     #[allow(clippy::too_many_arguments)]
+    fn prepare_static_component_list_paints_in_lifecycle_order(
+        &self,
+        runtime: &RuntimeFile,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        mut nested_paint_caches: Option<
+            &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        >,
+        render_cache: &mut RuntimeRenderPathCache,
+        commands: &[RuntimeDrawCommand],
+        apply_nested_layout_bounds: bool,
+        nested_ancestors: &[u32],
+    ) -> Result<()> {
+        let commands = runtime_component_list_preparation_commands(commands);
+        // C++ creates non-virtualized rows during the authored list update,
+        // while a virtualized list first mounts its seed row for layout and
+        // mounts the rest of the visible window after sibling list updates.
+        // Preserve that two-phase instance lifecycle because render-paint
+        // identity is allocated when each child artboard is created. C++ has
+        // mounted every row before its first gradient update, so allocate all
+        // phase-ordered paint caches before configuring any of them.
+        for phase in [
+            RuntimeComponentListPreparationPhase::Initial,
+            RuntimeComponentListPreparationPhase::DeferredVirtualized,
+        ] {
+            for command in &commands {
+                self.prepare_static_component_list_paints(
+                    runtime,
+                    artboards,
+                    factory,
+                    nested_paint_caches.as_deref_mut(),
+                    render_cache,
+                    command,
+                    apply_nested_layout_bounds,
+                    nested_ancestors,
+                    phase,
+                    true,
+                )?;
+            }
+        }
+        for phase in [
+            RuntimeComponentListPreparationPhase::Initial,
+            RuntimeComponentListPreparationPhase::DeferredVirtualized,
+        ] {
+            for command in &commands {
+                self.prepare_static_component_list_paints(
+                    runtime,
+                    artboards,
+                    factory,
+                    nested_paint_caches.as_deref_mut(),
+                    render_cache,
+                    command,
+                    apply_nested_layout_bounds,
+                    nested_ancestors,
+                    phase,
+                    false,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn prepare_static_component_list_paints(
         &self,
         runtime: &RuntimeFile,
@@ -1481,34 +1783,47 @@ impl ArtboardInstance {
         render_cache: &mut RuntimeRenderPathCache,
         command: &RuntimeDrawCommand,
         apply_nested_layout_bounds: bool,
-        nested_ancestors: &BTreeSet<u32>,
+        nested_ancestors: &[u32],
+        phase: RuntimeComponentListPreparationPhase,
+        preallocate_only: bool,
     ) -> Result<()> {
-        let Some(items) = command
-            .local_id
-            .and_then(|local_id| self.component_list_items.get(&local_id))
-        else {
+        let Some(local_id) = command.local_id else {
             return Ok(());
         };
-        for (item_index, item) in items.iter().enumerate() {
+        let Some(items) = self.component_list_items.get(&local_id) else {
+            return Ok(());
+        };
+        let is_virtualized =
+            crate::constraints::component_list_virtualization(self, local_id).is_some();
+        let (start, end) = match (phase, is_virtualized) {
+            (RuntimeComponentListPreparationPhase::Initial, true) => (0, items.len().min(1)),
+            (RuntimeComponentListPreparationPhase::Initial, false) => (0, items.len()),
+            (RuntimeComponentListPreparationPhase::DeferredVirtualized, true) => {
+                (items.len().min(1), items.len())
+            }
+            (RuntimeComponentListPreparationPhase::DeferredVirtualized, false) => (0, 0),
+        };
+        for item in &items[start..end] {
             if nested_ancestors.contains(&item.child.graph_global_id) {
                 continue;
             }
-            let Some(child_graph) = artboards
-                .iter()
-                .find(|graph| graph.global_id == item.child.graph_global_id)
-            else {
+            let Some(child_graph) = item.child.runtime_graph().or_else(|| {
+                artboards
+                    .iter()
+                    .find(|graph| graph.global_id == item.child.graph_global_id)
+            }) else {
                 continue;
             };
-            let mut child_ancestors = nested_ancestors.clone();
-            child_ancestors.insert(item.child.graph_global_id);
             let cache_key = component_list_render_cache_key(
                 command.global_id,
                 command.local_id,
                 item.child.graph_global_id,
-                item_index,
+                item.logical_index,
                 item.render_cache_revision,
             );
-            let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
+            let child_cache = render_cache
+                .nested_artboards
+                .get_or_insert_default(cache_key);
             if let Some(caches) = nested_paint_caches.as_deref_mut() {
                 if !caches.contains_key(&cache_key) {
                     caches.insert(
@@ -1520,6 +1835,20 @@ impl ArtboardInstance {
                             factory,
                         ),
                     );
+                }
+                if preallocate_only {
+                    let child_paint_cache = caches.entry(cache_key).or_default();
+                    item.child.preallocate_dynamic_artboard_tree_paints(
+                        runtime,
+                        child_graph,
+                        artboards,
+                        factory,
+                        &mut child_paint_cache.nested_artboards,
+                        child_cache,
+                        apply_nested_layout_bounds,
+                        nested_ancestors,
+                    )?;
+                    continue;
                 }
                 let child_paint_cache = caches.entry(cache_key).or_default();
                 item.child.prepare_static_artboard_tree_paints_internal(
@@ -1534,11 +1863,135 @@ impl ArtboardInstance {
                     child_cache,
                     true,
                     apply_nested_layout_bounds,
-                    &child_ancestors,
+                    nested_ancestors,
                 )?;
             }
         }
         Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn preallocate_dynamic_artboard_tree_paints(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        nested_paint_caches: &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        render_cache: &mut RuntimeRenderPathCache,
+        apply_nested_layout_bounds: bool,
+        nested_ancestors: &[u32],
+    ) -> Result<()> {
+        let prepared = render_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let commands = prepared.commands.as_slice();
+
+        // Binding a newly-created C++ list row immediately updates all of its
+        // nested hosts. Allocate those dynamically-selected artboards before
+        // constructing the next sibling row, but leave gradient configuration
+        // until every row has been mounted.
+        for command in commands {
+            if command.referenced_artboard_global.is_none()
+                || !runtime_draw_command_is_nested_artboard(command)
+            {
+                continue;
+            }
+            self.preallocate_dynamic_nested_artboard_tree_paints(
+                runtime,
+                artboards,
+                factory,
+                nested_paint_caches,
+                render_cache,
+                command,
+                apply_nested_layout_bounds,
+                nested_ancestors,
+            )?;
+        }
+
+        let component_lists = runtime_component_list_preparation_commands(commands);
+        for phase in [
+            RuntimeComponentListPreparationPhase::Initial,
+            RuntimeComponentListPreparationPhase::DeferredVirtualized,
+        ] {
+            for command in component_lists.iter().copied() {
+                self.prepare_static_component_list_paints(
+                    runtime,
+                    artboards,
+                    factory,
+                    Some(nested_paint_caches),
+                    render_cache,
+                    command,
+                    apply_nested_layout_bounds,
+                    nested_ancestors,
+                    phase,
+                    true,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn preallocate_dynamic_nested_artboard_tree_paints(
+        &self,
+        runtime: &RuntimeFile,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        nested_paint_caches: &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        render_cache: &mut RuntimeRenderPathCache,
+        command: &RuntimeDrawCommand,
+        apply_nested_layout_bounds: bool,
+        nested_ancestors: &[u32],
+    ) -> Result<()> {
+        let Some(nested_instance) = command
+            .local_id
+            .and_then(|local_id| self.nested_artboards.get(&local_id))
+        else {
+            return Ok(());
+        };
+        let referenced_artboard_global = nested_instance.child.graph_global_id;
+        let child_graph = self
+            .runtime_graph_for_global(referenced_artboard_global)
+            .or_else(|| {
+                artboards
+                    .iter()
+                    .find(|graph| graph.global_id == referenced_artboard_global)
+            })
+            .with_context(|| {
+                format!("missing nested artboard graph for global {referenced_artboard_global}")
+            })?;
+        let cache_key = nested_render_cache_key(
+            command.global_id,
+            command.local_id,
+            referenced_artboard_global,
+            nested_instance.render_cache_revision,
+        );
+        let child_cache = render_cache
+            .nested_artboards
+            .get_or_insert_default(cache_key);
+        if !nested_paint_caches.contains_key(&cache_key) {
+            nested_paint_caches.insert(
+                cache_key,
+                preallocate_render_paint_cache_for_artboard_instance(
+                    runtime,
+                    child_graph,
+                    artboards,
+                    factory,
+                ),
+            );
+        }
+        let child_paint_cache = nested_paint_caches.entry(cache_key).or_default();
+        nested_instance
+            .child
+            .preallocate_dynamic_artboard_tree_paints(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                &mut child_paint_cache.nested_artboards,
+                child_cache,
+                apply_nested_layout_bounds,
+                nested_ancestors,
+            )
     }
 
     fn runtime_nested_paint_preparation_epoch(&self, commands: &[RuntimeDrawCommand]) -> u64 {
@@ -1596,6 +2049,276 @@ impl ArtboardInstance {
         commands
     }
 
+    /// Consume only the one-shot pre-transfer shader frames still owned by
+    /// authoritative descendants. The ordinary paint pass deliberately does
+    /// not run here: the caller must preserve the intermediate parent shader
+    /// that C++ configures before continuing with final child paints.
+    #[allow(clippy::too_many_arguments)]
+    fn drain_pending_initial_nested_layout_paint_frames(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        paint_by_global: &mut RuntimeRenderPaints,
+        mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+        mut nested_paint_caches: Option<
+            &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        >,
+        render_cache: &mut RuntimeRenderPathCache,
+        nested_ancestors: &[u32],
+    ) -> Result<()> {
+        let prepared = render_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let commands = Arc::clone(&prepared.commands);
+        let layout_bounds = Arc::clone(&prepared.layout_bounds);
+
+        // Match the retained preparation table: first host insertion order,
+        // with the last command for duplicate draw proxies winning.
+        let mut nested_commands = Vec::new();
+        for command in commands.iter() {
+            if command.referenced_artboard_global.is_none()
+                || !runtime_draw_command_is_nested_artboard(command)
+            {
+                continue;
+            }
+            let Some(local_id) = command.local_id else {
+                continue;
+            };
+            runtime_upsert_nested_preparation_command(
+                &mut nested_commands,
+                local_id,
+                command.clone(),
+            );
+        }
+        if graph
+            .components
+            .iter()
+            .any(|component| component.type_name == "LayoutComponent")
+        {
+            for (local_id, command) in self.runtime_nested_artboard_preparation_commands_by_local(
+                graph,
+                layout_bounds.as_ref().as_ref(),
+                render_cache,
+            ) {
+                runtime_upsert_nested_preparation_command(&mut nested_commands, local_id, command);
+            }
+        }
+        for (_, command) in nested_commands {
+            self.drain_pending_initial_nested_layout_paint_host(
+                runtime,
+                artboards,
+                factory,
+                paint_by_global,
+                paint_configurations.as_deref_mut(),
+                nested_paint_caches.as_deref_mut(),
+                render_cache,
+                &command,
+                nested_ancestors,
+            )?;
+        }
+
+        // Component-list rows are mounted in two lifecycle phases. Walk their
+        // authoritative children in the same order so a nested-layout frame
+        // below a row cannot be stranded behind this early-return boundary.
+        let component_lists = runtime_component_list_preparation_commands(commands.as_slice());
+        for phase in [
+            RuntimeComponentListPreparationPhase::Initial,
+            RuntimeComponentListPreparationPhase::DeferredVirtualized,
+        ] {
+            for command in &component_lists {
+                let Some(local_id) = command.local_id else {
+                    continue;
+                };
+                let Some(items) = self.component_list_items.get(&local_id) else {
+                    continue;
+                };
+                let is_virtualized =
+                    crate::constraints::component_list_virtualization(self, local_id).is_some();
+                let (start, end) = match (phase, is_virtualized) {
+                    (RuntimeComponentListPreparationPhase::Initial, true) => {
+                        (0, items.len().min(1))
+                    }
+                    (RuntimeComponentListPreparationPhase::Initial, false) => (0, items.len()),
+                    (RuntimeComponentListPreparationPhase::DeferredVirtualized, true) => {
+                        (items.len().min(1), items.len())
+                    }
+                    (RuntimeComponentListPreparationPhase::DeferredVirtualized, false) => (0, 0),
+                };
+                for item in &items[start..end] {
+                    if nested_ancestors.contains(&item.child.graph_global_id) {
+                        continue;
+                    }
+                    let Some(child_graph) = item.child.runtime_graph().or_else(|| {
+                        artboards
+                            .iter()
+                            .find(|graph| graph.global_id == item.child.graph_global_id)
+                    }) else {
+                        continue;
+                    };
+                    let cache_key = component_list_render_cache_key(
+                        command.global_id,
+                        command.local_id,
+                        item.child.graph_global_id,
+                        item.logical_index,
+                        item.render_cache_revision,
+                    );
+                    let child_cache = render_cache
+                        .nested_artboards
+                        .get_or_insert_default(cache_key);
+                    if let Some(caches) = nested_paint_caches.as_deref_mut() {
+                        if !caches.contains_key(&cache_key) {
+                            caches.insert(
+                                cache_key,
+                                preallocate_render_paint_cache_for_artboard_instance(
+                                    runtime,
+                                    child_graph,
+                                    artboards,
+                                    factory,
+                                ),
+                            );
+                        }
+                        let child_paints = caches.entry(cache_key).or_default();
+                        item.child
+                            .drain_pending_initial_nested_layout_paint_frames(
+                                runtime,
+                                child_graph,
+                                artboards,
+                                factory,
+                                &mut child_paints.paints,
+                                Some(&mut child_paints.paint_configurations),
+                                Some(&mut child_paints.nested_artboards),
+                                child_cache,
+                                nested_ancestors,
+                            )?;
+                    } else {
+                        item.child
+                            .drain_pending_initial_nested_layout_paint_frames(
+                                runtime,
+                                child_graph,
+                                artboards,
+                                factory,
+                                paint_by_global,
+                                paint_configurations.as_deref_mut(),
+                                None,
+                                child_cache,
+                                nested_ancestors,
+                            )?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn drain_pending_initial_nested_layout_paint_host(
+        &self,
+        runtime: &RuntimeFile,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        paint_by_global: &mut RuntimeRenderPaints,
+        mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+        nested_paint_caches: Option<
+            &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+        >,
+        render_cache: &mut RuntimeRenderPathCache,
+        command: &RuntimeDrawCommand,
+        nested_ancestors: &[u32],
+    ) -> Result<()> {
+        let Some(nested) = command
+            .local_id
+            .and_then(|local_id| self.nested_artboards.get(&local_id))
+        else {
+            return Ok(());
+        };
+        let child_graph = nested.child.runtime_graph().or_else(|| {
+            artboards
+                .iter()
+                .find(|graph| graph.global_id == nested.child.graph_global_id)
+        });
+        let Some(child_graph) = child_graph else {
+            return Ok(());
+        };
+        let cache_key = nested_render_cache_key(
+            command.global_id,
+            command.local_id,
+            nested.child.graph_global_id,
+            nested.render_cache_revision,
+        );
+        let child_cache = render_cache
+            .nested_artboards
+            .get_or_insert_default(cache_key);
+        let pending_frame = (command.object_kind
+            == RuntimeDrawCommandObjectKind::NestedArtboardLayout)
+            .then(|| nested.initial_layout_paint_frame.borrow().clone())
+            .flatten();
+
+        if let Some(caches) = nested_paint_caches {
+            if !caches.contains_key(&cache_key) {
+                caches.insert(
+                    cache_key,
+                    preallocate_render_paint_cache_for_artboard_instance(
+                        runtime,
+                        child_graph,
+                        artboards,
+                        factory,
+                    ),
+                );
+            }
+            let child_paints = caches.entry(cache_key).or_default();
+            if let Some(mut frame) = pending_frame {
+                frame.apply_inherited_opacity_from(nested.child.as_ref());
+                runtime_configure_initial_nested_layout_paint_frame(
+                    frame,
+                    factory,
+                    &mut child_paints.paints,
+                    Some(&mut child_paints.paint_configurations),
+                    child_cache,
+                )?;
+                nested.initial_layout_paint_frame.replace(None);
+            }
+            nested
+                .child
+                .drain_pending_initial_nested_layout_paint_frames(
+                    runtime,
+                    child_graph,
+                    artboards,
+                    factory,
+                    &mut child_paints.paints,
+                    Some(&mut child_paints.paint_configurations),
+                    Some(&mut child_paints.nested_artboards),
+                    child_cache,
+                    nested_ancestors,
+                )?;
+        } else {
+            if let Some(mut frame) = pending_frame {
+                frame.apply_inherited_opacity_from(nested.child.as_ref());
+                runtime_configure_initial_nested_layout_paint_frame(
+                    frame,
+                    factory,
+                    paint_by_global,
+                    paint_configurations.as_deref_mut(),
+                    child_cache,
+                )?;
+                nested.initial_layout_paint_frame.replace(None);
+            }
+            nested
+                .child
+                .drain_pending_initial_nested_layout_paint_frames(
+                    runtime,
+                    child_graph,
+                    artboards,
+                    factory,
+                    paint_by_global,
+                    paint_configurations.as_deref_mut(),
+                    None,
+                    child_cache,
+                    nested_ancestors,
+                )?;
+        }
+        Ok(())
+    }
+
     fn prepare_static_nested_artboard_tree_paints(
         &self,
         runtime: &RuntimeFile,
@@ -1610,7 +2333,7 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         command: &RuntimeDrawCommand,
         apply_nested_layout_bounds: bool,
-        nested_ancestors: &BTreeSet<u32>,
+        nested_ancestors: &[u32],
     ) -> Result<()> {
         let nested_instance = command
             .local_id
@@ -1622,14 +2345,27 @@ impl ArtboardInstance {
         // Cycle guard (see `nested_ancestors` at the top of this module): if this
         // artboard is already an ancestor on the current descent path, descending
         // would loop -- terminate gracefully, mirroring C++ Artboard::isAncestor.
-        if nested_ancestors.contains(&referenced_artboard_global) {
+        if nested_instance.is_none() && nested_ancestors.contains(&referenced_artboard_global) {
             return Ok(());
         }
-        let mut child_ancestors = nested_ancestors.clone();
-        child_ancestors.insert(referenced_artboard_global);
-        let child_graph = artboards
-            .iter()
-            .find(|graph| graph.global_id == referenced_artboard_global)
+        let fallback_child_ancestors;
+        let child_ancestors = if nested_instance.is_some() {
+            nested_ancestors
+        } else {
+            fallback_child_ancestors = {
+                let mut ancestors = nested_ancestors.to_vec();
+                ancestors.push(referenced_artboard_global);
+                ancestors
+            };
+            fallback_child_ancestors.as_slice()
+        };
+        let child_graph = self
+            .runtime_graph_for_global(referenced_artboard_global)
+            .or_else(|| {
+                artboards
+                    .iter()
+                    .find(|graph| graph.global_id == referenced_artboard_global)
+            })
             .with_context(|| {
                 format!("missing nested artboard graph for global {referenced_artboard_global}")
             })?;
@@ -1639,7 +2375,9 @@ impl ArtboardInstance {
             referenced_artboard_global,
             nested_instance.map_or(0, |nested| nested.render_cache_revision),
         );
-        let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
+        let child_cache = render_cache
+            .nested_artboards
+            .get_or_insert_default(cache_key);
         let child_paint_caches = match nested_paint_caches {
             Some(caches) => {
                 if !caches.contains_key(&cache_key) {
@@ -1664,24 +2402,100 @@ impl ArtboardInstance {
             None => None,
         };
 
+        let initial_layout_paint_frame = if !apply_nested_layout_bounds
+            && command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout
+        {
+            nested_instance.and_then(|nested| nested.initial_layout_paint_frame.borrow().clone())
+        } else {
+            None
+        };
+        if let Some(mut frame) = initial_layout_paint_frame {
+            // Parent-to-child opacity settles after layout ownership transfers
+            // but before C++ creates this intermediate shader. Read the
+            // explicitly declared opacity locals from the one live mounted
+            // child at consumption time; no component arrays are copied.
+            if let Some(child) = nested_instance.map(|nested| nested.child.as_ref()) {
+                frame.apply_inherited_opacity_from(child);
+            }
+            if let Some((child_paints, child_configurations, _, child_nested_paints)) =
+                child_paint_caches
+            {
+                runtime_configure_initial_nested_layout_paint_frame(
+                    frame,
+                    factory,
+                    child_paints,
+                    Some(child_configurations),
+                    child_cache,
+                )?;
+                if let Some(nested) = nested_instance {
+                    nested.initial_layout_paint_frame.replace(None);
+                    nested
+                        .child
+                        .drain_pending_initial_nested_layout_paint_frames(
+                            runtime,
+                            child_graph,
+                            artboards,
+                            factory,
+                            child_paints,
+                            Some(child_configurations),
+                            child_nested_paints,
+                            child_cache,
+                            child_ancestors,
+                        )?;
+                }
+            } else {
+                runtime_configure_initial_nested_layout_paint_frame(
+                    frame,
+                    factory,
+                    paint_by_global,
+                    paint_configurations.as_deref_mut(),
+                    child_cache,
+                )?;
+                if let Some(nested) = nested_instance {
+                    nested.initial_layout_paint_frame.replace(None);
+                    nested
+                        .child
+                        .drain_pending_initial_nested_layout_paint_frames(
+                            runtime,
+                            child_graph,
+                            artboards,
+                            factory,
+                            paint_by_global,
+                            paint_configurations.as_deref_mut(),
+                            None,
+                            child_cache,
+                            child_ancestors,
+                        )?;
+                }
+            }
+            return Ok(());
+        }
+
         if let Some(child) = command
             .local_id
             .and_then(|local_id| self.nested_artboards.get(&local_id))
             .map(|nested| nested.child.as_ref())
         {
-            let layout_child;
-            let child = if apply_nested_layout_bounds
-                && command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout
+            let nested_layout_child;
+            let child = if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout
             {
-                let mut cloned = child.clone_for_transient_layout();
-                runtime_apply_nested_artboard_layout_child_bounds(
-                    &mut cloned,
-                    command,
-                    layout_bounds,
-                )?;
-                runtime_settle_nested_artboard_layout_child(&mut cloned);
-                layout_child = cloned;
-                &layout_child
+                if apply_nested_layout_bounds {
+                    // C++ settles the mounted occurrence after its one-time
+                    // pre-transfer shader boundary. Preserve that pass even
+                    // when update already installed the constraint space:
+                    // pending component/binding dirt belongs to this child.
+                    let mut cloned = child.clone_for_transient_layout();
+                    runtime_apply_nested_artboard_layout_child_bounds(
+                        &mut cloned,
+                        command,
+                        layout_bounds,
+                    )?;
+                    runtime_settle_nested_artboard_layout_child(&mut cloned);
+                    nested_layout_child = cloned;
+                    &nested_layout_child
+                } else {
+                    child
+                }
             } else {
                 child
             };
@@ -1704,7 +2518,7 @@ impl ArtboardInstance {
                     child_cache,
                     true,
                     apply_nested_layout_bounds,
-                    &child_ancestors,
+                    child_ancestors,
                 )?;
             } else {
                 child.prepare_static_artboard_tree_paints_internal(
@@ -1719,7 +2533,7 @@ impl ArtboardInstance {
                     child_cache,
                     true,
                     apply_nested_layout_bounds,
-                    &child_ancestors,
+                    child_ancestors,
                 )?;
             }
             return Ok(());
@@ -1753,7 +2567,7 @@ impl ArtboardInstance {
                 child_cache,
                 true,
                 apply_nested_layout_bounds,
-                &child_ancestors,
+                child_ancestors,
             )?;
         } else {
             child.prepare_static_artboard_tree_paints_internal(
@@ -1768,7 +2582,7 @@ impl ArtboardInstance {
                 child_cache,
                 true,
                 apply_nested_layout_bounds,
-                &child_ancestors,
+                child_ancestors,
             )?;
         }
         Ok(())
@@ -1790,24 +2604,75 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         commands: &[RuntimeDrawCommand],
         apply_nested_layout_bounds: bool,
-        nested_ancestors: &BTreeSet<u32>,
+        nested_ancestors: &[u32],
     ) -> Result<()> {
         let gradient_preparation = render_cache.gradient_preparation_frame(graph);
+        let has_layout_components = graph
+            .components
+            .iter()
+            .any(|component| component.type_name == "LayoutComponent");
 
-        for command in commands {
-            if command.object_kind != RuntimeDrawCommandObjectKind::ArtboardComponentList {
-                continue;
+        if !gradient_preparation.has_paints() && !has_layout_components {
+            // The common nested-artboard path has neither gradients nor
+            // layout-generated host commands. C++ walks its retained child
+            // pointers directly here. Avoid cloning every nested command into
+            // a temporary table on each paint update while preserving the
+            // table's exact semantics: first host insertion order, with the
+            // last command for a duplicate host winning.
+            for (command_index, first_command) in commands.iter().enumerate() {
+                if first_command.referenced_artboard_global.is_none()
+                    || !runtime_draw_command_is_nested_artboard(first_command)
+                {
+                    continue;
+                }
+                let Some(local_id) = first_command.local_id else {
+                    continue;
+                };
+                if commands[..command_index].iter().any(|command| {
+                    command.local_id == Some(local_id)
+                        && command.referenced_artboard_global.is_some()
+                        && runtime_draw_command_is_nested_artboard(command)
+                }) {
+                    continue;
+                }
+                let command = commands[command_index + 1..]
+                    .iter()
+                    .rev()
+                    .find(|command| {
+                        command.local_id == Some(local_id)
+                            && command.referenced_artboard_global.is_some()
+                            && runtime_draw_command_is_nested_artboard(command)
+                    })
+                    .unwrap_or(first_command);
+                self.prepare_static_nested_artboard_tree_paints(
+                    runtime,
+                    artboards,
+                    factory,
+                    paint_by_global,
+                    paint_configurations.as_deref_mut(),
+                    nested_paint_caches.as_deref_mut(),
+                    render_cache,
+                    layout_bounds,
+                    command,
+                    apply_nested_layout_bounds,
+                    nested_ancestors,
+                )?;
             }
-            self.prepare_static_component_list_paints(
-                runtime,
-                artboards,
-                factory,
-                nested_paint_caches.as_deref_mut(),
-                render_cache,
-                command,
-                apply_nested_layout_bounds,
-                nested_ancestors,
-            )?;
+            if commands.iter().any(|command| {
+                command.object_kind == RuntimeDrawCommandObjectKind::ArtboardComponentList
+            }) {
+                self.prepare_static_component_list_paints_in_lifecycle_order(
+                    runtime,
+                    artboards,
+                    factory,
+                    nested_paint_caches.as_deref_mut(),
+                    render_cache,
+                    commands,
+                    apply_nested_layout_bounds,
+                    nested_ancestors,
+                )?;
+            }
+            return Ok(());
         }
 
         let mut nested_command_by_local = Vec::new();
@@ -1826,11 +2691,7 @@ impl ArtboardInstance {
                 command.clone(),
             );
         }
-        if graph
-            .components
-            .iter()
-            .any(|component| component.type_name == "LayoutComponent")
-        {
+        if has_layout_components {
             for (local_id, command) in self.runtime_nested_artboard_preparation_commands_by_local(
                 graph,
                 layout_bounds,
@@ -1859,6 +2720,16 @@ impl ArtboardInstance {
                     nested_ancestors,
                 )?;
             }
+            self.prepare_static_component_list_paints_in_lifecycle_order(
+                runtime,
+                artboards,
+                factory,
+                nested_paint_caches.as_deref_mut(),
+                render_cache,
+                commands,
+                apply_nested_layout_bounds,
+                nested_ancestors,
+            )?;
             return Ok(());
         }
 
@@ -1928,6 +2799,17 @@ impl ArtboardInstance {
             )?;
         }
 
+        self.prepare_static_component_list_paints_in_lifecycle_order(
+            runtime,
+            artboards,
+            factory,
+            nested_paint_caches.as_deref_mut(),
+            render_cache,
+            commands,
+            apply_nested_layout_bounds,
+            nested_ancestors,
+        )?;
+
         Ok(())
     }
 
@@ -1976,10 +2858,16 @@ impl ArtboardInstance {
                 layout_bounds,
                 render_cache,
             );
+            let render_opacity = runtime_retained_gradient_render_opacity(
+                self,
+                opacity_local,
+                paint.global_id,
+                render_cache,
+            );
             let runtime_paint = runtime_prepare_gradient_paint_command(
                 self,
                 graph,
-                opacity_local,
+                render_opacity,
                 container,
                 paint,
                 shape_world,
@@ -2056,7 +2944,7 @@ impl ArtboardInstance {
         let mut mesh_buffers = RuntimeMeshRenderBufferSlots::default();
         let images = RuntimeRenderImages::default();
         // Seed the nested-artboard cycle guard with this artboard's global id.
-        let nested_ancestors = BTreeSet::from([graph.global_id]);
+        let nested_ancestors = [graph.global_id];
         self.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
             graph,
@@ -2109,7 +2997,7 @@ impl ArtboardInstance {
         apply_origin_transform: bool,
     ) -> Result<()> {
         // Seed the nested-artboard cycle guard with this artboard's global id.
-        let nested_ancestors = BTreeSet::from([graph.global_id]);
+        let nested_ancestors = [graph.global_id];
         self.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
             graph,
@@ -2143,7 +3031,7 @@ impl ArtboardInstance {
             &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
         >,
         apply_origin_transform: bool,
-        nested_ancestors: &BTreeSet<u32>,
+        nested_ancestors: &[u32],
     ) -> Result<()> {
         if self
             .component(0)
@@ -2182,6 +3070,8 @@ impl ArtboardInstance {
 
         let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        let component_list_item_bounds = prepared.component_list_item_bounds.as_ref();
+        let component_list_layout_children = prepared.component_list_layout_children.as_ref();
         if let Some(background) = prepared.background.as_ref() {
             runtime_draw_background(
                 runtime,
@@ -2196,14 +3086,53 @@ impl ArtboardInstance {
             )?;
         }
 
-        for command in prepared.commands.iter() {
-            runtime_draw_command(
+        // C++ retains the drawable list but evaluates `willDraw()` while
+        // walking it, buffering clip starts until a live drawable needs them.
+        // The prepared Rust commands likewise retain zero-opacity topology;
+        // keep clip envelopes lazy so a dynamically hidden shape does not
+        // emit otherwise-empty save/clip/restore operations.
+        let mut pending_clip_operations = std::mem::take(&mut path_cache.pending_clip_commands);
+        pending_clip_operations.clear();
+        for (command_index, command) in prepared.commands.iter().enumerate() {
+            match command.kind {
+                RuntimeDrawCommandKind::ClipStart => {
+                    pending_clip_operations.push(command_index);
+                    continue;
+                }
+                RuntimeDrawCommandKind::ClipEnd => {
+                    if pending_clip_operations.pop().is_none() {
+                        runtime_draw_clip_end(graph, command, renderer);
+                    }
+                    continue;
+                }
+                RuntimeDrawCommandKind::Draw => {}
+            }
+            if !runtime_draw_command_will_draw_live(self, command) {
+                continue;
+            }
+            if !pending_clip_operations.is_empty() {
+                for pending_clip_index in pending_clip_operations.drain(..) {
+                    let pending_clip = &prepared.commands[pending_clip_index];
+                    runtime_draw_clip_start(
+                        self,
+                        graph,
+                        pending_clip,
+                        layout_bounds,
+                        factory,
+                        renderer,
+                        path_cache,
+                    );
+                }
+            }
+            runtime_draw_live_command(
                 runtime,
                 self,
                 graph,
                 artboards,
                 command,
                 layout_bounds,
+                component_list_item_bounds,
+                component_list_layout_children,
                 factory,
                 renderer,
                 paint_by_global,
@@ -2216,8 +3145,11 @@ impl ArtboardInstance {
                     None => None,
                 },
                 nested_ancestors,
+                prepared.world_dependent,
             )?;
         }
+        debug_assert!(pending_clip_operations.is_empty());
+        path_cache.pending_clip_commands = pending_clip_operations;
 
         if needs_save {
             renderer.restore();
@@ -2267,10 +3199,7 @@ impl ArtboardInstance {
                             drawable.local_id,
                             drawable.resolved_image_asset_global,
                         )
-                        .is_some()
-                        && self
-                            .runtime_drawable_render_opacity(drawable)
-                            .is_some_and(|opacity| opacity != 0.0);
+                        .is_some();
                 }
 
                 if sorted_drawable_is_nested_artboard(drawable.type_name) {
@@ -2278,20 +3207,17 @@ impl ArtboardInstance {
                 }
 
                 if sorted_drawable_uses_render_opacity(drawable.type_name) {
-                    return self
-                        .runtime_drawable_render_opacity(drawable)
-                        .is_some_and(|opacity| opacity != 0.0);
+                    // Retain the drawable/paint topology across opacity
+                    // updates. C++ evaluates Drawable::willDraw against the
+                    // live component at replay time; filtering here made the
+                    // first settled frame rebuild every path hidden by the
+                    // instance's pre-update opacity.
+                    return drawable.local_id.is_some();
                 }
 
                 true
             }
         }
-    }
-
-    fn runtime_drawable_render_opacity(&self, drawable: &SortedDrawableNode) -> Option<f32> {
-        let local_id = drawable.local_id?;
-        self.component(local_id)
-            .map(|component| component.transform.render_opacity)
     }
 
     fn runtime_empty_clip_count(
@@ -2365,7 +3291,7 @@ impl ArtboardInstance {
         false
     }
 
-    fn runtime_component_is_collapsed_for_draw(&self, local_id: usize) -> bool {
+    pub(crate) fn runtime_component_is_collapsed_for_draw(&self, local_id: usize) -> bool {
         let Some(component) = self.component(local_id) else {
             return false;
         };
@@ -2394,7 +3320,7 @@ impl ArtboardInstance {
                 RuntimeDrawCommandKind::Draw
             }
         };
-        RuntimeDrawCommand {
+        let mut command = RuntimeDrawCommand {
             kind,
             object_kind: RuntimeDrawCommandObjectKind::from_type_name(drawable.type_name),
             local_id,
@@ -2420,7 +3346,12 @@ impl ArtboardInstance {
                 layout_bounds,
                 path_cache,
             ),
-        }
+            simple_solid_shape: false,
+            world_stroke_shape: false,
+        };
+        command.simple_solid_shape = runtime_command_is_simple_solid_shape(&command);
+        command.world_stroke_shape = runtime_command_is_world_stroke_shape(&command);
+        command
     }
 
     fn runtime_retained_draw_world_transform(
@@ -2539,19 +3470,25 @@ impl ArtboardInstance {
             .paints
             .iter()
             .filter_map(|paint| {
-                let path_commands = match container.type_name {
-                    "Shape" => self.runtime_shape_paint_path_commands(
-                        container_local,
-                        paint,
-                        graph,
-                        layout_bounds,
-                        path_cache,
-                    ),
-                    "LayoutComponent" => self.runtime_layout_component_paint_path_commands(
-                        container_local,
-                        paint,
-                        graph,
-                        layout_bounds,
+                let (path_commands, prepared_raw_path) = match container.type_name {
+                    "Shape" => self
+                        .runtime_shape_paint_path_commands(
+                            container_local,
+                            paint,
+                            graph,
+                            layout_bounds,
+                            path_cache,
+                        )
+                        .map(|path| (path.commands.as_ref().clone(), Some(path.raw_path.clone())))
+                        .unwrap_or_default(),
+                    "LayoutComponent" => (
+                        self.runtime_layout_component_paint_path_commands(
+                            container_local,
+                            paint,
+                            graph,
+                            layout_bounds,
+                        ),
+                        None,
                     ),
                     "ForegroundLayoutDrawable" => {
                         // Ported from C++ `src/foreground_layout_drawable.cpp`:
@@ -2559,14 +3496,17 @@ impl ArtboardInstance {
                         // `LayoutComponent` path with the parent layout world
                         // transform.
                         let layout_local = layout_path_local?;
-                        self.runtime_layout_component_paint_path_commands(
-                            layout_local,
-                            paint,
-                            graph,
-                            layout_bounds,
+                        (
+                            self.runtime_layout_component_paint_path_commands(
+                                layout_local,
+                                paint,
+                                graph,
+                                layout_bounds,
+                            ),
+                            None,
                         )
                     }
-                    _ => Vec::new(),
+                    _ => (Vec::new(), None),
                 };
                 let mut command = runtime_shape_paint_command(
                     self,
@@ -2586,6 +3526,7 @@ impl ArtboardInstance {
                     ),
                     container.type_name != "Shape",
                 )?;
+                command.prepared_raw_path = prepared_raw_path;
                 if drawable.kind == DrawableOrderKind::LayoutProxy
                     || container.type_name == "ForegroundLayoutDrawable"
                 {
@@ -2852,6 +3793,80 @@ impl ArtboardInstance {
         runtime: Option<&RuntimeFile>,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
         TaffyRuntimeLayoutEngine.compute_bounds(self, graph, runtime)
+    }
+
+    /// Parent-assigned bounds for every currently mounted component-list row.
+    /// C++ obtains the same values by transferring each row artboard's Yoga
+    /// node into the hosting layout before
+    /// `ArtboardComponentList::updateLayoutBounds` writes the result back to
+    /// `m_artboardSizes`.
+    pub(crate) fn runtime_component_list_assigned_layout_bounds(
+        &self,
+    ) -> BTreeMap<usize, Vec<RuntimeLayoutBounds>> {
+        if self.component_list_items.is_empty() {
+            return BTreeMap::new();
+        }
+        let Some(graph) = self.runtime_graph() else {
+            return BTreeMap::new();
+        };
+        TaffyRuntimeLayoutEngine
+            .compute_layout(self, graph, self.runtime_file())
+            .map(|layout| layout.component_list_item_bounds)
+            .unwrap_or_default()
+    }
+
+    /// Root transforms for mounted component-list artboards.
+    ///
+    /// C++ gives each row artboard an `ArtboardHost`; `Node::computedRoot*`
+    /// therefore walks through `ArtboardComponentList::hostTransformPoint`.
+    /// Rust renders row artboards as retained child instances, so reuse the
+    /// exact row transforms used by the draw path when polling their computed
+    /// data-bind sources.
+    pub(crate) fn runtime_component_list_child_root_transforms(
+        &self,
+        root_transform: Mat2D,
+    ) -> BTreeMap<usize, Vec<Mat2D>> {
+        if self.component_list_items.is_empty() {
+            return BTreeMap::new();
+        }
+        let Some(graph) = self.runtime_graph() else {
+            return BTreeMap::new();
+        };
+        let assigned_bounds = self.runtime_component_list_assigned_layout_bounds();
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file());
+        self.component_list_items
+            .keys()
+            .copied()
+            .map(|list_local| {
+                let host_transform_local = if crate::constraints::component_list_virtualization(
+                    self, list_local,
+                )
+                .is_some()
+                {
+                    self.component(list_local)
+                        .and_then(|component| component.parent_local)
+                        .unwrap_or(list_local)
+                } else {
+                    list_local
+                };
+                let host_world = self.runtime_component_world_transform_with_bounds(
+                    host_transform_local,
+                    graph,
+                    layout_bounds.as_ref(),
+                );
+                let host_root = root_transform.multiply(host_world);
+                let item_transforms = runtime_component_list_item_local_transforms(
+                    self,
+                    list_local,
+                    assigned_bounds.get(&list_local).map(Vec::as_slice),
+                    None,
+                )
+                .into_iter()
+                .map(|item_transform| host_root.multiply(item_transform))
+                .collect();
+                (list_local, item_transforms)
+            })
+            .collect()
     }
 
     #[doc(hidden)]
@@ -3574,11 +4589,11 @@ impl ArtboardInstance {
                     child_sizes.push((bounds.width, bounds.height));
                 }
                 "ArtboardComponentList" => {
-                    // Ported from C++ `src/artboard_component_list.cpp`
-                    // `ArtboardComponentList::layoutBounds`: non-virtualized
-                    // lists with no instantiated items retain the default
-                    // zero layout size, which makes hug-sized parents collapse.
-                    child_sizes.push((0.0, 0.0));
+                    child_sizes.push(
+                        TaffyRuntimeLayoutEngine
+                            .measure_component_list_layout_child(self, layout_local, *child_local)
+                            .unwrap_or((0.0, 0.0)),
+                    );
                 }
                 "Text" => {
                     if let Some((_, _, width, height)) = self.runtime_file().and_then(|runtime| {
@@ -4082,7 +5097,11 @@ impl ArtboardInstance {
                     )?;
                     child_sizes.push((width, height));
                 }
-                "ArtboardComponentList" => child_sizes.push((0.0, 0.0)),
+                "ArtboardComponentList" => child_sizes.push(
+                    TaffyRuntimeLayoutEngine
+                        .measure_component_list_layout_child(self, layout_local, *child_local)
+                        .unwrap_or((0.0, 0.0)),
+                ),
                 "Text" => {
                     if let Some((_, _, width, height)) = self.runtime_file().and_then(|runtime| {
                         static_text_constraint_bounds(runtime, graph, self, *child_local)
@@ -4173,9 +5192,9 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         path_cache: &mut RuntimeRenderPathCache,
-    ) -> Vec<RuntimePathCommand> {
+    ) -> Option<RuntimePreparedShapePaintPath> {
         let Some(path_kind) = paint.path_kind.and_then(runtime_shape_paint_path_kind) else {
-            return Vec::new();
+            return None;
         };
         let key = RuntimeShapePaintPathCommandsCacheKey {
             shape_local,
@@ -4186,25 +5205,30 @@ impl ArtboardInstance {
                 .unwrap_or_default(),
             path_kind,
         };
-        if let Some(commands) =
-            path_cache
-                .shape_paint_paths
-                .get(graph.global_id, paint.local_id, key)
+        if let Some(path) = path_cache
+            .shape_paint_paths
+            .get(graph.global_id, shape_local, key)
         {
-            return commands.as_ref().clone();
+            return Some(path);
         }
 
-        let commands = Arc::new(self.runtime_shape_paint_path_commands_uncached(
+        let mut commands = self.runtime_shape_paint_path_commands_uncached(
             shape_local,
             paint,
             graph,
             layout_bounds,
             path_cache,
-        ));
+        );
+        prune_empty_path_segments(&mut commands);
+        let raw_path = Arc::new(runtime_raw_path_from_commands(&commands));
+        let path = RuntimePreparedShapePaintPath {
+            commands: Arc::new(commands),
+            raw_path,
+        };
         path_cache
             .shape_paint_paths
-            .insert(graph.global_id, paint.local_id, key, commands.clone());
-        commands.as_ref().clone()
+            .insert(graph.global_id, shape_local, key, path.clone());
+        Some(path)
     }
 
     fn runtime_shape_world_path_commands(
@@ -4431,21 +5455,7 @@ impl ArtboardInstance {
             let transform = match path_kind {
                 ShapePaintPathKind::World => path_transform,
                 ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise => {
-                    if shape_world == path_transform
-                        && mat2d_has_visible_skew_or_rotation(shape_world)
-                    {
-                        inverse_shape_world.multiply_path_local_contracted(path_transform)
-                    } else if mat2d_has_visible_skew_or_rotation(shape_world)
-                        || mat2d_has_visible_skew_or_rotation(path_transform)
-                    {
-                        inverse_shape_world.multiply_path_local_fused(path_transform)
-                    } else if mat2d_has_any_skew_or_rotation(shape_world)
-                        || mat2d_has_any_skew_or_rotation(path_transform)
-                    {
-                        inverse_shape_world.multiply_path_local_contracted(path_transform)
-                    } else {
-                        inverse_shape_world.multiply(path_transform)
-                    }
+                    inverse_shape_world.multiply(path_transform)
                 }
             };
 
@@ -4933,6 +5943,8 @@ pub struct RuntimeDrawCommand {
     pub clipping_shape_local: Option<usize>,
     pub needs_save_operation: bool,
     pub shape_paints: Vec<RuntimeShapePaintCommand>,
+    simple_solid_shape: bool,
+    world_stroke_shape: bool,
 }
 
 #[doc(hidden)]
@@ -4970,10 +5982,143 @@ trait RuntimeLayoutEngine {
 
 struct TaffyRuntimeLayoutEngine;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum TaffyMeasureContext {
+    LayoutComponent {
+        local: usize,
+    },
+    ComponentListItem {
+        list_local: usize,
+        item_index: usize,
+        intrinsic_size: Size<f32>,
+    },
+}
+
+#[derive(Default)]
+struct RuntimeComputedLayout {
+    bounds: BTreeMap<usize, RuntimeLayoutBounds>,
+    component_list_item_bounds: BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
+}
+
+fn runtime_component_list_item_layout_size(
+    item: &crate::artboard::RuntimeComponentListItemInstance,
+) -> (f32, f32) {
+    item.child
+        .runtime_graph()
+        .and_then(|graph| {
+            item.child
+                .runtime_taffy_layout_bounds(graph, item.child.runtime_file())
+        })
+        .and_then(|bounds| bounds.get(&0).copied())
+        .map(|bounds| (bounds.width, bounds.height))
+        .unwrap_or((item.child.width, item.child.height))
+}
+
+fn runtime_mounted_component_list_revisions(instance: &ArtboardInstance) -> (u64, u64) {
+    // The overwhelmingly common case has no mounted component list. Avoid
+    // allocating the cycle guard merely to reproduce the two seed hashes.
+    if instance.component_list_items.is_empty() {
+        return (0xcbf29ce484222325, 0xcbf29ce484222325);
+    }
+
+    fn mix(epoch: &mut u64, value: u64) {
+        *epoch = epoch.wrapping_mul(0x100000001b3) ^ value;
+    }
+
+    fn visit(
+        instance: &ArtboardInstance,
+        layout_epoch: &mut u64,
+        prepared_epoch: &mut u64,
+        visited: &mut BTreeSet<u64>,
+    ) {
+        if !visited.insert(instance.instance_identity()) {
+            return;
+        }
+        for (list_local, items) in &instance.component_list_items {
+            mix(layout_epoch, *list_local as u64);
+            mix(layout_epoch, items.len() as u64);
+            mix(prepared_epoch, *list_local as u64);
+            mix(prepared_epoch, items.len() as u64);
+            for item in items {
+                for epoch in [&mut *layout_epoch, &mut *prepared_epoch] {
+                    mix(epoch, item.context.borrow().instance_identity());
+                    mix(epoch, item.occurrence_identity);
+                    mix(epoch, item.logical_index as u64);
+                    mix(epoch, item.render_cache_revision);
+                    mix(epoch, u64::from(item.child.graph_global_id));
+                    mix(epoch, item.child.instance_identity());
+                }
+                if let Some((x, y)) = item.virtualized_position {
+                    for epoch in [&mut *layout_epoch, &mut *prepared_epoch] {
+                        mix(epoch, u64::from(x.to_bits()));
+                        mix(epoch, u64::from(y.to_bits()));
+                    }
+                }
+                mix(layout_epoch, item.child.layout_epoch());
+                mix(layout_epoch, u64::from(item.child.width.to_bits()));
+                mix(layout_epoch, u64::from(item.child.height.to_bits()));
+                // The prepared frame owns a transient clone of each mounted
+                // child, so it must track all live instance-property writes,
+                // not only prepared-topology changes. For example SolidColor
+                // mutations intentionally bump `cache_epoch` without bumping
+                // `prepared_epoch`; omitting this would keep drawing the
+                // clone's stale paint value.
+                mix(prepared_epoch, item.child.cache_epoch());
+                mix(prepared_epoch, item.child.prepared_epoch());
+                visit(&item.child, layout_epoch, prepared_epoch, visited);
+            }
+        }
+    }
+
+    let mut layout_epoch = 0xcbf29ce484222325;
+    let mut prepared_epoch = 0xcbf29ce484222325;
+    visit(
+        instance,
+        &mut layout_epoch,
+        &mut prepared_epoch,
+        &mut BTreeSet::new(),
+    );
+    (layout_epoch, prepared_epoch)
+}
+
+fn runtime_component_list_layout_children(
+    instance: &ArtboardInstance,
+    item_bounds: &BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
+) -> BTreeMap<usize, Vec<ArtboardInstance>> {
+    let mut children = BTreeMap::new();
+    for (list_local, items) in &instance.component_list_items {
+        let assigned_bounds = item_bounds.get(list_local);
+        let mut layout_items = Vec::with_capacity(items.len());
+        for (item_index, item) in items.iter().enumerate() {
+            let bounds = assigned_bounds
+                .and_then(|bounds| bounds.get(item_index))
+                .copied()
+                .unwrap_or_else(|| {
+                    let (width, height) = runtime_component_list_item_layout_size(item);
+                    RuntimeLayoutBounds {
+                        x: 0.0,
+                        y: 0.0,
+                        width,
+                        height,
+                    }
+                });
+            item.settled_layout_size
+                .set(Some((bounds.width, bounds.height)));
+            let mut child = item.child.clone_for_transient_layout();
+            runtime_apply_component_list_item_layout_bounds(&mut child, bounds);
+            runtime_settle_nested_artboard_layout_child(&mut child);
+            layout_items.push(child);
+        }
+        children.insert(*list_local, layout_items);
+    }
+    children
+}
+
 #[derive(Default)]
 struct TaffyLayoutBuild {
     nodes_by_local: BTreeMap<usize, NodeId>,
     children_by_local: BTreeMap<usize, Vec<usize>>,
+    component_list_item_nodes: BTreeMap<usize, Vec<NodeId>>,
 }
 
 fn definite_available_space(space: AvailableSpace) -> Option<f32> {
@@ -5010,6 +6155,34 @@ impl TaffyRuntimeLayoutEngine {
         runtime: Option<&RuntimeFile>,
         root_hug: Size<bool>,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
+        self.compute_layout_with_root_hug(instance, graph, runtime, root_hug)
+            .map(|layout| layout.bounds)
+    }
+
+    fn compute_layout(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
+    ) -> Option<RuntimeComputedLayout> {
+        self.compute_layout_with_root_hug(
+            instance,
+            graph,
+            runtime,
+            Size {
+                width: false,
+                height: false,
+            },
+        )
+    }
+
+    fn compute_layout_with_root_hug(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
+        root_hug: Size<bool>,
+    ) -> Option<RuntimeComputedLayout> {
         // Ported from C++ `src/layout_component.cpp`
         // `syncStyle`/`syncLayoutChildren`/`calculateLayoutInternal`: translate
         // Rive layout style into the delegated layout engine, then expose the
@@ -5021,7 +6194,7 @@ impl TaffyRuntimeLayoutEngine {
         if root.type_name != "Artboard" {
             return None;
         }
-        let mut taffy = TaffyTree::<usize>::new();
+        let mut taffy = TaffyTree::<TaffyMeasureContext>::new();
         taffy.disable_rounding();
         let mut build = TaffyLayoutBuild::default();
         let root_node =
@@ -5048,25 +6221,53 @@ impl TaffyRuntimeLayoutEngine {
                 root_node,
                 available_space,
                 |known_dimensions, available_space, _node_id, node_context, _style| {
-                    node_context
-                        .and_then(|layout_local| {
-                            self.measure_layout_component(
-                                runtime?,
-                                instance,
-                                graph,
-                                *layout_local,
-                                known_dimensions,
-                                available_space,
-                            )
-                        })
-                        .unwrap_or(Size::ZERO)
+                    match node_context {
+                        Some(TaffyMeasureContext::LayoutComponent { local }) => runtime
+                            .and_then(|runtime| {
+                                self.measure_layout_component(
+                                    runtime,
+                                    instance,
+                                    graph,
+                                    *local,
+                                    known_dimensions,
+                                    available_space,
+                                )
+                            })
+                            .unwrap_or(Size::ZERO),
+                        Some(TaffyMeasureContext::ComponentListItem {
+                            list_local: _,
+                            item_index: _,
+                            intrinsic_size,
+                        }) => Size {
+                            width: known_dimensions.width.unwrap_or(intrinsic_size.width),
+                            height: known_dimensions.height.unwrap_or(intrinsic_size.height),
+                        },
+                        None => Size::ZERO,
+                    }
                 },
             )
             .ok()?;
 
         let mut bounds = BTreeMap::new();
         self.collect_bounds(0, 0.0, 0.0, &taffy, &build, &mut bounds)?;
-        Some(bounds)
+        let mut component_list_item_bounds = BTreeMap::new();
+        for (list_local, nodes) in &build.component_list_item_nodes {
+            let mut item_bounds = Vec::with_capacity(nodes.len());
+            for node in nodes {
+                let layout = taffy.layout(*node).ok()?;
+                item_bounds.push(RuntimeLayoutBounds {
+                    x: layout.location.x,
+                    y: layout.location.y,
+                    width: layout.size.width,
+                    height: layout.size.height,
+                });
+            }
+            component_list_item_bounds.insert(*list_local, item_bounds);
+        }
+        Some(RuntimeComputedLayout {
+            bounds,
+            component_list_item_bounds,
+        })
     }
 
     fn build_node(
@@ -5076,7 +6277,7 @@ impl TaffyRuntimeLayoutEngine {
         runtime: Option<&RuntimeFile>,
         local: usize,
         parent_is_row: bool,
-        taffy: &mut TaffyTree<usize>,
+        taffy: &mut TaffyTree<TaffyMeasureContext>,
         build: &mut TaffyLayoutBuild,
     ) -> Option<NodeId> {
         // Cycle guard: a malformed-but-accepted file can make the layout child
@@ -5148,6 +6349,37 @@ impl TaffyRuntimeLayoutEngine {
                     if !self.zero_sized_component_list_supported(graph, *child_local)? {
                         return None;
                     }
+                    if let Some(items) = instance.component_list_items.get(child_local) {
+                        for (item_index, item) in items.iter().enumerate() {
+                            let intrinsic_size = runtime_component_list_item_layout_size(item);
+                            let item_style = self.component_list_item_style(
+                                instance,
+                                graph,
+                                *child_local,
+                                item,
+                                is_row,
+                            )?;
+                            let item_node = taffy
+                                .new_leaf_with_context(
+                                    item_style,
+                                    TaffyMeasureContext::ComponentListItem {
+                                        list_local: *child_local,
+                                        item_index,
+                                        intrinsic_size: Size {
+                                            width: intrinsic_size.0,
+                                            height: intrinsic_size.1,
+                                        },
+                                    },
+                                )
+                                .ok()?;
+                            child_nodes.push(item_node);
+                            build
+                                .component_list_item_nodes
+                                .entry(*child_local)
+                                .or_default()
+                                .push(item_node);
+                        }
+                    }
                 }
                 "NestedArtboardLayout" => {
                     let child_node = self.build_node(
@@ -5170,7 +6402,9 @@ impl TaffyRuntimeLayoutEngine {
             if runtime.is_some()
                 && self.layout_component_has_intrinsic_static_measure(instance, graph, local)?
             {
-                taffy.new_leaf_with_context(style, local).ok()?
+                taffy
+                    .new_leaf_with_context(style, TaffyMeasureContext::LayoutComponent { local })
+                    .ok()?
             } else {
                 taffy.new_leaf(style).ok()?
             }
@@ -5180,6 +6414,228 @@ impl TaffyRuntimeLayoutEngine {
         build.nodes_by_local.insert(local, node);
         build.children_by_local.insert(local, child_locals);
         Some(node)
+    }
+
+    /// C++ contributes the mounted artboard's root Yoga node directly to the
+    /// hosting layout. Before insertion, `ArtboardComponentListOverride`
+    /// rewrites that root node's width/height scale contract. Keep the
+    /// override on the provider node (rather than on the authored child
+    /// instance) so list lifecycle remains persistent and reversible.
+    fn component_list_item_style(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        list_local: usize,
+        item: &crate::artboard::RuntimeComponentListItemInstance,
+        parent_is_row: bool,
+    ) -> Option<Style> {
+        let item_graph = item.child.runtime_graph()?;
+        let mut style = self.style_for_node(&item.child, item_graph, 0, parent_is_row)?;
+        // `style_for_node` fixes a standalone root to the current artboard
+        // dimensions because those dimensions are the root's available
+        // space. A component list instead transfers that root node into the
+        // hosting layout. Restore the authored unit/scale contract here so a
+        // fill root is `auto` and can stretch/shrink to the parent's assigned
+        // row width, exactly as C++ `Artboard::takeLayoutData()` does.
+        if let Some(style_local) = item.child.runtime_layout_component_style_local(0) {
+            style.size = Size {
+                width: self.axis_dimension(&item.child, item_graph, 0, style_local, true)?,
+                height: self.axis_dimension(&item.child, item_graph, 0, style_local, false)?,
+            };
+        }
+        let Some(override_local) =
+            self.component_list_item_override_local(instance, graph, list_local, item)
+        else {
+            return Some(style);
+        };
+
+        let width_scale = self.component_list_override_axis_scale(instance, override_local, true);
+        let height_scale = self.component_list_override_axis_scale(instance, override_local, false);
+        self.apply_component_list_item_axis_override(
+            instance,
+            override_local,
+            item,
+            parent_is_row,
+            true,
+            width_scale,
+            &mut style,
+        )?;
+
+        // Match `StyleOverrider::updateHeightOverride` literally. Upstream's
+        // hug branch currently checks `instanceWidthScaleType`; fixed/fill use
+        // the height scale as expected. Keeping this quirk is required for
+        // byte-exact behavior with the pinned C++ runtime.
+        let effective_height_scale = match height_scale {
+            0 | 1 => Some(height_scale),
+            _ if width_scale == 2 => Some(2),
+            _ => None,
+        };
+        if let Some(height_scale) = effective_height_scale {
+            self.apply_component_list_item_axis_override(
+                instance,
+                override_local,
+                item,
+                parent_is_row,
+                false,
+                height_scale,
+                &mut style,
+            )?;
+        }
+        Some(style)
+    }
+
+    fn component_list_item_override_local(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        list_local: usize,
+        item: &crate::artboard::RuntimeComponentListItemInstance,
+    ) -> Option<usize> {
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == list_local)?;
+        let item_artboard_index = item
+            .child
+            .runtime_file()
+            .zip(item.child.runtime_graph())
+            .and_then(|(file, item_graph)| artboard_index_for_graph(file, item_graph));
+        let artboard_id_key = runtime_component_list_override_property_key_for_name("artboardId")?;
+        let mut default_override = None;
+        for child_local in &component.children {
+            if graph
+                .components
+                .iter()
+                .find(|candidate| candidate.local_id == *child_local)
+                .is_none_or(|candidate| candidate.type_name != "ArtboardComponentListOverride")
+            {
+                continue;
+            }
+            let artboard_id = instance
+                .uint_property(*child_local, artboard_id_key)
+                .unwrap_or(u64::from(u32::MAX));
+            if artboard_id == u64::from(u32::MAX) {
+                default_override = Some(*child_local);
+            } else if usize::try_from(artboard_id).ok() == item_artboard_index {
+                return Some(*child_local);
+            }
+        }
+        default_override
+    }
+
+    fn component_list_override_axis_scale(
+        &self,
+        instance: &ArtboardInstance,
+        override_local: usize,
+        width_axis: bool,
+    ) -> u64 {
+        runtime_component_list_override_property_key_for_name(if width_axis {
+            "instanceWidthScaleType"
+        } else {
+            "instanceHeightScaleType"
+        })
+        .and_then(|key| instance.uint_property(override_local, key))
+        .unwrap_or(0)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn apply_component_list_item_axis_override(
+        &self,
+        instance: &ArtboardInstance,
+        override_local: usize,
+        item: &crate::artboard::RuntimeComponentListItemInstance,
+        parent_is_row: bool,
+        width_axis: bool,
+        scale: u64,
+        style: &mut Style,
+    ) -> Option<()> {
+        if !matches!(scale, 0 | 1 | 2) {
+            return None;
+        }
+        let value_key = runtime_component_list_override_property_key_for_name(if width_axis {
+            "instanceWidth"
+        } else {
+            "instanceHeight"
+        })?;
+        let units_key = runtime_component_list_override_property_key_for_name(if width_axis {
+            "instanceWidthUnitsValue"
+        } else {
+            "instanceHeightUnitsValue"
+        })?;
+        let configured_value = instance
+            .double_property(override_local, value_key)
+            .unwrap_or(-1.0);
+        let original_value = item
+            .child
+            .runtime_file()
+            .and_then(|file| file.object(item.child.graph_global_id as usize))
+            .and_then(|artboard| {
+                artboard.double_property(if width_axis { "width" } else { "height" })
+            })
+            .unwrap_or(if width_axis {
+                item.child.width
+            } else {
+                item.child.height
+            });
+        let value = if configured_value == -1.0 {
+            original_value
+        } else {
+            configured_value
+        };
+        let units = instance
+            .uint_property(override_local, units_key)
+            .unwrap_or(1);
+        let dimension = match scale {
+            0 => self.dimension_from_unit(value.max(0.0), units)?,
+            1 | 2 => Dimension::auto(),
+            _ => return None,
+        };
+        if width_axis {
+            style.size.width = dimension;
+        } else {
+            style.size.height = dimension;
+        }
+
+        if width_axis == parent_is_row {
+            match scale {
+                0 | 2 => {
+                    style.flex_grow = 0.0;
+                    style.flex_shrink = 0.0;
+                    style.flex_basis = Dimension::auto();
+                }
+                1 => {
+                    style.flex_grow = item.child.runtime_layout_axis_fraction(0, width_axis);
+                    style.flex_shrink = style.flex_grow;
+                    style.flex_basis = item
+                        .child
+                        .runtime_layout_component_style_local(0)
+                        .and_then(|style_local| {
+                            let basis = item
+                                .child
+                                .runtime_layout_style_double(
+                                    style_local,
+                                    RuntimeLayoutStyleProperty::FlexBasis,
+                                )
+                                .unwrap_or(0.0);
+                            let basis_units = item.child.runtime_layout_style_uint_default(
+                                style_local,
+                                RuntimeLayoutStyleProperty::FlexBasisUnitsValue,
+                                3,
+                            );
+                            self.dimension_from_unit(basis, basis_units)
+                        })
+                        .unwrap_or_else(Dimension::auto);
+                }
+                _ => return None,
+            }
+        } else {
+            style.align_self = match scale {
+                1 => Some(AlignSelf::STRETCH),
+                0 | 2 => None,
+                _ => return None,
+            };
+        }
+        Some(())
     }
 
     fn zero_sized_component_list_supported(
@@ -5216,7 +6672,7 @@ impl TaffyRuntimeLayoutEngine {
         local: usize,
         parent_x: f32,
         parent_y: f32,
-        taffy: &TaffyTree<usize>,
+        taffy: &TaffyTree<TaffyMeasureContext>,
         build: &TaffyLayoutBuild,
         bounds: &mut BTreeMap<usize, RuntimeLayoutBounds>,
     ) -> Option<()> {
@@ -6047,7 +7503,14 @@ impl TaffyRuntimeLayoutEngine {
                 .components
                 .iter()
                 .find(|component| component.local_id == *child_local)
-                .is_some_and(|child| matches!(child.type_name, "Shape" | "Text" | "TextInput"))
+                .is_some_and(|child| {
+                    matches!(child.type_name, "Shape" | "Text" | "TextInput")
+                        || (child.type_name == "ArtboardComponentList"
+                            && instance
+                                .component_list_items
+                                .get(child_local)
+                                .is_some_and(|items| !items.is_empty()))
+                })
         }))
     }
 
@@ -6176,6 +7639,17 @@ impl TaffyRuntimeLayoutEngine {
                     measured.width = measured.width.max(width);
                     measured.height = measured.height.max(height);
                 }
+                "ArtboardComponentList" => {
+                    let Some((width, height)) = self.measure_component_list_layout_child(
+                        instance,
+                        layout_local,
+                        child.local_id,
+                    ) else {
+                        continue;
+                    };
+                    measured.width = measured.width.max(width);
+                    measured.height = measured.height.max(height);
+                }
                 _ => {}
             }
         }
@@ -6183,6 +7657,53 @@ impl TaffyRuntimeLayoutEngine {
             width: known_dimensions.width.unwrap_or(measured.width),
             height: known_dimensions.height.unwrap_or(measured.height),
         })
+    }
+
+    /// C++ exposes each `ArtboardComponentList` row as a layout-provider node
+    /// of the hosting `LayoutComponent`. The current Taffy adapter represents
+    /// intrinsically measured non-layout children through one leaf callback,
+    /// so collapse those repeated nodes to their equivalent no-wrap intrinsic
+    /// extent. Parent padding is deliberately excluded: Taffy applies it from
+    /// the hosting component's style around this measured content box.
+    fn measure_component_list_layout_child(
+        &self,
+        instance: &ArtboardInstance,
+        layout_local: usize,
+        list_local: usize,
+    ) -> Option<(f32, f32)> {
+        let items = instance.component_list_items.get(&list_local)?;
+        if items.is_empty() {
+            return Some((0.0, 0.0));
+        }
+        let style_local = instance.runtime_layout_component_style_local(layout_local)?;
+        let is_row = instance.runtime_layout_style_is_row(style_local);
+        let gap = if is_row {
+            instance
+                .runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::GapHorizontal)
+        } else {
+            instance
+                .runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::GapVertical)
+        }
+        .unwrap_or(0.0);
+        let mut width: f32 = 0.0;
+        let mut height: f32 = 0.0;
+        for item in items {
+            let (item_width, item_height) = runtime_component_list_item_layout_size(item);
+            if is_row {
+                width += item_width;
+                height = height.max(item_height);
+            } else {
+                width = width.max(item_width);
+                height += item_height;
+            }
+        }
+        let total_gap = gap * items.len().saturating_sub(1) as f32;
+        if is_row {
+            width += total_gap;
+        } else {
+            height += total_gap;
+        }
+        Some((width, height))
     }
 
     fn measure_shape_layout_child(
@@ -6568,6 +8089,26 @@ pub enum RuntimeShapePaintPathKind {
     World,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RuntimeTextPaintPoolSpec {
+    pub(crate) style_local: usize,
+    pub(crate) paint_count: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RuntimeTextPaintPoolUse {
+    pub(crate) spec: RuntimeTextPaintPoolSpec,
+    pub(crate) paint_index: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct RuntimeTextPaintPoolKey {
+    graph_global_id: u32,
+    instance_identity: u64,
+    text_local: usize,
+    style_local: usize,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeShapePaintCommand {
     pub paint_local: usize,
@@ -6591,7 +8132,13 @@ pub struct RuntimeShapePaintCommand {
     pub shape_world_override: Option<Mat2D>,
     pub aliases_local_clockwise_path: bool,
     pub uses_temporary_paint: bool,
-    pub allocates_text_paint_pool: bool,
+    pub(crate) text_path_bucket_slot: Option<usize>,
+    pub(crate) text_paint_pool: Option<RuntimeTextPaintPoolUse>,
+    pub(crate) ensure_text_paint_pool_after_draw: Option<RuntimeTextPaintPoolSpec>,
+    // Mirrors C++ PathComposer/ShapePaintPath ownership: the immutable raw
+    // geometry is prepared behind path dirt and shared by every paint that
+    // selects the same shape path. RenderPath creation remains lazy in draw.
+    prepared_raw_path: Option<Arc<RawPath>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -6620,6 +8167,67 @@ pub enum RuntimeShapePaintState {
     },
 }
 
+/// One shader configuration from C++'s one-time pre-transfer paint phase.
+/// Keeping inherited opacity explicit documents the phase boundary even
+/// though the same scalar has already been applied to `paint_state`'s render
+/// colors.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct RuntimeInitialGradientPaintState {
+    paint_global_id: u32,
+    paint_state: RuntimeShapePaintState,
+    inherited_opacity: f32,
+    opacity_local: usize,
+    paint_space_transform: Option<Mat2D>,
+}
+
+/// Narrow, immutable state for the initial nested-layout shader events. This
+/// is consumed once by the renderer and intentionally contains no artboard,
+/// component, geometry, script, or view-model ownership.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct RuntimeInitialNestedLayoutPaintFrame {
+    gradients: Vec<RuntimeInitialGradientPaintState>,
+}
+
+impl RuntimeInitialNestedLayoutPaintFrame {
+    /// Whether the isolated pre-transfer bind dirtied this child's gradient
+    /// paint pass. Once one paint changes, C++ prepares the child's complete
+    /// gradient set in dependency order, not only the changed mutator.
+    pub(crate) fn changed_from(&self, before: &Self) -> bool {
+        self != before
+    }
+
+    pub(crate) fn apply_inherited_opacity_from(&mut self, instance: &ArtboardInstance) {
+        for gradient in &mut self.gradients {
+            let inherited_opacity = instance
+                .component(gradient.opacity_local)
+                .map(|component| component.transform.render_opacity)
+                .unwrap_or(1.0);
+            gradient.inherited_opacity = inherited_opacity;
+            match &mut gradient.paint_state {
+                RuntimeShapePaintState::LinearGradient {
+                    opacity,
+                    render_opacity,
+                    stops,
+                    ..
+                }
+                | RuntimeShapePaintState::RadialGradient {
+                    opacity,
+                    render_opacity,
+                    stops,
+                    ..
+                } => {
+                    *render_opacity = inherited_opacity;
+                    for stop in stops {
+                        stop.render_color =
+                            color_modulate_opacity(stop.color, *opacity * inherited_opacity);
+                    }
+                }
+                RuntimeShapePaintState::SolidColor { .. } => {}
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RuntimeGradientStop {
     pub color: u32,
@@ -6634,20 +8242,122 @@ struct RuntimeNestedRenderCacheKey {
     instance_revision: u64,
 }
 
+const RUNTIME_COMPONENT_LIST_CACHE_NAMESPACE: u64 = 1_u64 << 63;
+
+/// Renderer resources follow a mounted nested-artboard tree, where each
+/// parent normally owns only a handful of direct children. C++ reaches those
+/// resources through the already-mounted `NestedArtboard::m_Instance`
+/// directly; using a tree map here added a logarithmic lookup and node walk to
+/// every retained draw. Keep the external renderer-resource ownership needed
+/// by Rust, but use the same small, parent-local shape as the mounted tree.
+enum RuntimeNestedRenderCaches<T> {
+    Flat(Vec<(RuntimeNestedRenderCacheKey, T)>),
+    Ordered(BTreeMap<RuntimeNestedRenderCacheKey, T>),
+}
+
+impl<T> Default for RuntimeNestedRenderCaches<T> {
+    fn default() -> Self {
+        Self::Flat(Vec::new())
+    }
+}
+
+impl<T> RuntimeNestedRenderCaches<T> {
+    // Authored nesting can be wider than the usual handful of direct children:
+    // ai_assitant has 16 under one artboard. C++ still reaches each child
+    // through direct NestedArtboard ownership, so keep that real-world width
+    // in the parent-local flat tier instead of spilling every draw to a map.
+    const FLAT_CAPACITY: usize = 32;
+
+    #[inline]
+    fn get_or_insert_with(
+        &mut self,
+        key: RuntimeNestedRenderCacheKey,
+        make: impl FnOnce() -> T,
+    ) -> &mut T {
+        if matches!(self, Self::Ordered(_)) {
+            let Self::Ordered(entries) = self else {
+                unreachable!();
+            };
+            return entries.entry(key).or_insert_with(make);
+        }
+
+        let existing = match self {
+            Self::Flat(entries) => entries.iter().position(|(candidate, _)| *candidate == key),
+            Self::Ordered(_) => unreachable!(),
+        };
+        if let Some(index) = existing {
+            let Self::Flat(entries) = self else {
+                unreachable!();
+            };
+            return &mut entries[index].1;
+        }
+
+        let should_spill = key.instance_revision & RUNTIME_COMPONENT_LIST_CACHE_NAMESPACE != 0
+            || matches!(self, Self::Flat(entries) if entries.len() == Self::FLAT_CAPACITY);
+        if should_spill {
+            // Component-list rows are a potentially large collection, unlike
+            // the mounted direct-child set. Preserve logarithmic lookup for
+            // that explicit cache-key namespace, and for unusually broad
+            // ordinary nesting trees.
+            let Self::Flat(entries) = std::mem::replace(self, Self::Ordered(BTreeMap::new()))
+            else {
+                unreachable!();
+            };
+            let Self::Ordered(ordered) = self else {
+                unreachable!();
+            };
+            ordered.extend(entries);
+            return ordered.entry(key).or_insert_with(make);
+        }
+
+        let Self::Flat(entries) = self else {
+            unreachable!();
+        };
+        entries.push((key, make()));
+        &mut entries.last_mut().expect("just inserted").1
+    }
+
+    #[inline]
+    fn get_or_insert_default(&mut self, key: RuntimeNestedRenderCacheKey) -> &mut T
+    where
+        T: Default,
+    {
+        self.get_or_insert_with(key, T::default)
+    }
+}
+
 #[derive(Default)]
 pub struct RuntimeRenderPaintCache {
     paints: RuntimeRenderPaints,
     paint_configurations: RuntimeRenderPaintConfigurationSlots,
+    preparation_without_nested_layout: Option<RuntimePaintPreparationFrame>,
     preparation: Option<RuntimePaintPreparationFrame>,
     images: RuntimeRenderImages,
     meshes: RuntimeMeshRenderBufferSlots,
     nested_artboards: BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+    // Nested layout hosts require C++'s deferred-gradient preparation pass.
+    // This is a conservative file-level fact, so compute it once while the
+    // instance paint cache is built instead of walking the retained tree on
+    // every frame.
+    requires_nested_layout_prepass: bool,
+    // A flat artboard containing only solid paints has no paint work to do
+    // between advance and draw. Keep this conservative: nested/component-list
+    // hosts can materialize child caches during preparation, even when neither
+    // the parent nor child contains a gradient.
+    paint_preparation_is_noop: bool,
+    // A file containing no gradient paints only needs the recursive paint
+    // preparation walk when its mounted instance tree changes. SolidColor
+    // updates are applied to retained paints during draw, just as C++ mutates
+    // its attached RenderPaint directly in SolidColor::colorValueChanged.
+    paint_preparation_is_solid_only_tree: bool,
+    solid_only_tree_structure_epoch: Option<u64>,
     image_decode_error: Option<ImageDecodeError>,
 }
 
 #[derive(Default)]
 pub struct RuntimeRenderPaints {
     paints_by_global: Vec<Option<Box<dyn RenderPaint>>>,
+    text_paint_pools: BTreeMap<RuntimeTextPaintPoolKey, Vec<Box<dyn RenderPaint>>>,
 }
 
 impl RuntimeRenderPaints {
@@ -6696,9 +8406,39 @@ impl RuntimeRenderPaintCache {
             artboards,
             Some(external_images),
             factory,
+            false,
             true,
-            true,
+            false,
+            None,
         )
+    }
+
+    /// Returns whether this retained cache has paint or slice resources that
+    /// must be refreshed before its next draw.
+    ///
+    /// Solid colors update their retained render paints during draw, matching
+    /// C++ `SolidColor::colorValueChanged`. A solid-only tree therefore only
+    /// needs the recursive preparation pass on its first mounted structure and
+    /// after that structure changes. Gradients stay conservative, and authored
+    /// NSlicers always run their mesh preparation work.
+    #[inline]
+    pub fn needs_paint_preparation(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+    ) -> bool {
+        if !graph.n_slicer_details.is_empty() {
+            return true;
+        }
+        if self.paint_preparation_is_noop {
+            return false;
+        }
+        if self.paint_preparation_is_solid_only_tree {
+            let nested_structure_epoch = instance.nested_structure_epoch();
+            return nested_structure_epoch.is_none()
+                || self.solid_only_tree_structure_epoch != nested_structure_epoch;
+        }
+        true
     }
 
     pub fn root_paints_mut(&mut self) -> &mut RuntimeRenderPaints {
@@ -6735,9 +8475,13 @@ impl RuntimeRenderImages {
     }
 }
 
+fn runtime_render_image_identity(image: &dyn RenderImage) -> usize {
+    (image as *const dyn RenderImage as *const ()) as usize
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct RuntimeCachedRenderPaintConfiguration {
-    instance_epoch: u64,
+    instance_epoch: u128,
     configuration: RuntimeRenderPaintConfiguration,
 }
 
@@ -6753,7 +8497,7 @@ impl RuntimeRenderPaintConfigurationSlots {
             .and_then(|configuration| configuration.as_ref())
     }
 
-    fn is_current(&self, paint_global_id: u32, instance_epoch: u64) -> bool {
+    fn is_current(&self, paint_global_id: u32, instance_epoch: u128) -> bool {
         self.get(paint_global_id)
             .is_some_and(|configuration| configuration.instance_epoch == instance_epoch)
     }
@@ -6820,9 +8564,41 @@ struct RuntimeMeshRenderBuffers {
     last_vertex_bytes: Option<Vec<u8>>,
 }
 
+struct RuntimeSliceMeshRenderBuffers {
+    vertices: Option<Box<dyn RenderBuffer>>,
+    uv_coords: Option<Box<dyn RenderBuffer>>,
+    indices: Option<Box<dyn RenderBuffer>>,
+    vertex_count: u32,
+    index_count: u32,
+    last_update: Option<RuntimeSliceMeshUpdate>,
+}
+
+impl Default for RuntimeSliceMeshRenderBuffers {
+    fn default() -> Self {
+        Self {
+            vertices: None,
+            uv_coords: None,
+            indices: None,
+            vertex_count: 0,
+            index_count: 0,
+            last_update: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeSliceMeshUpdate {
+    world_bits: [u32; 6],
+    input_words: Vec<u64>,
+    vertex_bytes: Vec<u8>,
+    uv_bytes: Vec<u8>,
+    index_bytes: Vec<u8>,
+}
+
 #[derive(Default)]
 struct RuntimeMeshRenderBufferSlots {
     buffers_by_local: Vec<Option<RuntimeMeshRenderBuffers>>,
+    slice_buffers_by_local: Vec<Option<RuntimeSliceMeshRenderBuffers>>,
 }
 
 impl RuntimeMeshRenderBufferSlots {
@@ -6835,6 +8611,19 @@ impl RuntimeMeshRenderBufferSlots {
 
     fn get_mut(&mut self, local_id: usize) -> Option<&mut RuntimeMeshRenderBuffers> {
         self.buffers_by_local.get_mut(local_id)?.as_mut()
+    }
+
+    fn slice_mut(&mut self, local_id: usize) -> &mut RuntimeSliceMeshRenderBuffers {
+        if self.slice_buffers_by_local.len() <= local_id {
+            self.slice_buffers_by_local
+                .resize_with(local_id + 1, || None);
+        }
+        self.slice_buffers_by_local[local_id]
+            .get_or_insert_with(RuntimeSliceMeshRenderBuffers::default)
+    }
+
+    fn slice(&self, local_id: usize) -> Option<&RuntimeSliceMeshRenderBuffers> {
+        self.slice_buffers_by_local.get(local_id)?.as_ref()
     }
 }
 
@@ -6863,8 +8652,10 @@ impl RuntimePaintPreparationFrame {
         graph_global_id: u32,
         instance_epoch: u64,
         world_epoch: u64,
+        tree_epoch: Option<u64>,
     ) -> bool {
-        !self.has_nested_artboards
+        (!self.has_nested_artboards
+            || tree_epoch.is_some_and(|tree_epoch| self.key.nested_epoch == tree_epoch))
             && self.key.graph_global_id == graph_global_id
             && self.key.instance_epoch == instance_epoch
             && self.key.world_epoch == world_epoch
@@ -6873,7 +8664,7 @@ impl RuntimePaintPreparationFrame {
 
 #[derive(Default)]
 pub struct RuntimeRenderPathCache {
-    prepared_artboard: Option<RuntimePreparedArtboardFrame>,
+    prepared_artboard: Option<Arc<RuntimePreparedArtboardFrame>>,
     sorted_drawable_order: Option<RuntimeSortedDrawableOrderFrame>,
     layout_bounds: Option<RuntimeLayoutBoundsFrame>,
     path_composer_lookup: Option<RuntimePathComposerLookupFrame>,
@@ -6882,6 +8673,7 @@ pub struct RuntimeRenderPathCache {
     clip_paths: RuntimeRetainedRenderPathSlots,
     layout_clip_paths: RuntimeRetainedRenderPathSlots,
     text_clip_paths: RuntimeRetainedRenderPathSlots,
+    simple_solid_draw_paths: RuntimeSimpleSolidDrawPathSlots,
     draw_paths: RuntimeDrawPathSlots,
     path_geometry_commands: RuntimePathGeometryCommandSlots,
     shape_paint_paths: RuntimeShapePaintPathCommandSlots,
@@ -6889,10 +8681,10 @@ pub struct RuntimeRenderPathCache {
     world_transforms: RuntimeWorldTransformSlots,
     image_layout_transforms: RuntimeImageLayoutTransformSlots,
     text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
-    allocated_text_paint_pools: BTreeSet<(u32, usize, u32)>,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
-    nested_artboards: BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPathCache>,
+    nested_artboards: RuntimeNestedRenderCaches<RuntimeRenderPathCache>,
+    pending_clip_commands: Vec<usize>,
     // Cycle guard for the component_world_transform_with_bounds <->
     // compute_component_world_transform_with_layout_bounds parent-walk
     // recursion: locals on the current walk. See the guard comment in
@@ -6936,13 +8728,27 @@ struct RuntimeGeometryCacheKey {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimePreparedArtboardCacheKey {
     graph_global_id: u32,
-    prepared_epoch: u64,
+    command_epoch: u64,
+    world_epoch: u64,
+    mounted_component_list_layout_revision: u64,
+    mounted_component_list_prepared_revision: u64,
+}
+
+fn runtime_command_frame_requires_world_epoch(graph: &ArtboardGraph) -> bool {
+    graph
+        .shape_paint_containers
+        .iter()
+        .flat_map(|container| &container.paints)
+        .any(|paint| paint.path_kind == Some(ShapePaintPathKind::World) || paint.feather.is_some())
 }
 
 #[derive(Clone)]
 struct RuntimePreparedArtboardFrame {
     key: RuntimePreparedArtboardCacheKey,
+    world_dependent: bool,
     layout_bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
+    component_list_item_bounds: Arc<BTreeMap<usize, Vec<RuntimeLayoutBounds>>>,
+    component_list_layout_children: Arc<BTreeMap<usize, Vec<ArtboardInstance>>>,
     background: Option<RuntimePreparedBackgroundFrame>,
     commands: Arc<Vec<RuntimeDrawCommand>>,
 }
@@ -6970,12 +8776,14 @@ struct RuntimeSortedDrawableOrderFrame {
 struct RuntimeLayoutBoundsCacheKey {
     graph_global_id: u32,
     layout_epoch: u64,
+    mounted_component_list_layout_revision: u64,
 }
 
 #[derive(Clone)]
 struct RuntimeLayoutBoundsFrame {
     key: RuntimeLayoutBoundsCacheKey,
     bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
+    component_list_item_bounds: Arc<BTreeMap<usize, Vec<RuntimeLayoutBounds>>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7068,51 +8876,66 @@ struct RuntimeShapePaintPathCommandsCacheKey {
 #[derive(Default)]
 struct RuntimeShapePaintPathCommandSlots {
     graph_global_id: Option<u32>,
-    by_paint_local: Vec<Option<RuntimeCachedShapePaintPathCommands>>,
+    by_shape_local: Vec<[Option<RuntimeCachedShapePaintPathCommands>; 3]>,
 }
 
 impl RuntimeShapePaintPathCommandSlots {
     fn get(
         &mut self,
         graph_global_id: u32,
-        paint_local: usize,
+        shape_local: usize,
         key: RuntimeShapePaintPathCommandsCacheKey,
-    ) -> Option<Arc<Vec<RuntimePathCommand>>> {
+    ) -> Option<RuntimePreparedShapePaintPath> {
         if self.graph_global_id != Some(graph_global_id) {
             self.graph_global_id = Some(graph_global_id);
-            self.by_paint_local.clear();
+            self.by_shape_local.clear();
             return None;
         }
-        self.by_paint_local
-            .get(paint_local)
-            .and_then(|cached| cached.as_ref())
+        self.by_shape_local
+            .get(shape_local)
+            .and_then(|slots| slots[runtime_shape_paint_path_kind_slot(key.path_kind)].as_ref())
             .filter(|cached| cached.key == key)
-            .map(|cached| cached.commands.clone())
+            .map(|cached| cached.path.clone())
     }
 
     fn insert(
         &mut self,
         graph_global_id: u32,
-        paint_local: usize,
+        shape_local: usize,
         key: RuntimeShapePaintPathCommandsCacheKey,
-        commands: Arc<Vec<RuntimePathCommand>>,
+        path: RuntimePreparedShapePaintPath,
     ) {
         if self.graph_global_id != Some(graph_global_id) {
             self.graph_global_id = Some(graph_global_id);
-            self.by_paint_local.clear();
+            self.by_shape_local.clear();
         }
-        if self.by_paint_local.len() <= paint_local {
-            self.by_paint_local.resize_with(paint_local + 1, || None);
+        if self.by_shape_local.len() <= shape_local {
+            self.by_shape_local
+                .resize_with(shape_local + 1, || [None, None, None]);
         }
-        self.by_paint_local[paint_local] =
-            Some(RuntimeCachedShapePaintPathCommands { key, commands });
+        self.by_shape_local[shape_local][runtime_shape_paint_path_kind_slot(key.path_kind)] =
+            Some(RuntimeCachedShapePaintPathCommands { key, path });
     }
+}
+
+fn runtime_shape_paint_path_kind_slot(path_kind: RuntimeShapePaintPathKind) -> usize {
+    match path_kind {
+        RuntimeShapePaintPathKind::Local => 0,
+        RuntimeShapePaintPathKind::LocalClockwise => 1,
+        RuntimeShapePaintPathKind::World => 2,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct RuntimePreparedShapePaintPath {
+    commands: Arc<Vec<RuntimePathCommand>>,
+    raw_path: Arc<RawPath>,
 }
 
 #[derive(Clone)]
 struct RuntimeCachedShapePaintPathCommands {
     key: RuntimeShapePaintPathCommandsCacheKey,
-    commands: Arc<Vec<RuntimePathCommand>>,
+    path: RuntimePreparedShapePaintPath,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7232,6 +9055,8 @@ impl RuntimeWorldTransformSlots {
 struct RuntimeImageLayoutTransformCacheKey {
     cache_epoch: u64,
     layout_epoch: u64,
+    layout_scale_separate: bool,
+    image_identity: usize,
     image_width_bits: u32,
     image_height_bits: u32,
     layout_width_bits: u32,
@@ -7241,7 +9066,21 @@ struct RuntimeImageLayoutTransformCacheKey {
 #[derive(Debug, Clone, Copy)]
 struct RuntimeCachedImageLayoutTransform {
     key: RuntimeImageLayoutTransformCacheKey,
+    state: RuntimeImageLayoutTransform,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeImageLayoutTransform {
     local_transform: Mat2D,
+    render_scale_x: f32,
+    render_scale_y: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeImageLayoutWorldTransform {
+    world_transform: Mat2D,
+    render_scale_x: f32,
+    render_scale_y: f32,
 }
 
 #[derive(Default)]
@@ -7256,7 +9095,7 @@ impl RuntimeImageLayoutTransformSlots {
         graph_global_id: u32,
         local_id: usize,
         key: RuntimeImageLayoutTransformCacheKey,
-    ) -> Option<Mat2D> {
+    ) -> Option<RuntimeImageLayoutTransform> {
         if self.graph_global_id != Some(graph_global_id) {
             self.graph_global_id = Some(graph_global_id);
             self.by_local.clear();
@@ -7266,7 +9105,7 @@ impl RuntimeImageLayoutTransformSlots {
             .get(local_id)
             .and_then(|cached| cached.as_ref())
             .filter(|cached| cached.key == key)
-            .map(|cached| cached.local_transform)
+            .map(|cached| cached.state)
     }
 
     fn insert(
@@ -7274,7 +9113,7 @@ impl RuntimeImageLayoutTransformSlots {
         graph_global_id: u32,
         local_id: usize,
         key: RuntimeImageLayoutTransformCacheKey,
-        local_transform: Mat2D,
+        state: RuntimeImageLayoutTransform,
     ) {
         if self.graph_global_id != Some(graph_global_id) {
             self.graph_global_id = Some(graph_global_id);
@@ -7283,10 +9122,7 @@ impl RuntimeImageLayoutTransformSlots {
         if self.by_local.len() <= local_id {
             self.by_local.resize(local_id + 1, None);
         }
-        self.by_local[local_id] = Some(RuntimeCachedImageLayoutTransform {
-            key,
-            local_transform,
-        });
+        self.by_local[local_id] = Some(RuntimeCachedImageLayoutTransform { key, state });
     }
 }
 
@@ -7300,13 +9136,14 @@ struct RuntimeTextShapePaintCacheSlot {
 struct RuntimeTextShapePaintCacheKey {
     path_epoch: u64,
     layout_epoch: u64,
-    instance_epoch: u64,
+    text_epoch: u64,
 }
 
 #[derive(Clone)]
 struct RuntimeCachedTextShapePaints {
     key: RuntimeTextShapePaintCacheKey,
     commands: Arc<Vec<RuntimeShapePaintCommand>>,
+    clip_bounds: Option<StaticTextClipBounds>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7356,9 +9193,30 @@ struct RuntimeGradientShaderCacheEntry {
 
 struct RuntimeCachedDrawPath {
     path: Box<dyn RenderPath>,
-    raw_path: RawPath,
+    raw_path: RuntimeCachedDrawRawPath,
     revision: RuntimeDrawPathRevision,
     fill_rule: RenderFillRule,
+}
+
+struct RuntimeSimpleSolidDrawPath {
+    path: Box<dyn RenderPath>,
+    raw_path: Arc<RawPath>,
+    revision: RuntimeDrawPathRevision,
+    fill_rule: RenderFillRule,
+}
+
+enum RuntimeCachedDrawRawPath {
+    Owned(RawPath),
+    Prepared(Arc<RawPath>),
+}
+
+impl RuntimeCachedDrawRawPath {
+    fn as_raw_path(&self) -> &RawPath {
+        match self {
+            Self::Owned(path) => path,
+            Self::Prepared(path) => path.as_ref(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7403,6 +9261,22 @@ impl RuntimeRetainedRenderPathSlots {
             self.by_local.resize_with(local_id + 1, || None);
         }
         &mut self.by_local[local_id]
+    }
+}
+
+#[derive(Default)]
+struct RuntimeSimpleSolidDrawPathSlots {
+    // A RuntimeRenderPathCache follows one mounted artboard. Nested artboards
+    // receive child caches from RuntimeRenderPathCache::nested_artboards.
+    by_shape_local: Vec<Option<RuntimeSimpleSolidDrawPath>>,
+}
+
+impl RuntimeSimpleSolidDrawPathSlots {
+    fn slot_mut(&mut self, shape_local: usize) -> &mut Option<RuntimeSimpleSolidDrawPath> {
+        if self.by_shape_local.len() <= shape_local {
+            self.by_shape_local.resize_with(shape_local + 1, || None);
+        }
+        &mut self.by_shape_local[shape_local]
     }
 }
 
@@ -7523,6 +9397,22 @@ fn runtime_mark_seen_usize(seen: &mut Vec<usize>, value: usize) -> bool {
     }
     seen.push(value);
     true
+}
+
+fn runtime_component_list_preparation_commands(
+    commands: &[RuntimeDrawCommand],
+) -> Vec<&RuntimeDrawCommand> {
+    let mut component_lists = commands
+        .iter()
+        .filter(|command| {
+            command.object_kind == RuntimeDrawCommandObjectKind::ArtboardComponentList
+        })
+        .collect::<Vec<_>>();
+    // `Artboard::updateDataBinds` constructs component-list children in
+    // authored object order, independent of paint/draw sorting. Render-paint
+    // handles therefore have to be allocated by local id as well.
+    component_lists.sort_by_key(|command| command.local_id.unwrap_or(usize::MAX));
+    component_lists
 }
 
 fn runtime_upsert_nested_preparation_command(
@@ -7696,16 +9586,18 @@ impl RuntimeRenderPathCache {
         .multiply(component.transform.local_transform)
     }
 
-    fn image_world_transform_with_bounds(
+    fn image_layout_world_transform_with_bounds(
         &mut self,
+        runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
         local_id: usize,
         image_object: Option<&RuntimeObject>,
+        resolved_image_asset_global: Option<u32>,
         image: &dyn RenderImage,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         has_vertex_mesh: bool,
-    ) -> Result<Option<Mat2D>> {
+    ) -> Result<Option<RuntimeImageLayoutWorldTransform>> {
         let Some(layout_bounds) = layout_bounds else {
             return Ok(None);
         };
@@ -7727,26 +9619,36 @@ impl RuntimeRenderPathCache {
 
         let image_width = image.width() as f32;
         let image_height = image.height() as f32;
+        let image_identity = runtime_render_image_identity(image);
+        let layout_scale_separate = runtime_layout_image_uses_separate_fit_scale(
+            runtime.header.major_version,
+            runtime.header.minor_version,
+        );
         let key = RuntimeImageLayoutTransformCacheKey {
             cache_epoch: instance.cache_epoch(),
             layout_epoch: instance.layout_epoch(),
+            layout_scale_separate,
+            image_identity,
             image_width_bits: image_width.to_bits(),
             image_height_bits: image_height.to_bits(),
             layout_width_bits: parent_bounds.width.to_bits(),
             layout_height_bits: parent_bounds.height.to_bits(),
         };
 
-        let local_transform = if let Some(local_transform) =
+        let state = if let Some(state) =
             self.image_layout_transforms
                 .get(graph.global_id, local_id, key)
         {
-            local_transform
+            state
         } else {
-            let local_transform = runtime_image_layout_local_transform(
+            let state = runtime_image_layout_local_transform(
                 instance,
                 local_id,
                 image_object,
+                resolved_image_asset_global,
+                image_identity as u64,
                 component.transform.local_transform,
+                layout_scale_separate,
                 image_width,
                 image_height,
                 parent_bounds.width,
@@ -7754,8 +9656,8 @@ impl RuntimeRenderPathCache {
                 has_vertex_mesh,
             )?;
             self.image_layout_transforms
-                .insert(graph.global_id, local_id, key, local_transform);
-            local_transform
+                .insert(graph.global_id, local_id, key, state);
+            state
         };
 
         let parent_world = self.component_world_transform_with_bounds(
@@ -7764,7 +9666,38 @@ impl RuntimeRenderPathCache {
             parent_local,
             Some(layout_bounds),
         );
-        Ok(Some(parent_world.multiply(local_transform)))
+        Ok(Some(RuntimeImageLayoutWorldTransform {
+            world_transform: parent_world.multiply(state.local_transform),
+            render_scale_x: state.render_scale_x,
+            render_scale_y: state.render_scale_y,
+        }))
+    }
+
+    fn image_world_transform_with_bounds(
+        &mut self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        image_object: Option<&RuntimeObject>,
+        resolved_image_asset_global: Option<u32>,
+        image: &dyn RenderImage,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        has_vertex_mesh: bool,
+    ) -> Result<Option<Mat2D>> {
+        Ok(self
+            .image_layout_world_transform_with_bounds(
+                runtime,
+                instance,
+                graph,
+                local_id,
+                image_object,
+                resolved_image_asset_global,
+                image,
+                layout_bounds,
+                has_vertex_mesh,
+            )?
+            .map(|state| state.world_transform))
     }
 
     fn prepared_artboard_frame(
@@ -7772,32 +9705,69 @@ impl RuntimeRenderPathCache {
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
         runtime: Option<&RuntimeFile>,
-    ) -> RuntimePreparedArtboardFrame {
+    ) -> Arc<RuntimePreparedArtboardFrame> {
+        let (mounted_component_list_layout_revision, mounted_component_list_prepared_revision) =
+            runtime_mounted_component_list_revisions(instance);
+        let world_dependent = self
+            .prepared_artboard
+            .as_ref()
+            .filter(|frame| frame.key.graph_global_id == graph.global_id)
+            .map(|frame| frame.world_dependent)
+            .unwrap_or_else(|| runtime_command_frame_requires_world_epoch(graph));
         let key = RuntimePreparedArtboardCacheKey {
             graph_global_id: graph.global_id,
-            prepared_epoch: instance.prepared_epoch(),
+            command_epoch: instance.command_epoch(),
+            world_epoch: world_dependent
+                .then(|| instance.prepared_epoch())
+                .unwrap_or_default(),
+            mounted_component_list_layout_revision,
+            mounted_component_list_prepared_revision,
         };
         if self
             .prepared_artboard
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
-            let layout_bounds = self.layout_bounds_frame(instance, graph, runtime);
+            // The frame is only retained by this cache between calls.  When
+            // no reader has kept a temporary Arc alive, recover the command
+            // vector's allocation for this rebuild.  A held reader simply
+            // takes the established fresh-vector path.
+            let reusable_commands = self
+                .prepared_artboard
+                .take()
+                .and_then(Arc::into_inner)
+                .and_then(|frame| Arc::into_inner(frame.commands))
+                .unwrap_or_default();
+            let layout_frame = self.layout_bounds_frame(
+                instance,
+                graph,
+                runtime,
+                mounted_component_list_layout_revision,
+            );
+            let layout_bounds = layout_frame.bounds.clone();
             let sorted_drawable_order = self.sorted_drawable_order_frame(instance, graph);
-            let commands = instance.draw_commands_with_sorted_drawable_order(
+            let commands = instance.draw_commands_with_sorted_drawable_order_reusing(
                 graph,
                 layout_bounds.as_ref().as_ref(),
                 sorted_drawable_order.as_slice(),
                 self,
+                reusable_commands,
             );
             let background =
                 runtime_prepared_background_frame(instance, graph, layout_bounds.as_ref().as_ref());
-            self.prepared_artboard = Some(RuntimePreparedArtboardFrame {
+            let component_list_layout_children = Arc::new(runtime_component_list_layout_children(
+                instance,
+                layout_frame.component_list_item_bounds.as_ref(),
+            ));
+            self.prepared_artboard = Some(Arc::new(RuntimePreparedArtboardFrame {
                 key,
+                world_dependent,
                 layout_bounds,
+                component_list_item_bounds: layout_frame.component_list_item_bounds,
+                component_list_layout_children,
                 background,
                 commands: Arc::new(commands),
-            });
+            }));
         }
 
         self.prepared_artboard
@@ -7838,26 +9808,33 @@ impl RuntimeRenderPathCache {
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
         runtime: Option<&RuntimeFile>,
-    ) -> Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>> {
+        mounted_component_list_layout_revision: u64,
+    ) -> RuntimeLayoutBoundsFrame {
         let key = RuntimeLayoutBoundsCacheKey {
             graph_global_id: graph.global_id,
             layout_epoch: instance.layout_epoch(),
+            mounted_component_list_layout_revision,
         };
         if self
             .layout_bounds
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
+            let layout = TaffyRuntimeLayoutEngine.compute_layout(instance, graph, runtime);
+            let (bounds, component_list_item_bounds) = match layout {
+                Some(layout) => (Some(layout.bounds), layout.component_list_item_bounds),
+                None => (None, BTreeMap::new()),
+            };
             self.layout_bounds = Some(RuntimeLayoutBoundsFrame {
                 key,
-                bounds: Arc::new(instance.runtime_taffy_layout_bounds(graph, runtime)),
+                bounds: Arc::new(bounds),
+                component_list_item_bounds: Arc::new(component_list_item_bounds),
             });
         }
 
         self.layout_bounds
             .as_ref()
             .expect("layout bounds frame was just populated")
-            .bounds
             .clone()
     }
 
@@ -7945,7 +9922,7 @@ impl RuntimeRenderPathCache {
         graph: &ArtboardGraph,
         command: &RuntimeDrawCommand,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    ) -> Result<Arc<Vec<RuntimeShapePaintCommand>>> {
+    ) -> Result<RuntimeCachedTextShapePaints> {
         let text_local = command
             .local_id
             .context("text draw command missing local id")?;
@@ -7956,7 +9933,7 @@ impl RuntimeRenderPathCache {
         let key = RuntimeTextShapePaintCacheKey {
             path_epoch: instance.path_epoch(),
             layout_epoch: instance.layout_epoch(),
-            instance_epoch: instance.cache_epoch(),
+            text_epoch: instance.text_epoch(),
         };
 
         if self
@@ -7974,12 +9951,15 @@ impl RuntimeRenderPathCache {
                 layout_bounds,
                 layout_constraint,
             )?;
+            let clip_bounds =
+                static_text_clip_bounds(runtime, graph, instance, text_local, layout_constraint)?;
             assign_shape_paint_path_slot_indices(&mut commands);
             self.text_shape_paints.insert(
                 slot,
                 RuntimeCachedTextShapePaints {
                     key,
                     commands: Arc::new(commands),
+                    clip_bounds,
                 },
             );
         }
@@ -7988,7 +9968,6 @@ impl RuntimeRenderPathCache {
             .text_shape_paints
             .get(&slot)
             .expect("text shape paint cache was just populated")
-            .commands
             .clone())
     }
 
@@ -7996,6 +9975,18 @@ impl RuntimeRenderPathCache {
         &mut self,
         graph: &ArtboardGraph,
     ) -> RuntimeGradientPreparationFrame {
+        self.ensure_gradient_preparation_frame(graph).clone()
+    }
+
+    fn gradient_preparation_has_world_space_paints(&mut self, graph: &ArtboardGraph) -> bool {
+        self.ensure_gradient_preparation_frame(graph)
+            .has_world_space_gradient_paints
+    }
+
+    fn ensure_gradient_preparation_frame(
+        &mut self,
+        graph: &ArtboardGraph,
+    ) -> &RuntimeGradientPreparationFrame {
         let key = RuntimeGradientPreparationCacheKey {
             graph_global_id: graph.global_id,
             graph_identity: graph as *const ArtboardGraph as usize,
@@ -8030,7 +10021,6 @@ impl RuntimeRenderPathCache {
         self.gradient_preparation
             .as_ref()
             .expect("gradient preparation frame was just populated")
-            .clone()
     }
 
     fn retained_render_path_key(
@@ -8156,6 +10146,42 @@ impl RuntimeRenderPathCache {
         runtime_cached_retained_render_path(slot, key, factory, commands)
     }
 
+    fn simple_solid_draw_path(
+        &mut self,
+        shape_local: usize,
+        revision: RuntimeDrawPathRevision,
+        factory: &mut dyn RenderFactory,
+        prepared_raw_path: &Arc<RawPath>,
+        fill_rule: RenderFillRule,
+    ) -> &mut Box<dyn RenderPath> {
+        let cached = self
+            .simple_solid_draw_paths
+            .slot_mut(shape_local)
+            .get_or_insert_with(|| RuntimeSimpleSolidDrawPath {
+                path: runtime_make_path_from_raw_path(
+                    factory,
+                    prepared_raw_path.as_ref(),
+                    RenderFillRule::Clockwise,
+                ),
+                raw_path: prepared_raw_path.clone(),
+                revision,
+                fill_rule: RenderFillRule::Clockwise,
+            });
+        if cached.revision != revision {
+            cached.raw_path = prepared_raw_path.clone();
+            runtime_rebuild_path_from_raw_path_preserving_fill_rule(
+                cached.path.as_mut(),
+                cached.raw_path.as_ref(),
+            );
+            cached.revision = revision;
+        }
+        if cached.fill_rule != fill_rule {
+            cached.path.fill_rule(fill_rule);
+            cached.fill_rule = fill_rule;
+        }
+        &mut cached.path
+    }
+
     fn draw_path(
         &mut self,
         key: RuntimeDrawPathCacheKey,
@@ -8176,20 +10202,62 @@ impl RuntimeRenderPathCache {
         fill_rule: RenderFillRule,
         replay_fill_rule: Option<RenderFillRule>,
     ) -> &mut Box<dyn RenderPath> {
+        self.draw_path_with_optional_fill_rule_and_prepared_raw_path(
+            key,
+            revision,
+            factory,
+            commands,
+            fill_rule,
+            replay_fill_rule,
+            None,
+        )
+    }
+
+    fn draw_path_with_optional_fill_rule_and_prepared_raw_path(
+        &mut self,
+        key: RuntimeDrawPathCacheKey,
+        revision: RuntimeDrawPathRevision,
+        factory: &mut dyn RenderFactory,
+        commands: &[RuntimePathCommand],
+        fill_rule: RenderFillRule,
+        replay_fill_rule: Option<RenderFillRule>,
+        prepared_raw_path: Option<&Arc<RawPath>>,
+    ) -> &mut Box<dyn RenderPath> {
         let cached = self.draw_paths.slot_mut(key).get_or_insert_with(|| {
-            let raw_path = runtime_raw_path_from_commands(commands);
+            let raw_path = match prepared_raw_path {
+                Some(path) => RuntimeCachedDrawRawPath::Prepared(path.clone()),
+                None => {
+                    record_runtime_draw_path_command_replay();
+                    RuntimeCachedDrawRawPath::Owned(runtime_raw_path_from_commands(commands))
+                }
+            };
             RuntimeCachedDrawPath {
-                path: runtime_make_path_from_raw_path(factory, &raw_path, fill_rule),
+                path: runtime_make_path_from_raw_path(factory, raw_path.as_raw_path(), fill_rule),
                 raw_path,
                 revision,
                 fill_rule,
             }
         });
         if cached.revision != revision {
-            runtime_rebuild_raw_path_from_commands(&mut cached.raw_path, commands);
+            match prepared_raw_path {
+                Some(path) => cached.raw_path = RuntimeCachedDrawRawPath::Prepared(path.clone()),
+                None => match &mut cached.raw_path {
+                    RuntimeCachedDrawRawPath::Owned(raw_path) => {
+                        record_runtime_draw_path_command_replay();
+                        runtime_rebuild_raw_path_from_commands(raw_path, commands);
+                    }
+                    RuntimeCachedDrawRawPath::Prepared(_) => {
+                        record_runtime_draw_path_command_replay();
+                        cached.raw_path = RuntimeCachedDrawRawPath::Owned(
+                            runtime_raw_path_from_commands(commands),
+                        );
+                    }
+                },
+            }
+            let (path, raw_path) = (&mut cached.path, &cached.raw_path);
             runtime_rebuild_path_from_raw_path_preserving_fill_rule(
-                cached.path.as_mut(),
-                &cached.raw_path,
+                path.as_mut(),
+                raw_path.as_raw_path(),
             );
             cached.revision = revision;
         }
@@ -8279,8 +10347,12 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
+    // In a non-scripting runtime ScriptInputArtboard is inert: C++ never
+    // realizes its referenced artboard, so none of that child's paints or
+    // meshes are cloned. Script-enabled callers use the dedicated helpers and
+    // realize script-hosted children at the point the script requests them.
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, None, factory, true, true,
+        runtime, graph, artboards, None, factory, false, true, false, None,
     )
 }
 
@@ -8291,7 +10363,29 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, None, factory, false, true,
+        runtime, graph, artboards, None, factory, false, true, true, None,
+    )
+}
+
+/// Mirrors C++ file import followed by `File::registerScripts()` before an
+/// artboard instance clones its retained paints and mesh buffers.
+pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+    mut register_file_scripts: impl FnMut(&mut dyn RenderFactory),
+) -> RuntimeRenderPaintCache {
+    preallocate_render_paint_cache_for_artboard_tree_internal(
+        runtime,
+        graph,
+        artboards,
+        None,
+        factory,
+        false,
+        true,
+        true,
+        Some(&mut register_file_scripts),
     )
 }
 
@@ -8302,7 +10396,7 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_pa
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, None, factory, false, false,
+        runtime, graph, artboards, None, factory, false, false, true, None,
     )
 }
 
@@ -8314,6 +10408,8 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     factory: &mut dyn RenderFactory,
     include_script_input_artboards: bool,
     allocate_source_paints: bool,
+    scripting_file_assets: bool,
+    file_registration: Option<&mut dyn FnMut(&mut dyn RenderFactory)>,
 ) -> RuntimeRenderPaintCache {
     let image_asset_globals = runtime
         .file_assets()
@@ -8321,8 +10417,13 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         .filter(|asset| asset.type_name == "ImageAsset")
         .map(|asset| asset.id)
         .collect::<Vec<_>>();
-    let pre_source_image_assets =
-        pre_source_image_asset_globals(runtime, graph, artboards, &image_asset_globals);
+    let pre_source_image_assets = pre_source_image_asset_globals(
+        runtime,
+        graph,
+        artboards,
+        &image_asset_globals,
+        scripting_file_assets,
+    );
     let mut images = RuntimeRenderImages::default();
     let mut image_decode_error = None;
     for asset_global in image_asset_globals
@@ -8361,7 +10462,15 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     }
     let mut source_meshes =
         preallocate_source_mesh_render_buffers_for_artboards(runtime, artboards, factory, &images);
+    if let Some(register_file_scripts) = file_registration {
+        register_file_scripts(factory);
+    }
     let mut cache = RuntimeRenderPaintCache::default();
+    cache.requires_nested_layout_prepass =
+        runtime_artboard_set_contains_nested_layout(graph, artboards);
+    cache.paint_preparation_is_noop = runtime_artboard_paint_preparation_is_noop(graph);
+    cache.paint_preparation_is_solid_only_tree =
+        runtime_artboard_set_paint_preparation_is_solid_only(artboards);
     preallocate_artboard_mesh_render_buffer_tree_batch_into(
         runtime,
         graph,
@@ -8398,6 +10507,11 @@ pub fn preallocate_render_paint_cache_for_artboard_instance(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     let mut cache = RuntimeRenderPaintCache::default();
+    cache.requires_nested_layout_prepass =
+        runtime_artboard_set_contains_nested_layout(graph, artboards);
+    cache.paint_preparation_is_noop = runtime_artboard_paint_preparation_is_noop(graph);
+    cache.paint_preparation_is_solid_only_tree =
+        runtime_artboard_set_paint_preparation_is_solid_only(artboards);
     preallocate_artboard_render_paint_tree_batch_into(
         runtime,
         graph,
@@ -8410,22 +10524,78 @@ pub fn preallocate_render_paint_cache_for_artboard_instance(
     cache
 }
 
+fn runtime_artboard_set_contains_nested_layout(
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+) -> bool {
+    graph
+        .nested_artboards
+        .iter()
+        .chain(
+            artboards
+                .iter()
+                .flat_map(|candidate| candidate.nested_artboards.iter()),
+        )
+        .any(|host| host.type_name == "NestedArtboardLayout")
+}
+
+fn runtime_artboard_paint_preparation_is_noop(graph: &ArtboardGraph) -> bool {
+    graph.nested_artboards.is_empty()
+        && graph.component_lists.is_empty()
+        && graph
+            .shape_paint_containers
+            .iter()
+            .flat_map(|container| container.paints.iter())
+            .all(|paint| {
+                !matches!(
+                    paint.paint_state,
+                    Some(
+                        ShapePaintStateNode::LinearGradient { .. }
+                            | ShapePaintStateNode::RadialGradient { .. }
+                    )
+                )
+            })
+}
+
+fn runtime_artboard_set_paint_preparation_is_solid_only(artboards: &[ArtboardGraph]) -> bool {
+    artboards.iter().all(|graph| {
+        graph
+            .shape_paint_containers
+            .iter()
+            .flat_map(|container| container.paints.iter())
+            .all(|paint| {
+                !matches!(
+                    paint.paint_state,
+                    Some(
+                        ShapePaintStateNode::LinearGradient { .. }
+                            | ShapePaintStateNode::RadialGradient { .. }
+                    )
+                )
+            })
+    })
+}
+
 fn pre_source_image_asset_globals(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     image_asset_globals: &[u32],
+    scripting_file_assets: bool,
 ) -> BTreeSet<u32> {
-    let mut pre_source_assets = import_stack_pre_source_image_asset_globals(runtime)
-        .into_iter()
-        .collect::<BTreeSet<_>>();
+    let mut pre_source_assets =
+        import_stack_pre_source_image_asset_globals(runtime, scripting_file_assets)
+            .into_iter()
+            .collect::<BTreeSet<_>>();
     let heuristic_count =
         heuristic_pre_source_image_decode_count(graph, artboards, image_asset_globals.len());
     pre_source_assets.extend(image_asset_globals.iter().copied().take(heuristic_count));
     pre_source_assets
 }
 
-fn import_stack_pre_source_image_asset_globals(runtime: &RuntimeFile) -> Vec<u32> {
+fn import_stack_pre_source_image_asset_globals(
+    runtime: &RuntimeFile,
+    scripting_file_assets: bool,
+) -> Vec<u32> {
     let mut pre_source_assets = Vec::new();
     let mut latest_image_asset = None;
 
@@ -8433,7 +10603,7 @@ fn import_stack_pre_source_image_asset_globals(runtime: &RuntimeFile) -> Vec<u32
         if object.type_name == "Artboard" {
             break;
         }
-        if !runtime_object_uses_golden_file_asset_stack(object) {
+        if !runtime_object_uses_golden_file_asset_stack(object, scripting_file_assets) {
             continue;
         }
 
@@ -8450,14 +10620,14 @@ fn import_stack_pre_source_image_asset_globals(runtime: &RuntimeFile) -> Vec<u32
     pre_source_assets
 }
 
-fn runtime_object_uses_golden_file_asset_stack(object: &RuntimeObject) -> bool {
-    // The C++ golden runner is built without scripting, so ScriptAsset and
-    // ShaderAsset do not enter the WITH_RIVE_SCRIPTING FileAsset stack cases
-    // and must not displace a pending image importer here.
+fn runtime_object_uses_golden_file_asset_stack(
+    object: &RuntimeObject,
+    scripting_file_assets: bool,
+) -> bool {
     matches!(
         object.type_name,
         "ImageAsset" | "FontAsset" | "AudioAsset" | "BlobAsset" | "ManifestAsset"
-    )
+    ) || scripting_file_assets && matches!(object.type_name, "ScriptAsset" | "ShaderAsset")
 }
 
 fn heuristic_pre_source_image_decode_count(
@@ -8931,7 +11101,7 @@ fn component_list_render_cache_key(
     global_id: Option<u32>,
     local_id: Option<usize>,
     referenced_artboard_global: u32,
-    item_index: usize,
+    _item_index: usize,
     instance_revision: u64,
 ) -> RuntimeNestedRenderCacheKey {
     let mut key = nested_render_cache_key(
@@ -8940,7 +11110,13 @@ fn component_list_render_cache_key(
         referenced_artboard_global,
         instance_revision,
     );
-    key.instance_revision = (1_u64 << 63) | ((item_index as u64) << 32) | instance_revision;
+    // C++ retains an artboard (and therefore its render resources) by the
+    // ViewModelInstanceListItem wrapper identity. A logical index is mutable:
+    // removing or reordering a preceding row must not make every surviving
+    // occurrence look like a fresh artboard. `instance_revision` is the
+    // wrapper occurrence identity and is already unique for duplicate VMI
+    // entries, so keep the component-list namespace bit but not the index.
+    key.instance_revision = RUNTIME_COMPONENT_LIST_CACHE_NAMESPACE | instance_revision;
     key
 }
 
@@ -8988,7 +11164,10 @@ fn runtime_draw_background(
             paint_configurations
                 .as_deref()
                 .is_some_and(|configurations| {
-                    configurations.is_current(global_id, instance.cache_epoch())
+                    configurations.is_current(
+                        global_id,
+                        runtime_paint_configuration_epoch(instance, runtime_paint),
+                    )
                 });
         if !paint_configuration_is_current {
             let object = runtime
@@ -9172,23 +11351,22 @@ fn runtime_background_shape_paint_command(
         shape_world_override: None,
         aliases_local_clockwise_path: false,
         uses_temporary_paint: false,
-        allocates_text_paint_pool: false,
+        text_path_bucket_slot: None,
+        text_paint_pool: None,
+        ensure_text_paint_pool_after_draw: None,
+        prepared_raw_path: None,
     })
 }
 
 fn runtime_prepare_gradient_paint_command(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
-    opacity_local: usize,
+    render_opacity: f32,
     container: &ShapePaintContainerNode,
     paint: &ShapePaintNode,
     shape_world: Mat2D,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
 ) -> RuntimeShapePaintCommand {
-    let render_opacity = instance
-        .component(opacity_local)
-        .map(|component| component.transform.render_opacity)
-        .unwrap_or(1.0);
     let paint_state = runtime_deform_gradient_paint_state_with_nsliced_node(
         instance,
         graph,
@@ -9225,7 +11403,10 @@ fn runtime_prepare_gradient_paint_command(
         shape_world_override: None,
         aliases_local_clockwise_path: false,
         uses_temporary_paint: false,
-        allocates_text_paint_pool: false,
+        text_path_bucket_slot: None,
+        text_paint_pool: None,
+        ensure_text_paint_pool_after_draw: None,
+        prepared_raw_path: None,
     }
 }
 
@@ -9271,6 +11452,24 @@ fn runtime_shape_paint_container_world_transform(
     }
 }
 
+fn runtime_draw_command_will_draw_live(
+    instance: &ArtboardInstance,
+    command: &RuntimeDrawCommand,
+) -> bool {
+    if command.kind != RuntimeDrawCommandKind::Draw {
+        return true;
+    }
+    if command.object_kind == RuntimeDrawCommandObjectKind::Image
+        || sorted_drawable_uses_render_opacity(command.type_name)
+    {
+        return command
+            .local_id
+            .and_then(|local_id| instance.component(local_id))
+            .is_some_and(|component| component.transform.render_opacity != 0.0);
+    }
+    true
+}
+
 fn runtime_foreground_layout_parent_local(
     instance: &ArtboardInstance,
     foreground_local: usize,
@@ -9285,13 +11484,52 @@ fn runtime_foreground_layout_parent_local(
         })
 }
 
-fn runtime_draw_command(
+#[inline]
+fn runtime_live_command_world_transform(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    command: &RuntimeDrawCommand,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    path_cache: &mut RuntimeRenderPathCache,
+    retained_world_is_current: bool,
+) -> Mat2D {
+    // `world_transform` is retained as a structural marker: Some means the
+    // component's settled dense slot is authoritative; None means layout
+    // composition is required. Reuse the numeric value only when the retained
+    // world is current, or when a synthetic command has no live component.
+    if retained_world_is_current && let Some(world_transform) = command.world_transform {
+        return world_transform;
+    }
+    let Some(local_id) = command.local_id else {
+        return command.world_transform.unwrap_or(Mat2D::IDENTITY);
+    };
+    if command.world_transform.is_some() {
+        return instance
+            .component(local_id)
+            .map(|component| component.transform.world_transform)
+            .unwrap_or(Mat2D::IDENTITY);
+    }
+    path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds)
+}
+
+#[inline]
+fn runtime_text_paint_shape_world(
+    draws_text: bool,
+    shape_world_override: Option<Mat2D>,
+    live_shape_world: Mat2D,
+) -> Option<Mat2D> {
+    draws_text.then(|| shape_world_override.unwrap_or(live_shape_world))
+}
+
+fn runtime_draw_live_command(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     command: &RuntimeDrawCommand,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    component_list_item_bounds: &BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
+    component_list_layout_children: &BTreeMap<usize, Vec<ArtboardInstance>>,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
@@ -9302,26 +11540,32 @@ fn runtime_draw_command(
     nested_paint_caches: Option<
         &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
     >,
-    nested_ancestors: &BTreeSet<u32>,
+    nested_ancestors: &[u32],
+    retained_world_is_current: bool,
 ) -> Result<()> {
-    match command.kind {
-        RuntimeDrawCommandKind::ClipStart => {
-            runtime_draw_clip_start(
-                instance,
-                graph,
-                command,
-                layout_bounds,
-                factory,
-                renderer,
-                path_cache,
-            );
-            return Ok(());
-        }
-        RuntimeDrawCommandKind::ClipEnd => {
-            runtime_draw_clip_end(graph, command, renderer);
-            return Ok(());
-        }
-        RuntimeDrawCommandKind::Draw => {}
+    debug_assert_eq!(command.kind, RuntimeDrawCommandKind::Draw);
+
+    // This retained form is deliberately self-contained: it cannot be a
+    // layout proxy, nested artboard, image, script, clip participant, or
+    // world-space stroke. Dispatch it before the generic drawable family so
+    // the overwhelmingly common fill path does not pay for every unrelated
+    // command-kind test on each replay.
+    if command.simple_solid_shape
+        && runtime_try_draw_simple_solid_shape(
+            runtime,
+            instance,
+            graph,
+            command,
+            layout_bounds,
+            factory,
+            renderer,
+            paint_by_global,
+            path_cache,
+            paint_configurations.as_deref_mut(),
+            retained_world_is_current,
+        )?
+    {
+        return Ok(());
     }
 
     if command.object_kind == RuntimeDrawCommandObjectKind::DrawableProxy
@@ -9367,6 +11611,7 @@ fn runtime_draw_command(
             nested_paint_caches,
             layout_bounds,
             nested_ancestors,
+            retained_world_is_current,
         );
     }
 
@@ -9386,6 +11631,8 @@ fn runtime_draw_command(
             paint_configurations.as_deref_mut(),
             nested_paint_caches,
             layout_bounds,
+            component_list_item_bounds,
+            component_list_layout_children,
             nested_ancestors,
         );
     }
@@ -9405,22 +11652,41 @@ fn runtime_draw_command(
     }
 
     if command.object_kind == RuntimeDrawCommandObjectKind::ScriptedDrawable {
-        return runtime_draw_scripted_drawable(instance, command, factory, renderer);
+        return runtime_draw_scripted_drawable(
+            instance,
+            graph,
+            command,
+            layout_bounds,
+            path_cache,
+            factory,
+            renderer,
+            retained_world_is_current,
+        );
     }
 
-    let shape_world = command.world_transform.unwrap_or_else(|| {
-        command
-            .local_id
-            .map(|local_id| {
-                path_cache.component_world_transform_with_bounds(
-                    instance,
-                    graph,
-                    local_id,
-                    layout_bounds,
-                )
-            })
-            .unwrap_or(Mat2D::IDENTITY)
-    });
+    if command.world_stroke_shape
+        && runtime_try_draw_world_stroke_shape(
+            runtime,
+            instance,
+            command,
+            factory,
+            renderer,
+            paint_by_global,
+            path_cache,
+            paint_configurations.as_deref_mut(),
+        )?
+    {
+        return Ok(());
+    }
+
+    let shape_world = runtime_live_command_world_transform(
+        instance,
+        graph,
+        command,
+        layout_bounds,
+        path_cache,
+        retained_world_is_current,
+    );
     let draws_text = command.object_kind == RuntimeDrawCommandObjectKind::Text;
     let text_local = draws_text.then_some(command.local_id).flatten();
     let text_shape_paints = if draws_text {
@@ -9434,13 +11700,14 @@ fn runtime_draw_command(
     } else {
         None
     };
-    let text_clip_path_commands = if let Some(text_local) = text_local
+    let text_clip_path_commands = if text_local.is_some()
         && text_shape_paints
             .as_ref()
-            .is_some_and(|paints| !paints.is_empty())
+            .is_some_and(|paints| !paints.commands.is_empty())
     {
-        let layout_constraint = instance.runtime_text_layout_constraint(text_local, layout_bounds);
-        static_text_clip_bounds(runtime, graph, instance, text_local, layout_constraint)?
+        text_shape_paints
+            .as_ref()
+            .and_then(|paints| paints.clip_bounds)
             .map(|bounds| runtime_text_clip_path_commands(bounds, shape_world))
     } else {
         None
@@ -9449,6 +11716,7 @@ fn runtime_draw_command(
         text_shape_paints
             .as_ref()
             .expect("text shape paints were just populated")
+            .commands
             .as_slice()
     } else {
         command.shape_paints.as_slice()
@@ -9461,8 +11729,11 @@ fn runtime_draw_command(
     if let (Some(text_local), Some(path_commands)) =
         (text_local, text_clip_path_commands.as_deref())
     {
+        // C++ `Text::m_clipPath` is a default `ShapePaintPath`, whose default
+        // fill rule is clockwise. Keep text overflow clips distinct from
+        // ordinary non-zero shape paths in the retained cache.
         let key =
-            path_cache.retained_world_render_path_key(instance, graph, RenderFillRule::NonZero);
+            path_cache.retained_world_render_path_key(instance, graph, RenderFillRule::Clockwise);
         let clip_path = path_cache.text_clip_path(key, text_local, factory, path_commands);
         renderer.clip_path(clip_path.as_ref());
     }
@@ -9472,12 +11743,12 @@ fn runtime_draw_command(
         text_temporary_paints.reserve(
             shape_paints
                 .iter()
-                .filter(|paint| paint.uses_temporary_paint)
+                .filter(|paint| paint.uses_temporary_paint && paint.text_paint_pool.is_none())
                 .count(),
         );
         for _ in shape_paints
             .iter()
-            .filter(|paint| paint.uses_temporary_paint)
+            .filter(|paint| paint.uses_temporary_paint && paint.text_paint_pool.is_none())
         {
             text_temporary_paints.push(factory.make_render_paint());
         }
@@ -9493,6 +11764,23 @@ fn runtime_draw_command(
         };
     for paint in shape_paints {
         let global_id = paint.paint_global_id;
+        let text_paint_pool_slot = if draws_text {
+            paint.text_paint_pool.map(|pool_use| {
+                let key = RuntimeTextPaintPoolKey {
+                    graph_global_id: graph.global_id,
+                    instance_identity: instance.instance_identity(),
+                    text_local: command.local_id.unwrap_or_default(),
+                    style_local: pool_use.spec.style_local,
+                };
+                let pool = paint_by_global.text_paint_pools.entry(key).or_default();
+                while pool.len() < pool_use.spec.paint_count {
+                    pool.push(factory.make_render_paint());
+                }
+                (key, pool_use.paint_index)
+            })
+        } else {
+            None
+        };
         let draw_path_revision = runtime_draw_path_revision(instance, paint.path_kind);
         let effect_or_shape_path_commands = if paint.has_effect_path {
             &paint.effect_path_commands
@@ -9505,52 +11793,93 @@ fn runtime_draw_command(
             .filter(|feather| feather.inner)
             .map(|feather| feather.inner_path_commands.as_slice())
             .unwrap_or(effect_or_shape_path_commands);
-        let temporary_paint_index = if draws_text && paint.uses_temporary_paint {
-            let object = runtime
-                .object(global_id as usize)
-                .with_context(|| format!("missing paint global {global_id}"))?;
-            let render_paint = text_temporary_paints
-                .get_mut(text_temporary_paint_index)
-                .context("missing temporary text render paint")?;
-            let index = text_temporary_paint_index;
-            text_temporary_paint_index += 1;
-            runtime_configure_paint(render_paint.as_mut(), instance, object, paint, None)?;
-            Some(index)
-        } else {
-            let paint_configuration_is_current =
-                paint_configurations
-                    .as_deref()
-                    .is_some_and(|configurations| {
-                        configurations.is_current(
-                            global_id,
-                            runtime_paint_configuration_epoch(instance, paint),
-                        )
-                    });
-            if !paint_configuration_is_current {
+        let temporary_paint_index =
+            if draws_text && paint.uses_temporary_paint && text_paint_pool_slot.is_none() {
                 let object = runtime
                     .object(global_id as usize)
                     .with_context(|| format!("missing paint global {global_id}"))?;
-                let render_paint = paint_by_global
-                    .paint_mut(global_id)
-                    .with_context(|| format!("missing render paint for global {global_id}"))?
-                    .as_mut();
-                if let Some(configurations) = paint_configurations.as_mut() {
-                    runtime_configure_paint_with_cache(
-                        render_paint,
-                        configurations,
-                        global_id,
-                        instance,
-                        object,
-                        paint,
-                    )?;
-                } else {
-                    runtime_configure_paint(render_paint, instance, object, paint, None)?;
+                let render_paint = text_temporary_paints
+                    .get_mut(text_temporary_paint_index)
+                    .context("missing temporary text render paint")?;
+                let index = text_temporary_paint_index;
+                text_temporary_paint_index += 1;
+                runtime_configure_paint(render_paint.as_mut(), instance, object, paint, None)?;
+                Some(index)
+            } else {
+                let paint_configuration_is_current =
+                    paint_configurations
+                        .as_deref()
+                        .is_some_and(|configurations| {
+                            configurations.is_current(
+                                global_id,
+                                runtime_paint_configuration_epoch(instance, paint),
+                            )
+                        });
+                if !paint_configuration_is_current {
+                    let object = runtime
+                        .object(global_id as usize)
+                        .with_context(|| format!("missing paint global {global_id}"))?;
+                    let render_paint = paint_by_global
+                        .paint_mut(global_id)
+                        .with_context(|| format!("missing render paint for global {global_id}"))?
+                        .as_mut();
+                    if let Some(configurations) = paint_configurations.as_mut() {
+                        runtime_configure_paint_with_cache(
+                            render_paint,
+                            configurations,
+                            global_id,
+                            instance,
+                            object,
+                            paint,
+                        )?;
+                    } else {
+                        runtime_configure_paint(render_paint, instance, object, paint, None)?;
+                    }
                 }
-            }
-            None
-        };
+                None
+            };
+        if let Some((key, paint_index)) = text_paint_pool_slot {
+            let object = runtime
+                .object(global_id as usize)
+                .with_context(|| format!("missing paint global {global_id}"))?;
+            let render_paint = paint_by_global
+                .text_paint_pools
+                .get_mut(&key)
+                .and_then(|pool| pool.get_mut(paint_index))
+                .context("missing pooled text render paint")?;
+            runtime_configure_paint(render_paint.as_mut(), instance, object, paint, None)?;
+        }
         let mut saved = !paint.needs_save_operation;
-        let paint_shape_world = paint.shape_world_override.unwrap_or(shape_world);
+        // Layout proxy commands used to retain this value in
+        // `shape_world_override`. Read the settled component transform at
+        // replay time instead, matching C++ Shape::worldTransform(). A
+        // ForegroundLayoutDrawable paints its parent layout path.
+        let paint_shape_world = if let Some(text_shape_world) =
+            runtime_text_paint_shape_world(draws_text, paint.shape_world_override, shape_world)
+        {
+            // Text shaping emits one paint command per run/bucket. Its
+            // override is the run's live glyph transform, not a retained
+            // component-world snapshot, so replacing it with the Text
+            // component transform collapses distinct lines onto one origin.
+            text_shape_world
+        } else if paint.shape_world_override.is_some()
+            && command.object_kind == RuntimeDrawCommandObjectKind::ForegroundLayoutDrawable
+        {
+            command
+                .local_id
+                .and_then(|local_id| runtime_foreground_layout_parent_local(instance, local_id))
+                .map(|layout_local| {
+                    path_cache.component_world_transform_with_bounds(
+                        instance,
+                        graph,
+                        layout_local,
+                        layout_bounds,
+                    )
+                })
+                .unwrap_or(shape_world)
+        } else {
+            shape_world
+        };
         // Ported from C++ src/shapes/paint/shape_paint.cpp and feather.cpp.
         // C++ reuses the parent layout render path for effect-free foreground
         // layout paints.
@@ -9625,7 +11954,14 @@ fn runtime_draw_command(
         } else {
             None
         };
-        let path = path_cache.draw_path_with_optional_fill_rule(
+        let prepared_raw_path = paint.prepared_raw_path.as_ref().filter(|_| {
+            !paint.has_effect_path
+                && !paint
+                    .feather_state
+                    .as_ref()
+                    .is_some_and(|feather| feather.inner)
+        });
+        let path = path_cache.draw_path_with_optional_fill_rule_and_prepared_raw_path(
             RuntimeDrawPathCacheKey {
                 kind: RuntimeDrawPathCacheKind::Draw,
                 path_kind: runtime_draw_path_cache_path_kind(paint),
@@ -9637,8 +11973,16 @@ fn runtime_draw_command(
             draw_path_commands,
             RenderFillRule::Clockwise,
             replay_fill_rule,
+            prepared_raw_path,
         );
-        let render_paint = if let Some(index) = temporary_paint_index {
+        let render_paint = if let Some((key, paint_index)) = text_paint_pool_slot {
+            paint_by_global
+                .text_paint_pools
+                .get(&key)
+                .and_then(|pool| pool.get(paint_index))
+                .context("missing pooled text render paint")?
+                .as_ref()
+        } else if let Some(index) = temporary_paint_index {
             text_temporary_paints[index].as_ref()
         } else {
             paint_by_global
@@ -9650,15 +11994,17 @@ fn runtime_draw_command(
         if saved && paint.needs_save_operation {
             renderer.restore();
         }
-        if draws_text
-            && paint.allocates_text_paint_pool
-            && path_cache.allocated_text_paint_pools.insert((
-                graph.global_id,
-                command.local_id.unwrap_or_default(),
-                paint.paint_global_id,
-            ))
-        {
-            let _ = factory.make_render_paint();
+        if draws_text && let Some(spec) = paint.ensure_text_paint_pool_after_draw {
+            let key = RuntimeTextPaintPoolKey {
+                graph_global_id: graph.global_id,
+                instance_identity: instance.instance_identity(),
+                text_local: command.local_id.unwrap_or_default(),
+                style_local: spec.style_local,
+            };
+            let pool = paint_by_global.text_paint_pools.entry(key).or_default();
+            while pool.len() < spec.paint_count {
+                pool.push(factory.make_render_paint());
+            }
         }
     }
     if text_needs_save_operation {
@@ -9668,11 +12014,258 @@ fn runtime_draw_command(
     Ok(())
 }
 
-fn runtime_draw_scripted_drawable(
+/// Replay the retained world-space stroke shape used by C++ `Shape::draw`
+/// without entering text, layout, local-path, or temporary-paint machinery.
+/// The structural guard keeps effect paths and outer feather offsets on their
+/// exact `ShapePaint::draw` path; every richer form falls through unchanged.
+#[inline]
+fn runtime_try_draw_world_stroke_shape(
+    runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     command: &RuntimeDrawCommand,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    path_cache: &mut RuntimeRenderPathCache,
+    paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+) -> Result<bool> {
+    if !command.world_stroke_shape {
+        return Ok(false);
+    }
+    debug_assert!(runtime_command_is_world_stroke_shape(command));
+    let Some(configurations) = paint_configurations else {
+        return Ok(false);
+    };
+    let local_id = command
+        .local_id
+        .expect("world-stroke shape guard requires a local id");
+    let draw_path_revision = runtime_draw_path_revision(instance, RuntimeShapePaintPathKind::World);
+    let paint_configuration_epoch = u128::from(runtime_world_paint_configuration_epoch(instance));
+
+    for paint in &command.shape_paints {
+        let global_id = paint.paint_global_id;
+        let paint_configuration_is_current =
+            configurations.is_current(global_id, paint_configuration_epoch);
+        if !paint_configuration_is_current {
+            let object = runtime
+                .object(global_id as usize)
+                .with_context(|| format!("missing paint global {global_id}"))?;
+            let render_paint = paint_by_global
+                .paint_mut(global_id)
+                .with_context(|| format!("missing render paint for global {global_id}"))?
+                .as_mut();
+            runtime_configure_paint_with_cache(
+                render_paint,
+                configurations,
+                global_id,
+                instance,
+                object,
+                paint,
+            )?;
+        }
+
+        let effect_or_shape_path_commands = if paint.has_effect_path {
+            &paint.effect_path_commands
+        } else {
+            &paint.path_commands
+        };
+        let mut saved = !paint.needs_save_operation;
+        if let Some(feather) = paint.feather_state.as_ref()
+            && runtime_feather_has_offset(feather)
+        {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+        }
+
+        let prepared_raw_path = paint
+            .prepared_raw_path
+            .as_ref()
+            .filter(|_| !paint.has_effect_path);
+        let path = path_cache.draw_path_with_optional_fill_rule_and_prepared_raw_path(
+            RuntimeDrawPathCacheKey {
+                kind: RuntimeDrawPathCacheKind::Draw,
+                path_kind: RuntimeShapePaintPathKind::World,
+                local_id: Some(if paint.has_effect_path {
+                    paint.paint_local
+                } else {
+                    local_id
+                }),
+                path_index: paint.path_slot_index,
+            },
+            draw_path_revision,
+            factory,
+            effect_or_shape_path_commands,
+            RenderFillRule::Clockwise,
+            None,
+            prepared_raw_path,
+        );
+        let render_paint = paint_by_global
+            .paint(global_id)
+            .with_context(|| format!("missing render paint for global {global_id}"))?
+            .as_ref();
+        renderer.draw_path(path.as_ref(), render_paint);
+        if saved && paint.needs_save_operation {
+            renderer.restore();
+        }
+    }
+    Ok(true)
+}
+
+fn runtime_command_is_world_stroke_shape(command: &RuntimeDrawCommand) -> bool {
+    command.kind == RuntimeDrawCommandKind::Draw
+        && command.object_kind == RuntimeDrawCommandObjectKind::Other
+        && command.type_name == "Shape"
+        && command.local_id.is_some()
+        && command.clipping_shape_local.is_none()
+        && !command.shape_paints.is_empty()
+        && command.shape_paints.iter().all(|paint| {
+            paint.paint_type == RuntimeShapePaintKind::Stroke
+                && paint.path_kind == RuntimeShapePaintPathKind::World
+                && paint.paint_space_transform.is_some()
+                && paint
+                    .feather_state
+                    .as_ref()
+                    .is_none_or(|feather| !feather.inner)
+                && !paint.aliases_local_clockwise_path
+                && !paint.uses_temporary_paint
+                && paint.text_path_bucket_slot.is_none()
+                && paint.text_paint_pool.is_none()
+                && paint.ensure_text_paint_pool_after_draw.is_none()
+        })
+}
+
+/// Replay the overwhelmingly common retained-shape form without entering the
+/// generic text/effect/feather/layout paint machinery below. The guard is
+/// deliberately structural: a command that needs any richer behavior falls
+/// through to the existing replay path unchanged.
+#[inline]
+fn runtime_try_draw_simple_solid_shape(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    command: &RuntimeDrawCommand,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    path_cache: &mut RuntimeRenderPathCache,
+    mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+    retained_world_is_current: bool,
+) -> Result<bool> {
+    if !command.simple_solid_shape {
+        return Ok(false);
+    }
+    let [paint] = command.shape_paints.as_slice() else {
+        return Ok(false);
+    };
+    let Some(local_id) = command.local_id else {
+        return Ok(false);
+    };
+    let Some(prepared_raw_path) = paint.prepared_raw_path.as_ref() else {
+        return Ok(false);
+    };
+    let shape_world = runtime_live_command_world_transform(
+        instance,
+        graph,
+        command,
+        layout_bounds,
+        path_cache,
+        retained_world_is_current,
+    );
+    debug_assert!(runtime_command_is_simple_solid_shape(command));
+
+    let global_id = paint.paint_global_id;
+    let paint_configuration_is_current =
+        paint_configurations
+            .as_deref()
+            .is_some_and(|configurations| {
+                configurations.is_current(
+                    global_id,
+                    runtime_paint_configuration_epoch(instance, paint),
+                )
+            });
+    if !paint_configuration_is_current {
+        let object = runtime
+            .object(global_id as usize)
+            .with_context(|| format!("missing paint global {global_id}"))?;
+        let render_paint = paint_by_global
+            .paint_mut(global_id)
+            .with_context(|| format!("missing render paint for global {global_id}"))?
+            .as_mut();
+        if let Some(configurations) = paint_configurations.as_mut() {
+            runtime_configure_paint_with_cache(
+                render_paint,
+                configurations,
+                global_id,
+                instance,
+                object,
+                paint,
+            )?;
+        } else {
+            runtime_configure_paint(render_paint, instance, object, paint, None)?;
+        }
+    }
+
+    renderer.save();
+    renderer.transform(runtime_render_mat(shape_world));
+    let path = path_cache.simple_solid_draw_path(
+        local_id,
+        runtime_draw_path_revision(instance, RuntimeShapePaintPathKind::Local),
+        factory,
+        prepared_raw_path,
+        paint.fill_rule,
+    );
+    let render_paint = paint_by_global
+        .paint(global_id)
+        .with_context(|| format!("missing render paint for global {global_id}"))?
+        .as_ref();
+    renderer.draw_path(path.as_ref(), render_paint);
+    renderer.restore();
+    Ok(true)
+}
+
+fn runtime_command_is_simple_solid_shape(command: &RuntimeDrawCommand) -> bool {
+    let [paint] = command.shape_paints.as_slice() else {
+        return false;
+    };
+    command.local_id.is_some()
+        && command.world_transform.is_some()
+        && command.object_kind == RuntimeDrawCommandObjectKind::Other
+        && command.type_name == "Shape"
+        && command.clipping_shape_local.is_none()
+        && command.needs_save_operation
+        && paint.paint_type == RuntimeShapePaintKind::Fill
+        && paint.path_kind == RuntimeShapePaintPathKind::Local
+        && matches!(
+            paint.paint_state,
+            Some(RuntimeShapePaintState::SolidColor { .. })
+        )
+        && paint.feather_state.is_none()
+        && paint.paint_space_transform.is_none()
+        && !paint.has_effect_path
+        && paint.effect_path_commands.is_empty()
+        && paint.needs_save_operation
+        && paint.shape_world_override.is_none()
+        && !paint.aliases_local_clockwise_path
+        && !paint.uses_temporary_paint
+        && paint.text_path_bucket_slot.is_none()
+        && paint.text_paint_pool.is_none()
+        && paint.ensure_text_paint_pool_after_draw.is_none()
+        && paint.prepared_raw_path.is_some()
+}
+
+fn runtime_draw_scripted_drawable(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    command: &RuntimeDrawCommand,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    path_cache: &mut RuntimeRenderPathCache,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    retained_world_is_current: bool,
 ) -> Result<()> {
     let Some(global_id) = command.global_id else {
         return Ok(());
@@ -9689,9 +12282,15 @@ fn runtime_draw_scripted_drawable(
     if needs_opacity_save {
         renderer.modulate_opacity(command.render_opacity);
     }
-    renderer.transform(runtime_render_mat(
-        command.world_transform.unwrap_or(Mat2D::IDENTITY),
-    ));
+    let world_transform = runtime_live_command_world_transform(
+        instance,
+        graph,
+        command,
+        layout_bounds,
+        path_cache,
+        retained_world_is_current,
+    );
+    renderer.transform(runtime_render_mat(world_transform));
 
     let mut host = crate::NoopScriptHost;
     let draw_result = script_instance
@@ -9732,6 +12331,506 @@ fn runtime_draw_path_revision(
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct RuntimeSliceMeshGeometry {
+    vertices: Vec<(f32, f32)>,
+    uvs: Vec<(f32, f32)>,
+    indices: Vec<u16>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeSliceMeshVertex {
+    vertex: (f32, f32),
+    uv: (f32, f32),
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_prepare_slice_meshes(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    commands: &[RuntimeDrawCommand],
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    factory: &mut dyn RenderFactory,
+    image_by_global: &RuntimeRenderImages,
+    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
+    path_cache: &mut RuntimeRenderPathCache,
+) -> Result<()> {
+    for details in graph
+        .n_slicer_details
+        .iter()
+        .filter(|details| details.type_name == "NSlicer")
+    {
+        let Some(image_local) = runtime_nslicer_image_local(instance, details) else {
+            continue;
+        };
+        let image_command = commands.iter().find(|command| {
+            command.object_kind == RuntimeDrawCommandObjectKind::Image
+                && command.local_id == Some(image_local)
+        });
+        let resolved_image_asset_global = image_command
+            .and_then(|command| command.resolved_image_asset_global)
+            .or_else(|| {
+                let authored = graph
+                    .sorted_drawable_order
+                    .iter()
+                    .find(|drawable| drawable.local_id == Some(image_local))
+                    .and_then(|drawable| drawable.resolved_image_asset_global);
+                instance.resolved_image_asset_global(Some(image_local), authored)
+            });
+        let Some(image) =
+            resolved_image_asset_global.and_then(|asset_global| image_by_global.get(asset_global))
+        else {
+            continue;
+        };
+        let image_object = instance
+            .component(image_local)
+            .and_then(|component| runtime.object(component.global_id as usize));
+        let layout_state = path_cache.image_layout_world_transform_with_bounds(
+            runtime,
+            instance,
+            graph,
+            image_local,
+            image_object,
+            resolved_image_asset_global,
+            image,
+            layout_bounds,
+            false,
+        )?;
+        let world_transform = layout_state
+            .map(|state| state.world_transform)
+            .unwrap_or_else(|| {
+                path_cache.component_world_transform_with_bounds(
+                    instance,
+                    graph,
+                    image_local,
+                    layout_bounds,
+                )
+            });
+        let render_scale_x = layout_state
+            .map(|state| state.render_scale_x)
+            .unwrap_or_else(|| {
+                instance
+                    .transform_property(image_local, TransformProperty::ScaleX)
+                    .unwrap_or(1.0)
+            });
+        let render_scale_y = layout_state
+            .map(|state| state.render_scale_y)
+            .unwrap_or_else(|| {
+                instance
+                    .transform_property(image_local, TransformProperty::ScaleY)
+                    .unwrap_or(1.0)
+            });
+        let input_words = runtime_slice_mesh_input_words(
+            runtime,
+            instance,
+            graph,
+            details,
+            image_local,
+            resolved_image_asset_global,
+            runtime_render_image_identity(image),
+            image.width(),
+            image.height(),
+            render_scale_x,
+            render_scale_y,
+            layout_bounds,
+        );
+        let world_bits = world_transform.0.map(f32::to_bits);
+        if mesh_by_local
+            .slice(details.local_id)
+            .and_then(|buffers| buffers.last_update.as_ref())
+            .is_some_and(|last| last.world_bits == world_bits && last.input_words == input_words)
+        {
+            continue;
+        }
+        let geometry = runtime_slice_mesh_geometry(
+            runtime,
+            instance,
+            details,
+            image.width() as f32,
+            image.height() as f32,
+            render_scale_x.abs(),
+            render_scale_y.abs(),
+        );
+        let update =
+            runtime_slice_mesh_update(geometry, world_transform, image.uv_transform(), input_words);
+        let buffers = mesh_by_local.slice_mut(details.local_id);
+        runtime_update_slice_mesh_render_buffers(factory, buffers, update);
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_slice_mesh_input_words(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    details: &NSlicerDetailsNode,
+    image_local: usize,
+    resolved_image_asset_global: Option<u32>,
+    image_identity: usize,
+    image_width: u32,
+    image_height: u32,
+    render_scale_x: f32,
+    render_scale_y: f32,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+) -> Vec<u64> {
+    let mut words = vec![
+        u64::from(resolved_image_asset_global.unwrap_or(u32::MAX)),
+        image_identity as u64,
+        u64::from(image_width),
+        u64::from(image_height),
+        u64::from(render_scale_x.to_bits()),
+        u64::from(render_scale_y.to_bits()),
+    ];
+    for property in [
+        TransformProperty::X,
+        TransformProperty::Y,
+        TransformProperty::Rotation,
+        TransformProperty::ScaleX,
+        TransformProperty::ScaleY,
+    ] {
+        words.push(u64::from(
+            instance
+                .transform_property(image_local, property)
+                .unwrap_or_else(|| property.default_value())
+                .to_bits(),
+        ));
+    }
+    let layout_size = instance
+        .component(image_local)
+        .and_then(|component| component.parent_local)
+        .and_then(|parent_local| layout_bounds.and_then(|bounds| bounds.get(&parent_local)))
+        .map(|bounds| (bounds.width.to_bits(), bounds.height.to_bits()));
+    words.push(u64::from(layout_size.map_or(u32::MAX, |(width, _)| width)));
+    words.push(u64::from(
+        layout_size.map_or(u32::MAX, |(_, height)| height),
+    ));
+    for axis in details.x_axes.iter().chain(&details.y_axes) {
+        words.push(u64::from(
+            runtime_axis_offset(runtime, instance, axis).to_bits(),
+        ));
+        words.push(u64::from(runtime_axis_normalized(runtime, instance, axis)));
+    }
+    for tile_mode in &details.tile_modes {
+        words.push(tile_mode.patch_index);
+        words.push(tile_mode.style);
+    }
+    // The graph identity prevents retained slots with coincident local ids and
+    // identical values from being reused across a remounted child artboard.
+    words.push(u64::from(graph.global_id));
+    words
+}
+
+fn runtime_nslicer_image_local(
+    instance: &ArtboardInstance,
+    details: &NSlicerDetailsNode,
+) -> Option<usize> {
+    instance
+        .component(details.local_id)
+        .filter(|component| component.type_name == "NSlicer")?
+        .parent_local
+        .filter(|parent_local| {
+            instance
+                .component(*parent_local)
+                .is_some_and(|component| component.type_name == "Image")
+        })
+}
+
+fn runtime_slice_mesh_geometry(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    details: &NSlicerDetailsNode,
+    image_width: f32,
+    image_height: f32,
+    render_scale_x: f32,
+    render_scale_y: f32,
+) -> RuntimeSliceMeshGeometry {
+    // Ported line-for-line from C++ `src/shapes/slice_mesh.cpp::calc`.
+    if image_width == 0.0 || image_height == 0.0 || render_scale_x == 0.0 || render_scale_y == 0.0 {
+        return RuntimeSliceMeshGeometry {
+            vertices: Vec::new(),
+            uvs: Vec::new(),
+            indices: Vec::new(),
+        };
+    }
+
+    let us = runtime_nslicer_uv_stops(runtime, instance, &details.x_axes, image_width);
+    let vs = runtime_nslicer_uv_stops(runtime, instance, &details.y_axes, image_height);
+    let xs = runtime_slice_mesh_vertex_stops(&us, image_width, render_scale_x);
+    let ys = runtime_slice_mesh_vertex_stops(&vs, image_height, render_scale_y);
+    if us.len() != xs.len() || vs.len() != ys.len() {
+        return RuntimeSliceMeshGeometry {
+            vertices: Vec::new(),
+            uvs: Vec::new(),
+            indices: Vec::new(),
+        };
+    }
+
+    let tile_modes = details
+        .tile_modes
+        .iter()
+        .map(|tile_mode| (tile_mode.patch_index, tile_mode.style))
+        .collect::<BTreeMap<_, _>>();
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+    let mut vertex_index = 0_u16;
+    let patch_width = details.x_axes.len() + 1;
+
+    'patches: for patch_y in 0..vs.len().saturating_sub(1) {
+        for patch_x in 0..us.len().saturating_sub(1) {
+            let patch_index = patch_y
+                .checked_mul(patch_width)
+                .and_then(|index| index.checked_add(patch_x))
+                .and_then(|index| u64::try_from(index).ok())
+                .unwrap_or(u64::MAX);
+            let tile_mode = tile_modes.get(&patch_index).copied().unwrap_or(0);
+            if tile_mode == 2 {
+                continue;
+            }
+            let patch_vertices = [
+                RuntimeSliceMeshVertex {
+                    vertex: (xs[patch_x], ys[patch_y]),
+                    uv: (us[patch_x], vs[patch_y]),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (xs[patch_x + 1], ys[patch_y]),
+                    uv: (us[patch_x + 1], vs[patch_y]),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (xs[patch_x + 1], ys[patch_y + 1]),
+                    uv: (us[patch_x + 1], vs[patch_y + 1]),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (xs[patch_x], ys[patch_y + 1]),
+                    uv: (us[patch_x], vs[patch_y + 1]),
+                },
+            ];
+            if tile_mode == 1 {
+                let added = runtime_slice_mesh_tile_repeat(
+                    &mut vertices,
+                    &mut indices,
+                    patch_vertices,
+                    vertex_index,
+                    image_width,
+                    image_height,
+                    render_scale_x,
+                    render_scale_y,
+                );
+                let Some(next) = vertex_index.checked_add(added) else {
+                    break 'patches;
+                };
+                vertex_index = next;
+                continue;
+            }
+
+            let Some(next) = vertex_index.checked_add(4) else {
+                break 'patches;
+            };
+            vertices.extend_from_slice(&patch_vertices);
+            runtime_slice_mesh_push_triangulation(&mut indices, vertex_index);
+            vertex_index = next;
+        }
+    }
+
+    RuntimeSliceMeshGeometry {
+        vertices: vertices.iter().map(|vertex| vertex.vertex).collect(),
+        uvs: vertices.iter().map(|vertex| vertex.uv).collect(),
+        indices,
+    }
+}
+
+fn runtime_slice_mesh_vertex_stops(
+    normalized_stops: &[f32],
+    image_size: f32,
+    image_scale: f32,
+) -> Vec<f32> {
+    if image_size == 0.0 || image_scale == 0.0 {
+        return Vec::new();
+    }
+    let scale_info = runtime_nslicer_analyze_uv_stops(normalized_stops, image_size, image_scale);
+    let mut vertices = Vec::with_capacity(normalized_stops.len());
+    let mut vertex = 0.0;
+    let mut vertex_in_bounds = 0.0;
+    for index in 0..normalized_stops.len().saturating_sub(1) {
+        vertices.push(vertex_in_bounds);
+        let segment =
+            image_size * (normalized_stops[index + 1] - normalized_stops[index]) / image_scale;
+        if runtime_nslicer_is_fixed_segment(index) {
+            vertex += segment;
+        } else if scale_info.use_scale {
+            vertex += segment * scale_info.scale_factor;
+        } else {
+            vertex += scale_info.fallback_size;
+        }
+        vertex_in_bounds = vertex.clamp(0.0, image_size);
+    }
+    vertices.push(vertex_in_bounds);
+    vertices
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_slice_mesh_tile_repeat(
+    vertices: &mut Vec<RuntimeSliceMeshVertex>,
+    indices: &mut Vec<u16>,
+    patch: [RuntimeSliceMeshVertex; 4],
+    start: u16,
+    image_width: f32,
+    image_height: f32,
+    render_scale_x: f32,
+    render_scale_y: f32,
+) -> u16 {
+    let (start_x, start_y) = patch[0].vertex;
+    let (end_x, end_y) = patch[2].vertex;
+    let (start_u, start_v) = patch[0].uv;
+    let (end_u, end_v) = patch[2].uv;
+    if render_scale_x == 0.0 || render_scale_y == 0.0 {
+        return 0;
+    }
+    let size_x = image_width * (end_u - start_u) / render_scale_x;
+    let size_y = image_height * (end_v - start_v) / render_scale_y;
+    if size_x.abs() < 1.0 || size_y.abs() < 1.0 {
+        return 0;
+    }
+
+    let mut cur_y = start_y;
+    let mut cur_vertex = u32::from(start);
+    let mut escape = 10_000;
+    while cur_y < end_y && escape > 0 {
+        escape -= 1;
+        let frac_y = if cur_y + size_y > end_y {
+            (end_y - cur_y) / size_y
+        } else {
+            1.0
+        };
+        let mut cur_x = start_x;
+        while cur_x < end_x && escape > 0 {
+            escape -= 1;
+            if cur_vertex > u32::from(u16::MAX) - 3 {
+                return u16::MAX - start;
+            }
+            let frac_x = if cur_x + size_x > end_x {
+                (end_x - cur_x) / size_x
+            } else {
+                1.0
+            };
+            let end_u1 = start_u + (end_u - start_u) * frac_x;
+            let end_v1 = start_v + (end_v - start_v) * frac_y;
+            let end_x1 = cur_x + size_x * frac_x;
+            let end_y1 = cur_y + size_y * frac_y;
+            let v0 = cur_vertex as u16;
+            vertices.extend_from_slice(&[
+                RuntimeSliceMeshVertex {
+                    vertex: (cur_x, cur_y),
+                    uv: (start_u, start_v),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (end_x1, cur_y),
+                    uv: (end_u1, start_v),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (end_x1, end_y1),
+                    uv: (end_u1, end_v1),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (cur_x, end_y1),
+                    uv: (start_u, end_v1),
+                },
+            ]);
+            runtime_slice_mesh_push_triangulation(indices, v0);
+            cur_vertex += 4;
+            cur_x += size_x;
+        }
+        cur_y += size_y;
+    }
+    u16::try_from(cur_vertex - u32::from(start)).unwrap_or(u16::MAX - start)
+}
+
+fn runtime_slice_mesh_push_triangulation(indices: &mut Vec<u16>, start: u16) {
+    for offset in [0_u16, 1, 3, 1, 2, 3] {
+        if let Some(index) = start.checked_add(offset) {
+            indices.push(index);
+        }
+    }
+}
+
+fn runtime_slice_mesh_update(
+    geometry: RuntimeSliceMeshGeometry,
+    world_transform: Mat2D,
+    uv_transform: RenderMat2D,
+    input_words: Vec<u64>,
+) -> RuntimeSliceMeshUpdate {
+    let mut vertex_bytes = Vec::with_capacity(geometry.vertices.len() * 8);
+    for (x, y) in geometry.vertices {
+        push_f32_pair_bytes(&mut vertex_bytes, x, y);
+    }
+    let mut uv_bytes = Vec::with_capacity(geometry.uvs.len() * 8);
+    for (u, v) in geometry.uvs {
+        let uv = uv_transform.transform_point(RenderVec2D::new(u, v));
+        push_f32_pair_bytes(&mut uv_bytes, uv.x, uv.y);
+    }
+    let mut index_bytes = Vec::with_capacity(geometry.indices.len() * 2);
+    for index in geometry.indices {
+        index_bytes.extend_from_slice(&index.to_le_bytes());
+    }
+    RuntimeSliceMeshUpdate {
+        world_bits: world_transform.0.map(f32::to_bits),
+        input_words,
+        vertex_bytes,
+        uv_bytes,
+        index_bytes,
+    }
+}
+
+fn runtime_update_slice_mesh_render_buffers(
+    factory: &mut dyn RenderFactory,
+    buffers: &mut RuntimeSliceMeshRenderBuffers,
+    update: RuntimeSliceMeshUpdate,
+) {
+    runtime_update_slice_mesh_render_buffer(
+        factory,
+        &mut buffers.vertices,
+        RenderBufferType::Vertex,
+        &update.vertex_bytes,
+    );
+    runtime_update_slice_mesh_render_buffer(
+        factory,
+        &mut buffers.uv_coords,
+        RenderBufferType::Vertex,
+        &update.uv_bytes,
+    );
+    runtime_update_slice_mesh_render_buffer(
+        factory,
+        &mut buffers.indices,
+        RenderBufferType::Index,
+        &update.index_bytes,
+    );
+    buffers.vertex_count = u32::try_from(update.vertex_bytes.len() / 8).unwrap_or(u32::MAX);
+    buffers.index_count = u32::try_from(update.index_bytes.len() / 2).unwrap_or(u32::MAX);
+    buffers.last_update = Some(update);
+}
+
+fn runtime_update_slice_mesh_render_buffer(
+    factory: &mut dyn RenderFactory,
+    buffer: &mut Option<Box<dyn RenderBuffer>>,
+    buffer_type: RenderBufferType,
+    bytes: &[u8],
+) {
+    if buffer
+        .as_ref()
+        .is_some_and(|buffer| buffer.size_in_bytes() != bytes.len())
+    {
+        *buffer = None;
+    }
+    if buffer.is_none() && !bytes.is_empty() {
+        *buffer =
+            Some(factory.make_render_buffer(buffer_type, RenderBufferFlags::None, bytes.len()));
+    }
+    if let Some(buffer) = buffer.as_deref_mut() {
+        write_render_buffer_bytes(buffer, bytes);
+    }
+}
+
 fn runtime_draw_image(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -9761,6 +12860,28 @@ fn runtime_draw_image(
         renderer.save();
     }
 
+    if let Some(details) = runtime_image_nslicer(instance, graph, local_id) {
+        if let Some(buffers) = mesh_by_local.slice(details.local_id) {
+            runtime_draw_slice_mesh_image(
+                runtime,
+                instance,
+                graph,
+                local_id,
+                image_object,
+                command.resolved_image_asset_global,
+                buffers,
+                layout_bounds,
+                image,
+                path_cache,
+                renderer,
+            )?;
+        }
+        if command.needs_save_operation {
+            renderer.restore();
+        }
+        return Ok(());
+    }
+
     if let Some(mesh) = runtime_image_mesh(runtime, graph, local_id) {
         let buffers = mesh_by_local
             .get_mut(mesh.local_id)
@@ -9771,6 +12892,7 @@ fn runtime_draw_image(
             graph,
             local_id,
             image_object,
+            command.resolved_image_asset_global,
             mesh,
             buffers,
             layout_bounds,
@@ -9806,10 +12928,12 @@ fn runtime_draw_image(
         .unwrap_or(0.5);
     let world = path_cache
         .image_world_transform_with_bounds(
+            runtime,
             instance,
             graph,
             local_id,
             image_object,
+            command.resolved_image_asset_global,
             image,
             layout_bounds,
             false,
@@ -9860,6 +12984,17 @@ fn runtime_draw_image(
     Ok(())
 }
 
+fn runtime_image_nslicer<'a>(
+    instance: &ArtboardInstance,
+    graph: &'a ArtboardGraph,
+    image_local: usize,
+) -> Option<&'a NSlicerDetailsNode> {
+    graph.n_slicer_details.iter().find(|details| {
+        details.type_name == "NSlicer"
+            && runtime_nslicer_image_local(instance, details) == Some(image_local)
+    })
+}
+
 fn runtime_image_mesh<'a>(
     runtime: &RuntimeFile,
     graph: &'a ArtboardGraph,
@@ -9875,12 +13010,113 @@ fn runtime_image_mesh<'a>(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_slice_mesh_image(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    image_local: usize,
+    image_object: Option<&RuntimeObject>,
+    resolved_image_asset_global: Option<u32>,
+    buffers: &RuntimeSliceMeshRenderBuffers,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    image: &dyn RenderImage,
+    path_cache: &mut RuntimeRenderPathCache,
+    renderer: &mut dyn Renderer,
+) -> Result<()> {
+    let (Some(vertices), Some(uv_coords), Some(indices)) = (
+        buffers.vertices.as_deref(),
+        buffers.uv_coords.as_deref(),
+        buffers.indices.as_deref(),
+    ) else {
+        return Ok(());
+    };
+    let world = path_cache
+        .image_world_transform_with_bounds(
+            runtime,
+            instance,
+            graph,
+            image_local,
+            image_object,
+            resolved_image_asset_global,
+            image,
+            layout_bounds,
+            false,
+        )?
+        .unwrap_or_else(|| {
+            path_cache.component_world_transform_with_bounds(
+                instance,
+                graph,
+                image_local,
+                layout_bounds,
+            )
+        });
+    renderer.transform(runtime_render_mat(world));
+
+    let origin_x_key =
+        runtime_draw_property_key_for_name("Image", "originX").context("missing Image.originX")?;
+    let origin_y_key =
+        runtime_draw_property_key_for_name("Image", "originY").context("missing Image.originY")?;
+    let origin_x = instance
+        .double_property(image_local, origin_x_key)
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_double_property_by_key(object, origin_x_key)
+            })
+        })
+        .unwrap_or(0.5);
+    let origin_y = instance
+        .double_property(image_local, origin_y_key)
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_double_property_by_key(object, origin_y_key)
+            })
+        })
+        .unwrap_or(0.5);
+    renderer.transform(RenderMat2D([
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        -(image.width() as f32 * origin_x),
+        -(image.height() as f32 * origin_y),
+    ]));
+
+    let blend_mode_key = runtime_draw_property_key_for_name("Drawable", "blendModeValue")
+        .context("missing Drawable.blendModeValue")?;
+    let blend_mode_value = instance
+        .uint_property(image_local, blend_mode_key)
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_uint_property_by_key(object, blend_mode_key)
+            })
+        })
+        .unwrap_or(3);
+    let opacity = instance
+        .component(image_local)
+        .map(|component| component.transform.render_opacity)
+        .unwrap_or(1.0);
+    renderer.draw_image_mesh(
+        Some(image),
+        RenderImageSampler::LINEAR_CLAMP,
+        Some(vertices),
+        Some(uv_coords),
+        Some(indices),
+        buffers.vertex_count,
+        buffers.index_count,
+        runtime_blend_mode(u32::try_from(blend_mode_value).unwrap_or(3))?,
+        opacity,
+    );
+    Ok(())
+}
+
 fn runtime_draw_mesh_image(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     image_local: usize,
     image_object: Option<&RuntimeObject>,
+    resolved_image_asset_global: Option<u32>,
     mesh: &MeshGeometryNode,
     buffers: &mut RuntimeMeshRenderBuffers,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
@@ -9892,10 +13128,12 @@ fn runtime_draw_mesh_image(
     if weighted_context.is_none() {
         let world = path_cache
             .image_world_transform_with_bounds(
+                runtime,
                 instance,
                 graph,
                 image_local,
                 image_object,
+                resolved_image_asset_global,
                 image,
                 layout_bounds,
                 true,
@@ -10018,18 +13256,130 @@ fn runtime_mesh_vertex_render_translation(
     Ok((x, y))
 }
 
+fn runtime_apply_image_layout_fit(
+    mut base_local_transform: Mat2D,
+    scale_x: f32,
+    scale_y: f32,
+    offset_x: f32,
+    offset_y: f32,
+    layout_scale_separate: bool,
+) -> Mat2D {
+    if layout_scale_separate {
+        base_local_transform.scale_by_values(scale_x, scale_y);
+        base_local_transform.0[4] += offset_x;
+        base_local_transform.0[5] += offset_y;
+        base_local_transform
+    } else {
+        let mut components = base_local_transform.decompose();
+        components.scale_x = scale_x;
+        components.scale_y = scale_y;
+        components.x += offset_x;
+        components.y += offset_y;
+        Mat2D::compose(components)
+    }
+}
+
+fn runtime_layout_image_uses_separate_fit_scale(major_version: u64, minor_version: u64) -> bool {
+    major_version > 7 || (major_version == 7 && minor_version >= 2)
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeImageLayoutFit {
+    scale_x: f32,
+    scale_y: f32,
+    offset_x: f32,
+    offset_y: f32,
+    fit: u64,
+    origin_x: f32,
+    origin_y: f32,
+    alignment_x: f32,
+    alignment_y: f32,
+}
+
 fn runtime_image_layout_local_transform(
     instance: &ArtboardInstance,
     local_id: usize,
     image_object: Option<&RuntimeObject>,
+    resolved_image_asset_global: Option<u32>,
+    image_identity: u64,
     base_local_transform: Mat2D,
+    layout_scale_separate: bool,
     image_width: f32,
     image_height: f32,
     layout_width: f32,
     layout_height: f32,
     has_vertex_mesh: bool,
-) -> Result<Mat2D> {
+) -> Result<RuntimeImageLayoutTransform> {
     // Ported from C++ `src/shapes/image.cpp::Image::updateImageScale`.
+    let fit = runtime_image_layout_fit(
+        instance,
+        local_id,
+        image_object,
+        image_width,
+        image_height,
+        layout_width,
+        layout_height,
+        has_vertex_mesh,
+    )?;
+
+    if layout_scale_separate {
+        let user_scale_x = instance
+            .transform_property(local_id, TransformProperty::ScaleX)
+            .unwrap_or(1.0);
+        let user_scale_y = instance
+            .transform_property(local_id, TransformProperty::ScaleY)
+            .unwrap_or(1.0);
+        return Ok(RuntimeImageLayoutTransform {
+            local_transform: runtime_apply_image_layout_fit(
+                base_local_transform,
+                fit.scale_x,
+                fit.scale_y,
+                fit.offset_x,
+                fit.offset_y,
+                true,
+            ),
+            render_scale_x: user_scale_x * fit.scale_x,
+            render_scale_y: user_scale_y * fit.scale_y,
+        });
+    }
+
+    let legacy_key = runtime_legacy_image_layout_scale_key(
+        resolved_image_asset_global,
+        image_identity,
+        image_width,
+        image_height,
+        layout_width,
+        layout_height,
+        has_vertex_mesh,
+        fit,
+    );
+    let (public_scale_x, public_scale_y) =
+        instance.resolve_legacy_image_layout_scale(local_id, legacy_key, fit.scale_x, fit.scale_y);
+    Ok(RuntimeImageLayoutTransform {
+        local_transform: runtime_apply_image_layout_fit(
+            base_local_transform,
+            public_scale_x,
+            public_scale_y,
+            fit.offset_x,
+            fit.offset_y,
+            false,
+        ),
+        render_scale_x: public_scale_x,
+        render_scale_y: public_scale_y,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_image_layout_fit(
+    instance: &ArtboardInstance,
+    local_id: usize,
+    image_object: Option<&RuntimeObject>,
+    image_width: f32,
+    image_height: f32,
+    layout_width: f32,
+    layout_height: f32,
+    has_vertex_mesh: bool,
+) -> Result<RuntimeImageLayoutFit> {
     let fit_key =
         runtime_draw_property_key_for_name("Image", "fit").context("missing Image.fit")?;
     let origin_x_key =
@@ -10127,47 +13477,59 @@ fn runtime_image_layout_local_transform(
         offset_y = -scaled_top + height_remainder * y_align;
     }
 
-    let mut components = base_local_transform.decompose();
-    components.scale_x = scale_x;
-    components.scale_y = scale_y;
-    components.x += offset_x;
-    components.y += offset_y;
-    Ok(Mat2D::compose(components))
+    Ok(RuntimeImageLayoutFit {
+        scale_x,
+        scale_y,
+        offset_x,
+        offset_y,
+        fit,
+        origin_x,
+        origin_y,
+        alignment_x,
+        alignment_y,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
-fn runtime_draw_component_list(
-    runtime: &RuntimeFile,
-    instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
-    artboards: &[ArtboardGraph],
-    command: &RuntimeDrawCommand,
-    factory: &mut dyn RenderFactory,
-    renderer: &mut dyn Renderer,
-    paint_by_global: &mut RuntimeRenderPaints,
-    image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
-    path_cache: &mut RuntimeRenderPathCache,
-    mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
-    mut nested_paint_caches: Option<
-        &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
-    >,
-    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    nested_ancestors: &BTreeSet<u32>,
-) -> Result<()> {
-    let local_id = command
-        .local_id
-        .context("component-list draw command missing local id")?;
-    let Some(items) = instance.component_list_items.get(&local_id) else {
-        return Ok(());
-    };
-    let host_world =
-        path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds);
-    if command.needs_save_operation {
-        renderer.save();
-    }
-    renderer.transform(runtime_render_mat(host_world));
+fn runtime_legacy_image_layout_scale_key(
+    resolved_image_asset_global: Option<u32>,
+    image_identity: u64,
+    image_width: f32,
+    image_height: f32,
+    layout_width: f32,
+    layout_height: f32,
+    has_vertex_mesh: bool,
+    fit: RuntimeImageLayoutFit,
+) -> RuntimeLegacyImageLayoutScaleKey {
+    // Include only inputs that cause C++ to rerun `Image::updateImageScale`;
+    // public scale is intentionally excluded so a user/animation write
+    // survives until another fit-driving change.
+    RuntimeLegacyImageLayoutScaleKey::new([
+        u64::from(resolved_image_asset_global.unwrap_or(u32::MAX)),
+        image_identity,
+        u64::from(image_width.to_bits()),
+        u64::from(image_height.to_bits()),
+        u64::from(layout_width.to_bits()),
+        u64::from(layout_height.to_bits()),
+        u64::from(has_vertex_mesh),
+        fit.fit,
+        u64::from(fit.origin_x.to_bits()),
+        u64::from(fit.origin_y.to_bits()),
+        u64::from(fit.alignment_x.to_bits()),
+        u64::from(fit.alignment_y.to_bits()),
+    ])
+}
 
+#[allow(clippy::too_many_arguments)]
+fn runtime_component_list_item_local_transforms(
+    instance: &ArtboardInstance,
+    local_id: usize,
+    component_list_item_bounds: Option<&[RuntimeLayoutBounds]>,
+    component_list_layout_children: Option<&[ArtboardInstance]>,
+) -> Vec<Mat2D> {
+    let Some(items) = instance.component_list_items.get(&local_id) else {
+        return Vec::new();
+    };
     let list_style_local = instance
         .runtime_layout_component_style_local(local_id)
         .or_else(|| {
@@ -10178,7 +13540,7 @@ fn runtime_draw_component_list(
                     instance.runtime_layout_component_style_local(parent_local)
                 })
         });
-    let (padding_left, padding_top, gap, is_row) = list_style_local
+    let (padding_left, padding_top, gap_horizontal, gap_vertical, is_row) = list_style_local
         .map(|style_local| {
             (
                 instance
@@ -10199,57 +13561,233 @@ fn runtime_draw_component_list(
                         RuntimeLayoutStyleProperty::GapHorizontal,
                     )
                     .unwrap_or(0.0),
-                instance.runtime_layout_style_uint_default(
-                    style_local,
-                    RuntimeLayoutStyleProperty::FlexDirectionValue,
-                    2,
-                ) == 2,
+                instance
+                    .runtime_layout_style_double(
+                        style_local,
+                        RuntimeLayoutStyleProperty::GapVertical,
+                    )
+                    .unwrap_or(0.0),
+                matches!(
+                    instance.runtime_layout_style_uint_default(
+                        style_local,
+                        RuntimeLayoutStyleProperty::FlexDirectionValue,
+                        2,
+                    ),
+                    2 | 3
+                ),
             )
         })
-        .unwrap_or((0.0, 0.0, 0.0, true));
+        .unwrap_or((0.0, 0.0, 0.0, 0.0, true));
+    let gap = if is_row { gap_horizontal } else { gap_vertical };
+    let uses_hosted_layout = instance
+        .component(local_id)
+        .and_then(|component| component.parent_local)
+        .and_then(|parent_local| instance.component(parent_local))
+        .is_some_and(|parent| matches!(parent.type_name, "Artboard" | "LayoutComponent"));
+    let node_x_key = runtime_draw_property_key_for_name("Node", "x");
+    let node_y_key = runtime_draw_property_key_for_name("Node", "y");
 
+    let mut item_main_offset = 0.0;
+    let mut item_transforms = Vec::with_capacity(items.len());
     for (item_index, item) in items.iter().enumerate() {
+        let computed_item_bounds = component_list_item_bounds
+            .and_then(|bounds| bounds.get(item_index))
+            .copied();
+        let item_size = computed_item_bounds
+            .map(|bounds| (bounds.width, bounds.height))
+            .or_else(|| {
+                component_list_layout_children
+                    .and_then(|children| children.get(item_index))
+                    .map(|child| (child.width, child.height))
+            })
+            .unwrap_or_else(|| runtime_component_list_item_layout_size(item));
+        let (item_x, item_y) = if let Some((virtual_x, virtual_y)) = item.virtualized_position {
+            // The scroll virtualizer owns only the main-axis position. C++
+            // preserves the mounted artboard's settled cross-axis position.
+            if is_row {
+                (
+                    virtual_x,
+                    computed_item_bounds.map_or(virtual_y, |bounds| bounds.y),
+                )
+            } else {
+                (
+                    computed_item_bounds.map_or(virtual_x, |bounds| bounds.x),
+                    virtual_y,
+                )
+            }
+        } else if let Some(bounds) = computed_item_bounds {
+            (bounds.x, bounds.y)
+        } else if !uses_hosted_layout {
+            // C++ `ArtboardComponentList::updateArtboardsWorldTransform` uses
+            // `Artboard::worldBounds()` when there is no layout parent. Those
+            // bounds begin at the mounted artboard root's authored Node x/y;
+            // they are not a sequential intrinsic-size layout.
+            (
+                node_x_key
+                    .and_then(|key| item.child.double_property(0, key))
+                    .unwrap_or(0.0),
+                node_y_key
+                    .and_then(|key| item.child.double_property(0, key))
+                    .unwrap_or(0.0),
+            )
+        } else if is_row {
+            (padding_left + item_main_offset, padding_top)
+        } else {
+            (padding_left, padding_top + item_main_offset)
+        };
+        item_transforms.push(Mat2D([
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+            item_x
+                + if uses_hosted_layout {
+                    item_size.0 * item.child.origin_x
+                } else {
+                    0.0
+                },
+            item_y
+                + if uses_hosted_layout {
+                    item_size.1 * item.child.origin_y
+                } else {
+                    0.0
+                },
+        ]));
+        item_main_offset += (if is_row { item_size.0 } else { item_size.1 }) + gap;
+    }
+    if let Some(list_component_index) = instance.component_by_local.get(&local_id).copied() {
+        crate::constraints::constrain_component_list_item_transforms(
+            instance,
+            local_id,
+            list_component_index,
+            &mut item_transforms,
+        );
+    }
+    item_transforms
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_component_list(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    command: &RuntimeDrawCommand,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    image_by_global: &RuntimeRenderImages,
+    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
+    path_cache: &mut RuntimeRenderPathCache,
+    mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+    mut nested_paint_caches: Option<
+        &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+    >,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    component_list_item_bounds: &BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
+    component_list_layout_children: &BTreeMap<usize, Vec<ArtboardInstance>>,
+    nested_ancestors: &[u32],
+) -> Result<()> {
+    let local_id = command
+        .local_id
+        .context("component-list draw command missing local id")?;
+    let Some(items) = instance.component_list_items.get(&local_id) else {
+        return Ok(());
+    };
+    // A virtualized list's row positions already include the scroll window.
+    // C++ therefore draws it in its parent's world space; non-virtualized
+    // lists continue to use their own world transform.
+    let host_transform_local =
+        if crate::constraints::component_list_virtualization(instance, local_id).is_some() {
+            instance
+                .component(local_id)
+                .and_then(|component| component.parent_local)
+                .unwrap_or(local_id)
+        } else {
+            local_id
+        };
+    let host_world = path_cache.component_world_transform_with_bounds(
+        instance,
+        graph,
+        host_transform_local,
+        layout_bounds,
+    );
+    if command.needs_save_operation {
+        renderer.save();
+    }
+    renderer.transform(runtime_render_mat(host_world));
+
+    let item_transforms = runtime_component_list_item_local_transforms(
+        instance,
+        local_id,
+        component_list_item_bounds.get(&local_id).map(Vec::as_slice),
+        component_list_layout_children
+            .get(&local_id)
+            .map(Vec::as_slice),
+    );
+
+    let mut item_indices = (0..items.len()).collect::<Vec<_>>();
+    let draw_indices = items
+        .iter()
+        .map(|item| {
+            runtime
+                .view_model_property_for_symbol(item.context.borrow().view_model_index(), 16)
+                .map(|property| {
+                    property
+                        .string_property("name")
+                        .and_then(|name| item.context.borrow().number_value_by_property_name(name))
+                        .filter(|value| value.is_finite())
+                        .unwrap_or(0.0)
+                })
+        })
+        .collect::<Vec<_>>();
+    let uses_draw_index_sort = instance
+        .component_list_logical_items
+        .get(&local_id)
+        .is_some_and(|logical_items| {
+            logical_items.iter().any(|item| {
+                runtime
+                    .view_model_property_for_symbol(item.context.borrow().view_model_index(), 16)
+                    .is_some()
+            })
+        });
+    if uses_draw_index_sort {
+        item_indices.sort_by(|&a, &b| {
+            draw_indices[a]
+                .unwrap_or(0.0)
+                .partial_cmp(&draw_indices[b].unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| items[a].logical_index.cmp(&items[b].logical_index))
+        });
+    }
+
+    for item_index in item_indices {
+        let item = &items[item_index];
         if nested_ancestors.contains(&item.child.graph_global_id) {
             continue;
         }
-        let Some(child_graph) = artboards
-            .iter()
-            .find(|graph| graph.global_id == item.child.graph_global_id)
-        else {
+        let Some(child_graph) = item.child.runtime_graph().or_else(|| {
+            artboards
+                .iter()
+                .find(|graph| graph.global_id == item.child.graph_global_id)
+        }) else {
             continue;
         };
-        let mut child_ancestors = nested_ancestors.clone();
-        child_ancestors.insert(item.child.graph_global_id);
         let cache_key = component_list_render_cache_key(
             command.global_id,
             command.local_id,
             item.child.graph_global_id,
-            item_index,
+            item.logical_index,
             item.render_cache_revision,
         );
-        let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
-        let item_offset = if is_row {
-            Mat2D([
-                1.0,
-                0.0,
-                0.0,
-                1.0,
-                padding_left + item_index as f32 * (item.child.width + gap),
-                padding_top,
-            ])
-        } else {
-            Mat2D([
-                1.0,
-                0.0,
-                0.0,
-                1.0,
-                padding_left,
-                padding_top + item_index as f32 * (item.child.height + gap),
-            ])
-        };
+        let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
+        let child = component_list_layout_children
+            .get(&local_id)
+            .and_then(|children| children.get(item_index))
+            .unwrap_or(item.child.as_ref());
 
         renderer.save();
-        renderer.transform(runtime_render_mat(item_offset.multiply(item.transform)));
+        renderer.transform(runtime_render_mat(item_transforms[item_index]));
         if let Some(caches) = nested_paint_caches.as_deref_mut() {
             if !caches.contains_key(&cache_key) {
                 caches.insert(
@@ -10263,7 +13801,7 @@ fn runtime_draw_component_list(
                 );
             }
             let child_paint_cache = caches.entry(cache_key).or_default();
-            item.child.prepare_static_artboard_tree_paints_internal(
+            child.prepare_static_artboard_tree_paints_internal(
                 runtime,
                 child_graph,
                 artboards,
@@ -10275,26 +13813,33 @@ fn runtime_draw_component_list(
                 child_cache,
                 false,
                 true,
-                &child_ancestors,
+                nested_ancestors,
             )?;
-            item.child
-                .draw_prepared_static_artboard_internal_with_path_cache(
-                    runtime,
-                    child_graph,
-                    artboards,
-                    factory,
-                    renderer,
-                    &mut child_paint_cache.paints,
-                    image_by_global,
-                    &mut child_paint_cache.meshes,
-                    child_cache,
-                    Some(&mut child_paint_cache.paint_configurations),
-                    Some(&mut child_paint_cache.nested_artboards),
-                    false,
-                    &child_ancestors,
-                )?;
+            child.prepare_static_artboard_slice_meshes(
+                runtime,
+                child_graph,
+                factory,
+                image_by_global,
+                &mut child_paint_cache.meshes,
+                child_cache,
+            )?;
+            child.draw_prepared_static_artboard_internal_with_path_cache(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                renderer,
+                &mut child_paint_cache.paints,
+                image_by_global,
+                &mut child_paint_cache.meshes,
+                child_cache,
+                Some(&mut child_paint_cache.paint_configurations),
+                Some(&mut child_paint_cache.nested_artboards),
+                false,
+                nested_ancestors,
+            )?;
         } else {
-            item.child.prepare_static_artboard_tree_paints_internal(
+            child.prepare_static_artboard_tree_paints_internal(
                 runtime,
                 child_graph,
                 artboards,
@@ -10306,24 +13851,31 @@ fn runtime_draw_component_list(
                 child_cache,
                 false,
                 true,
-                &child_ancestors,
+                nested_ancestors,
             )?;
-            item.child
-                .draw_prepared_static_artboard_internal_with_path_cache(
-                    runtime,
-                    child_graph,
-                    artboards,
-                    factory,
-                    renderer,
-                    paint_by_global,
-                    image_by_global,
-                    mesh_by_local,
-                    child_cache,
-                    paint_configurations.as_deref_mut(),
-                    None,
-                    false,
-                    &child_ancestors,
-                )?;
+            child.prepare_static_artboard_slice_meshes(
+                runtime,
+                child_graph,
+                factory,
+                image_by_global,
+                mesh_by_local,
+                child_cache,
+            )?;
+            child.draw_prepared_static_artboard_internal_with_path_cache(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                renderer,
+                paint_by_global,
+                image_by_global,
+                mesh_by_local,
+                child_cache,
+                paint_configurations.as_deref_mut(),
+                None,
+                false,
+                nested_ancestors,
+            )?;
         }
         renderer.restore();
     }
@@ -10351,35 +13903,63 @@ fn runtime_draw_nested_artboard(
         &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
     >,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    nested_ancestors: &BTreeSet<u32>,
+    nested_ancestors: &[u32],
+    retained_world_is_current: bool,
 ) -> Result<()> {
-    if let Some(local_id) = command.local_id
+    let nested_instance = command
+        .local_id
+        .and_then(|local_id| instance.nested_artboards.get(&local_id));
+    if nested_instance.is_none()
+        && let Some(local_id) = command.local_id
         && let Some(artboard_id_key) =
             runtime_draw_property_key_for_name("NestedArtboard", "artboardId")
         && instance.uint_property(local_id, artboard_id_key) == Some(u64::from(u32::MAX))
     {
         return Ok(());
     }
-
-    let nested_instance = command
-        .local_id
-        .and_then(|local_id| instance.nested_artboards.get(&local_id));
-    let referenced_artboard_global = nested_instance
-        .map(|nested| nested.child.graph_global_id)
-        .or(command.referenced_artboard_global)
-        .context("nested artboard missing referenced artboard")?;
+    // A mounted child already represents the live `artboardId` resolution.
+    // Nulling the property removes that child, and mounted children always
+    // win over the authored fallback, so only an absent child needs the
+    // property/data-bind fallback checks.
+    let host_has_artboard_data_bind = nested_instance.is_none()
+        && command
+            .local_id
+            .is_some_and(|local_id| instance.nested_artboard_host_has_artboard_data_bind(local_id));
+    let Some(referenced_artboard_global) = runtime_nested_artboard_referenced_global(
+        nested_instance.map(|nested| nested.child.graph_global_id),
+        command.referenced_artboard_global,
+        host_has_artboard_data_bind,
+    ) else {
+        return Ok(());
+    };
     // Cycle guard (see `nested_ancestors` at the top of this module): mirror of
     // the paint-prep guard for the draw recursion. Skip a nested artboard that is
     // already an ancestor on the current descent path, as C++ Artboard::isAncestor
     // does, so a cyclic nesting graph terminates instead of looping/overflowing.
-    if nested_ancestors.contains(&referenced_artboard_global) {
+    if nested_instance.is_none() && nested_ancestors.contains(&referenced_artboard_global) {
         return Ok(());
     }
-    let mut child_ancestors = nested_ancestors.clone();
-    child_ancestors.insert(referenced_artboard_global);
-    let child_graph = artboards
-        .iter()
-        .find(|graph| graph.global_id == referenced_artboard_global)
+    // Persistent children were cycle-checked while the instance tree was
+    // mounted, matching C++ Artboard::isAncestor. Only the legacy ephemeral
+    // fallback needs to extend the runtime guard.
+    let fallback_child_ancestors;
+    let child_ancestors = if nested_instance.is_some() {
+        nested_ancestors
+    } else {
+        fallback_child_ancestors = {
+            let mut ancestors = nested_ancestors.to_vec();
+            ancestors.push(referenced_artboard_global);
+            ancestors
+        };
+        fallback_child_ancestors.as_slice()
+    };
+    let child_graph = instance
+        .runtime_graph_for_global(referenced_artboard_global)
+        .or_else(|| {
+            artboards
+                .iter()
+                .find(|graph| graph.global_id == referenced_artboard_global)
+        })
         .with_context(|| {
             format!("missing nested artboard graph for global {referenced_artboard_global}")
         })?;
@@ -10414,17 +13994,14 @@ fn runtime_draw_nested_artboard(
                 path_cache,
             )?
         }
-        _ => command
-            .local_id
-            .map(|local_id| {
-                path_cache.component_world_transform_with_bounds(
-                    instance,
-                    graph,
-                    local_id,
-                    layout_bounds,
-                )
-            })
-            .unwrap_or(host_component.transform.world_transform),
+        _ => runtime_live_command_world_transform(
+            instance,
+            graph,
+            command,
+            layout_bounds,
+            path_cache,
+            retained_world_is_current,
+        ),
     };
     let host_opacity = host_component.transform.render_opacity;
 
@@ -10439,7 +14016,7 @@ fn runtime_draw_nested_artboard(
         referenced_artboard_global,
         nested_instance.map_or(0, |nested| nested.render_cache_revision),
     );
-    let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
+    let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
 
     if let Some(child) = persistent_child {
         let layout_child;
@@ -10458,19 +14035,32 @@ fn runtime_draw_nested_artboard(
         };
         if let Some(caches) = nested_paint_caches {
             let child_paint_cache = caches.entry(cache_key).or_default();
-            child.prepare_static_artboard_tree_paints_internal(
+            // The public prepared-draw contract recursively prepares this
+            // exact cache key before replay. Retain a defensive first-use
+            // fallback for callers that provide an empty cache directly.
+            if child_paint_cache.preparation.is_none() {
+                child.prepare_static_artboard_tree_paints_internal(
+                    runtime,
+                    child_graph,
+                    artboards,
+                    factory,
+                    &mut child_paint_cache.paints,
+                    Some(&mut child_paint_cache.paint_configurations),
+                    Some(&mut child_paint_cache.preparation),
+                    Some(&mut child_paint_cache.nested_artboards),
+                    child_cache,
+                    false,
+                    true,
+                    child_ancestors,
+                )?;
+            }
+            child.prepare_static_artboard_slice_meshes(
                 runtime,
                 child_graph,
-                artboards,
                 factory,
-                &mut child_paint_cache.paints,
-                Some(&mut child_paint_cache.paint_configurations),
-                Some(&mut child_paint_cache.preparation),
-                Some(&mut child_paint_cache.nested_artboards),
+                image_by_global,
+                &mut child_paint_cache.meshes,
                 child_cache,
-                false,
-                true,
-                &child_ancestors,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
                 runtime,
@@ -10485,7 +14075,7 @@ fn runtime_draw_nested_artboard(
                 Some(&mut child_paint_cache.paint_configurations),
                 Some(&mut child_paint_cache.nested_artboards),
                 false,
-                &child_ancestors,
+                child_ancestors,
             )?;
         } else {
             child.prepare_static_artboard_tree_paints_internal(
@@ -10500,7 +14090,15 @@ fn runtime_draw_nested_artboard(
                 child_cache,
                 false,
                 true,
-                &child_ancestors,
+                child_ancestors,
+            )?;
+            child.prepare_static_artboard_slice_meshes(
+                runtime,
+                child_graph,
+                factory,
+                image_by_global,
+                mesh_by_local,
+                child_cache,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
                 runtime,
@@ -10515,7 +14113,7 @@ fn runtime_draw_nested_artboard(
                 paint_configurations.as_deref_mut(),
                 None,
                 false,
-                &child_ancestors,
+                child_ancestors,
             )?;
         }
 
@@ -10545,7 +14143,15 @@ fn runtime_draw_nested_artboard(
             child_cache,
             false,
             true,
-            &child_ancestors,
+            child_ancestors,
+        )?;
+        child.prepare_static_artboard_slice_meshes(
+            runtime,
+            child_graph,
+            factory,
+            image_by_global,
+            &mut child_paint_cache.meshes,
+            child_cache,
         )?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
@@ -10560,7 +14166,7 @@ fn runtime_draw_nested_artboard(
             Some(&mut child_paint_cache.paint_configurations),
             Some(&mut child_paint_cache.nested_artboards),
             false,
-            &child_ancestors,
+            child_ancestors,
         )?;
     } else {
         child.prepare_static_artboard_tree_paints_internal(
@@ -10575,7 +14181,15 @@ fn runtime_draw_nested_artboard(
             child_cache,
             false,
             true,
-            &child_ancestors,
+            child_ancestors,
+        )?;
+        child.prepare_static_artboard_slice_meshes(
+            runtime,
+            child_graph,
+            factory,
+            image_by_global,
+            mesh_by_local,
+            child_cache,
         )?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
@@ -10590,7 +14204,7 @@ fn runtime_draw_nested_artboard(
             paint_configurations.as_deref_mut(),
             None,
             false,
-            &child_ancestors,
+            child_ancestors,
         )?;
     }
 
@@ -10598,6 +14212,14 @@ fn runtime_draw_nested_artboard(
         renderer.restore();
     }
     Ok(())
+}
+
+fn runtime_nested_artboard_referenced_global(
+    mounted: Option<u32>,
+    authored: Option<u32>,
+    host_has_artboard_data_bind: bool,
+) -> Option<u32> {
+    mounted.or_else(|| (!host_has_artboard_data_bind).then_some(authored).flatten())
 }
 
 #[derive(Clone, Copy)]
@@ -10794,8 +14416,12 @@ fn runtime_apply_nested_artboard_layout_child_bounds(
     let bounds = layout_bounds
         .and_then(|bounds| bounds.get(&local_id).copied())
         .context("nested artboard layout missing Taffy bounds")?;
-    child.set_artboard_dimensions(bounds.width, bounds.height);
-    child.enable_layout_constraint_bounds();
+    let assigned_size_changed = child.set_artboard_dimensions(bounds.width, bounds.height);
+    if assigned_size_changed && child.layout_constraint_bounds_enabled {
+        child.refresh_layout_constraint_bounds();
+    } else {
+        child.enable_layout_constraint_bounds();
+    }
     if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
         child.set_double_property(0, width_key, bounds.width);
     }
@@ -10803,6 +14429,25 @@ fn runtime_apply_nested_artboard_layout_child_bounds(
         child.set_double_property(0, height_key, bounds.height);
     }
     Ok(())
+}
+
+pub(crate) fn runtime_apply_component_list_item_layout_bounds(
+    child: &mut ArtboardInstance,
+    bounds: RuntimeLayoutBounds,
+) -> bool {
+    // `ArtboardComponentList::layoutNode` transfers the mounted artboard's
+    // root Yoga node to the parent. The resulting width/height are therefore
+    // the child's own layout constraints, not merely a draw-time frame.
+    let mut changed = child.set_artboard_dimensions(bounds.width, bounds.height);
+    changed |= !child.layout_constraint_bounds_enabled;
+    child.enable_layout_constraint_bounds();
+    if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
+        changed |= child.set_double_property(0, width_key, bounds.width);
+    }
+    if let Some(height_key) = runtime_layout_component_property_key_for_name("height") {
+        changed |= child.set_double_property(0, height_key, bounds.height);
+    }
+    changed
 }
 
 fn runtime_settle_nested_artboard_layout_child(child: &mut ArtboardInstance) {
@@ -10839,7 +14484,10 @@ fn runtime_draw_clip_start(
         path_cache.clipping_shape_path_commands(instance, graph, clipping_shape, layout_bounds);
     // Ported from src/shapes/clipping_shape.cpp: each ClippingShape owns a
     // cached clip path, so repeated clip-start proxies reuse the same RenderPath.
-    let fill_rule = runtime_fill_rule_for_value(clipping_shape.fill_rule);
+    let fill_rule = runtime_fill_rule_for_value(runtime_live_clipping_shape_fill_rule_value(
+        instance,
+        clipping_shape,
+    ));
     let key = path_cache.retained_world_render_path_key(instance, graph, fill_rule);
     let path = path_cache.clipping_shape_path(
         key,
@@ -10874,6 +14522,11 @@ fn runtime_clipping_shape(graph: &ArtboardGraph, local_id: usize) -> Option<&Cli
 }
 
 fn assign_shape_paint_path_slot_indices(commands: &mut [RuntimeShapePaintCommand]) {
+    let explicit_slot_count = commands
+        .iter()
+        .filter_map(|command| command.text_path_bucket_slot)
+        .max()
+        .map_or(0, |slot| slot + 1);
     let mut path_slots = Vec::<&[RuntimePathCommand]>::new();
     for command in commands {
         let effect_or_shape_path_commands = if command.has_effect_path {
@@ -10886,15 +14539,19 @@ fn assign_shape_paint_path_slot_indices(commands: &mut [RuntimeShapePaintCommand
             .as_ref()
             .filter(|feather| feather.inner)
         {
-            command.clip_path_slot_index =
-                runtime_cached_path_slot_index(&mut path_slots, effect_or_shape_path_commands);
-            command.path_slot_index = runtime_cached_path_slot_index(
-                &mut path_slots,
-                feather.inner_path_commands.as_slice(),
-            );
+            command.clip_path_slot_index = explicit_slot_count
+                + runtime_cached_path_slot_index(&mut path_slots, effect_or_shape_path_commands);
+            command.path_slot_index = explicit_slot_count
+                + runtime_cached_path_slot_index(
+                    &mut path_slots,
+                    feather.inner_path_commands.as_slice(),
+                );
+        } else if let Some(slot) = command.text_path_bucket_slot {
+            command.path_slot_index = slot;
+            command.clip_path_slot_index = slot;
         } else {
-            command.path_slot_index =
-                runtime_cached_path_slot_index(&mut path_slots, effect_or_shape_path_commands);
+            command.path_slot_index = explicit_slot_count
+                + runtime_cached_path_slot_index(&mut path_slots, effect_or_shape_path_commands);
             command.clip_path_slot_index = command.path_slot_index;
         }
     }
@@ -10979,15 +14636,39 @@ fn runtime_render_paint_configuration(
 fn runtime_paint_configuration_epoch(
     instance: &ArtboardInstance,
     paint: &RuntimeShapePaintCommand,
-) -> u64 {
+) -> u128 {
+    if paint.paint_type == RuntimeShapePaintKind::Fill
+        && paint.feather_state.is_none()
+        && matches!(
+            paint.paint_state,
+            Some(RuntimeShapePaintState::SolidColor { .. })
+        )
+    {
+        // C++ SolidColor dirties only its attached ShapePaint. A transform on
+        // an unrelated component must not make every solid fill reconfigure.
+        // Retain the same per-mutator dirt revision and combine it with the
+        // command-local opacity/blend values that complete the fill state.
+        let revision = paint
+            .mutator_local
+            .map(|local_id| instance.solid_color_paint_revision(local_id))
+            .unwrap_or_default();
+        return (1_u128 << 127)
+            | (u128::from(revision & 0x7fff_ffff_ffff_ffff) << 64)
+            | (u128::from(paint.render_blend_mode_value) << 32)
+            | u128::from(paint.render_opacity.to_bits());
+    }
     let cache_epoch = instance.cache_epoch();
     if paint.paint_space_transform.is_some() {
-        (0xcbf29ce484222325u64 ^ cache_epoch)
-            .wrapping_mul(0x100000001b3)
-            .wrapping_add(instance.prepared_epoch())
+        u128::from(runtime_world_paint_configuration_epoch(instance))
     } else {
-        cache_epoch
+        u128::from(cache_epoch)
     }
+}
+
+fn runtime_world_paint_configuration_epoch(instance: &ArtboardInstance) -> u64 {
+    (0xcbf29ce484222325u64 ^ instance.cache_epoch())
+        .wrapping_mul(0x100000001b3)
+        .wrapping_add(instance.prepared_epoch())
 }
 
 fn runtime_configure_paint_with_cache(
@@ -11161,6 +14842,107 @@ fn runtime_configure_paint(
     Ok(())
 }
 
+fn runtime_configure_initial_nested_layout_paint_frame(
+    frame: RuntimeInitialNestedLayoutPaintFrame,
+    factory: &mut dyn RenderFactory,
+    paints: &mut RuntimeRenderPaints,
+    mut configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+    render_cache: &mut RuntimeRenderPathCache,
+) -> Result<()> {
+    for gradient in frame.gradients {
+        let object_id = gradient.paint_global_id;
+        let (start_x, start_y, end_x, end_y, state_opacity, stops) = match &gradient.paint_state {
+            RuntimeShapePaintState::LinearGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                render_opacity,
+                stops,
+                ..
+            }
+            | RuntimeShapePaintState::RadialGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                render_opacity,
+                stops,
+                ..
+            } => (
+                *start_x,
+                *start_y,
+                *end_x,
+                *end_y,
+                *render_opacity,
+                stops.clone(),
+            ),
+            RuntimeShapePaintState::SolidColor { .. } => continue,
+        };
+        debug_assert_eq!(state_opacity, gradient.inherited_opacity);
+        let (start_x, start_y, end_x, end_y) = runtime_gradient_space_endpoints(
+            gradient.paint_space_transform,
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+        );
+        let paint_state = runtime_shape_paint_state_with_endpoints(
+            gradient.paint_state,
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+        );
+        let mut resources = RuntimeGradientShaderResources {
+            factory,
+            shaders: &mut render_cache.gradient_shaders,
+        };
+        let render_paint = paints
+            .paint_mut(gradient.paint_global_id)
+            .with_context(|| {
+                format!(
+                    "missing render paint for initial nested layout gradient {}",
+                    gradient.paint_global_id
+                )
+            })?
+            .as_mut();
+        if let Some(configurations) = configurations.as_deref_mut() {
+            configurations.remove(gradient.paint_global_id);
+        }
+        match paint_state {
+            state @ RuntimeShapePaintState::LinearGradient { .. } => {
+                runtime_configure_linear_gradient(
+                    render_paint,
+                    &mut resources,
+                    object_id,
+                    state,
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
+                    &stops,
+                );
+            }
+            state @ RuntimeShapePaintState::RadialGradient { .. } => {
+                runtime_configure_radial_gradient(
+                    render_paint,
+                    &mut resources,
+                    object_id,
+                    state,
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
+                    &stops,
+                );
+            }
+            RuntimeShapePaintState::SolidColor { .. } => {}
+        }
+    }
+    Ok(())
+}
+
 fn runtime_current_solid_render_color(
     instance: &ArtboardInstance,
     paint: &RuntimeShapePaintCommand,
@@ -11169,10 +14951,7 @@ fn runtime_current_solid_render_color(
         RuntimeShapePaintState::SolidColor { color, .. } => {
             let color = paint
                 .mutator_local
-                .zip(solid_color_value_property_key())
-                .and_then(|(local_id, property_key)| {
-                    instance.color_property(local_id, property_key)
-                })
+                .and_then(|local_id| instance.solid_color_value(local_id))
                 .unwrap_or(*color);
             Some(color_modulate_opacity(color, paint.render_opacity))
         }
@@ -11370,6 +15149,17 @@ fn runtime_live_shape_paint_fill_rule(
     runtime_fill_rule_for_value(live_value)
 }
 
+// C++ `ClippingShape::update` rewinds its cached world path with the live
+// animatable/data-bound fillRule. The graph node is only an import snapshot.
+fn runtime_live_clipping_shape_fill_rule_value(
+    instance: &ArtboardInstance,
+    clipping_shape: &ClippingShapeNode,
+) -> u64 {
+    runtime_draw_property_key_for_name("ClippingShape", "fillRule")
+        .and_then(|key| instance.uint_property(clipping_shape.local_id, key))
+        .unwrap_or(clipping_shape.fill_rule)
+}
+
 fn runtime_make_path_from_raw_path(
     factory: &mut dyn RenderFactory,
     raw_path: &RawPath,
@@ -11461,17 +15251,40 @@ fn runtime_rebuild_path_from_raw_path_preserving_fill_rule(
     path.add_raw_path(raw_path);
 }
 
+#[inline]
+fn record_runtime_draw_path_command_replay() {
+    #[cfg(test)]
+    RUNTIME_DRAW_PATH_COMMAND_REPLAYS.with(|calls| calls.set(calls.get() + 1));
+}
+
 fn runtime_raw_path_from_commands(commands: &[RuntimePathCommand]) -> RawPath {
     let mut raw_path = RawPath::new();
     runtime_rebuild_raw_path_from_commands(&mut raw_path, commands);
     raw_path
 }
 
+#[cfg(test)]
+std::thread_local! {
+    static RUNTIME_DRAW_PATH_COMMAND_REPLAYS: std::cell::Cell<usize> = const {
+        std::cell::Cell::new(0)
+    };
+}
+
+#[cfg(test)]
+fn reset_runtime_draw_path_command_replays() {
+    RUNTIME_DRAW_PATH_COMMAND_REPLAYS.with(|calls| calls.set(0));
+}
+
+#[cfg(test)]
+fn runtime_draw_path_command_replays() -> usize {
+    RUNTIME_DRAW_PATH_COMMAND_REPLAYS.with(std::cell::Cell::get)
+}
+
 fn runtime_rebuild_raw_path_from_commands(raw_path: &mut RawPath, commands: &[RuntimePathCommand]) {
-    raw_path.rewind();
     let (verbs, points) = runtime_path_command_counts(commands);
-    raw_path.reserve(verbs, points);
-    runtime_append_commands_to_raw_path(raw_path, commands);
+    raw_path.rebuild(verbs, points, |raw_path| {
+        runtime_append_commands_to_raw_path(raw_path, commands);
+    });
 }
 
 fn runtime_path_command_counts(commands: &[RuntimePathCommand]) -> (usize, usize) {
@@ -11486,7 +15299,10 @@ fn runtime_path_command_counts(commands: &[RuntimePathCommand]) -> (usize, usize
     (commands.len(), points)
 }
 
-fn runtime_append_commands_to_raw_path(raw_path: &mut RawPath, commands: &[RuntimePathCommand]) {
+fn runtime_append_commands_to_raw_path(
+    raw_path: &mut RawPathBuilder<'_>,
+    commands: &[RuntimePathCommand],
+) {
     for command in commands {
         match *command {
             RuntimePathCommand::Move { x, y } => raw_path.move_to(x, y),
@@ -11727,17 +15543,6 @@ fn runtime_feather_has_offset(feather: &RuntimeFeatherState) -> bool {
     feather.offset_x != 0.0 || feather.offset_y != 0.0
 }
 
-fn mat2d_has_visible_skew_or_rotation(mat: Mat2D) -> bool {
-    // Keep near-axis-aligned cancellation on the regular multiply path; real
-    // off-axis local path composition needs the fused C++ residual.
-    const MATRIX_AXIS_EPSILON: f32 = 5.0e-2;
-    mat.0[1].abs() > MATRIX_AXIS_EPSILON || mat.0[2].abs() > MATRIX_AXIS_EPSILON
-}
-
-fn mat2d_has_any_skew_or_rotation(mat: Mat2D) -> bool {
-    mat.0[1] != 0.0 || mat.0[2] != 0.0
-}
-
 fn mat2d_linear_is_identity(mat: Mat2D) -> bool {
     mat.0[0] == 1.0 && mat.0[1] == 0.0 && mat.0[2] == 0.0 && mat.0[3] == 1.0
 }
@@ -11850,7 +15655,10 @@ pub(crate) fn runtime_shape_paint_command(
         shape_world_override: None,
         aliases_local_clockwise_path,
         uses_temporary_paint: false,
-        allocates_text_paint_pool: false,
+        text_path_bucket_slot: None,
+        text_paint_pool: None,
+        ensure_text_paint_pool_after_draw: None,
+        prepared_raw_path: None,
     })
 }
 
@@ -12061,6 +15869,37 @@ fn runtime_shape_paint_state(
             })
         }
     }
+}
+
+// C++ ShapePaintMutator owns its inherited opacity independently of the
+// TransformComponent. A newly mounted zero-opacity artboard can leave a
+// descendant's RenderOpacity dirt pending; until Shape::update propagates it,
+// the gradient mutator retains its default opacity of 1. Preserve the last
+// shader value in that state instead of eagerly reading the transform's
+// not-yet-propagated value.
+fn runtime_retained_gradient_render_opacity(
+    instance: &ArtboardInstance,
+    opacity_local: usize,
+    paint_global_id: u32,
+    render_cache: &RuntimeRenderPathCache,
+) -> f32 {
+    let Some(component) = instance.component(opacity_local) else {
+        return 1.0;
+    };
+    if !component.dirt.contains(ComponentDirt::RENDER_OPACITY) {
+        return component.transform.render_opacity;
+    }
+    render_cache
+        .gradient_shaders
+        .get(&paint_global_id)
+        .and_then(|entry| match &entry.state {
+            RuntimeShapePaintState::LinearGradient { render_opacity, .. }
+            | RuntimeShapePaintState::RadialGradient { render_opacity, .. } => {
+                Some(*render_opacity)
+            }
+            RuntimeShapePaintState::SolidColor { .. } => None,
+        })
+        .unwrap_or(1.0)
 }
 
 fn shape_paint_container_opacity_local(graph: &ArtboardGraph, container_local: usize) -> usize {
@@ -12280,7 +16119,7 @@ fn runtime_geometry_shape_paint_contains(
         return false;
     }
 
-    let paint_shape_world = paint.shape_world_override.unwrap_or(shape_world);
+    let paint_shape_world = shape_world;
     let Some(point) = runtime_geometry_paint_space_point(paint, paint_shape_world, world_point)
     else {
         return false;
@@ -14163,17 +18002,24 @@ fn runtime_stroke_effect_path_commands(
     match effect.type_name {
         "DashPath" => runtime_dash_path_effect_commands(artboard, effect, paint, source),
         "ScriptedPathEffect" => {
-            let output = artboard
-                .apply_scripted_path_effect(
-                    effect.global_id,
-                    runtime_raw_path_from_commands(source),
-                    ScriptNode {
-                        path: None,
-                        paint: Some(script_paint_for_shape(artboard, paint)),
-                    },
-                )
-                .map_err(|_| eprintln!("update function failed"))
-                .ok()?;
+            let output = match artboard.apply_scripted_path_effect(
+                effect.global_id,
+                runtime_raw_path_from_commands(source),
+                ScriptNode {
+                    path: None,
+                    paint: Some(script_paint_for_shape(artboard, paint)),
+                },
+            ) {
+                Ok(output) => output,
+                Err(_) => {
+                    // C++ still exposes the ScriptedEffectPath when scripting
+                    // is unavailable or its update fails. That path was
+                    // rewound before the attempted update, so it is empty
+                    // rather than a signal to fall back to the source path.
+                    eprintln!("update function failed");
+                    return Some(Vec::new());
+                }
+            };
             Some(runtime_path_commands_from_raw_path(&output))
         }
         "TargetEffect" => {
@@ -14418,7 +18264,10 @@ fn runtime_trim_path_line_effect_commands(
 }
 
 fn positive_unit_mod(value: f32) -> f32 {
-    value.rem_euclid(1.0)
+    // Match C++ `fmodf(fmodf(value, 1) + 1, 1)` exactly. The intermediate
+    // addition is observable at f32 precision even for already-positive
+    // values and feeds directly into trim distances.
+    ((value % 1.0) + 1.0) % 1.0
 }
 
 #[derive(Debug, Clone)]
@@ -14679,7 +18528,9 @@ impl TrimContour {
             return previous_t;
         }
         let ratio = (distance - previous_distance) / denominator;
-        (previous_t + (segment.t - previous_t) * ratio).clamp(previous_t, segment.t)
+        previous_t
+            .mul_add(1.0 - ratio, segment.t * ratio)
+            .clamp(previous_t, segment.t)
     }
 
     fn first_segment_for_original(&self, original_index: usize) -> Option<&TrimMeasuredSegment> {
@@ -14705,7 +18556,7 @@ impl TrimContour {
                 } else {
                     (distance - previous_distance) / denominator
                 };
-                let (tan, _) = normalize_vector((to.0 - from.0, to.1 - from.1));
+                let tan = normalized_vector((to.0 - from.0, to.1 - from.1));
                 (lerp_point(from, to, rel_d), tan)
             }
             TrimSegmentKind::Cubic { p0, p1, p2, p3 } => {
@@ -14941,8 +18792,8 @@ impl TrimSegmentKind {
     ) {
         match self {
             Self::Line { from, to } => {
-                let start = lerp_point(from, to, start_t);
-                let end = lerp_point(from, to, end_t);
+                let start = weighted_lerp_point(from, to, start_t);
+                let end = weighted_lerp_point(from, to, end_t);
                 if move_to {
                     commands.push(RuntimePathCommand::Move {
                         x: start.0,
@@ -15181,7 +19032,7 @@ fn cubic_position_tangent(points: [(f32, f32); 4], t: f32) -> ((f32, f32), (f32,
         3.0 * (points[1].0 - points[0].0),
         3.0 * (points[1].1 - points[0].1),
     );
-    let (tan, _) = normalize_vector((
+    let tan = normalized_vector((
         (3.0 * a.0 * t + 2.0 * b.0) * t + c.0,
         (3.0 * a.1 * t + 2.0 * b.1) * t + c.1,
     ));
@@ -15213,16 +19064,16 @@ fn cubic_extract(points: [(f32, f32); 4], start_t: f32, end_t: f32) -> [(f32, f3
 }
 
 fn cubic_subdivide(points: [(f32, f32); 4], t: f32) -> [(f32, f32); 7] {
-    let ab = lerp_point(points[0], points[1], t);
-    let bc = lerp_point(points[1], points[2], t);
-    let cd = lerp_point(points[2], points[3], t);
-    let abc = lerp_point(ab, bc, t);
-    let bcd = lerp_point(bc, cd, t);
+    let ab = weighted_lerp_point(points[0], points[1], t);
+    let bc = weighted_lerp_point(points[1], points[2], t);
+    let cd = weighted_lerp_point(points[2], points[3], t);
+    let abc = weighted_lerp_point(ab, bc, t);
+    let bcd = weighted_lerp_point(bc, cd, t);
     [
         points[0],
         ab,
         abc,
-        lerp_point(abc, bcd, t),
+        weighted_lerp_point(abc, bcd, t),
         bcd,
         cd,
         points[3],
@@ -15232,7 +19083,7 @@ fn cubic_subdivide(points: [(f32, f32); 4], t: f32) -> [(f32, f32); 7] {
 fn distance(from: (f32, f32), to: (f32, f32)) -> f32 {
     let x = to.0 - from.0;
     let y = to.1 - from.1;
-    (x * x + y * y).sqrt()
+    x.mul_add(x, y * y).sqrt()
 }
 
 fn distance_squared(from: (f32, f32), to: (f32, f32)) -> f32 {
@@ -15240,17 +19091,16 @@ fn distance_squared(from: (f32, f32), to: (f32, f32)) -> f32 {
 }
 
 fn vector_length_squared(vector: (f32, f32)) -> f32 {
-    vector.0 * vector.0 + vector.1 * vector.1
+    vector.0.mul_add(vector.0, vector.1 * vector.1)
 }
 
 fn lerp_point(from: (f32, f32), to: (f32, f32), t: f32) -> (f32, f32) {
-    if t == 0.0 {
-        return from;
-    }
-    if t == 1.0 {
-        return to;
-    }
     (from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t)
+}
+
+fn weighted_lerp_point(from: (f32, f32), to: (f32, f32), t: f32) -> (f32, f32) {
+    let inverse_t = 1.0 - t;
+    (from.0 * inverse_t + to.0 * t, from.1 * inverse_t + to.1 * t)
 }
 
 fn color_modulate_opacity(color: u32, opacity: f32) -> u32 {
@@ -17167,8 +21017,18 @@ fn normalize_vector(vector: (f32, f32)) -> ((f32, f32), f32) {
     }
 }
 
+fn normalized_vector(vector: (f32, f32)) -> (f32, f32) {
+    let length_squared = vector.0.mul_add(vector.0, vector.1 * vector.1);
+    let scale = if length_squared > 0.0 {
+        1.0 / length_squared.sqrt()
+    } else {
+        1.0
+    };
+    (vector.0 * scale, vector.1 * scale)
+}
+
 fn vector_length(vector: (f32, f32)) -> f32 {
-    (vector.0 * vector.0 + vector.1 * vector.1).sqrt()
+    vector.0.mul_add(vector.0, vector.1 * vector.1).sqrt()
 }
 
 fn scale_and_add_point(point: (f32, f32), vector: (f32, f32), scale: f32) -> (f32, f32) {
@@ -17292,6 +21152,443 @@ fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+
+    fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: nuxie_schema::definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn authoring_property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
+        AuthoringProperty {
+            key: crate::properties::property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value,
+        }
+    }
+
+    #[test]
+    fn scripted_file_assets_displace_pending_image_importers() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            authoring_record("Backboard", Vec::new()),
+            authoring_record(
+                "ImageAsset",
+                vec![authoring_property(
+                    "ImageAsset",
+                    "assetId",
+                    AuthoringValue::Uint(10),
+                )],
+            ),
+            authoring_record(
+                "FileAssetContents",
+                vec![authoring_property(
+                    "FileAssetContents",
+                    "bytes",
+                    AuthoringValue::Bytes(vec![1]),
+                )],
+            ),
+            authoring_record(
+                "ImageAsset",
+                vec![authoring_property(
+                    "ImageAsset",
+                    "assetId",
+                    AuthoringValue::Uint(11),
+                )],
+            ),
+            authoring_record(
+                "FileAssetContents",
+                vec![authoring_property(
+                    "FileAssetContents",
+                    "bytes",
+                    AuthoringValue::Bytes(vec![2]),
+                )],
+            ),
+            authoring_record("ScriptAsset", Vec::new()),
+            authoring_record(
+                "FileAssetContents",
+                vec![authoring_property(
+                    "FileAssetContents",
+                    "bytes",
+                    AuthoringValue::Bytes(vec![3]),
+                )],
+            ),
+            authoring_record("Artboard", Vec::new()),
+        ])
+        .expect("file-asset import-order fixture imports");
+        let image_globals = file
+            .file_assets()
+            .into_iter()
+            .filter(|asset| asset.type_name == "ImageAsset")
+            .map(|asset| asset.id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(image_globals.len(), 2);
+        assert_eq!(
+            import_stack_pre_source_image_asset_globals(&file, false),
+            vec![image_globals[0]],
+            "a non-scripting importer leaves the final image pending"
+        );
+        assert_eq!(
+            import_stack_pre_source_image_asset_globals(&file, true),
+            image_globals,
+            "WITH_RIVE_SCRIPTING treats ScriptAsset as the next FileAsset importer"
+        );
+    }
+
+    #[test]
+    fn retained_text_paints_preserve_each_run_world_transform() {
+        let live_text_world = Mat2D([1.0, 0.0, 0.0, 1.0, 70.0, 184.57031]);
+        let first_run_world = Mat2D([1.0, 0.0, 0.0, 1.0, 70.0, 184.57031]);
+        let second_run_world = Mat2D([1.0, 0.0, 0.0, 1.0, 70.0, 251.82813]);
+
+        assert_eq!(
+            runtime_text_paint_shape_world(true, Some(first_run_world), live_text_world),
+            Some(first_run_world)
+        );
+        assert_eq!(
+            runtime_text_paint_shape_world(true, Some(second_run_world), live_text_world),
+            Some(second_run_world)
+        );
+        assert_eq!(
+            runtime_text_paint_shape_world(false, Some(second_run_world), live_text_world),
+            None,
+            "non-text overrides are retained structural markers and use live component worlds"
+        );
+    }
+
+    #[test]
+    fn positive_unit_mod_matches_cpp_nested_fmod_rounding() {
+        assert_eq!(positive_unit_mod(0.185).to_bits(), 0x3e3d_70a0);
+        assert_eq!(positive_unit_mod(-0.185).to_bits(), 0x3f50_a3d7);
+    }
+
+    #[test]
+    fn line_sampling_matches_cpp_endpoint_and_tangent_evaluation() {
+        let commands = [
+            RuntimePathCommand::Move {
+                x: f32::from_bits(0x424a_32b8),
+                y: f32::from_bits(0x428b_f5bf),
+            },
+            RuntimePathCommand::Line {
+                x: f32::from_bits(0xb5fc_4636),
+                y: f32::from_bits(0x422d_0000),
+            },
+        ];
+        let measure = RuntimePathMeasure::from_commands(&commands);
+        let sample = measure.at_distance(measure.length());
+
+        assert_eq!(sample.pos.0.to_bits(), 0x0000_0000);
+        assert_eq!(sample.pos.1.to_bits(), 0x422d_0000);
+        assert_eq!(sample.tan.0.to_bits(), 0xbf62_4edf);
+        assert_eq!(sample.tan.1.to_bits(), 0xbeef_5680);
+    }
+
+    #[test]
+    fn format_7_2_layout_images_compose_fit_on_top_of_authored_scale() {
+        let authored = Mat2D([2.0, 0.0, 0.0, 3.0, 7.0, 11.0]);
+
+        assert_eq!(
+            runtime_apply_image_layout_fit(
+                authored,
+                4.0,
+                5.0,
+                13.0,
+                17.0,
+                runtime_layout_image_uses_separate_fit_scale(7, 2),
+            ),
+            Mat2D([8.0, 0.0, 0.0, 15.0, 20.0, 28.0]),
+        );
+    }
+
+    #[test]
+    fn pre_7_2_layout_images_overwrite_authored_scale_with_fit() {
+        let authored = Mat2D([2.0, 0.0, 0.0, 3.0, 7.0, 11.0]);
+
+        assert_eq!(
+            runtime_apply_image_layout_fit(
+                authored,
+                4.0,
+                5.0,
+                13.0,
+                17.0,
+                runtime_layout_image_uses_separate_fit_scale(7, 1),
+            ),
+            Mat2D([4.0, 0.0, 0.0, 5.0, 20.0, 28.0]),
+        );
+    }
+
+    #[test]
+    fn pre_7_2_layout_fit_mutates_public_image_scale_until_the_user_writes_it() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 1);
+        push_var_uint(&mut bytes, 9711);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Image", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "Node", "scaleX", 2.0);
+            push_f32(bytes, "Node", "scaleY", 3.0);
+        });
+        let file = read_runtime_file(&bytes).expect("synthetic legacy image imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic legacy image graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let scale_x_key = property_key_for_name("Node", "scaleX").expect("Node.scaleX key");
+        let scale_y_key = property_key_for_name("Node", "scaleY").expect("Node.scaleY key");
+        let first_layout = RuntimeLegacyImageLayoutScaleKey::new([11; 12]);
+
+        assert_eq!(
+            instance.resolve_legacy_image_layout_scale(1, first_layout, 4.0, 5.0),
+            (4.0, 5.0)
+        );
+        assert_eq!(instance.double_property(1, scale_x_key), Some(4.0));
+        assert_eq!(instance.double_property(1, scale_y_key), Some(5.0));
+
+        assert!(instance.set_double_property(1, scale_x_key, 7.0));
+        assert_eq!(
+            instance.resolve_legacy_image_layout_scale(1, first_layout, 4.0, 5.0),
+            (7.0, 5.0),
+            "a user write survives while the layout control size is unchanged"
+        );
+
+        assert_eq!(
+            instance.resolve_legacy_image_layout_scale(
+                1,
+                RuntimeLegacyImageLayoutScaleKey::new([12; 12]),
+                6.0,
+                8.0,
+            ),
+            (6.0, 8.0),
+            "a new layout control size overwrites legacy public scale again"
+        );
+        assert_eq!(instance.double_property(1, scale_x_key), Some(6.0));
+        assert_eq!(instance.double_property(1, scale_y_key), Some(8.0));
+    }
+
+    #[test]
+    fn format_7_2_layout_fit_keeps_public_scale_authored_and_reports_composed_render_scale() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 2);
+        push_var_uint(&mut bytes, 9712);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Image", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "Node", "scaleX", 2.0);
+            push_f32(bytes, "Node", "scaleY", 3.0);
+        });
+        let file = read_runtime_file(&bytes).expect("synthetic modern image imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic modern image graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let image_global = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == 1)
+            .expect("image component")
+            .global_id;
+
+        let state = runtime_image_layout_local_transform(
+            &instance,
+            1,
+            file.object(image_global as usize),
+            Some(99),
+            123,
+            Mat2D([2.0, 0.0, 0.0, 3.0, 7.0, 11.0]),
+            true,
+            100.0,
+            100.0,
+            400.0,
+            500.0,
+            false,
+        )
+        .expect("layout fit resolves");
+
+        assert_eq!(
+            instance.transform_property(1, TransformProperty::ScaleX),
+            Some(2.0)
+        );
+        assert_eq!(
+            instance.transform_property(1, TransformProperty::ScaleY),
+            Some(3.0)
+        );
+        assert_eq!(
+            state.local_transform,
+            Mat2D([8.0, 0.0, 0.0, 15.0, 7.0, 11.0])
+        );
+        assert_eq!((state.render_scale_x, state.render_scale_y), (8.0, 15.0));
+    }
+
+    #[test]
+    fn slice_mesh_stretch_emits_four_vertices_and_six_indices_per_patch() {
+        let bytes = synthetic_image_nslicer_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic image NSlicer imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic image NSlicer graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let details = graph.n_slicer_details.first().expect("NSlicer details");
+
+        let geometry =
+            runtime_slice_mesh_geometry(&file, &instance, details, 300.0, 300.0, 1.5, 1.5);
+
+        assert_eq!(geometry.vertices.len(), 36);
+        assert_eq!(geometry.uvs.len(), 36);
+        assert_eq!(geometry.indices.len(), 54);
+        assert_eq!(&geometry.indices[..6], &[0, 1, 3, 1, 2, 3]);
+        assert_eq!(&geometry.indices[48..], &[32, 33, 35, 33, 34, 35]);
+        assert_eq!(geometry.vertices[0], (0.0, 0.0));
+        assert_eq!(geometry.uvs[0], (0.0, 0.0));
+        assert!((geometry.vertices[34].0 - 300.0).abs() <= 0.0001);
+        assert!((geometry.vertices[34].1 - 300.0).abs() <= 0.0001);
+        assert_eq!(geometry.uvs[34], (1.0, 1.0));
+    }
+
+    #[test]
+    fn slice_mesh_hidden_and_repeat_tile_modes_match_cpp_patch_semantics() {
+        let bytes = synthetic_image_nslicer_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic image NSlicer imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic image NSlicer graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let mut hidden = graph
+            .n_slicer_details
+            .first()
+            .expect("NSlicer details")
+            .clone();
+        hidden.tile_modes.push(nuxie_graph::NSlicerTileModeNode {
+            local_id: usize::MAX,
+            global_id: u32::MAX,
+            type_name: "NSlicerTileMode",
+            patch_index: 4,
+            style: 2,
+        });
+        let geometry =
+            runtime_slice_mesh_geometry(&file, &instance, &hidden, 300.0, 300.0, 1.5, 1.5);
+        assert_eq!(geometry.vertices.len(), 32);
+        assert_eq!(geometry.indices.len(), 48);
+
+        let mut repeated = Vec::new();
+        let mut indices = Vec::new();
+        let added = runtime_slice_mesh_tile_repeat(
+            &mut repeated,
+            &mut indices,
+            [
+                RuntimeSliceMeshVertex {
+                    vertex: (0.0, 0.0),
+                    uv: (0.0, 0.0),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (25.0, 0.0),
+                    uv: (0.5, 0.0),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (25.0, 25.0),
+                    uv: (0.5, 0.5),
+                },
+                RuntimeSliceMeshVertex {
+                    vertex: (0.0, 25.0),
+                    uv: (0.0, 0.5),
+                },
+            ],
+            0,
+            100.0,
+            100.0,
+            3.0,
+            3.0,
+        );
+        assert_eq!(added, 16);
+        assert_eq!(repeated.len(), 16);
+        assert_eq!(indices.len(), 24);
+        assert!((repeated[15].vertex.0 - 50.0 / 3.0).abs() <= 0.0001);
+        assert!((repeated[15].vertex.1 - 25.0).abs() <= 0.0001);
+        assert!((repeated[14].uv.0 - 0.25).abs() <= 0.0001);
+        assert!((repeated[14].uv.1 - 0.25).abs() <= 0.0001);
+    }
+
+    #[test]
+    fn slice_mesh_buffers_reuse_equal_sizes_and_replace_only_the_resized_buffer() {
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        let mut buffers = RuntimeSliceMeshRenderBuffers::default();
+        let update = |vertex_len, fill| RuntimeSliceMeshUpdate {
+            world_bits: [fill; 6],
+            input_words: vec![u64::from(fill)],
+            vertex_bytes: vec![fill as u8; vertex_len],
+            uv_bytes: vec![fill as u8; 16],
+            index_bytes: vec![fill as u8; 12],
+        };
+
+        runtime_update_slice_mesh_render_buffers(&mut factory, &mut buffers, update(16, 1));
+        runtime_update_slice_mesh_render_buffers(&mut factory, &mut buffers, update(16, 2));
+        runtime_update_slice_mesh_render_buffers(&mut factory, &mut buffers, update(24, 3));
+
+        let stream = factory.stream();
+        assert_eq!(stream.matches("makeRenderBuffer").count(), 4);
+        assert_eq!(stream.matches("bufferData").count(), 9);
+        assert!(stream.contains("makeRenderBuffer id=4 type=1 flags=0 size=24"));
+        assert_eq!(stream.matches("bufferData id=2 ").count(), 3);
+        assert_eq!(stream.matches("bufferData id=3 ").count(), 3);
+    }
+
+    #[test]
+    fn slice_mesh_invalidation_keeps_cpp_axis_dirt_when_clamped_geometry_is_unchanged() {
+        let bytes = synthetic_image_nslicer_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic image NSlicer imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic image NSlicer graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let details = graph.n_slicer_details.first().expect("NSlicer details");
+        let offset_key = property_key_for_name("Axis", "offset").expect("Axis.offset key");
+
+        assert!(instance.set_double_property(3, offset_key, 400.0));
+        let first_geometry =
+            runtime_slice_mesh_geometry(&file, &instance, details, 300.0, 300.0, 1.5, 1.5);
+        let first_key = runtime_slice_mesh_input_words(
+            &file,
+            &instance,
+            graph,
+            details,
+            1,
+            Some(7),
+            11,
+            300,
+            300,
+            1.5,
+            1.5,
+            None,
+        );
+
+        assert!(instance.set_double_property(3, offset_key, 500.0));
+        let second_geometry =
+            runtime_slice_mesh_geometry(&file, &instance, details, 300.0, 300.0, 1.5, 1.5);
+        let second_key = runtime_slice_mesh_input_words(
+            &file,
+            &instance,
+            graph,
+            details,
+            1,
+            Some(7),
+            11,
+            300,
+            300,
+            1.5,
+            1.5,
+            None,
+        );
+
+        assert_eq!(first_geometry, second_geometry);
+        assert_ne!(first_key, second_key);
+    }
 
     #[test]
     fn geometry_bounds_use_cubic_extrema_instead_of_the_control_hull() {
@@ -17776,6 +22073,7 @@ mod tests {
             .artboards
             .first()
             .expect("synthetic riv has an artboard");
+        assert!(runtime_command_frame_requires_world_epoch(graph));
         let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
         instance.update_pass();
         let mut cache = RuntimeGeometryCache::default();
@@ -17818,6 +22116,47 @@ mod tests {
     }
 
     #[test]
+    fn prepared_world_stroke_uses_direct_shape_replay() {
+        let bytes = synthetic_world_space_gradient_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic riv graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let prepared = path_cache.prepared_artboard_frame(&instance, graph, Some(&file));
+        let command = prepared
+            .commands
+            .iter()
+            .find(|command| command.type_name == "Shape")
+            .expect("synthetic artboard prepares its shape");
+
+        assert!(
+            command.world_stroke_shape,
+            "an effect-free world-space gradient stroke should bypass generic shape replay"
+        );
+
+        let mut inner_feather = command.clone();
+        inner_feather.shape_paints[0].feather_state = Some(RuntimeFeatherState {
+            feather_local: 0,
+            space_value: 0,
+            strength: 1.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            inner: true,
+            inner_path_commands: vec![RuntimePathCommand::Move { x: 0.0, y: 0.0 }],
+        });
+        assert!(
+            !runtime_command_is_world_stroke_shape(&inner_feather),
+            "inner feather clipping must stay on generic ShapePaint replay"
+        );
+    }
+
+    #[test]
     fn world_shape_paint_render_path_cache_follows_transform_writes() {
         use crate::TransformProperty;
 
@@ -17828,6 +22167,7 @@ mod tests {
             .artboards
             .first()
             .expect("synthetic riv has an artboard");
+        assert!(runtime_command_frame_requires_world_epoch(graph));
         let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
         instance.update_components();
 
@@ -17972,6 +22312,7 @@ mod tests {
             .artboards
             .first()
             .expect("synthetic riv has an artboard");
+        assert!(!runtime_command_frame_requires_world_epoch(graph));
         let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
         instance.update_pass();
         let mut cache = RuntimeGeometryCache::default();
@@ -17985,6 +22326,9 @@ mod tests {
             ),
             vec![1]
         );
+        let prepared_before = cache
+            .paths
+            .prepared_artboard_frame(&instance, graph, Some(&file));
         let key = RuntimeShapePaintPathCommandsCacheKey {
             shape_local: 1,
             path_epoch: instance.path_epoch(),
@@ -17995,7 +22339,7 @@ mod tests {
         let before = cache
             .paths
             .shape_paint_paths
-            .get(graph.global_id, 2, key)
+            .get(graph.global_id, 1, key)
             .expect("the first query retains local paint commands");
 
         assert!(instance.set_transform_property(1, TransformProperty::X, 60.0));
@@ -18012,11 +22356,242 @@ mod tests {
         let after = cache
             .paths
             .shape_paint_paths
-            .get(graph.global_id, 2, key)
+            .get(graph.global_id, 1, key)
             .expect("transform-only writes retain local paint commands");
+        let prepared_after = cache
+            .paths
+            .prepared_artboard_frame(&instance, graph, Some(&file));
         assert!(
-            Arc::ptr_eq(&before, &after),
+            Arc::ptr_eq(&before.commands, &after.commands)
+                && Arc::ptr_eq(&before.raw_path, &after.raw_path),
             "only world-baked paths should pay transform-epoch invalidation"
+        );
+        assert!(
+            Arc::ptr_eq(&prepared_before.commands, &prepared_after.commands),
+            "transform-only writes must retain local draw-command topology"
+        );
+    }
+
+    #[test]
+    fn invisible_unsettled_artboard_does_not_retain_preupdate_local_paths() {
+        let bytes = synthetic_even_odd_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic local-paint riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic local-paint graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        assert_eq!(instance.component(0).unwrap().transform.render_opacity, 0.0);
+        assert!(instance.set_transform_property(4, TransformProperty::Y, 0.25));
+
+        let mut factory = nuxie_render_api::NullFactory::new();
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("invisible prepare succeeds");
+
+        instance.update_pass();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("settled prepare succeeds");
+        let prepared = path_cache.prepared_artboard_frame(&instance, graph, Some(&file));
+        let shape = prepared
+            .commands
+            .iter()
+            .find(|command| command.local_id == Some(1))
+            .expect("prepared shape command");
+        let first_path = &shape
+            .shape_paints
+            .first()
+            .expect("prepared shape paint")
+            .path_commands;
+
+        assert!(
+            matches!(
+                first_path.first(),
+                Some(RuntimePathCommand::Move { x, y })
+                    if *x == -40.0 && *y == -39.75
+            ),
+            "the first visible frame must include the rectangle's authored local y: {first_path:?}"
+        );
+    }
+
+    #[test]
+    fn zero_opacity_shapes_retain_topology_but_skip_live_replay() {
+        use crate::TransformProperty;
+
+        let bytes = synthetic_even_odd_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic local-paint riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic local-paint graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        assert!(instance.set_transform_property(1, TransformProperty::Opacity, 0.0));
+        instance.update_pass();
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats,
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("zero-opacity paint preparation succeeds");
+        let prepared = path_cache.prepared_artboard_frame(&instance, graph, Some(&file));
+        assert!(
+            prepared
+                .commands
+                .iter()
+                .any(|command| { command.type_name == "Shape" && command.local_id == Some(1) })
+        );
+
+        let mut renderer = PathGeometryRecordingRenderer::default();
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("zero-opacity draw succeeds");
+        assert!(renderer.draw_paths.is_empty());
+
+        assert!(instance.set_transform_property(1, TransformProperty::Opacity, 1.0));
+        instance.update_pass();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("visible paint preparation succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("visible draw succeeds");
+        assert!(!renderer.draw_paths.is_empty());
+    }
+
+    #[test]
+    fn zero_opacity_shapes_do_not_flush_retained_clip_envelopes() {
+        use crate::TransformProperty;
+
+        let bytes = synthetic_clip_geometry_riv(Some(20.0));
+        let file = read_runtime_file(&bytes).expect("synthetic clip riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic clip graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        assert!(instance.set_transform_property(4, TransformProperty::Opacity, 0.0));
+        instance.update_pass();
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats,
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("zero-opacity clipped paint preparation succeeds");
+        let prepared = path_cache.prepared_artboard_frame(&instance, graph, Some(&file));
+        assert!(
+            prepared
+                .commands
+                .iter()
+                .any(|command| { command.kind == RuntimeDrawCommandKind::ClipStart })
+        );
+        assert!(
+            prepared
+                .commands
+                .iter()
+                .any(|command| { command.type_name == "Shape" && command.local_id == Some(4) })
+        );
+
+        let mut renderer = PathGeometryRecordingRenderer::default();
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("zero-opacity clipped draw succeeds");
+        assert!(renderer.draw_paths.is_empty());
+        assert_eq!(
+            renderer.clip_paths.len(),
+            1,
+            "only the artboard's own bounds clip should be installed"
         );
     }
 
@@ -18267,6 +22842,94 @@ mod tests {
     }
 
     #[test]
+    fn clipping_render_path_uses_live_fill_rule() {
+        let bytes = synthetic_clip_geometry_riv(Some(20.0));
+        let file = read_runtime_file(&bytes).expect("synthetic live-clip riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic live-clip graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let clipping_shape_local = graph
+            .clipping_shapes
+            .first()
+            .expect("synthetic riv has a clipping shape")
+            .local_id;
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+
+        let mut factory = CountingFactory {
+            stats: Rc::new(CountingStats::default()),
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let mut renderer = PathGeometryRecordingRenderer::default();
+
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first draw succeeds");
+        assert_eq!(
+            renderer.clip_fill_rules.last(),
+            Some(&RenderFillRule::NonZero)
+        );
+
+        let fill_rule_key = property_key_for_name("ClippingShape", "fillRule")
+            .expect("ClippingShape.fillRule property key");
+        assert!(instance.set_uint_property(clipping_shape_local, fill_rule_key, 2));
+        instance.update_components();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second draw succeeds");
+        assert_eq!(
+            renderer.clip_fill_rules.last(),
+            Some(&RenderFillRule::Clockwise),
+            "C++ rewinds ClippingShape paths with the live fillRule"
+        );
+    }
+
+    #[test]
     fn layout_shape_paint_render_path_cache_follows_layout_epoch() {
         let bytes = synthetic_painted_layout_geometry_riv();
         let file = read_runtime_file(&bytes).expect("synthetic painted-layout riv imports");
@@ -18369,6 +23032,183 @@ mod tests {
         assert!(
             resized_max_x > baseline_max_x,
             "layout path width did not grow: {baseline_max_x} -> {resized_max_x}"
+        );
+    }
+
+    #[test]
+    fn paint_preparation_classifies_solid_only_files_without_hiding_gradients() {
+        let solid_file = read_runtime_file(&synthetic_painted_layout_geometry_riv())
+            .expect("synthetic solid-only riv imports");
+        let solid_graphs =
+            GraphFile::from_runtime_file(&solid_file).expect("synthetic solid-only graphs");
+        assert!(runtime_artboard_set_paint_preparation_is_solid_only(
+            &solid_graphs.artboards
+        ));
+
+        let gradient_file = read_runtime_file(&synthetic_zero_opacity_nested_gradient_riv())
+            .expect("synthetic gradient riv imports");
+        let gradient_graphs =
+            GraphFile::from_runtime_file(&gradient_file).expect("synthetic gradient graphs");
+        assert!(!runtime_artboard_set_paint_preparation_is_solid_only(
+            &gradient_graphs.artboards
+        ));
+    }
+
+    #[test]
+    fn paint_preparation_gate_preserves_first_use_structure_changes_and_nslicer_work() {
+        let solid_file = read_runtime_file(&synthetic_painted_layout_geometry_riv())
+            .expect("synthetic solid-only riv imports");
+        let solid_graphs =
+            GraphFile::from_runtime_file(&solid_file).expect("synthetic solid-only graphs");
+        let solid_graph = solid_graphs.artboards.first().expect("solid artboard");
+        let solid_instance =
+            ArtboardInstance::from_graph(&solid_file, solid_graph).expect("solid instance builds");
+
+        let mut flat_cache = RuntimeRenderPaintCache {
+            paint_preparation_is_noop: true,
+            ..RuntimeRenderPaintCache::default()
+        };
+        assert!(!flat_cache.needs_paint_preparation(&solid_instance, solid_graph));
+
+        flat_cache.paint_preparation_is_noop = false;
+        flat_cache.paint_preparation_is_solid_only_tree = true;
+        assert!(
+            flat_cache.needs_paint_preparation(&solid_instance, solid_graph),
+            "the first mounted solid-only structure must be prepared"
+        );
+        let structure_epoch = solid_instance
+            .nested_structure_epoch()
+            .expect("graph-backed instance has a structure epoch");
+        flat_cache.solid_only_tree_structure_epoch = Some(structure_epoch);
+        assert!(!flat_cache.needs_paint_preparation(&solid_instance, solid_graph));
+        flat_cache.solid_only_tree_structure_epoch = Some(structure_epoch.wrapping_sub(1));
+        assert!(
+            flat_cache.needs_paint_preparation(&solid_instance, solid_graph),
+            "a mounted-tree structure change must reopen preparation"
+        );
+
+        let nslicer_file =
+            read_runtime_file(&synthetic_image_nslicer_riv()).expect("synthetic NSlicer imports");
+        let nslicer_graphs =
+            GraphFile::from_runtime_file(&nslicer_file).expect("synthetic NSlicer graphs");
+        let nslicer_graph = nslicer_graphs.artboards.first().expect("NSlicer artboard");
+        let nslicer_instance = ArtboardInstance::from_graph(&nslicer_file, nslicer_graph)
+            .expect("NSlicer instance builds");
+        let nslicer_cache = RuntimeRenderPaintCache {
+            paint_preparation_is_noop: true,
+            ..RuntimeRenderPaintCache::default()
+        };
+        assert!(
+            nslicer_cache.needs_paint_preparation(&nslicer_instance, nslicer_graph),
+            "authored NSlicer mesh work must never be hidden by the paint fast path"
+        );
+    }
+
+    #[test]
+    fn prepared_draw_refreshes_nested_nslicer_after_solid_only_root_skips_paint_preparation() {
+        let bytes = synthetic_nested_image_nslicer_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic nested NSlicer imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic nested NSlicer graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has a root artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("root instance builds");
+        instance.update_components();
+
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        assert!(paint_cache.paint_preparation_is_solid_only_tree);
+
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first paint preparation succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first prepared draw succeeds");
+        let first_stream = factory.stream();
+        assert_eq!(
+            first_stream.matches("bufferData").count(),
+            3,
+            "the first prepared draw must upload all three nested NSlicer buffers"
+        );
+        assert!(
+            !paint_cache.needs_paint_preparation(&instance, graph),
+            "the unchanged solid-only root should now take the retained fast path"
+        );
+
+        let offset_key = property_key_for_name("Axis", "offset").expect("Axis.offset key");
+        let child = &mut instance
+            .nested_artboards
+            .get_mut(&1)
+            .expect("nested child is mounted")
+            .child;
+        assert!(child.set_double_property(3, offset_key, 125.0));
+        child.update_components();
+        assert!(
+            !paint_cache.needs_paint_preparation(&instance, graph),
+            "child mesh dirt must not reopen the root paint walk"
+        );
+
+        factory.clear();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("retained paint preparation succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second prepared draw succeeds");
+
+        let stream = factory.stream();
+        assert_eq!(
+            stream.matches("bufferData").count(),
+            3,
+            "the nested NSlicer must upload its vertex, UV, and index buffers"
+        );
+        assert_ne!(
+            first_stream
+                .lines()
+                .find(|line| line.starts_with("bufferData ")),
+            stream.lines().find(|line| line.starts_with("bufferData ")),
+            "the changed X axis must reach the retained vertex buffer"
         );
     }
 
@@ -19020,6 +23860,100 @@ mod tests {
     }
 
     #[test]
+    fn nested_render_cache_retains_each_exact_instance_key() {
+        let original = nested_render_cache_key(Some(33), Some(14), 105, 7);
+        let replacement = nested_render_cache_key(Some(33), Some(14), 105, 8);
+        let mut caches = RuntimeNestedRenderCaches::default();
+
+        *caches.get_or_insert_with(original, || 7_u32) = 11;
+
+        assert_eq!(*caches.get_or_insert_with(original, || 99), 11);
+        assert_eq!(*caches.get_or_insert_with(replacement, || 17), 17);
+        assert!(
+            matches!(caches, RuntimeNestedRenderCaches::Flat(ref entries) if entries.len() == 2)
+        );
+    }
+
+    #[test]
+    fn nested_render_cache_spills_wide_nesting_trees_without_losing_entries() {
+        let mut caches = RuntimeNestedRenderCaches::default();
+        for revision in 0..=RuntimeNestedRenderCaches::<u32>::FLAT_CAPACITY {
+            let key = nested_render_cache_key(Some(33), Some(14), 105, revision as u64);
+            *caches.get_or_insert_with(key, || revision as u32) += 10;
+        }
+
+        assert!(matches!(
+            caches,
+            RuntimeNestedRenderCaches::Ordered(ref entries)
+                if entries.len() == RuntimeNestedRenderCaches::<u32>::FLAT_CAPACITY + 1
+        ));
+        let first = nested_render_cache_key(Some(33), Some(14), 105, 0);
+        assert_eq!(*caches.get_or_insert_with(first, || 99), 10);
+    }
+
+    #[test]
+    fn nested_render_cache_keeps_authored_sixteen_child_tree_flat() {
+        let mut caches = RuntimeNestedRenderCaches::default();
+        for revision in 0..16 {
+            let key = nested_render_cache_key(Some(33), Some(14), 105, revision);
+            *caches.get_or_insert_with(key, || revision as u32) += 10;
+        }
+
+        assert!(matches!(
+            caches,
+            RuntimeNestedRenderCaches::Flat(ref entries) if entries.len() == 16
+        ));
+    }
+
+    #[test]
+    fn nested_render_cache_keeps_component_list_rows_in_the_ordered_tier() {
+        let row = component_list_render_cache_key(Some(33), Some(14), 105, 0, 7);
+        let mut caches = RuntimeNestedRenderCaches::default();
+
+        *caches.get_or_insert_with(row, || 11_u32) = 17;
+
+        assert!(matches!(
+            caches,
+            RuntimeNestedRenderCaches::Ordered(ref entries) if entries.get(&row) == Some(&17)
+        ));
+    }
+
+    #[test]
+    fn component_list_render_cache_follows_occurrence_identity_not_logical_index() {
+        let original = component_list_render_cache_key(Some(33), Some(14), 105, 0, 7);
+        let shifted = component_list_render_cache_key(Some(33), Some(14), 105, 4, 7);
+        let replacement = component_list_render_cache_key(Some(33), Some(14), 105, 0, 8);
+
+        assert_eq!(original, shifted);
+        assert_ne!(original, replacement);
+        assert_ne!(
+            original,
+            nested_render_cache_key(Some(33), Some(14), 105, 7)
+        );
+    }
+
+    #[test]
+    fn data_bound_nested_host_without_a_mounted_child_suppresses_authored_fallback() {
+        assert_eq!(
+            runtime_nested_artboard_referenced_global(None, Some(41), true),
+            None
+        );
+        assert_eq!(
+            runtime_nested_artboard_referenced_global(None, Some(41), false),
+            Some(41),
+            "an unbound host still instantiates its authored static reference"
+        );
+    }
+
+    #[test]
+    fn data_bound_nested_host_keeps_the_live_outgoing_child_for_an_unresolved_target() {
+        assert_eq!(
+            runtime_nested_artboard_referenced_global(Some(77), Some(41), true),
+            Some(77)
+        );
+    }
+
+    #[test]
     fn raw_script_path_commands_preserve_verbs_and_lower_quadratics() {
         let mut path = RawPath::new();
         path.move_to(1.0, 2.0);
@@ -19097,6 +24031,7 @@ mod tests {
         lines: Cell<usize>,
         closes: Cell<usize>,
         linear_gradients: RefCell<Vec<[f32; 4]>>,
+        linear_gradient_colors: RefCell<Vec<Vec<ColorInt>>>,
     }
 
     struct CountingFactory {
@@ -19112,6 +24047,7 @@ mod tests {
     struct PathGeometryRecordingRenderer {
         draw_paths: Vec<Vec<(f32, f32)>>,
         clip_paths: Vec<Vec<(f32, f32)>>,
+        clip_fill_rules: Vec<RenderFillRule>,
     }
 
     impl PathGeometryRecordingRenderer {
@@ -19140,6 +24076,12 @@ mod tests {
 
         fn clip_path(&mut self, path: &dyn RenderPath) {
             self.clip_paths.push(Self::path_points(path));
+            self.clip_fill_rules.push(
+                path.as_any()
+                    .downcast_ref::<CountingRenderPath>()
+                    .expect("counting render path")
+                    .fill_rule,
+            );
         }
 
         fn draw_image(
@@ -19423,13 +24365,17 @@ mod tests {
             sy: f32,
             ex: f32,
             ey: f32,
-            _colors: &[ColorInt],
+            colors: &[ColorInt],
             _stops: &[f32],
         ) -> Box<dyn RenderShader> {
             self.stats
                 .linear_gradients
                 .borrow_mut()
                 .push([sx, sy, ex, ey]);
+            self.stats
+                .linear_gradient_colors
+                .borrow_mut()
+                .push(colors.to_vec());
             Box::new(TestRenderShader)
         }
 
@@ -19507,6 +24453,8 @@ mod tests {
             clipping_shape_local: None,
             needs_save_operation: true,
             shape_paints: Vec::new(),
+            simple_solid_shape: false,
+            world_stroke_shape: false,
         };
         let stats = Rc::new(CountingStats::default());
         let mut factory = CountingFactory {
@@ -19516,9 +24464,19 @@ mod tests {
         let mut renderer = RecordingRenderer {
             ops: Rc::clone(&ops),
         };
+        let mut path_cache = RuntimeRenderPathCache::default();
 
-        runtime_draw_scripted_drawable(&instance, &command, &mut factory, &mut renderer)
-            .expect("scripted draw succeeds");
+        runtime_draw_scripted_drawable(
+            &instance,
+            artboard,
+            &command,
+            None,
+            &mut path_cache,
+            &mut factory,
+            &mut renderer,
+            true,
+        )
+        .expect("scripted draw succeeds");
 
         assert_eq!(
             ops.borrow().as_slice(),
@@ -19560,6 +24518,8 @@ mod tests {
             clipping_shape_local: None,
             needs_save_operation: true,
             shape_paints: Vec::new(),
+            simple_solid_shape: false,
+            world_stroke_shape: false,
         };
         let mut factory = CountingFactory {
             stats: Rc::new(CountingStats::default()),
@@ -19568,10 +24528,19 @@ mod tests {
         let mut renderer = RecordingRenderer {
             ops: Rc::clone(&ops),
         };
+        let mut path_cache = RuntimeRenderPathCache::default();
 
-        let error =
-            runtime_draw_scripted_drawable(&instance, &command, &mut factory, &mut renderer)
-                .expect_err("throwing script draw must surface an error");
+        let error = runtime_draw_scripted_drawable(
+            &instance,
+            artboard,
+            &command,
+            None,
+            &mut path_cache,
+            &mut factory,
+            &mut renderer,
+            true,
+        )
+        .expect_err("throwing script draw must surface an error");
 
         assert!(error.to_string().contains("intentional draw failure"));
         assert_eq!(
@@ -19584,6 +24553,221 @@ mod tests {
                 "restore",
             ]
         );
+    }
+
+    #[test]
+    fn simple_solid_draw_path_retains_path_across_revision_and_fill_rule_changes() {
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut cache = RuntimeRenderPathCache::default();
+        let revision = RuntimeDrawPathRevision {
+            path_epoch: 10,
+            layout_epoch: 20,
+            world_epoch: 0,
+        };
+        let raw_path = Arc::new(runtime_raw_path_from_commands(&[
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 1.0, y: 1.0 },
+        ]));
+        reset_runtime_draw_path_command_replays();
+
+        let first_id = cache
+            .simple_solid_draw_path(
+                7,
+                revision,
+                &mut factory,
+                &raw_path,
+                RenderFillRule::EvenOdd,
+            )
+            .as_any()
+            .downcast_ref::<CountingRenderPath>()
+            .expect("counting path")
+            .id;
+        assert_eq!(stats.make_empty_paths.get(), 1);
+        assert_eq!(stats.rewinds.get(), 1);
+        assert_eq!(stats.add_raw_paths.get(), 1);
+        assert_eq!(stats.fill_rules.get(), 2);
+
+        let second_id = cache
+            .simple_solid_draw_path(
+                7,
+                revision,
+                &mut factory,
+                &raw_path,
+                RenderFillRule::EvenOdd,
+            )
+            .as_any()
+            .downcast_ref::<CountingRenderPath>()
+            .expect("counting path")
+            .id;
+        assert_eq!(second_id, first_id);
+        assert_eq!(stats.rewinds.get(), 1);
+        assert_eq!(stats.add_raw_paths.get(), 1);
+        assert_eq!(stats.fill_rules.get(), 2);
+
+        let changed_raw_path = Arc::new(runtime_raw_path_from_commands(&[
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 2.0, y: 2.0 },
+            RuntimePathCommand::Close,
+        ]));
+        let (third_id, third_verbs, third_points, third_fill_rule) = {
+            let path = cache.simple_solid_draw_path(
+                7,
+                RuntimeDrawPathRevision {
+                    path_epoch: 11,
+                    ..revision
+                },
+                &mut factory,
+                &changed_raw_path,
+                RenderFillRule::EvenOdd,
+            );
+            let path = path
+                .as_any()
+                .downcast_ref::<CountingRenderPath>()
+                .expect("counting path");
+            (
+                path.id,
+                path.raw_path.verbs().len(),
+                path.raw_path.points().len(),
+                path.fill_rule,
+            )
+        };
+        assert_eq!(third_id, first_id, "RenderPath identity remains retained");
+        assert_eq!(third_verbs, 3);
+        assert_eq!(third_points, 2);
+        assert_eq!(third_fill_rule, RenderFillRule::EvenOdd);
+        assert_eq!(stats.make_empty_paths.get(), 1);
+        assert_eq!(stats.rewinds.get(), 2);
+        assert_eq!(stats.add_raw_paths.get(), 2);
+        assert_eq!(stats.fill_rules.get(), 2);
+        assert_eq!(runtime_draw_path_command_replays(), 0);
+
+        let changed_revision = RuntimeDrawPathRevision {
+            path_epoch: 11,
+            ..revision
+        };
+        cache.simple_solid_draw_path(
+            7,
+            changed_revision,
+            &mut factory,
+            &changed_raw_path,
+            RenderFillRule::Clockwise,
+        );
+        cache.simple_solid_draw_path(
+            7,
+            changed_revision,
+            &mut factory,
+            &changed_raw_path,
+            RenderFillRule::Clockwise,
+        );
+        assert_eq!(stats.fill_rules.get(), 3);
+    }
+
+    #[test]
+    fn simple_solid_draw_path_slots_are_direct_by_shape_local() {
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut cache = RuntimeRenderPathCache::default();
+        let revision = RuntimeDrawPathRevision {
+            path_epoch: 10,
+            layout_epoch: 20,
+            world_epoch: 0,
+        };
+        let raw_path = Arc::new(runtime_raw_path_from_commands(&[
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 1.0, y: 1.0 },
+        ]));
+        let path_id =
+            |cache: &mut RuntimeRenderPathCache, factory: &mut CountingFactory, shape_local| {
+                cache
+                    .simple_solid_draw_path(
+                        shape_local,
+                        revision,
+                        factory,
+                        &raw_path,
+                        RenderFillRule::Clockwise,
+                    )
+                    .as_any()
+                    .downcast_ref::<CountingRenderPath>()
+                    .expect("counting path")
+                    .id
+            };
+
+        let local_seven_id = path_id(&mut cache, &mut factory, 7);
+        let local_eight_id = path_id(&mut cache, &mut factory, 8);
+        assert_ne!(local_eight_id, local_seven_id);
+        assert_eq!(path_id(&mut cache, &mut factory, 7), local_seven_id);
+        assert_eq!(stats.make_empty_paths.get(), 2);
+    }
+
+    #[test]
+    fn simple_solid_draw_paths_survive_alternating_parent_and_nested_graphs() {
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut root_cache = RuntimeRenderPathCache::default();
+        let revision = RuntimeDrawPathRevision {
+            path_epoch: 10,
+            layout_epoch: 20,
+            world_epoch: 0,
+        };
+        let raw_path = Arc::new(runtime_raw_path_from_commands(&[
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 1.0, y: 1.0 },
+        ]));
+        let child_a_key = nested_render_cache_key(Some(100), Some(10), 42, 1);
+        let child_b_key = nested_render_cache_key(Some(101), Some(11), 43, 1);
+        let path_id = |cache: &mut RuntimeRenderPathCache, factory: &mut CountingFactory| {
+            cache
+                .simple_solid_draw_path(7, revision, factory, &raw_path, RenderFillRule::Clockwise)
+                .as_any()
+                .downcast_ref::<CountingRenderPath>()
+                .expect("counting path")
+                .id
+        };
+
+        let root_id = path_id(&mut root_cache, &mut factory);
+        let child_a_id = path_id(
+            root_cache
+                .nested_artboards
+                .get_or_insert_default(child_a_key),
+            &mut factory,
+        );
+        let child_b_id = path_id(
+            root_cache
+                .nested_artboards
+                .get_or_insert_default(child_b_key),
+            &mut factory,
+        );
+
+        assert_eq!(path_id(&mut root_cache, &mut factory), root_id);
+        assert_eq!(
+            path_id(
+                root_cache
+                    .nested_artboards
+                    .get_or_insert_default(child_a_key),
+                &mut factory,
+            ),
+            child_a_id,
+        );
+        assert_eq!(
+            path_id(
+                root_cache
+                    .nested_artboards
+                    .get_or_insert_default(child_b_key),
+                &mut factory,
+            ),
+            child_b_id,
+        );
+        assert_eq!(stats.make_empty_paths.get(), 3);
     }
 
     #[test]
@@ -19684,6 +24868,89 @@ mod tests {
         assert_eq!(stats.closes.get(), 0);
         assert_eq!(third_verbs, 3);
         assert_eq!(third_points, 2);
+    }
+
+    #[test]
+    fn draw_path_replays_prepared_raw_path_without_command_conversion() {
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut cache = RuntimeRenderPathCache::default();
+        let key = RuntimeDrawPathCacheKey {
+            kind: RuntimeDrawPathCacheKind::Draw,
+            path_kind: RuntimeShapePaintPathKind::Local,
+            local_id: Some(7),
+            path_index: 0,
+        };
+        let revision = RuntimeDrawPathRevision {
+            path_epoch: 10,
+            layout_epoch: 20,
+            world_epoch: 0,
+        };
+        let commands = vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 1.0, y: 1.0 },
+        ];
+        let raw_path = Arc::new(runtime_raw_path_from_commands(&commands));
+        reset_runtime_draw_path_command_replays();
+
+        let first_id = cache
+            .draw_path_with_optional_fill_rule_and_prepared_raw_path(
+                key,
+                revision,
+                &mut factory,
+                &commands,
+                RenderFillRule::Clockwise,
+                None,
+                Some(&raw_path),
+            )
+            .as_any()
+            .downcast_ref::<CountingRenderPath>()
+            .expect("counting path")
+            .id;
+        assert_eq!(runtime_draw_path_command_replays(), 0);
+        assert_eq!(stats.make_empty_paths.get(), 1);
+        assert_eq!(stats.rewinds.get(), 1);
+
+        let changed_commands = vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 2.0, y: 2.0 },
+            RuntimePathCommand::Close,
+        ];
+        let changed_raw_path = Arc::new(runtime_raw_path_from_commands(&changed_commands));
+        let (second_id, second_verbs, second_points) = {
+            let path = cache.draw_path_with_optional_fill_rule_and_prepared_raw_path(
+                key,
+                RuntimeDrawPathRevision {
+                    path_epoch: 11,
+                    ..revision
+                },
+                &mut factory,
+                &changed_commands,
+                RenderFillRule::Clockwise,
+                None,
+                Some(&changed_raw_path),
+            );
+            let path = path
+                .as_any()
+                .downcast_ref::<CountingRenderPath>()
+                .expect("counting path");
+            (
+                path.id,
+                path.raw_path.verbs().len(),
+                path.raw_path.points().len(),
+            )
+        };
+
+        assert_eq!(second_id, first_id, "RenderPath identity remains retained");
+        assert_eq!(second_verbs, 3);
+        assert_eq!(second_points, 2);
+        assert_eq!(runtime_draw_path_command_replays(), 0);
+        assert_eq!(stats.make_empty_paths.get(), 1);
+        assert_eq!(stats.rewinds.get(), 2);
+        assert_eq!(stats.add_raw_paths.get(), 2);
     }
 
     #[test]
@@ -19898,6 +25165,12 @@ mod tests {
     fn push_uint(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: u64) {
         push_var_uint(bytes, schema_property_key(type_name, property_name));
         push_var_uint(bytes, value);
+    }
+
+    fn push_bytes(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: &[u8]) {
+        push_var_uint(bytes, schema_property_key(type_name, property_name));
+        push_var_uint(bytes, value.len() as u64);
+        bytes.extend_from_slice(value);
     }
 
     fn push_f32(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: f32) {
@@ -20161,6 +25434,84 @@ mod tests {
         bytes
     }
 
+    fn synthetic_image_nslicer_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 2);
+        push_var_uint(&mut bytes, 9713);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Image", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "NSlicer", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+        });
+        for offset in [100.0, 200.0] {
+            push_object(&mut bytes, "AxisX", |bytes| {
+                push_uint(bytes, "Component", "parentId", 2);
+                push_f32(bytes, "Axis", "offset", offset);
+            });
+        }
+        for offset in [100.0, 200.0] {
+            push_object(&mut bytes, "AxisY", |bytes| {
+                push_uint(bytes, "Component", "parentId", 2);
+                push_f32(bytes, "Axis", "offset", offset);
+            });
+        }
+        bytes
+    }
+
+    fn synthetic_nested_image_nslicer_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 2);
+        push_var_uint(&mut bytes, 9714);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "ImageAsset", |_| {});
+        push_object(&mut bytes, "FileAssetContents", |bytes| {
+            push_bytes(
+                bytes,
+                "FileAssetContents",
+                "bytes",
+                b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\x01,\0\0\x01,",
+            );
+        });
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "NestedArtboard", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "NestedArtboard", "artboardId", 1);
+            push_f32(bytes, "Node", "opacity", 1.0);
+        });
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "Node", "opacity", 1.0);
+        });
+        push_object(&mut bytes, "Image", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "Image", "assetId", 0);
+        });
+        push_object(&mut bytes, "NSlicer", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+        });
+        for offset in [100.0, 200.0] {
+            push_object(&mut bytes, "AxisX", |bytes| {
+                push_uint(bytes, "Component", "parentId", 2);
+                push_f32(bytes, "Axis", "offset", offset);
+            });
+        }
+        for offset in [100.0, 200.0] {
+            push_object(&mut bytes, "AxisY", |bytes| {
+                push_uint(bytes, "Component", "parentId", 2);
+                push_f32(bytes, "Axis", "offset", offset);
+            });
+        }
+        bytes
+    }
+
     fn synthetic_origin_clip_geometry_riv() -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"RIVE");
@@ -20377,6 +25728,292 @@ mod tests {
         bytes
     }
 
+    // A zero-opacity parent host with a gradient-filled child artboard. C++
+    // still queues NestedArtboard::draw(), which emits the host transform; the
+    // referenced Artboard::drawInternal() then returns before drawing content.
+    fn synthetic_zero_opacity_nested_gradient_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9632);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "NestedArtboard", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "NestedArtboard", "artboardId", 1);
+            push_f32(bytes, "Node", "opacity", 0.0);
+        });
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+        });
+        push_object(&mut bytes, "LinearGradient", |bytes| {
+            push_uint(bytes, "Component", "parentId", 2);
+            push_f32(bytes, "LinearGradient", "endX", 10.0);
+        });
+        push_object(&mut bytes, "GradientStop", |bytes| {
+            push_uint(bytes, "Component", "parentId", 3);
+            push_color(bytes, "GradientStop", "colorValue", 0xffff_0000);
+            push_f32(bytes, "GradientStop", "position", 0.0);
+        });
+        push_object(&mut bytes, "GradientStop", |bytes| {
+            push_uint(bytes, "Component", "parentId", 3);
+            push_color(bytes, "GradientStop", "colorValue", 0xff00_00ff);
+            push_f32(bytes, "GradientStop", "position", 1.0);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "ParametricPath", "width", 10.0);
+            push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+        bytes
+    }
+
+    fn synthetic_nested_layout_gradient_chain_riv() -> Vec<u8> {
+        fn push_gradient_artboard(
+            bytes: &mut Vec<u8>,
+            end_x: f32,
+            nested_artboard_id: Option<u64>,
+        ) {
+            push_object(bytes, "Artboard", |bytes| {
+                push_f32(bytes, "LayoutComponent", "width", 100.0);
+                push_f32(bytes, "LayoutComponent", "height", 100.0);
+            });
+            push_object(bytes, "Shape", |bytes| {
+                push_uint(bytes, "Node", "parentId", 0);
+            });
+            push_object(bytes, "Fill", |bytes| {
+                push_uint(bytes, "Component", "parentId", 1);
+            });
+            push_object(bytes, "LinearGradient", |bytes| {
+                push_uint(bytes, "Component", "parentId", 2);
+                push_f32(bytes, "LinearGradient", "endX", end_x);
+            });
+            push_object(bytes, "GradientStop", |bytes| {
+                push_uint(bytes, "Component", "parentId", 3);
+                push_color(bytes, "GradientStop", "colorValue", 0xffff_0000);
+                push_f32(bytes, "GradientStop", "position", 0.0);
+            });
+            push_object(bytes, "GradientStop", |bytes| {
+                push_uint(bytes, "Component", "parentId", 3);
+                push_color(bytes, "GradientStop", "colorValue", 0xff00_00ff);
+                push_f32(bytes, "GradientStop", "position", 1.0);
+            });
+            push_object(bytes, "Rectangle", |bytes| {
+                push_uint(bytes, "Node", "parentId", 1);
+                push_f32(bytes, "ParametricPath", "width", 10.0);
+                push_f32(bytes, "ParametricPath", "height", 10.0);
+            });
+            if let Some(artboard_id) = nested_artboard_id {
+                push_object(bytes, "NestedArtboardLayout", |bytes| {
+                    push_uint(bytes, "Node", "parentId", 0);
+                    push_uint(bytes, "NestedArtboard", "artboardId", artboard_id);
+                });
+            }
+        }
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9632);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "NestedArtboardLayout", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_gradient_artboard(&mut bytes, 10.0, Some(2));
+        push_gradient_artboard(&mut bytes, 20.0, None);
+        bytes
+    }
+
+    #[test]
+    fn pending_initial_nested_layout_frames_drain_authoritative_descendants_once() {
+        let bytes = synthetic_nested_layout_gradient_chain_riv();
+        let file = read_runtime_file(&bytes).expect("nested layout chain imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("nested layout chain graphs");
+        let graph = graphs.artboards.first().expect("parent graph");
+        let instance = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+            .expect("nested layout chain instance");
+
+        let parent_nested = instance
+            .nested_artboards
+            .values()
+            .next()
+            .expect("parent nested layout host");
+        let parent_frame = parent_nested
+            .child
+            .capture_initial_nested_layout_paint_frame();
+        assert_eq!(parent_frame.gradients.len(), 1);
+        let child_nested = parent_nested
+            .child
+            .nested_artboards
+            .values()
+            .next()
+            .expect("child nested layout host");
+        let child_frame = child_nested
+            .child
+            .capture_initial_nested_layout_paint_frame();
+        assert_eq!(child_frame.gradients.len(), 1);
+        parent_nested
+            .initial_layout_paint_frame
+            .replace(Some(parent_frame));
+        child_nested
+            .initial_layout_paint_frame
+            .replace(Some(child_frame));
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut render_cache = RuntimeRenderPathCache::default();
+        let nested_ancestors = [graph.global_id];
+
+        instance
+            .drain_pending_initial_nested_layout_paint_frames(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache.paints,
+                Some(&mut paint_cache.paint_configurations),
+                Some(&mut paint_cache.nested_artboards),
+                &mut render_cache,
+                &nested_ancestors,
+            )
+            .expect("initial frames drain");
+        assert!(parent_nested.initial_layout_paint_frame.borrow().is_none());
+        assert!(child_nested.initial_layout_paint_frame.borrow().is_none());
+        let first_shader_count = stats.linear_gradients.borrow().len();
+        assert_eq!(first_shader_count, 2);
+
+        instance
+            .drain_pending_initial_nested_layout_paint_frames(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache.paints,
+                Some(&mut paint_cache.paint_configurations),
+                Some(&mut paint_cache.nested_artboards),
+                &mut render_cache,
+                &nested_ancestors,
+            )
+            .expect("second drain is a no-op");
+        assert_eq!(stats.linear_gradients.borrow().len(), first_shader_count);
+    }
+
+    #[test]
+    fn zero_opacity_nested_host_prepares_child_paints_and_replays_only_host_envelope() {
+        let bytes = synthetic_zero_opacity_nested_gradient_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic nested riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic nested riv graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic nested riv has a parent artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("parent artboard instance builds");
+        instance.update_components();
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+
+        let prepared = path_cache.prepared_artboard_frame(&instance, graph, Some(&file));
+        assert_eq!(
+            prepared
+                .commands
+                .iter()
+                .filter(|command| runtime_draw_command_is_nested_artboard(command))
+                .count(),
+            1,
+            "NestedArtboard::willDraw() depends on visibility and reference, not opacity"
+        );
+        assert!(stats.linear_gradients.borrow().is_empty());
+
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("nested paint preparation succeeds");
+        assert!(
+            !stats.linear_gradients.borrow().is_empty(),
+            "paint-allocation lifecycle must configure the nested child gradient"
+        );
+        assert_eq!(
+            stats
+                .linear_gradient_colors
+                .borrow()
+                .last()
+                .map(|colors| colors.as_slice()),
+            Some([0xffff_0000, 0xff00_00ff].as_slice()),
+            "a zero-opacity host leaves the child's pending gradient mutator at its C++ default opacity"
+        );
+
+        let ops = Rc::new(RefCell::new(Vec::new()));
+        let mut renderer = RecordingRenderer {
+            ops: Rc::clone(&ops),
+        };
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("zero-opacity parent draw succeeds");
+        assert!(
+            !ops.borrow().iter().any(|op| op == "draw_path"),
+            "the zero-opacity referenced artboard must not draw child content"
+        );
+        assert!(
+            ops.borrow().iter().any(|op| op.starts_with("transform:")),
+            "the nested host envelope must still replay its transform"
+        );
+    }
+
     struct FillRuleRecordingRenderer {
         fill_rules: Rc<RefCell<Vec<RenderFillRule>>>,
     }
@@ -20462,6 +26099,61 @@ mod tests {
             push_f32(bytes, "Vertex", "y", 10.0);
         });
         bytes
+    }
+
+    #[test]
+    fn prepared_solid_shape_does_not_build_raw_path_during_first_draw() {
+        let bytes = synthetic_solid_fill_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic riv imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("synthetic riv graphs");
+        let artboard = graph.artboards.first().expect("synthetic riv has artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats,
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            artboard,
+            &graph.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let ops = Rc::new(RefCell::new(Vec::new()));
+        let mut renderer = RecordingRenderer { ops };
+
+        instance.update_components();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                artboard,
+                &graph.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("paint preparation succeeds");
+        reset_runtime_draw_path_command_replays();
+
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                artboard,
+                &graph.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("draw succeeds");
+
+        assert_eq!(
+            runtime_draw_path_command_replays(),
+            0,
+            "prepared C++ ShapePaintPath geometry must not be rebuilt on first draw"
+        );
     }
 
     // Regression for the M8 audit finding (fill rule snapshot, item 25): draw

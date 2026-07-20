@@ -22,15 +22,19 @@ the only memory the next session has. Update it every commit.
   whole-repeat `total_ms` runner timings, min aggregation, the deliberate
   image-bearing focused corpus, `PERF_ITERATIONS=10`, three warmups, and
   `PERF_BENCHMARK_REPEAT=10000`. Phase timings remain JSON/console diagnostics
-  but do not define the aggregate score.
+  but do not define the aggregate score. `PERF_RUNNER_ORDER=rust-first`
+  provides the reverse-order half of an order-balanced acceptance check.
 - Acceptance: aggregate min Rust/C++ <= 1.0. The default ratchet is now 1.0,
   so the command fails closed on any slower-than-C++ aggregate.
 - Noise rule: ratio movement below about 0.08 is below single-run resolution;
   claim it only with two pre/post runs. Debug builds, wall-clock process time,
   and serializer output are not M7 decision-grade.
-- Current standing: closed at aggregate min Rust/C++=0.974427 in the latest
-  clean candidate report (C++=40.581370 ms, Rust=39.543582 ms), below the 1.0
-  parity threshold.
+- Current standing: six order-balanced reports from Rust commit `d4adb01d`
+  and upstream `d788e8ec` pass at aggregate min Rust/C++=0.898703, 0.902711,
+  0.896757, 0.914476, 0.908816, and 0.912194. Rust is 8.6-10.3% faster than
+  C++ in the declared gate. See
+  [the runtime performance closeout](runtime-performance-closeout-2026-07-19.md)
+  for hashes, settings, exactness, and accepted/rejected optimizations.
 - Historical optimization record (under the former 2.0 ratchet): after
   retained path-composer graph lookups, dense
   draw-path slots, graph-scoped dense path-geometry command slots, dense
@@ -533,8 +537,8 @@ the only memory the next session has. Update it every commit.
 1. M0-M8 and renderer Phase R are complete. Phase S manual cycle 1 advances
    the active runtime pin to `d788e8ec`; default and forced-scripted candidate
    validation are exact across 317 files and 647 segments.
-2. The runtime performance ratchet is 1.0. The latest clean candidate report
-   passes at aggregate min Rust/C++=0.974427.
+2. The runtime performance ratchet is 1.0. Six order-balanced final reports
+   pass at aggregate min Rust/C++=0.897-0.914.
 3. Keep the write-capable Phase S worker paused until a second clean manual
    cycle is recorded. The read-only weekly drift scout remains active.
 

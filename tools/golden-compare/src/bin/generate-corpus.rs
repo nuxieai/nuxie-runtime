@@ -13,6 +13,10 @@ fn main() {
 
 fn run() -> Result<()> {
     let options = Options::parse(env::args().skip(1).collect())?;
+    generate(options)
+}
+
+fn generate(options: Options) -> Result<()> {
     let existing = match options.existing.as_ref() {
         Some(path) if path.exists() => parse_existing(path)?,
         _ => BTreeMap::new(),
@@ -52,13 +56,24 @@ fn run() -> Result<()> {
                     .to_owned(),
                 type_key_features(&runtime),
             ),
-            Err(error) => (
-                "unsupported-feature".to_owned(),
-                vec![format!(
-                    "import-error:{}",
-                    normalize_feature(&error.to_string())
-                )],
-            ),
+            Err(error) => {
+                let preserves_verified_rejection = previous.is_some_and(|entry| {
+                    entry.status == "exact"
+                        && entry.verification.as_deref() == Some("rejects-malformed")
+                });
+                (
+                    if preserves_verified_rejection {
+                        "exact"
+                    } else {
+                        "unsupported-feature"
+                    }
+                    .to_owned(),
+                    vec![format!(
+                        "import-error:{}",
+                        normalize_feature(&error.to_string())
+                    )],
+                )
+            }
         };
         if let Some(previous) = previous {
             for feature in previous.features.iter().filter(|feature| {
@@ -86,6 +101,9 @@ fn run() -> Result<()> {
         if let Some(input_script) = previous.and_then(|entry| entry.input_script.as_ref()) {
             output.push_str(&format!("input_script = {}\n", quoted(input_script)));
         }
+        if previous.is_some_and(|entry| entry.rust_execute_scripts) {
+            output.push_str("rust_execute_scripts = true\n");
+        }
         let samples = previous
             .map(|entry| entry.samples.clone())
             .unwrap_or_else(|| vec!["0.0".to_owned()]);
@@ -108,6 +126,13 @@ fn run() -> Result<()> {
             output.push_str(&quoted(feature));
         }
         output.push_str("]\n\n");
+    }
+
+    // Keep one newline at EOF without leaving the generated manifest with a
+    // whitespace-only trailing line (`git diff --check` treats that as an
+    // error).
+    if output.ends_with("\n\n") {
+        output.pop();
     }
 
     match options.out {
@@ -178,6 +203,7 @@ struct ExistingEntry {
     artboard: Option<String>,
     state_machine: Option<String>,
     input_script: Option<String>,
+    rust_execute_scripts: bool,
     samples: Vec<String>,
     status: String,
     verification: Option<String>,
@@ -214,6 +240,7 @@ fn parse_existing(path: &Path) -> Result<BTreeMap<String, ExistingEntry>> {
             "artboard" => entry.artboard = Some(parse_string(value)?),
             "state_machine" => entry.state_machine = Some(parse_string(value)?),
             "input_script" => entry.input_script = Some(parse_string(value)?),
+            "rust_execute_scripts" => entry.rust_execute_scripts = parse_bool(value)?,
             "samples" => entry.samples = parse_array(value).unwrap_or_default(),
             "status" => entry.status = parse_string(value)?,
             "verification" => entry.verification = Some(parse_string(value)?),
@@ -226,6 +253,14 @@ fn parse_existing(path: &Path) -> Result<BTreeMap<String, ExistingEntry>> {
         entries.insert(id, entry);
     }
     Ok(entries)
+}
+
+fn parse_bool(value: &str) -> Result<bool> {
+    match value {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => bail!("expected true or false, found {value}"),
+    }
 }
 
 fn type_key_features(file: &RuntimeFile) -> Vec<String> {
@@ -313,4 +348,78 @@ fn quoted(value: &str) -> String {
     }
     out.push('"');
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn regeneration_preserves_manually_verified_malformed_rejections() {
+        let test_dir = std::env::temp_dir().join(format!(
+            "generate-corpus-rejects-malformed-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let assets_dir = test_dir.join("assets");
+        let existing_path = test_dir.join("existing.toml");
+        let output_path = test_dir.join("output.toml");
+        std::fs::create_dir_all(&assets_dir).unwrap();
+        std::fs::write(assets_dir.join("verified.riv"), []).unwrap();
+        std::fs::write(assets_dir.join("ordinary.riv"), []).unwrap();
+        std::fs::write(
+            &existing_path,
+            r#"
+[[file]]
+id = "verified"
+path = "tests/unit_tests/assets/verified.riv"
+samples = [0.0]
+status = "exact"
+verification = "rejects-malformed"
+rust_execute_scripts = true
+features = ["import-error:old-diagnostic"]
+
+[[file]]
+id = "ordinary"
+path = "tests/unit_tests/assets/ordinary.riv"
+samples = [0.0]
+status = "exact"
+features = []
+"#,
+        )
+        .unwrap();
+
+        generate(Options {
+            assets_dir,
+            existing: Some(existing_path),
+            out: Some(output_path.clone()),
+            relative_prefix: "tests/unit_tests/assets".to_owned(),
+        })
+        .unwrap();
+
+        let output_bytes = std::fs::read(&output_path).unwrap();
+        assert!(output_bytes.ends_with(b"\n"));
+        assert!(!output_bytes.ends_with(b"\n\n"));
+
+        let regenerated = parse_existing(&output_path).unwrap();
+        let verified = regenerated.get("verified").unwrap();
+        assert_eq!(verified.status, "exact");
+        assert_eq!(verified.verification.as_deref(), Some("rejects-malformed"));
+        assert!(verified.rust_execute_scripts);
+        assert!(
+            verified
+                .features
+                .iter()
+                .any(|feature| feature.starts_with("import-error:"))
+        );
+
+        let ordinary = regenerated.get("ordinary").unwrap();
+        assert_eq!(ordinary.status, "unsupported-feature");
+        assert_eq!(ordinary.verification, None);
+
+        std::fs::remove_dir_all(test_dir).ok();
+    }
 }

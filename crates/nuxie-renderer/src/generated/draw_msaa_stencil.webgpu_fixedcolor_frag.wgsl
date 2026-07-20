@@ -1,39 +1,39 @@
-struct NB {
-    Ub: f32,
-    dd: f32,
-    Xe: f32,
-    Ye: f32,
-    q5_: u32,
-    ug: u32,
-    Je: u32,
-    Ke: u32,
-    U7_: vec4<i32>,
-    rg: vec2<f32>,
-    ed: vec2<f32>,
-    W1_: u32,
-    vg: f32,
-    Y5_: u32,
-    P2_: f32,
-    fd: f32,
-    Ee: u32,
+struct CC {
+    bc: f32,
+    kd: f32,
+    bf: f32,
+    cf: f32,
+    m6_: u32,
+    Bg: u32,
+    Ne: u32,
+    Oe: u32,
+    Q7_: vec4<i32>,
+    xg: vec2<f32>,
+    ld: vec2<f32>,
+    a2_: u32,
+    Cg: f32,
+    Z5_: u32,
+    N2_: f32,
+    md: f32,
+    Ie: u32,
     y3_: f32,
     z3_: f32,
-    gd: f32,
-    og: u32,
+    nd: f32,
+    ug: u32,
 }
 
-var<private> yg: vec4<f32>;
-@group(0) @binding(0) 
-var<uniform> k: NB;
+var<private> Fg: vec4<f32>;
+@group(0) @binding(0)
+var<uniform> m: CC;
 
 fn main_1() {
-    yg = vec4<f32>(0f, 0f, 0f, 0f);
+    Fg = vec4<f32>(0f, 0f, 0f, 0f);
     return;
 }
 
-@fragment 
+@fragment
 fn main() -> @location(0) vec4<f32> {
     main_1();
-    let _e1 = yg;
+    let _e1 = Fg;
     return _e1;
 }

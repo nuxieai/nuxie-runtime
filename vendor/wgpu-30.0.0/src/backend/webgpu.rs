@@ -1201,6 +1201,71 @@ impl ContextWebGpu {
         }
         .into())
     }
+
+    pub(crate) fn request_adapter_with_feature_level(
+        &self,
+        options: &crate::RequestAdapterOptions<'_, '_>,
+        feature_level: wgt::FeatureLevel,
+    ) -> Pin<Box<dyn dispatch::RequestAdapterFuture>> {
+        self.request_adapter_inner(options, Some(feature_level))
+    }
+
+    fn request_adapter_inner(
+        &self,
+        options: &crate::RequestAdapterOptions<'_, '_>,
+        feature_level: Option<wgt::FeatureLevel>,
+    ) -> Pin<Box<dyn dispatch::RequestAdapterFuture>> {
+        let requested_backends = self.requested_backends;
+
+        // TODO: support this check in the future logic and return `None` when
+        // the flag is not set.
+        if !requested_backends.contains(wgt::Backends::BROWSER_WEBGPU) {
+            return Box::pin(core::future::ready(Err(
+                wgt::RequestAdapterError::NotFound {
+                    active_backends: Backends::BROWSER_WEBGPU,
+                    requested_backends,
+                    // TODO: supported_backends should also include
+                    // wgpu-core-based backends when compiled in.
+                    supported_backends: Backends::BROWSER_WEBGPU,
+                    no_fallback_backends: Backends::default(),
+                    no_adapter_backends: Backends::default(),
+                    incompatible_surface_backends: Backends::default(),
+                },
+            )));
+        }
+
+        let mapped_options = webgpu_sys::GpuRequestAdapterOptions::new();
+        if let Some(feature_level) = feature_level {
+            mapped_options.set_feature_level(match feature_level {
+                wgt::FeatureLevel::Core => "core",
+                wgt::FeatureLevel::Compatibility => "compatibility",
+            });
+        }
+        let mapped_power_preference = match options.power_preference {
+            wgt::PowerPreference::None => None,
+            wgt::PowerPreference::LowPower => Some(webgpu_sys::GpuPowerPreference::LowPower),
+            wgt::PowerPreference::HighPerformance => {
+                Some(webgpu_sys::GpuPowerPreference::HighPerformance)
+            }
+        };
+        if let Some(mapped_pref) = mapped_power_preference {
+            mapped_options.set_power_preference(mapped_pref);
+        }
+
+        if let Some(gpu) = &self.gpu {
+            let adapter_promise = gpu.request_adapter_with_options(&mapped_options);
+            Box::pin(MakeSendFuture::new(
+                wasm_bindgen_futures::JsFuture::from(adapter_promise),
+                move |result| future_request_adapter(result, requested_backends),
+            ))
+        } else {
+            // Gpu is undefined; WebGPU is not supported in this browser.
+            // Treat this exactly like requestAdapter() returned null.
+            Box::pin(core::future::ready(Err(request_adapter_null_error(
+                requested_backends,
+            ))))
+        }
+    }
 }
 
 // Represents the global object in the JavaScript context.
@@ -1662,50 +1727,7 @@ impl dispatch::InstanceInterface for ContextWebGpu {
         &self,
         options: &crate::RequestAdapterOptions<'_, '_>,
     ) -> Pin<Box<dyn dispatch::RequestAdapterFuture>> {
-        let requested_backends = self.requested_backends;
-
-        //TODO: support this check, return `None` if the flag is not set.
-        // It's not trivial, since we need the Future logic to have this check,
-        // and currently the Future here has no room for extra parameter `backends`.
-        if !(requested_backends.contains(wgt::Backends::BROWSER_WEBGPU)) {
-            return Box::pin(core::future::ready(Err(
-                wgt::RequestAdapterError::NotFound {
-                    active_backends: Backends::BROWSER_WEBGPU,
-                    requested_backends,
-                    // TODO: supported_backends should also include wgpu-core-based backends,
-                    // if they were compiled in.
-                    supported_backends: Backends::BROWSER_WEBGPU,
-                    no_fallback_backends: Backends::default(),
-                    no_adapter_backends: Backends::default(),
-                    incompatible_surface_backends: Backends::default(),
-                },
-            )));
-        }
-        let mapped_options = webgpu_sys::GpuRequestAdapterOptions::new();
-        let mapped_power_preference = match options.power_preference {
-            wgt::PowerPreference::None => None,
-            wgt::PowerPreference::LowPower => Some(webgpu_sys::GpuPowerPreference::LowPower),
-            wgt::PowerPreference::HighPerformance => {
-                Some(webgpu_sys::GpuPowerPreference::HighPerformance)
-            }
-        };
-        if let Some(mapped_pref) = mapped_power_preference {
-            mapped_options.set_power_preference(mapped_pref);
-        }
-
-        if let Some(gpu) = &self.gpu {
-            let adapter_promise = gpu.request_adapter_with_options(&mapped_options);
-            Box::pin(MakeSendFuture::new(
-                wasm_bindgen_futures::JsFuture::from(adapter_promise),
-                move |result| future_request_adapter(result, requested_backends),
-            ))
-        } else {
-            // Gpu is undefined; WebGPU is not supported in this browser.
-            // Treat this exactly like requestAdapter() returned null.
-            Box::pin(core::future::ready(Err(request_adapter_null_error(
-                requested_backends,
-            ))))
-        }
+        self.request_adapter_inner(options, None)
     }
     fn enumerate_adapters(
         &self,
@@ -1768,10 +1790,31 @@ impl Drop for ContextWebGpu {
     }
 }
 
-impl dispatch::AdapterInterface for WebAdapter {
-    fn request_device(
+impl WebAdapter {
+    pub(crate) fn max_storage_buffers_in_vertex_stage(&self) -> Option<u32> {
+        let limits = self.inner.limits();
+        let value = js_sys::Reflect::get(
+            limits.as_ref(),
+            &JsValue::from_str("maxStorageBuffersInVertexStage"),
+        )
+        .ok()?;
+        let value = value.as_f64()?;
+        (value.is_finite() && value >= 0.0 && value <= u32::MAX as f64 && value.fract() == 0.0)
+            .then_some(value as u32)
+    }
+
+    pub(crate) fn request_device_with_max_storage_buffers_in_vertex_stage(
         &self,
         desc: &crate::DeviceDescriptor<'_>,
+        max_storage_buffers_in_vertex_stage: u32,
+    ) -> Pin<Box<dyn dispatch::RequestDeviceFuture>> {
+        self.request_device_inner(desc, Some(max_storage_buffers_in_vertex_stage))
+    }
+
+    fn request_device_inner(
+        &self,
+        desc: &crate::DeviceDescriptor<'_>,
+        max_storage_buffers_in_vertex_stage: Option<u32>,
     ) -> Pin<Box<dyn dispatch::RequestDeviceFuture>> {
         if !matches!(desc.trace, wgt::Trace::Off) {
             log::warn!("The `trace` parameter is not supported on the WebGPU backend.");
@@ -1780,6 +1823,14 @@ impl dispatch::AdapterInterface for WebAdapter {
         let mapped_desc = webgpu_sys::GpuDeviceDescriptor::new();
 
         let required_limits = map_js_sys_limits(&desc.required_limits);
+        if let Some(limit) = max_storage_buffers_in_vertex_stage {
+            js_sys::Reflect::set(
+                &required_limits,
+                &JsValue::from_str("maxStorageBuffersInVertexStage"),
+                &JsValue::from_f64(limit as f64),
+            )
+            .expect("setting required WebGPU Compatibility limits should never fail");
+        }
         mapped_desc.set_required_limits(&required_limits);
 
         let required_features = FEATURES_MAPPING
@@ -1809,6 +1860,15 @@ impl dispatch::AdapterInterface for WebAdapter {
             wasm_bindgen_futures::JsFuture::from(device_promise),
             future_request_device,
         ))
+    }
+}
+
+impl dispatch::AdapterInterface for WebAdapter {
+    fn request_device(
+        &self,
+        desc: &crate::DeviceDescriptor<'_>,
+    ) -> Pin<Box<dyn dispatch::RequestDeviceFuture>> {
+        self.request_device_inner(desc, None)
     }
 
     fn is_surface_supported(&self, _surface: &dispatch::DispatchSurface) -> bool {

@@ -27,6 +27,9 @@ mod scene;
 #[cfg(feature = "scripting")]
 mod script_import;
 
+#[cfg(all(test, feature = "scripting"))]
+mod scripted_listener_action_lifecycle_tests;
+
 pub use scene::*;
 #[cfg(feature = "scripting")]
 pub use script_import::{ScriptAuthenticationError, ScriptImportCapability};
@@ -69,7 +72,9 @@ pub use nuxie_runtime::{
 };
 
 #[cfg(feature = "scripting")]
-use nuxie_scripting::vm::ScriptProgram;
+use nuxie_scripting::vm::{
+    HostCommand as LuaHostCommand, HostCycleCheckpoint, HostValue as LuaHostValue, ScriptProgram,
+};
 #[cfg(feature = "scripting")]
 pub use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
 
@@ -161,7 +166,9 @@ impl FileScriptRuntime {
             let mut failures = Vec::new();
             for asset in pending {
                 let payload = required_script_payload(asset, "module registration")?;
+                let effect_checkpoint = vm.checkpoint_host_effects();
                 if let Err(error) = vm.register_module_with_factory(&asset.name, payload, factory) {
+                    vm.rollback_host_effects(effect_checkpoint);
                     failures.push((asset, error));
                 }
             }
@@ -225,6 +232,23 @@ impl FileScriptRuntime {
             candidate: Some(candidate),
         })
     }
+
+    fn begin_host_cycle(&self) -> Option<HostCycleCheckpoint> {
+        self.ready.as_ref().map(|ready| ready.vm.begin_host_cycle())
+    }
+
+    fn rollback_host_cycle(&self, checkpoint: HostCycleCheckpoint) {
+        if let Some(ready) = self.ready.as_ref() {
+            ready.vm.rollback_host_cycle(checkpoint);
+        }
+    }
+
+    fn drain_host_commands(&self) -> Vec<LuaHostCommand> {
+        self.ready
+            .as_ref()
+            .map(|ready| ready.vm.drain_host_commands())
+            .unwrap_or_default()
+    }
 }
 
 #[cfg(feature = "scripting")]
@@ -273,11 +297,11 @@ fn required_script_payload<'a>(
 fn asset_phase_error(
     asset: &FileScriptAsset,
     phase: &str,
-    error: impl std::fmt::Display,
+    error: nuxie_runtime::ScriptError,
 ) -> nuxie_runtime::ScriptError {
-    nuxie_runtime::ScriptError::new(format!(
-        "ScriptAsset ordinal {} global {} name '{}' phase {} failed: {}",
-        asset.ordinal, asset.global_id, asset.name, phase, error
+    error.with_context(format!(
+        "ScriptAsset ordinal {} global {} name '{}' phase {} failed",
+        asset.ordinal, asset.global_id, asset.name, phase
     ))
 }
 
@@ -311,35 +335,32 @@ fn instantiate_script_mounts(
                 .vm
                 .instantiate_registered_script_with_factory(program, &mut host, factory)
                 .map_err(|error| {
-                    nuxie_runtime::ScriptError::new(format!(
-                        "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase generator failed: {}",
+                    error.with_context(format!(
+                        "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase generator failed",
                         group.path,
                         target.component_global_id,
                         target.asset_ordinal,
-                        target.asset_name,
-                        error
+                        target.asset_name
                     ))
                 })?;
             if script.has_method(ScriptMethod::Init).map_err(|error| {
-                nuxie_runtime::ScriptError::new(format!(
-                    "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init lookup failed: {}",
+                error.with_context(format!(
+                    "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init lookup failed",
                     group.path,
                     target.component_global_id,
                     target.asset_ordinal,
-                    target.asset_name,
-                    error
+                    target.asset_name
                 ))
             })? {
                 let initialized = script
                     .call_init_with_factory(&mut host, factory)
                     .map_err(|error| {
-                        nuxie_runtime::ScriptError::new(format!(
-                            "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init failed: {}",
+                        error.with_context(format!(
+                            "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init failed",
                             group.path,
                             target.component_global_id,
                             target.asset_ordinal,
-                            target.asset_name,
-                            error
+                            target.asset_name
                         ))
                     })?;
                 if !initialized {
@@ -360,6 +381,615 @@ fn instantiate_script_mounts(
         });
     }
     Ok(prepared)
+}
+
+#[cfg(feature = "scripting")]
+fn instantiate_script_listener_actions(
+    file: &Arc<File>,
+    machine: &mut StateMachineInstance,
+    factory: &mut dyn Factory,
+    root_view_model: Option<&ViewModelInstance>,
+) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+    let definitions = machine.scripted_listener_actions().to_vec();
+    if definitions.is_empty() || !file.scripts.borrow().scripts_are_authenticated() {
+        return Ok(());
+    }
+    let hydrations =
+        prepare_script_listener_hydrations(file, &definitions, root_view_model, None, false)?;
+    let scripts = file.scripts.borrow();
+    let ready = scripts.ready.as_ref().ok_or_else(|| {
+        nuxie_runtime::ScriptError::new(
+            "scripted listener actions require a bootstrapped script VM",
+        )
+    })?;
+    if ready.factory_domain != render_factory_domain(factory) {
+        return Err(nuxie_runtime::ScriptError::new(
+            "scripted listener actions used a different renderer Factory domain",
+        ));
+    }
+    let mut prepared = Vec::with_capacity(definitions.len());
+    for (definition, hydration) in definitions.into_iter().zip(hydrations) {
+        let ordinal = definition.asset_ordinal();
+        let asset = scripts.assets.get(ordinal).ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(format!(
+                "ScriptedListenerAction global {} references absent FileAsset ordinal {ordinal}",
+                definition.action_global_id()
+            ))
+        })?;
+        if asset.type_name != "ScriptAsset"
+            || asset.is_module
+            || asset.name != definition.asset_name()
+        {
+            return Err(nuxie_runtime::ScriptError::new(format!(
+                "ScriptedListenerAction global {} does not resolve its non-module ScriptAsset ordinal {ordinal} name '{}'",
+                definition.action_global_id(),
+                definition.asset_name()
+            )));
+        }
+        let program = ready.programs.get(&ordinal).ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(format!(
+                "ScriptedListenerAction global {} references unregistered protocol ordinal {ordinal} name '{}'",
+                definition.action_global_id(),
+                definition.asset_name()
+            ))
+        })?;
+        let mut host = NoopScriptHost;
+        let mut instance = ready
+            .vm
+            .instantiate_registered_script_with_factory(program, &mut host, factory)
+            .map_err(|error| {
+                error.with_context(format!(
+                    "ScriptedListenerAction global {} asset ordinal {ordinal} name '{}' generator failed",
+                    definition.action_global_id(),
+                    definition.asset_name()
+                ))
+            })?;
+        hydration.apply(&mut *instance, &mut host).map_err(|error| {
+            error.with_context(format!(
+                "ScriptedListenerAction global {} asset ordinal {ordinal} name '{}' input hydration failed",
+                definition.action_global_id(),
+                definition.asset_name()
+            ))
+        })?;
+        if instance.has_method(ScriptMethod::Init).map_err(|error| {
+            error.with_context(format!(
+                "ScriptedListenerAction global {} asset ordinal {ordinal} name '{}' init lookup failed",
+                definition.action_global_id(),
+                definition.asset_name()
+            ))
+        })? {
+            let initialized = instance
+                .call_init_with_factory(&mut host, factory)
+                .map_err(|error| {
+                    error.with_context(format!(
+                        "ScriptedListenerAction global {} asset ordinal {ordinal} name '{}' init failed",
+                        definition.action_global_id(),
+                        definition.asset_name()
+                    ))
+                })?;
+            if !initialized {
+                return Err(nuxie_runtime::ScriptError::new(format!(
+                    "ScriptedListenerAction global {} asset ordinal {ordinal} name '{}' init returned false or nil",
+                    definition.action_global_id(),
+                    definition.asset_name()
+                )));
+            }
+        }
+        prepared.push((definition.action_global_id(), instance));
+    }
+    drop(scripts);
+    for (action_global_id, instance) in prepared {
+        machine.set_scripted_listener_action_instance(action_global_id, instance)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn rehydrate_script_listener_actions(
+    file: &Arc<File>,
+    machine: &mut StateMachineInstance,
+    root_view_model: Option<&ViewModelInstance>,
+    previous_root_view_model: Option<&ViewModelInstance>,
+) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+    let definitions = machine.scripted_listener_actions().to_vec();
+    if definitions.is_empty() || !file.scripts.borrow().scripts_are_authenticated() {
+        return Ok(());
+    }
+    let hydrations = prepare_script_listener_hydrations(
+        file,
+        &definitions,
+        root_view_model,
+        previous_root_view_model,
+        true,
+    )?;
+    for (definition, hydration) in definitions.into_iter().zip(hydrations) {
+        machine
+            .hydrate_scripted_listener_action_instance(definition.action_global_id(), hydration)
+            .map_err(|error| {
+                error.with_context(format!(
+                    "ScriptedListenerAction global {} asset ordinal {} name '{}' data-context rehydration failed",
+                    definition.action_global_id(),
+                    definition.asset_ordinal(),
+                    definition.asset_name()
+                ))
+            })?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn prepare_script_listener_hydrations(
+    file: &Arc<File>,
+    definitions: &[nuxie_runtime::ScriptListenerActionDefinition],
+    root_view_model: Option<&ViewModelInstance>,
+    previous_root_view_model: Option<&ViewModelInstance>,
+    rebind: bool,
+) -> std::result::Result<
+    Vec<nuxie_runtime::ScriptListenerActionHydration>,
+    nuxie_runtime::ScriptError,
+> {
+    let runtime = file.runtime();
+    let root_context = root_view_model.map(|view_model| {
+        nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(
+            runtime,
+            view_model.handle().clone(),
+        )
+    });
+    let context_view_model = root_view_model.and_then(|view_model| {
+        nuxie_runtime::script_view_model_from_owned(runtime, view_model.handle())
+    });
+    let mut prepared = Vec::with_capacity(definitions.len());
+
+    for definition in definitions {
+        let mut inputs = Vec::with_capacity(definition.inputs().len());
+        for input_definition in definition.inputs() {
+            let input = runtime
+                .object(input_definition.input_global_id() as usize)
+                .ok_or_else(|| {
+                    listener_input_hydration_error(
+                        definition,
+                        input_definition.input_global_id(),
+                        "object is absent",
+                    )
+                })?;
+            let expected_type = match input_definition.kind() {
+                nuxie_runtime::ScriptListenerInputKind::Boolean => "ScriptInputBoolean",
+                nuxie_runtime::ScriptListenerInputKind::Number => "ScriptInputNumber",
+                nuxie_runtime::ScriptListenerInputKind::Color => "ScriptInputColor",
+                nuxie_runtime::ScriptListenerInputKind::String => "ScriptInputString",
+                nuxie_runtime::ScriptListenerInputKind::Trigger => "ScriptInputTrigger",
+                nuxie_runtime::ScriptListenerInputKind::Artboard => "ScriptInputArtboard",
+                nuxie_runtime::ScriptListenerInputKind::ViewModelProperty => {
+                    "ScriptInputViewModelProperty"
+                }
+            };
+            if input.type_name != expected_type {
+                return Err(listener_input_hydration_error(
+                    definition,
+                    input.id,
+                    &format!("expected {expected_type}, found {}", input.type_name),
+                ));
+            }
+            let name = input.string_property("name").unwrap_or_default().to_owned();
+            match input_definition.kind() {
+                nuxie_runtime::ScriptListenerInputKind::Boolean
+                | nuxie_runtime::ScriptListenerInputKind::Number
+                | nuxie_runtime::ScriptListenerInputKind::Color
+                | nuxie_runtime::ScriptListenerInputKind::String => {
+                    let bound = match root_view_model {
+                        Some(view_model) => nuxie_runtime::bound_script_input_value(
+                            runtime,
+                            &view_model.raw(),
+                            input,
+                        )?,
+                        None => None,
+                    };
+                    if rebind && bound.is_none() {
+                        // Unbound authored inputs are installed once before
+                        // init. Rive only refreshes retained DataBind inputs at
+                        // the advance-time bind flush; resetting this field on
+                        // every cycle would erase script-owned table state.
+                        continue;
+                    }
+                    let value = bound.unwrap_or_else(|| match input_definition.kind() {
+                        nuxie_runtime::ScriptListenerInputKind::Boolean => {
+                            nuxie_runtime::ScriptValue::Bool(
+                                input.bool_property("propertyValue").unwrap_or(false),
+                            )
+                        }
+                        nuxie_runtime::ScriptListenerInputKind::Number => {
+                            nuxie_runtime::ScriptValue::Number(f64::from(
+                                input.double_property("propertyValue").unwrap_or(0.0),
+                            ))
+                        }
+                        nuxie_runtime::ScriptListenerInputKind::Color => {
+                            nuxie_runtime::ScriptValue::Color(
+                                input.color_property("propertyValue").unwrap_or(0),
+                            )
+                        }
+                        nuxie_runtime::ScriptListenerInputKind::String => {
+                            nuxie_runtime::ScriptValue::String(
+                                input
+                                    .string_property("propertyValue")
+                                    .unwrap_or_default()
+                                    .to_owned(),
+                            )
+                        }
+                        _ => unreachable!("scalar listener input kind"),
+                    });
+                    inputs.push(nuxie_runtime::ScriptListenerInputHydration::Value { name, value });
+                }
+                nuxie_runtime::ScriptListenerInputKind::Trigger => {
+                    let current = match root_view_model {
+                        Some(view_model) => nuxie_runtime::bound_script_trigger_input(
+                            runtime,
+                            &view_model.raw(),
+                            input,
+                        )?,
+                        None => None,
+                    };
+                    if rebind {
+                        let previous = match previous_root_view_model {
+                            Some(view_model) => nuxie_runtime::bound_script_trigger_input(
+                                runtime,
+                                &view_model.raw(),
+                                input,
+                            )?,
+                            None => None,
+                        };
+                        if current.is_some_and(|current| current != 0 && Some(current) != previous)
+                        {
+                            inputs.push(nuxie_runtime::ScriptListenerInputHydration::Trigger {
+                                name,
+                            });
+                        }
+                    }
+                }
+                nuxie_runtime::ScriptListenerInputKind::Artboard => {
+                    let bound = match root_view_model {
+                        Some(view_model) => nuxie_runtime::bound_script_artboard_input(
+                            runtime,
+                            &view_model.raw(),
+                            input,
+                        )?,
+                        None => None,
+                    };
+                    if rebind && bound.is_none() {
+                        continue;
+                    }
+                    let artboard_id = bound
+                        .or_else(|| input.uint_property("artboardId"))
+                        .filter(|id| *id != u64::from(u32::MAX))
+                        .and_then(|id| usize::try_from(id).ok())
+                        .ok_or_else(|| {
+                            listener_input_hydration_error(
+                                definition,
+                                input.id,
+                                "referenced artboard is unresolved",
+                            )
+                        })?;
+                    let artboard = FileScriptArtboard::new(Arc::clone(file), artboard_id).map_err(
+                        |error| {
+                            listener_input_hydration_error(
+                                definition,
+                                input.id,
+                                &format!(
+                                    "referenced artboard {artboard_id} is unavailable: {error}"
+                                ),
+                            )
+                        },
+                    )?;
+                    inputs.push(nuxie_runtime::ScriptListenerInputHydration::Artboard {
+                        name,
+                        artboard: Box::new(artboard),
+                    });
+                }
+                nuxie_runtime::ScriptListenerInputKind::ViewModelProperty => {
+                    let context = root_context.as_ref().ok_or_else(|| {
+                        listener_input_hydration_error(
+                            definition,
+                            input.id,
+                            "requires an active root view-model context",
+                        )
+                    })?;
+                    let view_model = nuxie_runtime::bound_script_view_model_from_owned_context(
+                        runtime, context, input,
+                    )
+                    .ok_or_else(|| {
+                        listener_input_hydration_error(
+                            definition,
+                            input.id,
+                            "view-model property path is unresolved",
+                        )
+                    })?;
+                    inputs.push(nuxie_runtime::ScriptListenerInputHydration::ViewModel {
+                        name,
+                        view_model,
+                    });
+                }
+            }
+        }
+        prepared.push(nuxie_runtime::ScriptListenerActionHydration::new(
+            context_view_model.clone(),
+            inputs,
+        ));
+    }
+    Ok(prepared)
+}
+
+#[cfg(feature = "scripting")]
+fn listener_input_hydration_error(
+    definition: &nuxie_runtime::ScriptListenerActionDefinition,
+    input_global_id: u32,
+    detail: &str,
+) -> nuxie_runtime::ScriptError {
+    nuxie_runtime::ScriptError::new(format!(
+        "ScriptedListenerAction global {} asset ordinal {} name '{}' input global {input_global_id}: {detail}",
+        definition.action_global_id(),
+        definition.asset_ordinal(),
+        definition.asset_name()
+    ))
+}
+
+/// File-backed artboard userdata used by `ScriptInputArtboard`.
+///
+/// This deliberately drives the low-level runtime instance instead of calling
+/// the owning facade's script bootstrap recursively: listener hydration and
+/// `init` execute while the File VM is already borrowed.
+#[cfg(feature = "scripting")]
+struct FileScriptArtboard {
+    file: Arc<File>,
+    artboard_index: usize,
+    instance: RuntimeArtboardInstance,
+    state_machine: Option<StateMachineInstance>,
+    view_model: Option<nuxie_runtime::ScriptViewModel>,
+    width: f32,
+    height: f32,
+    frame_origin: bool,
+    paint_cache: Option<RuntimeRenderPaintCache>,
+    path_cache: RuntimeRenderPathCache,
+}
+
+#[cfg(feature = "scripting")]
+impl FileScriptArtboard {
+    fn new(
+        file: Arc<File>,
+        artboard_index: usize,
+    ) -> std::result::Result<Self, nuxie_runtime::ScriptError> {
+        let graph = file.graph.artboards.get(artboard_index).ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(format!(
+                "missing scripted artboard index {artboard_index}",
+            ))
+        })?;
+        let instance = RuntimeArtboardInstance::from_graph_with_artboards_and_external_fonts(
+            &file.runtime,
+            graph,
+            &file.graph.artboards,
+            &file.external_font_assets,
+        )
+        .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
+        let state_machine_index = file
+            .artboard(artboard_index)
+            .and_then(|artboard| artboard.default_state_machine_index())
+            .unwrap_or(0);
+        let state_machine = instance.state_machine_instance(state_machine_index);
+        let owned_view_model = file
+            .runtime
+            .artboard(artboard_index)
+            .and_then(|artboard| artboard.uint_property("viewModelId"))
+            .filter(|index| *index != u64::from(u32::MAX))
+            .and_then(|index| usize::try_from(index).ok())
+            .and_then(|view_model_index| {
+                file.runtime
+                    .view_model_default_instance(view_model_index)
+                    .and_then(|instance| {
+                        RuntimeOwnedViewModelInstance::from_instance(
+                            &file.runtime,
+                            view_model_index,
+                            instance.instance_index,
+                        )
+                    })
+                    .or_else(|| RuntimeOwnedViewModelInstance::new(&file.runtime, view_model_index))
+                    .map(RuntimeOwnedViewModelHandle::new)
+            });
+        let view_model = owned_view_model.as_ref().and_then(|instance| {
+            nuxie_runtime::script_view_model_from_owned(&file.runtime, instance)
+        });
+        let (width, height) = instance.artboard_dimensions();
+        let mut scripted = Self {
+            file,
+            artboard_index,
+            instance,
+            state_machine,
+            view_model,
+            width,
+            height,
+            frame_origin: false,
+            paint_cache: None,
+            path_cache: RuntimeRenderPathCache::default(),
+        };
+        scripted.bind_view_model();
+        Ok(scripted)
+    }
+
+    fn bind_view_model(&mut self) {
+        let Some(view_model) = self.view_model.as_ref() else {
+            return;
+        };
+        let context = view_model.owned_instance();
+        if let Some(state_machine) = self.state_machine.as_mut() {
+            state_machine.bind_owned_view_model_context_handle(&context);
+            state_machine.advance_data_context();
+        }
+        self.instance
+            .bind_owned_view_model_artboard_context_handle(&self.file.runtime, &context);
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
+    fn width(&self) -> f32 {
+        self.width
+    }
+
+    fn height(&self) -> f32 {
+        self.height
+    }
+
+    fn frame_origin(&self) -> bool {
+        self.frame_origin
+    }
+
+    fn set_width(&mut self, width: f32) {
+        self.width = width;
+        self.instance.set_artboard_dimensions(width, self.height);
+    }
+
+    fn set_height(&mut self, height: f32) {
+        self.height = height;
+        self.instance.set_artboard_dimensions(self.width, height);
+    }
+
+    fn set_frame_origin(&mut self, frame_origin: bool) {
+        self.frame_origin = frame_origin;
+    }
+
+    fn data(&self) -> Option<nuxie_runtime::ScriptViewModel> {
+        self.view_model.clone()
+    }
+
+    fn instance(
+        &self,
+        view_model: Option<nuxie_runtime::ScriptViewModel>,
+    ) -> std::result::Result<Box<dyn nuxie_runtime::ScriptArtboard>, nuxie_runtime::ScriptError>
+    {
+        let mut instance = Self::new(Arc::clone(&self.file), self.artboard_index)?;
+        instance.view_model = view_model;
+        instance.bind_view_model();
+        Ok(Box::new(instance))
+    }
+
+    fn advance(&mut self, seconds: f32) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+        self.bind_view_model();
+        let mut changed = if let Some(state_machine) = self.state_machine.as_mut() {
+            self.instance
+                .advance_state_machine_instance(state_machine, seconds)
+        } else {
+            self.instance.advance_nested_artboards(seconds)
+        };
+        changed |= self
+            .instance
+            .advance_artboard_data_binds_with_elapsed(seconds);
+        changed |= self.instance.update_pass();
+        Ok(changed)
+    }
+
+    fn animation(
+        &self,
+        name: &str,
+    ) -> std::result::Result<Option<nuxie_runtime::ScriptAnimation>, nuxie_runtime::ScriptError>
+    {
+        Ok(nuxie_runtime::ScriptAnimation::named(&self.instance, name))
+    }
+
+    fn advance_animation(
+        &mut self,
+        animation: &mut nuxie_runtime::ScriptAnimation,
+        seconds: f32,
+    ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+        Ok(animation.advance(&mut self.instance, seconds))
+    }
+
+    fn set_animation_time(
+        &mut self,
+        animation: &mut nuxie_runtime::ScriptAnimation,
+        value: f32,
+        mode: nuxie_runtime::ScriptAnimationTime,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        animation.set_time(&mut self.instance, value, mode);
+        Ok(())
+    }
+
+    fn node(
+        &self,
+        name: &str,
+    ) -> std::result::Result<Option<nuxie_runtime::ScriptNode>, nuxie_runtime::ScriptError> {
+        let graph = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "missing scripted artboard index {}",
+                    self.artboard_index
+                ))
+            })?;
+        Ok(nuxie_runtime::script_node_for_artboard(
+            &self.instance,
+            graph,
+            name,
+        ))
+    }
+
+    fn draw(
+        &mut self,
+        factory: &mut dyn Factory,
+        renderer: &mut dyn Renderer,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        let graph = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(format!(
+                    "missing scripted artboard index {}",
+                    self.artboard_index
+                ))
+            })?;
+        if self.paint_cache.is_none() {
+            let candidate =
+                RuntimeRenderPaintCache::preallocate_for_artboard_tree_with_external_images(
+                    &self.file.runtime,
+                    graph,
+                    &self.file.graph.artboards,
+                    &self.file.external_image_assets,
+                    factory,
+                );
+            if let Some(error) = candidate.image_decode_error() {
+                return Err(nuxie_runtime::ScriptError::new(error.to_string()));
+            }
+            self.paint_cache = Some(candidate);
+        }
+        let Some(paint_cache) = self.paint_cache.as_mut() else {
+            return Err(nuxie_runtime::ScriptError::new(
+                "scripted artboard paint cache initialization produced no cache",
+            ));
+        };
+        self.instance
+            .prepare_static_artboard_tree_paints(
+                &self.file.runtime,
+                graph,
+                &self.file.graph.artboards,
+                factory,
+                paint_cache,
+                &mut self.path_cache,
+            )
+            .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
+        self.instance
+            .draw_prepared_static_artboard_with_render_cache_and_origin(
+                &self.file.runtime,
+                graph,
+                &self.file.graph.artboards,
+                factory,
+                renderer,
+                paint_cache,
+                &mut self.path_cache,
+                self.frame_origin,
+            )
+            .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))
+    }
 }
 
 #[cfg(feature = "scripting")]
@@ -554,8 +1184,8 @@ fn flush_scripted_artboard_tree(
     let mut changed = instance
         .flush_script_lifecycle_with_factory(factory)
         .map_err(|error| {
-            nuxie_runtime::ScriptError::new(format!(
-                "root graph {} script lifecycle failed: {error}",
+            error.with_context(format!(
+                "root graph {} script lifecycle failed",
                 instance.graph_global_id()
             ))
         })?;
@@ -563,8 +1193,8 @@ fn flush_scripted_artboard_tree(
         changed |= nested
             .flush_script_lifecycle_with_factory(factory)
             .map_err(|error| {
-                nuxie_runtime::ScriptError::new(format!(
-                    "nested depth {depth} graph {graph_global_id} script lifecycle failed: {error}"
+                error.with_context(format!(
+                    "nested depth {depth} graph {graph_global_id} script lifecycle failed"
                 ))
             })?;
         Ok::<(), nuxie_runtime::ScriptError>(())
@@ -592,10 +1222,18 @@ fn prepare_scripted_artboard_tree(
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
-    let (has_scripted_drawable, groups) = collect_script_mount_groups(file, root_graph, instance)?;
-    if !has_scripted_drawable {
-        return Ok(false);
+    {
+        let scripts = file.scripts.borrow();
+        if !scripts.scripts_are_authenticated()
+            || !scripts
+                .assets
+                .iter()
+                .any(|asset| asset.type_name == "ScriptAsset")
+        {
+            return Ok(false);
+        }
     }
+    let (has_scripted_drawable, groups) = collect_script_mount_groups(file, root_graph, instance)?;
     let mut prepared = file.scripts.borrow_mut().prepare_mounts(&groups, factory)?;
     validate_prepared_script_mount_topology(instance, &prepared.groups)?;
 
@@ -616,7 +1254,11 @@ fn prepare_scripted_artboard_tree(
             group.path
         )));
     }
-    let changed = flush_scripted_artboard_tree(instance, factory)?;
+    let changed = if has_scripted_drawable {
+        flush_scripted_artboard_tree(instance, factory)?
+    } else {
+        false
+    };
 
     // Script update refreshes component-list occurrences. A newly materialized
     // child is mounted on the next preparation call, but must not slip through
@@ -1629,6 +2271,64 @@ impl OwnedArtboardInstance {
         let _ = factory;
         changed |= self.raw.update_pass();
         Ok(changed)
+    }
+
+    #[cfg(feature = "scripting")]
+    pub(crate) fn prepare_flow_scripts(
+        &mut self,
+        factory: &mut dyn Factory,
+    ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+        let artboard = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .ok_or_else(|| {
+                nuxie_runtime::ScriptError::new(
+                    "owned artboard instance graph is unavailable during script bootstrap",
+                )
+            })?;
+        prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)
+    }
+
+    #[cfg(feature = "scripting")]
+    pub(crate) fn prepare_flow_listener_actions(
+        &self,
+        machine: &mut StateMachineInstance,
+        factory: &mut dyn Factory,
+        root_view_model: Option<&ViewModelInstance>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        instantiate_script_listener_actions(&self.file, machine, factory, root_view_model)
+    }
+
+    #[cfg(feature = "scripting")]
+    pub(crate) fn rehydrate_flow_listener_actions(
+        &self,
+        machine: &mut StateMachineInstance,
+        root_view_model: Option<&ViewModelInstance>,
+        previous_root_view_model: Option<&ViewModelInstance>,
+    ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+        rehydrate_script_listener_actions(
+            &self.file,
+            machine,
+            root_view_model,
+            previous_root_view_model,
+        )
+    }
+
+    #[cfg(feature = "scripting")]
+    pub(crate) fn begin_flow_host_cycle(&self) -> Option<HostCycleCheckpoint> {
+        self.file.scripts.borrow().begin_host_cycle()
+    }
+
+    #[cfg(feature = "scripting")]
+    pub(crate) fn rollback_flow_host_cycle(&self, checkpoint: HostCycleCheckpoint) {
+        self.file.scripts.borrow().rollback_host_cycle(checkpoint);
+    }
+
+    #[cfg(feature = "scripting")]
+    pub(crate) fn drain_flow_host_commands(&self) -> Vec<LuaHostCommand> {
+        self.file.scripts.borrow().drain_host_commands()
     }
 
     /// Return visible runtime shape locals under `point`, front to back.

@@ -45,9 +45,12 @@ pub use draw::{
 pub use objects::InstanceSlot;
 pub use scripting::{
     NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
-    ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,
-    ScriptModuleFailure, ScriptNode, ScriptPaint, ScriptValue, ScriptViewModel,
-    ScriptViewModelProperty, ScriptingVm, bound_script_artboard_input, bound_script_input_value,
+    ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance,
+    ScriptListenerActionDefinition, ScriptListenerActionHydration, ScriptListenerActionMethod,
+    ScriptListenerInputDefinition, ScriptListenerInputHydration, ScriptListenerInputKind,
+    ScriptListenerInvocation, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode,
+    ScriptPaint, ScriptPointerEventKind, ScriptValue, ScriptViewModel, ScriptViewModelProperty,
+    ScriptingVm, bound_script_artboard_input, bound_script_input_value, bound_script_trigger_input,
     bound_script_view_model_from_owned_context, bound_script_view_model_snapshot,
     script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_snapshot,
     script_view_models,

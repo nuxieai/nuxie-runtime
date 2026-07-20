@@ -12,7 +12,10 @@
 //! runtime does not embed — useful for tests and future editor-style flows.
 
 mod bytecode;
+mod host_commands;
+mod listener_invocation;
 mod renderer;
+mod resource_limits;
 mod view_model;
 
 use std::cell::{Cell, RefCell};
@@ -30,18 +33,23 @@ use luaur_vm::functions::luau_load::luau_load;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
     ScriptArtboard, ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance,
-    ScriptMethod, ScriptValue, ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
+    ScriptListenerActionMethod, ScriptListenerInvocation, ScriptMethod, ScriptValue,
+    ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
 };
 use renderer::RendererBindings;
 use view_model::{ScriptedContext, create_scripted_view_model};
 
 use crate::envelope::SignedContent;
 
+pub use host_commands::{HostCommand, HostCycleCheckpoint, HostEffectCheckpoint, HostValue};
 pub use luaur_rt::{Error, Result};
+pub use resource_limits::ScriptResourceLimit;
 
 /// Registry key for the require cache (C++: `registeredCacheTableKey` in
 /// `src/lua/rive_lua_libs.cpp`).
 const MODULE_CACHE_KEY: &str = "rive_scripting_registered_modules";
+const SCRIPT_VM_MEMORY_LIMIT_BYTES: usize = 16 * 1024 * 1024;
+const SCRIPT_SAFEPOINTS_PER_CYCLE: usize = 100_000;
 
 /// A booted Luau VM.
 ///
@@ -49,11 +57,15 @@ const MODULE_CACHE_KEY: &str = "rive_scripting_registered_modules";
 /// [`ScriptVm::lua`] exposes the full mlua-style API for binding work.
 pub struct ScriptVm {
     lua: Lua,
+    initialization_error: Option<String>,
     rive_globals_installed: Cell<bool>,
     renderer_bindings: RendererBindings,
     view_models: BTreeMap<String, ScriptViewModel>,
     default_context_view_model: Option<ScriptViewModel>,
     default_context_parent_view_models: Vec<ScriptViewModel>,
+    host_commands: host_commands::HostCommandQueue,
+    script_safepoints: Rc<Cell<usize>>,
+    resource_limits: resource_limits::ResourceLimitTracker,
 }
 
 /// File-registered protocol generator. The script chunk has already executed;
@@ -77,6 +89,7 @@ pub struct LuaScriptInstance {
     renderer_bindings: RendererBindings,
     context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
     context: Option<AnyUserData>,
+    resource_limits: resource_limits::ResourceLimitTracker,
 }
 
 #[derive(Debug, Clone)]
@@ -162,6 +175,7 @@ impl LuaScriptInstance {
             renderer_bindings: RendererBindings::default(),
             context_view_model: Rc::new(RefCell::new(None)),
             context: None,
+            resource_limits: resource_limits::ResourceLimitTracker::default(),
         }
     }
 
@@ -170,12 +184,14 @@ impl LuaScriptInstance {
         renderer_bindings: RendererBindings,
         context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
         context: Option<AnyUserData>,
+        resource_limits: resource_limits::ResourceLimitTracker,
     ) -> Self {
         Self {
             table,
             renderer_bindings,
             context_view_model,
             context,
+            resource_limits,
         }
     }
 
@@ -183,12 +199,19 @@ impl LuaScriptInstance {
         &self.table
     }
 
+    fn script_error(&self, error: Error) -> ScriptError {
+        tracked_script_error(error, &self.resource_limits)
+    }
+
     fn call_method_value(
         &mut self,
         method: ScriptMethod,
         args: &[ScriptValue],
     ) -> std::result::Result<Value, ScriptError> {
-        let value: Value = self.table.get(method.as_str()).map_err(script_error)?;
+        let value: Value = self
+            .table
+            .get(method.as_str())
+            .map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
             return match value {
                 Value::Nil => Ok(Value::Nil),
@@ -211,7 +234,9 @@ impl LuaScriptInstance {
         {
             call_args.push_back(Value::UserData(context.clone()));
         }
-        function.call(call_args).map_err(script_error)
+        function
+            .call(call_args)
+            .map_err(|error| self.script_error(error))
     }
 }
 
@@ -222,6 +247,10 @@ impl Default for ScriptVm {
 }
 
 impl ScriptVm {
+    fn script_error(&self, error: Error) -> ScriptError {
+        tracked_script_error(error, &self.resource_limits)
+    }
+
     pub fn instantiate_script_with_factory(
         &mut self,
         name: &str,
@@ -243,12 +272,15 @@ impl ScriptVm {
     ) -> std::result::Result<ScriptProgram, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         bindings.with_factory_context(factory, || {
-            self.install_rive_globals().map_err(script_error)?;
+            self.install_rive_globals()
+                .map_err(|error| self.script_error(error))?;
             let generator = self
-                .load_script_asset_payload(name, payload)
-                .map_err(script_error)?
-                .call(())
-                .map_err(script_error)?;
+                .track_resource_result(
+                    self.load_script_asset_payload(name, payload)
+                        .map_err(|error| self.script_error(error))?
+                        .call(()),
+                )
+                .map_err(|error| self.script_error(error))?;
             Ok(ScriptProgram { generator })
         })
     }
@@ -270,29 +302,50 @@ impl ScriptVm {
                     Rc::clone(&context_view_model),
                     self.default_context_parent_view_models.clone(),
                 ))
-                .map_err(script_error)?;
-            let instance: Table = program
-                .generator
-                .call(context.clone())
-                .map_err(script_error)?;
+                .map_err(|error| self.script_error(error))?;
+            let instance: Table = self
+                .track_resource_result(program.generator.call(context.clone()))
+                .map_err(|error| self.script_error(error))?;
             Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
                 instance,
                 self.renderer_bindings.clone(),
                 context_view_model,
                 Some(context),
+                self.resource_limits.clone(),
             )) as Box<dyn ScriptInstance>)
         })
     }
 
     /// Boot a VM with the Luau standard libraries open.
     pub fn new() -> Self {
+        let lua = Lua::new();
+        let initialization_error = lua
+            .set_memory_limit(SCRIPT_VM_MEMORY_LIMIT_BYTES)
+            .err()
+            .map(|error| format!("failed to configure the script VM memory ceiling: {error}"));
+        let resource_limits = resource_limits::ResourceLimitTracker::default();
+        let script_safepoints = Rc::new(Cell::new(0));
+        let interrupt_safepoints = Rc::clone(&script_safepoints);
+        let interrupt_resource_limits = resource_limits.clone();
+        lua.set_interrupt(move |_| {
+            let used = interrupt_safepoints.get();
+            if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
+                return Err(interrupt_resource_limits.fail(ScriptResourceLimit::Safepoints));
+            }
+            interrupt_safepoints.set(used + 1);
+            Ok(luaur_rt::VmState::Continue)
+        });
         Self {
-            lua: Lua::new(),
+            lua,
+            initialization_error,
             rive_globals_installed: Cell::new(false),
             renderer_bindings: RendererBindings::default(),
             view_models: BTreeMap::new(),
             default_context_view_model: None,
             default_context_parent_view_models: Vec::new(),
+            host_commands: host_commands::HostCommandQueue::new(resource_limits.clone()),
+            script_safepoints,
+            resource_limits,
         }
     }
 
@@ -325,6 +378,7 @@ impl ScriptVm {
     /// globals are installed before any script/module bytecode is loaded, then
     /// the VM applies `luaL_sandbox` and `luaL_sandboxthread` via luaur.
     pub fn install_rive_globals(&self) -> Result<()> {
+        self.ensure_initialized()?;
         if self.rive_globals_installed.get() {
             return Ok(());
         }
@@ -338,9 +392,11 @@ impl ScriptVm {
         self.lua.globals().set("late", late)?;
 
         let cache = self.ensure_module_cache()?;
+        host_commands::install_nuxie_module(&self.lua, &cache, self.host_commands.clone())?;
         self.install_require_global(cache)?;
         self.renderer_bindings.install(&self.lua)?;
         view_model::install_data_global(&self.lua, &self.view_models)?;
+        resource_limits::install_protected_call_guards(&self.lua, self.resource_limits.clone())?;
 
         self.lua.sandbox(true)?;
         self.rive_globals_installed.set(true);
@@ -349,12 +405,16 @@ impl ScriptVm {
 
     /// Compile and evaluate Luau *source*, returning the chunk's results.
     pub fn eval<R: FromLuaMulti>(&self, source: &str) -> Result<R> {
-        self.lua.load(source).eval()
+        self.ensure_initialized()?;
+        let result = self.lua.load(source).eval();
+        self.track_resource_result(result)
     }
 
     /// Compile Luau *source* into a callable function without running it.
     pub fn load(&self, name: &str, source: &str) -> Result<Function> {
-        self.lua.load(source).set_name(name).into_function()
+        self.ensure_initialized()?;
+        let result = self.lua.load(source).set_name(name).into_function();
+        self.track_resource_result(result)
     }
 
     /// Load precompiled Luau *bytecode* (the payload `.riv` files carry)
@@ -365,6 +425,7 @@ impl ScriptVm {
     /// The pinned luaur loader mirrors C++ pointer-heavy deserialization, so
     /// hostile `.riv` payloads get a safe Rust preflight before the raw VM call.
     pub fn load_bytecode(&self, chunk_name: &str, bytecode: &[u8]) -> Result<Function> {
+        self.ensure_initialized()?;
         validate_luau_bytecode(bytecode).map_err(|e| {
             Error::runtime(format!(
                 "ScriptAsset '{chunk_name}': malformed Luau bytecode: {e}"
@@ -372,7 +433,7 @@ impl ScriptVm {
         })?;
         let name = CString::new(format!("={chunk_name}"))
             .unwrap_or_else(|_| CString::new("=script").expect("static"));
-        unsafe {
+        let result = unsafe {
             self.lua.exec_raw((), |state| {
                 let rc = luau_load(
                     state,
@@ -389,7 +450,8 @@ impl ScriptVm {
                 // Success: the loaded closure is on the stack and becomes
                 // exec_raw's result.
             })
-        }
+        };
+        self.track_resource_result(result)
     }
 
     /// Load and *execute* a script/module payload, returning what the chunk
@@ -399,7 +461,8 @@ impl ScriptVm {
     /// (`src/lua/rive_lua_libs.cpp`), minus the per-module sandboxed thread
     /// and require-cache bookkeeping.
     pub fn run_bytecode<R: FromLuaMulti>(&self, chunk_name: &str, bytecode: &[u8]) -> Result<R> {
-        self.load_bytecode(chunk_name, bytecode)?.call(())
+        let result = self.load_bytecode(chunk_name, bytecode)?.call(());
+        self.track_resource_result(result)
     }
 
     /// Load a raw `ScriptAsset` payload as it appears in a `.riv` file:
@@ -462,9 +525,12 @@ impl ScriptVm {
         name: &str,
         payload: &[u8],
         factory: &mut dyn RenderFactory,
-    ) -> Result<Value> {
+    ) -> std::result::Result<Value, ScriptError> {
         let bindings = self.renderer_bindings.clone();
-        bindings.with_factory_context(factory, || self.register_module(name, payload))
+        bindings.with_factory_context(factory, || {
+            self.register_module(name, payload)
+                .map_err(|error| self.script_error(error))
+        })
     }
 
     fn register_module_after_init(&self, name: &str, payload: &[u8]) -> Result<Value> {
@@ -472,7 +538,8 @@ impl ScriptVm {
         if let value @ (Value::Table(_) | Value::Function(_)) = cache.get::<Value>(name)? {
             return Ok(value);
         }
-        let result: Value = self.load_script_asset_payload(name, payload)?.call(())?;
+        let result: Value =
+            self.track_resource_result(self.load_script_asset_payload(name, payload)?.call(()))?;
         match &result {
             Value::Table(_) | Value::Function(_) => {}
             other => {
@@ -522,12 +589,51 @@ impl ScriptVm {
     /// Call a global function by name.
     pub fn call_global<R: FromLuaMulti>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R> {
         let function: Function = self.lua.globals().get(name)?;
-        function.call(args)
+        let result = function.call(args);
+        self.track_resource_result(result)
     }
 
     /// Read a global value.
     pub fn global(&self, name: &str) -> Result<Value> {
         self.lua.globals().get(name)
+    }
+
+    /// Start a bounded unit of script work without discarding commands that
+    /// the host has not drained yet.
+    pub fn begin_host_cycle(&self) -> HostCycleCheckpoint {
+        self.resource_limits.begin_cycle();
+        self.script_safepoints.set(0);
+        self.host_commands.begin_cycle()
+    }
+
+    /// Discard only effects appended after `checkpoint`, leaving older
+    /// import/creation effects available for a later successful drain.
+    pub fn rollback_host_cycle(&self, checkpoint: HostCycleCheckpoint) {
+        self.host_commands.rollback(checkpoint);
+    }
+
+    /// Mark the current host-effect queue position inside an already-bounded
+    /// cycle. Rolling back this checkpoint removes only later commands and
+    /// intentionally does not refund command, content, or safepoint budgets.
+    pub fn checkpoint_host_effects(&self) -> HostEffectCheckpoint {
+        self.host_commands.checkpoint_effects()
+    }
+
+    /// Discard host commands emitted after `checkpoint` without resetting any
+    /// enclosing cycle resource counter.
+    pub fn rollback_host_effects(&self, checkpoint: HostEffectCheckpoint) {
+        self.host_commands.rollback_effects(checkpoint);
+    }
+
+    /// Machine-readable resource identity retained after terminal script
+    /// exhaustion and cleared only by [`Self::begin_host_cycle`].
+    pub fn terminal_resource_limit(&self) -> Option<ScriptResourceLimit> {
+        self.resource_limits.terminal_limit()
+    }
+
+    /// Drain Nuxie-owned host effects in the exact order scripts emitted them.
+    pub fn drain_host_commands(&self) -> Vec<HostCommand> {
+        self.host_commands.drain()
     }
 
     pub fn script_instance_from_table(&self, table: Table) -> LuaScriptInstance {
@@ -536,7 +642,22 @@ impl ScriptVm {
             self.renderer_bindings.clone(),
             Rc::new(RefCell::new(None)),
             None,
+            self.resource_limits.clone(),
         )
+    }
+
+    fn track_resource_result<T>(&self, result: Result<T>) -> Result<T> {
+        if let Err(error) = &result {
+            self.resource_limits.observe_vm_error(error);
+        }
+        result
+    }
+
+    fn ensure_initialized(&self) -> Result<()> {
+        match self.initialization_error.as_deref() {
+            Some(message) => Err(Error::runtime(message)),
+            None => Ok(()),
+        }
     }
 }
 
@@ -686,7 +807,7 @@ fn install_vector_global(lua: &Lua) -> Result<()> {
 
 impl RuntimeScriptingVm for ScriptVm {
     fn install_rive_globals(&mut self) -> std::result::Result<(), ScriptError> {
-        ScriptVm::install_rive_globals(self).map_err(script_error)
+        ScriptVm::install_rive_globals(self).map_err(|error| self.script_error(error))
     }
 
     fn register_module(
@@ -694,10 +815,10 @@ impl RuntimeScriptingVm for ScriptVm {
         name: &str,
         payload: &[u8],
     ) -> std::result::Result<(), ScriptError> {
-        ScriptVm::install_rive_globals(self).map_err(script_error)?;
+        ScriptVm::install_rive_globals(self).map_err(|error| self.script_error(error))?;
         ScriptVm::register_module(self, name, payload)
             .map(|_| ())
-            .map_err(script_error)
+            .map_err(|error| self.script_error(error))
     }
 
     fn instantiate_script(
@@ -706,12 +827,14 @@ impl RuntimeScriptingVm for ScriptVm {
         payload: &[u8],
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
-        ScriptVm::install_rive_globals(self).map_err(script_error)?;
+        ScriptVm::install_rive_globals(self).map_err(|error| self.script_error(error))?;
         let generator: Function = self
-            .load_script_asset_payload(name, payload)
-            .map_err(script_error)?
-            .call(())
-            .map_err(script_error)?;
+            .track_resource_result(
+                self.load_script_asset_payload(name, payload)
+                    .map_err(|error| self.script_error(error))?
+                    .call(()),
+            )
+            .map_err(|error| self.script_error(error))?;
         let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
         let context = self
             .lua
@@ -719,13 +842,16 @@ impl RuntimeScriptingVm for ScriptVm {
                 Rc::clone(&context_view_model),
                 self.default_context_parent_view_models.clone(),
             ))
-            .map_err(script_error)?;
-        let instance: Table = generator.call(context.clone()).map_err(script_error)?;
+            .map_err(|error| self.script_error(error))?;
+        let instance: Table = self
+            .track_resource_result(generator.call(context.clone()))
+            .map_err(|error| self.script_error(error))?;
         Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
             instance,
             self.renderer_bindings.clone(),
             context_view_model,
             Some(context),
+            self.resource_limits.clone(),
         )))
     }
 }
@@ -740,7 +866,10 @@ impl ScriptInstance for LuaScriptInstance {
     }
 
     fn has_method(&self, method: ScriptMethod) -> std::result::Result<bool, ScriptError> {
-        let value: Value = self.table.get(method.as_str()).map_err(script_error)?;
+        let value: Value = self
+            .table
+            .get(method.as_str())
+            .map_err(|error| self.script_error(error))?;
         Ok(matches!(value, Value::Function(_)))
     }
 
@@ -751,7 +880,7 @@ impl ScriptInstance for LuaScriptInstance {
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<ScriptValue, ScriptError> {
         let value = self.call_method_value(method, args)?;
-        script_value_from_lua(value).map_err(script_error)
+        script_value_from_lua(value).map_err(|error| self.script_error(error))
     }
 
     fn call_method_with_factory(
@@ -763,6 +892,43 @@ impl ScriptInstance for LuaScriptInstance {
     ) -> std::result::Result<ScriptValue, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         bindings.with_factory_context(factory, || self.call_method(method, args, host))
+    }
+
+    fn call_listener_action(
+        &mut self,
+        method: ScriptListenerActionMethod,
+        invocation: &ScriptListenerInvocation,
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<(), ScriptError> {
+        let function: Function = self
+            .table
+            .get(method.as_script_method().as_str())
+            .map_err(|error| self.script_error(error))?;
+        let lua = self.table.lua();
+        let invocation = listener_invocation::listener_action_argument(&lua, method, invocation)
+            .map_err(|error| self.script_error(error))?;
+        function
+            .call((self.table.clone(), invocation))
+            .map_err(|error| self.script_error(error))
+    }
+
+    fn call_input_trigger(
+        &mut self,
+        name: &str,
+        host: &mut dyn ScriptHost,
+    ) -> std::result::Result<(), ScriptError> {
+        let value: Value = self
+            .table
+            .get(name)
+            .map_err(|error| self.script_error(error))?;
+        let Value::Function(function) = value else {
+            return Ok(());
+        };
+        function
+            .call::<()>(self.table.clone())
+            .map_err(|error| self.script_error(error))?;
+        host.mark_script_update();
+        Ok(())
     }
 
     fn call_init_with_factory(
@@ -783,7 +949,8 @@ impl ScriptInstance for LuaScriptInstance {
         node: nuxie_runtime::ScriptNode,
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<nuxie_render_api::RawPath, ScriptError> {
-        renderer::call_path_effect_update(&self.table, source, node).map_err(script_error)
+        renderer::call_path_effect_update(&self.table, source, node)
+            .map_err(|error| self.script_error(error))
     }
 
     fn call_draw(
@@ -794,7 +961,7 @@ impl ScriptInstance for LuaScriptInstance {
     ) -> std::result::Result<(), ScriptError> {
         self.renderer_bindings
             .call_draw(&self.table, factory, renderer)
-            .map_err(script_error)
+            .map_err(|error| self.script_error(error))
     }
 
     fn call_data_converter(
@@ -802,21 +969,29 @@ impl ScriptInstance for LuaScriptInstance {
         method: ScriptDataConverterMethod,
         value: ScriptValue,
     ) -> std::result::Result<ScriptValue, ScriptError> {
-        let function: Function = self.table.get(method.as_str()).map_err(script_error)?;
+        let function: Function = self
+            .table
+            .get(method.as_str())
+            .map_err(|error| self.script_error(error))?;
         let lua = self.table.lua();
         let input = lua
             .create_userdata(ScriptedDataValue::new(value))
-            .map_err(script_error)?;
+            .map_err(|error| self.script_error(error))?;
         let output: AnyUserData = function
             .call((self.table.clone(), input))
-            .map_err(script_error)?;
-        let output = output.borrow::<ScriptedDataValue>().map_err(script_error)?;
+            .map_err(|error| self.script_error(error))?;
+        let output = output
+            .borrow::<ScriptedDataValue>()
+            .map_err(|error| self.script_error(error))?;
         Ok(output.value.clone())
     }
 
     fn get_input(&self, name: &str) -> std::result::Result<ScriptValue, ScriptError> {
-        let value: Value = self.table.get(name).map_err(script_error)?;
-        script_value_from_lua(value).map_err(script_error)
+        let value: Value = self
+            .table
+            .get(name)
+            .map_err(|error| self.script_error(error))?;
+        script_value_from_lua(value).map_err(|error| self.script_error(error))
     }
 
     fn set_input(
@@ -827,7 +1002,7 @@ impl ScriptInstance for LuaScriptInstance {
         let lua = self.table.lua();
         self.table
             .set(name, script_value_to_lua(&lua, &value))
-            .map_err(script_error)
+            .map_err(|error| self.script_error(error))
     }
 
     fn set_artboard_input(
@@ -839,8 +1014,10 @@ impl ScriptInstance for LuaScriptInstance {
         let artboard = self
             .renderer_bindings
             .create_scripted_artboard(&lua, artboard)
-            .map_err(script_error)?;
-        self.table.set(name, artboard).map_err(script_error)
+            .map_err(|error| self.script_error(error))?;
+        self.table
+            .set(name, artboard)
+            .map_err(|error| self.script_error(error))
     }
 
     fn set_view_model_input(
@@ -849,14 +1026,24 @@ impl ScriptInstance for LuaScriptInstance {
         view_model: ScriptViewModel,
     ) -> std::result::Result<(), ScriptError> {
         let lua = self.table.lua();
-        let view_model = create_scripted_view_model(&lua, view_model).map_err(script_error)?;
-        self.table.set(name, view_model).map_err(script_error)?;
+        let view_model = create_scripted_view_model(&lua, view_model)
+            .map_err(|error| self.script_error(error))?;
+        self.table
+            .set(name, view_model)
+            .map_err(|error| self.script_error(error))?;
         Ok(())
     }
 }
 
-fn script_error(error: Error) -> ScriptError {
-    ScriptError::new(error.to_string())
+fn tracked_script_error(
+    error: Error,
+    resource_limits: &resource_limits::ResourceLimitTracker,
+) -> ScriptError {
+    resource_limits.observe_vm_error(&error);
+    match resource_limits.terminal_limit() {
+        Some(limit) => ScriptError::with_resource_code(error.to_string(), limit.code()),
+        None => ScriptError::new(error.to_string()),
+    }
 }
 
 fn script_value_to_lua(lua: &Lua, value: &ScriptValue) -> Value {

@@ -1,4 +1,4 @@
-//! ABI 1.3's bounded, coarse flow-session protocol.
+//! ABI 1.4's bounded, coarse flow-session protocol.
 //!
 //! The C layouts in this module are deliberately independent from the Rust
 //! session model. Every caller-owned view is validated and copied before the
@@ -9,7 +9,7 @@
 use super::*;
 use std::{collections::HashSet, ffi::c_void, ptr, slice};
 
-pub const NUX_FLOW_SESSION_ABI_MINOR: u16 = 3;
+pub const NUX_FLOW_SESSION_ABI_MINOR: u16 = 4;
 
 pub const NUX_FLOW_MAX_ID_BYTE_LENGTH: u64 = 4_096;
 pub const NUX_FLOW_MAX_PATH_BYTE_LENGTH: u64 = 4_096;
@@ -26,6 +26,7 @@ pub const NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH: u64 = 4_194_304;
 pub const NUX_FLOW_MAX_POINTER_COUNT: u64 = 32;
 
 const NO_VALUE_ROOT: u32 = u32::MAX;
+const NUX_FLOW_MAX_HOST_COMMANDS_PER_CYCLE: usize = 256;
 
 /// Stable-width selected-player kind.
 pub type NuxFlowPlayerKind = u32;
@@ -155,7 +156,7 @@ pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_OBJECT: NuxFlowSchemaPropertyKind = 10;
 pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_NULL: NuxFlowSchemaPropertyKind = 11;
 pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX: NuxFlowSchemaPropertyKind = 12;
 
-/// ABI 1.3 configured-session descriptor. `minimum_abi_minor` must be 3 for
+/// ABI 1.4 configured-session descriptor. `minimum_abi_minor` must be 4 for
 /// this surface. A null `artboard_name` selects the default artboard. A null
 /// `player_name` uses the authored fallback policy; a nonempty UTF-8 name
 /// explicitly selects a state machine. Linear animations are fallback-only.
@@ -290,6 +291,8 @@ pub struct NuxFlowPointerEvent {
     pub pointer_id: i32,
     pub x: f32,
     pub y: f32,
+    /// Event time in seconds from the platform's monotonic input clock.
+    pub timestamp_seconds: f32,
 }
 
 #[repr(C)]
@@ -332,8 +335,9 @@ pub struct NuxFlowQueryBatch {
     pub query_count: u64,
 }
 
-/// Tagged generic operation. Exactly the pointer selected by `kind` must be
-/// non-null and the other payload pointers must be null.
+/// ABI 1.4 tagged generic operation. `required_abi_major` and
+/// `minimum_abi_minor` must be exactly 1 and 4. Exactly the pointer selected by
+/// `kind` must be non-null and the other payload pointers must be null.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxFlowSessionOperation {
@@ -444,7 +448,9 @@ pub struct NuxFlowCreatedInstanceView {
 }
 
 /// Borrowed exact-order output owned by a session result. `payload_root_index`
-/// is `UINT32_MAX` when the item has no typed arena payload.
+/// is `UINT32_MAX` when the item has no typed arena payload. ABI 1.4 host
+/// commands always use an object node as their typed payload root and leave the
+/// opaque `payload` byte view empty.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxFlowOutputView {
@@ -489,7 +495,7 @@ pub struct NuxFlowEventPropertyView {
     pub name: NuxByteView,
 }
 
-/// Opaque owned ABI 1.3 result. Every borrowed view returned by an accessor
+/// Opaque owned ABI 1.4 result. Every borrowed view returned by an accessor
 /// remains valid until this handle is freed.
 pub struct NuxFlowSessionResult {
     _private: [u8; 0],
@@ -566,6 +572,7 @@ struct OwnedPointerEvent {
     pointer_id: i32,
     x: f32,
     y: f32,
+    timestamp_seconds: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -621,7 +628,7 @@ impl PayloadBudget {
     }
 }
 
-fn validate_v13_version(required_major: u16, minimum_minor: u16) -> Result<(), NuxStatus> {
+fn validate_v14_version(required_major: u16, minimum_minor: u16) -> Result<(), NuxStatus> {
     if required_major == NUX_RUNTIME_ABI_MAJOR && minimum_minor == NUX_FLOW_SESSION_ABI_MINOR {
         Ok(())
     } else {
@@ -705,7 +712,7 @@ unsafe fn copy_configured_session_descriptor(
         return Err(NuxStatus::InvalidArgument);
     }
     let descriptor = unsafe { descriptor.read() };
-    validate_v13_version(descriptor.required_abi_major, descriptor.minimum_abi_minor)?;
+    validate_v14_version(descriptor.required_abi_major, descriptor.minimum_abi_minor)?;
     let mut budget = PayloadBudget::default();
     let artboard_name = copy_optional_utf8(
         descriptor.artboard_name,
@@ -1278,6 +1285,8 @@ unsafe fn copy_pointer_batch(
         if event.struct_size != size_u32::<NuxFlowPointerEvent>()
             || !event.x.is_finite()
             || !event.y.is_finite()
+            || !event.timestamp_seconds.is_finite()
+            || event.timestamp_seconds < 0.0
             || event.pointer_id <= 0
             || !matches!(
                 event.kind,
@@ -1295,6 +1304,7 @@ unsafe fn copy_pointer_batch(
             pointer_id: event.pointer_id,
             x: event.x,
             y: event.y,
+            timestamp_seconds: event.timestamp_seconds,
         });
     }
     Ok(events)
@@ -1410,7 +1420,7 @@ unsafe fn copy_session_operation(
         return Err(NuxStatus::InvalidArgument);
     }
     let operation = unsafe { operation.read() };
-    validate_v13_version(operation.required_abi_major, operation.minimum_abi_minor)?;
+    validate_v14_version(operation.required_abi_major, operation.minimum_abi_minor)?;
     let selected_payload_count = [
         !operation.state_batch.is_null(),
         !operation.pointer_batch.is_null(),
@@ -1567,6 +1577,7 @@ struct OwnedEventProperty {
     name: Vec<u8>,
 }
 
+#[derive(Clone)]
 struct FlowSessionResultHandle {
     status: NuxStatus,
     surface_disposition: NuxSurfaceDisposition,
@@ -1619,6 +1630,14 @@ impl FlowSessionResultHandle {
     }
 
     fn failure(status: NuxStatus, diagnostic: impl Into<Vec<u8>>) -> Self {
+        Self::failure_with_code(status, diagnostic_code_for_status(status), diagnostic)
+    }
+
+    fn failure_with_code(
+        status: NuxStatus,
+        code: impl Into<Vec<u8>>,
+        diagnostic: impl Into<Vec<u8>>,
+    ) -> Self {
         let message = diagnostic.into();
         Self {
             status,
@@ -1643,10 +1662,15 @@ impl FlowSessionResultHandle {
             event_properties: Vec::new(),
             diagnostics: vec![OwnedDiagnostic {
                 severity: NUX_DIAGNOSTIC_SEVERITY_FATAL,
-                code: diagnostic_code_for_status(status).to_vec(),
+                code: code.into(),
                 message,
             }],
         }
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn from_runtime_failure(failure: RuntimeFailure) -> Self {
+        Self::failure_with_code(failure.status, failure.diagnostic_code, failure.diagnostic)
     }
 
     fn validate(&self) -> Result<(), NuxStatus> {
@@ -1903,6 +1927,9 @@ impl FlowSessionResultHandle {
         }
         let mut prior_sequence = None;
         let mut prior_cycle_phase = None;
+        let mut host_cycle = None;
+        let mut host_commands_this_cycle = 0_usize;
+        let mut host_content_bytes_this_cycle = 0_usize;
         for output in &self.outputs {
             if output.instance_id == Some(0) {
                 return Err(NuxStatus::RuntimeError);
@@ -1958,9 +1985,34 @@ impl FlowSessionResultHandle {
                 let valid_payload_root = match output.kind {
                     NUX_FLOW_OUTPUT_KIND_STATE_CHANGE => is_scalar,
                     NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE => is_scalar || is_view_model_reference,
+                    NUX_FLOW_OUTPUT_KIND_HOST_COMMAND => {
+                        node.kind == NUX_FLOW_VALUE_KIND_OBJECT
+                            && node.instance_id.is_none()
+                            && node.schema_id.is_empty()
+                    }
                     _ => false,
                 };
                 if !valid_payload_root {
+                    return Err(NuxStatus::RuntimeError);
+                }
+            }
+            if output.kind == NUX_FLOW_OUTPUT_KIND_HOST_COMMAND {
+                let content_bytes = validate_host_command_output(output, &self.value_arena)?;
+                if host_cycle != Some(output.cycle) {
+                    host_cycle = Some(output.cycle);
+                    host_commands_this_cycle = 0;
+                    host_content_bytes_this_cycle = 0;
+                }
+                host_commands_this_cycle = host_commands_this_cycle
+                    .checked_add(1)
+                    .ok_or(NuxStatus::RuntimeError)?;
+                host_content_bytes_this_cycle = host_content_bytes_this_cycle
+                    .checked_add(content_bytes)
+                    .ok_or(NuxStatus::RuntimeError)?;
+                if host_commands_this_cycle > NUX_FLOW_MAX_HOST_COMMANDS_PER_CYCLE
+                    || host_content_bytes_this_cycle
+                        > NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize
+                {
                     return Err(NuxStatus::RuntimeError);
                 }
             }
@@ -2047,6 +2099,164 @@ impl FlowSessionResultHandle {
     }
 }
 
+#[derive(Default)]
+struct HostValueValidation {
+    visited: HashSet<u32>,
+    nodes: usize,
+    edges: usize,
+    content_bytes: usize,
+}
+
+fn validate_host_command_output(
+    output: &OwnedOutput,
+    arena: &OwnedValueArena,
+) -> Result<usize, NuxStatus> {
+    if output.phase != NUX_FLOW_OUTPUT_PHASE_HOST_WORK
+        || !output.path.is_empty()
+        || !output.payload.is_empty()
+        || output.origin_mutation_id.is_some()
+        || output.instance_id.is_some()
+        || output.event_type != 0
+        || output.first_event_property != 0
+        || output.event_property_count != 0
+        || output.delay_seconds.to_bits() != 0
+        || output.open_url.is_some()
+        || output.name.is_empty()
+        || output.name.len() > NUX_FLOW_MAX_ID_BYTE_LENGTH as usize
+        || std::str::from_utf8(&output.name).is_err()
+    {
+        return Err(NuxStatus::RuntimeError);
+    }
+    let root = output.payload_root_index.ok_or(NuxStatus::RuntimeError)?;
+    if arena
+        .nodes
+        .get(root as usize)
+        .is_none_or(|node| node.kind != NUX_FLOW_VALUE_KIND_OBJECT)
+    {
+        return Err(NuxStatus::RuntimeError);
+    }
+
+    let mut validation = HostValueValidation {
+        content_bytes: output.name.len(),
+        ..HostValueValidation::default()
+    };
+    validate_host_value_tree(root, 1, arena, &mut validation)?;
+    Ok(validation.content_bytes)
+}
+
+fn validate_host_value_tree(
+    node_index: u32,
+    depth: u32,
+    arena: &OwnedValueArena,
+    validation: &mut HostValueValidation,
+) -> Result<(), NuxStatus> {
+    if depth > NUX_FLOW_MAX_VALUE_DEPTH || !validation.visited.insert(node_index) {
+        return Err(NuxStatus::RuntimeError);
+    }
+    validation.nodes = validation
+        .nodes
+        .checked_add(1)
+        .ok_or(NuxStatus::RuntimeError)?;
+    if validation.nodes > NUX_FLOW_MAX_BATCH_ITEM_COUNT as usize {
+        return Err(NuxStatus::RuntimeError);
+    }
+
+    let node = arena
+        .nodes
+        .get(node_index as usize)
+        .ok_or(NuxStatus::RuntimeError)?;
+    let first_edge = node.first_edge as usize;
+    let edge_count = node.edge_count as usize;
+    let end_edge = first_edge
+        .checked_add(edge_count)
+        .ok_or(NuxStatus::RuntimeError)?;
+    let edges = arena
+        .edges
+        .get(first_edge..end_edge)
+        .ok_or(NuxStatus::RuntimeError)?;
+
+    match node.kind {
+        NUX_FLOW_VALUE_KIND_BOOL | NUX_FLOW_VALUE_KIND_NUMBER => {
+            validation.content_bytes = validation
+                .content_bytes
+                .checked_add(16)
+                .ok_or(NuxStatus::RuntimeError)?;
+        }
+        NUX_FLOW_VALUE_KIND_STRING => {
+            validation.content_bytes = validation
+                .content_bytes
+                .checked_add(node.string_value.len())
+                .ok_or(NuxStatus::RuntimeError)?;
+        }
+        NUX_FLOW_VALUE_KIND_LIST => {
+            if edge_count > NUX_FLOW_MAX_LIST_ITEM_COUNT as usize
+                || !node.schema_id.is_empty()
+                || node.instance_id.is_some()
+                || edges.iter().any(|edge| !edge.key.is_empty())
+            {
+                return Err(NuxStatus::RuntimeError);
+            }
+            validation.edges = validation
+                .edges
+                .checked_add(edge_count)
+                .ok_or(NuxStatus::RuntimeError)?;
+            if validation.edges > NUX_FLOW_MAX_VALUE_EDGE_COUNT as usize {
+                return Err(NuxStatus::RuntimeError);
+            }
+            for edge in edges {
+                validate_host_value_tree(
+                    edge.node_index,
+                    depth.checked_add(1).ok_or(NuxStatus::RuntimeError)?,
+                    arena,
+                    validation,
+                )?;
+            }
+        }
+        NUX_FLOW_VALUE_KIND_OBJECT => {
+            if edge_count > NUX_FLOW_MAX_LIST_ITEM_COUNT as usize
+                || !node.schema_id.is_empty()
+                || node.instance_id.is_some()
+            {
+                return Err(NuxStatus::RuntimeError);
+            }
+            validation.edges = validation
+                .edges
+                .checked_add(edge_count)
+                .ok_or(NuxStatus::RuntimeError)?;
+            if validation.edges > NUX_FLOW_MAX_VALUE_EDGE_COUNT as usize {
+                return Err(NuxStatus::RuntimeError);
+            }
+            let mut prior_key: Option<&[u8]> = None;
+            for edge in edges {
+                let key = edge.key.as_slice();
+                if key.is_empty()
+                    || key.len() > NUX_FLOW_MAX_ID_BYTE_LENGTH as usize
+                    || std::str::from_utf8(key).is_err()
+                    || prior_key.is_some_and(|prior| prior >= key)
+                {
+                    return Err(NuxStatus::RuntimeError);
+                }
+                validation.content_bytes = validation
+                    .content_bytes
+                    .checked_add(key.len())
+                    .ok_or(NuxStatus::RuntimeError)?;
+                prior_key = Some(key);
+                validate_host_value_tree(
+                    edge.node_index,
+                    depth.checked_add(1).ok_or(NuxStatus::RuntimeError)?,
+                    arena,
+                    validation,
+                )?;
+            }
+        }
+        _ => return Err(NuxStatus::RuntimeError),
+    }
+    if validation.content_bytes > NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize {
+        return Err(NuxStatus::RuntimeError);
+    }
+    Ok(())
+}
+
 fn validate_result_value_node(node: &OwnedValueNode) -> Result<(), NuxStatus> {
     let has_edges = node.edge_count != 0;
     let canonical_edge_start = has_edges || node.first_edge == 0;
@@ -2076,7 +2286,6 @@ fn validate_result_value_node(node: &OwnedValueNode) -> Result<(), NuxStatus> {
         }
         NUX_FLOW_VALUE_KIND_NUMBER => {
             node.number_value.is_finite()
-                && node.number_value.abs() <= f64::from(f32::MAX)
                 && node.color_value == 0
                 && !node.bool_value
                 && node.identity_value == 0
@@ -2172,7 +2381,7 @@ fn replace_session_result(
     if result.validate().is_err() {
         result = FlowSessionResultHandle::failure(
             NuxStatus::RuntimeError,
-            "runtime produced an invalid or oversized ABI 1.3 result",
+            "runtime produced an invalid or oversized ABI 1.4 result",
         );
     }
     let status = result.status;
@@ -2190,6 +2399,17 @@ fn write_session_failure(
     replace_session_result(
         out_result,
         FlowSessionResultHandle::failure(status, diagnostic),
+    )
+}
+
+#[cfg(feature = "apple-product")]
+fn write_session_runtime_failure(
+    out_result: *mut *mut NuxFlowSessionResult,
+    failure: RuntimeFailure,
+) -> NuxStatus {
+    replace_session_result(
+        out_result,
+        FlowSessionResultHandle::from_runtime_failure(failure),
     )
 }
 
@@ -2253,19 +2473,29 @@ mod configured_session_seam {
             artboard_name: descriptor.artboard_name,
             player_name: descriptor.player_name,
         };
-        let (session, bootstrap) = core::FlowSession::create(Arc::clone(&state.file), config)
-            .map_err(runtime_failure_from_core)?;
-        let mut result = result_from_bootstrap(&bootstrap)?;
-        result.is_settled = session.is_settled();
+        let mut factory = state.make_session_factory()?;
+        let (session, creation) = core::FlowSession::create_with_factory(
+            Arc::clone(&state.file),
+            config,
+            factory.as_mut(),
+        )
+        .map_err(runtime_failure_from_core)?;
+        let mut result = result_from_bootstrap(&creation.bootstrap)?;
+        result.is_dirty = creation.dirty;
+        result.is_settled = creation.settled;
+        result.wake_after = creation.wake_after_seconds.map(f64::from);
+        append_outputs(&mut result, creation.outputs)?;
         result
             .validate()
-            .map_err(|_| RuntimeFailure::runtime("bootstrap exceeds ABI 1.3 bounds"))?;
+            .map_err(|_| RuntimeFailure::runtime("bootstrap exceeds ABI 1.4 bounds"))?;
         let session_id = state.allocate_session_id()?;
         state.sessions.insert(
             session_id,
             SessionState {
                 is_fatal: false,
+                fatal_diagnostic: None,
                 flow_session: session,
+                factory,
                 render_cache: None,
                 legacy_timestamp_seconds: 0.0,
                 #[cfg(test)]
@@ -2286,10 +2516,10 @@ mod configured_session_seam {
             perform_on_worker(state, session_id, operation)
         }) {
             Ok(Ok(result)) => (NuxStatus::Ok, result),
-            Ok(Err(failure)) => (
-                failure.status,
-                FlowSessionResultHandle::failure(failure.status, failure.diagnostic),
-            ),
+            Ok(Err(failure)) => {
+                let result = FlowSessionResultHandle::from_runtime_failure(failure);
+                (result.status, result)
+            }
             Err(WorkerCallError::Panicked) => (
                 NuxStatus::RuntimeError,
                 FlowSessionResultHandle::failure(NuxStatus::RuntimeError, PANIC_DIAGNOSTIC),
@@ -2314,7 +2544,8 @@ mod configured_session_seam {
             return perform_advance_on_worker(state, session_id, advance);
         }
         let session = state.session_mut(session_id)?;
-        let session = &mut session.flow_session;
+        let flow_session = &mut session.flow_session;
+        let factory = &mut session.factory;
         let core_result = match operation {
             OwnedSessionOperation::Query(queries) => {
                 let mut combined = FlowSessionResultHandle::empty_success();
@@ -2332,8 +2563,8 @@ mod configured_session_seam {
                             ));
                         }
                     };
-                    let mut result = session
-                        .perform(core::FlowOperation::Query(query))
+                    let mut result = flow_session
+                        .perform_with_factory(core::FlowOperation::Query(query), factory.as_mut())
                         .map_err(runtime_failure_from_core)?;
                     if result.player_inputs.is_some() {
                         deferred_player_inputs = result.player_inputs.take();
@@ -2344,7 +2575,7 @@ mod configured_session_seam {
                     replace_player_inputs(&mut combined, inputs)?;
                     combined.has_player_inputs = true;
                     combined.validate().map_err(|_| {
-                        RuntimeFailure::runtime("query result exceeds ABI 1.3 bounds")
+                        RuntimeFailure::runtime("query result exceeds ABI 1.4 bounds")
                     })?;
                 }
                 return Ok(combined);
@@ -2362,6 +2593,7 @@ mod configured_session_seam {
                                 pointer_id: event.pointer_id,
                                 x: event.x,
                                 y: event.y,
+                                timestamp_seconds: event.timestamp_seconds,
                             })
                         })
                         .collect::<Result<Vec<_>, RuntimeFailure>>()?,
@@ -2371,8 +2603,8 @@ mod configured_session_seam {
                 return Err(RuntimeFailure::runtime("advance dispatch is inconsistent"));
             }
         };
-        let result = session
-            .perform(core_result)
+        let result = flow_session
+            .perform_with_factory(core_result, factory.as_mut())
             .map_err(runtime_failure_from_core)?;
         result_from_core(result)
     }
@@ -2387,42 +2619,69 @@ mod configured_session_seam {
             context_identity: advance.completion_context_identity,
         };
         let session = state.session_mut(session_id)?;
-        let flow_session = &mut session.flow_session;
-        let core_result = flow_session
-            .perform(core::FlowOperation::Advance(core::FlowAdvance {
-                timestamp_seconds: advance.timestamp_seconds,
-                delta_seconds: advance.delta_seconds,
-                render: advance.render,
-            }))
+        let preflight_disposition = if advance.render {
+            let attachment = session
+                .attachment
+                .as_ref()
+                .ok_or_else(|| RuntimeFailure::surface("surface is not attached"))?;
+            attachment
+                .surface
+                .preflight_present(&session.factory, advance.drawable_identity != 0)
+                .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?
+        } else {
+            None
+        };
+        let mut core_result = session
+            .flow_session
+            .perform_with_factory(
+                core::FlowOperation::Advance(core::FlowAdvance {
+                    timestamp_seconds: advance.timestamp_seconds,
+                    delta_seconds: advance.delta_seconds,
+                    render: advance.render,
+                }),
+                session.factory.as_mut(),
+            )
             .map_err(runtime_failure_from_core)?;
         session.legacy_timestamp_seconds = advance.timestamp_seconds;
-        let mut result = result_from_core(core_result)?;
         if !advance.render {
-            return Ok(result);
+            return committed_result_from_core(session, core_result);
         }
-        let attachment = session
-            .attachment
-            .as_mut()
-            .ok_or_else(|| RuntimeFailure::surface("surface is not attached"))?;
-        if let Some(disposition) = attachment
-            .surface
-            .preflight_present(&attachment.factory, advance.drawable_identity != 0)
-            .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?
-        {
+        if let Some(disposition) = preflight_disposition {
+            let mut result = committed_result_from_core(session, core_result)?;
             result.surface_disposition = surface_disposition(disposition);
             return Ok(result);
         }
-        let (viewport_width, viewport_height) = attachment.surface.dimensions();
-        let bounds = flow_session.artboard_bounds();
-        let presentation_transform = centered_contain_transform(
+        let Some((viewport_width, viewport_height)) = session
+            .attachment
+            .as_ref()
+            .map(|attachment| attachment.surface.dimensions())
+        else {
+            let failure = RuntimeFailure::runtime("preflighted surface became unavailable");
+            return Err(terminalize_after_committed_advance_failure(
+                session,
+                "presentation setup",
+                failure,
+            ));
+        };
+        let bounds = session.flow_session.artboard_bounds();
+        let presentation_transform = match centered_contain_transform(
             bounds.x,
             bounds.y,
             bounds.width,
             bounds.height,
             viewport_width,
             viewport_height,
-        )?;
-        let mut frame = attachment.factory.begin_frame(0x0000_0000);
+        ) {
+            Ok(transform) => transform,
+            Err(failure) => {
+                return Err(terminalize_after_committed_advance_failure(
+                    session,
+                    "presentation transform",
+                    failure,
+                ));
+            }
+        };
+        let mut frame = session.factory.begin_frame(0x0000_0000);
         frame.transform(presentation_transform);
         #[cfg(test)]
         {
@@ -2430,31 +2689,63 @@ mod configured_session_seam {
         }
         let render_cache = session
             .render_cache
-            .get_or_insert_with(|| flow_session.new_render_cache());
-        flow_session
-            .draw(&mut attachment.factory, &mut frame, render_cache)
-            .map_err(runtime_failure_from_core)?;
+            .get_or_insert_with(|| session.flow_session.new_render_cache());
+        let draw_result = session.flow_session.draw_into_result(
+            session.factory.as_mut(),
+            &mut frame,
+            render_cache,
+            &mut core_result,
+        );
+        if let Err(error) = draw_result {
+            let failure = runtime_failure_from_core(error);
+            return Err(terminalize_after_committed_advance_failure(
+                session, "drawing", failure,
+            ));
+        }
         let drawable = ptr::with_exposed_provenance_mut::<c_void>(advance.drawable_identity);
         let completion = completion.into_renderer_completion();
-        let (disposition, _metrics) = unsafe {
-            attachment
-                .surface
-                .present(&mut attachment.factory, frame, drawable, completion)
-        }
-        .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?;
+        let presentation = {
+            let Some(attachment) = session.attachment.as_mut() else {
+                let failure = RuntimeFailure::runtime("preflighted surface became unavailable");
+                return Err(terminalize_after_committed_advance_failure(
+                    session,
+                    "presentation setup",
+                    failure,
+                ));
+            };
+            unsafe {
+                attachment
+                    .surface
+                    .present(&mut session.factory, frame, drawable, completion)
+            }
+        };
+        let (disposition, _metrics) = match presentation {
+            Ok(presentation) => presentation,
+            Err(error) => {
+                let failure = RuntimeFailure::surface(format!("{error:#}"));
+                return Err(terminalize_after_committed_advance_failure(
+                    session,
+                    "presentation",
+                    failure,
+                ));
+            }
+        };
+        let mut result = committed_result_from_core(session, core_result)?;
         result.surface_disposition = surface_disposition(disposition);
         Ok(result)
     }
 
+    fn committed_result_from_core(
+        session: &mut SessionState,
+        result: core::FlowResult,
+    ) -> Result<FlowSessionResultHandle, RuntimeFailure> {
+        result_from_core(result).map_err(|failure| {
+            terminalize_after_committed_advance_failure(session, "result translation", failure)
+        })
+    }
+
     fn runtime_failure_from_core(error: core::FlowSessionError) -> RuntimeFailure {
-        let status = match error.kind() {
-            core::FlowSessionErrorKind::NotFound => NuxStatus::NotFound,
-            core::FlowSessionErrorKind::InvalidArgument
-            | core::FlowSessionErrorKind::LimitExceeded
-            | core::FlowSessionErrorKind::Conflict => NuxStatus::InvalidArgument,
-            core::FlowSessionErrorKind::Runtime => NuxStatus::RuntimeError,
-        };
-        RuntimeFailure::new(status, error.message())
+        RuntimeFailure::flow_session(error.kind(), error.message())
     }
 
     fn state_batch_to_core(batch: OwnedStateBatch) -> Result<core::FlowStateBatch, RuntimeFailure> {
@@ -3090,7 +3381,7 @@ mod configured_session_seam {
         append_outputs(translated, result.outputs)?;
         translated
             .validate()
-            .map_err(|_| RuntimeFailure::runtime("flow result exceeds ABI 1.3 bounds"))?;
+            .map_err(|_| RuntimeFailure::runtime("flow result exceeds ABI 1.4 bounds"))?;
         Ok(())
     }
 
@@ -3202,7 +3493,7 @@ mod configured_session_seam {
                 core::FlowOutputPayload::HostCommand { name, payload } => {
                     translated.kind = NUX_FLOW_OUTPUT_KIND_HOST_COMMAND;
                     translated.name = name.into_bytes();
-                    translated.payload = payload;
+                    translated.payload_root_index = Some(push_host_value(result, payload)?);
                 }
                 core::FlowOutputPayload::RenderRequested { .. } => {
                     translated.kind = NUX_FLOW_OUTPUT_KIND_RENDER_REQUEST;
@@ -3344,14 +3635,80 @@ mod configured_session_seam {
             }
         }
     }
+
+    fn push_host_value(
+        result: &mut FlowSessionResultHandle,
+        value: core::FlowHostValue,
+    ) -> Result<u32, RuntimeFailure> {
+        let (kind, number_value, bool_value, string_value, child_edges) = match value {
+            core::FlowHostValue::Bool(value) => {
+                (NUX_FLOW_VALUE_KIND_BOOL, 0.0, value, Vec::new(), Vec::new())
+            }
+            core::FlowHostValue::Number(value) => (
+                NUX_FLOW_VALUE_KIND_NUMBER,
+                value,
+                false,
+                Vec::new(),
+                Vec::new(),
+            ),
+            core::FlowHostValue::String(value) => (
+                NUX_FLOW_VALUE_KIND_STRING,
+                0.0,
+                false,
+                value.into_bytes(),
+                Vec::new(),
+            ),
+            core::FlowHostValue::List(values) => {
+                let mut edges = Vec::with_capacity(values.len());
+                for value in values {
+                    edges.push(OwnedValueEdge {
+                        node_index: push_host_value(result, value)?,
+                        key: Vec::new(),
+                    });
+                }
+                (NUX_FLOW_VALUE_KIND_LIST, 0.0, false, Vec::new(), edges)
+            }
+            core::FlowHostValue::Object(values) => {
+                let mut edges = Vec::with_capacity(values.len());
+                for (key, value) in values {
+                    edges.push(OwnedValueEdge {
+                        node_index: push_host_value(result, value)?,
+                        key: key.into_bytes(),
+                    });
+                }
+                (NUX_FLOW_VALUE_KIND_OBJECT, 0.0, false, Vec::new(), edges)
+            }
+        };
+        let first_edge = u32::try_from(result.value_arena.edges.len())
+            .map_err(|_| RuntimeFailure::runtime("host value edge index overflowed"))?;
+        let edge_count = u32::try_from(child_edges.len())
+            .map_err(|_| RuntimeFailure::runtime("host value edge count overflowed"))?;
+        result.value_arena.edges.extend(child_edges);
+        let index = u32::try_from(result.value_arena.nodes.len())
+            .map_err(|_| RuntimeFailure::runtime("host value node index overflowed"))?;
+        result.value_arena.nodes.push(OwnedValueNode {
+            kind,
+            number_value,
+            color_value: 0,
+            bool_value,
+            first_edge: if edge_count == 0 { 0 } else { first_edge },
+            edge_count,
+            instance_id: None,
+            identity_value: 0,
+            string_value,
+            schema_id: Vec::new(),
+        });
+        Ok(index)
+    }
 }
 
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
-/// Creates one independent screen session using the ABI 1.3 player-selection
+/// Creates one independent screen session using the ABI 1.4 player-selection
 /// and bootstrap-result contract. Creation never performs an observable
-/// advance. The returned result owns player metadata, bounds, catalog, and
-/// bootstrap value views until explicitly freed.
+/// advance. Authenticated script initialization may return ordered cycle-zero
+/// host-work outputs. The returned result owns those outputs, player metadata,
+/// bounds, catalog, and bootstrap value views until explicitly freed.
 ///
 /// # Safety
 ///
@@ -3387,7 +3744,7 @@ pub unsafe extern "C" fn nux_flow_render_session_create_configured(
                         out_result,
                         status,
                         if status == NuxStatus::AbiMismatch {
-                            "configured session requires ABI 1.3"
+                            "configured session requires ABI 1.4"
                         } else {
                             "configured session descriptor is malformed or oversized"
                         },
@@ -3405,9 +3762,7 @@ pub unsafe extern "C" fn nux_flow_render_session_create_configured(
                     }
                     result_status
                 }
-                Err(failure) => {
-                    write_session_failure(out_result, failure.status, failure.diagnostic)
-                }
+                Err(failure) => write_session_runtime_failure(out_result, failure),
             }
         },
     )
@@ -3415,7 +3770,7 @@ pub unsafe extern "C" fn nux_flow_render_session_create_configured(
 
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
-/// Performs one fully copied ABI 1.3 operation on the session's pinned worker.
+/// Performs one fully copied ABI 1.4 operation on the session's pinned worker.
 /// Rust never calls Swift reentrantly; ordered outputs are returned in the owned
 /// result. State batches are atomic and pointer batches preserve immediate
 /// subcycles inside their returned `cycle` values.
@@ -3448,7 +3803,7 @@ pub unsafe extern "C" fn nux_flow_render_session_perform(
                         out_result,
                         status,
                         if status == NuxStatus::AbiMismatch {
-                            "session operation requires ABI 1.3"
+                            "session operation requires ABI 1.4"
                         } else {
                             "session operation is malformed or exceeds a published bound"
                         },
@@ -3474,7 +3829,7 @@ pub unsafe extern "C" fn nux_flow_render_session_perform(
 }
 
 #[unsafe(no_mangle)]
-/// Returns an ABI 1.3 session result's status, or `NULL_ARGUMENT` for null.
+/// Returns an ABI 1.4 session result's status, or `NULL_ARGUMENT` for null.
 ///
 /// # Safety
 ///
@@ -4569,7 +4924,7 @@ pub unsafe extern "C" fn nux_flow_session_result_diagnostic_at(
 }
 
 #[unsafe(no_mangle)]
-/// Releases one ABI 1.3 session result. Null is a no-op.
+/// Releases one ABI 1.4 session result. Null is a no-op.
 ///
 /// # Safety
 ///
@@ -4590,6 +4945,18 @@ mod tests {
     use super::*;
     #[cfg(feature = "apple-product")]
     use nuxie::flow_session as core;
+    #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]
+    use objc2::rc::{Retained, autoreleasepool};
+    #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]
+    use objc2::runtime::ProtocolObject;
+    #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]
+    use objc2_core_foundation::CGSize;
+    #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]
+    use objc2_metal::{MTLDevice, MTLPixelFormat};
+    #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]
+    use objc2_quartz_core::CAMetalLayer;
+    #[cfg(feature = "apple-product")]
+    use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn bytes(value: &[u8]) -> NuxByteView {
@@ -4603,7 +4970,7 @@ mod tests {
         NuxFlowConfiguredSessionDescriptor {
             struct_size: size_u32::<NuxFlowConfiguredSessionDescriptor>(),
             required_abi_major: 1,
-            minimum_abi_minor: 3,
+            minimum_abi_minor: 4,
             artboard_name: NuxByteView::default(),
             player_name: NuxByteView::default(),
         }
@@ -4613,7 +4980,7 @@ mod tests {
         NuxFlowSessionOperation {
             struct_size: size_u32::<NuxFlowSessionOperation>(),
             required_abi_major: 1,
-            minimum_abi_minor: 3,
+            minimum_abi_minor: 4,
             kind,
             state_batch: ptr::null(),
             pointer_batch: ptr::null(),
@@ -4639,21 +5006,347 @@ mod tests {
         }
     }
 
+    // Compiled with workspace-pinned `luaur-compiler` 0.1.8 after
+    // `luaur_common::set_all_flags(true)`, by passing this exact source to
+    // `luau_compile` with default options. Exact source follows, including its
+    // leading and trailing blank lines (the unsigned envelope byte is added below):
+    //
+    // local nuxie = require("nuxie")
+    //
+    // nuxie.trigger("fixture_loaded", {
+    //     authenticated = true,
+    //     nested = { "apple", 14 },
+    // })
+    //
+    // return function(_context)
+    //     return {
+    //         init = function(_self)
+    //             nuxie.response.set("welcome", {
+    //                 title = "Hello from Luau",
+    //                 enabled = true,
+    //                 count = 14,
+    //             })
+    //             return true
+    //         end,
+    //         advance = function(_self, seconds)
+    //             if seconds >= 1 then
+    //                 for command = 1, 257 do
+    //                     nuxie.trigger("overflow_" .. command)
+    //                 end
+    //             else
+    //                 nuxie.trigger("sibling_ok", { delta = seconds })
+    //             end
+    //             return false
+    //         end,
+    //     }
+    // end
+    //
+    #[cfg(feature = "apple-product")]
+    const SCRIPTED_APPLE_SEAM_BYTECODE: &[u8] = &[
+        11, 3, 19, 8, 114, 101, 115, 112, 111, 110, 115, 101, 3, 115, 101, 116, 7, 119, 101, 108,
+        99, 111, 109, 101, 5, 116, 105, 116, 108, 101, 15, 72, 101, 108, 108, 111, 32, 102, 114,
+        111, 109, 32, 76, 117, 97, 117, 7, 101, 110, 97, 98, 108, 101, 100, 5, 99, 111, 117, 110,
+        116, 4, 105, 110, 105, 116, 7, 116, 114, 105, 103, 103, 101, 114, 9, 111, 118, 101, 114,
+        102, 108, 111, 119, 95, 10, 115, 105, 98, 108, 105, 110, 103, 95, 111, 107, 5, 100, 101,
+        108, 116, 97, 7, 97, 100, 118, 97, 110, 99, 101, 7, 114, 101, 113, 117, 105, 114, 101, 5,
+        110, 117, 120, 105, 101, 14, 102, 105, 120, 116, 117, 114, 101, 95, 108, 111, 97, 100, 101,
+        100, 13, 97, 117, 116, 104, 101, 110, 116, 105, 99, 97, 116, 101, 100, 6, 110, 101, 115,
+        116, 101, 100, 5, 97, 112, 112, 108, 101, 0, 4, 4, 1, 1, 0, 0, 0, 11, 9, 1, 0, 0, 15, 1, 1,
+        87, 0, 0, 0, 0, 15, 1, 1, 83, 1, 0, 0, 0, 5, 2, 2, 0, 54, 3, 9, 0, 87, 1, 3, 1, 0, 0, 0, 0,
+        3, 1, 1, 0, 22, 1, 2, 0, 10, 3, 1, 3, 2, 3, 3, 3, 4, 3, 5, 3, 6, 1, 1, 3, 7, 2, 0, 0, 0, 0,
+        0, 0, 44, 64, 8, 3, 3, 4, 0, 0, 0, 5, 6, 0, 0, 0, 7, 8, 0, 0, 0, 0, 11, 8, 1, 24, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 5, 0, 12, 0, 0, 0, 0, 1, 0, 7, 9, 2, 1, 0, 0, 0, 28, 4, 2, 1, 0, 31, 2,
+        15, 0, 1, 0, 0, 0, 4, 4, 1, 0, 4, 2, 1, 1, 4, 3, 1, 0, 56, 2, 19, 0, 9, 5, 0, 0, 15, 5, 5,
+        212, 0, 0, 0, 0, 5, 7, 1, 0, 6, 8, 4, 0, 49, 6, 7, 8, 87, 5, 2, 1, 0, 0, 0, 0, 57, 2, 247,
+        255, 23, 0, 9, 0, 9, 2, 0, 0, 15, 2, 2, 212, 0, 0, 0, 0, 5, 3, 2, 0, 54, 4, 4, 0, 16, 1, 4,
+        214, 3, 0, 0, 0, 87, 2, 3, 1, 1, 0, 0, 0, 3, 2, 0, 0, 22, 2, 2, 0, 5, 3, 9, 3, 10, 3, 11,
+        3, 12, 5, 1, 3, 0, 19, 13, 1, 24, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 255, 0, 4,
+        0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 20, 0, 0, 0, 0, 2, 0, 13, 0, 24, 3, 1, 1, 0, 0, 0, 10, 54, 1,
+        2, 0, 64, 2, 3, 0, 70, 2, 0, 0, 16, 2, 1, 19, 0, 0, 0, 0, 64, 2, 4, 0, 70, 2, 0, 0, 16, 2,
+        1, 210, 1, 0, 0, 0, 22, 1, 2, 0, 5, 3, 8, 3, 13, 5, 2, 0, 1, 6, 0, 6, 1, 2, 0, 1, 9, 0, 1,
+        24, 0, 1, 0, 0, 0, 8, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 7, 0, 0, 1, 2, 0, 21, 65, 0, 0, 0, 12,
+        0, 1, 0, 0, 0, 0, 64, 5, 1, 2, 0, 21, 0, 2, 2, 15, 1, 0, 212, 3, 0, 0, 0, 5, 2, 4, 0, 54,
+        3, 8, 0, 53, 4, 0, 0, 2, 0, 0, 0, 5, 5, 9, 0, 4, 6, 14, 0, 55, 4, 5, 3, 1, 0, 0, 0, 16, 4,
+        3, 90, 7, 0, 0, 0, 21, 1, 3, 1, 64, 1, 10, 0, 70, 0, 0, 0, 22, 1, 2, 0, 11, 3, 14, 4, 0, 0,
+        0, 64, 3, 15, 3, 9, 3, 16, 3, 17, 1, 1, 3, 18, 8, 2, 5, 6, 0, 0, 0, 7, 255, 255, 255, 255,
+        3, 19, 6, 2, 1, 2, 1, 0, 1, 24, 0, 1, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 254, 5,
+        0, 0, 1, 0, 0, 0, 0, 0, 3,
+    ];
+
+    #[cfg(feature = "apple-product")]
+    fn scripted_fixture_push_var_uint(output: &mut Vec<u8>, mut value: u64) {
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            output.push(byte);
+            if value == 0 {
+                break;
+            }
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn scripted_fixture_property_key(type_name: &str, property_name: &str) -> u16 {
+        let definition = nuxie_schema::definition_by_name(type_name).expect("fixture type exists");
+        definition
+            .properties
+            .iter()
+            .chain(definition.ancestors.iter().flat_map(|ancestor| {
+                nuxie_schema::definition_by_name(ancestor)
+                    .expect("fixture ancestor exists")
+                    .properties
+                    .iter()
+            }))
+            .find(|property| property.name == property_name)
+            .expect("fixture property exists")
+            .key
+            .int
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn scripted_fixture_push_object(
+        output: &mut Vec<u8>,
+        type_name: &str,
+        properties: impl FnOnce(&mut Vec<u8>),
+    ) {
+        scripted_fixture_push_var_uint(
+            output,
+            u64::from(
+                nuxie_schema::definition_by_name(type_name)
+                    .expect("fixture type exists")
+                    .type_key
+                    .int,
+            ),
+        );
+        properties(output);
+        scripted_fixture_push_var_uint(output, 0);
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn scripted_fixture_push_uint(
+        output: &mut Vec<u8>,
+        type_name: &str,
+        property_name: &str,
+        value: u64,
+    ) {
+        scripted_fixture_push_var_uint(
+            output,
+            u64::from(scripted_fixture_property_key(type_name, property_name)),
+        );
+        scripted_fixture_push_var_uint(output, value);
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn scripted_fixture_push_f32(
+        output: &mut Vec<u8>,
+        type_name: &str,
+        property_name: &str,
+        value: f32,
+    ) {
+        scripted_fixture_push_var_uint(
+            output,
+            u64::from(scripted_fixture_property_key(type_name, property_name)),
+        );
+        output.extend_from_slice(&value.to_le_bytes());
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn scripted_fixture_push_blob(
+        output: &mut Vec<u8>,
+        type_name: &str,
+        property_name: &str,
+        value: &[u8],
+    ) {
+        scripted_fixture_push_var_uint(
+            output,
+            u64::from(scripted_fixture_property_key(type_name, property_name)),
+        );
+        scripted_fixture_push_var_uint(output, value.len() as u64);
+        output.extend_from_slice(value);
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn scripted_fixture_push_string(
+        output: &mut Vec<u8>,
+        type_name: &str,
+        property_name: &str,
+        value: &str,
+    ) {
+        scripted_fixture_push_blob(output, type_name, property_name, value.as_bytes());
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn signed_scripted_apple_seam_artifact() -> Vec<u8> {
+        let mut protocol_payload = vec![0];
+        protocol_payload.extend_from_slice(SCRIPTED_APPLE_SEAM_BYTECODE);
+
+        let mut output = b"RIVE".to_vec();
+        scripted_fixture_push_var_uint(&mut output, 7);
+        scripted_fixture_push_var_uint(&mut output, 0);
+        scripted_fixture_push_var_uint(&mut output, 9_403);
+        scripted_fixture_push_var_uint(&mut output, 0);
+        scripted_fixture_push_object(&mut output, "Backboard", |_| {});
+        scripted_fixture_push_object(&mut output, "ScriptAsset", |output| {
+            scripted_fixture_push_uint(output, "ScriptAsset", "assetId", 0);
+            scripted_fixture_push_string(output, "ScriptAsset", "name", "AppleSeamProtocol");
+        });
+        scripted_fixture_push_object(&mut output, "FileAssetContents", |output| {
+            scripted_fixture_push_blob(output, "FileAssetContents", "bytes", &protocol_payload);
+        });
+        scripted_fixture_push_object(&mut output, "Artboard", |output| {
+            scripted_fixture_push_f32(output, "Artboard", "width", 100.0);
+            scripted_fixture_push_f32(output, "Artboard", "height", 100.0);
+        });
+        scripted_fixture_push_object(&mut output, "ScriptedDrawable", |output| {
+            scripted_fixture_push_uint(output, "ScriptedDrawable", "parentId", 0);
+            scripted_fixture_push_uint(output, "ScriptedDrawable", "scriptAssetId", 0);
+        });
+        output
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn with_signed_scripted_apple_import_request<R>(
+        body: impl FnOnce(&NuxFlowImportRequest) -> R,
+    ) -> R {
+        use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+        use ed25519_dalek::{Signer as _, SigningKey};
+        use sha2::{Digest as _, Sha256};
+
+        let artifact = signed_scripted_apple_seam_artifact();
+        let artifact_sha256 = Sha256::digest(&artifact)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let manifest = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "flowId": "flow-scripted-apple-seam",
+            "buildId": "build-scripted-apple-seam",
+            "renderer": "rive",
+            "riv": {
+                "path": "flow.riv",
+                "sha256": artifact_sha256,
+                "sizeBytes": artifact.len(),
+            },
+            "assets": { "images": [], "fonts": [] },
+        }))
+        .expect("fixture manifest encodes");
+        let signing_key = SigningKey::from_bytes(&[14; 32]);
+        let signature = signing_key.sign(&manifest);
+        let signature_envelope = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "signs": "nuxie-manifest.json",
+            "algorithm": "ed25519",
+            "keyId": "apple-seam-key",
+            "signatureBase64": BASE64.encode(signature.to_bytes()),
+        }))
+        .expect("fixture signature envelope encodes");
+        let flow_id = b"flow-scripted-apple-seam";
+        let build_id = b"build-scripted-apple-seam";
+        let key_id = b"apple-seam-key";
+        let public_key = signing_key.verifying_key().to_bytes();
+        let selected_key = NuxFlowAuthorizationKey {
+            struct_size: size_u32::<NuxFlowAuthorizationKey>(),
+            key_id: bytes(key_id),
+            ed25519_public_key: bytes(&public_key),
+        };
+        let request = NuxFlowImportRequest {
+            struct_size: size_u32::<NuxFlowImportRequest>(),
+            artifact_bytes: bytes(&artifact),
+            expected_flow_id: bytes(flow_id),
+            expected_build_id: bytes(build_id),
+            manifest_bytes: bytes(&manifest),
+            signature_envelope_bytes: bytes(&signature_envelope),
+            selected_key: &selected_key,
+            external_assets: ptr::null(),
+            external_asset_count: 0,
+        };
+        body(&request)
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn copied_byte_view(view: NuxByteView) -> Vec<u8> {
+        if view.len == 0 {
+            return Vec::new();
+        }
+        assert!(!view.data.is_null(), "non-empty borrowed byte view is null");
+        unsafe { slice::from_raw_parts(view.data, view.len as usize) }.to_vec()
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn public_output_at(result: *const NuxFlowSessionResult, index: u64) -> NuxFlowOutputView {
+        let mut output: NuxFlowOutputView = unsafe { std::mem::zeroed() };
+        output.struct_size = size_u32::<NuxFlowOutputView>();
+        assert_eq!(
+            unsafe { nux_flow_session_result_output_at(result, index, &mut output) },
+            NuxStatus::Ok
+        );
+        output
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn public_value_node_at(result: *const NuxFlowSessionResult, index: u32) -> NuxFlowValueNode {
+        let mut node = null_node(NUX_FLOW_VALUE_KIND_NULL);
+        assert_eq!(
+            unsafe { nux_flow_session_result_value_node_at(result, u64::from(index), &mut node) },
+            NuxStatus::Ok
+        );
+        node
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn public_value_edge_at(result: *const NuxFlowSessionResult, index: u32) -> NuxFlowValueEdge {
+        let mut edge: NuxFlowValueEdge = unsafe { std::mem::zeroed() };
+        edge.struct_size = size_u32::<NuxFlowValueEdge>();
+        assert_eq!(
+            unsafe { nux_flow_session_result_value_edge_at(result, u64::from(index), &mut edge) },
+            NuxStatus::Ok
+        );
+        edge
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn public_object_child(
+        result: *const NuxFlowSessionResult,
+        object_index: u32,
+        key: &[u8],
+    ) -> u32 {
+        let object = public_value_node_at(result, object_index);
+        assert_eq!(object.kind, NUX_FLOW_VALUE_KIND_OBJECT);
+        for offset in 0..object.edge_count {
+            let edge_index = object
+                .first_edge
+                .checked_add(offset)
+                .expect("fixture edge index remains bounded");
+            let edge = public_value_edge_at(result, edge_index);
+            if copied_byte_view(edge.key) == key {
+                return edge.node_index;
+            }
+        }
+        panic!(
+            "typed host object is missing key {:?}",
+            String::from_utf8_lossy(key)
+        );
+    }
+
     #[test]
-    fn abi_13_handshake_preserves_structurally_valid_abi_11_and_12_compatibility() {
+    fn abi_14_handshake_preserves_structurally_valid_abi_11_through_13_compatibility() {
         assert_eq!(NUX_RUNTIME_ABI_MAJOR, 1);
-        assert_eq!(NUX_RUNTIME_ABI_MINOR, 3);
-        assert_eq!(NUX_FLOW_SESSION_ABI_MINOR, 3);
+        assert_eq!(NUX_RUNTIME_ABI_MINOR, 4);
+        assert_eq!(NUX_FLOW_SESSION_ABI_MINOR, 4);
         assert_eq!(MINIMUM_SUPPORTED_ABI_MINOR, 1);
         assert_eq!(nux_runtime_require_abi(1, 1), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 2), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 3), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(1, 4), NuxStatus::AbiMismatch);
+        assert_eq!(nux_runtime_require_abi(1, 4), NuxStatus::Ok);
+        assert_eq!(nux_runtime_require_abi(1, 5), NuxStatus::AbiMismatch);
         assert_eq!(nux_runtime_require_abi(2, 1), NuxStatus::AbiMismatch);
     }
 
     #[test]
-    fn abi_13_layouts_preserve_abi_11_and_12_prefixes() {
+    fn abi_14_layouts_preserve_abi_11_through_13_prefixes() {
         assert_eq!(std::mem::size_of::<NuxFlowSessionDescriptor>(), 40);
         assert_eq!(std::mem::size_of::<NuxFrameOperation>(), 40);
         assert_eq!(
@@ -4667,7 +5360,7 @@ mod tests {
         assert_eq!(std::mem::size_of::<NuxFlowInstanceReference>(), 16);
         assert_eq!(std::mem::size_of::<NuxFlowStateMutation>(), 88);
         assert_eq!(std::mem::size_of::<NuxFlowStateBatch>(), 56);
-        assert_eq!(std::mem::size_of::<NuxFlowPointerEvent>(), 20);
+        assert_eq!(std::mem::size_of::<NuxFlowPointerEvent>(), 24);
         assert_eq!(std::mem::size_of::<NuxFlowPointerBatch>(), 24);
         assert_eq!(std::mem::size_of::<NuxFlowAdvanceOperation>(), 48);
         assert_eq!(std::mem::size_of::<NuxFlowQuery>(), 8);
@@ -4677,6 +5370,10 @@ mod tests {
         assert_eq!(std::mem::size_of::<NuxFlowSchemaPropertyView>(), 80);
         assert_eq!(std::mem::size_of::<NuxFlowEnumLabelView>(), 24);
         assert_eq!(std::mem::size_of::<NuxFlowOutputView>(), 160);
+        assert_eq!(
+            std::mem::offset_of!(NuxFlowOutputView, payload_root_index),
+            12
+        );
         assert_eq!(std::mem::offset_of!(NuxFlowOutputView, has_open_url), 120);
         assert_eq!(std::mem::offset_of!(NuxFlowOutputView, open_url), 128);
         assert_eq!(
@@ -4761,6 +5458,191 @@ mod tests {
         assert_eq!(ordinary.open_url_target.len, 0);
 
         unsafe { nux_flow_session_result_free(result) };
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn typed_host_command_uses_an_object_root_and_empty_opaque_payload() {
+        let payload = core::FlowHostValue::Object(BTreeMap::from([
+            (
+                "alpha".to_owned(),
+                core::FlowHostValue::String("first".to_owned()),
+            ),
+            (
+                "nested".to_owned(),
+                core::FlowHostValue::List(vec![
+                    core::FlowHostValue::Bool(true),
+                    core::FlowHostValue::Object(BTreeMap::from([(
+                        "score".to_owned(),
+                        core::FlowHostValue::Number(42.5),
+                    )])),
+                ]),
+            ),
+        ]));
+        let result = configured_session_seam::result_from_core(core::FlowResult {
+            outputs: vec![core::FlowOutput {
+                sequence: 1,
+                cycle: 0,
+                phase: core::FlowOutputPhase::HostWork,
+                payload: core::FlowOutputPayload::HostCommand {
+                    name: "created".to_owned(),
+                    payload,
+                },
+            }],
+            dirty: false,
+            settled: true,
+            wake_after_seconds: None,
+            snapshot: None,
+            values: None,
+            catalog: None,
+            player_inputs: None,
+            created_instances: Vec::new(),
+        })
+        .expect("typed host output must translate");
+
+        assert!(!result.has_values, "host payloads are not state snapshots");
+        assert_eq!(result.outputs.len(), 1);
+        let output = &result.outputs[0];
+        assert_eq!(output.phase, NUX_FLOW_OUTPUT_PHASE_HOST_WORK);
+        assert_eq!(output.kind, NUX_FLOW_OUTPUT_KIND_HOST_COMMAND);
+        assert!(output.payload.is_empty());
+        let root_index = output.payload_root_index.expect("host object root");
+        let root = &result.value_arena.nodes[root_index as usize];
+        assert_eq!(root.kind, NUX_FLOW_VALUE_KIND_OBJECT);
+        let root_edges = &result.value_arena.edges
+            [root.first_edge as usize..(root.first_edge + root.edge_count) as usize];
+        assert_eq!(
+            root_edges
+                .iter()
+                .map(|edge| edge.key.as_slice())
+                .collect::<Vec<_>>(),
+            vec![b"alpha".as_slice(), b"nested".as_slice()]
+        );
+        let nested = &result.value_arena.nodes[root_edges[1].node_index as usize];
+        assert_eq!(nested.kind, NUX_FLOW_VALUE_KIND_LIST);
+        assert_eq!(nested.edge_count, 2);
+        assert_eq!(result.validate(), Ok(()));
+
+        let mut unsorted = result.clone();
+        let root = &unsorted.value_arena.nodes[root_index as usize];
+        let first_edge = root.first_edge as usize;
+        unsorted.value_arena.edges.swap(first_edge, first_edge + 1);
+        assert_eq!(unsorted.validate(), Err(NuxStatus::RuntimeError));
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn host_command_result_validation_rejects_malformed_typed_payloads() {
+        let valid = configured_session_seam::result_from_core(core::FlowResult {
+            outputs: vec![core::FlowOutput {
+                sequence: 1,
+                cycle: 1,
+                phase: core::FlowOutputPhase::HostWork,
+                payload: core::FlowOutputPayload::HostCommand {
+                    name: "event".to_owned(),
+                    payload: core::FlowHostValue::Object(BTreeMap::from([(
+                        "value".to_owned(),
+                        core::FlowHostValue::Number(1.0),
+                    )])),
+                },
+            }],
+            dirty: false,
+            settled: true,
+            wake_after_seconds: None,
+            snapshot: None,
+            values: None,
+            catalog: None,
+            player_inputs: None,
+            created_instances: Vec::new(),
+        })
+        .expect("valid host output translates");
+
+        let mut missing_root = valid.clone();
+        missing_root.outputs[0].payload_root_index = None;
+        assert_eq!(missing_root.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut scalar_root = valid.clone();
+        scalar_root.outputs[0].payload_root_index = Some(0);
+        assert_eq!(scalar_root.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut wrong_phase = valid.clone();
+        wrong_phase.outputs[0].phase = NUX_FLOW_OUTPUT_PHASE_RENDER;
+        assert_eq!(wrong_phase.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut empty_name = valid.clone();
+        empty_name.outputs[0].name.clear();
+        assert_eq!(empty_name.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut nonempty_path = valid.clone();
+        nonempty_path.outputs[0].path = b"state/path".to_vec();
+        assert_eq!(nonempty_path.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut instance_id = valid.clone();
+        instance_id.outputs[0].instance_id = Some(7);
+        assert_eq!(instance_id.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut origin_mutation_id = valid.clone();
+        origin_mutation_id.outputs[0].origin_mutation_id = Some(11);
+        assert_eq!(origin_mutation_id.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut event_type = valid.clone();
+        event_type.outputs[0].event_type = 1;
+        assert_eq!(event_type.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut event_range = valid.clone();
+        event_range.outputs[0].first_event_property = 1;
+        assert_eq!(event_range.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut delay = valid.clone();
+        delay.outputs[0].delay_seconds = 0.25;
+        assert_eq!(delay.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut open_url = valid.clone();
+        open_url.outputs[0].open_url = Some(OwnedOpenUrl {
+            url: b"https://example.com".to_vec(),
+            target: b"_self".to_vec(),
+        });
+        assert_eq!(open_url.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut opaque_payload = valid.clone();
+        opaque_payload.outputs[0].payload = vec![1];
+        assert_eq!(opaque_payload.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut nonfinite = valid.clone();
+        nonfinite.value_arena.nodes[0].number_value = f64::NAN;
+        assert_eq!(nonfinite.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut null_value = valid.clone();
+        null_value.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_NULL;
+        null_value.value_arena.nodes[0].number_value = 0.0;
+        assert_eq!(null_value.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut enum_value = valid.clone();
+        enum_value.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_ENUM;
+        enum_value.value_arena.nodes[0].number_value = 0.0;
+        enum_value.value_arena.nodes[0].identity_value = 1;
+        assert_eq!(enum_value.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut color_value = valid.clone();
+        color_value.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_COLOR;
+        color_value.value_arena.nodes[0].number_value = 0.0;
+        color_value.value_arena.nodes[0].color_value = 0xff00ffff;
+        assert_eq!(color_value.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut view_model_value = valid.clone();
+        view_model_value.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_VIEW_MODEL;
+        view_model_value.value_arena.nodes[0].number_value = 0.0;
+        assert_eq!(view_model_value.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut schema_object = valid.clone();
+        schema_object.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_OBJECT;
+        schema_object.value_arena.nodes[0].number_value = 0.0;
+        schema_object.value_arena.nodes[0].schema_id = b"Payload".to_vec();
+        assert_eq!(schema_object.validate(), Err(NuxStatus::RuntimeError));
+
+        let mut malformed_edge = valid;
+        malformed_edge.value_arena.edges[0].node_index = u32::MAX;
+        assert_eq!(malformed_edge.validate(), Err(NuxStatus::RuntimeError));
     }
 
     #[test]
@@ -4905,12 +5787,18 @@ mod tests {
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
-        descriptor.minimum_abi_minor = 4;
+        descriptor.minimum_abi_minor = 3;
         assert!(matches!(
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
-        descriptor.minimum_abi_minor = 3;
+        descriptor.minimum_abi_minor = 5;
+        assert!(matches!(
+            unsafe { copy_configured_session_descriptor(&descriptor) },
+            Err(NUX_STATUS_ABI_MISMATCH)
+        ));
+        descriptor.minimum_abi_minor = 4;
+        assert!(unsafe { copy_configured_session_descriptor(&descriptor) }.is_ok());
         descriptor.required_abi_major = 2;
         assert!(matches!(
             unsafe { copy_configured_session_descriptor(&descriptor) },
@@ -4924,6 +5812,42 @@ mod tests {
         assert!(matches!(
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_INVALID_ARGUMENT)
+        ));
+    }
+
+    #[test]
+    fn session_operation_requires_the_exact_abi_14_handshake() {
+        let advance = NuxFlowAdvanceOperation {
+            struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+            timestamp_seconds: 0.0,
+            delta_seconds: 0.0,
+            render: 0,
+            apple_drawable: ptr::null_mut(),
+            completion_context: ptr::null_mut(),
+            completion_callback: None,
+        };
+        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+        request.advance = &advance;
+        assert!(matches!(
+            unsafe { copy_session_operation(&request) },
+            Ok(OwnedSessionOperation::Advance(_))
+        ));
+
+        request.minimum_abi_minor = 3;
+        assert!(matches!(
+            unsafe { copy_session_operation(&request) },
+            Err(NUX_STATUS_ABI_MISMATCH)
+        ));
+        request.minimum_abi_minor = 5;
+        assert!(matches!(
+            unsafe { copy_session_operation(&request) },
+            Err(NUX_STATUS_ABI_MISMATCH)
+        ));
+        request.minimum_abi_minor = 4;
+        request.required_abi_major = 2;
+        assert!(matches!(
+            unsafe { copy_session_operation(&request) },
+            Err(NUX_STATUS_ABI_MISMATCH)
         ));
     }
 
@@ -5046,7 +5970,25 @@ mod tests {
             pointer_id: 1,
             x: 0.0,
             y: 0.0,
+            timestamp_seconds: 12.5,
         };
+        assert_eq!(
+            unsafe {
+                copy_pointer_batch(&NuxFlowPointerBatch {
+                    struct_size: size_u32::<NuxFlowPointerBatch>(),
+                    events: &event,
+                    event_count: 1,
+                })
+            }
+            .expect("valid pointer event copies"),
+            [OwnedPointerEvent {
+                kind: NUX_FLOW_POINTER_EVENT_KIND_DOWN,
+                pointer_id: 1,
+                x: 0.0,
+                y: 0.0,
+                timestamp_seconds: 12.5,
+            }]
+        );
         let batch = NuxFlowPointerBatch {
             struct_size: size_u32::<NuxFlowPointerBatch>(),
             events: &event,
@@ -5058,6 +6000,18 @@ mod tests {
         ));
 
         let mut invalid_event = event;
+        invalid_event.timestamp_seconds = -1.0;
+        let batch = NuxFlowPointerBatch {
+            struct_size: size_u32::<NuxFlowPointerBatch>(),
+            events: &invalid_event,
+            event_count: 1,
+        };
+        assert!(matches!(
+            unsafe { copy_pointer_batch(&batch) },
+            Err(NUX_STATUS_INVALID_ARGUMENT)
+        ));
+
+        invalid_event = event;
         invalid_event.pointer_id = 0;
         let batch = NuxFlowPointerBatch {
             struct_size: size_u32::<NuxFlowPointerBatch>(),
@@ -5313,6 +6267,66 @@ mod tests {
         unsafe { nux_flow_session_result_free(result) };
     }
 
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn configured_create_and_perform_preserve_flow_failure_diagnostic_codes() {
+        let cases = [
+            (
+                core::FlowSessionErrorKind::ScriptResourceExceeded,
+                SCRIPT_RESOURCE_DIAGNOSTIC_CODE,
+            ),
+            (
+                core::FlowSessionErrorKind::ResultLimitExceeded,
+                RESULT_LIMIT_DIAGNOSTIC_CODE,
+            ),
+            (
+                core::FlowSessionErrorKind::Runtime,
+                diagnostic_code_for_status(NuxStatus::RuntimeError),
+            ),
+        ];
+
+        for (kind, expected_code) in cases {
+            let mut creation_result = ptr::null_mut();
+            assert_eq!(
+                write_session_runtime_failure(
+                    &mut creation_result,
+                    RuntimeFailure::flow_session(kind, "configured creation failed"),
+                ),
+                NuxStatus::RuntimeError
+            );
+            assert_session_diagnostic_code(creation_result, expected_code);
+            unsafe { nux_flow_session_result_free(creation_result) };
+
+            let perform_result =
+                Box::into_raw(Box::new(FlowSessionResultHandle::from_runtime_failure(
+                    RuntimeFailure::flow_session(kind, "configured perform failed"),
+                )))
+                .cast::<NuxFlowSessionResult>();
+            assert_session_diagnostic_code(perform_result, expected_code);
+            unsafe { nux_flow_session_result_free(perform_result) };
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    fn assert_session_diagnostic_code(result: *const NuxFlowSessionResult, expected_code: &[u8]) {
+        assert_eq!(
+            unsafe { nux_flow_session_result_status(result) },
+            NuxStatus::RuntimeError
+        );
+        assert_eq!(
+            unsafe { nux_flow_session_result_diagnostic_count(result) },
+            1
+        );
+        let mut diagnostic = NuxDiagnosticView::default();
+        assert_eq!(
+            unsafe { nux_flow_session_result_diagnostic_at(result, 0, &mut diagnostic) },
+            NuxStatus::Ok
+        );
+        let code =
+            unsafe { slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize) };
+        assert_eq!(code, expected_code);
+    }
+
     #[test]
     fn result_views_borrow_owned_storage_until_explicit_free() {
         let mut result = FlowSessionResultHandle::empty_success();
@@ -5446,6 +6460,592 @@ mod tests {
         result.outputs[1].sequence = 2;
         result.outputs[1].cycle = 1;
         assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn signed_scripted_artifact_crosses_public_configured_session_seam_with_isolated_resource_failure()
+     {
+        with_signed_scripted_apple_import_request(|request| {
+            let mut context = ptr::null_mut();
+            let mut import_result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_runtime_context_create(request, &mut context, &mut import_result)
+                },
+                NuxStatus::Ok
+            );
+            assert!(!context.is_null());
+            assert_eq!(
+                unsafe { nux_operation_result_script_authorization(import_result) },
+                NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED
+            );
+            assert_eq!(
+                unsafe { nux_operation_result_diagnostic_count(import_result) },
+                0
+            );
+            unsafe { nux_operation_result_free(import_result) };
+
+            let descriptor = configured_descriptor();
+            let mut session = ptr::null_mut();
+            let mut creation = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_create_configured(
+                        context,
+                        &descriptor,
+                        &mut session,
+                        &mut creation,
+                    )
+                },
+                NuxStatus::Ok
+            );
+            assert!(!session.is_null());
+            assert_eq!(
+                unsafe { nux_flow_session_result_status(creation) },
+                NuxStatus::Ok
+            );
+            assert_eq!(unsafe { nux_flow_session_result_output_count(creation) }, 2);
+
+            let loaded = public_output_at(creation, 0);
+            assert_eq!(loaded.phase, NUX_FLOW_OUTPUT_PHASE_HOST_WORK);
+            assert_eq!(loaded.kind, NUX_FLOW_OUTPUT_KIND_HOST_COMMAND);
+            assert_eq!(loaded.sequence, 1);
+            assert_eq!(loaded.cycle, 0);
+            assert_eq!(copied_byte_view(loaded.name), b"fixture_loaded");
+            assert_eq!(loaded.payload.len, 0);
+            let loaded_root = public_value_node_at(creation, loaded.payload_root_index);
+            assert_eq!(loaded_root.kind, NUX_FLOW_VALUE_KIND_OBJECT);
+            let authenticated = public_value_node_at(
+                creation,
+                public_object_child(creation, loaded.payload_root_index, b"authenticated"),
+            );
+            assert_eq!(authenticated.kind, NUX_FLOW_VALUE_KIND_BOOL);
+            assert_eq!(authenticated.bool_value, 1);
+            let nested_index = public_object_child(creation, loaded.payload_root_index, b"nested");
+            let nested = public_value_node_at(creation, nested_index);
+            assert_eq!(nested.kind, NUX_FLOW_VALUE_KIND_LIST);
+            assert_eq!(nested.edge_count, 2);
+            let first_nested = public_value_edge_at(creation, nested.first_edge);
+            assert!(copied_byte_view(first_nested.key).is_empty());
+            let first_nested = public_value_node_at(creation, first_nested.node_index);
+            assert_eq!(first_nested.kind, NUX_FLOW_VALUE_KIND_STRING);
+            assert_eq!(copied_byte_view(first_nested.string_value), b"apple");
+            let second_edge_index = nested
+                .first_edge
+                .checked_add(1)
+                .expect("fixture list has a second edge");
+            let second_nested = public_value_edge_at(creation, second_edge_index);
+            let second_nested = public_value_node_at(creation, second_nested.node_index);
+            assert_eq!(second_nested.kind, NUX_FLOW_VALUE_KIND_NUMBER);
+            assert_eq!(second_nested.number_value, 14.0);
+
+            let response = public_output_at(creation, 1);
+            assert_eq!(response.phase, NUX_FLOW_OUTPUT_PHASE_HOST_WORK);
+            assert_eq!(response.kind, NUX_FLOW_OUTPUT_KIND_HOST_COMMAND);
+            assert_eq!(response.sequence, 2);
+            assert_eq!(response.cycle, 0);
+            assert_eq!(copied_byte_view(response.name), b"$response_set");
+            let field = public_value_node_at(
+                creation,
+                public_object_child(creation, response.payload_root_index, b"field"),
+            );
+            assert_eq!(field.kind, NUX_FLOW_VALUE_KIND_STRING);
+            assert_eq!(copied_byte_view(field.string_value), b"welcome");
+            let response_value =
+                public_object_child(creation, response.payload_root_index, b"value");
+            let title = public_value_node_at(
+                creation,
+                public_object_child(creation, response_value, b"title"),
+            );
+            assert_eq!(title.kind, NUX_FLOW_VALUE_KIND_STRING);
+            assert_eq!(copied_byte_view(title.string_value), b"Hello from Luau");
+            let enabled = public_value_node_at(
+                creation,
+                public_object_child(creation, response_value, b"enabled"),
+            );
+            assert_eq!(enabled.kind, NUX_FLOW_VALUE_KIND_BOOL);
+            assert_eq!(enabled.bool_value, 1);
+            let count = public_value_node_at(
+                creation,
+                public_object_child(creation, response_value, b"count"),
+            );
+            assert_eq!(count.kind, NUX_FLOW_VALUE_KIND_NUMBER);
+            assert_eq!(count.number_value, 14.0);
+            unsafe { nux_flow_session_result_free(creation) };
+
+            let mut sibling = ptr::null_mut();
+            let mut sibling_creation = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_create_configured(
+                        context,
+                        &descriptor,
+                        &mut sibling,
+                        &mut sibling_creation,
+                    )
+                },
+                NuxStatus::Ok
+            );
+            assert!(!sibling.is_null());
+            assert_eq!(
+                unsafe { nux_flow_session_result_status(sibling_creation) },
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                unsafe { nux_flow_session_result_output_count(sibling_creation) },
+                2
+            );
+            unsafe { nux_flow_session_result_free(sibling_creation) };
+
+            let overflowing_advance = NuxFlowAdvanceOperation {
+                struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+                timestamp_seconds: 1.0,
+                delta_seconds: 1.0,
+                render: 0,
+                apple_drawable: ptr::null_mut(),
+                completion_context: ptr::null_mut(),
+                completion_callback: None,
+            };
+            let mut overflowing_operation = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+            overflowing_operation.advance = &overflowing_advance;
+            let mut overflow_result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_perform(
+                        session,
+                        &overflowing_operation,
+                        &mut overflow_result,
+                    )
+                },
+                NuxStatus::RuntimeError
+            );
+            assert_session_diagnostic_code(overflow_result, SCRIPT_RESOURCE_DIAGNOSTIC_CODE);
+            assert_eq!(
+                unsafe { nux_flow_session_result_output_count(overflow_result) },
+                0,
+                "partial HostWork must not cross the public result seam"
+            );
+            unsafe { nux_flow_session_result_free(overflow_result) };
+
+            let sibling_advance = NuxFlowAdvanceOperation {
+                struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+                timestamp_seconds: 0.25,
+                delta_seconds: 0.25,
+                render: 0,
+                apple_drawable: ptr::null_mut(),
+                completion_context: ptr::null_mut(),
+                completion_callback: None,
+            };
+            let mut sibling_operation = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+            sibling_operation.advance = &sibling_advance;
+            let mut sibling_result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_perform(
+                        sibling,
+                        &sibling_operation,
+                        &mut sibling_result,
+                    )
+                },
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                unsafe { nux_flow_session_result_status(sibling_result) },
+                NuxStatus::Ok
+            );
+            let sibling_host_output =
+                (0..unsafe { nux_flow_session_result_output_count(sibling_result) })
+                    .map(|index| public_output_at(sibling_result, index))
+                    .find(|output| output.kind == NUX_FLOW_OUTPUT_KIND_HOST_COMMAND)
+                    .expect("sibling advance emits its host command");
+            assert_eq!(sibling_host_output.phase, NUX_FLOW_OUTPUT_PHASE_HOST_WORK);
+            assert_eq!(sibling_host_output.cycle, 1);
+            assert_eq!(copied_byte_view(sibling_host_output.name), b"sibling_ok");
+            let sibling_delta = public_value_node_at(
+                sibling_result,
+                public_object_child(
+                    sibling_result,
+                    sibling_host_output.payload_root_index,
+                    b"delta",
+                ),
+            );
+            assert_eq!(sibling_delta.kind, NUX_FLOW_VALUE_KIND_NUMBER);
+            assert_eq!(sibling_delta.number_value, 0.25);
+
+            unsafe {
+                nux_flow_session_result_free(sibling_result);
+                nux_flow_render_session_free(sibling);
+                nux_flow_render_session_free(session);
+                nux_flow_runtime_context_free(context);
+            }
+        });
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn configured_render_without_a_surface_does_not_advance_or_drain_host_work() {
+        with_signed_scripted_apple_import_request(|request| {
+            let mut context = ptr::null_mut();
+            let mut import_result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_runtime_context_create(request, &mut context, &mut import_result)
+                },
+                NuxStatus::Ok
+            );
+            unsafe { nux_operation_result_free(import_result) };
+
+            let descriptor = configured_descriptor();
+            let mut session = ptr::null_mut();
+            let mut creation = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_create_configured(
+                        context,
+                        &descriptor,
+                        &mut session,
+                        &mut creation,
+                    )
+                },
+                NuxStatus::Ok
+            );
+            assert_eq!(unsafe { nux_flow_session_result_output_count(creation) }, 2);
+            unsafe { nux_flow_session_result_free(creation) };
+
+            let advance = NuxFlowAdvanceOperation {
+                struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+                timestamp_seconds: 0.25,
+                delta_seconds: 0.25,
+                render: 1,
+                apple_drawable: ptr::null_mut(),
+                completion_context: ptr::null_mut(),
+                completion_callback: None,
+            };
+            let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+            request.advance = &advance;
+            let mut missing_surface_result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_perform(session, &request, &mut missing_surface_result)
+                },
+                NuxStatus::SurfaceError
+            );
+            unsafe { nux_flow_session_result_free(missing_surface_result) };
+
+            let retry_advance = NuxFlowAdvanceOperation {
+                render: 0,
+                ..advance
+            };
+            request.advance = &retry_advance;
+            let mut retry_result = ptr::null_mut();
+            assert_eq!(
+                unsafe { nux_flow_render_session_perform(session, &request, &mut retry_result) },
+                NuxStatus::Ok
+            );
+            let host_output = (0..unsafe { nux_flow_session_result_output_count(retry_result) })
+                .map(|index| public_output_at(retry_result, index))
+                .find(|output| output.kind == NUX_FLOW_OUTPUT_KIND_HOST_COMMAND)
+                .expect("the first committed advance emits its host command");
+            assert_eq!(host_output.sequence, 4);
+            assert_eq!(host_output.cycle, 1);
+            assert_eq!(copied_byte_view(host_output.name), b"sibling_ok");
+
+            unsafe {
+                nux_flow_session_result_free(retry_result);
+                nux_flow_render_session_free(session);
+                nux_flow_runtime_context_free(context);
+            }
+        });
+    }
+
+    #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]
+    #[test]
+    fn configured_surface_preflight_error_does_not_advance_or_drain_host_work() {
+        with_signed_scripted_apple_import_request(|request| {
+            let mut context = ptr::null_mut();
+            let mut import_result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_runtime_context_create(request, &mut context, &mut import_result)
+                },
+                NuxStatus::Ok
+            );
+            unsafe { nux_operation_result_free(import_result) };
+
+            let descriptor = configured_descriptor();
+            let mut session = ptr::null_mut();
+            let mut creation = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_create_configured(
+                        context,
+                        &descriptor,
+                        &mut session,
+                        &mut creation,
+                    )
+                },
+                NuxStatus::Ok
+            );
+            unsafe { nux_flow_session_result_free(creation) };
+
+            let session_handle = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+            let session_id = session_handle.token.id;
+            let surface_id = session_handle
+                .token
+                .worker
+                .call(Some(session_id), move |state| {
+                    state.attach_surface(session_id, 8, 8)
+                })
+                .expect("worker accepts surface attachment")
+                .expect("surface attachment succeeds");
+            session_handle
+                .token
+                .worker
+                .call(Some(session_id), move |state| {
+                    let session = state.session_mut(session_id)?;
+                    let attachment = session
+                        .attachment
+                        .as_mut()
+                        .filter(|attachment| attachment.id == surface_id)
+                        .ok_or_else(|| RuntimeFailure::surface("test surface is unavailable"))?;
+                    attachment.surface.detach();
+                    Ok::<(), RuntimeFailure>(())
+                })
+                .expect("worker accepts preflight fault injection")
+                .expect("preflight fault injection succeeds");
+
+            let render_advance = NuxFlowAdvanceOperation {
+                struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+                timestamp_seconds: 0.25,
+                delta_seconds: 0.25,
+                render: 1,
+                apple_drawable: ptr::null_mut(),
+                completion_context: ptr::null_mut(),
+                completion_callback: None,
+            };
+            let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+            request.advance = &render_advance;
+            let mut preflight_result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_perform(session, &request, &mut preflight_result)
+                },
+                NuxStatus::SurfaceError
+            );
+            unsafe { nux_flow_session_result_free(preflight_result) };
+
+            let retry_advance = NuxFlowAdvanceOperation {
+                render: 0,
+                ..render_advance
+            };
+            request.advance = &retry_advance;
+            let mut retry_result = ptr::null_mut();
+            assert_eq!(
+                unsafe { nux_flow_render_session_perform(session, &request, &mut retry_result) },
+                NuxStatus::Ok
+            );
+            let host_output = (0..unsafe { nux_flow_session_result_output_count(retry_result) })
+                .map(|index| public_output_at(retry_result, index))
+                .find(|output| output.kind == NUX_FLOW_OUTPUT_KIND_HOST_COMMAND)
+                .expect("the first committed advance emits its host command");
+            assert_eq!(host_output.sequence, 4);
+            assert_eq!(host_output.cycle, 1);
+            assert_eq!(copied_byte_view(host_output.name), b"sibling_ok");
+
+            unsafe {
+                nux_flow_session_result_free(retry_result);
+                nux_flow_render_session_free(session);
+                nux_flow_runtime_context_free(context);
+            }
+        });
+    }
+
+    #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]
+    #[test]
+    fn configured_present_failure_terminalizes_the_committed_session() {
+        autoreleasepool(|_| {
+            with_signed_scripted_apple_import_request(|request| {
+                let mut context = ptr::null_mut();
+                let mut import_result = ptr::null_mut();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_runtime_context_create(request, &mut context, &mut import_result)
+                    },
+                    NuxStatus::Ok
+                );
+                unsafe { nux_operation_result_free(import_result) };
+
+                let descriptor = configured_descriptor();
+                let mut session = ptr::null_mut();
+                let mut creation = ptr::null_mut();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_render_session_create_configured(
+                            context,
+                            &descriptor,
+                            &mut session,
+                            &mut creation,
+                        )
+                    },
+                    NuxStatus::Ok
+                );
+                unsafe { nux_flow_session_result_free(creation) };
+
+                let surface_descriptor = NuxAppleSurfaceDescriptor {
+                    struct_size: size_u32::<NuxAppleSurfaceDescriptor>(),
+                    pixel_width: 8,
+                    pixel_height: 8,
+                };
+                let mut surface = ptr::null_mut();
+                let mut surface_result = ptr::null_mut();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_render_session_attach_apple_surface(
+                            session,
+                            &surface_descriptor,
+                            &mut surface,
+                            &mut surface_result,
+                        )
+                    },
+                    NuxStatus::Ok
+                );
+                unsafe { nux_operation_result_free(surface_result) };
+
+                let skipped_advance = NuxFlowAdvanceOperation {
+                    struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+                    timestamp_seconds: 0.25,
+                    delta_seconds: 0.25,
+                    render: 1,
+                    apple_drawable: ptr::null_mut(),
+                    completion_context: ptr::null_mut(),
+                    completion_callback: None,
+                };
+                let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+                request.advance = &skipped_advance;
+                let mut skipped_result = ptr::null_mut();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_render_session_perform(session, &request, &mut skipped_result)
+                    },
+                    NuxStatus::Ok
+                );
+                assert_eq!(
+                    unsafe { nux_flow_session_result_surface_disposition(skipped_result) },
+                    NUX_SURFACE_DISPOSITION_SKIPPED_TIMEOUT
+                );
+                let skipped_host_output =
+                    (0..unsafe { nux_flow_session_result_output_count(skipped_result) })
+                        .map(|index| public_output_at(skipped_result, index))
+                        .find(|output| output.kind == NUX_FLOW_OUTPUT_KIND_HOST_COMMAND)
+                        .expect("a skipped presentation still returns committed host work");
+                assert_eq!(skipped_host_output.sequence, 4);
+                assert_eq!(skipped_host_output.cycle, 1);
+                assert_eq!(copied_byte_view(skipped_host_output.name), b"sibling_ok");
+                unsafe { nux_flow_session_result_free(skipped_result) };
+
+                let mut metal_device = ptr::null_mut();
+                let mut device_result = ptr::null_mut();
+                assert_eq!(
+                    unsafe {
+                        nux_apple_surface_copy_metal_device(
+                            surface,
+                            &mut metal_device,
+                            &mut device_result,
+                        )
+                    },
+                    NuxStatus::Ok
+                );
+                unsafe { nux_operation_result_free(device_result) };
+                let metal_device: Retained<ProtocolObject<dyn MTLDevice>> = unsafe {
+                    Retained::from_raw(metal_device.cast())
+                        .expect("copy_metal_device returns a retained device")
+                };
+                let layer = CAMetalLayer::new();
+                layer.setDevice(Some(&metal_device));
+                layer.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+                layer.setFramebufferOnly(true);
+                layer.setAllowsNextDrawableTimeout(true);
+                layer.setDrawableSize(CGSize::new(4.0, 4.0));
+                let drawable = layer
+                    .nextDrawable()
+                    .expect("configured CAMetalLayer provides a wrong-size drawable");
+                let drawable_pointer = Retained::as_ptr(&drawable).cast_mut().cast::<c_void>();
+
+                let render_advance = NuxFlowAdvanceOperation {
+                    struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+                    timestamp_seconds: 0.5,
+                    delta_seconds: 0.25,
+                    render: 1,
+                    apple_drawable: drawable_pointer,
+                    completion_context: ptr::null_mut(),
+                    completion_callback: None,
+                };
+                request.advance = &render_advance;
+                let mut present_result = ptr::null_mut();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_render_session_perform(session, &request, &mut present_result)
+                    },
+                    NuxStatus::SurfaceError
+                );
+                unsafe { nux_flow_session_result_free(present_result) };
+
+                let session_handle = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+                let session_id = session_handle.token.id;
+                let (is_fatal, fatal_diagnostic) = session_handle
+                    .token
+                    .worker
+                    .call(Some(session_id), move |state| {
+                        state
+                            .session(session_id)
+                            .map(|session| (session.is_fatal, session.fatal_diagnostic.clone()))
+                    })
+                    .expect("worker reports terminal state")
+                    .expect("configured session remains allocated");
+                assert!(is_fatal);
+                let fatal_diagnostic = fatal_diagnostic.expect("terminal reason is retained");
+                assert!(fatal_diagnostic.contains("committed advance failed during presentation"));
+                assert!(fatal_diagnostic.contains("texture is 4x4, expected 8x8"));
+
+                let retry_advance = NuxFlowAdvanceOperation {
+                    render: 0,
+                    apple_drawable: ptr::null_mut(),
+                    timestamp_seconds: 0.75,
+                    ..render_advance
+                };
+                request.advance = &retry_advance;
+                let mut retry_result = ptr::null_mut();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_render_session_perform(session, &request, &mut retry_result)
+                    },
+                    NuxStatus::RuntimeError
+                );
+                assert_eq!(
+                    unsafe { nux_flow_session_result_output_count(retry_result) },
+                    0
+                );
+                let mut diagnostic = NuxDiagnosticView::default();
+                assert_eq!(
+                    unsafe {
+                        nux_flow_session_result_diagnostic_at(retry_result, 0, &mut diagnostic)
+                    },
+                    NuxStatus::Ok
+                );
+                assert_eq!(
+                    copied_byte_view(diagnostic.message),
+                    fatal_diagnostic.as_bytes()
+                );
+
+                unsafe {
+                    nux_flow_session_result_free(retry_result);
+                    nux_apple_surface_free(surface);
+                    nux_flow_render_session_free(session);
+                    nux_flow_runtime_context_free(context);
+                }
+            });
+        });
     }
 
     #[test]
@@ -5721,6 +7321,7 @@ mod tests {
             pointer_id: 1,
             x: 0.0,
             y: 0.0,
+            timestamp_seconds: 42.25,
         };
         let pointer_batch = NuxFlowPointerBatch {
             struct_size: size_u32::<NuxFlowPointerBatch>(),
@@ -6259,7 +7860,7 @@ mod tests {
     }
 
     #[test]
-    fn every_v13_export_has_a_panic_firewall() {
+    fn every_v14_export_has_a_panic_firewall() {
         let source = include_str!("session_v12.rs");
         let mut checked = 0usize;
         for prefix in ["pub unsafe extern \"C\" fn ", "pub extern \"C\" fn "] {
@@ -6271,7 +7872,7 @@ mod tests {
                 assert!(
                     first_statement.starts_with("ffi_guard(")
                         || first_statement.starts_with("ffi_guard_with_session_result("),
-                    "v1.3 export is missing its panic firewall: {}",
+                    "v1.4 export is missing its panic firewall: {}",
                     rest.lines().next().unwrap_or_default()
                 );
                 checked += 1;

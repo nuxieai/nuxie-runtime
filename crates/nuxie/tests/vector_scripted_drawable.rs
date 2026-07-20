@@ -1,6 +1,6 @@
 #![cfg(feature = "scripting")]
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::Result;
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -8,7 +8,11 @@ use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
     ArtboardSpec, DrawError, File, NodeSpec, Parent, RecordingFactory, Scene, SceneEvent,
     ScriptAssetSpec, ScriptImportCapability, ScriptedDrawableSpec,
-    flow_session::{FlowSession, FlowSessionConfig},
+    flow_session::{
+        FlowAdvance, FlowHostValue, FlowOperation, FlowOutputPayload, FlowOutputPhase,
+        FlowPointerBatch, FlowPointerEvent, FlowPointerKind, FlowQuery, FlowSession,
+        FlowSessionConfig, FlowSessionErrorKind,
+    },
 };
 use nuxie_schema::definition_by_name;
 use sha2::{Digest as _, Sha256};
@@ -99,7 +103,11 @@ fn push_string(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &str) {
 }
 
 fn imported_scripted_file() -> Vec<u8> {
-    let protocol = compile_luau(include_bytes!("fixtures/vector-scripted-drawable.luau"));
+    imported_scripted_file_with_protocol(include_bytes!("fixtures/vector-scripted-drawable.luau"))
+}
+
+fn imported_scripted_file_with_protocol(protocol_source: &[u8]) -> Vec<u8> {
+    let protocol = compile_luau(protocol_source);
     let module = compile_luau(include_bytes!("fixtures/vector-scripted-module.luau"));
     let mut protocol_payload = vec![0];
     protocol_payload.extend(protocol);
@@ -149,6 +157,48 @@ fn imported_scripted_file() -> Vec<u8> {
     push_object(&mut bytes, "ScriptedDrawable", |bytes| {
         push_uint(bytes, "ScriptedDrawable", "parentId", 0);
         push_uint(bytes, "ScriptedDrawable", "scriptAssetId", 0);
+    });
+    bytes
+}
+
+fn imported_scripted_listener_file(protocol_source: &[u8]) -> Vec<u8> {
+    let mut protocol_payload = vec![0];
+    protocol_payload.extend(compile_luau(protocol_source));
+
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 9_402);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ScriptAsset", |bytes| {
+        push_uint(bytes, "ScriptAsset", "assetId", 0);
+        push_string(bytes, "ScriptAsset", "name", "PointerBudgetListener");
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_blob(bytes, "FileAssetContents", "bytes", &protocol_payload);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 100.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 100.0);
+        push_f32(bytes, "ParametricPath", "height", 100.0);
+    });
+    push_object(&mut bytes, "StateMachine", |bytes| {
+        push_string(bytes, "StateMachine", "name", "PointerBudgetMachine");
+    });
+    push_object(&mut bytes, "StateMachineListenerSingle", |bytes| {
+        push_uint(bytes, "StateMachineListener", "targetId", 1);
+        push_uint(bytes, "StateMachineListenerSingle", "listenerTypeValue", 2);
+    });
+    push_object(&mut bytes, "ScriptedListenerAction", |bytes| {
+        push_uint(bytes, "ScriptedListenerAction", "scriptAssetId", 0);
     });
     bytes
 }
@@ -343,6 +393,334 @@ fn only_an_exact_authenticated_artifact_can_execute_imported_scripts() -> Result
         File::import_with_script_capability(&changed_bytes, authenticated_capability(&bytes))
             .is_err(),
         "an authenticated capability must remain bound to the exact artifact bytes"
+    );
+    Ok(())
+}
+
+#[test]
+fn factory_bound_session_returns_typed_creation_and_cycle_host_work_in_fifo_order() -> Result<()> {
+    let bytes = imported_scripted_file_with_protocol(
+        br#"
+            local nuxie = require("nuxie")
+            nuxie.trigger("protocol_loaded", {
+                zeta = 3,
+                alpha = "first",
+                nested = { true, { id = "sku-1", enabled = false } },
+            })
+
+            return function(_context)
+                nuxie.response.set("selection", { "sku-1", "sku-2" })
+                return {
+                    init = function(_self)
+                        nuxie.trigger("initialized")
+                        return true
+                    end,
+                    advance = function(_self, seconds)
+                        nuxie.trigger("advanced", { delta = seconds })
+                        return false
+                    end,
+                    draw = function(_self, _renderer)
+                        nuxie.trigger("drawn")
+                    end,
+                }
+            end
+        "#,
+    );
+    let capability = authenticated_capability(&bytes);
+    let file = Arc::new(File::import_with_script_capability(&bytes, capability)?);
+    let mut factory = RecordingFactory::new();
+    let (mut session, creation) = FlowSession::create_with_factory(
+        Arc::clone(&file),
+        FlowSessionConfig::default(),
+        &mut factory,
+    )?;
+
+    assert_eq!(
+        creation
+            .outputs
+            .iter()
+            .map(|output| (output.sequence, output.cycle, output.phase))
+            .collect::<Vec<_>>(),
+        vec![
+            (1, 0, FlowOutputPhase::HostWork),
+            (2, 0, FlowOutputPhase::HostWork),
+            (3, 0, FlowOutputPhase::HostWork),
+        ]
+    );
+    assert_eq!(
+        creation
+            .outputs
+            .iter()
+            .map(|output| match &output.payload {
+                FlowOutputPayload::HostCommand { name, .. } => name.as_str(),
+                payload => panic!("creation emitted non-host payload {payload:?}"),
+            })
+            .collect::<Vec<_>>(),
+        vec!["protocol_loaded", "$response_set", "initialized"]
+    );
+    assert_eq!(
+        creation.outputs[0].payload,
+        FlowOutputPayload::HostCommand {
+            name: "protocol_loaded".to_owned(),
+            payload: FlowHostValue::Object(BTreeMap::from([
+                (
+                    "alpha".to_owned(),
+                    FlowHostValue::String("first".to_owned())
+                ),
+                (
+                    "nested".to_owned(),
+                    FlowHostValue::List(vec![
+                        FlowHostValue::Bool(true),
+                        FlowHostValue::Object(BTreeMap::from([
+                            ("enabled".to_owned(), FlowHostValue::Bool(false)),
+                            ("id".to_owned(), FlowHostValue::String("sku-1".to_owned())),
+                        ])),
+                    ]),
+                ),
+                ("zeta".to_owned(), FlowHostValue::Number(3.0)),
+            ])),
+        }
+    );
+    assert_eq!(
+        creation.outputs[1].payload,
+        FlowOutputPayload::HostCommand {
+            name: "$response_set".to_owned(),
+            payload: FlowHostValue::Object(BTreeMap::from([
+                (
+                    "field".to_owned(),
+                    FlowHostValue::String("selection".to_owned()),
+                ),
+                (
+                    "value".to_owned(),
+                    FlowHostValue::List(vec![
+                        FlowHostValue::String("sku-1".to_owned()),
+                        FlowHostValue::String("sku-2".to_owned()),
+                    ]),
+                ),
+            ])),
+        }
+    );
+
+    let mut result = session.perform_with_factory(
+        FlowOperation::Advance(FlowAdvance {
+            timestamp_seconds: 0.25,
+            delta_seconds: 0.25,
+            render: true,
+        }),
+        &mut factory,
+    )?;
+    let mut renderer = factory.make_renderer();
+    let mut render_cache = session.new_render_cache();
+    session.draw_into_result(&mut factory, &mut renderer, &mut render_cache, &mut result)?;
+    assert_eq!(
+        result
+            .outputs
+            .iter()
+            .map(|output| (output.sequence, output.cycle, output.phase))
+            .collect::<Vec<_>>(),
+        vec![
+            (4, 1, FlowOutputPhase::RuntimeAdvance),
+            (5, 1, FlowOutputPhase::HostWork),
+            (6, 1, FlowOutputPhase::HostWork),
+            (7, 1, FlowOutputPhase::Render),
+        ]
+    );
+    assert_eq!(
+        result.outputs[2].payload,
+        FlowOutputPayload::HostCommand {
+            name: "drawn".to_owned(),
+            payload: FlowHostValue::Object(BTreeMap::new()),
+        }
+    );
+    assert_eq!(
+        result.outputs[1].payload,
+        FlowOutputPayload::HostCommand {
+            name: "advanced".to_owned(),
+            payload: FlowHostValue::Object(BTreeMap::from([(
+                "delta".to_owned(),
+                FlowHostValue::Number(0.25),
+            )])),
+        }
+    );
+    Ok(())
+}
+
+#[test]
+fn aggregate_host_trees_overflow_before_crossing_the_apple_result_seam_and_poison_session()
+-> Result<()> {
+    let bytes = imported_scripted_file_with_protocol(
+        br#"
+            local nuxie = require("nuxie")
+
+            return function(_context)
+                return {
+                    init = function(_self)
+                        return true
+                    end,
+                    advance = function(_self, _seconds)
+                        -- The script-side arena counts the authored array while the
+                        -- Apple result arena also counts each response object wrapper.
+                        -- This stays within the former and deliberately exceeds the latter.
+                        for command = 1, 240 do
+                            local values = {}
+                            for index = 1, 16 do
+                                values[index] = true
+                            end
+                            nuxie.response.set("field_" .. command, values)
+                        end
+                        return false
+                    end,
+                }
+            end
+        "#,
+    );
+    let file = Arc::new(File::import_with_script_capability(
+        &bytes,
+        authenticated_capability(&bytes),
+    )?);
+    let mut factory = RecordingFactory::new();
+    let (mut session, creation) =
+        FlowSession::create_with_factory(file, FlowSessionConfig::default(), &mut factory)?;
+    assert!(creation.outputs.is_empty());
+
+    let error = session
+        .perform_with_factory(
+            FlowOperation::Advance(FlowAdvance {
+                timestamp_seconds: 1.0,
+                delta_seconds: 0.016,
+                render: false,
+            }),
+            &mut factory,
+        )
+        .expect_err("all host trees must fit the one result value arena");
+    assert_eq!(error.kind(), FlowSessionErrorKind::ResultLimitExceeded);
+    assert!(error.message().contains("result value arena"));
+
+    let terminal = session
+        .perform_with_factory(FlowOperation::Query(FlowQuery::Values), &mut factory)
+        .expect_err("a post-mutation projection failure must terminally poison the session");
+    assert_eq!(terminal.kind(), FlowSessionErrorKind::Runtime);
+    assert!(terminal.message().contains("flow session is terminal"));
+    Ok(())
+}
+
+#[test]
+fn pointer_subcycles_reset_script_budgets_and_roll_back_overflowing_host_work() -> Result<()> {
+    let bytes = imported_scripted_listener_file(
+        br#"
+            local nuxie = require("nuxie")
+
+            return function(_context)
+                return {
+                    init = function(_self)
+                        return true
+                    end,
+                    performAction = function(_self, invocation)
+                        local pointer = invocation:asPointerEvent()
+                        local count = if pointer.id == 3 then 257 else 200
+                        for command = 1, count do
+                            nuxie.trigger("pointer_" .. pointer.id .. "_" .. command)
+                        end
+                    end,
+                }
+            end
+        "#,
+    );
+    let file = Arc::new(File::import_with_script_capability(
+        &bytes,
+        authenticated_capability(&bytes),
+    )?);
+    let mut factory = RecordingFactory::new();
+    let (mut session, creation) = FlowSession::create_with_factory(
+        Arc::clone(&file),
+        FlowSessionConfig::default(),
+        &mut factory,
+    )?;
+    assert!(creation.outputs.is_empty());
+
+    let pointer_down = |pointer_id| FlowPointerEvent {
+        kind: FlowPointerKind::Down,
+        pointer_id,
+        x: 0.0,
+        y: 0.0,
+        timestamp_seconds: 0.0,
+    };
+    let result = session.perform_with_factory(
+        FlowOperation::PointerBatch(FlowPointerBatch {
+            events: vec![pointer_down(1), pointer_down(2)],
+        }),
+        &mut factory,
+    )?;
+    let host_work = result
+        .outputs
+        .iter()
+        .filter_map(|output| match &output.payload {
+            FlowOutputPayload::HostCommand { name, .. } => {
+                assert_eq!(output.phase, FlowOutputPhase::HostWork);
+                Some((output.cycle, name.as_str()))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(host_work.len(), 400);
+    assert_eq!(
+        host_work
+            .iter()
+            .map(|(cycle, _)| *cycle)
+            .collect::<std::collections::BTreeSet<_>>(),
+        [1, 2].into_iter().collect()
+    );
+    for command in 1..=200 {
+        assert_eq!(host_work[command - 1].1, format!("pointer_1_{command}"));
+        assert_eq!(
+            host_work[200 + command - 1].1,
+            format!("pointer_2_{command}")
+        );
+    }
+
+    let error = session
+        .perform_with_factory(
+            FlowOperation::PointerBatch(FlowPointerBatch {
+                events: vec![pointer_down(3)],
+            }),
+            &mut factory,
+        )
+        .expect_err("one pointer subcycle may not emit 257 host commands");
+    assert_eq!(error.kind(), FlowSessionErrorKind::ScriptResourceExceeded);
+    assert!(error.message().contains("256 host commands"));
+
+    let terminal = session
+        .perform_with_factory(FlowOperation::Query(FlowQuery::Values), &mut factory)
+        .expect_err("resource exhaustion must poison only this session");
+    assert_eq!(terminal.kind(), FlowSessionErrorKind::Runtime);
+    assert!(terminal.message().contains("flow session is terminal"));
+
+    let mut sibling_factory = RecordingFactory::new();
+    let (mut sibling, sibling_creation) =
+        FlowSession::create_with_factory(file, FlowSessionConfig::default(), &mut sibling_factory)?;
+    assert!(sibling_creation.outputs.is_empty());
+    let sibling_result = sibling.perform_with_factory(
+        FlowOperation::PointerBatch(FlowPointerBatch {
+            events: vec![pointer_down(1)],
+        }),
+        &mut sibling_factory,
+    )?;
+    let sibling_commands = sibling_result
+        .outputs
+        .iter()
+        .filter_map(|output| match &output.payload {
+            FlowOutputPayload::HostCommand { name, .. } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(sibling_commands.len(), 200);
+    assert_eq!(sibling_commands.first(), Some(&"pointer_1_1"));
+    assert_eq!(sibling_commands.last(), Some(&"pointer_1_200"));
+    assert!(
+        sibling_commands
+            .iter()
+            .all(|name| !name.starts_with("pointer_3_")),
+        "partial HostWork from the poisoned session must not escape to its sibling"
     );
     Ok(())
 }

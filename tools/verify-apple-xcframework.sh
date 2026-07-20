@@ -68,6 +68,16 @@ archived_framework="$(find "${verification_temp_dir}" -maxdepth 1 -name '*.xcfra
 test -n "${archived_framework}"
 diff -rq "${xcframework_path}" "${archived_framework}" >/dev/null
 
+phase "validate packaged license notices"
+third_party_notices_path="$(metadata_scalar thirdPartyNoticesPath string)"
+test "${third_party_notices_path}" = "NuxieRuntime.xcframework/THIRD_PARTY_NOTICES.md"
+require_file "${xcframework_path}/LICENSE"
+require_file "${xcframework_path}/THIRD_PARTY_NOTICES.md"
+require_file "${verification_temp_dir}/${third_party_notices_path}"
+cmp "${repo_root}/LICENSE" "${xcframework_path}/LICENSE"
+cmp "${repo_root}/THIRD_PARTY_NOTICES.md" "${xcframework_path}/THIRD_PARTY_NOTICES.md"
+cmp "${repo_root}/THIRD_PARTY_NOTICES.md" "${verification_temp_dir}/${third_party_notices_path}"
+
 device_library="$(find "${xcframework_path}" -path '*ios-arm64/libnux_apple_runtime.a' -print -quit)"
 simulator_library="$(find "${xcframework_path}" -path '*ios-arm64_x86_64-simulator/libnux_apple_runtime.a' -print -quit)"
 
@@ -126,6 +136,7 @@ source_revision="$(metadata_scalar sourceRevision string)"
 build_profile="$(metadata_scalar buildProfile string)"
 minimum_ios_version="$(metadata_scalar minimumIOSVersion string)"
 runtime_version="$(metadata_scalar runtimeVersion string)"
+luaur_version="$(metadata_scalar luaurVersion string)"
 xcode_version="$(metadata_scalar xcodeVersion string)"
 xcode_build="$(metadata_scalar xcodeBuild string)"
 iphoneos_sdk_version="$(metadata_scalar iphoneOSSDKVersion string)"
@@ -133,6 +144,21 @@ iphoneos_sdk_build="$(metadata_scalar iphoneOSSDKBuild string)"
 iphonesimulator_sdk_version="$(metadata_scalar iphoneSimulatorSDKVersion string)"
 iphonesimulator_sdk_build="$(metadata_scalar iphoneSimulatorSDKBuild string)"
 test "$(metadata_scalar schemaVersion integer)" = "1"
+expected_luaur_version="$(
+    awk '
+        $0 == "name = \"luaur-vm\"" { found = 1; next }
+        found && /^version = / {
+            value = $0
+            sub(/^version = \"/, "", value)
+            sub(/\"$/, "", value)
+            print value
+            exit
+        }
+        found && /^\[\[package\]\]/ { exit 1 }
+    ' "${repo_root}/Cargo.lock"
+)"
+test -n "${expected_luaur_version}"
+test "${luaur_version}" = "${expected_luaur_version}"
 test "$(xcodebuild -version | sed -n 's/^Xcode //p')" = "${xcode_version}"
 test "$(xcodebuild -version | sed -n 's/^Build version //p')" = "${xcode_build}"
 test "$(xcrun --sdk iphoneos --show-sdk-version)" = "${iphoneos_sdk_version}"
@@ -152,7 +178,7 @@ for target_and_library in \
     grep -Fq "\"profile\":\"${build_profile}\"" <<< "${provenance}"
     grep -Fq "\"rustc\":\"rustc ${rust_toolchain}" <<< "${provenance}"
     grep -Fq '"features":"apple-product"' <<< "${provenance}"
-    grep -Fq '"luaurVersion":null' <<< "${provenance}"
+    grep -Fq "\"luaurVersion\":\"${luaur_version}\"" <<< "${provenance}"
 done
 
 expected_public_headers="$(printf '%s\n' \

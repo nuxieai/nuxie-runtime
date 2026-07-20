@@ -19,6 +19,11 @@ draft assets, rechecks that release immutability is enabled, and publishes.
 Finally, it downloads the public immutable assets without credentials and
 verifies their bytes and SwiftPM checksum.
 
+The XCFramework archive includes `LICENSE` and `THIRD_PARTY_NOTICES.md` at its
+root. Packaging verifies those files byte-for-byte against the release source,
+records the notice path and embedded Luau version in `artifact.json`, and checks
+the same Luau version in every target library's build provenance.
+
 The workflow fails rather than changing an existing release or attaching
 replacement assets. If a run fails after draft creation, inspect and delete
 only that unpublished draft before retrying; a published immutable release

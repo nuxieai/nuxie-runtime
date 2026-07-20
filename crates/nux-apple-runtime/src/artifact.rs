@@ -2,8 +2,7 @@
 //! artifact adapter.
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use ed25519_dalek::{Signature, VerifyingKey};
-use nuxie::File;
+use nuxie::{File, ScriptAuthenticationError, ScriptImportCapability};
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -266,12 +265,13 @@ pub(crate) fn validate_flow_artifact_import(
     }
 
     let declarations = external_asset_declarations(manifest.assets)?;
-    let (authorization, authentication_diagnostic) = authenticate_manifest(
+    let (authorization, script_capability, authentication_diagnostic) = authenticate_manifest(
+        &input.artifact_bytes,
         &input.manifest_bytes,
         input.signature_envelope_bytes.as_deref(),
         input.selected_key.as_ref(),
     );
-    let file = File::import(&input.artifact_bytes)
+    let file = File::import_with_script_capability(&input.artifact_bytes, script_capability)
         .map_err(|error| import_error("artifact.riv.import_failed", error.to_string()))?;
     let mut diagnostics = Vec::new();
     if let Some(diagnostic) = authentication_diagnostic {
@@ -710,10 +710,15 @@ fn validate_riv_asset_catalog(
 }
 
 fn authenticate_manifest(
+    artifact_bytes: &[u8],
     manifest_bytes: &[u8],
     signature_envelope_bytes: Option<&[u8]>,
     selected_key: Option<&SelectedArtifactSigningKey>,
-) -> (ArtifactAuthorization, Option<ArtifactDiagnostic>) {
+) -> (
+    ArtifactAuthorization,
+    ScriptImportCapability,
+    Option<ArtifactDiagnostic>,
+) {
     let Some(signature_envelope_bytes) = signature_envelope_bytes else {
         return visual_only(
             VisualOnlyReason::MissingSignature,
@@ -762,16 +767,6 @@ fn authenticate_manifest(
             ),
         );
     }
-    let verifying_key = match VerifyingKey::from_bytes(&selected_key.public_key) {
-        Ok(key) => key,
-        Err(error) => {
-            return visual_only(
-                VisualOnlyReason::InvalidSelectedKey,
-                "artifact.authentication.invalid_key",
-                format!("selected Ed25519 key is invalid: {error}"),
-            );
-        }
-    };
     let signature_bytes = match BASE64.decode(envelope.signature_base64.as_bytes()) {
         Ok(bytes) => bytes,
         Err(error) => {
@@ -782,30 +777,45 @@ fn authenticate_manifest(
             );
         }
     };
-    let signature = match Signature::from_slice(&signature_bytes) {
-        Ok(signature) => signature,
-        Err(error) => {
+    if signature_bytes.len() != 64 {
+        return visual_only(
+            VisualOnlyReason::MalformedSignature,
+            "artifact.authentication.malformed",
+            "detached Ed25519 signature has an invalid length",
+        );
+    }
+    let capability = match ScriptImportCapability::authenticate_ed25519(
+        artifact_bytes,
+        manifest_bytes,
+        &signature_bytes,
+        &selected_key.public_key,
+    ) {
+        Ok(capability) => capability,
+        Err(ScriptAuthenticationError::InvalidPublicKey) => {
             return visual_only(
-                VisualOnlyReason::MalformedSignature,
-                "artifact.authentication.malformed",
-                format!("detached Ed25519 signature has an invalid length: {error}"),
+                VisualOnlyReason::InvalidSelectedKey,
+                "artifact.authentication.invalid_key",
+                "selected Ed25519 key is invalid",
+            );
+        }
+        Err(
+            ScriptAuthenticationError::InvalidSignature
+            | ScriptAuthenticationError::InvalidManifest
+            | ScriptAuthenticationError::ArtifactSizeMismatch
+            | ScriptAuthenticationError::ArtifactHashMismatch,
+        ) => {
+            return visual_only(
+                VisualOnlyReason::InvalidSignature,
+                "artifact.authentication.invalid_signature",
+                "detached signature does not authenticate this exact artifact manifest",
             );
         }
     };
-    if verifying_key
-        .verify_strict(manifest_bytes, &signature)
-        .is_err()
-    {
-        return visual_only(
-            VisualOnlyReason::InvalidSignature,
-            "artifact.authentication.invalid_signature",
-            "detached signature does not authenticate the exact manifest bytes",
-        );
-    }
     (
         ArtifactAuthorization::Authenticated {
             key_id: envelope.key_id,
         },
+        capability,
         None,
     )
 }
@@ -814,9 +824,14 @@ fn visual_only(
     reason: VisualOnlyReason,
     code: &'static str,
     message: impl Into<String>,
-) -> (ArtifactAuthorization, Option<ArtifactDiagnostic>) {
+) -> (
+    ArtifactAuthorization,
+    ScriptImportCapability,
+    Option<ArtifactDiagnostic>,
+) {
     (
         ArtifactAuthorization::VisualOnly { reason },
+        ScriptImportCapability::visual_only(),
         Some(ArtifactDiagnostic {
             severity: ArtifactDiagnosticSeverity::Warning,
             code,

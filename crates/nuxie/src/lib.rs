@@ -24,8 +24,18 @@ use nuxie_runtime::{
 
 pub mod flow_session;
 mod scene;
+#[cfg(feature = "scripting")]
+mod script_import;
 
 pub use scene::*;
+#[cfg(feature = "scripting")]
+pub use script_import::{ScriptAuthenticationError, ScriptImportCapability};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScriptExecutionAuthorization {
+    VisualOnly,
+    Authenticated,
+}
 
 pub use nuxie_render_api::{
     Aabb, BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageFilter, ImageSampler,
@@ -84,8 +94,8 @@ struct ReadyFileScripts {
 
 #[cfg(feature = "scripting")]
 struct FileScriptRuntime {
-    assets: Vec<FileScriptAsset>,
-    allow_unsigned_execution: bool,
+    assets: Arc<[FileScriptAsset]>,
+    authorization: ScriptExecutionAuthorization,
     ready: Option<ReadyFileScripts>,
 }
 
@@ -95,7 +105,7 @@ impl std::fmt::Debug for FileScriptRuntime {
         formatter
             .debug_struct("FileScriptRuntime")
             .field("assets", &self.assets)
-            .field("allow_unsigned_execution", &self.allow_unsigned_execution)
+            .field("authorization", &self.authorization)
             .field("ready", &self.ready.is_some())
             .finish_non_exhaustive()
     }
@@ -103,8 +113,8 @@ impl std::fmt::Debug for FileScriptRuntime {
 
 #[cfg(feature = "scripting")]
 impl FileScriptRuntime {
-    fn new(runtime: &RuntimeFile, allow_unsigned_execution: bool) -> Self {
-        let assets = runtime
+    fn imported_assets(runtime: &RuntimeFile) -> Arc<[FileScriptAsset]> {
+        runtime
             .scripting_file_assets_with_contents()
             .into_iter()
             .map(|entry| FileScriptAsset {
@@ -119,12 +129,20 @@ impl FileScriptRuntime {
                 is_module: entry.asset.bool_property("isModule").unwrap_or(false),
                 payload: entry.contents.map(ToOwned::to_owned),
             })
-            .collect();
+            .collect::<Vec<_>>()
+            .into()
+    }
+
+    fn new(assets: Arc<[FileScriptAsset]>, authorization: ScriptExecutionAuthorization) -> Self {
         Self {
             assets,
-            allow_unsigned_execution,
+            authorization,
             ready: None,
         }
+    }
+
+    fn scripts_are_authenticated(&self) -> bool {
+        self.authorization == ScriptExecutionAuthorization::Authenticated
     }
 
     fn build_candidate(
@@ -359,12 +377,6 @@ fn script_mount_group(
             continue;
         }
         has_scripted_drawable = true;
-        if !scripts.allow_unsigned_execution {
-            return Err(nuxie_runtime::ScriptError::new(format!(
-                "{path} contains ScriptedDrawable global {}, but arbitrary imported Files do not execute unsigned bytecode; use File::import_with_unsigned_scripts only for trusted content",
-                component.global_id
-            )));
-        }
         let object = runtime
             .object(component.global_id as usize)
             .ok_or_else(|| {
@@ -439,6 +451,9 @@ fn collect_script_mount_groups(
     instance: &mut RuntimeArtboardInstance,
 ) -> std::result::Result<(bool, Vec<ScriptMountGroup>), nuxie_runtime::ScriptError> {
     let scripts = file.scripts.borrow();
+    if !scripts.scripts_are_authenticated() {
+        return Ok((false, Vec::new()));
+    }
     let (mut has_scripted_drawable, root) = script_mount_group(
         &file.runtime,
         &scripts,
@@ -626,6 +641,9 @@ fn queue_root_script_advance(
     instance: &mut RuntimeArtboardInstance,
     elapsed_seconds: f32,
 ) -> bool {
+    if !file.scripts.borrow().scripts_are_authenticated() {
+        return false;
+    }
     let mut has_scripted_drawable = root_graph
         .components
         .iter()
@@ -657,8 +675,8 @@ fn queue_root_script_advance(
 
 /// Imported Rive file plus its runtime graph projection.
 pub struct File {
-    runtime: RuntimeFile,
-    graph: GraphFile,
+    runtime: Arc<RuntimeFile>,
+    graph: Arc<GraphFile>,
     external_image_assets: BTreeMap<u32, Arc<[u8]>>,
     external_font_assets: BTreeMap<u32, Arc<[u8]>>,
     #[cfg(feature = "scripting")]
@@ -723,13 +741,16 @@ impl std::fmt::Debug for File {
 
 impl Clone for File {
     fn clone(&self) -> Self {
-        let runtime = self.runtime.clone();
-        let graph = self.graph.clone();
+        let runtime = Arc::clone(&self.runtime);
+        let graph = Arc::clone(&self.graph);
         #[cfg(feature = "scripting")]
-        let scripts = RefCell::new(FileScriptRuntime::new(
-            &runtime,
-            self.scripts.borrow().allow_unsigned_execution,
-        ));
+        let scripts = {
+            let scripts = self.scripts.borrow();
+            RefCell::new(FileScriptRuntime::new(
+                Arc::clone(&scripts.assets),
+                scripts.authorization,
+            ))
+        };
         Self {
             runtime,
             graph,
@@ -744,42 +765,54 @@ impl Clone for File {
 impl File {
     /// Import `.riv` bytes and build the runtime graph needed for instancing.
     ///
-    /// With scripting enabled, arbitrary imported files remain inert by
-    /// default. Use `File::import_with_unsigned_scripts` only after the host
-    /// has established trust in the file bytes.
+    /// With scripting enabled, arbitrary imported files remain visual-only by
+    /// default: ordinary visuals render while embedded bytecode stays inert.
     pub fn import(bytes: &[u8]) -> Result<Self> {
         let runtime = read_runtime_file_for_facade(bytes).context("failed to import Rive file")?;
-        Self::from_runtime_with_script_policy(runtime, false)
+        Self::from_runtime_with_script_authorization(
+            runtime,
+            ScriptExecutionAuthorization::VisualOnly,
+        )
     }
 
-    /// Import `.riv` bytes and allow their unsigned ScriptAsset bytecode to
-    /// execute lazily on first factory-bearing advance or draw.
+    /// Import `.riv` bytes using cryptographically bound script authority.
     ///
-    /// This is an explicit trust boundary for content the host authored or
-    /// authenticated. Arbitrary uploaded or network-provided files should use
-    /// [`Self::import`], which refuses to enter the script draw path.
+    /// [`ScriptImportCapability::visual_only`] keeps scripts inert. Executable
+    /// authority can only be minted by authenticating a signed manifest that
+    /// binds these exact artifact bytes.
     #[cfg(feature = "scripting")]
-    pub fn import_with_unsigned_scripts(bytes: &[u8]) -> Result<Self> {
+    pub fn import_with_script_capability(
+        bytes: &[u8],
+        capability: ScriptImportCapability,
+    ) -> Result<Self> {
+        let authorization = capability
+            .execution_authorization_for(bytes)
+            .context("script import capability does not match the artifact")?;
         let runtime = read_runtime_file_for_facade(bytes).context("failed to import Rive file")?;
-        Self::from_runtime_with_script_policy(runtime, true)
+        Self::from_runtime_with_script_authorization(runtime, authorization)
     }
 
     pub(crate) fn from_runtime(runtime: RuntimeFile) -> Result<Self> {
         // RuntimeFile values constructed by Scene are authored in-process and
         // deliberately opt into unsigned editor bytecode execution.
-        Self::from_runtime_with_script_policy(runtime, true)
+        Self::from_runtime_with_script_authorization(
+            runtime,
+            ScriptExecutionAuthorization::Authenticated,
+        )
     }
 
-    fn from_runtime_with_script_policy(
+    fn from_runtime_with_script_authorization(
         runtime: RuntimeFile,
-        _allow_unsigned_execution: bool,
+        _authorization: ScriptExecutionAuthorization,
     ) -> Result<Self> {
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
+        #[cfg(feature = "scripting")]
+        let script_assets = FileScriptRuntime::imported_assets(&runtime);
         Ok(Self {
             #[cfg(feature = "scripting")]
-            scripts: RefCell::new(FileScriptRuntime::new(&runtime, _allow_unsigned_execution)),
-            runtime,
-            graph,
+            scripts: RefCell::new(FileScriptRuntime::new(script_assets, _authorization)),
+            runtime: Arc::new(runtime),
+            graph: Arc::new(graph),
             external_image_assets: BTreeMap::new(),
             external_font_assets: BTreeMap::new(),
         })
@@ -862,12 +895,12 @@ impl File {
 
     /// Low-level imported file data for advanced integrations.
     pub fn runtime(&self) -> &RuntimeFile {
-        &self.runtime
+        self.runtime.as_ref()
     }
 
     /// Low-level graph projection for advanced integrations.
     pub fn graph(&self) -> &GraphFile {
-        &self.graph
+        self.graph.as_ref()
     }
 
     pub fn artboard_count(&self) -> usize {

@@ -22,6 +22,8 @@ members = [
     "tools/rust-golden-runner",
 ]
 exclude = [
+    "vendor/luaur-common-0.1.8",
+    "vendor/luaur-vm-0.1.8",
     "vendor/wgpu-30.0.0",
     "vendor/wgpu-core-30.0.0",
     "vendor/wgpu-core-deps-apple-30.0.0",
@@ -36,6 +38,13 @@ resolver = "3"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/nuxieai/nuxie-runtime"
+
+[patch.crates-io]
+# luaur 0.1.8 only selected its Mach clock implementation for macOS. The
+# local packages widen that existing implementation to every Apple platform so
+# the same pinned VM can ship in the iOS XCFramework.
+luaur-common = { path = "vendor/luaur-common-0.1.8" }
+luaur-vm = { path = "vendor/luaur-vm-0.1.8" }
 
 # Panic-freedom lint discipline for the runtime crates (v2-status item 20 #6).
 # Opted into per-crate via `lints.workspace = true` by the SDK runtime crates

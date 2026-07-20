@@ -530,12 +530,22 @@ impl fmt::Debug for FlowSession {
 }
 
 impl FlowSession {
+    // `File` deliberately becomes !Send/!Sync when scripting is enabled: its
+    // Luau VM is confined to the runtime worker. `Arc` is still the ownership
+    // type used by artboard instances inside that one thread; it is never used
+    // to move a scripted File between threads.
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn create(
         file: Arc<File>,
         config: FlowSessionConfig,
     ) -> Result<(Self, FlowBootstrap), FlowSessionError> {
         validate_optional_selector(config.artboard_name.as_deref(), "artboard name")?;
         validate_optional_selector(config.player_name.as_deref(), "player name")?;
+        // A File owns lazy script-module registration and its VM. Cloning at
+        // this deep-module boundary makes session isolation unconditional for
+        // every host, not merely a convention that individual facades must
+        // remember to uphold.
+        let file = Arc::new(file.as_ref().clone());
 
         let artboard_index = match config.artboard_name.as_deref() {
             Some(name) => file

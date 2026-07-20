@@ -604,6 +604,10 @@ fn runtime_failure_from_flow_session(
 
 #[cfg(feature = "apple-product")]
 impl WorkerState {
+    // Script-enabled Files are intentionally confined to this worker thread.
+    // `Arc` provides same-thread shared ownership to its sessions; neither the
+    // File nor its Luau VM crosses the worker boundary.
+    #[allow(clippy::arc_with_non_send_sync)]
     fn new(file: File) -> Self {
         Self {
             owner_thread_id: thread::current().id(),
@@ -3211,10 +3215,18 @@ mod tests {
             "\"profile\"",
             "\"rustc\"",
             "\"wgpuVersion\":\"30.0.0\"",
-            "\"luaurVersion\":null",
         ] {
             assert!(json.contains(field), "missing {field} in {json}");
         }
+        let luaur_field = if cfg!(feature = "apple-product") {
+            "\"luaurVersion\":\"0.1.8\""
+        } else {
+            "\"luaurVersion\":null"
+        };
+        assert!(
+            json.contains(luaur_field),
+            "missing {luaur_field} in {json}"
+        );
         if let Some(profile) = option_env!("NUX_RUNTIME_BUILD_PROFILE") {
             let expected = format!("\"profile\":\"{profile}\"");
             assert!(json.contains(&expected), "missing {expected} in {json}");

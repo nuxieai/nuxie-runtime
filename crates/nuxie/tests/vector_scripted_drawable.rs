@@ -1,12 +1,17 @@
 #![cfg(feature = "scripting")]
 
+use std::sync::Arc;
+
 use anyhow::Result;
+use ed25519_dalek::{Signer as _, SigningKey};
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
     ArtboardSpec, DrawError, File, NodeSpec, Parent, RecordingFactory, Scene, SceneEvent,
-    ScriptAssetSpec, ScriptedDrawableSpec,
+    ScriptAssetSpec, ScriptImportCapability, ScriptedDrawableSpec,
+    flow_session::{FlowSession, FlowSessionConfig},
 };
 use nuxie_schema::definition_by_name;
+use sha2::{Digest as _, Sha256};
 
 fn compile_luau(source: &[u8]) -> Vec<u8> {
     luaur_common::set_all_flags(true);
@@ -73,6 +78,16 @@ fn push_uint(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: u64) {
     push_var_uint(bytes, value);
 }
 
+fn push_f32(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: f32) {
+    push_var_uint(bytes, u64::from(property_key(type_name, name)));
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_color(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: u32) {
+    push_var_uint(bytes, u64::from(property_key(type_name, name)));
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
 fn push_blob(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &[u8]) {
     push_var_uint(bytes, u64::from(property_key(type_name, name)));
     push_var_uint(bytes, value.len() as u64);
@@ -112,12 +127,53 @@ fn imported_scripted_file() -> Vec<u8> {
     push_object(&mut bytes, "FileAssetContents", |bytes| {
         push_blob(bytes, "FileAssetContents", "bytes", &module_payload);
     });
-    push_object(&mut bytes, "Artboard", |_| {});
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 160.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    push_object(&mut bytes, "Fill", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+    });
+    push_object(&mut bytes, "SolidColor", |bytes| {
+        push_uint(bytes, "Component", "parentId", 2);
+        push_color(bytes, "SolidColor", "colorValue", 0xffcc_3300);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 40.0);
+        push_f32(bytes, "ParametricPath", "height", 20.0);
+    });
     push_object(&mut bytes, "ScriptedDrawable", |bytes| {
         push_uint(bytes, "ScriptedDrawable", "parentId", 0);
         push_uint(bytes, "ScriptedDrawable", "scriptAssetId", 0);
     });
     bytes
+}
+
+fn authenticated_capability(bytes: &[u8]) -> ScriptImportCapability {
+    let signing_key = SigningKey::from_bytes(&[7; 32]);
+    let artifact_sha256 = Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let manifest = serde_json::to_vec(&serde_json::json!({
+        "riv": {
+            "sha256": artifact_sha256,
+            "sizeBytes": bytes.len(),
+        },
+    }))
+    .expect("manifest encodes");
+    let signature = signing_key.sign(&manifest);
+    ScriptImportCapability::authenticate_ed25519(
+        bytes,
+        &manifest,
+        &signature.to_bytes(),
+        &signing_key.verifying_key().to_bytes(),
+    )
+    .expect("exact signed artifact authenticates")
 }
 
 fn scripted_scene() -> Result<(Scene, nuxie::ArtboardId)> {
@@ -223,7 +279,7 @@ fn authored_vector_script_uses_one_file_program_and_fresh_occurrence_tables() ->
 }
 
 #[test]
-fn imported_file_scripts_require_an_explicit_unsigned_trust_opt_in() -> Result<()> {
+fn visual_only_import_skips_scripts_but_keeps_ordinary_visuals_live() -> Result<()> {
     let bytes = imported_scripted_file();
     let inert = File::import(&bytes)?;
     let mut inert_instance = inert
@@ -232,23 +288,61 @@ fn imported_file_scripts_require_an_explicit_unsigned_trust_opt_in() -> Result<(
         .instantiate()?;
     let mut inert_factory = RecordingFactory::new();
     let mut inert_renderer = inert_factory.make_renderer();
+    inert_instance.draw(&mut inert_factory, &mut inert_renderer)?;
+    let inert_stream = inert_factory.stream();
+    assert!(inert_stream.contains("color=0xffcc3300"), "{inert_stream}");
+    assert!(inert_stream.contains("drawPath "), "{inert_stream}");
     assert!(
-        inert_instance
-            .draw(&mut inert_factory, &mut inert_renderer)
-            .is_err(),
-        "arbitrary File::import bytecode remains inert"
+        !inert_stream.contains("color=0xff3366cc"),
+        "visual-only imports must not execute ScriptAsset bytecode: {inert_stream}"
+    );
+    let _ = inert_instance.advance(0.0);
+    assert!(
+        !inert_instance.advance(0.1),
+        "inert ScriptedDrawable topology must not keep a static visual dirty"
     );
 
-    let trusted = File::import_with_unsigned_scripts(&bytes)?;
-    let mut trusted_instance = trusted
-        .default_artboard()
-        .expect("fixture artboard")
-        .instantiate()?;
+    Ok(())
+}
+
+#[test]
+fn only_an_exact_authenticated_artifact_can_execute_imported_scripts() -> Result<()> {
+    let bytes = imported_scripted_file();
+    let capability = authenticated_capability(&bytes);
+    let trusted = Arc::new(File::import_with_script_capability(&bytes, capability)?);
+    let (mut first_session, _) =
+        FlowSession::create(Arc::clone(&trusted), FlowSessionConfig::default())?;
+    let (mut second_session, _) =
+        FlowSession::create(Arc::clone(&trusted), FlowSessionConfig::default())?;
+
     let mut trusted_factory = RecordingFactory::new();
     let mut trusted_renderer = trusted_factory.make_renderer();
-    trusted_instance.draw(&mut trusted_factory, &mut trusted_renderer)?;
+    let mut first_cache = first_session.new_render_cache();
+    first_session.draw(
+        &mut trusted_factory,
+        &mut trusted_renderer,
+        &mut first_cache,
+    )?;
     let stream = trusted_factory.stream();
+    assert!(stream.contains("color=0xffcc3300"), "{stream}");
     assert!(stream.contains("color=0xff3366cc"), "{stream}");
     assert!(stream.contains("drawPath "), "{stream}");
+
+    let mut clone_factory = RecordingFactory::new();
+    let mut clone_renderer = clone_factory.make_renderer();
+    let mut second_cache = second_session.new_render_cache();
+    second_session.draw(&mut clone_factory, &mut clone_renderer, &mut second_cache)?;
+    assert!(
+        clone_factory.stream().contains("color=0xff3366cc"),
+        "two sessions from one source File own fresh script VMs and distinct Factory domains"
+    );
+
+    let mut changed_bytes = bytes.clone();
+    changed_bytes.push(0);
+    assert!(
+        File::import_with_script_capability(&changed_bytes, authenticated_capability(&bytes))
+            .is_err(),
+        "an authenticated capability must remain bound to the exact artifact bytes"
+    );
     Ok(())
 }

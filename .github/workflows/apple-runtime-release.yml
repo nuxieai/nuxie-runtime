@@ -184,6 +184,7 @@ jobs:
 
           test "$(metadata_scalar schemaVersion integer)" = "1"
           test "$(metadata_scalar runtimeVersion string)" = "${NUX_RUNTIME_VERSION}"
+          test "$(metadata_scalar luaurVersion string)" = "0.1.8"
           test "$(metadata_scalar sourceRevision string)" = "${NUX_RUNTIME_SOURCE_REVISION}"
           test "$(metadata_scalar abiMajor integer)" = "${expected_abi_major}"
           test "$(metadata_scalar abiMinor integer)" = "${expected_abi_minor}"
@@ -192,6 +193,7 @@ jobs:
           test "$(metadata_scalar xcodeVersion string)" = "${NUX_APPLE_XCODE_VERSION}"
           test "$(metadata_scalar xcodeBuild string)" = "${NUX_APPLE_XCODE_BUILD}"
           test "$(metadata_scalar minimumIOSVersion string)" = "${NUX_APPLE_DEPLOYMENT_TARGET}"
+          test "$(metadata_scalar thirdPartyNoticesPath string)" = "NuxieRuntime.xcframework/THIRD_PARTY_NOTICES.md"
 
           metadata_checksum="$(metadata_scalar swiftPackageChecksum string)"
           actual_checksum="$(swift package compute-checksum "${archive}")"

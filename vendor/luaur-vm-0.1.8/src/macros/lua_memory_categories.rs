@@ -1,0 +1,1 @@
+pub const LUA_MEMORY_CATEGORIES: i32 = 256;

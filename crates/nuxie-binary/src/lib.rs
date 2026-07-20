@@ -6458,6 +6458,7 @@ impl RuntimeFile {
         let mut latest_view_model = None;
         let mut latest_view_model_instance = None;
         let mut latest_view_model_instance_list = None;
+        let mut backboard_seen = false;
 
         for (index, object) in self.objects.iter().enumerate() {
             if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
@@ -6470,6 +6471,11 @@ impl RuntimeFile {
             let Some(definition) = definition_by_type_key(object.type_key) else {
                 continue;
             };
+
+            if definition.name == "Backboard" {
+                backboard_seen = true;
+                continue;
+            }
 
             if definition.name == "ViewModel" {
                 view_models.push(RuntimeViewModel {
@@ -6490,11 +6496,25 @@ impl RuntimeFile {
 
             if definition.name == "ViewModelInstance" {
                 latest_view_model_instance = None;
-                let Some(view_model_index) = object.uint_property("viewModelId") else {
-                    continue;
-                };
-                let Ok(view_model_index) = usize::try_from(view_model_index) else {
-                    continue;
+                // Publisher-era files serialize each instance directly after its
+                // ViewModel and before the Backboard. Rive attached those records
+                // through the latest ViewModel importer. Newer files serialize
+                // instances under the Backboard and resolve their viewModelId.
+                // Accept both layouts so existing Nuxie payloads retain authored
+                // values without sacrificing the newer ID-based association.
+                let view_model_index = if backboard_seen {
+                    let Some(view_model_index) = object.uint_property("viewModelId") else {
+                        continue;
+                    };
+                    let Ok(view_model_index) = usize::try_from(view_model_index) else {
+                        continue;
+                    };
+                    view_model_index
+                } else {
+                    let Some(view_model_index) = latest_view_model else {
+                        continue;
+                    };
+                    view_model_index
                 };
                 if let Some(view_model) = view_models.get_mut(view_model_index) {
                     view_model.instances.push(RuntimeViewModelInstance {
@@ -8907,7 +8927,13 @@ fn object_imports_successfully(
                 && context.latest(ImportStackKey::ListenerInputTypeSemantic);
         }
         "DataEnumValue" => return context.latest(ImportStackKey::DataEnumCustom),
-        "ViewModelInstance" => return context.latest(ImportStackKey::Backboard),
+        // Rive's publisher-era importer attached instances to the latest
+        // ViewModel before a Backboard existed. Current files attach them to
+        // the Backboard and resolve viewModelId. Nuxie must read both layouts.
+        "ViewModelInstance" => {
+            return context.latest(ImportStackKey::Backboard)
+                || context.latest(ImportStackKey::ViewModel);
+        }
         "ViewModelInstanceListItem" => {
             return context.latest(ImportStackKey::ViewModelInstanceList);
         }

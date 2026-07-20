@@ -1305,7 +1305,7 @@ fn advance_scene_to(
         .update_script_instances()
         .context("scripted drawable update failed")?;
     if let Some(state_machine) = state_machine.as_deref_mut() {
-        instance.settle_state_machine_update_passes_with_state_machines(std::slice::from_mut(
+        instance.settle_state_machine_update_passes_after_main_advance(std::slice::from_mut(
             state_machine,
         ));
     } else {

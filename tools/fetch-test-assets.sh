@@ -9,6 +9,9 @@ base_url="https://raw.githubusercontent.com/rive-app/rive-runtime/$ref/tests/uni
 assets=(
   "animation/smi_test.riv|51fb2ef2ca7a2014b4f4586df1c0894fef7d92d422a27ac82fef1459407b73f8"
   "animation/state_machine_transition.riv|65fc100a82b1c2015cdd6267e5b3f3dea0d7a772c1710a7e9c4a09c883e26e3e"
+  "flow/component_list_2.riv|b1541dfdba9f0a873245838ac560b27c21c181f9745d8052d9133163a530ef6e"
+  "flow/data_binding_test.riv|c7e61a409945ffc70eb72c35b6efcd9a6115a00de0adc74419360ab88b740308"
+  "flow/replace_view_model.riv|99a04bd4ff5c0a9b333e83c6a3840861fac6a26237329c7eef6993b26b64e4f5"
   "graph/clipping_and_draw_order.riv|aac75187236fcd528e92cdba9ad5022a7e1346b8475ea2e68dd2dde1023fdc97"
   "graph/dependency_test.riv|1321815e37a5101a9176b2e147cac2b203cc9cd81366e49d46d1f97c28ec784d"
   "graph/draw_rule_cycle.riv|db0cf30b8df689dc1d29dfbf4316b69c61270743a7eb94bcd3ac27600a00c9c3"

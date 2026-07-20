@@ -293,15 +293,10 @@ fn callback_event_for_keyed_property(
         return None;
     }
 
-    Some(StateMachineReportedEvent {
-        event_local_index: target_local_id,
-        event_core_type: u32::from(target.type_key),
-        name: target
-            .string_property("name")
-            .filter(|name| !name.is_empty())
-            .map(ToOwned::to_owned),
-        seconds_delay: 0.0,
-    })
+    Some(StateMachineReportedEvent::from_runtime_event(
+        target_local_id,
+        target,
+    ))
 }
 
 pub(crate) fn build_linear_animations(

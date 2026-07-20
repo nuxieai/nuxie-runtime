@@ -2721,7 +2721,7 @@ fn instantiate_runtime_mount_with_carry(
         .view_model_default
         .as_ref()
         .map(|default| {
-            let mut value = runtime
+            let value = runtime
                 .instantiate_view_model_instance(default.instance_index)
                 .ok_or(())?;
             let mut slots = Vec::with_capacity(default.numbers.len());
@@ -2827,7 +2827,9 @@ fn flush_view_model(live: &mut LiveInstance) -> bool {
     if !view_model.dirty {
         return false;
     }
-    view_model.context.set_main(view_model.value.raw().clone());
+    view_model
+        .context
+        .set_main_handle(view_model.value.handle().clone());
     let file = Arc::clone(live.runtime.file());
     let mut changed = live
         .runtime
@@ -13105,6 +13107,11 @@ mod tests {
         assert_eq!(machine.reported_event_count(), 0);
         assert!(machine.fire_trigger(trigger));
         assert!(instance.advance_with_state_machine(&mut machine, 0.0));
+        assert_eq!(
+            machine.changed_state_count(),
+            1,
+            "the main transition count must survive the outer settlement tail"
+        );
         assert_eq!(
             instance.raw().double_property(1, PROPERTY_WORLD_OPACITY),
             Some(0.8)

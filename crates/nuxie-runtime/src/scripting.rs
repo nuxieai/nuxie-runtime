@@ -11,8 +11,8 @@ use nuxie_render_api::{
 
 use crate::properties::property_key_for_name;
 use crate::{
-    ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelHandle,
-    RuntimeOwnedViewModelInstance,
+    ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelContextHandle,
+    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
 };
 
 /// Runtime-owned scripting error type.
@@ -280,7 +280,7 @@ fn script_blend_mode(value: u32) -> BlendMode {
 pub struct ScriptViewModel {
     properties: BTreeMap<String, ScriptViewModelProperty>,
     nested_view_models: BTreeMap<String, ScriptViewModel>,
-    instance: RuntimeOwnedViewModelHandle,
+    context: RuntimeOwnedViewModelContextHandle,
     file: Rc<RuntimeFile>,
     view_model_index: usize,
     ancestors: Rc<Vec<usize>>,
@@ -341,56 +341,91 @@ impl ScriptViewModel {
         )
     }
 
+    /// Compatibility access to the retained graph root.
+    ///
+    /// Scoped integrations should prefer [`Self::owned_handle`] so a nested
+    /// view model keeps its property path as well as the shared root identity.
     pub fn owned_instance(&self) -> Rc<RefCell<RuntimeOwnedViewModelInstance>> {
-        self.instance.shared()
+        self.context.root_handle().shared()
     }
 
-    pub fn owned_handle(&self) -> RuntimeOwnedViewModelHandle {
-        self.instance.clone()
+    pub fn owned_handle(&self) -> RuntimeOwnedViewModelContextHandle {
+        self.context.clone()
     }
 
     pub fn number(&self, name: &str) -> Option<f32> {
-        self.instance.borrow().number_value_by_property_name(name)
+        let path = self.scoped_property_path(name)?;
+        self.context
+            .root_handle()
+            .borrow()
+            .number_value_by_property_path(&path)
     }
 
     pub fn set_number(&self, name: &str, value: f32) -> bool {
-        self.instance
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
             .borrow_mut()
-            .set_number_by_property_name(name, value)
+            .set_number_by_property_path(&path, value)
     }
 
     pub fn color(&self, name: &str) -> Option<u32> {
-        self.instance.borrow().color_value_by_property_name(name)
+        let path = self.scoped_property_path(name)?;
+        self.context
+            .root_handle()
+            .borrow()
+            .color_value_by_property_path(&path)
     }
 
     pub fn set_color(&self, name: &str, value: u32) -> bool {
-        self.instance
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
             .borrow_mut()
-            .set_color_by_property_name(name, value)
+            .set_color_by_property_path(&path, value)
     }
 
     pub fn string(&self, name: &str) -> Option<String> {
-        self.instance
+        let path = self.scoped_property_path(name)?;
+        self.context
+            .root_handle()
             .borrow()
-            .string_value_by_property_name(name)
+            .string_value_by_property_path(&path)
             .map(|value| String::from_utf8_lossy(value).into_owned())
     }
 
     pub fn set_string(&self, name: &str, value: &str) -> bool {
-        self.instance
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
             .borrow_mut()
-            .set_string_by_property_name(name, value.as_bytes())
+            .set_string_by_property_path(&path, value.as_bytes())
     }
 
     pub fn boolean(&self, name: &str) -> Option<bool> {
-        self.instance.borrow().boolean_value_by_property_name(name)
+        let path = self.scoped_property_path(name)?;
+        self.context
+            .root_handle()
+            .borrow()
+            .boolean_value_by_property_path(&path)
     }
 
     pub fn image(&self, name: &str) -> Option<ScriptImage> {
         if self.property(name) != Some(ScriptViewModelProperty::Image) {
             return None;
         }
-        let file_asset_index = self.instance.borrow().asset_value_by_property_name(name)?;
+        let path = self.scoped_property_path(name)?;
+        let file_asset_index = self
+            .context
+            .root_handle()
+            .borrow()
+            .asset_value_by_property_path(&path)?;
         let asset = self
             .file
             .file_asset(usize::try_from(file_asset_index).ok()?)?;
@@ -419,24 +454,38 @@ impl ScriptViewModel {
         let file_asset_index = image
             .map(ScriptImage::file_asset_index)
             .unwrap_or(u64::from(u32::MAX));
-        self.instance
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
             .borrow_mut()
-            .set_asset_by_property_name(name, file_asset_index)
+            .set_asset_by_property_path(&path, file_asset_index)
     }
 
     /// Mirrors C++ `ScriptedViewModel::pushIndex` for component-list rows.
     pub fn component_list_item_index(&self) -> Option<u64> {
-        self.instance.borrow().component_list_item_index()
+        self.context
+            .detached_snapshot()
+            .and_then(|instance| instance.component_list_item_index())
     }
 
     pub fn set_boolean(&self, name: &str, value: bool) -> bool {
-        self.instance
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
             .borrow_mut()
-            .set_boolean_by_property_name(name, value)
+            .set_boolean_by_property_path(&path, value)
     }
 
     pub fn trigger(&self, name: &str) -> Option<u64> {
-        self.instance.borrow().trigger_value_by_property_name(name)
+        let path = self.scoped_property_path(name)?;
+        self.context
+            .root_handle()
+            .borrow()
+            .trigger_value_by_property_path(&path)
     }
 
     /// Fire a trigger the same way C++ `ViewModelInstanceTrigger::trigger()`
@@ -446,9 +495,13 @@ impl ScriptViewModel {
         let Some(value) = self.trigger(name) else {
             return false;
         };
-        self.instance
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
             .borrow_mut()
-            .set_trigger_by_property_name(name, value.wrapping_add(1))
+            .set_trigger_by_property_path(&path, value.wrapping_add(1))
     }
 
     /// Consume transient values at the end of a script host frame.
@@ -457,7 +510,7 @@ impl ScriptViewModel {
     /// without invoking script listeners, embedded view models recurse, and
     /// shared list instances recurse exactly once even if the graph cycles.
     pub fn advance_script_frame(&self) -> bool {
-        Self::advance_owned_instance(&self.instance.shared())
+        Self::advance_owned_instance(&self.context.root_handle().shared())
     }
 
     /// Advance a shared owned instance without requiring its schema wrapper.
@@ -497,45 +550,63 @@ impl ScriptViewModel {
     }
 
     pub fn list_len(&self, name: &str) -> Option<usize> {
-        self.instance
+        let path = self.scoped_property_path(name)?;
+        self.context
+            .root_handle()
             .borrow()
-            .list_items_by_property_name(name)
-            .map(|items| items.len())
+            .list_item_count_by_property_path(&path)
     }
 
     pub fn list_item(&self, name: &str, index: usize) -> Option<Self> {
+        let path = self.scoped_property_path(name)?;
         let item = self
-            .instance
+            .context
+            .root_handle()
             .borrow()
-            .list_items_by_property_name(name)?
+            .list_handle_by_property_path(&path)?
+            .items()
             .get(index)
             .cloned()?;
         let view_model_index = item.borrow().view_model_index();
         build_script_view_model_shared(
             Rc::clone(&self.file),
             view_model_index,
-            RuntimeOwnedViewModelHandle::from_shared(item),
+            item,
             self.ancestors.as_slice(),
         )
     }
 
     pub fn push_list_item(&self, name: &str, item: &ScriptViewModel) -> bool {
-        self.instance
-            .borrow_mut()
-            .push_list_item_by_property_name(name, item.instance.shared())
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        let item_context = item.owned_handle();
+        if !item_context.is_root() {
+            return false;
+        }
+        let root = self.context.root_handle();
+        root.push_list_item_by_property_path(&path, item_context.root_handle().shared())
     }
 
     pub fn insert_list_item(&self, name: &str, index: usize, item: &ScriptViewModel) -> bool {
-        self.instance
-            .borrow_mut()
-            .insert_list_item_by_property_name(name, index, item.instance.shared())
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        let item_context = item.owned_handle();
+        if !item_context.is_root() {
+            return false;
+        }
+        let root = self.context.root_handle();
+        root.insert_list_item_by_property_path(&path, index, item_context.root_handle().shared())
     }
 
     pub fn pop_list_item(&self, name: &str) -> Option<Self> {
+        let path = self.scoped_property_path(name)?;
         let item = self
-            .instance
+            .context
+            .root_handle()
             .borrow_mut()
-            .pop_list_item_by_property_name(name)?;
+            .pop_list_item_by_property_path(&path)?;
         let view_model_index = item.borrow().view_model_index();
         build_script_view_model_shared(
             Rc::clone(&self.file),
@@ -546,10 +617,12 @@ impl ScriptViewModel {
     }
 
     pub fn shift_list_item(&self, name: &str) -> Option<Self> {
+        let path = self.scoped_property_path(name)?;
         let item = self
-            .instance
+            .context
+            .root_handle()
             .borrow_mut()
-            .shift_list_item_by_property_name(name)?;
+            .shift_list_item_by_property_path(&path)?;
         let view_model_index = item.borrow().view_model_index();
         build_script_view_model_shared(
             Rc::clone(&self.file),
@@ -560,28 +633,60 @@ impl ScriptViewModel {
     }
 
     pub fn swap_list_items(&self, name: &str, first: usize, second: usize) -> bool {
-        self.instance
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
             .borrow_mut()
-            .swap_list_items_by_property_name(name, first, second)
+            .swap_list_items_by_property_path(&path, first, second)
     }
 
     pub fn clear_list_items(&self, name: &str) -> bool {
-        self.instance
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
             .borrow_mut()
-            .clear_list_items_by_property_name(name)
+            .clear_list_items_by_property_path(&path)
     }
 
     pub fn remove_list_item_at(&self, name: &str, index: usize) -> bool {
-        self.instance
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
             .borrow_mut()
-            .remove_list_item_at_by_property_name(name, index)
+            .remove_list_item_at_by_property_path(&path, index)
     }
 
     pub fn remove_list_item(&self, name: &str, item: &ScriptViewModel, remove_all: bool) -> bool {
-        let item = item.instance.shared();
-        self.instance
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        let item_context = item.owned_handle();
+        if !item_context.is_root() {
+            return false;
+        }
+        let item = item_context.root_handle().shared();
+        self.context
+            .root_handle()
             .borrow_mut()
-            .remove_list_items_by_identity(name, &item, remove_all)
+            .remove_list_items_by_identity_at_property_path(&path, &item, remove_all)
+    }
+
+    fn scoped_property_path(&self, name: &str) -> Option<Vec<usize>> {
+        let property_index = self
+            .file
+            .view_model(self.view_model_index)?
+            .properties
+            .iter()
+            .position(|property| property.string_property("name") == Some(name))?;
+        let mut path = self.context.scope_path().to_vec();
+        path.push(property_index);
+        Some(path)
     }
 }
 
@@ -642,6 +747,23 @@ pub fn script_view_model_from_owned(
     )
 }
 
+/// Build a detached scripting snapshot from one owned view-model value.
+///
+/// Product integrations should normally use [`script_view_model_from_owned`]
+/// so artboards, state machines, and scripts retain the same mutable graph.
+pub fn script_view_model_from_owned_snapshot(
+    file: &RuntimeFile,
+    instance: &RuntimeOwnedViewModelInstance,
+) -> Option<ScriptViewModel> {
+    let view_model_index = instance.view_model_index();
+    build_script_view_model_shared(
+        Rc::new(file.clone()),
+        view_model_index,
+        RuntimeOwnedViewModelHandle::new(instance.clone()),
+        &[],
+    )
+}
+
 fn build_script_view_model(
     file: Rc<RuntimeFile>,
     view_model_index: usize,
@@ -660,6 +782,16 @@ fn build_script_view_model_shared(
     file: Rc<RuntimeFile>,
     view_model_index: usize,
     instance: RuntimeOwnedViewModelHandle,
+    ancestors: &[usize],
+) -> Option<ScriptViewModel> {
+    let context = RuntimeOwnedViewModelContextHandle::root(&file, instance);
+    build_script_view_model_scoped(file, view_model_index, context, ancestors)
+}
+
+fn build_script_view_model_scoped(
+    file: Rc<RuntimeFile>,
+    view_model_index: usize,
+    context: RuntimeOwnedViewModelContextHandle,
     ancestors: &[usize],
 ) -> Option<ScriptViewModel> {
     let view_model = file.view_model(view_model_index)?;
@@ -687,29 +819,23 @@ fn build_script_view_model_shared(
     let nested_view_models = view_model
         .properties
         .iter()
-        .filter(|property| property.type_name == "ViewModelPropertyViewModel")
-        .filter_map(|property| {
+        .enumerate()
+        .filter(|(_, property)| property.type_name == "ViewModelPropertyViewModel")
+        .filter_map(|(property_index, property)| {
             let name = property.string_property("name")?.to_owned();
-            let (nested_index, instance_index) = instance
-                .borrow()
-                .nested_view_model_selection_by_property_name(&name)?;
+            let mut nested_scope_path = context.scope_path().to_vec();
+            nested_scope_path.push(property_index);
+            let nested_context = context.scoped(nested_scope_path)?;
+            let nested_index = nested_context.view_model_index()?;
             if child_ancestors.contains(&nested_index) {
                 return None;
             }
-            let nested_instance = match instance_index {
-                Some(instance_index) => RuntimeOwnedViewModelInstance::from_instance(
-                    &file,
-                    nested_index,
-                    instance_index,
-                )?,
-                None => RuntimeOwnedViewModelInstance::new(&file, nested_index)?,
-            };
             Some((
                 name,
-                build_script_view_model(
+                build_script_view_model_scoped(
                     Rc::clone(&file),
                     nested_index,
-                    nested_instance,
+                    nested_context,
                     &child_ancestors,
                 )?,
             ))
@@ -718,7 +844,7 @@ fn build_script_view_model_shared(
     Some(ScriptViewModel {
         properties,
         nested_view_models,
-        instance,
+        context,
         file,
         view_model_index,
         ancestors: Rc::new(ancestors.to_vec()),
@@ -811,7 +937,33 @@ pub fn bound_script_artboard_input(
 /// Resolves a `ScriptInputViewModelProperty` after its scripted object has a
 /// data context. C++ treats hydration as all-or-nothing, so `None` means the
 /// caller must defer every input and user `init`, not install a nil stand-in.
-pub fn bound_script_view_model(
+pub fn bound_script_view_model_from_owned_context(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelContextHandle,
+    input: &RuntimeObject,
+) -> Option<ScriptViewModel> {
+    if input.type_name != "ScriptInputViewModelProperty" {
+        return None;
+    }
+    let source_path = file.resolved_data_bind_path_ids_for_referencer_object(input)?;
+    let root = context.root_handle();
+    let property_path = root.borrow().property_path_for_context_source_path(
+        file,
+        context.scope_path(),
+        &source_path,
+        false,
+    )?;
+    let nested_context = context.scoped(property_path)?;
+    let view_model_index = nested_context.view_model_index()?;
+    build_script_view_model_scoped(Rc::new(file.clone()), view_model_index, nested_context, &[])
+}
+
+/// Hydrate a detached scripting snapshot from a detached owned context.
+///
+/// Retained runtime integrations should use
+/// [`bound_script_view_model_from_owned_context`] so nested mutations keep the
+/// same graph identity and invalidation path.
+pub fn bound_script_view_model_snapshot(
     file: &RuntimeFile,
     context: &RuntimeOwnedViewModelInstance,
     input: &RuntimeObject,

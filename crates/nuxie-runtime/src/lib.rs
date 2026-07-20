@@ -18,7 +18,9 @@ pub use animation::{
     RuntimeKeyFrameDouble, RuntimeKeyFrameString, RuntimeKeyFrameUint, RuntimeKeyedObject,
     RuntimeKeyedProperty, RuntimeLinearAnimation,
 };
-pub use artboard::{ArtboardInstance, ExternalFontAssetError};
+pub use artboard::{
+    ArtboardInstance, ExternalFontAssetError, RuntimeEventProperty, RuntimeEventPropertyValue,
+};
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,
     TransformRuntimeState, UpdateComponentsReport,
@@ -52,8 +54,10 @@ pub use scripting::{
     ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptImage, ScriptInstance,
     ScriptListenerInvocation, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode,
     ScriptPaint, ScriptPointerEventKind, ScriptValue, ScriptViewModel, ScriptViewModelProperty,
-    ScriptingVm, bound_script_artboard_input, bound_script_input_value, bound_script_view_model,
-    script_node_for_artboard, script_view_model_from_owned, script_view_models,
+    ScriptingVm, bound_script_artboard_input, bound_script_input_value,
+    bound_script_view_model_from_owned_context, bound_script_view_model_snapshot,
+    script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_snapshot,
+    script_view_models,
 };
 pub use state_machine::{
     RuntimeLayerState, RuntimeStateMachine, RuntimeStateMachineInput, RuntimeStateMachineLayer,
@@ -69,7 +73,9 @@ pub(crate) use state_machine::{
     StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
     StateMachineTransitionDurationInstance,
 };
-pub use text::{embedded_font_is_parseable, static_text_support_error};
+pub use text::{
+    embedded_font_is_parseable, embedded_fonts_are_parseable, static_text_support_error,
+};
 pub use view_model::{
     RuntimeDataContext, RuntimeDataContextInstanceRef, RuntimeDataContextLookupKind,
     RuntimeDataContextLookupReport, RuntimeDataContextValueRef,
@@ -87,11 +93,12 @@ pub use view_model::{
     RuntimeImportedViewModelTriggerSourceHandle, RuntimeImportedViewModelViewModelSourceHandle,
     RuntimeOwnedViewModelArtboardSourceHandle, RuntimeOwnedViewModelAssetSourceHandle,
     RuntimeOwnedViewModelBooleanSourceHandle, RuntimeOwnedViewModelColorSourceHandle,
-    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelEnumSourceHandle,
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
-    RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelNumberSourceHandle,
-    RuntimeOwnedViewModelStringSourceHandle, RuntimeOwnedViewModelSymbolListIndexSourceHandle,
-    RuntimeOwnedViewModelTriggerSourceHandle, RuntimeOwnedViewModelViewModelSourceHandle,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle,
+    RuntimeOwnedViewModelEnumSourceHandle, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, RuntimeOwnedViewModelListSourceHandle,
+    RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
+    RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTriggerSourceHandle,
+    RuntimeOwnedViewModelViewModelSourceHandle, RuntimeViewModelLinkError,
     runtime_data_context_lookup_reports, runtime_global_view_model_indices,
     runtime_global_view_model_names,
 };

@@ -803,10 +803,34 @@ pub struct StateMachineReportedEvent {
     pub(crate) event_local_index: usize,
     pub(crate) event_core_type: u32,
     pub(crate) name: Option<String>,
+    pub(crate) url: Option<String>,
+    pub(crate) target: Option<String>,
     pub(crate) seconds_delay: f32,
 }
 
 impl StateMachineReportedEvent {
+    pub(crate) fn from_runtime_event(event_local_index: usize, event: &RuntimeObject) -> Self {
+        let (url, target) = if event.type_name == "OpenUrlEvent" {
+            (
+                Some(event.string_property("url").unwrap_or_default().to_owned()),
+                Some(open_url_target(event.uint_property("targetValue").unwrap_or(0)).to_owned()),
+            )
+        } else {
+            (None, None)
+        };
+        Self {
+            event_local_index,
+            event_core_type: u32::from(event.type_key),
+            name: event
+                .string_property("name")
+                .filter(|name| !name.is_empty())
+                .map(ToOwned::to_owned),
+            url,
+            target,
+            seconds_delay: 0.0,
+        }
+    }
+
     pub fn event_local_index(&self) -> usize {
         self.event_local_index
     }
@@ -819,8 +843,26 @@ impl StateMachineReportedEvent {
         self.name.as_deref()
     }
 
+    pub fn url(&self) -> Option<&str> {
+        self.url.as_deref()
+    }
+
+    pub fn target(&self) -> Option<&str> {
+        self.target.as_deref()
+    }
+
     pub fn seconds_delay(&self) -> f32 {
         self.seconds_delay
+    }
+}
+
+fn open_url_target(value: u64) -> &'static str {
+    match value {
+        0 => "_blank",
+        1 => "_parent",
+        2 => "_self",
+        3 => "_top",
+        _ => "",
     }
 }
 
@@ -1164,15 +1206,10 @@ impl RuntimeStateMachineFireAction {
                 let event = action.event?;
                 Some(Self::Event {
                     occurs_value,
-                    event: StateMachineReportedEvent {
-                        event_local_index: action.event_local_index?,
-                        event_core_type: u32::from(event.type_key),
-                        name: event
-                            .string_property("name")
-                            .filter(|name| !name.is_empty())
-                            .map(ToOwned::to_owned),
-                        seconds_delay: 0.0,
-                    },
+                    event: StateMachineReportedEvent::from_runtime_event(
+                        action.event_local_index?,
+                        event,
+                    ),
                 })
             }
             "StateMachineFireTrigger" => Some(Self::Trigger {
@@ -1853,15 +1890,10 @@ impl RuntimeScheduledListenerAction {
                 let event = action.event?;
                 Some(Self::FireEvent {
                     flags,
-                    event: StateMachineReportedEvent {
-                        event_local_index: action.event_local_index?,
-                        event_core_type: u32::from(event.type_key),
-                        name: event
-                            .string_property("name")
-                            .filter(|name| !name.is_empty())
-                            .map(ToOwned::to_owned),
-                        seconds_delay: 0.0,
-                    },
+                    event: StateMachineReportedEvent::from_runtime_event(
+                        action.event_local_index?,
+                        event,
+                    ),
                 })
             }
             "ListenerBoolChange" => Some(Self::BoolChange {
@@ -3356,7 +3388,7 @@ impl StateMachineLayerInstance {
 }
 
 #[cfg(test)]
-mod tests {
+mod animation_tests {
     use super::*;
     use crate::animation::RuntimeKeyFrameValue;
     use crate::view_model::RuntimeFontAssetValue;
@@ -3474,5 +3506,52 @@ mod tests {
                 .is_some_and(|value| Arc::ptr_eq(value, &live)),
             "cloning a scheduled listener must retain the same live font"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nuxie_binary::read_runtime_file;
+    use std::path::PathBuf;
+
+    #[test]
+    fn reported_event_metadata_preserves_open_url_values_and_ordinary_absence() {
+        assert_eq!(open_url_target(0), "_blank");
+        assert_eq!(open_url_target(1), "_parent");
+        assert_eq!(open_url_target(2), "_self");
+        assert_eq!(open_url_target(3), "_top");
+        assert_eq!(open_url_target(4), "");
+        assert_eq!(open_url_target(u64::MAX), "");
+
+        let fixture = PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets/event_on_listener.riv");
+        let file = read_runtime_file(&std::fs::read(fixture).expect("read event fixture"))
+            .expect("import event fixture");
+        let open_url = file
+            .objects
+            .iter()
+            .flatten()
+            .find(|object| {
+                object.type_name == "OpenUrlEvent"
+                    && object.string_property("url") == Some("http://rive.app/delete-me")
+            })
+            .expect("authored OpenURL event");
+        let open_url = StateMachineReportedEvent::from_runtime_event(7, open_url);
+        assert_eq!(open_url.url(), Some("http://rive.app/delete-me"));
+        assert_eq!(open_url.target(), Some("_blank"));
+
+        let ordinary = file
+            .objects
+            .iter()
+            .flatten()
+            .find(|object| object.type_name == "Event")
+            .expect("ordinary event");
+        let ordinary = StateMachineReportedEvent::from_runtime_event(8, ordinary);
+        assert_eq!(ordinary.url(), None);
+        assert_eq!(ordinary.target(), None);
     }
 }

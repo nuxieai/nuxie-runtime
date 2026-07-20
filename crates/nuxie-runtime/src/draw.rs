@@ -8394,32 +8394,6 @@ impl RuntimeRenderPaints {
 }
 
 impl RuntimeRenderPaintCache {
-    /// Allocate one artboard-tree cache using host-provided bytes for image
-    /// assets whose serialized file contents are absent.
-    ///
-    /// External bytes are keyed by the semantic `FileAsset.assetId`. They are
-    /// decoded here, at cache allocation time, so callers can discard a failed
-    /// candidate cache and retry. Serialized `FileAssetContents` always wins.
-    pub fn preallocate_for_artboard_tree_with_external_images(
-        runtime: &RuntimeFile,
-        graph: &ArtboardGraph,
-        artboards: &[ArtboardGraph],
-        external_images: &BTreeMap<u32, Arc<[u8]>>,
-        factory: &mut dyn RenderFactory,
-    ) -> Self {
-        preallocate_render_paint_cache_for_artboard_tree_internal(
-            runtime,
-            graph,
-            artboards,
-            Some(external_images),
-            factory,
-            false,
-            true,
-            false,
-            None,
-        )
-    }
-
     /// Returns whether this retained cache has paint or slice resources that
     /// must be refreshed before its next draw.
     ///
@@ -8446,6 +8420,32 @@ impl RuntimeRenderPaintCache {
                 || self.solid_only_tree_structure_epoch != nested_structure_epoch;
         }
         true
+    }
+
+    /// Allocate one artboard-tree cache using host-provided bytes for image
+    /// assets whose serialized file contents are absent.
+    ///
+    /// External bytes are keyed by the semantic `FileAsset.assetId`. They are
+    /// decoded here, at cache allocation time, so callers can discard a failed
+    /// candidate cache and retry. Serialized `FileAssetContents` always wins.
+    pub fn preallocate_for_artboard_tree_with_external_images(
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        external_images: &BTreeMap<u32, Arc<[u8]>>,
+        factory: &mut dyn RenderFactory,
+    ) -> Self {
+        preallocate_render_paint_cache_for_artboard_tree_internal(
+            runtime,
+            graph,
+            artboards,
+            Some(external_images),
+            factory,
+            false,
+            true,
+            false,
+            None,
+        )
     }
 
     pub fn root_paints_mut(&mut self) -> &mut RuntimeRenderPaints {

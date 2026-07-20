@@ -13,8 +13,9 @@ use crate::{
     RuntimeDefaultViewModelNumberSourceHandle, RuntimeDefaultViewModelStringSourceHandle,
     RuntimeDefaultViewModelSymbolListIndexSourceHandle, RuntimeDefaultViewModelTriggerSourceHandle,
     RuntimeDefaultViewModelViewModelSourceHandle, RuntimeImportedViewModelInstanceContext,
-    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
-    ScriptError, ScriptInstance, ScriptListenerInvocation, ScriptPointerEventKind, ScriptValue,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, ScriptError, ScriptInstance, ScriptListenerInvocation,
+    ScriptPointerEventKind, ScriptValue,
     runtime_default_view_model_artboard_property_path_for_name,
     runtime_default_view_model_artboard_property_path_for_name_path,
     runtime_default_view_model_asset_property_path_for_name,
@@ -71,6 +72,8 @@ pub struct StateMachineInstance {
     post_update_probe_pending: bool,
     data_bind_graph: RuntimeDataBindGraph,
     key_frame_data_bind_graphs: Vec<Option<RuntimeDataBindGraph>>,
+    owned_view_model_handle: Option<RuntimeOwnedViewModelContextHandle>,
+    owned_view_model_generation: Option<u64>,
     pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
     pointer_listener_states: Vec<RuntimePointerListenerState>,
     pointer_positions: Vec<RuntimePointerPosition>,
@@ -237,6 +240,8 @@ impl StateMachineInstance {
             post_update_probe_pending: false,
             data_bind_graph,
             key_frame_data_bind_graphs,
+            owned_view_model_handle: None,
+            owned_view_model_generation: None,
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
             pointer_positions: Vec::new(),
@@ -280,6 +285,10 @@ impl StateMachineInstance {
 
     pub fn changed_state_count(&self) -> usize {
         self.changed_state_count
+    }
+
+    pub(crate) fn reset_changed_state_count_for_outer_settlement(&mut self) {
+        self.changed_state_count = 0;
     }
 
     pub fn needs_advance(&self) -> bool {
@@ -775,11 +784,23 @@ impl StateMachineInstance {
                     value,
                     ..
                 } => {
-                    changed |= self.perform_listener_view_model_change(
-                        *data_bind_index,
-                        value,
-                        owned_context.as_deref_mut(),
-                    );
+                    changed |= if let Some(context) = owned_context.as_deref_mut() {
+                        self.perform_listener_view_model_change(
+                            *data_bind_index,
+                            value,
+                            Some(context),
+                        )
+                    } else if let Some(handle) = self.owned_view_model_handle.clone() {
+                        let root = handle.root_handle();
+                        let mut context = root.borrow_mut();
+                        self.perform_listener_view_model_change(
+                            *data_bind_index,
+                            value,
+                            Some(&mut context),
+                        )
+                    } else {
+                        self.perform_listener_view_model_change(*data_bind_index, value, None)
+                    };
                 }
                 RuntimeScheduledListenerAction::Scripted { global_id, .. } => {
                     changed |= self.perform_scripted_listener_action(*global_id, invocation);
@@ -910,7 +931,7 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: &RuntimeListenerViewModelChangeValue,
     ) -> bool {
-        let value = match value {
+        let artboard_value = match value {
             RuntimeListenerViewModelChangeValue::Number(value) => {
                 RuntimeDataBindGraphValue::Number(*value)
             }
@@ -943,14 +964,20 @@ impl StateMachineInstance {
         let path = self
             .data_bind_graph
             .source_path_for_data_bind(data_bind_index);
-        if !self
-            .data_bind_graph
-            .set_active_view_model_source_for_data_bind(data_bind_index, value.clone())
-        {
+        let retained_handle = self.owned_view_model_handle.clone();
+        let changed = if let Some(handle) = retained_handle {
+            let root = handle.root_handle();
+            let mut context = root.borrow_mut();
+            self.perform_listener_view_model_change(data_bind_index, value, Some(&mut context))
+        } else {
+            self.data_bind_graph
+                .set_active_view_model_source_for_data_bind(data_bind_index, artboard_value.clone())
+        };
+        if !changed {
             return false;
         }
         if let Some(path) = path {
-            artboard.set_artboard_data_bind_value_for_path(&path, value);
+            artboard.set_artboard_data_bind_value_for_path(&path, artboard_value);
         }
         self.needs_advance = true;
         true
@@ -3233,6 +3260,7 @@ impl StateMachineInstance {
     }
 
     pub fn bind_empty_data_context(&mut self) -> bool {
+        self.clear_owned_view_model_handle();
         if !self.data_bind_graph.bind_empty_data_context() {
             return false;
         }
@@ -3244,6 +3272,7 @@ impl StateMachineInstance {
     }
 
     pub fn bind_default_view_model_context(&mut self) -> bool {
+        self.clear_owned_view_model_handle();
         if !self.data_bind_graph.bind_default_view_model_context() {
             return false;
         }
@@ -3274,6 +3303,7 @@ impl StateMachineInstance {
         view_model_index: usize,
         instance_index: usize,
     ) -> bool {
+        self.clear_owned_view_model_handle();
         if !self.data_bind_graph.bind_view_model_instance_context(
             file,
             view_model_index,
@@ -3299,6 +3329,7 @@ impl StateMachineInstance {
         file: &RuntimeFile,
         context: &RuntimeImportedViewModelInstanceContext,
     ) -> bool {
+        self.clear_owned_view_model_handle();
         if !self
             .data_bind_graph
             .bind_imported_view_model_context(file, context)
@@ -3327,6 +3358,49 @@ impl StateMachineInstance {
         &mut self,
         context: &RuntimeOwnedViewModelInstance,
     ) -> bool {
+        self.clear_owned_view_model_handle();
+        self.bind_owned_view_model_snapshot(context)
+    }
+
+    /// Bind and retain a shared owned view-model graph.
+    ///
+    /// Later mutations through any alias are refreshed at the next data
+    /// context advance, so the state machine and host never fork identity.
+    pub fn bind_owned_view_model_handle(&mut self, context: &RuntimeOwnedViewModelHandle) -> bool {
+        let context = RuntimeOwnedViewModelContextHandle::root_without_file(context.clone());
+        self.bind_owned_view_model_context_handle(&context)
+    }
+
+    pub fn bind_owned_view_model_context_handle(
+        &mut self,
+        context: &RuntimeOwnedViewModelContextHandle,
+    ) -> bool {
+        let identity_changed = self
+            .owned_view_model_handle
+            .as_ref()
+            .is_none_or(|bound| !bound.ptr_eq(context));
+        let handle = context.clone();
+        let root = context.root_handle();
+        let root = root.borrow();
+        let generation = root.mutation_generation();
+        let values_changed = if let Some(file) = context.file() {
+            let context_chain = [context.scope_path()];
+            self.data_bind_graph
+                .bind_owned_view_model_context_chain(file, &root, &context_chain)
+        } else {
+            self.data_bind_graph.bind_owned_view_model_context(&root)
+        };
+        if values_changed || identity_changed {
+            self.bind_active_owned_view_model_triggers_for_context(&root, context.scope_path());
+            self.needs_advance = true;
+        }
+        drop(root);
+        self.owned_view_model_generation = Some(generation);
+        self.owned_view_model_handle = Some(handle);
+        values_changed || identity_changed
+    }
+
+    fn bind_owned_view_model_snapshot(&mut self, context: &RuntimeOwnedViewModelInstance) -> bool {
         if !self.data_bind_graph.bind_owned_view_model_context(context) {
             return false;
         }
@@ -3365,6 +3439,7 @@ impl StateMachineInstance {
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &[&[usize]],
     ) -> bool {
+        self.clear_owned_view_model_handle();
         if !self
             .data_bind_graph
             .bind_owned_view_model_context_chain(file, context, context_chain)
@@ -3512,6 +3587,11 @@ impl StateMachineInstance {
     }
 
     pub fn advance_data_context(&mut self) -> bool {
+        self.advance_data_context_with_trigger_reset(true)
+    }
+
+    fn advance_data_context_with_trigger_reset(&mut self, reset_triggers: bool) -> bool {
+        self.refresh_owned_view_model_handle();
         if !self.data_bind_graph.data_context_present() {
             return false;
         }
@@ -3541,7 +3621,9 @@ impl StateMachineInstance {
             self.data_bind_graph
                 .apply_default_view_model_view_model_targets_to_sources(&self.bindable_view_models);
             self.apply_default_view_model_bindings(true, RuntimeDataBindGraphApplyPhase::Immediate);
-            self.reset_advanced_data_context();
+            if reset_triggers {
+                self.reset_advanced_data_context();
+            }
         }
         true
     }
@@ -3573,6 +3655,42 @@ impl StateMachineInstance {
                 RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
             );
         }
+    }
+
+    fn refresh_owned_view_model_handle(&mut self) -> bool {
+        let Some(context) = self.owned_view_model_handle.clone() else {
+            return false;
+        };
+        let root = context.root_handle();
+        let generation = root.borrow().mutation_generation();
+        if self.owned_view_model_generation == Some(generation) {
+            return false;
+        }
+        let context_value = root.borrow();
+        if let Some(file) = context.file() {
+            let context_chain = [context.scope_path()];
+            self.data_bind_graph.bind_owned_view_model_context_chain(
+                file,
+                &context_value,
+                &context_chain,
+            );
+        } else {
+            self.data_bind_graph
+                .bind_owned_view_model_context(&context_value);
+        }
+        self.refresh_active_owned_view_model_triggers_for_context(
+            &context_value,
+            context.scope_path(),
+        );
+        self.needs_advance = true;
+        drop(context_value);
+        self.owned_view_model_generation = Some(generation);
+        true
+    }
+
+    fn clear_owned_view_model_handle(&mut self) {
+        self.owned_view_model_handle = None;
+        self.owned_view_model_generation = None;
     }
 
     pub fn update_data_binds_apply_target_to_source(&mut self) -> bool {
@@ -3653,6 +3771,11 @@ impl StateMachineInstance {
         self.reported_events.get(index)
     }
 
+    /// Drain reported events at a host operation seam without advancing.
+    pub fn take_reported_events(&mut self) -> Vec<StateMachineReportedEvent> {
+        std::mem::take(&mut self.reported_events)
+    }
+
     pub fn view_model_trigger_count(&self, index: usize) -> Option<u64> {
         self.default_view_model_triggers
             .get(index)
@@ -3687,6 +3810,23 @@ impl StateMachineInstance {
         self.advance_with_report_mode(artboard, state_machine, elapsed_seconds, false)
     }
 
+    pub(crate) fn advance_after_state_probe(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        state_machine: &RuntimeStateMachine,
+        elapsed_seconds: f32,
+    ) -> bool {
+        let probed_state_count = self.changed_state_count;
+        let changed =
+            self.advance_with_report_mode(artboard, state_machine, elapsed_seconds, false);
+        // `try_change_state` already counted the first transition applied by
+        // this zero-delta advance. Preserve the cumulative frame count while
+        // adding only any further chained transitions.
+        self.changed_state_count =
+            probed_state_count.saturating_add(self.changed_state_count.saturating_sub(1));
+        changed
+    }
+
     /// Probe authored transitions without advancing or reapplying the current
     /// animations. This mirrors C++ `StateMachineInstance::tryChangeState`,
     /// which is used by the bounded outer update loop after component dirt can
@@ -3700,6 +3840,7 @@ impl StateMachineInstance {
         if !self.focus.is_inert() {
             self.focus.sync(artboard);
         }
+        self.refresh_owned_view_model_handle();
         self.update_data_binds_for_state_probe();
 
         let data_context_present = self.data_bind_graph.data_context_present();
@@ -3777,6 +3918,10 @@ impl StateMachineInstance {
         if !self.focus.is_inert() {
             self.focus.sync(artboard);
         }
+        // A retained context can be mutated through any alias between
+        // frames. Refresh it before the clean-frame fast path so the new
+        // generation schedules the ordinary updateDataBinds(false) work.
+        self.refresh_owned_view_model_handle();
         if self.has_advanced_once
             && elapsed_seconds == 0.0
             && !self.needs_advance
@@ -3949,11 +4094,23 @@ impl StateMachineInstance {
     }
 
     fn bind_active_owned_view_model_triggers(&mut self, context: &RuntimeOwnedViewModelInstance) {
+        self.bind_active_owned_view_model_triggers_for_context(context, &[]);
+    }
+
+    fn bind_active_owned_view_model_triggers_for_context(
+        &mut self,
+        context: &RuntimeOwnedViewModelInstance,
+        context_path: &[usize],
+    ) {
         let mut active = self.default_view_model_triggers.clone();
         for trigger in &mut active {
             let value = usize::try_from(trigger.view_model_property_id())
                 .ok()
-                .and_then(|property_index| context.trigger_value_by_property_index(property_index));
+                .and_then(|property_index| {
+                    let mut path = context_path.to_vec();
+                    path.push(property_index);
+                    context.trigger_value_by_property_path(&path)
+                });
             if let Some(value) = value {
                 trigger.replace_value(value);
             } else {
@@ -3961,6 +4118,27 @@ impl StateMachineInstance {
             }
         }
         self.view_model_triggers = active;
+    }
+
+    fn refresh_active_owned_view_model_triggers_for_context(
+        &mut self,
+        context: &RuntimeOwnedViewModelInstance,
+        context_path: &[usize],
+    ) {
+        for trigger in &mut self.view_model_triggers {
+            let value = usize::try_from(trigger.view_model_property_id())
+                .ok()
+                .and_then(|property_index| {
+                    let mut path = context_path.to_vec();
+                    path.push(property_index);
+                    context.trigger_value_by_property_path(&path)
+                });
+            if let Some(value) = value {
+                trigger.set_value(value);
+            } else {
+                trigger.reset();
+            }
+        }
     }
 
     fn reset_active_view_model_triggers(&mut self) {

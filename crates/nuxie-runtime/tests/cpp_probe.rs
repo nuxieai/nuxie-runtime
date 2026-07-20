@@ -4,9 +4,11 @@ use nuxie_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDataContext,
     RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDrawCommandKind,
     RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
-    RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
-    RuntimeShapePaintPathKind, RuntimeShapePaintState, StateMachineInputKind, StateMachineInstance,
-    TransformProperty, runtime_data_context_lookup_reports,
+    RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
+    RuntimeViewModelLinkError, StateMachineInputKind, StateMachineInstance, TransformProperty,
+    bound_script_view_model_from_owned_context, runtime_data_context_lookup_reports,
+    script_view_model_from_owned,
 };
 use nuxie_schema::definition_by_name;
 use serde::Deserialize;
@@ -1876,6 +1878,94 @@ fn push_scheduled_listener_input_change(
     }
 }
 
+fn synthetic_state_machine_scheduled_listener_owned_number_change(file_id: u64) -> Vec<u8> {
+    const STATE_AT_START: u64 = 2 << 1;
+    const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_bindable_number_data_bind_context_with_converter_and_flags(
+            bytes,
+            42.0,
+            &[0, 0],
+            None,
+            DATA_BIND_TO_SOURCE,
+        );
+        push_object_with_properties(bytes, "ListenerViewModelChange", |bytes| {
+            push_uint_property(bytes, "ListenerViewModelChange", "flags", STATE_AT_START);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_artboard_owned_viewmodel_number_target_to_source(file_id: u64) -> Vec<u8> {
+    const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "CustomPropertyNumber", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 0);
+            push_f32_property(bytes, "CustomPropertyNumber", "propertyValue", 42.0);
+        });
+        let mut source_path_ids = Vec::new();
+        push_var_uint(&mut source_path_ids, 0);
+        push_var_uint(&mut source_path_ids, 0);
+        push_object_with_properties(bytes, "DataBindContext", |bytes| {
+            push_uint_property(
+                bytes,
+                "DataBindContext",
+                "propertyKey",
+                u64::from(property_key_for_name(
+                    "CustomPropertyNumber",
+                    "propertyValue",
+                )),
+            );
+            push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
+            push_uint_property(bytes, "DataBindContext", "flags", DATA_BIND_TO_SOURCE);
+        });
+    })
+}
+
 fn synthetic_state_machine_blend_state_1d_input(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
@@ -2064,7 +2154,21 @@ fn synthetic_state_machine_imported_nested_viewmodel_number_shared_mutation(
     file_id: u64,
 ) -> Vec<u8> {
     synthetic_state_machine_nested_viewmodel_number_blend_state_with_state_machines(
-        file_id, 0.25, 2,
+        file_id,
+        0.25,
+        2,
+        &[0, 0, 0],
+        false,
+    )
+}
+
+fn synthetic_state_machine_child_scoped_viewmodel_number_blend_state(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_nested_viewmodel_number_blend_state_with_state_machines(
+        file_id,
+        0.25,
+        1,
+        &[1, 0],
+        false,
     )
 }
 
@@ -2076,6 +2180,18 @@ fn synthetic_state_machine_nested_viewmodel_number_blend_state(
         file_id,
         child_number_value,
         1,
+        &[0, 0, 0],
+        false,
+    )
+}
+
+fn synthetic_script_input_nested_viewmodel_context(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_nested_viewmodel_number_blend_state_with_state_machines(
+        file_id,
+        0.25,
+        1,
+        &[0, 0, 0],
+        true,
     )
 }
 
@@ -2083,6 +2199,8 @@ fn synthetic_state_machine_nested_viewmodel_number_blend_state_with_state_machin
     file_id: u64,
     child_number_value: f32,
     state_machine_count: usize,
+    source_path: &[u32],
+    include_script_input: bool,
 ) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
@@ -2104,7 +2222,11 @@ fn synthetic_state_machine_nested_viewmodel_number_blend_state_with_state_machin
             push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
         });
         push_object_with_properties(bytes, "Backboard", |_| {});
-        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            if source_path == [1, 0] {
+                push_uint_property(bytes, "Artboard", "viewModelId", 1);
+            }
+        });
         push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
             push_string_property(bytes, "ViewModelInstance", "name", "child");
             push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
@@ -2134,6 +2256,23 @@ fn synthetic_state_machine_nested_viewmodel_number_blend_state_with_state_machin
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
         push_animation_for_single_node(bytes, 1, 2.0, 12.0);
         push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        if include_script_input {
+            let mut encoded_path = Vec::new();
+            push_var_uint(&mut encoded_path, 0);
+            push_var_uint(&mut encoded_path, 0);
+            push_object_with_properties(bytes, "DataBindPath", |bytes| {
+                push_bytes_property(bytes, "DataBindPath", "path", &encoded_path);
+            });
+            push_object_with_properties(bytes, "ScriptedDrawable", |_| {});
+            push_object_with_properties(bytes, "ScriptInputViewModelProperty", |bytes| {
+                push_bytes_property(
+                    bytes,
+                    "ScriptInputViewModelProperty",
+                    "dataBindPathIds",
+                    &encoded_path,
+                );
+            });
+        }
         for _ in 0..state_machine_count {
             push_object_with_properties(bytes, "StateMachine", |_| {});
             push_object_with_properties(bytes, "StateMachineLayer", |_| {});
@@ -2142,7 +2281,7 @@ fn synthetic_state_machine_nested_viewmodel_number_blend_state_with_state_machin
             push_object_with_properties(bytes, "StateTransition", |bytes| {
                 push_uint_property(bytes, "StateTransition", "stateToId", 2);
             });
-            push_bindable_number_data_bind_context(bytes, 0.0, &[0, 0, 0]);
+            push_bindable_number_data_bind_context(bytes, 0.0, source_path);
             push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
             push_blend_animation_1d(bytes, 0, 0.0);
             push_blend_animation_1d(bytes, 1, 1.0);
@@ -13091,6 +13230,50 @@ fn synthetic_state_machine_viewmodel_trigger_condition(
     })
 }
 
+fn synthetic_state_machine_retained_viewmodel_trigger_transition(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyTrigger", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyTrigger", "name", "fire");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceTrigger", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceTrigger", "viewModelPropertyId", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_synthetic_viewmodel_trigger_condition(
+            bytes,
+            SyntheticViewModelTriggerComparatorKind::ValueTrigger,
+        );
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_viewmodel_boolean_condition(
     file_id: u64,
     initial_value: bool,
@@ -16715,6 +16898,89 @@ fn state_machine_bool_input_drives_zero_duration_transition() {
 }
 
 #[test]
+fn outer_settlement_consumes_a_zero_delta_root_state_change() {
+    let label = "synthetic/runtime_state_machine_outer_settlement_public.riv";
+    let bytes = synthetic_state_machine_bool_transition(8237);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
+    assert_close(transform_x(&rust, 1), 2.0, "initial outer-settle state x");
+    assert!(state_machine.set_bool(0, true));
+
+    assert!(
+        rust.settle_state_machine_update_passes_with_state_machines(std::slice::from_mut(
+            &mut state_machine
+        ),)
+    );
+    assert_close(
+        transform_x(&rust, 1),
+        20.0,
+        "outer settlement target state x",
+    );
+    assert_eq!(
+        state_machine.changed_state_count(),
+        1,
+        "outer settlement must retain the probed state-change count"
+    );
+
+    assert!(
+        !rust.settle_state_machine_update_passes_with_state_machines(std::slice::from_mut(
+            &mut state_machine
+        )),
+        "a second standalone settlement should be a no-op"
+    );
+    assert_eq!(
+        state_machine.changed_state_count(),
+        0,
+        "standalone settlement reports counts per call"
+    );
+}
+
+#[test]
+fn outer_settlement_evaluates_a_retained_view_model_trigger_before_resetting_it() {
+    let label = "synthetic/runtime_state_machine_outer_settlement_owned_trigger.riv";
+    let bytes = synthetic_state_machine_retained_viewmodel_trigger_transition(9622);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
+    assert_eq!(
+        state_machine
+            .current_animation(0)
+            .map(|animation| animation.animation_index()),
+        Some(0),
+        "{label} should enter the initial animation"
+    );
+    assert!(state_machine.bind_owned_view_model_handle(&context));
+    assert!(
+        context.borrow_mut().set_trigger_by_property_name("fire", 1),
+        "{label} failed to fire the retained trigger"
+    );
+
+    assert!(
+        rust.settle_state_machine_update_passes_with_state_machines(std::slice::from_mut(
+            &mut state_machine,
+        ))
+    );
+    assert_eq!(
+        state_machine
+            .current_animation(0)
+            .map(|animation| animation.animation_index()),
+        Some(1),
+        "{label} should enter the trigger target animation",
+    );
+}
+
+#[test]
 fn state_machine_entry_timed_transition_starts_destination_at_zero_mix() {
     let label = "synthetic/runtime_state_machine_entry_timed_transition_public.riv";
     let bytes = synthetic_state_machine_entry_timed_transition(8261);
@@ -18378,6 +18644,42 @@ fn state_machine_scheduled_listener_fire_events_match_cpp_probe() {
 }
 
 #[test]
+fn state_machine_listener_writes_round_trip_through_the_retained_owned_handle() {
+    let label = "synthetic/runtime_state_machine_listener_retained_number_round_trip.riv";
+    let bytes = synthetic_state_machine_scheduled_listener_owned_number_change(9623);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+    let script = script_view_model_from_owned(&runtime, &context)
+        .unwrap_or_else(|| panic!("missing script view-model wrapper for {label}"));
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_owned_view_model_handle(&context));
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
+    assert_eq!(
+        context.borrow().number_value_by_property_name("amount"),
+        Some(42.0),
+        "{label} listener write must update the retained host graph"
+    );
+    assert_eq!(
+        script.number("amount"),
+        Some(42.0),
+        "{label} listener write must be visible through the script alias"
+    );
+
+    assert!(state_machine.advance_data_context());
+    assert_eq!(
+        context.borrow().number_value_by_property_name("amount"),
+        Some(42.0),
+        "{label} retained refresh must not overwrite the runtime-origin write"
+    );
+}
+
+#[test]
 fn state_machine_scheduled_listener_input_changes_match_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -18855,6 +19157,297 @@ fn artboard_owned_context_rebinds_after_root_number_set() {
     rust.bind_owned_view_model_artboard_context(&runtime, &context);
     rust.advance_artboard_data_binds();
     assert_close(transform_x(&rust, 1), 42.0, "rebind after root number set");
+}
+
+#[test]
+fn artboard_retained_owned_handle_observes_mutations_without_rebinding() {
+    let label = "synthetic/runtime_artboard_owned_handle_number_set.riv";
+    let bytes = synthetic_artboard_owned_viewmodel_number_binding(9614);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+
+    rust.bind_owned_view_model_artboard_handle(&runtime, &context);
+    rust.advance_artboard_data_binds();
+    assert_close(transform_x(&rust, 1), 0.0, "generated default number bind");
+
+    assert!(
+        context.borrow_mut().set_number_by_property_index(0, 42.0),
+        "{label} failed to mutate shared owned view-model number"
+    );
+    rust.advance_artboard_data_binds();
+    assert_close(
+        transform_x(&rust, 1),
+        42.0,
+        "retained handle mutation reaches artboard",
+    );
+}
+
+#[test]
+fn artboard_target_to_source_writes_round_trip_through_the_retained_owned_handle() {
+    let label = "synthetic/runtime_artboard_owned_handle_target_to_source.riv";
+    let bytes = synthetic_artboard_owned_viewmodel_number_target_to_source(9624);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+    let script = script_view_model_from_owned(&runtime, &context)
+        .unwrap_or_else(|| panic!("missing script view-model wrapper for {label}"));
+
+    rust.bind_owned_view_model_artboard_handle(&runtime, &context);
+    let property_key = property_key_for_name("CustomPropertyNumber", "propertyValue");
+    assert!(rust.advance_artboard_data_binds());
+    assert_eq!(
+        context.borrow().number_value_by_property_name("amount"),
+        Some(42.0),
+        "{label} target-to-source write must update the retained host graph"
+    );
+    assert_eq!(script.number("amount"), Some(42.0));
+
+    rust.advance_artboard_data_binds();
+    assert_eq!(
+        rust.double_property(1, property_key),
+        Some(42.0),
+        "{label} retained refresh must not overwrite the runtime-origin write"
+    );
+}
+
+#[test]
+fn state_machine_retained_owned_handle_observes_mutations_without_rebinding() {
+    let label = "synthetic/runtime_state_machine_owned_handle_number_set.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_number_blend_state(9615);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+    assert!(context.borrow_mut().set_number_by_property_index(0, 0.25));
+
+    // Binding the same values by snapshot first makes the following handle
+    // bind an identity-only change. The handle still has to be retained so a
+    // later aliased mutation can reach the machine.
+    assert!(state_machine.bind_owned_view_model_context(&context.borrow()));
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
+    assert!(state_machine.bind_owned_view_model_handle(&context));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    assert_close(
+        state_machine
+            .bindable_number_value_for_data_bind(0)
+            .expect("bound number"),
+        0.25,
+        "initial retained state-machine value",
+    );
+
+    assert!(context.borrow_mut().set_number_by_property_index(0, 0.75));
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
+    assert_close(
+        state_machine
+            .bindable_number_value_for_data_bind(0)
+            .expect("updated bound number"),
+        0.75,
+        "retained handle mutation reaches state machine",
+    );
+}
+
+#[test]
+fn state_machine_inherits_the_artboards_retained_owned_handle() {
+    let label = "synthetic/runtime_state_machine_inherited_owned_handle.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_number_blend_state(9617);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+    assert!(context.borrow_mut().set_number_by_property_index(0, 0.25));
+
+    rust.bind_owned_view_model_artboard_handle(&runtime, &context);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
+    assert_close(
+        state_machine
+            .bindable_number_value_for_data_bind(0)
+            .expect("inherited bound number"),
+        0.25,
+        "initial inherited state-machine value",
+    );
+
+    assert!(context.borrow_mut().set_number_by_property_index(0, 0.75));
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
+    assert_close(
+        state_machine
+            .bindable_number_value_for_data_bind(0)
+            .expect("updated inherited bound number"),
+        0.75,
+        "inherited handle mutation reaches state machine",
+    );
+}
+
+#[test]
+fn script_view_model_wraps_the_same_owned_handle_graph() {
+    let label = "synthetic/runtime_script_owned_handle_number_set.riv";
+    let bytes = synthetic_artboard_owned_viewmodel_number_binding(9616);
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+    let script = script_view_model_from_owned(&runtime, &context)
+        .unwrap_or_else(|| panic!("missing script view-model wrapper for {label}"));
+
+    assert!(script.owned_handle().shares_root_with(&context));
+    assert!(script.owned_handle().is_root());
+    assert!(script.set_number("amount", 42.0));
+    assert_eq!(
+        context.borrow().number_value_by_property_name("amount"),
+        Some(42.0)
+    );
+
+    assert!(
+        context
+            .borrow_mut()
+            .set_number_by_property_name("amount", 17.0)
+    );
+    assert_eq!(script.number("amount"), Some(17.0));
+}
+
+#[test]
+fn nested_script_view_model_wraps_the_same_root_owned_handle_graph() {
+    let label = "synthetic/runtime_script_nested_owned_handle_number_set.riv";
+    let bytes = synthetic_state_machine_owned_nested_viewmodel_number_blend_state(9625);
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+    let script = script_view_model_from_owned(&runtime, &context)
+        .unwrap_or_else(|| panic!("missing script view-model wrapper for {label}"));
+    let child = script
+        .view_model("child")
+        .unwrap_or_else(|| panic!("missing nested script view-model wrapper for {label}"));
+
+    assert!(child.owned_handle().shares_root_with(&context));
+    assert_eq!(child.owned_handle().scope_path(), &[0]);
+    assert_eq!(child.owned_handle().view_model_index(), Some(1));
+    assert!(child.set_number("amount", 42.0));
+    assert_eq!(child.number("amount"), Some(42.0));
+
+    assert!(
+        context
+            .borrow_mut()
+            .set_number_by_property_name_path("child/amount", 17.0)
+    );
+    assert_eq!(child.number("amount"), Some(17.0));
+    assert_eq!(
+        script
+            .view_model("child")
+            .and_then(|child| child.number("amount")),
+        Some(17.0)
+    );
+}
+
+#[test]
+fn nested_script_view_model_context_preserves_an_imported_child_selection() {
+    let label = "synthetic/runtime_script_nested_imported_context.riv";
+    let bytes = synthetic_state_machine_default_nested_viewmodel_number_blend_state(9626);
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+            .unwrap_or_else(|| panic!("missing imported root view-model context for {label}")),
+    );
+    let script = script_view_model_from_owned(&runtime, &context)
+        .unwrap_or_else(|| panic!("missing script view-model wrapper for {label}"));
+    let child = script
+        .view_model("child")
+        .unwrap_or_else(|| panic!("missing selected child wrapper for {label}"));
+    let child_context = child.owned_handle();
+
+    assert!(child_context.shares_root_with(&context));
+    assert_eq!(child_context.scope_path(), &[0]);
+    assert_eq!(child_context.view_model_index(), Some(1));
+    assert_eq!(child.number("amount"), Some(0.25));
+    assert_eq!(
+        child_context
+            .detached_snapshot()
+            .map(|snapshot| snapshot.view_model_index()),
+        Some(1)
+    );
+}
+
+#[test]
+fn script_input_view_model_hydration_retains_the_selected_child_context() {
+    let label = "synthetic/runtime_script_input_nested_retained_context.riv";
+    let bytes = synthetic_script_input_nested_viewmodel_context(9628);
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing generated root view-model context for {label}")),
+    );
+    let context = RuntimeOwnedViewModelContextHandle::root(&runtime, root.clone());
+    let input = (0..runtime.object_count())
+        .filter_map(|id| runtime.object(id))
+        .find(|object| object.type_name == "ScriptInputViewModelProperty")
+        .unwrap_or_else(|| panic!("missing script view-model input for {label}"));
+    assert_eq!(
+        runtime.resolved_data_bind_path_ids_for_referencer_object(input),
+        Some(vec![0, 0])
+    );
+    let child = bound_script_view_model_from_owned_context(&runtime, &context, input)
+        .unwrap_or_else(|| panic!("failed to hydrate retained child script input for {label}"));
+    let root_script = script_view_model_from_owned(&runtime, &root)
+        .unwrap_or_else(|| panic!("missing root script view-model for {label}"));
+
+    assert!(child.owned_handle().shares_root_with(&root));
+    assert_eq!(child.owned_handle().scope_path(), &[0]);
+    assert_eq!(child.owned_handle().view_model_index(), Some(1));
+    assert!(child.set_number("amount", 42.0));
+    assert_eq!(
+        root_script
+            .view_model("child")
+            .and_then(|child| child.number("amount")),
+        Some(42.0)
+    );
+}
+
+#[test]
+fn nested_script_view_model_context_binds_the_child_schema_not_the_root() {
+    let label = "synthetic/runtime_script_nested_child_context_binding.riv";
+    let bytes = synthetic_state_machine_child_scoped_viewmodel_number_blend_state(9627);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+            .unwrap_or_else(|| panic!("missing imported root view-model context for {label}")),
+    );
+    let child = script_view_model_from_owned(&runtime, &root)
+        .and_then(|script| script.view_model("child"))
+        .unwrap_or_else(|| panic!("missing selected child wrapper for {label}"));
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing state-machine instance for {label}"));
+
+    assert!(state_machine.bind_owned_view_model_context_handle(&child.owned_handle()));
+    assert_close(
+        state_machine
+            .default_view_model_number_source_value_for_data_bind(0)
+            .expect("child-scoped source number"),
+        0.25,
+        "child-scoped source value",
+    );
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
+    assert_close(
+        state_machine
+            .bindable_number_value_for_data_bind(0)
+            .expect("child-scoped bound number"),
+        0.25,
+        "child-scoped scripting context binds the selected child schema",
+    );
 }
 
 // Regression for the M8 audit finding (owned-context rebind key, item 22b):
@@ -52989,6 +53582,300 @@ fn artboard_default_viewmodel_list_to_component_list_update_matches_cpp_probe() 
         .first()
         .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
     compare_artboard_list_binding(cpp_artboard, &rust, 0, label);
+}
+
+#[test]
+fn retained_artboard_context_observes_script_list_row_mutation() {
+    let label = "synthetic/runtime_artboard_retained_list_row_mutation.riv";
+    let bytes = synthetic_artboard_default_viewmodel_list_to_component_list(8580);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+            .unwrap_or_else(|| panic!("missing serialized root view-model context for {label}")),
+    );
+    let script = script_view_model_from_owned(&runtime, &root)
+        .unwrap_or_else(|| panic!("missing script view-model wrapper for {label}"));
+    let row = script
+        .list_item("items", 0)
+        .unwrap_or_else(|| panic!("missing first list row for {label}"));
+
+    assert!(
+        !script.push_list_item("items", &script),
+        "a graph cannot be inserted into its own list"
+    );
+    assert!(rust.bind_owned_view_model_artboard_handle(&runtime, &root));
+    rust.advance_artboard_data_binds();
+    assert!(row.set_string("label", "updated"));
+    assert_eq!(
+        script
+            .list_item("items", 0)
+            .and_then(|item| item.string("label"))
+            .as_deref(),
+        Some("updated")
+    );
+    assert!(
+        rust.advance_artboard_data_binds(),
+        "mutating a retained list-row alias must invalidate the retained root context"
+    );
+    assert!(
+        !rust.advance_artboard_data_binds(),
+        "the retained root invalidation must be consumed exactly once"
+    );
+}
+
+#[test]
+fn script_list_insertion_rejects_transitive_graph_cycles() {
+    let label = "synthetic/runtime_script_list_transitive_cycle.riv";
+    let bytes = synthetic_artboard_default_viewmodel_list_to_component_list(8582);
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    let root_a = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing generated A context for {label}")),
+    );
+    let root_b = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing generated B context for {label}")),
+    );
+    let script_a = script_view_model_from_owned(&runtime, &root_a)
+        .unwrap_or_else(|| panic!("missing A script wrapper for {label}"));
+    let script_b = script_view_model_from_owned(&runtime, &root_b)
+        .unwrap_or_else(|| panic!("missing B script wrapper for {label}"));
+
+    assert!(script_a.push_list_item("items", &script_b));
+    assert_eq!(script_a.list_len("items"), Some(1));
+    assert!(
+        !script_b.push_list_item("items", &script_a),
+        "B -> A must be rejected after A -> B"
+    );
+    assert!(
+        !script_b.insert_list_item("items", 0, &script_a),
+        "insert must enforce the same transitive cycle check as push"
+    );
+    assert_eq!(script_b.list_len("items"), Some(0));
+}
+
+#[test]
+fn owned_view_model_links_reject_transitive_cycles_atomically() {
+    let bytes = synthetic_runtime_file(8584, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "next");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                0,
+            );
+        });
+    });
+    let runtime = read_runtime_file(&bytes).expect("import recursive view-model schema");
+    let make_handle = || {
+        RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&runtime, 0).expect("generated Root instance"),
+        )
+    };
+    let a = make_handle();
+    let b = make_handle();
+    let c = make_handle();
+
+    assert_eq!(
+        a.link_view_model_by_property_name_path("next", &b),
+        Ok(true)
+    );
+    assert_eq!(
+        b.link_view_model_by_property_name_path("next", &c),
+        Ok(true)
+    );
+    assert_eq!(
+        c.link_view_model_by_property_name_path("next", &a),
+        Err(RuntimeViewModelLinkError::Cycle)
+    );
+    assert!(c.linked_view_model_by_property_name_path("next").is_none());
+    assert!(
+        a.linked_view_model_by_property_name_path("next")
+            .is_some_and(|linked| linked.ptr_eq(&b))
+    );
+}
+
+#[test]
+fn owned_view_model_links_expose_shared_string_state_through_the_parent_path() {
+    let bytes = std::fs::read(
+        PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets")
+        .join("replace_view_model.riv"),
+    )
+    .expect("read replacement fixture");
+    let runtime = read_runtime_file(&bytes).expect("import replacement fixture");
+    let owner = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 1).expect("generated Main instance"),
+    );
+    let child = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 1)
+            .expect("authored Child instance"),
+    );
+
+    assert_eq!(
+        owner.link_view_model_by_property_name_path("child", &child),
+        Ok(true)
+    );
+    assert!(
+        child
+            .borrow_mut()
+            .set_string_by_property_name_path("label", b"shared")
+    );
+    assert_eq!(
+        owner
+            .borrow()
+            .string_value_by_property_name_path("child/label"),
+        Some(&b"shared"[..])
+    );
+    assert!(
+        owner
+            .borrow_mut()
+            .set_string_by_property_name_path("child/label", b"parent-write")
+    );
+    assert_eq!(
+        child.borrow().string_value_by_property_name_path("label"),
+        Some(&b"parent-write"[..])
+    );
+    let held_owner = owner.borrow();
+    assert!(
+        child
+            .borrow_mut()
+            .set_string_by_property_name_path("label", b"deferred")
+    );
+    assert_eq!(
+        held_owner.string_value_by_property_name_path("child/label"),
+        Some(&b"parent-write"[..])
+    );
+    drop(held_owner);
+    assert_eq!(
+        owner
+            .borrow()
+            .string_value_by_property_name_path("child/label"),
+        Some(&b"deferred"[..])
+    );
+
+    let detached = RuntimeOwnedViewModelHandle::detached_graph(&[owner.clone(), child.clone()]);
+    assert!(
+        detached[0]
+            .linked_view_model_by_property_name_path("child")
+            .is_some_and(|linked| linked.ptr_eq(&detached[1]))
+    );
+    assert!(
+        detached[1]
+            .borrow_mut()
+            .set_string_by_property_name_path("label", b"detached")
+    );
+    assert_eq!(
+        detached[0]
+            .borrow()
+            .string_value_by_property_name_path("child/label"),
+        Some(&b"detached"[..])
+    );
+    assert_eq!(
+        owner
+            .borrow()
+            .string_value_by_property_name_path("child/label"),
+        Some(&b"deferred"[..])
+    );
+}
+
+#[test]
+fn shared_list_item_mutation_invalidates_every_retained_parent_graph() {
+    let label = "synthetic/runtime_script_list_shared_multi_parent.riv";
+    let bytes = synthetic_artboard_default_viewmodel_list_to_component_list(8583);
+    let (runtime, mut artboard_a) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut artboard_c) = read_rust_instance_from_bytes(&bytes, label);
+    let root_a = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing generated A context for {label}")),
+    );
+    let root_c = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing generated C context for {label}")),
+    );
+    let shared_item = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 1)
+            .unwrap_or_else(|| panic!("missing generated shared item for {label}")),
+    );
+    let script_a = script_view_model_from_owned(&runtime, &root_a)
+        .unwrap_or_else(|| panic!("missing A script wrapper for {label}"));
+    let script_c = script_view_model_from_owned(&runtime, &root_c)
+        .unwrap_or_else(|| panic!("missing C script wrapper for {label}"));
+    let item = script_view_model_from_owned(&runtime, &shared_item)
+        .unwrap_or_else(|| panic!("missing shared item wrapper for {label}"));
+
+    assert!(script_a.push_list_item("items", &item));
+    assert!(script_c.push_list_item("items", &item));
+    assert!(artboard_a.bind_owned_view_model_artboard_handle(&runtime, &root_a));
+    assert!(artboard_c.bind_owned_view_model_artboard_handle(&runtime, &root_c));
+    artboard_a.advance_artboard_data_binds();
+    artboard_c.advance_artboard_data_binds();
+
+    assert!(item.set_string("label", "shared"));
+    assert!(
+        artboard_a.advance_artboard_data_binds(),
+        "the first parent must observe mutation after a later parent attaches"
+    );
+    assert!(
+        artboard_c.advance_artboard_data_binds(),
+        "the second parent must observe the shared item mutation"
+    );
+    assert!(!artboard_a.advance_artboard_data_binds());
+    assert!(!artboard_c.advance_artboard_data_binds());
+}
+
+#[test]
+fn detached_script_snapshot_reroots_list_row_identity_and_invalidation() {
+    let label = "synthetic/runtime_artboard_detached_list_row_snapshot.riv";
+    let bytes = synthetic_artboard_default_viewmodel_list_to_component_list(8581);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+            .unwrap_or_else(|| panic!("missing serialized root view-model context for {label}")),
+    );
+    let root_context = RuntimeOwnedViewModelContextHandle::root(&runtime, root.clone());
+    let snapshot = RuntimeOwnedViewModelHandle::new(
+        root_context
+            .detached_snapshot()
+            .unwrap_or_else(|| panic!("missing detached root snapshot for {label}")),
+    );
+    let retained_script = script_view_model_from_owned(&runtime, &root)
+        .unwrap_or_else(|| panic!("missing retained script view-model for {label}"));
+    let snapshot_script = script_view_model_from_owned(&runtime, &snapshot)
+        .unwrap_or_else(|| panic!("missing snapshot script view-model for {label}"));
+
+    assert!(rust.bind_owned_view_model_artboard_handle(&runtime, &root));
+    rust.advance_artboard_data_binds();
+    assert!(
+        snapshot_script
+            .list_item("items", 0)
+            .is_some_and(|item| item.set_string("label", "snapshot"))
+    );
+    assert_eq!(
+        retained_script
+            .list_item("items", 0)
+            .and_then(|item| item.string("label"))
+            .as_deref(),
+        Some("first")
+    );
+    assert_eq!(
+        snapshot_script
+            .list_item("items", 0)
+            .and_then(|item| item.string("label"))
+            .as_deref(),
+        Some("snapshot")
+    );
+    assert!(
+        !rust.advance_artboard_data_binds(),
+        "a detached snapshot row must not invalidate the retained source graph"
+    );
 }
 
 #[test]

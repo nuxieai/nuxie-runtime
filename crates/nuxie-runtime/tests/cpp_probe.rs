@@ -2162,6 +2162,107 @@ fn synthetic_state_machine_imported_nested_viewmodel_number_shared_mutation(
     )
 }
 
+fn synthetic_publisher_era_nested_viewmodel_values(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "container");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                1,
+            );
+        });
+
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Container");
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "container");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "input");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                2,
+            );
+        });
+
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Input");
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "input");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 2);
+        });
+        for (property_index, value) in [(0, 294.0), (1, 24.0)] {
+            push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "ViewModelInstanceNumber",
+                    "viewModelPropertyId",
+                    property_index,
+                );
+                push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", value);
+            });
+        }
+        push_object_with_properties(bytes, "ViewModelInstanceBoolean", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceBoolean", "viewModelPropertyId", 2);
+            push_bool_property(bytes, "ViewModelInstanceBoolean", "propertyValue", true);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceString", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceString", "viewModelPropertyId", 3);
+            push_string_property(
+                bytes,
+                "ViewModelInstanceString",
+                "propertyValue",
+                "publisher value",
+            );
+        });
+        for property_name in ["width", "height"] {
+            push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+                push_string_property(bytes, "ViewModelPropertyNumber", "name", property_name);
+            });
+        }
+        push_object_with_properties(bytes, "ViewModelPropertyBoolean", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyBoolean", "name", "enabled");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyString", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyString", "name", "label");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+    })
+}
+
 fn synthetic_state_machine_child_scoped_viewmodel_number_blend_state(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_nested_viewmodel_number_blend_state_with_state_machines(
         file_id,
@@ -19088,6 +19189,45 @@ fn owned_view_model_from_instance_uses_serialized_number_values() {
     let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
     assert!(RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 2).is_none());
     assert!(RuntimeOwnedViewModelInstance::from_instance(&runtime, 1, 0).is_none());
+}
+
+#[test]
+fn owned_view_model_from_publisher_era_instance_uses_nested_serialized_values() {
+    let label = "synthetic/runtime_owned_publisher_era_nested_values.riv";
+    let bytes = synthetic_publisher_era_nested_viewmodel_values(9491);
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    let leaf = RuntimeOwnedViewModelInstance::from_instance(&runtime, 2, 0)
+        .unwrap_or_else(|| panic!("missing publisher-era leaf view-model context for {label}"));
+    assert_eq!(leaf.number_value_by_property_name("width"), Some(294.0));
+    let container = RuntimeOwnedViewModelInstance::from_instance(&runtime, 1, 0)
+        .unwrap_or_else(|| panic!("missing publisher-era container context for {label}"));
+    assert_eq!(
+        container.nested_view_model_selection_by_property_name("input"),
+        Some((2, Some(0)))
+    );
+    assert_eq!(
+        container.number_value_by_property_name_path("input/width"),
+        Some(294.0)
+    );
+    let context = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing publisher-era root view-model context for {label}"));
+
+    assert_eq!(
+        context.number_value_by_property_name_path("container/input/width"),
+        Some(294.0)
+    );
+    assert_eq!(
+        context.number_value_by_property_name_path("container/input/height"),
+        Some(24.0)
+    );
+    assert_eq!(
+        context.boolean_value_by_property_name_path("container/input/enabled"),
+        Some(true)
+    );
+    assert_eq!(
+        context.string_value_by_property_name_path("container/input/label"),
+        Some("publisher value".as_bytes())
+    );
 }
 
 fn synthetic_artboard_owned_viewmodel_number_binding(file_id: u64) -> Vec<u8> {

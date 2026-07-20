@@ -6665,17 +6665,10 @@ impl RuntimeOwnedViewModelInstance {
         let (number_name, view_model_names) = property_path.split_last()?;
         let (view_model_path, view_model) =
             self.view_model_property_path_by_names(view_model_names)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
         let property_index = view_model.property_index_by_name(number_name)?;
-        if !view_model
-            .numbers
-            .iter()
-            .any(|number| number.property_index == property_index)
+        if view_model
+            .active_number_value_by_property_index(property_index)
+            .is_none()
         {
             return None;
         }
@@ -6817,17 +6810,10 @@ impl RuntimeOwnedViewModelInstance {
         let (boolean_name, view_model_names) = property_path.split_last()?;
         let (view_model_path, view_model) =
             self.view_model_property_path_by_names(view_model_names)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
         let property_index = view_model.property_index_by_name(boolean_name)?;
-        if !view_model
-            .booleans
-            .iter()
-            .any(|boolean| boolean.property_index == property_index)
+        if view_model
+            .active_boolean_value_by_property_index(property_index)
+            .is_none()
         {
             return None;
         }
@@ -6969,17 +6955,10 @@ impl RuntimeOwnedViewModelInstance {
         let (string_name, view_model_names) = property_path.split_last()?;
         let (view_model_path, view_model) =
             self.view_model_property_path_by_names(view_model_names)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
         let property_index = view_model.property_index_by_name(string_name)?;
-        if !view_model
-            .strings
-            .iter()
-            .any(|string| string.property_index == property_index)
+        if view_model
+            .active_string_value_by_property_index(property_index)
+            .is_none()
         {
             return None;
         }
@@ -7126,17 +7105,10 @@ impl RuntimeOwnedViewModelInstance {
         let (color_name, view_model_names) = property_path.split_last()?;
         let (view_model_path, view_model) =
             self.view_model_property_path_by_names(view_model_names)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
         let property_index = view_model.property_index_by_name(color_name)?;
-        if !view_model
-            .colors
-            .iter()
-            .any(|color| color.property_index == property_index)
+        if view_model
+            .active_color_value_by_property_index(property_index)
+            .is_none()
         {
             return None;
         }
@@ -7278,17 +7250,10 @@ impl RuntimeOwnedViewModelInstance {
         let (enum_name, view_model_names) = property_path.split_last()?;
         let (view_model_path, view_model) =
             self.view_model_property_path_by_names(view_model_names)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
         let property_index = view_model.property_index_by_name(enum_name)?;
-        if !view_model
-            .enums
-            .iter()
-            .any(|enum_value| enum_value.property_index == property_index)
+        if view_model
+            .active_enum_value_by_property_index(property_index)
+            .is_none()
         {
             return None;
         }
@@ -7460,17 +7425,10 @@ impl RuntimeOwnedViewModelInstance {
         let (symbol_list_index_name, view_model_names) = property_path.split_last()?;
         let (view_model_path, view_model) =
             self.view_model_property_path_by_names(view_model_names)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
         let property_index = view_model.property_index_by_name(symbol_list_index_name)?;
-        if !view_model
-            .symbol_list_indices
-            .iter()
-            .any(|symbol_list_index| symbol_list_index.property_index == property_index)
+        if view_model
+            .active_symbol_list_index_value_by_property_index(property_index)
+            .is_none()
         {
             return None;
         }
@@ -7827,17 +7785,10 @@ impl RuntimeOwnedViewModelInstance {
         let (list_name, view_model_names) = property_path.split_last()?;
         let (view_model_path, view_model) =
             self.view_model_property_path_by_names(view_model_names)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
         let property_index = view_model.property_index_by_name(list_name)?;
-        if !view_model
-            .lists
-            .iter()
-            .any(|list| list.property_index == property_index)
+        if view_model
+            .active_list_by_property_index(property_index)
+            .is_none()
         {
             return None;
         }
@@ -7984,17 +7935,10 @@ impl RuntimeOwnedViewModelInstance {
         let (asset_name, view_model_names) = property_path.split_last()?;
         let (view_model_path, view_model) =
             self.view_model_property_path_by_names(view_model_names)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
         let property_index = view_model.property_index_by_name(asset_name)?;
-        if !view_model
-            .assets
-            .iter()
-            .any(|asset| asset.property_index == property_index)
+        if view_model
+            .active_asset_value_by_property_index(property_index)
+            .is_none()
         {
             return None;
         }
@@ -8393,17 +8337,10 @@ impl RuntimeOwnedViewModelInstance {
         let (artboard_name, view_model_names) = property_path.split_last()?;
         let (view_model_path, view_model) =
             self.view_model_property_path_by_names(view_model_names)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
         let property_index = view_model.property_index_by_name(artboard_name)?;
-        if !view_model
-            .artboards
-            .iter()
-            .any(|artboard| artboard.property_index == property_index)
+        if view_model
+            .active_artboard_value_by_property_index(property_index)
+            .is_none()
         {
             return None;
         }
@@ -8545,17 +8482,10 @@ impl RuntimeOwnedViewModelInstance {
         let (trigger_name, view_model_names) = property_path.split_last()?;
         let (view_model_path, view_model) =
             self.view_model_property_path_by_names(view_model_names)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
         let property_index = view_model.property_index_by_name(trigger_name)?;
-        if !view_model
-            .triggers
-            .iter()
-            .any(|trigger| trigger.property_index == property_index)
+        if view_model
+            .active_trigger_value_by_property_index(property_index)
+            .is_none()
         {
             return None;
         }
@@ -9062,14 +8992,8 @@ impl RuntimeOwnedViewModelInstance {
             .find(|view_model| view_model.property_name == *property_name)?;
         path.push(view_model.property_index);
         for property_name in rest {
-            if !matches!(
-                view_model.value,
-                RuntimeViewModelPointer::OwnedGenerated { .. }
-            ) {
-                return None;
-            }
             view_model = view_model
-                .children
+                .active_children()?
                 .iter()
                 .find(|view_model| view_model.property_name == *property_name)?;
             path.push(view_model.property_index);

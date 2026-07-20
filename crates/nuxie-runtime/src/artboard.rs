@@ -2170,6 +2170,37 @@ impl ArtboardInstance {
         true
     }
 
+    /// Set the first root-artboard `TextValueRun` with the exact authored
+    /// component name. Resolution follows component/local order and does not
+    /// traverse nested artboards.
+    ///
+    /// `None` means no matching root text run exists. `Some(false)` means the
+    /// existing run already contains `value`; `Some(true)` means it changed.
+    pub fn set_root_text_value_run(&mut self, name: &str, value: Vec<u8>) -> Option<bool> {
+        let text_property_key = property_key_for_name("TextValueRun", "text")?;
+        let local_id = self.root_text_value_run_local_id(name)?;
+        if self.string_property(local_id, text_property_key) == Some(value.as_slice()) {
+            return Some(false);
+        }
+        Some(self.set_string_property(local_id, text_property_key, value))
+    }
+
+    /// Whether this root artboard contains an exactly named `TextValueRun`.
+    /// Nested-artboard occurrences are deliberately outside this lookup.
+    pub fn has_root_text_value_run(&self, name: &str) -> bool {
+        self.root_text_value_run_local_id(name).is_some()
+    }
+
+    fn root_text_value_run_local_id(&self, name: &str) -> Option<usize> {
+        self.slots
+            .iter()
+            .filter(|slot| {
+                slot.type_name == Some("TextValueRun") && slot.name.as_deref() == Some(name)
+            })
+            .min_by_key(|slot| slot.local_id)
+            .map(|slot| slot.local_id)
+    }
+
     pub fn apply_linear_animation(&mut self, index: usize, seconds: f32, mix: f32) -> bool {
         let Some(animation) = self.linear_animations.get(index).cloned() else {
             return false;
@@ -6010,7 +6041,7 @@ mod tests {
     };
     use nuxie_binary::{
         AuthoringProperty, AuthoringRecord, AuthoringValue, BytesValue, FieldValue, RuntimeObject,
-        RuntimeProperty, read_runtime_file,
+        RuntimeProperty, StringValue, read_runtime_file,
     };
     use nuxie_graph::GraphFile;
     use nuxie_render_api::RecordingFactory;
@@ -8260,6 +8291,104 @@ mod tests {
         layout_epoch = instance.layout_epoch();
         assert!(instance.set_color_property(2, color, 0xff00ff00));
         assert_eq!(instance.layout_epoch(), layout_epoch);
+    }
+
+    #[test]
+    fn named_root_text_value_run_write_uses_first_local_match_and_ignores_nested_runs() {
+        let text_key =
+            property_key_for_name("TextValueRun", "text").expect("TextValueRun.text key");
+        let mut first = synthetic_component(0, 0);
+        first.type_name = "TextValueRun";
+        let mut second = synthetic_component(1, 1);
+        second.type_name = "TextValueRun";
+        let mut instance = synthetic_instance(vec![first, second], vec![0, 1]);
+        instance.slots[0].name = Some("headline".to_owned());
+        instance.slots[1].name = Some("headline".to_owned());
+        // Resolution is explicitly local-id ordered even if an embedding's
+        // slot enumeration is not already sorted that way.
+        instance.slots.reverse();
+        instance.objects = InstanceObjectArena::from_runtime_objects(vec![
+            Some(synthetic_runtime_object(
+                0,
+                "TextValueRun",
+                vec![RuntimeProperty {
+                    key: text_key,
+                    name: "text",
+                    owner: "TextValueRun",
+                    value: FieldValue::String(StringValue {
+                        value: Some("first".to_owned()),
+                        raw: b"first".to_vec(),
+                    }),
+                }],
+            )),
+            Some(synthetic_runtime_object(
+                1,
+                "TextValueRun",
+                vec![RuntimeProperty {
+                    key: text_key,
+                    name: "text",
+                    owner: "TextValueRun",
+                    value: FieldValue::String(StringValue {
+                        value: Some("second".to_owned()),
+                        raw: b"second".to_vec(),
+                    }),
+                }],
+            )),
+        ]);
+
+        let mut nested_run = synthetic_component(0, 0);
+        nested_run.type_name = "TextValueRun";
+        let mut nested = synthetic_instance(vec![nested_run], vec![0]);
+        nested.slots[0].name = Some("headline".to_owned());
+        nested.objects =
+            InstanceObjectArena::from_runtime_objects(vec![Some(synthetic_runtime_object(
+                0,
+                "TextValueRun",
+                vec![RuntimeProperty {
+                    key: text_key,
+                    name: "text",
+                    owner: "TextValueRun",
+                    value: FieldValue::String(StringValue {
+                        value: Some("nested".to_owned()),
+                        raw: b"nested".to_vec(),
+                    }),
+                }],
+            ))]);
+        instance.nested_artboards.insert(
+            9,
+            RuntimeNestedArtboardInstance {
+                child: Box::new(nested),
+                ..synthetic_nested_artboard_instance(9)
+            },
+        );
+
+        assert_eq!(
+            instance.set_root_text_value_run("headline", b"updated".to_vec()),
+            Some(true)
+        );
+        assert_eq!(
+            instance.string_property(0, text_key),
+            Some(b"updated".as_slice())
+        );
+        assert_eq!(
+            instance.string_property(1, text_key),
+            Some(b"second".as_slice())
+        );
+        assert_eq!(
+            instance
+                .nested_artboards
+                .get(&9)
+                .and_then(|nested| nested.child.string_property(0, text_key)),
+            Some(b"nested".as_slice())
+        );
+        assert_eq!(
+            instance.set_root_text_value_run("headline", b"updated".to_vec()),
+            Some(false)
+        );
+        assert_eq!(
+            instance.set_root_text_value_run("missing", b"ignored".to_vec()),
+            None
+        );
     }
 
     #[test]

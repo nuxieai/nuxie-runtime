@@ -37,8 +37,8 @@ fn main() {
     let provenance = format!(
         concat!(
             "{{\"schemaVersion\":1,\"runtimeVersion\":\"{}\",",
-            "\"runtimeAbiMajor\":1,\"runtimeAbiMinor\":4,",
-            "\"flowSessionAbiMinor\":4,",
+            "\"runtimeAbiMajor\":1,\"runtimeAbiMinor\":5,",
+            "\"flowSessionAbiMinor\":5,",
             "\"sourceRevision\":\"{}\",\"target\":\"{}\",",
             "\"profile\":\"{}\",\"rustc\":\"{}\",",
             "\"features\":\"{}\",\"wgpuVersion\":\"30.0.0\",",

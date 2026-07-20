@@ -35,11 +35,11 @@
 
 #define NUX_FLOW_MAX_VALUE_EDGE_COUNT 16384
 
-#define NUX_FLOW_SESSION_ABI_MINOR 4
+#define NUX_FLOW_SESSION_ABI_MINOR 5
 
 #define NUX_RUNTIME_ABI_MAJOR 1
 
-#define NUX_RUNTIME_ABI_MINOR 4
+#define NUX_RUNTIME_ABI_MINOR 5
 
 /**
  * Opaque C handle. It retains the logical render session across detach.
@@ -57,7 +57,7 @@ typedef struct NuxFlowRenderSession NuxFlowRenderSession;
 typedef struct NuxFlowRuntimeContext NuxFlowRuntimeContext;
 
 /**
- * Opaque owned ABI 1.4 result. Every borrowed view returned by an accessor
+ * Opaque owned ABI 1.5 result. Every borrowed view returned by an accessor
  * remains valid until this handle is freed.
  */
 typedef struct NuxFlowSessionResult NuxFlowSessionResult;
@@ -118,7 +118,7 @@ typedef struct NuxFlowSessionDescriptor {
 } NuxFlowSessionDescriptor;
 
 /**
- * ABI 1.4 configured-session descriptor. `minimum_abi_minor` must be 4 for
+ * ABI 1.5 configured-session descriptor. `minimum_abi_minor` must be 5 for
  * this surface. A null `artboard_name` selects the default artboard. A null
  * `player_name` uses the authored fallback policy; a nonempty UTF-8 name
  * explicitly selects a state machine. Linear animations are fallback-only.
@@ -325,8 +325,27 @@ typedef struct NuxFlowQueryBatch {
 } NuxFlowQueryBatch;
 
 /**
- * ABI 1.4 tagged generic operation. `required_abi_major` and
- * `minimum_abi_minor` must be exactly 1 and 4. Exactly the pointer selected by
+ * One semantic write to an exactly named `TextValueRun` on the root
+ * artboard. Array elements require the exact published size.
+ */
+typedef struct NuxFlowTextRunMutation {
+  uint32_t struct_size;
+  struct NuxByteView name;
+  struct NuxByteView text;
+} NuxFlowTextRunMutation;
+
+/**
+ * One all-or-nothing root-artboard text-run batch.
+ */
+typedef struct NuxFlowTextRunBatch {
+  uint32_t struct_size;
+  const struct NuxFlowTextRunMutation *mutations;
+  uint64_t mutation_count;
+} NuxFlowTextRunBatch;
+
+/**
+ * ABI 1.5 tagged generic operation. `required_abi_major` and
+ * `minimum_abi_minor` must be exactly 1 and 5. Exactly the pointer selected by
  * `kind` must be non-null and the other payload pointers must be null.
  */
 typedef struct NuxFlowSessionOperation {
@@ -338,6 +357,7 @@ typedef struct NuxFlowSessionOperation {
   const struct NuxFlowPointerBatch *pointer_batch;
   const struct NuxFlowAdvanceOperation *advance;
   const struct NuxFlowQueryBatch *query_batch;
+  const struct NuxFlowTextRunBatch *text_run_batch;
 } NuxFlowSessionOperation;
 
 typedef struct NuxFlowAuthorizationKey {
@@ -510,7 +530,7 @@ typedef uint32_t NuxFlowOutputKind;
 
 /**
  * Borrowed exact-order output owned by a session result. `payload_root_index`
- * is `UINT32_MAX` when the item has no typed arena payload. ABI 1.4 host
+ * is `UINT32_MAX` when the item has no typed arena payload. ABI 1.5 host
  * commands always use an object node as their typed payload root and leave the
  * opaque `payload` byte view empty.
  */
@@ -768,6 +788,8 @@ typedef uint32_t NuxScriptAuthorization;
 
 #define NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH 1
 
+#define NUX_FLOW_SESSION_OPERATION_KIND_TEXT_RUN_BATCH 5
+
 #define NUX_FLOW_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER 11
 
 #define NUX_FLOW_STATE_MUTATION_KIND_LIST_CLEAR 8
@@ -969,7 +991,7 @@ NuxStatus nux_flow_render_session_create(const struct NuxFlowRuntimeContext *con
                                          struct NuxOperationResult **out_result);
 
 /**
- * Creates one independent screen session using the ABI 1.4 player-selection
+ * Creates one independent screen session using the ABI 1.5 player-selection
  * and bootstrap-result contract. Creation never performs an observable
  * advance. Authenticated script initialization may return ordered cycle-zero
  * host-work outputs. The returned result owns those outputs, player metadata,
@@ -997,7 +1019,7 @@ NuxStatus nux_flow_render_session_create_configured(const struct NuxFlowRuntimeC
 void nux_flow_render_session_free(struct NuxFlowRenderSession *session);
 
 /**
- * Performs one fully copied ABI 1.4 operation on the session's pinned worker.
+ * Performs one fully copied ABI 1.5 operation on the session's pinned worker.
  * Rust never calls Swift reentrantly; ordered outputs are returned in the owned
  * result. State batches are atomic and pointer batches preserve immediate
  * subcycles inside their returned `cycle` values.
@@ -1119,7 +1141,7 @@ NuxStatus nux_flow_session_result_event_property_at(const struct NuxFlowSessionR
 uint64_t nux_flow_session_result_event_property_count(const struct NuxFlowSessionResult *result);
 
 /**
- * Releases one ABI 1.4 session result. Null is a no-op.
+ * Releases one ABI 1.5 session result. Null is a no-op.
  *
  * # Safety
  *
@@ -1309,7 +1331,7 @@ NuxStatus nux_flow_session_result_schema_property_at(const struct NuxFlowSession
 uint64_t nux_flow_session_result_schema_property_count(const struct NuxFlowSessionResult *result);
 
 /**
- * Returns an ABI 1.4 session result's status, or `NULL_ARGUMENT` for null.
+ * Returns an ABI 1.5 session result's status, or `NULL_ARGUMENT` for null.
  *
  * # Safety
  *

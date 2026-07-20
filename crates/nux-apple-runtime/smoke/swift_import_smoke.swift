@@ -3,7 +3,7 @@ import NuxieRuntime
 func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
     _ = nux_runtime_abi_major()
     _ = nux_runtime_abi_minor()
-    _ = nux_runtime_require_abi(1, 4)
+    _ = nux_runtime_require_abi(1, 5)
 
     let byteView = NuxByteView(data: bytes, len: count)
     _ = NuxFlowImportRequest(
@@ -60,7 +60,7 @@ func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
     _ = NuxFlowConfiguredSessionDescriptor(
         struct_size: UInt32(MemoryLayout<NuxFlowConfiguredSessionDescriptor>.size),
         required_abi_major: 1,
-        minimum_abi_minor: 4,
+        minimum_abi_minor: 5,
         artboard_name: NuxByteView(data: nil, len: 0),
         player_name: NuxByteView(data: nil, len: 0)
     )
@@ -115,15 +115,26 @@ func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
         index: 0,
         other_index: 0
     )
+    _ = NuxFlowTextRunMutation(
+        struct_size: UInt32(MemoryLayout<NuxFlowTextRunMutation>.size),
+        name: byteView,
+        text: NuxByteView(data: nil, len: 0)
+    )
+    _ = NuxFlowTextRunBatch(
+        struct_size: UInt32(MemoryLayout<NuxFlowTextRunBatch>.size),
+        mutations: nil,
+        mutation_count: 0
+    )
     _ = NuxFlowSessionOperation(
         struct_size: UInt32(MemoryLayout<NuxFlowSessionOperation>.size),
         required_abi_major: 1,
-        minimum_abi_minor: 4,
+        minimum_abi_minor: 5,
         kind: UInt32(NUX_FLOW_SESSION_OPERATION_KIND_QUERY),
         state_batch: nil,
         pointer_batch: nil,
         advance: nil,
-        query_batch: nil
+        query_batch: nil,
+        text_run_batch: nil
     )
     var playerMetadata = NuxFlowPlayerMetadataView(
         struct_size: UInt32(MemoryLayout<NuxFlowPlayerMetadataView>.size),

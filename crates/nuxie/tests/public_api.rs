@@ -700,3 +700,30 @@ fn public_api_view_model_instance_selection_and_missing() {
     assert!(instance.instantiate_view_model_instance(0).is_some());
     assert!(instance.instantiate_view_model_instance(9_999).is_none());
 }
+
+#[test]
+fn public_api_artboard_view_model_binding_leaves_global_completion_to_state_machines() {
+    let bytes = external_fixture("global_viewmodels_test.riv");
+    let file = File::import(&bytes).expect("import file");
+    let mut instance = file
+        .default_artboard()
+        .unwrap()
+        .instantiate()
+        .expect("instantiate artboard");
+    let view_model = instance
+        .instantiate_view_model()
+        .expect("default artboard view model");
+
+    let _ = instance.bind_view_model(&view_model);
+
+    assert_eq!(
+        instance
+            .owned_view_model_context()
+            .expect("retained artboard context")
+            .instances()
+            .count(),
+        1,
+        "C++ Artboard::bindViewModelInstance installs only the supplied main; \
+         global completion belongs to StateMachineInstance binding"
+    );
+}

@@ -30,6 +30,28 @@ pub enum CoreRegistryFieldKind {
     Bool,
 }
 
+/// The in-memory width requested by a uint-like schema field.
+///
+/// All three widths use the same varuint wire family. `Uint8` is only a
+/// storage optimization in generated runtimes, while `Uint64` opts known
+/// fields into the full varuint64 value range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UintStorage {
+    Uint8,
+    Uint32,
+    Uint64,
+}
+
+impl UintStorage {
+    pub const fn max_value(self) -> u64 {
+        match self {
+            Self::Uint8 => u8::MAX as u64,
+            Self::Uint32 => u32::MAX as u64,
+            Self::Uint64 => u64::MAX,
+        }
+    }
+}
+
 impl CoreRegistryFieldKind {
     pub fn from_field_kind(kind: FieldKind) -> Option<Self> {
         match kind {
@@ -69,7 +91,7 @@ pub enum StoredFieldInitializer {
     Color(u32),
     Double(f32),
     String(&'static str),
-    Uint(u32),
+    Uint(u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,6 +129,18 @@ pub struct Property {
 }
 
 impl Property {
+    pub fn uint_storage(self) -> Option<UintStorage> {
+        if self.runtime_type != FieldKind::Uint {
+            return None;
+        }
+
+        Some(match self.declared_type {
+            "uint8" => UintStorage::Uint8,
+            "uint64" => UintStorage::Uint64,
+            _ => UintStorage::Uint32,
+        })
+    }
+
     pub fn cpp_generates_changed_hook(self) -> bool {
         self.stores_data && self.bitmask_passthrough.is_none()
     }
@@ -191,7 +225,15 @@ impl Property {
                 value.map(parse_string_initializer).unwrap_or(""),
             )),
             FieldKind::Uint => Some(StoredFieldInitializer::Uint(
-                value.map(parse_uint_initializer).unwrap_or(0),
+                value
+                    .map(|value| {
+                        parse_uint_initializer(
+                            value,
+                            self.uint_storage()
+                                .expect("uint runtime fields have uint storage metadata"),
+                        )
+                    })
+                    .unwrap_or(0),
             )),
             FieldKind::Bytes | FieldKind::Callback => None,
         }
@@ -316,12 +358,21 @@ fn parse_string_initializer(value: &'static str) -> &'static str {
         .unwrap_or(value)
 }
 
-fn parse_uint_initializer(value: &'static str) -> u32 {
+fn parse_uint_initializer(value: &'static str, storage: UintStorage) -> u64 {
     match value {
-        "-1" | "Core.missingId" => u32::MAX,
+        "-1" | "Core.missingId" => storage.max_value(),
         "CoreContext.invalidPropertyKey" | "Core::invalidPropertyKey" => 0,
-        other => other
-            .parse::<u32>()
-            .unwrap_or_else(|err| panic!("unsupported uint initializer {value:?}: {err}")),
+        other => {
+            let parsed = other
+                .parse::<u64>()
+                .unwrap_or_else(|err| panic!("unsupported uint initializer {value:?}: {err}"));
+            match storage {
+                UintStorage::Uint8 => u64::from(parsed as u8),
+                UintStorage::Uint32 => u64::from(u32::try_from(parsed).unwrap_or_else(|_| {
+                    panic!("uint initializer {value:?} does not fit {storage:?}")
+                })),
+                UintStorage::Uint64 => parsed,
+            }
+        }
     }
 }

@@ -1113,7 +1113,11 @@ impl FieldKind {
             "Color" => Some(Self::Color),
             "double" => Some(Self::Double),
             "String" => Some(Self::String),
-            "uint" => Some(Self::Uint),
+            // `uint8` is a memory-only alias for `uint`, and `uint64` shares
+            // the same varuint registry/wire family. The declared type stays
+            // in generated metadata so import can retain the known-field
+            // width contract.
+            "uint" | "uint8" | "uint64" => Some(Self::Uint),
             _ => None,
         }
     }

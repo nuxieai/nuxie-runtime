@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, bail};
 use nuxie_schema::{
     BitmaskPassthrough, CoreRegistryFieldKind, Definition, FieldKind, Property,
-    StoredFieldInitializer, core_registry_field_kind_by_property_key, definition_by_name,
-    definition_by_type_key, object_supports_property,
+    StoredFieldInitializer, UintStorage, core_registry_field_kind_by_property_key,
+    definition_by_name, definition_by_type_key, object_supports_property,
 };
 use serde::Serialize;
 use std::{
@@ -12,7 +12,7 @@ use std::{
 };
 
 pub const SUPPORTED_MAJOR_VERSION: u64 = 7;
-pub const SUPPORTED_MINOR_VERSION: u64 = 0;
+pub const SUPPORTED_MINOR_VERSION: u64 = 2;
 pub const VIEW_MODEL_SYMBOL_ITEM_INDEX: u8 = 15;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -31,6 +31,7 @@ pub enum RuntimeDataType {
     SymbolListIndex = 10,
     AssetImage = 11,
     Artboard = 12,
+    AssetFont = 13,
     Input = 99,
     Any = 100,
 }
@@ -59,6 +60,7 @@ pub struct RuntimeDataBindCollapseEffect {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeDataBindAddDirtEffect {
     pub dirt: RuntimeComponentDirt,
+    pub target_origin: bool,
     pub changed: bool,
     pub invalidates_context_value: bool,
     pub requests_dirty_update: bool,
@@ -344,6 +346,7 @@ impl RuntimeComponentDirt {
     pub const LAYOUT_STYLE: Self = Self(1 << 11);
     pub const BINDINGS: Self = Self(1 << 12);
     pub const NSLICER: Self = Self(1 << 13);
+    pub const BINDINGS_TARGET: Self = Self(1 << 13);
     pub const SCRIPT_UPDATE: Self = Self(1 << 14);
     pub const CLIPPING: Self = Self(1 << 15);
     pub const FILTHY: Self = Self(0xFFFE);
@@ -1401,11 +1404,36 @@ impl RuntimeFile {
         parent_has_context_value: bool,
         parent_has_container: bool,
     ) -> Option<RuntimeDataConverterMarkDirtyEffect> {
+        self.data_converter_mark_dirty_effect_with_origin(
+            data_converter_index,
+            parent_data_bind_id,
+            parent_current_dirt,
+            false,
+            parent_suppress_dirt,
+            parent_is_collapsed,
+            parent_has_context_value,
+            parent_has_container,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_mark_dirty_effect_with_origin(
+        &self,
+        data_converter_index: usize,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+    ) -> Option<RuntimeDataConverterMarkDirtyEffect> {
         let data_converter = self.data_converter(data_converter_index)?;
-        self.data_converter_mark_dirty_effect_for_object(
+        self.data_converter_mark_dirty_effect_for_object_with_origin(
             data_converter,
             parent_data_bind_id,
             parent_current_dirt,
+            parent_target_origin,
             parent_suppress_dirt,
             parent_is_collapsed,
             parent_has_context_value,
@@ -1424,12 +1452,42 @@ impl RuntimeFile {
         parent_has_context_value: bool,
         parent_has_container: bool,
     ) -> Option<RuntimeDataConverterMarkDirtyEffect> {
+        self.data_converter_mark_dirty_effect_for_object_with_origin(
+            data_converter,
+            parent_data_bind_id,
+            parent_current_dirt,
+            false,
+            parent_suppress_dirt,
+            parent_is_collapsed,
+            parent_has_context_value,
+            parent_has_container,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_mark_dirty_effect_for_object_with_origin(
+        &self,
+        data_converter: &RuntimeObject,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+    ) -> Option<RuntimeDataConverterMarkDirtyEffect> {
         self.validate_data_converter(data_converter)?;
         let parent_add_dirt_effect = match parent_data_bind_id {
-            Some(parent_data_bind_id) => Some(self.data_bind_add_dirt_effect(
+            Some(parent_data_bind_id) => Some(self.data_bind_add_dirt_effect_with_origin(
                 parent_data_bind_id,
                 parent_current_dirt,
-                RuntimeComponentDirt::DEPENDENTS | RuntimeComponentDirt::BINDINGS,
+                parent_target_origin,
+                RuntimeComponentDirt::DEPENDENTS
+                    | if parent_target_origin {
+                        RuntimeComponentDirt::BINDINGS_TARGET
+                    } else {
+                        RuntimeComponentDirt::BINDINGS
+                    },
                 parent_suppress_dirt,
                 parent_is_collapsed,
                 parent_has_context_value,
@@ -1453,12 +1511,39 @@ impl RuntimeFile {
         parent_has_context_value: bool,
         parent_has_container: bool,
     ) -> Option<RuntimeDataConverterPropertyChangeEffect> {
+        self.data_converter_property_change_effect_with_origin(
+            data_converter_index,
+            property_name,
+            parent_data_bind_id,
+            parent_current_dirt,
+            false,
+            parent_suppress_dirt,
+            parent_is_collapsed,
+            parent_has_context_value,
+            parent_has_container,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_property_change_effect_with_origin(
+        &self,
+        data_converter_index: usize,
+        property_name: &str,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+    ) -> Option<RuntimeDataConverterPropertyChangeEffect> {
         let data_converter = self.data_converter(data_converter_index)?;
-        self.data_converter_property_change_effect_for_object(
+        self.data_converter_property_change_effect_for_object_with_origin(
             data_converter,
             property_name,
             parent_data_bind_id,
             parent_current_dirt,
+            parent_target_origin,
             parent_suppress_dirt,
             parent_is_collapsed,
             parent_has_context_value,
@@ -1478,6 +1563,32 @@ impl RuntimeFile {
         parent_has_context_value: bool,
         parent_has_container: bool,
     ) -> Option<RuntimeDataConverterPropertyChangeEffect> {
+        self.data_converter_property_change_effect_for_object_with_origin(
+            data_converter,
+            property_name,
+            parent_data_bind_id,
+            parent_current_dirt,
+            false,
+            parent_suppress_dirt,
+            parent_is_collapsed,
+            parent_has_context_value,
+            parent_has_container,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_property_change_effect_for_object_with_origin(
+        &self,
+        data_converter: &RuntimeObject,
+        property_name: &str,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+    ) -> Option<RuntimeDataConverterPropertyChangeEffect> {
         self.validate_data_converter(data_converter)?;
         if !cpp_data_converter_property_change_marks_dirty(data_converter, property_name) {
             return None;
@@ -1486,10 +1597,11 @@ impl RuntimeFile {
         Some(cpp_data_converter_property_change_effect(
             data_converter,
             property_name,
-            self.data_converter_mark_dirty_effect_for_object(
+            self.data_converter_mark_dirty_effect_for_object_with_origin(
                 data_converter,
                 parent_data_bind_id,
                 parent_current_dirt,
+                parent_target_origin,
                 parent_suppress_dirt,
                 parent_is_collapsed,
                 parent_has_context_value,
@@ -1513,12 +1625,45 @@ impl RuntimeFile {
         data_bind_in_dirty_list: bool,
         is_processing: bool,
     ) -> Option<RuntimeDataConverterAddDirtyDataBindEffect> {
+        self.data_converter_add_dirty_data_bind_effect_with_origin(
+            data_converter_index,
+            data_bind_id,
+            parent_data_bind_id,
+            parent_current_dirt,
+            false,
+            parent_suppress_dirt,
+            parent_is_collapsed,
+            parent_has_context_value,
+            parent_has_container,
+            data_bind_in_persisting_list,
+            data_bind_in_dirty_list,
+            is_processing,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_add_dirty_data_bind_effect_with_origin(
+        &self,
+        data_converter_index: usize,
+        data_bind_id: usize,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+        data_bind_in_persisting_list: bool,
+        data_bind_in_dirty_list: bool,
+        is_processing: bool,
+    ) -> Option<RuntimeDataConverterAddDirtyDataBindEffect> {
         let data_converter = self.data_converter(data_converter_index)?;
-        self.data_converter_add_dirty_data_bind_effect_for_object(
+        self.data_converter_add_dirty_data_bind_effect_for_object_with_origin(
             data_converter,
             data_bind_id,
             parent_data_bind_id,
             parent_current_dirt,
+            parent_target_origin,
             parent_suppress_dirt,
             parent_is_collapsed,
             parent_has_context_value,
@@ -1544,15 +1689,49 @@ impl RuntimeFile {
         data_bind_in_dirty_list: bool,
         is_processing: bool,
     ) -> Option<RuntimeDataConverterAddDirtyDataBindEffect> {
-        let mark_converter_dirty_effect = self.data_converter_mark_dirty_effect_for_object(
+        self.data_converter_add_dirty_data_bind_effect_for_object_with_origin(
             data_converter,
+            data_bind_id,
             parent_data_bind_id,
             parent_current_dirt,
+            false,
             parent_suppress_dirt,
             parent_is_collapsed,
             parent_has_context_value,
             parent_has_container,
-        )?;
+            data_bind_in_persisting_list,
+            data_bind_in_dirty_list,
+            is_processing,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn data_converter_add_dirty_data_bind_effect_for_object_with_origin(
+        &self,
+        data_converter: &RuntimeObject,
+        data_bind_id: usize,
+        parent_data_bind_id: Option<usize>,
+        parent_current_dirt: RuntimeComponentDirt,
+        parent_target_origin: bool,
+        parent_suppress_dirt: bool,
+        parent_is_collapsed: bool,
+        parent_has_context_value: bool,
+        parent_has_container: bool,
+        data_bind_in_persisting_list: bool,
+        data_bind_in_dirty_list: bool,
+        is_processing: bool,
+    ) -> Option<RuntimeDataConverterAddDirtyDataBindEffect> {
+        let mark_converter_dirty_effect = self
+            .data_converter_mark_dirty_effect_for_object_with_origin(
+                data_converter,
+                parent_data_bind_id,
+                parent_current_dirt,
+                parent_target_origin,
+                parent_suppress_dirt,
+                parent_is_collapsed,
+                parent_has_context_value,
+                parent_has_container,
+            )?;
         let container_add_dirty_effect = self.data_bind_container_add_dirty_effect(
             data_bind_id,
             data_bind_in_persisting_list,
@@ -2449,6 +2628,19 @@ impl RuntimeFile {
         Some(cpp_data_bind_source_to_target_runs_first(data_bind))
     }
 
+    pub fn data_bind_reconcile_dirt(&self, data_bind_id: usize) -> Option<RuntimeComponentDirt> {
+        let data_bind = self.object(data_bind_id)?;
+        self.data_bind_reconcile_dirt_for_object(data_bind)
+    }
+
+    pub fn data_bind_reconcile_dirt_for_object(
+        &self,
+        data_bind: &RuntimeObject,
+    ) -> Option<RuntimeComponentDirt> {
+        self.validate_data_bind(data_bind)?;
+        Some(cpp_data_bind_reconcile_dirt(data_bind))
+    }
+
     pub fn data_bind_is_name_based(&self, data_bind_id: usize) -> Option<bool> {
         let data_bind = self.object(data_bind_id)?;
         self.data_bind_is_name_based_for_object(data_bind)
@@ -2559,10 +2751,34 @@ impl RuntimeFile {
         has_context_value: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindAddDirtEffect> {
+        self.data_bind_add_dirt_effect_with_origin(
+            data_bind_id,
+            current_dirt,
+            false,
+            added_dirt,
+            suppress_dirt,
+            is_collapsed,
+            has_context_value,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_add_dirt_effect_with_origin(
+        &self,
+        data_bind_id: usize,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
+        added_dirt: RuntimeComponentDirt,
+        suppress_dirt: bool,
+        is_collapsed: bool,
+        has_context_value: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindAddDirtEffect> {
         let data_bind = self.object(data_bind_id)?;
-        self.data_bind_add_dirt_effect_for_object(
+        self.data_bind_add_dirt_effect_for_object_with_origin(
             data_bind,
             current_dirt,
+            current_target_origin,
             added_dirt,
             suppress_dirt,
             is_collapsed,
@@ -2581,10 +2797,35 @@ impl RuntimeFile {
         has_context_value: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindAddDirtEffect> {
+        self.data_bind_add_dirt_effect_for_object_with_origin(
+            data_bind,
+            current_dirt,
+            false,
+            added_dirt,
+            suppress_dirt,
+            is_collapsed,
+            has_context_value,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_add_dirt_effect_for_object_with_origin(
+        &self,
+        data_bind: &RuntimeObject,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
+        added_dirt: RuntimeComponentDirt,
+        suppress_dirt: bool,
+        is_collapsed: bool,
+        has_context_value: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindAddDirtEffect> {
         self.validate_data_bind(data_bind)?;
         Some(cpp_data_bind_add_dirt_effect(
             current_dirt,
+            current_target_origin,
             added_dirt,
+            cpp_data_bind_source_to_target_runs_first(data_bind),
             suppress_dirt,
             is_collapsed,
             has_context_value,
@@ -2671,14 +2912,40 @@ impl RuntimeFile {
         is_collapsed: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindBindEffect> {
+        self.data_bind_bind_effect_with_origin(
+            data_bind_id,
+            source_data_type,
+            has_target,
+            is_observing,
+            has_context_value,
+            current_dirt,
+            false,
+            is_collapsed,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_bind_effect_with_origin(
+        &self,
+        data_bind_id: usize,
+        source_data_type: RuntimeDataType,
+        has_target: bool,
+        is_observing: bool,
+        has_context_value: bool,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
+        is_collapsed: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindBindEffect> {
         let data_bind = self.object(data_bind_id)?;
-        self.data_bind_bind_effect_for_object(
+        self.data_bind_bind_effect_for_object_with_origin(
             data_bind,
             source_data_type,
             has_target,
             is_observing,
             has_context_value,
             current_dirt,
+            current_target_origin,
             is_collapsed,
             has_container,
         )
@@ -2692,6 +2959,31 @@ impl RuntimeFile {
         is_observing: bool,
         has_context_value: bool,
         current_dirt: RuntimeComponentDirt,
+        is_collapsed: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindBindEffect> {
+        self.data_bind_bind_effect_for_object_with_origin(
+            data_bind,
+            source_data_type,
+            has_target,
+            is_observing,
+            has_context_value,
+            current_dirt,
+            false,
+            is_collapsed,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_bind_effect_for_object_with_origin(
+        &self,
+        data_bind: &RuntimeObject,
+        source_data_type: RuntimeDataType,
+        has_target: bool,
+        is_observing: bool,
+        has_context_value: bool,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
         is_collapsed: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindBindEffect> {
@@ -2712,6 +3004,7 @@ impl RuntimeFile {
             is_observing,
             has_context_value,
             current_dirt,
+            current_target_origin,
             is_collapsed,
             has_container,
             target_supports_push,
@@ -2893,8 +3186,43 @@ impl RuntimeFile {
         is_collapsed: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindContextBindEffect> {
+        self.data_bind_context_bind_effect_with_origin(
+            data_bind_id,
+            source_path_is_resolved,
+            has_data_context,
+            lookup_has_source,
+            source_matches_lookup,
+            has_source,
+            source_data_type,
+            has_target,
+            is_observing,
+            has_context_value,
+            current_dirt,
+            false,
+            is_collapsed,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_context_bind_effect_with_origin(
+        &self,
+        data_bind_id: usize,
+        source_path_is_resolved: bool,
+        has_data_context: bool,
+        lookup_has_source: bool,
+        source_matches_lookup: bool,
+        has_source: bool,
+        source_data_type: RuntimeDataType,
+        has_target: bool,
+        is_observing: bool,
+        has_context_value: bool,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
+        is_collapsed: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindContextBindEffect> {
         let data_bind = self.object(data_bind_id)?;
-        self.data_bind_context_bind_effect_for_object(
+        self.data_bind_context_bind_effect_for_object_with_origin(
             data_bind,
             source_path_is_resolved,
             has_data_context,
@@ -2906,6 +3234,7 @@ impl RuntimeFile {
             is_observing,
             has_context_value,
             current_dirt,
+            current_target_origin,
             is_collapsed,
             has_container,
         )
@@ -2924,6 +3253,41 @@ impl RuntimeFile {
         is_observing: bool,
         has_context_value: bool,
         current_dirt: RuntimeComponentDirt,
+        is_collapsed: bool,
+        has_container: bool,
+    ) -> Option<RuntimeDataBindContextBindEffect> {
+        self.data_bind_context_bind_effect_for_object_with_origin(
+            data_bind,
+            source_path_is_resolved,
+            has_data_context,
+            lookup_has_source,
+            source_matches_lookup,
+            has_source,
+            source_data_type,
+            has_target,
+            is_observing,
+            has_context_value,
+            current_dirt,
+            false,
+            is_collapsed,
+            has_container,
+        )
+    }
+
+    pub fn data_bind_context_bind_effect_for_object_with_origin(
+        &self,
+        data_bind: &RuntimeObject,
+        source_path_is_resolved: bool,
+        has_data_context: bool,
+        lookup_has_source: bool,
+        source_matches_lookup: bool,
+        has_source: bool,
+        source_data_type: RuntimeDataType,
+        has_target: bool,
+        is_observing: bool,
+        has_context_value: bool,
+        current_dirt: RuntimeComponentDirt,
+        current_target_origin: bool,
         is_collapsed: bool,
         has_container: bool,
     ) -> Option<RuntimeDataBindContextBindEffect> {
@@ -2961,6 +3325,7 @@ impl RuntimeFile {
             is_observing,
             has_context_value,
             current_dirt,
+            current_target_origin,
             is_collapsed,
             has_container,
             target_supports_push,
@@ -2977,10 +3342,34 @@ impl RuntimeFile {
         has_target: bool,
     ) -> Option<RuntimeDataBindUpdateEffect> {
         let data_bind = self.object(data_bind_id)?;
-        self.data_bind_update_effect_for_object(
+        let in_persisting_list = self.data_bind_uses_persisting_list_for_object(data_bind)?;
+        self.data_bind_update_effect_for_object_with_persisting_state(
             data_bind,
             dirt,
             apply_target_to_source,
+            in_persisting_list,
+            has_source,
+            has_context_value,
+            has_target,
+        )
+    }
+
+    pub fn data_bind_update_effect_with_persisting_state(
+        &self,
+        data_bind_id: usize,
+        dirt: RuntimeComponentDirt,
+        apply_target_to_source: bool,
+        in_persisting_list: bool,
+        has_source: bool,
+        has_context_value: bool,
+        has_target: bool,
+    ) -> Option<RuntimeDataBindUpdateEffect> {
+        let data_bind = self.object(data_bind_id)?;
+        self.data_bind_update_effect_for_object_with_persisting_state(
+            data_bind,
+            dirt,
+            apply_target_to_source,
+            in_persisting_list,
             has_source,
             has_context_value,
             has_target,
@@ -2996,6 +3385,28 @@ impl RuntimeFile {
         has_context_value: bool,
         has_target: bool,
     ) -> Option<RuntimeDataBindUpdateEffect> {
+        let in_persisting_list = self.data_bind_uses_persisting_list_for_object(data_bind)?;
+        self.data_bind_update_effect_for_object_with_persisting_state(
+            data_bind,
+            dirt,
+            apply_target_to_source,
+            in_persisting_list,
+            has_source,
+            has_context_value,
+            has_target,
+        )
+    }
+
+    pub fn data_bind_update_effect_for_object_with_persisting_state(
+        &self,
+        data_bind: &RuntimeObject,
+        dirt: RuntimeComponentDirt,
+        apply_target_to_source: bool,
+        in_persisting_list: bool,
+        has_source: bool,
+        has_context_value: bool,
+        has_target: bool,
+    ) -> Option<RuntimeDataBindUpdateEffect> {
         self.validate_data_bind(data_bind)?;
         Some(cpp_data_bind_update_effect(
             data_bind,
@@ -3003,6 +3414,7 @@ impl RuntimeFile {
                 .is_some(),
             dirt,
             apply_target_to_source,
+            in_persisting_list,
             has_source,
             has_context_value,
             has_target,
@@ -4082,6 +4494,24 @@ impl RuntimeFile {
         value.uint_property("propertyValue")
     }
 
+    pub fn view_model_instance_font_asset_index(&self, value_id: usize) -> Option<u64> {
+        let value = self.object(value_id)?;
+        self.view_model_instance_font_asset_index_for_object(value)
+    }
+
+    pub fn view_model_instance_font_asset_index_for_object(
+        &self,
+        value: &RuntimeObject,
+    ) -> Option<u64> {
+        if self.view_model_instance_value_data_type_for_object(value)
+            != Some(RuntimeDataType::AssetFont)
+        {
+            return None;
+        }
+
+        value.uint_property("propertyValue")
+    }
+
     pub fn view_model_instance_artboard_index(&self, value_id: usize) -> Option<u64> {
         let value = self.object(value_id)?;
         self.view_model_instance_artboard_index_for_object(value)
@@ -4150,6 +4580,9 @@ impl RuntimeFile {
                 value.uint_property("propertyValue")?,
             )),
             RuntimeDataType::AssetImage => Some(RuntimeDataValue::AssetImage(
+                value.uint_property("propertyValue")?,
+            )),
+            RuntimeDataType::AssetFont => Some(RuntimeDataValue::AssetFont(
                 value.uint_property("propertyValue")?,
             )),
             RuntimeDataType::Artboard => Some(RuntimeDataValue::Artboard(
@@ -7028,7 +7461,7 @@ fn cpp_view_model_instance_value_symbol(
     }
 
     // `symbolTypeValue` is a ViewModel data-type discriminant whose domain is
-    // the small RuntimeDataType enum (0..=12, plus 99/100) -- always <= 255. A
+    // the small RuntimeDataType enum (0..=13, plus 99/100) -- always <= 255. A
     // value that does not fit in u8 can only come from a malformed file, so we
     // treat it as "no symbol" (0) via u8::try_from rather than silently
     // truncating with `as u8`. For every in-domain value try_from is identical
@@ -7090,6 +7523,7 @@ pub enum RuntimeDataValue<'a> {
     List(Vec<&'a RuntimeObject>),
     SymbolListIndex(u64),
     AssetImage(u64),
+    AssetFont(u64),
     Artboard(u64),
     ViewModel(Option<RuntimeViewModelInstanceReference<'a>>),
 }
@@ -7107,6 +7541,7 @@ impl RuntimeDataValue<'_> {
             Self::List(_) => RuntimeDataType::List,
             Self::SymbolListIndex(_) => RuntimeDataType::SymbolListIndex,
             Self::AssetImage(_) => RuntimeDataType::AssetImage,
+            Self::AssetFont(_) => RuntimeDataType::AssetFont,
             Self::Artboard(_) => RuntimeDataType::Artboard,
             Self::ViewModel(_) => RuntimeDataType::ViewModel,
         }
@@ -7130,6 +7565,7 @@ pub enum RuntimeConvertedDataValue<'a> {
     GeneratedList(Vec<RuntimeGeneratedListItem>),
     SymbolListIndex(u64),
     AssetImage(u64),
+    AssetFont(u64),
     Artboard(u64),
     ViewModel(Option<RuntimeViewModelInstanceReference<'a>>),
 }
@@ -7530,6 +7966,7 @@ impl<'a> From<&RuntimeDataValue<'a>> for RuntimeConvertedDataValue<'a> {
             RuntimeDataValue::List(value) => Self::List(value.clone()),
             RuntimeDataValue::SymbolListIndex(value) => Self::SymbolListIndex(*value),
             RuntimeDataValue::AssetImage(value) => Self::AssetImage(*value),
+            RuntimeDataValue::AssetFont(value) => Self::AssetFont(*value),
             RuntimeDataValue::Artboard(value) => Self::Artboard(*value),
             RuntimeDataValue::ViewModel(value) => Self::ViewModel(value.clone()),
         }
@@ -7550,6 +7987,7 @@ impl RuntimeConvertedDataValue<'_> {
             Self::List(_) | Self::GeneratedList(_) => RuntimeDataType::List,
             Self::SymbolListIndex(_) => RuntimeDataType::SymbolListIndex,
             Self::AssetImage(_) => RuntimeDataType::AssetImage,
+            Self::AssetFont(_) => RuntimeDataType::AssetFont,
             Self::Artboard(_) => RuntimeDataType::Artboard,
             Self::ViewModel(_) => RuntimeDataType::ViewModel,
         }
@@ -7568,6 +8006,7 @@ impl RuntimeConvertedDataValue<'_> {
             | Self::Integer(value)
             | Self::Trigger(value)
             | Self::AssetImage(value)
+            | Self::AssetFont(value)
             | Self::Artboard(value) => Some(*value as u32),
             _ => None,
         }
@@ -8144,8 +8583,12 @@ impl RuntimeObject {
             return property.value.as_uint();
         }
 
+        if let Some(value) = self.bitmask_passthrough_value(name) {
+            return Some(value);
+        }
+
         match self.stored_field_initializer(name)? {
-            StoredFieldInitializer::Uint(value) => Some(u64::from(value)),
+            StoredFieldInitializer::Uint(value) => Some(value),
             _ => None,
         }
     }
@@ -8153,6 +8596,10 @@ impl RuntimeObject {
     pub fn bool_property(&self, name: &str) -> Option<bool> {
         if let Some(property) = self.property(name) {
             return property.value.as_bool();
+        }
+
+        if let Some(value) = self.bitmask_passthrough_value(name) {
+            return Some(value != 0);
         }
 
         match self.stored_field_initializer(name)? {
@@ -8193,6 +8640,17 @@ impl RuntimeObject {
         let definition = definition_by_type_key(self.type_key)?;
         let property = property_by_name_in_hierarchy(definition, name)?;
         (*property).stored_field_initializer()
+    }
+
+    fn bitmask_passthrough_value(&self, name: &str) -> Option<u64> {
+        let definition = definition_by_type_key(self.type_key)?;
+        let property = property_by_name_in_hierarchy(definition, name)?;
+        let passthrough = property.bitmask_passthrough?;
+        let target = self.uint_property(passthrough.target)?;
+        let mask = 1u64
+            .wrapping_shl(u32::from(passthrough.width))
+            .wrapping_sub(1);
+        Some(target.wrapping_shr(u32::from(passthrough.bit)) & mask)
     }
 }
 
@@ -8497,7 +8955,8 @@ fn authoring_record_to_runtime_object(
                 authored_property.value.kind_name()
             );
         }
-        if let AuthoringValue::Uint(value) = &authored_property.value
+        if property.uint_storage() != Some(UintStorage::Uint64)
+            && let AuthoringValue::Uint(value) = &authored_property.value
             && u32::try_from(*value).is_err()
         {
             bail!(
@@ -8522,11 +8981,18 @@ fn authoring_record_to_runtime_object(
             }
         }
 
+        let mut value = authored_property.value.into_field_value();
+        if property.uint_storage() == Some(UintStorage::Uint8)
+            && let FieldValue::Uint(uint) = &mut value
+        {
+            *uint = u64::from(*uint as u8);
+        }
+
         properties.push(RuntimeProperty {
             key: authored_property.key,
             name: property.name,
             owner,
-            value: authored_property.value.into_field_value(),
+            value,
         });
     }
 
@@ -8937,7 +9403,7 @@ fn object_imports_successfully(
         "ViewModelInstanceListItem" => {
             return context.latest(ImportStackKey::ViewModelInstanceList);
         }
-        "ViewModelInstanceAsset" | "ViewModelInstanceAssetImage" => {
+        "ViewModelInstanceAsset" | "ViewModelInstanceAssetImage" | "ViewModelInstanceAssetFont" => {
             return context.latest(ImportStackKey::Backboard)
                 && context.latest(ImportStackKey::ViewModelInstance);
         }
@@ -9161,6 +9627,17 @@ fn cpp_data_bind_source_to_target_runs_first(object: &RuntimeObject) -> bool {
         .is_some_and(|flags| flags & DATA_BIND_SOURCE_TO_TARGET_RUNS_FIRST_FLAG != 0)
 }
 
+fn cpp_data_bind_reconcile_dirt(data_bind: &RuntimeObject) -> RuntimeComponentDirt {
+    let mut dirt = RuntimeComponentDirt::NONE;
+    if cpp_data_bind_to_target(data_bind) {
+        dirt |= RuntimeComponentDirt::BINDINGS;
+    }
+    if cpp_data_bind_to_source(data_bind) {
+        dirt |= RuntimeComponentDirt::BINDINGS_TARGET;
+    }
+    dirt
+}
+
 fn cpp_data_bind_to_source(object: &RuntimeObject) -> bool {
     const DATA_BIND_TO_SOURCE_FLAG: u64 = 1 << 0;
     const DATA_BIND_TWO_WAY_FLAG: u64 = 1 << 1;
@@ -9224,7 +9701,9 @@ fn cpp_data_bind_collapse_effect(
 
 fn cpp_data_bind_add_dirt_effect(
     current_dirt: RuntimeComponentDirt,
+    current_target_origin: bool,
     added_dirt: RuntimeComponentDirt,
+    source_to_target_runs_first: bool,
     suppress_dirt: bool,
     is_collapsed: bool,
     has_context_value: bool,
@@ -9233,15 +9712,25 @@ fn cpp_data_bind_add_dirt_effect(
     if suppress_dirt || current_dirt.contains(added_dirt) {
         return RuntimeDataBindAddDirtEffect {
             dirt: current_dirt,
+            target_origin: current_target_origin,
             changed: false,
             invalidates_context_value: false,
             requests_dirty_update: false,
         };
     }
 
+    let added_source_dirt = added_dirt.contains(RuntimeComponentDirt::BINDINGS);
+    let added_target_dirt = added_dirt.contains(RuntimeComponentDirt::BINDINGS_TARGET);
+    let target_origin = match (added_source_dirt, added_target_dirt) {
+        (true, true) => !source_to_target_runs_first,
+        (false, true) => true,
+        (true, false) => false,
+        (false, false) => current_target_origin,
+    };
     let dirt = current_dirt | added_dirt;
     RuntimeDataBindAddDirtEffect {
         dirt,
+        target_origin,
         changed: true,
         invalidates_context_value: dirt.contains(RuntimeComponentDirt::DEPENDENTS)
             && has_context_value,
@@ -9336,6 +9825,7 @@ fn cpp_data_bind_context_value_type(output_type: RuntimeDataType) -> Option<Runt
         | RuntimeDataType::Trigger
         | RuntimeDataType::SymbolListIndex
         | RuntimeDataType::AssetImage
+        | RuntimeDataType::AssetFont
         | RuntimeDataType::Artboard
         | RuntimeDataType::ViewModel
         | RuntimeDataType::Any => Some(output_type),
@@ -9352,6 +9842,7 @@ fn cpp_data_bind_bind_effect(
     is_observing: bool,
     has_context_value: bool,
     current_dirt: RuntimeComponentDirt,
+    current_target_origin: bool,
     is_collapsed: bool,
     has_container: bool,
     target_supports_push: bool,
@@ -9378,7 +9869,9 @@ fn cpp_data_bind_bind_effect(
         },
         add_dirt_effect: cpp_data_bind_add_dirt_effect(
             current_dirt,
-            RuntimeComponentDirt::BINDINGS,
+            current_target_origin,
+            cpp_data_bind_reconcile_dirt(data_bind),
+            cpp_data_bind_source_to_target_runs_first(data_bind),
             false,
             is_collapsed,
             context_value_type.is_some(),
@@ -9507,6 +10000,7 @@ fn cpp_data_bind_context_bind_effect(
     is_observing: bool,
     has_context_value: bool,
     current_dirt: RuntimeComponentDirt,
+    current_target_origin: bool,
     is_collapsed: bool,
     has_container: bool,
     target_supports_push: bool,
@@ -9540,7 +10034,9 @@ fn cpp_data_bind_context_bind_effect(
         effect.branch = RuntimeDataBindContextBindBranch::AddDirtExistingSource;
         effect.add_dirt_effect = Some(cpp_data_bind_add_dirt_effect(
             current_dirt,
-            RuntimeComponentDirt::BINDINGS,
+            current_target_origin,
+            cpp_data_bind_reconcile_dirt(data_bind),
+            cpp_data_bind_source_to_target_runs_first(data_bind),
             false,
             is_collapsed,
             has_context_value,
@@ -9566,6 +10062,7 @@ fn cpp_data_bind_context_bind_effect(
             is_observing,
             has_context_value,
             current_dirt,
+            current_target_origin,
             is_collapsed,
             has_container,
             target_supports_push,
@@ -9590,12 +10087,15 @@ fn cpp_data_bind_update_effect(
     has_converter: bool,
     dirt: RuntimeComponentDirt,
     apply_target_to_source: bool,
+    in_persisting_list: bool,
     has_source: bool,
     has_context_value: bool,
     has_target: bool,
 ) -> RuntimeDataBindUpdateEffect {
     let calls_update_dependents = dirt.contains(RuntimeComponentDirt::DEPENDENTS);
-    let can_apply_target_to_source = apply_target_to_source
+    let wants_target_to_source = apply_target_to_source
+        && (in_persisting_list || dirt.contains(RuntimeComponentDirt::BINDINGS_TARGET));
+    let can_apply_target_to_source = wants_target_to_source
         && cpp_data_bind_to_source(data_bind)
         && has_target
         && has_context_value;
@@ -10908,6 +11408,7 @@ fn cpp_view_model_instance_value_data_type(type_name: &str) -> RuntimeDataType {
         "ViewModelInstanceViewModel" => RuntimeDataType::ViewModel,
         "ViewModelInstanceSymbolListIndex" => RuntimeDataType::SymbolListIndex,
         "ViewModelInstanceAssetImage" => RuntimeDataType::AssetImage,
+        "ViewModelInstanceAssetFont" => RuntimeDataType::AssetFont,
         "ViewModelInstanceArtboard" => RuntimeDataType::Artboard,
         _ => RuntimeDataType::None,
     }
@@ -10927,6 +11428,7 @@ fn cpp_view_model_property_instance_type_key(type_name: &str) -> Option<u16> {
         "ViewModelPropertyViewModel" => "ViewModelInstanceViewModel",
         "ViewModelPropertySymbolListIndex" => "ViewModelInstanceSymbolListIndex",
         "ViewModelPropertyAssetImage" => "ViewModelInstanceAssetImage",
+        "ViewModelPropertyAssetFont" => "ViewModelInstanceAssetFont",
         "ViewModelPropertyArtboard" => "ViewModelInstanceArtboard",
         _ => return None,
     };
@@ -12650,7 +13152,7 @@ fn read_runtime_object(
         };
 
         if property.deserializes {
-            let value = read_field_value(reader, property.runtime_type)?;
+            let value = read_field_value(reader, property)?;
             upsert_runtime_property(
                 &mut properties,
                 RuntimeProperty {
@@ -12806,7 +13308,10 @@ fn skip_core_registry_value(
 ) -> Result<UnknownPropertySkip> {
     match field {
         CoreRegistryFieldKind::Uint => {
-            read_cpp_unsigned_int_var_uint(reader, "uint field")?;
+            // Uint64 deliberately shares the uint field id. Unknown fields do
+            // not carry enough schema to select a narrower C++ storage type,
+            // so consume the full raw varuint64 just like File::readRuntimeObject.
+            reader.read_var_uint()?;
         }
         CoreRegistryFieldKind::StringOrBytes => {
             reader.read_string()?;
@@ -12836,7 +13341,7 @@ fn read_core_registry_fallback_value(
 ) -> Result<KnownPropertySkip> {
     let value = match field {
         CoreRegistryFieldKind::Uint => {
-            FieldValue::Uint(read_cpp_unsigned_int_var_uint(reader, "uint field")?)
+            FieldValue::Uint(read_known_uint_field(reader, property, "uint field")?)
         }
         CoreRegistryFieldKind::StringOrBytes => read_string_or_bytes_value(reader, property)?,
         CoreRegistryFieldKind::Double => FieldValue::Double(reader.read_f32()?),
@@ -12860,9 +13365,11 @@ fn read_header_fallback_value(
     property: &Property,
 ) -> Result<FieldValue> {
     Ok(match field {
-        HeaderFieldKind::Uint => {
-            FieldValue::Uint(read_cpp_unsigned_int_var_uint(reader, "header uint field")?)
-        }
+        HeaderFieldKind::Uint => FieldValue::Uint(read_known_uint_field(
+            reader,
+            property,
+            "header uint field",
+        )?),
         HeaderFieldKind::StringOrBytes => read_string_or_bytes_value(reader, property)?,
         HeaderFieldKind::Double => FieldValue::Double(reader.read_f32()?),
         HeaderFieldKind::Color => FieldValue::Color(reader.read_u32()?),
@@ -12881,8 +13388,8 @@ fn read_string_or_bytes_value(
     }
 }
 
-fn read_field_value(reader: &mut BinaryReader<'_>, kind: FieldKind) -> Result<FieldValue> {
-    Ok(match kind {
+fn read_field_value(reader: &mut BinaryReader<'_>, property: &Property) -> Result<FieldValue> {
+    Ok(match property.runtime_type {
         FieldKind::Bool => FieldValue::Bool(reader.read_byte()? == 1),
         FieldKind::Bytes => {
             let bytes = reader.read_length_prefixed_bytes()?;
@@ -12892,14 +13399,16 @@ fn read_field_value(reader: &mut BinaryReader<'_>, kind: FieldKind) -> Result<Fi
         FieldKind::Color => FieldValue::Color(reader.read_u32()?),
         FieldKind::Double => FieldValue::Double(reader.read_f32()?),
         FieldKind::String => FieldValue::String(reader.read_string()?),
-        FieldKind::Uint => FieldValue::Uint(read_cpp_unsigned_int_var_uint(reader, "uint field")?),
+        FieldKind::Uint => FieldValue::Uint(read_known_uint_field(reader, property, "uint field")?),
     })
 }
 
 fn skip_header_value(reader: &mut BinaryReader<'_>, kind: HeaderFieldKind) -> Result<()> {
     match kind {
         HeaderFieldKind::Uint => {
-            read_cpp_unsigned_int_var_uint(reader, "header uint field")?;
+            // Header field id 0 is shared by uint32 and uint64. Unknown
+            // properties therefore have to consume the full raw varuint.
+            reader.read_var_uint()?;
         }
         HeaderFieldKind::StringOrBytes => {
             reader.read_length_prefixed_bytes()?;
@@ -13130,6 +13639,21 @@ fn read_cpp_unsigned_int_var_uint(reader: &mut BinaryReader<'_>, label: &str) ->
     Ok(value)
 }
 
+fn read_known_uint_field(
+    reader: &mut BinaryReader<'_>,
+    property: &Property,
+    label: &str,
+) -> Result<u64> {
+    match property.uint_storage() {
+        Some(UintStorage::Uint64) => reader.read_var_uint(),
+        Some(UintStorage::Uint8) => {
+            read_cpp_unsigned_int_var_uint(reader, label).map(|value| u64::from(value as u8))
+        }
+        Some(UintStorage::Uint32) => read_cpp_unsigned_int_var_uint(reader, label),
+        None => bail!("{label} schema property is not uint-like"),
+    }
+}
+
 struct BinaryReader<'a> {
     bytes: &'a [u8],
     offset: usize,
@@ -13202,6 +13726,125 @@ impl<'a> BinaryReader<'a> {
 
             shift = shift.wrapping_add(7);
         }
+    }
+}
+
+#[cfg(test)]
+mod uint_wire_tests {
+    use super::{
+        BinaryReader, CoreRegistryFieldKind, HeaderFieldKind, definition_by_name,
+        read_known_uint_field, read_runtime_file_with_error_kind, skip_core_registry_value,
+        skip_header_value,
+    };
+
+    fn encoded_var_uint(mut value: u64) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            bytes.push(byte);
+            if value == 0 {
+                return bytes;
+            }
+        }
+    }
+
+    #[test]
+    fn unknown_uint_skips_consume_full_varuint64() {
+        let mut bytes = encoded_var_uint(u64::MAX);
+        bytes.push(0x2a);
+
+        let mut core_reader = BinaryReader::new(&bytes);
+        skip_core_registry_value(&mut core_reader, CoreRegistryFieldKind::Uint)
+            .expect("unknown core uint64 should be skippable");
+        assert_eq!(core_reader.read_byte().expect("core sentinel"), 0x2a);
+
+        let mut header_reader = BinaryReader::new(&bytes);
+        skip_header_value(&mut header_reader, HeaderFieldKind::Uint)
+            .expect("unknown header uint64 should be skippable");
+        assert_eq!(header_reader.read_byte().expect("header sentinel"), 0x2a);
+    }
+
+    #[test]
+    fn known_uint_width_controls_value_validation_without_changing_wire_family() {
+        let file_asset = definition_by_name("FileAsset").expect("FileAsset schema");
+        let uint32_property = file_asset
+            .properties
+            .iter()
+            .find(|property| property.name == "assetId")
+            .expect("FileAsset.assetId schema");
+        let uint64_property = file_asset
+            .properties
+            .iter()
+            .find(|property| property.name == "scopeLibraryId")
+            .expect("FileAsset.scopeLibraryId schema");
+        let uint8_property = definition_by_name("LayoutComponentStyle")
+            .expect("LayoutComponentStyle schema")
+            .properties
+            .iter()
+            .find(|property| property.name == "displayValue")
+            .expect("LayoutComponentStyle.displayValue schema");
+
+        let over_u32 = encoded_var_uint(u64::from(u32::MAX) + 1);
+        let error = read_known_uint_field(
+            &mut BinaryReader::new(&over_u32),
+            uint32_property,
+            "uint field",
+        )
+        .expect_err("known uint32 must retain C++ unsigned-int validation");
+        assert!(
+            error
+                .to_string()
+                .contains("does not fit in C++ unsigned int")
+        );
+
+        let wide_bytes = encoded_var_uint(u64::MAX);
+        let mut wide_reader = BinaryReader::new(&wide_bytes);
+        assert_eq!(
+            read_known_uint_field(&mut wide_reader, uint64_property, "uint64 field")
+                .expect("known uint64"),
+            u64::MAX
+        );
+
+        // uint8 changes only generated member storage. Registry dispatch and
+        // deserialization accept the complete uint32 wire range, then the
+        // generated uint8_t member assignment truncates to its low byte.
+        let compact_bytes = encoded_var_uint(u64::from(u32::MAX));
+        let mut compact_reader = BinaryReader::new(&compact_bytes);
+        assert_eq!(
+            read_known_uint_field(&mut compact_reader, uint8_property, "uint8 field")
+                .expect("known uint8 alias"),
+            u64::from(u8::MAX)
+        );
+    }
+
+    #[test]
+    fn runtime_object_decode_preserves_known_uint64_values() {
+        let mut bytes = b"RIVE".to_vec();
+        // A legacy 7.0 header remains importable after advertising 7.2.
+        bytes.extend_from_slice(&[7, 0, 0, 0]); // version, file id, empty header ToC.
+
+        bytes.extend(encoded_var_uint(23)); // Backboard.
+        bytes.push(0); // End Backboard properties.
+
+        bytes.extend(encoded_var_uint(558)); // LibraryAsset.
+        bytes.extend(encoded_var_uint(798)); // libraryId.
+        bytes.extend(encoded_var_uint(u64::MAX));
+        bytes.extend(encoded_var_uint(799)); // libraryVersionId.
+        bytes.extend(encoded_var_uint(u64::from(u32::MAX) + 1));
+        bytes.push(0); // End LibraryAsset properties.
+
+        let file = read_runtime_file_with_error_kind(&bytes)
+            .expect("known uint64 fields should import through the full runtime reader");
+        let library = file.object(1).expect("decoded LibraryAsset");
+        assert_eq!(library.uint_property("libraryId"), Some(u64::MAX));
+        assert_eq!(
+            library.uint_property("libraryVersionId"),
+            Some(u64::from(u32::MAX) + 1)
+        );
     }
 }
 

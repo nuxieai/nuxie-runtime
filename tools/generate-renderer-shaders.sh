@@ -12,7 +12,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 # Python sets. Fix the hash seed so its compiler-input headers are byte-stable.
 export PYTHONHASHSEED=0
 
-expected_runtime_revision="7c778d13c5d903b3b74eec1dd6bb68a811dea5f2"
+expected_runtime_revision="d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 expected_naga_version="30.0.0"
 expected_glslang_version="Glslang Version: 11:16.2.0"
 expected_spirv_tools_version="SPIRV-Tools v2026.1 unknown hash, 2026-01-22T19:45:19+00:00"
@@ -72,6 +72,18 @@ if [[ "$spirv_tools_version" != "$expected_spirv_tools_version" ]]; then
     exit 1
 fi
 
+normalize_wgsl() {
+    local path="$1"
+    # WebGPU compatibility mode rejects `flat` (and `flat, first`). Rive's
+    # flat varyings are constant across each primitive, so match upstream's
+    # header generator and choose either provoking vertex explicitly.
+    sed -E \
+        -e 's/@interpolate\([[:space:]]*flat[[:space:]]*(,[[:space:]]*first[[:space:]]*)?\)/@interpolate(flat, either)/g' \
+        -e 's/[[:space:]]+$//' \
+        "$path" > "$path.tmp"
+    mv "$path.tmp" "$path"
+}
+
 generate_clockwise_atomic_shader() {
     local source="$1"
     local stage="$2"
@@ -114,8 +126,7 @@ generate_clockwise_atomic_shader() {
         "$unoptimized" -o "$optimized"
     TERM=dumb naga --keep-coordinate-space "$optimized" "$output_dir/$output" \
         2> >(grep -v "Unknown decoration RelaxedPrecision" >&2 || true)
-    sed -E 's/[[:space:]]+$//' "$output_dir/$output" > "$output_dir/$output.tmp"
-    mv "$output_dir/$output.tmp" "$output_dir/$output"
+    normalize_wgsl "$output_dir/$output"
     rm -f "$unoptimized" "$optimized"
 }
 
@@ -136,7 +147,9 @@ PATH="$venv/bin:$HOME/.cargo/bin:$PATH" make -C "$shader_dir" OUT="$upstream_out
 while IFS= read -r header; do
     source="${header%.hpp}.wgsl"
     PATH="$venv/bin:$HOME/.cargo/bin:$PATH" make -C "$shader_dir" OUT="$upstream_out" "$source"
-    cp "$source" "$output_dir/$(basename "$source")"
+    output="$output_dir/$(basename "$source")"
+    cp "$source" "$output"
+    normalize_wgsl "$output"
 done < <(find "$upstream_out/wgsl" -maxdepth 1 -name '*.hpp' | sort)
 
 # Upstream does not currently emit WebGPU-flavored clockwiseAtomic modules.

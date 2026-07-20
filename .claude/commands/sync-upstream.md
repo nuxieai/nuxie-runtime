@@ -19,31 +19,39 @@ Phase S activates only after the migration closes.
 2. **Probe.** On a throwaway branch, bump the reference pin and run the
    default + scripted golden compares. Attribute every diff to an upstream
    commit. Unattributed diffs mean your triage is incomplete — re-triage
-   before writing the report. Do not land the probe branch.
+   before writing the report. Use a clean temporary C++ worktree, verify its
+   HEAD is the candidate SHA, and pass it explicitly as
+   `RIVE_RUNTIME_DIR=<candidate-worktree>`. Do not mutate the pinned checkout
+   or land the probe branch.
 3. **Triage report.** Write `docs/sync/triage-<date>-<shortsha>.md` per the
    map's table format and rating rubric, including version-skew checks
-   (Luau bytecode version FIRST, then shaping/layout deps, then .riv header
-   version). Resurface prior deferred rows with staleness counters.
+   (.riv header/format FIRST, then Luau bytecode/vendor compatibility, then
+   shaping/layout/bidi/image dependencies). Renderer is an active sync bucket,
+   not a Phase-R deferral. Resurface prior deferred rows with staleness counters.
 4. **STOP FOR APPROVAL.** Present the report summary and top
    recommendations to the user. Port NOTHING and move NO pins without
-   explicit row-level approval. Standing approvals recorded in the map's
-   State section may be acted on, citing them.
+   explicit row-level approval, a standing category approval, or a
+   cycle-scoped authorization recorded in the map's State section. Cite the
+   applicable authorization before acting.
 5. **Port approved rows** in upstream order — V2 method, one commit per
    upstream change, message format `[sync] Port rive-runtime <sha>: <title>`,
    goldens as oracle. New upstream fixtures enter the corpus as `not-yet`.
-6. **Advance the pin** (CI SHA, map State section, status file) only when
-   the full ratchet is green at the new pin. Deliberate skips that move
-   goldens require a Decision entry naming the upstream sha diverged from.
+6. **Advance the pin** across every active-pin artifact listed in the map's
+   State section, plus the map/status state, only when the full ratchet is
+   green at the new pin. Never blanket-rewrite historical evidence or fixture
+   provenance. Deliberate skips that move goldens require a Decision entry
+   naming the upstream sha diverged from.
 7. **Close the cycle**: append the summary to the triage file; append
-   renderer-bucket rows to `docs/sync/phase-r-backlog.md`; update
-   LAST_SYNCED_SHA.
+   deferred rows with staleness counters; update LAST_SYNCED_SHA and the clean
+   manual-cycle count.
 
 ## Rules
 
-- The approval gate is absolute — a nightly invocation ends at step 4 with
-  a report and a notification, never a port.
+- Scheduled triage ends at step 4 with a report and a notification unless a
+  standing category approval is recorded. It never infers approval from prior
+  cycles.
 - All V2/goal ground rules apply to port slices (port code not behaviors,
   ratchet per commit, fences, single writer, threads policy for scouts).
-- Never modify the reference checkout beyond `git fetch`/branch switches,
-  and always restore it to the pinned SHA when the cycle ends — the golden
-  oracle for the CURRENT tree depends on it.
+- Keep the pinned reference checkout untouched. Fetch its repository metadata
+  if needed, but run candidate probes from a clean temporary C++ worktree and
+  remove that worktree when the cycle ends.

@@ -382,5 +382,11 @@ cargo test -p nuxie-renderer --all-features --lib
 cargo test --workspace
 ```
 
+The browser smoke includes a forced WebGPU Compatibility case. It rejects the
+initial Core adapter request, verifies that the retry sets
+`featureLevel: "compatibility"`, verifies the explicit
+`maxStorageBuffersInVertexStage` device limit, and renders both the advertised
+Compatibility path and a forced texture-backed no-SSBO path.
+
 Run the normal and scripted V2 golden targets serially if they are included;
 both prepare the same debug runner path.

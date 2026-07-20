@@ -164,6 +164,10 @@ jobs:
       - name: Verify dual fuzz replay, stub baseline, and same-runner renderer pixels
         env:
           RENDERER_JOBS: 4
+          # Stub rendering remains parallel. The same-runner gate serializes its
+          # C++ Dawn oracle to avoid four concurrent GPU replays wedging Metal.
+          RENDERER_SAME_RUNNER_JOBS: 1
+          RENDERER_REPLAY_TIMEOUT_SECONDS: 60
         run: |
           make renderer-fuzz-replay
           make renderer-stub-baseline

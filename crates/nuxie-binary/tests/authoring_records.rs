@@ -74,8 +74,10 @@ fn authoring_records_build_an_importable_runtime_file() {
     ])
     .expect("valid authoring records should build a runtime file");
 
-    assert_eq!(file.header.major_version, SUPPORTED_MAJOR_VERSION);
-    assert_eq!(file.header.minor_version, SUPPORTED_MINOR_VERSION);
+    assert_eq!(SUPPORTED_MAJOR_VERSION, 7);
+    assert_eq!(SUPPORTED_MINOR_VERSION, 2);
+    assert_eq!(file.header.major_version, 7);
+    assert_eq!(file.header.minor_version, 2);
     assert_eq!(file.header.file_id, 0);
     assert_eq!(file.object_count(), 6);
     assert_eq!(file.known_object_count(), 6);
@@ -470,5 +472,61 @@ fn authoring_records_reject_uints_that_cannot_round_trip_through_the_wire_format
             .to_string()
             .contains("does not fit in C++ unsigned int"),
         "unexpected error: {error:#}"
+    );
+}
+
+#[test]
+fn authoring_records_preserve_uint64_library_scope_values() {
+    let file = RuntimeFile::from_authoring_records(vec![
+        AuthoringRecord {
+            type_key: 23,
+            properties: vec![],
+        },
+        AuthoringRecord {
+            type_key: 558,
+            properties: vec![uint(798, u64::MAX), uint(799, u64::from(u32::MAX) + 1)],
+        },
+    ])
+    .expect("LibraryAsset uint64 values should retain the full wire range");
+
+    let library = file.object(1).expect("authored LibraryAsset");
+    assert_eq!(library.uint_property("libraryId"), Some(u64::MAX));
+    assert_eq!(
+        library.uint_property("libraryVersionId"),
+        Some(u64::from(u32::MAX) + 1)
+    );
+    assert_eq!(
+        file.header.property_field_ids.get(&798),
+        Some(&HeaderFieldKind::Uint)
+    );
+    assert_eq!(
+        file.header.property_field_ids.get(&799),
+        Some(&HeaderFieldKind::Uint)
+    );
+}
+
+#[test]
+fn authoring_records_apply_uint8_member_truncation_after_uint_wire_validation() {
+    let file = RuntimeFile::from_authoring_records(vec![
+        AuthoringRecord {
+            type_key: 23,
+            properties: vec![],
+        },
+        AuthoringRecord {
+            type_key: 1,
+            properties: vec![],
+        },
+        AuthoringRecord {
+            type_key: 420,
+            properties: vec![uint(596, 0x1ff)],
+        },
+    ])
+    .expect("uint8 aliases should accept uint wire values");
+
+    assert_eq!(
+        file.object(2)
+            .expect("authored LayoutComponentStyle")
+            .uint_property("displayValue"),
+        Some(0xff)
     );
 }

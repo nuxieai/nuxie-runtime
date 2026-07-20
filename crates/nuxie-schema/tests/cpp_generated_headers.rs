@@ -1769,7 +1769,9 @@ fn parse_cpp_core_registry_property_field_ids(
             }
         }
 
-        let kind = if line.contains("return CoreUintType::id") {
+        let kind = if line.contains("return CoreUintType::id")
+            || line.contains("return CoreUint64Type::id")
+        {
             Some(CoreRegistryFieldKind::Uint)
         } else if line.contains("return CoreStringType::id")
             || line.contains("return CoreBytesType::id")
@@ -1889,6 +1891,7 @@ fn parse_cpp_core_registry_getter_field_kinds(
 
         current_kind = match line {
             line if line.starts_with("static uint32_t getUint") => Some(FieldKind::Uint),
+            line if line.starts_with("static uint64_t getUint64") => Some(FieldKind::Uint),
             line if line.starts_with("static std::string getString") => Some(FieldKind::String),
             line if line.starts_with("static int getColor") => Some(FieldKind::Color),
             line if line.starts_with("static bool getBool") => Some(FieldKind::Bool),
@@ -2113,7 +2116,7 @@ fn parse_cpp_member_initializers(header: &Path) -> BTreeMap<String, String> {
         };
         if !matches!(
             type_name,
-            "bool" | "float" | "int" | "std::string" | "uint32_t"
+            "bool" | "float" | "int" | "std::string" | "uint8_t" | "uint32_t" | "uint64_t"
         ) {
             continue;
         }
@@ -2204,12 +2207,12 @@ fn parse_string_initializer(value: &str, label: &str) -> &'static str {
     }
 }
 
-fn parse_uint_initializer(value: &str, label: &str) -> u32 {
+fn parse_uint_initializer(value: &str, label: &str) -> u64 {
     match value {
-        "-1" => u32::MAX,
+        "-1" => u64::from(u32::MAX),
         "Core::invalidPropertyKey" => 0,
         _ => value
-            .parse::<u32>()
+            .parse::<u64>()
             .unwrap_or_else(|err| panic!("{label} has bad uint initializer {value:?}: {err}")),
     }
 }

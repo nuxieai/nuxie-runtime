@@ -1,6 +1,8 @@
 use crate::data_bind_graph::{
     DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraphConverterState,
-    RuntimeDataBindGraphRangeMapperProperty, runtime_data_bind_graph_convert_value,
+    RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphRangeMapperProperty,
+    RuntimeKeyFrameDataBindTarget, RuntimeKeyFrameDataBindTemplate,
+    data_bind_flags_source_to_target_runs_first, runtime_data_bind_graph_convert_value,
     runtime_data_bind_graph_converter, runtime_data_bind_graph_converter_contains_global_id,
     runtime_data_bind_graph_converter_contains_source_change_random,
     runtime_data_bind_graph_converter_requires_persisting_custom_property_source,
@@ -14,17 +16,78 @@ use crate::properties::{
     solo_active_component_id_property_key,
 };
 use crate::scripting::RuntimeScriptInstanceHandle;
-use crate::view_model::RuntimeOwnedViewModelListHandle;
+use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelListHandle};
 use crate::{
     ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
-    RuntimeOwnedViewModelInstance, RuntimeViewModelPointer, ScriptInstance,
-    data_bind_flags_apply_source_to_target, data_bind_flags_apply_target_to_source,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    RuntimeViewModelPointer, ScriptInstance, data_bind_flags_apply_source_to_target,
+    data_bind_flags_apply_target_to_source,
 };
 use nuxie_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use nuxie_graph::ArtboardGraph;
 use nuxie_schema::{FieldKind, definition_by_type_key};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
+
+pub(crate) fn build_key_frame_data_bind_templates(
+    file: &RuntimeFile,
+    artboard_index: usize,
+) -> Vec<RuntimeKeyFrameDataBindTemplate> {
+    let default_instance = artboard_default_view_model_instance(file, artboard_index);
+    let mut claimed_targets = BTreeSet::new();
+    let mut templates = Vec::new();
+
+    for (data_bind_index, data_bind) in file
+        .artboard_data_binds(artboard_index)
+        .into_iter()
+        .enumerate()
+    {
+        let Some(target) = data_bind.target else {
+            continue;
+        };
+        let holder_target = match target.type_name {
+            "KeyFrameDouble" => RuntimeKeyFrameDataBindTarget::Number,
+            "KeyFrameColor" => RuntimeKeyFrameDataBindTarget::Color,
+            "KeyFrameBool" => RuntimeKeyFrameDataBindTarget::Boolean,
+            "KeyFrameString" => RuntimeKeyFrameDataBindTarget::String,
+            // C++ intentionally leaves KeyFrameUint/KeyFrameId unbound.
+            _ => continue,
+        };
+        // C++ firstBindByTarget.emplace keeps the first authored bind even if
+        // another bind to the same shared keyframe follows it.
+        if !claimed_targets.insert(target.id) {
+            continue;
+        }
+        let Some(path) = file.data_bind_context_source_path_ids_for_object(data_bind.object) else {
+            continue;
+        };
+        let holder_default = match holder_target {
+            RuntimeKeyFrameDataBindTarget::Number => RuntimeDataBindGraphValue::Number(0.0),
+            RuntimeKeyFrameDataBindTarget::Color => RuntimeDataBindGraphValue::Color(0xFF1D1D1D),
+            RuntimeKeyFrameDataBindTarget::Boolean => RuntimeDataBindGraphValue::Boolean(false),
+            RuntimeKeyFrameDataBindTarget::String => RuntimeDataBindGraphValue::String(Vec::new()),
+        };
+        let default_value = default_instance
+            .as_ref()
+            .and_then(|default_instance| {
+                file.data_context_view_model_property_for_instance(default_instance.object, &path)
+                    .and_then(|source| runtime_created_view_model_value_for_source(file, source))
+            })
+            .or_else(|| runtime_created_view_model_value_for_declared_path(file, &path))
+            .unwrap_or(holder_default);
+
+        templates.push(RuntimeKeyFrameDataBindTemplate {
+            data_bind_index,
+            key_frame_global_id: target.id,
+            target: holder_target,
+            path: path.to_vec(),
+            flags: data_bind.object.uint_property("flags").unwrap_or(0),
+            converter: runtime_data_bind_graph_converter(file, data_bind.object),
+            default_value,
+        });
+    }
+    templates
+}
 
 macro_rules! cached_runtime_data_bind_property_key {
     ($type_name:literal, $property_name:literal) => {{
@@ -105,6 +168,9 @@ fn runtime_data_bind_property_key_for_name(type_name: &str, property_name: &str)
         ("ViewModelInstanceAssetImage", "propertyValue") => {
             cached_runtime_data_bind_property_key!("ViewModelInstanceAssetImage", "propertyValue")
         }
+        ("ViewModelInstanceAssetFont", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("ViewModelInstanceAssetFont", "propertyValue")
+        }
         ("ViewModelInstance", "viewModelId") => {
             cached_runtime_data_bind_property_key!("ViewModelInstance", "viewModelId")
         }
@@ -153,6 +219,10 @@ fn runtime_data_bind_view_model_instance_enum_value_key() -> Option<u16> {
 
 fn runtime_data_bind_view_model_instance_asset_value_key() -> Option<u16> {
     cached_runtime_data_bind_property_key!("ViewModelInstanceAssetImage", "propertyValue")
+}
+
+fn runtime_data_bind_view_model_instance_font_asset_value_key() -> Option<u16> {
+    cached_runtime_data_bind_property_key!("ViewModelInstanceAssetFont", "propertyValue")
 }
 
 pub(crate) fn build_nested_host_data_bind_source_locals(
@@ -326,6 +396,7 @@ fn view_model_instance_value_child_local_for_slots(
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardPropertyBindingInstance {
     data_bind_index: usize,
+    flags: u64,
     target_local_id: usize,
     property_key: u16,
     path: Vec<u32>,
@@ -340,12 +411,66 @@ pub(super) struct RuntimeArtboardPropertyBindingInstance {
     pending_value: Option<RuntimeDataBindGraphValue>,
 }
 
+/// One C++ `DataBind` owns one converter and one direction latch even when the
+/// Rust execution plan materializes separate source-to-target and
+/// target-to-source binding records. Keep that shared state keyed by the
+/// authored data-bind index so a stateful reverse conversion cannot advance a
+/// second interpolator or re-dirty the opposite direction.
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeArtboardSharedDataBindConverterState {
+    converter: RuntimeDataBindGraphConverter,
+    converter_state: RuntimeDataBindGraphConverterState,
+    target_origin: bool,
+}
+
+pub(super) fn build_artboard_shared_data_bind_converter_states(
+    property_bindings: &[RuntimeArtboardPropertyBindingInstance],
+    custom_property_bindings: &[RuntimeArtboardCustomPropertyBindingInstance],
+) -> BTreeMap<usize, RuntimeArtboardSharedDataBindConverterState> {
+    property_bindings
+        .iter()
+        .filter_map(|property| {
+            custom_property_bindings
+                .iter()
+                .any(|custom| custom.data_bind_index == property.data_bind_index)
+                .then_some(())?;
+            let converter = property.converter.clone()?;
+            Some((
+                property.data_bind_index,
+                RuntimeArtboardSharedDataBindConverterState {
+                    converter_state: RuntimeDataBindGraphConverterState::for_converter(Some(
+                        &converter,
+                    )),
+                    converter,
+                    // A reconcile carries both dirt bits; C++ latches the
+                    // direction that runs last (the favored final value).
+                    target_origin: !data_bind_flags_source_to_target_runs_first(property.flags),
+                },
+            ))
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeArtboardAssetBindingTarget {
+    Image(usize),
+    Font(usize),
+}
+
+impl RuntimeArtboardAssetBindingTarget {
+    fn is_font(self) -> bool {
+        matches!(self, Self::Font(_))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardImageAssetBindingInstance {
-    target_local_id: usize,
+    target: RuntimeArtboardAssetBindingTarget,
     path: Vec<u32>,
+    path_is_name_based: bool,
     owned_context_source_path: Option<Vec<usize>>,
     default_value: RuntimeDataBindGraphValue,
+    font_value: Option<RuntimeFontAssetValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -355,13 +480,29 @@ pub(crate) enum RuntimeNestedChildContextUpdate {
     ContextPath(Vec<u32>, RuntimeDataBindGraphValue),
 }
 
+#[derive(Debug, Clone)]
+enum RuntimeStatefulViewModelValueUpdate {
+    Value(RuntimeDataBindGraphValue),
+    FontAsset(u64),
+    ViewModelInstance(usize),
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeStatefulViewModelUpdate {
+    instance_local_id: usize,
+    view_model_index: usize,
+    property_path: Vec<usize>,
+    value: RuntimeStatefulViewModelValueUpdate,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RuntimeArtboardOwnedContextKey {
+    instances: Vec<RuntimeArtboardOwnedContextInstanceKey>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeArtboardOwnedContextInstanceKey {
     view_model_index: usize,
-    // C++ Artboard::bindViewModelInstance rebinds unconditionally; this key
-    // is an invented change detector, so it must carry the instance identity
-    // in addition to the mutation generation — two distinct instances of the
-    // same view model both start at generation zero.
     instance_identity: u64,
     mutation_generation: u64,
     context_chain: Vec<Vec<usize>>,
@@ -373,13 +514,15 @@ impl RuntimeArtboardOwnedContextKey {
         context_chain: &[&[usize]],
     ) -> Self {
         Self {
-            view_model_index: context.view_model_index,
-            instance_identity: context.instance_identity(),
-            mutation_generation: context.mutation_generation(),
-            context_chain: context_chain
-                .iter()
-                .map(|context_path| context_path.to_vec())
-                .collect(),
+            instances: vec![RuntimeArtboardOwnedContextInstanceKey {
+                view_model_index: context.view_model_index,
+                instance_identity: context.instance_identity(),
+                mutation_generation: context.mutation_generation(),
+                context_chain: context_chain
+                    .iter()
+                    .map(|context_path| context_path.to_vec())
+                    .collect(),
+            }],
         }
     }
 
@@ -388,15 +531,139 @@ impl RuntimeArtboardOwnedContextKey {
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &[&[usize]],
     ) -> bool {
-        self.view_model_index == context.view_model_index
-            && self.instance_identity == context.instance_identity()
-            && self.mutation_generation == context.mutation_generation()
-            && self.context_chain.len() == context_chain.len()
-            && self
+        self.instances.len() == 1
+            && self.instances[0].view_model_index == context.view_model_index
+            && self.instances[0].instance_identity == context.instance_identity()
+            && self.instances[0].mutation_generation == context.mutation_generation()
+            && self.instances[0].context_chain.len() == context_chain.len()
+            && self.instances[0]
                 .context_chain
                 .iter()
                 .zip(context_chain)
                 .all(|(stored, current)| stored.as_slice() == *current)
+    }
+
+    fn from_candidates(candidates: &[RuntimeOwnedViewModelBindingCandidate]) -> Self {
+        Self {
+            instances: candidates
+                .iter()
+                .map(|candidate| {
+                    let context = candidate.context.borrow();
+                    RuntimeArtboardOwnedContextInstanceKey {
+                        view_model_index: context.view_model_index(),
+                        instance_identity: context.instance_identity(),
+                        mutation_generation: context.mutation_generation(),
+                        context_chain: candidate.context_chain.clone(),
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    fn matches_candidates(&self, candidates: &[RuntimeOwnedViewModelBindingCandidate]) -> bool {
+        self.instances.len() == candidates.len()
+            && self
+                .instances
+                .iter()
+                .zip(candidates)
+                .all(|(stored, current)| {
+                    let context = current.context.borrow();
+                    stored.view_model_index == context.view_model_index()
+                        && stored.instance_identity == context.instance_identity()
+                        && stored.mutation_generation == context.mutation_generation()
+                        && stored.context_chain == current.context_chain
+                })
+    }
+
+    /// The retained candidate vector is replaced only through the full
+    /// structural check above. Steady-state frame polling therefore only
+    /// needs to observe mutations of those already-bound shared instances.
+    fn matches_candidate_mutations(
+        &self,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    ) -> bool {
+        self.instances.len() == candidates.len()
+            && self
+                .instances
+                .iter()
+                .zip(candidates)
+                .all(|(stored, current)| {
+                    stored.mutation_generation == current.context.borrow().mutation_generation()
+                })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeOwnedViewModelBindingCandidate {
+    pub(crate) context: RuntimeOwnedViewModelHandle,
+    pub(crate) context_chain: Vec<Vec<usize>>,
+}
+
+impl RuntimeOwnedViewModelBindingCandidate {
+    pub(crate) fn root(context: &RuntimeOwnedViewModelInstance) -> Self {
+        Self {
+            context: RuntimeOwnedViewModelHandle::new(context.clone()),
+            context_chain: vec![Vec::new()],
+        }
+    }
+
+    pub(crate) fn root_handle(context: &RuntimeOwnedViewModelHandle) -> Self {
+        Self {
+            context: context.clone(),
+            context_chain: vec![Vec::new()],
+        }
+    }
+
+    fn context_chain(&self) -> Vec<&[usize]> {
+        self.context_chain.iter().map(Vec::as_slice).collect()
+    }
+}
+
+/// The concrete view-model value selected when a data bind resolves its
+/// source. C++ retains this as a `ContextValue`; keeping both the shared
+/// instance and resolved property path prevents a target-to-source update
+/// from being redirected through a different fallback context later.
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelBindingSource {
+    context: RuntimeOwnedViewModelHandle,
+    property_path: Vec<usize>,
+}
+
+impl RuntimeOwnedViewModelBindingSource {
+    fn sync_value(&self, value: &RuntimeDataBindGraphValue) -> bool {
+        let mut context = self.context.borrow_mut();
+        match value {
+            RuntimeDataBindGraphValue::Number(value) => {
+                context.sync_number_by_property_path(&self.property_path, *value)
+            }
+            RuntimeDataBindGraphValue::Boolean(value) => {
+                context.sync_boolean_by_property_path(&self.property_path, *value)
+            }
+            RuntimeDataBindGraphValue::String(value) => {
+                context.sync_string_by_property_path(&self.property_path, value)
+            }
+            RuntimeDataBindGraphValue::Color(value) => {
+                context.sync_color_by_property_path(&self.property_path, *value)
+            }
+            RuntimeDataBindGraphValue::Enum(value) => {
+                context.sync_enum_by_property_path(&self.property_path, *value)
+            }
+            RuntimeDataBindGraphValue::SymbolListIndex(value) => {
+                context.sync_symbol_list_index_by_property_path(&self.property_path, *value)
+            }
+            RuntimeDataBindGraphValue::Asset(value) => {
+                context.sync_asset_by_property_path(&self.property_path, *value)
+            }
+            RuntimeDataBindGraphValue::Artboard(value) => {
+                context.sync_artboard_by_property_path(&self.property_path, *value)
+            }
+            RuntimeDataBindGraphValue::Trigger(value) => {
+                context.sync_trigger_by_property_path(&self.property_path, *value)
+            }
+            RuntimeDataBindGraphValue::List { .. }
+            | RuntimeDataBindGraphValue::ListLength(_)
+            | RuntimeDataBindGraphValue::ViewModel(_) => false,
+        }
     }
 }
 
@@ -457,7 +724,11 @@ impl RuntimeArtboardDataBindTargetQueues {
         queues
     }
 
-    fn enqueue_path(&mut self, path: &[u32]) -> Vec<usize> {
+    fn enqueue_path(
+        &mut self,
+        path: &[u32],
+        suppressed_property_index: Option<usize>,
+    ) -> Vec<usize> {
         let Some(targets) = self.by_path.get(path).cloned() else {
             return Vec::new();
         };
@@ -465,6 +736,9 @@ impl RuntimeArtboardDataBindTargetQueues {
         for target in targets {
             match target {
                 RuntimeArtboardDataBindTargetRef::Property(index) => {
+                    if Some(index) == suppressed_property_index {
+                        continue;
+                    }
                     if self.enqueue_property(index) {
                         enqueued_properties.push(index);
                     }
@@ -524,6 +798,26 @@ impl RuntimeArtboardDataBindTargetQueues {
         dirty
     }
 
+    fn drain_dirty_properties_for_precedence(
+        &mut self,
+        bindings: &[RuntimeArtboardPropertyBindingInstance],
+        source_to_target_runs_first: bool,
+    ) -> Vec<usize> {
+        let mut selected = Vec::new();
+        for index in self.drain_dirty_properties() {
+            let runs_first = bindings.get(index).is_some_and(|binding| {
+                data_bind_flags_apply_target_to_source(binding.flags)
+                    && data_bind_flags_source_to_target_runs_first(binding.flags)
+            });
+            if runs_first == source_to_target_runs_first {
+                selected.push(index);
+            } else {
+                self.enqueue_property(index);
+            }
+        }
+        selected
+    }
+
     fn drain_dirty_image_assets(&mut self) -> Vec<usize> {
         let dirty = std::mem::take(&mut self.dirty_image_assets);
         for index in &dirty {
@@ -575,6 +869,16 @@ pub(super) struct RuntimeArtboardDataBindSourceQueues {
 }
 
 impl RuntimeArtboardDataBindSourceQueues {
+    #[inline]
+    fn has_target_properties(&self) -> bool {
+        !self.by_target_property.is_empty()
+    }
+
+    pub(crate) fn observes_target_property(&self, local_id: usize, property_key: u16) -> bool {
+        self.by_target_property
+            .contains_key(&(local_id, property_key))
+    }
+
     pub(super) fn new(
         custom_property_bindings: &[RuntimeArtboardCustomPropertyBindingInstance],
         layout_computed_bindings: &[RuntimeArtboardLayoutComputedBindingInstance],
@@ -635,7 +939,7 @@ impl RuntimeArtboardDataBindSourceQueues {
         local_id: usize,
         property_key: u16,
         suppressed_data_bind_index: Option<usize>,
-    ) {
+    ) -> Vec<usize> {
         let Self {
             by_target_property,
             dirty_custom_properties,
@@ -645,8 +949,9 @@ impl RuntimeArtboardDataBindSourceQueues {
             ..
         } = self;
         let Some(sources) = by_target_property.get(&(local_id, property_key)) else {
-            return;
+            return Vec::new();
         };
+        let mut enqueued_data_binds = Vec::new();
         for source in sources.iter().copied() {
             match source {
                 RuntimeArtboardDataBindSourceRef::CustomProperty {
@@ -664,6 +969,7 @@ impl RuntimeArtboardDataBindSourceQueues {
                     }
                     *flag = true;
                     dirty_custom_properties.push(index);
+                    enqueued_data_binds.push(data_bind_index);
                 }
                 RuntimeArtboardDataBindSourceRef::NumericSource {
                     index,
@@ -680,9 +986,11 @@ impl RuntimeArtboardDataBindSourceQueues {
                     }
                     *flag = true;
                     dirty_numeric_sources.push(index);
+                    enqueued_data_binds.push(data_bind_index);
                 }
             }
         }
+        enqueued_data_binds
     }
 
     fn enqueue_custom_property(&mut self, index: usize) {
@@ -803,8 +1111,7 @@ impl RuntimeArtboardDataBindSourceQueues {
         &self.persisting_solo_sources
     }
 
-    #[cfg(test)]
-    fn persisting_numeric_sources(&self) -> &[usize] {
+    pub(super) fn persisting_numeric_sources(&self) -> &[usize] {
         &self.persisting_numeric_sources
     }
 }
@@ -817,6 +1124,7 @@ pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
     path: Arc<[u32]>,
     path_is_name_based: bool,
     owned_context_source_path: Option<Vec<usize>>,
+    owned_context_source: Option<RuntimeOwnedViewModelBindingSource>,
     flags: u64,
     value_kind: RuntimeArtboardDataBindValueKind,
     converter: Option<RuntimeDataBindGraphConverter>,
@@ -829,6 +1137,7 @@ pub(super) struct RuntimeArtboardLayoutComputedBindingInstance {
     target_local_id: usize,
     property: RuntimeLayoutComputedProperty,
     path: Arc<[u32]>,
+    owned_context_source: Option<RuntimeOwnedViewModelBindingSource>,
 }
 
 #[derive(Debug, Clone)]
@@ -838,6 +1147,7 @@ pub(super) struct RuntimeArtboardNumericSourceBindingInstance {
     property_key: u16,
     property: RuntimeArtboardNumericSourceProperty,
     path: Vec<u32>,
+    owned_context_source: Option<RuntimeOwnedViewModelBindingSource>,
 }
 
 #[derive(Debug, Clone)]
@@ -961,6 +1271,7 @@ pub(super) struct RuntimeArtboardSoloSourceBindingInstance {
     target_local_id: usize,
     path: Arc<[u32]>,
     enum_value_names: Vec<Vec<u8>>,
+    owned_context_source: Option<RuntimeOwnedViewModelBindingSource>,
 }
 
 #[derive(Debug, Clone)]
@@ -968,6 +1279,7 @@ pub(super) struct RuntimeArtboardNestedHostBindingInstance {
     target_local_id: usize,
     property: RuntimeArtboardNestedHostProperty,
     path: Vec<u32>,
+    path_is_name_based: bool,
     owned_context_source_path: Option<Vec<usize>>,
     artboard_value_applied: bool,
 }
@@ -1072,15 +1384,11 @@ fn runtime_owned_view_model_binding_value_for_retained_context_chain(
     path: &[u32],
     path_is_name_based: bool,
     scripting_manifest: bool,
-    default_value: &RuntimeDataBindGraphValue,
     retained_source_path: &mut Option<Vec<usize>>,
 ) -> Option<RuntimeDataBindGraphValue> {
     if let Some(source_path) = retained_source_path.as_deref()
-        && let Some(value) = runtime_owned_view_model_binding_value_for_property_path(
-            context,
-            source_path,
-            default_value,
-        )
+        && let Some(value) =
+            runtime_owned_view_model_binding_value_for_property_path(context, source_path)
     {
         return Some(value);
     }
@@ -1093,58 +1401,290 @@ fn runtime_owned_view_model_binding_value_for_retained_context_chain(
             path_is_name_based,
             scripting_manifest,
         )?;
-        let value = runtime_owned_view_model_binding_value_for_property_path(
-            context,
-            &source_path,
-            default_value,
-        )?;
+        let value =
+            runtime_owned_view_model_binding_value_for_property_path(context, &source_path)?;
         Some((source_path, value))
     })?;
     *retained_source_path = Some(source_path);
     Some(value)
 }
 
+fn runtime_owned_view_model_binding_value_for_candidates(
+    file: &RuntimeFile,
+    candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    path: &[u32],
+    path_is_name_based: bool,
+    scripting_manifest: bool,
+) -> Option<RuntimeDataBindGraphValue> {
+    candidates.iter().find_map(|candidate| {
+        let context = candidate.context.borrow();
+        candidate.context_chain.iter().find_map(|context_path| {
+            let source_path = context.property_path_for_context_source_path_with_manifest_mode(
+                file,
+                context_path,
+                path,
+                path_is_name_based,
+                scripting_manifest,
+            )?;
+            runtime_owned_view_model_binding_value_for_property_path(&context, &source_path)
+        })
+    })
+}
+
+fn runtime_owned_view_model_binding_source_for_candidates(
+    file: &RuntimeFile,
+    candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    path: &[u32],
+    path_is_name_based: bool,
+    scripting_manifest: bool,
+) -> Option<RuntimeOwnedViewModelBindingSource> {
+    candidates.iter().find_map(|candidate| {
+        let context = candidate.context.borrow();
+        let property_path = candidate.context_chain.iter().find_map(|context_path| {
+            context.property_path_for_context_source_path_with_manifest_mode(
+                file,
+                context_path,
+                path,
+                path_is_name_based,
+                scripting_manifest,
+            )
+        })?;
+        Some(RuntimeOwnedViewModelBindingSource {
+            context: candidate.context.clone(),
+            property_path,
+        })
+    })
+}
+
+fn runtime_owned_view_model_sync_value_for_candidates(
+    file: &RuntimeFile,
+    candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    path: &[u32],
+    path_is_name_based: bool,
+    value: &RuntimeDataBindGraphValue,
+) -> Option<bool> {
+    runtime_owned_view_model_binding_source_for_candidates(
+        file,
+        candidates,
+        path,
+        path_is_name_based,
+        true,
+    )
+    .or_else(|| {
+        runtime_owned_view_model_binding_source_for_candidates(
+            file,
+            candidates,
+            path,
+            path_is_name_based,
+            false,
+        )
+    })
+    .map(|source| source.sync_value(value))
+}
+
+fn runtime_owned_view_model_value_for_candidates(
+    file: &RuntimeFile,
+    candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    path: &[u32],
+    default_value: &RuntimeDataBindGraphValue,
+) -> Option<RuntimeDataBindGraphValue> {
+    candidates.iter().find_map(|candidate| {
+        let context = candidate.context.borrow();
+        candidate.context_chain.iter().find_map(|context_path| {
+            default_value.resolve_from_owned_view_model_context_path(
+                file,
+                &context,
+                context_path,
+                path,
+            )
+        })
+    })
+}
+
+fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
+    converter: &mut RuntimeDataBindGraphConverter,
+    candidates: &[RuntimeOwnedViewModelBindingCandidate],
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            source_path: Some(source_path),
+            ..
+        } => {
+            let value = candidates
+                .iter()
+                .find_map(|candidate| {
+                    let context = candidate.context.borrow();
+                    let value = RuntimeDataBindGraphValue::Number(0.0)
+                        .resolve_from_owned_view_model_instance(&context, source_path)?;
+                    match value {
+                        RuntimeDataBindGraphValue::Number(value) => Some(value),
+                        _ => None,
+                    }
+                })
+                .unwrap_or(0.0);
+            if *operation_value == value {
+                return false;
+            }
+            *operation_value = value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            converters.iter_mut().fold(false, |changed, converter| {
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
+                    converter, candidates,
+                ) || changed
+            })
+        }
+        _ => false,
+    }
+}
+
 fn runtime_owned_view_model_binding_value_for_property_path(
     context: &RuntimeOwnedViewModelInstance,
     property_path: &[usize],
-    default_value: &RuntimeDataBindGraphValue,
 ) -> Option<RuntimeDataBindGraphValue> {
-    match default_value {
-        RuntimeDataBindGraphValue::Number(_) => context
-            .number_value_by_property_path(property_path)
-            .map(RuntimeDataBindGraphValue::Number),
-        RuntimeDataBindGraphValue::Boolean(_) => context
-            .boolean_value_by_property_path(property_path)
-            .map(RuntimeDataBindGraphValue::Boolean),
-        RuntimeDataBindGraphValue::String(_) => context
-            .string_value_by_property_path(property_path)
-            .map(|value| RuntimeDataBindGraphValue::String(value.to_vec())),
-        RuntimeDataBindGraphValue::Color(_) => context
-            .color_value_by_property_path(property_path)
-            .map(RuntimeDataBindGraphValue::Color),
-        RuntimeDataBindGraphValue::Enum(_) => context
-            .enum_value_by_property_path(property_path)
-            .map(RuntimeDataBindGraphValue::Enum),
-        RuntimeDataBindGraphValue::SymbolListIndex(_) => context
-            .symbol_list_index_value_by_property_path(property_path)
-            .map(RuntimeDataBindGraphValue::SymbolListIndex),
-        RuntimeDataBindGraphValue::List { .. } => context
-            .list_item_count_by_property_path(property_path)
-            .map(|item_count| RuntimeDataBindGraphValue::List { item_count }),
-        RuntimeDataBindGraphValue::Asset(_) => context
-            .asset_value_by_property_path(property_path)
-            .map(RuntimeDataBindGraphValue::Asset),
-        RuntimeDataBindGraphValue::Artboard(_) => context
-            .artboard_value_by_property_path(property_path)
-            .map(RuntimeDataBindGraphValue::Artboard),
-        RuntimeDataBindGraphValue::Trigger(_) => context
-            .trigger_value_by_property_path(property_path)
-            .map(RuntimeDataBindGraphValue::Trigger),
-        RuntimeDataBindGraphValue::ViewModel(_) => context
-            .view_model_value_by_property_path(property_path)
-            .map(RuntimeDataBindGraphValue::ViewModel),
-        RuntimeDataBindGraphValue::ListLength(_) => None,
+    context
+        .number_value_by_property_path(property_path)
+        .map(RuntimeDataBindGraphValue::Number)
+        .or_else(|| {
+            context
+                .boolean_value_by_property_path(property_path)
+                .map(RuntimeDataBindGraphValue::Boolean)
+        })
+        .or_else(|| {
+            context
+                .string_value_by_property_path(property_path)
+                .map(|value| RuntimeDataBindGraphValue::String(value.to_vec()))
+        })
+        .or_else(|| {
+            context
+                .color_value_by_property_path(property_path)
+                .map(RuntimeDataBindGraphValue::Color)
+        })
+        .or_else(|| {
+            context
+                .enum_value_by_property_path(property_path)
+                .map(RuntimeDataBindGraphValue::Enum)
+        })
+        .or_else(|| {
+            context
+                .symbol_list_index_value_by_property_path(property_path)
+                .map(RuntimeDataBindGraphValue::SymbolListIndex)
+        })
+        .or_else(|| {
+            context
+                .list_item_count_by_property_path(property_path)
+                .map(|item_count| RuntimeDataBindGraphValue::List { item_count })
+        })
+        .or_else(|| {
+            context
+                .asset_value_by_property_path(property_path)
+                .map(RuntimeDataBindGraphValue::Asset)
+        })
+        .or_else(|| {
+            context
+                .font_asset_value_by_property_path(property_path)
+                .map(|value| RuntimeDataBindGraphValue::Asset(value.file_asset_index()))
+        })
+        .or_else(|| {
+            context
+                .artboard_value_by_property_path(property_path)
+                .map(RuntimeDataBindGraphValue::Artboard)
+        })
+        .or_else(|| {
+            context
+                .trigger_value_by_property_path(property_path)
+                .map(RuntimeDataBindGraphValue::Trigger)
+        })
+        .or_else(|| {
+            context
+                .view_model_value_by_property_path(property_path)
+                .map(RuntimeDataBindGraphValue::ViewModel)
+        })
+}
+
+fn runtime_font_asset_values_equal(
+    current: &RuntimeFontAssetValue,
+    next: &RuntimeFontAssetValue,
+) -> bool {
+    if current.file_asset_index() != next.file_asset_index() {
+        return false;
     }
+    match (current.live_font_bytes_arc(), next.live_font_bytes_arc()) {
+        (Some(current), Some(next)) => {
+            Arc::ptr_eq(current, next) || current.as_ref() == next.as_ref()
+        }
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn runtime_owned_view_model_font_value_for_retained_context_chain(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+    context_chain: &[&[usize]],
+    path: &[u32],
+    path_is_name_based: bool,
+    scripting_manifest: bool,
+    retained_source_path: &mut Option<Vec<usize>>,
+) -> Option<RuntimeFontAssetValue> {
+    if let Some(source_path) = retained_source_path.as_deref()
+        && let Some(value) = context.font_asset_value_by_property_path(source_path)
+    {
+        return Some(value.clone());
+    }
+
+    let (source_path, value) = context_chain.iter().find_map(|context_path| {
+        let source_path = context.property_path_for_context_source_path_with_manifest_mode(
+            file,
+            context_path,
+            path,
+            path_is_name_based,
+            scripting_manifest,
+        )?;
+        let value = context.font_asset_value_by_property_path(&source_path)?;
+        Some((source_path, value.clone()))
+    })?;
+    *retained_source_path = Some(source_path);
+    Some(value)
+}
+
+fn runtime_owned_view_model_font_value_for_candidates(
+    file: &RuntimeFile,
+    candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    path: &[u32],
+    path_is_name_based: bool,
+    scripting_manifest: bool,
+) -> Option<RuntimeFontAssetValue> {
+    candidates.iter().find_map(|candidate| {
+        let context = candidate.context.borrow();
+        candidate.context_chain.iter().find_map(|context_path| {
+            let source_path = context.property_path_for_context_source_path_with_manifest_mode(
+                file,
+                context_path,
+                path,
+                path_is_name_based,
+                scripting_manifest,
+            )?;
+            context
+                .font_asset_value_by_property_path(&source_path)
+                .cloned()
+        })
+    })
+}
+
+fn runtime_owned_view_model_list_source_for_property_path(
+    context: &RuntimeOwnedViewModelInstance,
+    property_path: &[usize],
+) -> Option<RuntimeArtboardListResolvedSource> {
+    context
+        .list_handle_by_property_path(property_path)
+        .map(RuntimeArtboardListResolvedSource::List)
+        .or_else(|| {
+            runtime_owned_view_model_binding_value_for_property_path(context, property_path)
+                .map(RuntimeArtboardListResolvedSource::Value)
+        })
 }
 
 fn runtime_owned_view_model_missing_binding_value_for_context_chain(
@@ -1268,10 +1808,244 @@ pub(super) struct RuntimeArtboardListBindingInstance {
     path: Vec<u32>,
     converter: Option<RuntimeDataBindGraphConverter>,
     default_value: RuntimeDataBindGraphValue,
+    source_value: Option<RuntimeDataBindGraphValue>,
     source_list_size: Option<usize>,
     source_number_value: Option<f32>,
     target_list_size: Option<usize>,
     should_reset_instances: bool,
+    generated_view_model_id: Option<usize>,
+    generated_items: Vec<RuntimeOwnedViewModelHandle>,
+}
+
+enum RuntimeArtboardListResolvedSource {
+    List(RuntimeOwnedViewModelListHandle),
+    Value(RuntimeDataBindGraphValue),
+}
+
+struct RuntimeArtboardListResolvedUpdate {
+    target_local_id: usize,
+    source: Option<RuntimeOwnedViewModelListHandle>,
+    items: Option<Vec<RuntimeOwnedViewModelHandle>>,
+    binding_changed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct RuntimeArtboardListConvertedValue {
+    value: RuntimeDataBindGraphValue,
+    generated_view_model_id: Option<u64>,
+}
+
+fn runtime_artboard_convert_list_value(
+    converter: &RuntimeDataBindGraphConverter,
+    converted: RuntimeArtboardListConvertedValue,
+) -> Option<RuntimeArtboardListConvertedValue> {
+    if let RuntimeDataBindGraphConverter::Group(converters) = converter {
+        return converters
+            .iter()
+            .try_fold(converted, |converted, converter| {
+                runtime_artboard_convert_list_value(converter, converted)
+            });
+    }
+
+    let input_was_number = matches!(converted.value, RuntimeDataBindGraphValue::Number(_));
+    let input_was_list = matches!(converted.value, RuntimeDataBindGraphValue::List { .. });
+    let value = runtime_data_bind_graph_convert_value(converter, &converted.value)?;
+    let generated_view_model_id = match converter {
+        RuntimeDataBindGraphConverter::NumberToList { view_model_id, .. } if input_was_number => {
+            Some(*view_model_id)
+        }
+        _ if input_was_list && matches!(value, RuntimeDataBindGraphValue::List { .. }) => {
+            converted.generated_view_model_id
+        }
+        _ => None,
+    };
+    Some(RuntimeArtboardListConvertedValue {
+        value,
+        generated_view_model_id,
+    })
+}
+
+impl RuntimeArtboardListBindingInstance {
+    fn update_metadata(
+        &mut self,
+        source_list_size: Option<usize>,
+        source_number_value: Option<f32>,
+        target_list_size: Option<usize>,
+        should_reset_instances: bool,
+        source_value: Option<RuntimeDataBindGraphValue>,
+    ) -> bool {
+        let changed = self.source_list_size != source_list_size
+            || self.source_number_value != source_number_value
+            || self.target_list_size != target_list_size
+            || self.should_reset_instances != should_reset_instances
+            || self.source_value != source_value;
+        self.source_value = source_value;
+        self.source_list_size = source_list_size;
+        self.source_number_value = source_number_value;
+        self.target_list_size = target_list_size;
+        self.should_reset_instances = should_reset_instances;
+        changed
+    }
+
+    /// Mirrors C++ `DataConverterNumberToList::convert`: generated instances
+    /// are cached, the common prefix survives size changes, and changing the
+    /// converter's view-model id invalidates the complete cache.
+    fn reconcile_number_to_list_items(
+        &mut self,
+        file: &RuntimeFile,
+        source_value: RuntimeDataBindGraphValue,
+        target_size: usize,
+        generated_view_model_id: u64,
+    ) -> RuntimeArtboardListResolvedUpdate {
+        let view_model_id = usize::try_from(generated_view_model_id)
+            .ok()
+            .filter(|&index| index < file.view_models().len());
+
+        let mut cache_changed = false;
+        if self.generated_view_model_id != view_model_id {
+            self.generated_items.clear();
+            self.generated_view_model_id = view_model_id;
+            cache_changed = true;
+        }
+
+        let requested_size = if view_model_id.is_some() {
+            target_size
+        } else {
+            0
+        };
+        if self.generated_items.len() > requested_size {
+            self.generated_items.truncate(requested_size);
+            cache_changed = true;
+        }
+        if let Some(view_model_id) = view_model_id {
+            while self.generated_items.len() < requested_size {
+                let Some(instance) =
+                    RuntimeOwnedViewModelInstance::from_instance(file, view_model_id, 0)
+                        .or_else(|| RuntimeOwnedViewModelInstance::new(file, view_model_id))
+                else {
+                    break;
+                };
+                self.generated_items
+                    .push(RuntimeOwnedViewModelHandle::new(instance));
+                cache_changed = true;
+            }
+        }
+
+        let source_number_value = match &source_value {
+            RuntimeDataBindGraphValue::Number(value) => Some(*value),
+            _ => None,
+        };
+        let source_list_size = match &source_value {
+            RuntimeDataBindGraphValue::List { item_count } => Some(*item_count),
+            _ => None,
+        };
+        let binding_changed = self.update_metadata(
+            source_list_size,
+            source_number_value,
+            Some(self.generated_items.len()),
+            true,
+            Some(source_value),
+        ) || cache_changed;
+        RuntimeArtboardListResolvedUpdate {
+            target_local_id: self.target_local_id,
+            source: None,
+            items: cache_changed.then(|| self.generated_items.clone()),
+            binding_changed,
+        }
+    }
+
+    fn apply_resolved_source(
+        &mut self,
+        file: &RuntimeFile,
+        source: RuntimeArtboardListResolvedSource,
+    ) -> RuntimeArtboardListResolvedUpdate {
+        let (source_handle, source_value) = match source {
+            RuntimeArtboardListResolvedSource::List(source) => {
+                let item_count = source.items().len();
+                (Some(source), RuntimeDataBindGraphValue::List { item_count })
+            }
+            RuntimeArtboardListResolvedSource::Value(source_value) => (None, source_value),
+        };
+        let converted = match self.converter.as_ref() {
+            Some(converter) => runtime_artboard_convert_list_value(
+                converter,
+                RuntimeArtboardListConvertedValue {
+                    value: source_value.clone(),
+                    generated_view_model_id: None,
+                },
+            ),
+            None => Some(RuntimeArtboardListConvertedValue {
+                value: source_value.clone(),
+                generated_view_model_id: None,
+            }),
+        };
+
+        if let Some(RuntimeArtboardListConvertedValue {
+            value: RuntimeDataBindGraphValue::List { item_count },
+            generated_view_model_id: Some(view_model_id),
+        }) = converted.as_ref()
+        {
+            return self.reconcile_number_to_list_items(
+                file,
+                source_value,
+                *item_count,
+                *view_model_id,
+            );
+        }
+
+        if let (
+            Some(source),
+            Some(RuntimeArtboardListConvertedValue {
+                value: RuntimeDataBindGraphValue::List { item_count },
+                generated_view_model_id: None,
+            }),
+        ) = (source_handle, converted)
+        {
+            let items = source.items();
+            let source_item_count = match source_value {
+                RuntimeDataBindGraphValue::List { item_count } => item_count,
+                _ => items.len(),
+            };
+            let binding_changed = self.update_metadata(
+                Some(source_item_count),
+                None,
+                Some(item_count),
+                false,
+                Some(source_value),
+            );
+            return RuntimeArtboardListResolvedUpdate {
+                target_local_id: self.target_local_id,
+                source: Some(source),
+                items: Some(items),
+                binding_changed,
+            };
+        }
+
+        let cache_changed =
+            !self.generated_items.is_empty() || self.generated_view_model_id.take().is_some();
+        self.generated_items.clear();
+        let source_list_size = match &source_value {
+            RuntimeDataBindGraphValue::List { item_count } => Some(*item_count),
+            _ => None,
+        };
+        let source_number_value = match &source_value {
+            RuntimeDataBindGraphValue::Number(value) => Some(*value),
+            _ => None,
+        };
+        let binding_changed = self.update_metadata(
+            source_list_size,
+            source_number_value,
+            None,
+            false,
+            Some(source_value),
+        ) || cache_changed;
+        RuntimeArtboardListResolvedUpdate {
+            target_local_id: self.target_local_id,
+            source: None,
+            items: Some(Vec::new()),
+            binding_changed,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1359,22 +2133,29 @@ pub(super) fn build_artboard_list_bindings(
                 file.data_context_view_model_property_for_instance(default_instance.object, &path)
             });
             let source_is_unresolved_name_based = path_is_name_based && source.is_none();
+            let converts_number_to_list = converter
+                .as_ref()
+                .and_then(RuntimeDataBindGraphConverter::number_to_list_view_model_id)
+                .is_some();
             let default_value = source
-                .and_then(|source| match converter.as_ref() {
-                    Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => file
-                        .view_model_instance_number_value_for_object(source)
-                        .map(RuntimeDataBindGraphValue::Number),
-                    None => file
-                        .view_model_instance_list_size_for_object(source)
-                        .map(|item_count| RuntimeDataBindGraphValue::List { item_count }),
-                    _ => None,
-                })
-                .or_else(|| match converter.as_ref() {
-                    Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => {
-                        Some(RuntimeDataBindGraphValue::Number(0.0))
+                .and_then(|source| {
+                    if converts_number_to_list {
+                        runtime_created_view_model_value_for_source(file, source)
+                    } else if converter.is_none() {
+                        file.view_model_instance_list_size_for_object(source)
+                            .map(|item_count| RuntimeDataBindGraphValue::List { item_count })
+                    } else {
+                        None
                     }
-                    None => Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
-                    _ => None,
+                })
+                .or_else(|| {
+                    if converts_number_to_list {
+                        Some(RuntimeDataBindGraphValue::Number(0.0))
+                    } else if converter.is_none() {
+                        Some(RuntimeDataBindGraphValue::List { item_count: 0 })
+                    } else {
+                        None
+                    }
                 })?;
 
             Some(RuntimeArtboardListBindingInstance {
@@ -1383,10 +2164,13 @@ pub(super) fn build_artboard_list_bindings(
                 path: path.to_vec(),
                 converter,
                 default_value,
+                source_value: None,
                 source_list_size: None,
                 source_number_value: None,
                 target_list_size: source_is_unresolved_name_based.then_some(0),
                 should_reset_instances: false,
+                generated_view_model_id: None,
+                generated_items: Vec::new(),
             })
         })
         .collect()
@@ -1415,9 +2199,8 @@ pub(super) fn build_artboard_property_bindings(
         .into_iter()
         .enumerate()
         .filter_map(|(data_bind_index, data_bind)| {
-            if !data_bind_flags_apply_source_to_target(
-                data_bind.object.uint_property("flags").unwrap_or(0),
-            ) {
+            let flags = data_bind.object.uint_property("flags").unwrap_or(0);
+            if !data_bind_flags_apply_source_to_target(flags) {
                 return None;
             }
             let target = data_bind.target?;
@@ -1479,12 +2262,6 @@ pub(super) fn build_artboard_property_bindings(
                 })
                 .or_else(|| {
                     if path_is_name_based {
-                        if property_kind == FieldKind::String
-                            && runtime_data_bind_property_key_for_name("TextValueRun", "text")
-                                == Some(property_key)
-                        {
-                            return Some(RuntimeDataBindGraphValue::String(Vec::new()));
-                        }
                         return None;
                     }
                     runtime_created_view_model_value_for_declared_path(file, &path)
@@ -1497,15 +2274,18 @@ pub(super) fn build_artboard_property_bindings(
                     .clone()
                     .unwrap_or_else(|| match property_kind {
                         FieldKind::Bool => RuntimeDataBindGraphValue::Boolean(false),
-                        _ => RuntimeDataBindGraphValue::Number(0.0),
+                        FieldKind::Color => RuntimeDataBindGraphValue::Color(0xFF000000),
+                        FieldKind::String => RuntimeDataBindGraphValue::String(Vec::new()),
+                        FieldKind::Double | FieldKind::Uint => {
+                            RuntimeDataBindGraphValue::Number(0.0)
+                        }
+                        _ => unreachable!("property kind was filtered above"),
                     });
-            if !artboard_property_binding_value_matches_kind(&default_value, property_kind)
-                && !artboard_property_binding_allows_converted_default(
-                    converter.as_ref(),
-                    &default_value,
-                    property_kind,
-                )
-            {
+            if !artboard_property_binding_accepts_default(
+                converter.as_ref(),
+                &default_value,
+                property_kind,
+            ) {
                 return None;
             }
             let snapshots_source_value = converter.is_none()
@@ -1517,6 +2297,7 @@ pub(super) fn build_artboard_property_bindings(
 
             Some(RuntimeArtboardPropertyBindingInstance {
                 data_bind_index,
+                flags,
                 target_local_id,
                 property_key,
                 path: path.to_vec(),
@@ -1547,6 +2328,7 @@ pub(super) fn build_artboard_image_asset_bindings(
     else {
         return Vec::new();
     };
+    let font_asset_id_key = runtime_data_bind_property_key_for_name("TextStyle", "fontAssetId");
     let default_instance = artboard_default_view_model_instance(file, artboard_index);
 
     file.artboard_data_binds(artboard_index)
@@ -1558,15 +2340,22 @@ pub(super) fn build_artboard_image_asset_bindings(
                 return None;
             }
             let target = data_bind.target?;
-            if target.type_name != "Image" {
-                return None;
-            }
-            if u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?
-                != image_asset_id_key
+            let target_local_id = data_bind.target_local_id?;
+            let property_key =
+                u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
+            let target = if target.type_name == "Image" && property_key == image_asset_id_key {
+                RuntimeArtboardAssetBindingTarget::Image(target_local_id)
+            } else if matches!(target.type_name, "TextStyle" | "TextStylePaint")
+                && Some(property_key) == font_asset_id_key
             {
+                RuntimeArtboardAssetBindingTarget::Font(target_local_id)
+            } else {
                 return None;
-            }
+            };
             let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
+            let path_is_name_based = file
+                .data_bind_is_name_based_for_object(data_bind.object)
+                .unwrap_or(false);
             let default_value = default_instance
                 .as_ref()
                 .and_then(|default_instance| {
@@ -1577,10 +2366,7 @@ pub(super) fn build_artboard_image_asset_bindings(
                     .and_then(|source| runtime_created_view_model_value_for_source(file, source))
                 })
                 .or_else(|| {
-                    if file
-                        .data_bind_is_name_based_for_object(data_bind.object)
-                        .unwrap_or(false)
-                    {
+                    if path_is_name_based {
                         return None;
                     }
                     runtime_created_view_model_value_for_declared_path(file, &path)
@@ -1590,9 +2376,16 @@ pub(super) fn build_artboard_image_asset_bindings(
             }
 
             Some(RuntimeArtboardImageAssetBindingInstance {
-                target_local_id: data_bind.target_local_id?,
+                target,
                 path,
+                path_is_name_based,
                 owned_context_source_path: None,
+                font_value: target.is_font().then(|| {
+                    let RuntimeDataBindGraphValue::Asset(index) = &default_value else {
+                        unreachable!("asset binding default was checked above")
+                    };
+                    RuntimeFontAssetValue::from_file_asset_index(*index)
+                }),
                 default_value,
             })
         })
@@ -1629,6 +2422,38 @@ fn artboard_property_binding_allows_converted_default(
         .convert_value(converter, default_value)
         .as_ref()
         .is_some_and(|value| artboard_property_binding_value_matches_kind(value, property_kind))
+}
+
+fn artboard_property_binding_accepts_default(
+    converter: Option<&RuntimeDataBindGraphConverter>,
+    default_value: &RuntimeDataBindGraphValue,
+    property_kind: FieldKind,
+) -> bool {
+    artboard_property_binding_value_matches_kind(default_value, property_kind)
+        || artboard_property_binding_allows_converted_default(
+            converter,
+            default_value,
+            property_kind,
+        )
+        || converter.is_some_and(RuntimeDataBindGraphConverter::can_change_output_kind)
+}
+
+fn runtime_artboard_convert_property_binding_value(
+    converter: &RuntimeDataBindGraphConverter,
+    converter_state: &mut RuntimeDataBindGraphConverterState,
+    value: RuntimeDataBindGraphValue,
+    enum_value_names: &[Vec<u8>],
+    formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+) -> Option<RuntimeDataBindGraphValue> {
+    if matches!(converter, RuntimeDataBindGraphConverter::ToString { .. })
+        && let RuntimeDataBindGraphValue::Enum(value) = &value
+    {
+        return enum_value_names
+            .get(usize::try_from(*value).ok()?)
+            .cloned()
+            .map(RuntimeDataBindGraphValue::String);
+    }
+    converter_state.convert_value_with_formula_randoms(converter, &value, formula_random_source)
 }
 
 fn runtime_image_asset_global_for_file_asset_index(
@@ -1680,8 +2505,17 @@ pub(super) fn build_artboard_nested_host_bindings(
                 target_local_id: data_bind.target_local_id?,
                 property,
                 path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+                path_is_name_based: file
+                    .data_bind_is_name_based_for_object(data_bind.object)
+                    .unwrap_or(false),
                 owned_context_source_path: None,
-                artboard_value_applied: true,
+                // C++ DataBindViewModel::update bypasses the generated
+                // NestedArtboard::artboardId equality guard and calls
+                // NestedArtboard::updateArtboard even when the first bound
+                // value equals the authored source. Preserve that first
+                // clone so instance-owned paints and state have the same
+                // lifetime as C++.
+                artboard_value_applied: false,
             })
         })
         .collect()
@@ -1698,27 +2532,29 @@ pub(super) fn build_artboard_default_view_model_values(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return BTreeMap::new();
     };
-    let default_instance = artboard_default_view_model_instance(file, artboard_index);
+    // C++ leaves authored targets untouched when createViewModelInstance()
+    // returns null. A declared ViewModel describes the value kinds, but it is
+    // not itself a bound DataContext and must not seed source-to-target work.
+    let Some(default_instance) = artboard_default_view_model_instance(file, artboard_index) else {
+        return BTreeMap::new();
+    };
 
     let mut values = BTreeMap::new();
     for data_bind in file.artboard_data_binds(artboard_index) {
         let Some(path) = file.data_bind_context_source_path_ids_for_object(data_bind.object) else {
             continue;
         };
-        let Some(value) = default_instance
-            .as_ref()
-            .and_then(|default_instance| {
-                runtime_created_view_model_value_for_path(file, default_instance.object, &path)
-            })
-            .or_else(|| {
-                if file
-                    .data_bind_is_name_based_for_object(data_bind.object)
-                    .unwrap_or(false)
-                {
-                    return None;
-                }
-                runtime_created_view_model_value_for_declared_path(file, &path)
-            })
+        let Some(value) =
+            runtime_created_view_model_value_for_path(file, default_instance.object, &path)
+                .or_else(|| {
+                    if file
+                        .data_bind_is_name_based_for_object(data_bind.object)
+                        .unwrap_or(false)
+                    {
+                        return None;
+                    }
+                    runtime_created_view_model_value_for_declared_path(file, &path)
+                })
         else {
             continue;
         };
@@ -1876,6 +2712,7 @@ pub(super) fn build_artboard_custom_property_bindings(
                     .data_bind_is_name_based_for_object(data_bind.object)
                     .unwrap_or(false),
                 owned_context_source_path: None,
+                owned_context_source: None,
                 flags,
                 value_kind,
                 converter_state: RuntimeDataBindGraphConverterState::for_converter(
@@ -1939,6 +2776,7 @@ pub(super) fn build_artboard_numeric_source_bindings(
                 property_key,
                 property,
                 path: source_path,
+                owned_context_source: None,
             })
         })
         .collect()
@@ -2091,38 +2929,6 @@ pub(super) fn build_artboard_converter_property_bindings(
         .into_iter()
         .filter_map(|data_bind| runtime_data_bind_graph_converter(file, data_bind.object))
         .collect::<Vec<_>>();
-    let mut range_mapper_property_counts = BTreeMap::<u32, usize>::new();
-    for data_bind in file
-        .objects
-        .iter()
-        .flatten()
-        .filter(|object| object.type_name == "DataBindContext")
-    {
-        let Some(target) = file.data_bind_target_for_object(data_bind) else {
-            continue;
-        };
-        let Some(property_key) = data_bind
-            .uint_property("propertyKey")
-            .and_then(|value| u16::try_from(value).ok())
-        else {
-            continue;
-        };
-        if target.type_name == "DataConverterRangeMapper"
-            && [
-                range_mapper_min_input_key,
-                range_mapper_max_input_key,
-                range_mapper_min_output_key,
-                range_mapper_max_output_key,
-            ]
-            .contains(&Some(property_key))
-            && artboard_converters.iter().any(|converter| {
-                runtime_data_bind_graph_converter_contains_global_id(converter, target.id)
-            })
-        {
-            *range_mapper_property_counts.entry(target.id).or_default() += 1;
-        }
-    }
-
     file.objects
         .iter()
         .flatten()
@@ -2182,12 +2988,6 @@ pub(super) fn build_artboard_converter_property_bindings(
                     }
                 }
                 "DataConverterRangeMapper" => {
-                    if range_mapper_property_counts
-                        .get(&target.id)
-                        .is_some_and(|count| *count > 1)
-                    {
-                        return None;
-                    }
                     let property = if Some(property_key) == range_mapper_min_input_key {
                         RuntimeDataBindGraphRangeMapperProperty::MinInput
                     } else if Some(property_key) == range_mapper_max_input_key {
@@ -2455,6 +3255,7 @@ pub(super) fn build_artboard_layout_computed_bindings(
                 path: shared_data_bind_path(
                     file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
                 ),
+                owned_context_source: None,
             })
         })
         .collect::<Vec<_>>();
@@ -2549,6 +3350,7 @@ pub(super) fn build_artboard_solo_source_bindings(
                 target_local_id: data_bind.target_local_id?,
                 path: shared_data_bind_path(path),
                 enum_value_names,
+                owned_context_source: None,
             })
         })
         .collect()
@@ -2667,7 +3469,9 @@ fn runtime_created_view_model_value_for_source(
         RuntimeDataType::Trigger => Some(RuntimeDataBindGraphValue::Trigger(0)),
         RuntimeDataType::List => Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
         RuntimeDataType::SymbolListIndex => Some(RuntimeDataBindGraphValue::SymbolListIndex(0)),
-        RuntimeDataType::AssetImage => Some(RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX))),
+        RuntimeDataType::AssetImage | RuntimeDataType::AssetFont => {
+            Some(RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX)))
+        }
         RuntimeDataType::Artboard => Some(RuntimeDataBindGraphValue::Artboard(u64::from(u32::MAX))),
         _ => None,
     }
@@ -2710,7 +3514,7 @@ fn runtime_created_view_model_value_for_declared_property(
         "ViewModelPropertyTrigger" => Some(RuntimeDataBindGraphValue::Trigger(0)),
         "ViewModelPropertyList" => Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
         "ViewModelPropertySymbolListIndex" => Some(RuntimeDataBindGraphValue::SymbolListIndex(0)),
-        "ViewModelPropertyAssetImage" => {
+        "ViewModelPropertyAssetImage" | "ViewModelPropertyAssetFont" => {
             Some(RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX)))
         }
         "ViewModelPropertyArtboard" => {
@@ -2730,6 +3534,9 @@ impl ArtboardInstance {
         self.scripted_data_converter_instances_by_global
             .insert(global_id, handle.clone());
         let mut attached = false;
+        for state in self.artboard_shared_data_bind_converter_states.values_mut() {
+            attached |= state.converter.attach_scripted_instance(global_id, &handle);
+        }
         for binding in &mut self.artboard_property_bindings {
             if let Some(converter) = binding.converter.as_mut() {
                 attached |= converter.attach_scripted_instance(global_id, &handle);
@@ -2759,8 +3566,38 @@ impl ArtboardInstance {
     }
 
     fn enqueue_artboard_data_bind_targets_for_path(&mut self, path: &[u32]) {
+        self.enqueue_artboard_data_bind_targets_for_path_with_suppressed_data_bind(path, None);
+    }
+
+    fn enqueue_artboard_data_bind_targets_for_path_with_suppressed_data_bind(
+        &mut self,
+        path: &[u32],
+        suppressed_data_bind_index: Option<usize>,
+    ) {
         let value = self.artboard_data_bind_values.get(path).cloned();
-        let enqueued = self.artboard_data_bind_target_queues.enqueue_path(path);
+        let suppressed_property_index = suppressed_data_bind_index.and_then(|data_bind_index| {
+            self.artboard_property_bindings
+                .iter()
+                .position(|binding| binding.data_bind_index == data_bind_index)
+        });
+        let enqueued = self
+            .artboard_data_bind_target_queues
+            .enqueue_path(path, suppressed_property_index);
+        for index in &enqueued {
+            let Some(data_bind_index) = self
+                .artboard_property_bindings
+                .get(*index)
+                .map(|binding| binding.data_bind_index)
+            else {
+                continue;
+            };
+            if let Some(state) = self
+                .artboard_shared_data_bind_converter_states
+                .get_mut(&data_bind_index)
+            {
+                state.target_origin = false;
+            }
+        }
         if let Some(value) = value {
             for index in enqueued {
                 if let Some(binding) = self.artboard_property_bindings.get_mut(index) {
@@ -2793,20 +3630,69 @@ impl ArtboardInstance {
         }
     }
 
+    fn enqueue_artboard_shared_converter_direction(&mut self, data_bind_index: usize) {
+        let Some(target_origin) = self
+            .artboard_shared_data_bind_converter_states
+            .get(&data_bind_index)
+            .map(|state| state.target_origin)
+        else {
+            return;
+        };
+        if target_origin {
+            if let Some(index) = self
+                .artboard_custom_property_bindings
+                .iter()
+                .position(|binding| binding.data_bind_index == data_bind_index)
+            {
+                self.artboard_data_bind_source_queues
+                    .enqueue_custom_property(index);
+            }
+        } else if let Some(index) = self
+            .artboard_property_bindings
+            .iter()
+            .position(|binding| binding.data_bind_index == data_bind_index)
+        {
+            self.enqueue_artboard_property_binding_target(index);
+        }
+    }
+
     pub(crate) fn notify_artboard_data_bind_target_property_changed(
         &mut self,
         local_id: usize,
         property_key: u16,
-    ) {
-        self.artboard_data_bind_source_queues
+    ) -> bool {
+        if !self
+            .artboard_data_bind_source_queues
+            .has_target_properties()
+        {
+            return false;
+        }
+        let enqueued = self
+            .artboard_data_bind_source_queues
             .enqueue_target_property(
                 local_id,
                 property_key,
                 self.artboard_data_bind_suppressed_target_data_bind,
             );
+        let did_enqueue = !enqueued.is_empty();
+        for data_bind_index in enqueued {
+            if let Some(state) = self
+                .artboard_shared_data_bind_converter_states
+                .get_mut(&data_bind_index)
+            {
+                state.target_origin = true;
+            }
+        }
+        if did_enqueue {
+            self.mark_artboard_data_bind_work_dirty();
+        }
+        did_enqueue
     }
 
     pub(crate) fn update_nested_artboard_data_binds_from_hosts(&mut self) -> bool {
+        if !self.nested_artboard_tree_has_context_source_bindings() {
+            return false;
+        }
         let mut changed = false;
         let mut values = std::mem::take(&mut self.artboard_context_source_values_scratch);
         self.collect_nested_artboard_context_source_values(Mat2D::IDENTITY, &mut values);
@@ -2815,6 +3701,36 @@ impl ArtboardInstance {
         }
         self.artboard_context_source_values_scratch = values;
         changed
+    }
+
+    fn nested_artboard_tree_has_context_source_bindings(&self) -> bool {
+        let structure_epoch = self.nested_structure_epoch();
+        if let (Some(epoch), Some((cached_epoch, cached_value))) =
+            (structure_epoch, self.nested_context_source_tree_cache.get())
+            && cached_epoch == epoch
+        {
+            return cached_value;
+        }
+        let has_bindings = self.nested_artboard_locals.iter().any(|host_local_id| {
+            self.nested_artboards
+                .get(host_local_id)
+                .is_some_and(|nested| {
+                    nested.child.has_artboard_context_source_bindings()
+                        || nested
+                            .child
+                            .nested_artboard_tree_has_context_source_bindings()
+                })
+        }) || self.component_list_items.values().flatten().any(|item| {
+            item.child.has_artboard_context_source_bindings()
+                || item
+                    .child
+                    .nested_artboard_tree_has_context_source_bindings()
+        });
+        if let Some(epoch) = structure_epoch {
+            self.nested_context_source_tree_cache
+                .set(Some((epoch, has_bindings)));
+        }
+        has_bindings
     }
 
     fn collect_nested_artboard_context_source_values(
@@ -2855,6 +3771,31 @@ impl ArtboardInstance {
                 .advance_artboard_data_binds_with_root_transform(child_root_transform, 0.0);
             if child_has_direct_context_sources {
                 nested.child.append_artboard_context_source_values(values);
+            }
+        }
+
+        // `ArtboardComponentList` is also an ArtboardHost in C++. Row
+        // artboards own their own main DataContext, so settle each row with
+        // the host/root transform but do not publish its values into the
+        // parent's context. Nested descendants inside the row still publish
+        // into the row before its own bindings are polled.
+        let row_root_transforms = self.runtime_component_list_child_root_transforms(root_transform);
+        for (list_local_id, transforms) in row_root_transforms {
+            let Some(items) = self.component_list_items.get_mut(&list_local_id) else {
+                continue;
+            };
+            for (item, child_root_transform) in items.iter_mut().zip(transforms) {
+                let row_values_start = values.len();
+                item.child
+                    .collect_nested_artboard_context_source_values(child_root_transform, values);
+                let row_values_end = values.len();
+                for source in &values[row_values_start..row_values_end] {
+                    item.child
+                        .set_artboard_data_bind_value_for_path_ref(&source.path, &source.value);
+                }
+                item.child
+                    .advance_artboard_data_binds_with_root_transform(child_root_transform, 0.0);
+                values.truncate(row_values_start);
             }
         }
     }
@@ -2932,8 +3873,205 @@ impl ArtboardInstance {
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
     ) -> bool {
+        self.artboard_owned_view_model_context =
+            Some(RuntimeOwnedViewModelContext::from_main(context.clone()));
         let context_chain: [&[usize]; 1] = [&[]];
         self.bind_owned_view_model_artboard_context_chain(file, context, &context_chain, true, true)
+    }
+
+    /// Binds the same ordered composite context used by C++ `DataContext`:
+    /// main first, followed by globals in canonical file-slot order.
+    pub fn bind_owned_view_model_artboard_contexts(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelContext,
+    ) -> bool {
+        self.artboard_owned_view_model_context = Some(context.clone());
+        let candidates = context
+            .handles()
+            .map(RuntimeOwnedViewModelBindingCandidate::root_handle)
+            .collect::<Vec<_>>();
+        self.bind_owned_view_model_artboard_context_candidates(file, &candidates, true, true)
+    }
+
+    pub(crate) fn bind_owned_view_model_artboard_context_candidates(
+        &mut self,
+        file: &RuntimeFile,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        bind_self: bool,
+        allow_full_context_bindings: bool,
+    ) -> bool {
+        if bind_self {
+            self.artboard_owned_view_model_candidates = candidates.to_vec();
+        }
+        let rebind_self = self.retain_owned_view_model_context_candidates(candidates);
+        if rebind_self {
+            self.mark_artboard_data_bind_work_dirty();
+            self.stateful_nested_view_model_contexts_dirty = true;
+        }
+        if bind_self && rebind_self {
+            self.bind_owned_view_model_target_to_source_bindings(
+                file,
+                candidates,
+                allow_full_context_bindings,
+            );
+        }
+        let mut changed = if bind_self && rebind_self {
+            let mut changed = self.refresh_artboard_converter_dependents(|converter| {
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
+                    converter, candidates,
+                )
+            });
+            changed |= self.bind_owned_view_model_artboard_values_for_candidates(
+                file,
+                candidates,
+                allow_full_context_bindings,
+            );
+            self.artboard_data_bind_source_queues
+                .enqueue_numeric_push_sources();
+            changed
+        } else {
+            false
+        };
+
+        for index in 0..self.nested_artboard_locals.len() {
+            let host_local_id = self.nested_artboard_locals[index];
+            let child_candidates = self.owned_view_model_context_candidates_for_nested_host(
+                file,
+                candidates,
+                host_local_id,
+                allow_full_context_bindings,
+            );
+            let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+                continue;
+            };
+
+            let mut nested_candidates = Vec::new();
+            if let Some(stateful_context) = nested.stateful_view_model_context.clone() {
+                nested_candidates.push(RuntimeOwnedViewModelBindingCandidate::root(
+                    &stateful_context,
+                ));
+            }
+            nested_candidates.extend(
+                nested
+                    .stateful_global_view_model_contexts
+                    .values()
+                    .map(RuntimeOwnedViewModelBindingCandidate::root),
+            );
+            // A nested composite has its local main/globals first and inherits
+            // the complete parent context as fallback.
+            nested_candidates.extend(child_candidates);
+
+            if rebind_self {
+                changed |= nested
+                    .bind_owned_view_model_animation_context_candidates(file, &nested_candidates);
+            }
+            changed |= nested
+                .child
+                .bind_owned_view_model_artboard_context_candidates(
+                    file,
+                    &nested_candidates,
+                    true,
+                    allow_full_context_bindings,
+                );
+        }
+        if bind_self && rebind_self {
+            changed |= self.bind_owned_view_model_component_list_context_candidates(
+                file,
+                candidates,
+                allow_full_context_bindings,
+            );
+        }
+        changed
+    }
+
+    /// Rebinds a freshly mounted nested occurrence to the parent context that
+    /// was active when its artboard asset changed.
+    ///
+    /// C++ `NestedArtboard::updateArtboard` mounts the replacement and then
+    /// immediately calls `bindViewModelInstance` (or propagates its existing
+    /// `DataContext`). The replacement must therefore observe the same local
+    /// main/globals plus inherited-parent ordering as an initially mounted
+    /// nested artboard, without waiting for the parent scene to be rebound.
+    pub(crate) fn rebind_owned_view_model_context_after_nested_artboard_swap(
+        &mut self,
+        file: &RuntimeFile,
+        host_local_id: usize,
+    ) -> bool {
+        if self.artboard_owned_view_model_candidates.is_empty() {
+            return false;
+        }
+        let inherited_candidates = self.owned_view_model_context_candidates_for_nested_host(
+            file,
+            &self.artboard_owned_view_model_candidates,
+            host_local_id,
+            true,
+        );
+        let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+            return false;
+        };
+
+        let mut candidates = Vec::new();
+        if let Some(context) = nested.stateful_view_model_context.clone() {
+            candidates.push(RuntimeOwnedViewModelBindingCandidate::root(&context));
+        }
+        candidates.extend(
+            nested
+                .stateful_global_view_model_contexts
+                .values()
+                .map(RuntimeOwnedViewModelBindingCandidate::root),
+        );
+        candidates.extend(inherited_candidates);
+
+        let mut changed =
+            nested.bind_owned_view_model_animation_context_candidates(file, &candidates);
+        changed |= nested
+            .child
+            .bind_owned_view_model_artboard_context_candidates(file, &candidates, true, true);
+        changed
+    }
+
+    fn bind_owned_view_model_component_list_context_candidates(
+        &mut self,
+        file: &RuntimeFile,
+        parent_candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        allow_full_context_bindings: bool,
+    ) -> bool {
+        let mut changed = false;
+        for items in self.component_list_items.values_mut() {
+            for item in items {
+                // C++ gives each row a child DataContext whose main is the row
+                // instance and whose parent is the complete owning artboard
+                // context. Resolution is therefore row first, followed by the
+                // parent's main and globals in their existing order.
+                let mut child_candidates = Vec::with_capacity(parent_candidates.len() + 1);
+                child_candidates.push(RuntimeOwnedViewModelBindingCandidate::root_handle(
+                    &item.context,
+                ));
+                child_candidates.extend(parent_candidates.iter().cloned());
+                changed |= item
+                    .child
+                    .bind_owned_view_model_artboard_context_candidates(
+                        file,
+                        &child_candidates,
+                        true,
+                        allow_full_context_bindings,
+                    );
+                if let Some(state_machine) = item.state_machine.as_mut() {
+                    let contexts = child_candidates
+                        .iter()
+                        .map(|candidate| {
+                            (candidate.context.clone(), candidate.context_chain.clone())
+                        })
+                        .collect::<Vec<_>>();
+                    if state_machine.bind_owned_view_model_context_chains(file, &contexts) {
+                        changed = true;
+                        changed |= state_machine.advance_data_context();
+                    }
+                }
+            }
+        }
+        changed
     }
 
     pub fn bind_owned_view_model_nested_artboard_contexts(
@@ -2959,7 +4097,26 @@ impl ArtboardInstance {
         bind_self: bool,
         allow_full_context_bindings: bool,
     ) -> bool {
+        if bind_self {
+            self.artboard_owned_view_model_candidates =
+                vec![RuntimeOwnedViewModelBindingCandidate {
+                    context: RuntimeOwnedViewModelHandle::new(context.clone()),
+                    context_chain: context_chain.iter().map(|path| path.to_vec()).collect(),
+                }];
+        }
         let rebind_self = self.retain_owned_view_model_context_chain(context, context_chain);
+        if rebind_self {
+            self.mark_artboard_data_bind_work_dirty();
+            self.stateful_nested_view_model_contexts_dirty = true;
+        }
+        if bind_self && rebind_self {
+            let candidates = self.artboard_owned_view_model_candidates.clone();
+            self.bind_owned_view_model_target_to_source_bindings(
+                file,
+                &candidates,
+                allow_full_context_bindings,
+            );
+        }
         let mut changed = if bind_self && rebind_self {
             let mut changed = self.refresh_artboard_converter_dependents(|converter| {
                 runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
@@ -3031,6 +4188,17 @@ impl ArtboardInstance {
                 allow_full_context_bindings,
             );
         }
+        if bind_self && rebind_self {
+            let parent_candidates = [RuntimeOwnedViewModelBindingCandidate {
+                context: RuntimeOwnedViewModelHandle::new(context.clone()),
+                context_chain: context_chain.iter().map(|path| path.to_vec()).collect(),
+            }];
+            changed |= self.bind_owned_view_model_component_list_context_candidates(
+                file,
+                &parent_candidates,
+                allow_full_context_bindings,
+            );
+        }
         changed
     }
 
@@ -3059,6 +4227,16 @@ impl ArtboardInstance {
         }
         for binding in &mut self.artboard_custom_property_bindings {
             binding.owned_context_source_path = None;
+            binding.owned_context_source = None;
+        }
+        for binding in &mut self.artboard_layout_computed_bindings {
+            binding.owned_context_source = None;
+        }
+        for binding in &mut self.artboard_numeric_source_bindings {
+            binding.owned_context_source = None;
+        }
+        for binding in &mut self.artboard_solo_source_bindings {
+            binding.owned_context_source = None;
         }
         for binding in &mut self.artboard_nested_host_bindings {
             binding.owned_context_source_path = None;
@@ -3070,6 +4248,95 @@ impl ArtboardInstance {
             binding.source = None;
         }
         true
+    }
+
+    fn retain_owned_view_model_context_candidates(
+        &mut self,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    ) -> bool {
+        if self
+            .artboard_owned_context_key
+            .as_ref()
+            .is_some_and(|key| key.matches_candidates(candidates))
+        {
+            return false;
+        }
+        let replacing_owned_context = self.artboard_owned_context_key.is_some();
+        self.artboard_owned_context_key =
+            Some(RuntimeArtboardOwnedContextKey::from_candidates(candidates));
+        for binding in &mut self.artboard_property_bindings {
+            binding.owned_context_source_path = None;
+        }
+        for binding in &mut self.artboard_image_asset_bindings {
+            binding.owned_context_source_path = None;
+        }
+        for binding in &mut self.artboard_custom_property_bindings {
+            binding.owned_context_source_path = None;
+            binding.owned_context_source = None;
+        }
+        for binding in &mut self.artboard_layout_computed_bindings {
+            binding.owned_context_source = None;
+        }
+        for binding in &mut self.artboard_numeric_source_bindings {
+            binding.owned_context_source = None;
+        }
+        for binding in &mut self.artboard_solo_source_bindings {
+            binding.owned_context_source = None;
+        }
+        for binding in &mut self.artboard_nested_host_bindings {
+            binding.owned_context_source_path = None;
+            if replacing_owned_context {
+                binding.artboard_value_applied = false;
+            }
+        }
+        for binding in &mut self.artboard_text_list_bindings {
+            binding.source = None;
+        }
+        true
+    }
+
+    fn bind_owned_view_model_target_to_source_bindings(
+        &mut self,
+        file: &RuntimeFile,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        scripting_manifest: bool,
+    ) {
+        for binding in &mut self.artboard_custom_property_bindings {
+            binding.owned_context_source = runtime_owned_view_model_binding_source_for_candidates(
+                file,
+                candidates,
+                binding.path.as_ref(),
+                binding.path_is_name_based,
+                scripting_manifest,
+            );
+        }
+        for binding in &mut self.artboard_layout_computed_bindings {
+            binding.owned_context_source = runtime_owned_view_model_binding_source_for_candidates(
+                file,
+                candidates,
+                binding.path.as_ref(),
+                false,
+                scripting_manifest,
+            );
+        }
+        for binding in &mut self.artboard_numeric_source_bindings {
+            binding.owned_context_source = runtime_owned_view_model_binding_source_for_candidates(
+                file,
+                candidates,
+                &binding.path,
+                false,
+                scripting_manifest,
+            );
+        }
+        for binding in &mut self.artboard_solo_source_bindings {
+            binding.owned_context_source = runtime_owned_view_model_binding_source_for_candidates(
+                file,
+                candidates,
+                binding.path.as_ref(),
+                false,
+                scripting_manifest,
+            );
+        }
     }
 
     fn bind_owned_view_model_artboard_values(
@@ -3091,7 +4358,6 @@ impl ArtboardInstance {
                     &binding.path,
                     binding.path_is_name_based,
                     allow_full_context_bindings,
-                    &binding.default_value,
                     &mut binding.owned_context_source_path,
                 )
                 .or_else(|| {
@@ -3118,26 +4384,55 @@ impl ArtboardInstance {
         }
 
         for index in 0..self.artboard_image_asset_bindings.len() {
-            let update = {
+            let (update, font_update) = {
                 let binding = &mut self.artboard_image_asset_bindings[index];
-                runtime_owned_view_model_binding_value_for_retained_context_chain(
+                let update = runtime_owned_view_model_binding_value_for_retained_context_chain(
                     file,
                     context,
                     context_chain,
                     &binding.path,
-                    false,
+                    binding.path_is_name_based,
                     allow_full_context_bindings,
-                    &binding.default_value,
                     &mut binding.owned_context_source_path,
-                )
+                );
+                let font_update = binding.target.is_font().then(|| {
+                    runtime_owned_view_model_font_value_for_retained_context_chain(
+                        file,
+                        context,
+                        context_chain,
+                        &binding.path,
+                        binding.path_is_name_based,
+                        allow_full_context_bindings,
+                        &mut binding.owned_context_source_path,
+                    )
+                });
+                (update, font_update.flatten())
             };
             if let Some(value) = update {
+                let font_changed = font_update.as_ref().is_some_and(|font_update| {
+                    self.artboard_image_asset_bindings[index]
+                        .font_value
+                        .as_ref()
+                        .is_none_or(|current| {
+                            !runtime_font_asset_values_equal(current, font_update)
+                        })
+                });
+                if let Some(font_update) = font_update {
+                    self.artboard_image_asset_bindings[index].font_value = Some(font_update);
+                }
                 let path = self.artboard_image_asset_bindings[index].path.as_slice();
-                if self.artboard_data_bind_values.get(path) == Some(&value) {
+                let value_changed = self.artboard_data_bind_values.get(path) != Some(&value);
+                if !value_changed && !font_changed {
                     continue;
                 }
                 let path = self.artboard_image_asset_bindings[index].path.clone();
-                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+                if value_changed {
+                    changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+                } else {
+                    self.artboard_data_bind_target_queues
+                        .enqueue_image_asset(index);
+                    changed = true;
+                }
             }
         }
 
@@ -3151,7 +4446,6 @@ impl ArtboardInstance {
                     binding.path.as_ref(),
                     binding.path_is_name_based,
                     allow_full_context_bindings,
-                    &binding.default_value,
                     &mut binding.owned_context_source_path,
                 )
             };
@@ -3212,9 +4506,6 @@ impl ArtboardInstance {
 
         for index in 0..self.artboard_nested_host_bindings.len() {
             let path = self.artboard_nested_host_bindings[index].path.clone();
-            let Some(default_value) = self.artboard_data_bind_values.get(&path).cloned() else {
-                continue;
-            };
             let update = {
                 let binding = &mut self.artboard_nested_host_bindings[index];
                 runtime_owned_view_model_binding_value_for_retained_context_chain(
@@ -3222,9 +4513,8 @@ impl ArtboardInstance {
                     context,
                     context_chain,
                     &binding.path,
-                    false,
+                    binding.path_is_name_based,
                     allow_full_context_bindings,
-                    &default_value,
                     &mut binding.owned_context_source_path,
                 )
             };
@@ -3234,28 +4524,34 @@ impl ArtboardInstance {
                 changed |= self.set_artboard_data_bind_value_for_path(&path, value);
             }
         }
-        let component_list_updates = self
-            .artboard_list_bindings
-            .iter()
-            .filter_map(|binding| {
-                let source = context_chain.iter().find_map(|context_path| {
-                    let property_path = context
-                        .property_path_for_context_source_path_with_manifest_mode(
-                            file,
-                            context_path,
-                            &binding.path,
-                            false,
-                            allow_full_context_bindings,
-                        )?;
-                    context.list_handle_by_property_path(&property_path)
-                })?;
-                Some((binding.target_local_id, source))
-            })
-            .collect::<Vec<_>>();
-        for (list_local_id, source) in component_list_updates {
-            let items = source.items();
-            self.component_list_sources.insert(list_local_id, source);
-            changed |= self.sync_component_list_items(file, list_local_id, items);
+        let mut component_list_updates = Vec::new();
+        for binding in &mut self.artboard_list_bindings {
+            let source = context_chain.iter().find_map(|context_path| {
+                let property_path = context
+                    .property_path_for_context_source_path_with_manifest_mode(
+                        file,
+                        context_path,
+                        &binding.path,
+                        false,
+                        allow_full_context_bindings,
+                    )?;
+                runtime_owned_view_model_list_source_for_property_path(context, &property_path)
+            });
+            if let Some(source) = source {
+                component_list_updates.push(binding.apply_resolved_source(file, source));
+            }
+        }
+        for update in component_list_updates {
+            changed |= update.binding_changed;
+            if let Some(source) = update.source {
+                self.component_list_sources
+                    .insert(update.target_local_id, source);
+            } else {
+                self.component_list_sources.remove(&update.target_local_id);
+            }
+            if let Some(items) = update.items {
+                changed |= self.sync_component_list_items(file, update.target_local_id, items);
+            }
         }
         let mut text_lists_changed = false;
         for binding in &mut self.artboard_text_list_bindings {
@@ -3279,10 +4575,283 @@ impl ArtboardInstance {
             self.mark_layout_changed();
             changed = true;
         }
-        if changed {
-            changed |= self.apply_artboard_nested_host_bindings();
+        changed
+    }
+
+    fn bind_owned_view_model_artboard_values_for_candidates(
+        &mut self,
+        file: &RuntimeFile,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        allow_full_context_bindings: bool,
+    ) -> bool {
+        let mut changed = false;
+
+        for index in 0..self.artboard_property_bindings.len() {
+            let update = {
+                let binding = &self.artboard_property_bindings[index];
+                runtime_owned_view_model_binding_value_for_candidates(
+                    file,
+                    candidates,
+                    &binding.path,
+                    binding.path_is_name_based,
+                    allow_full_context_bindings,
+                )
+                .or_else(|| {
+                    candidates.iter().find_map(|candidate| {
+                        let context_chain = candidate.context_chain();
+                        runtime_owned_view_model_missing_binding_value_for_context_chain(
+                            &context_chain,
+                            binding,
+                        )
+                    })
+                })
+            };
+            if let Some(value) = update {
+                let path = self.artboard_property_bindings[index].path.as_slice();
+                if self.artboard_data_bind_values.get(path) == Some(&value) {
+                    continue;
+                }
+                if self.artboard_property_bindings[index].snapshots_source_value {
+                    self.artboard_property_bindings[index].pending_value = Some(value.clone());
+                }
+                let path = self.artboard_property_bindings[index].path.clone();
+                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            }
+        }
+        if allow_full_context_bindings {
+            changed |= self.bind_owned_name_based_color_values_for_candidates(file, candidates);
+        }
+
+        for index in 0..self.artboard_image_asset_bindings.len() {
+            let (update, font_update) = {
+                let binding = &self.artboard_image_asset_bindings[index];
+                let update = runtime_owned_view_model_binding_value_for_candidates(
+                    file,
+                    candidates,
+                    &binding.path,
+                    binding.path_is_name_based,
+                    allow_full_context_bindings,
+                );
+                let font_update = binding.target.is_font().then(|| {
+                    runtime_owned_view_model_font_value_for_candidates(
+                        file,
+                        candidates,
+                        &binding.path,
+                        binding.path_is_name_based,
+                        allow_full_context_bindings,
+                    )
+                });
+                (update, font_update.flatten())
+            };
+            if let Some(value) = update {
+                let font_changed = font_update.as_ref().is_some_and(|font_update| {
+                    self.artboard_image_asset_bindings[index]
+                        .font_value
+                        .as_ref()
+                        .is_none_or(|current| {
+                            !runtime_font_asset_values_equal(current, font_update)
+                        })
+                });
+                if let Some(font_update) = font_update {
+                    self.artboard_image_asset_bindings[index].font_value = Some(font_update);
+                }
+                let path = self.artboard_image_asset_bindings[index].path.as_slice();
+                let value_changed = self.artboard_data_bind_values.get(path) != Some(&value);
+                if !value_changed && !font_changed {
+                    continue;
+                }
+                let path = self.artboard_image_asset_bindings[index].path.clone();
+                if value_changed {
+                    changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+                } else {
+                    self.artboard_data_bind_target_queues
+                        .enqueue_image_asset(index);
+                    changed = true;
+                }
+            }
+        }
+
+        for index in 0..self.artboard_custom_property_bindings.len() {
+            let update = {
+                let binding = &self.artboard_custom_property_bindings[index];
+                runtime_owned_view_model_binding_value_for_candidates(
+                    file,
+                    candidates,
+                    binding.path.as_ref(),
+                    binding.path_is_name_based,
+                    allow_full_context_bindings,
+                )
+            };
+            if let Some(value) = update {
+                let path = self.artboard_custom_property_bindings[index].path.as_ref();
+                if self.artboard_data_bind_values.get(path) == Some(&value) {
+                    continue;
+                }
+                let path = self.artboard_custom_property_bindings[index].path.clone();
+                changed |= self.set_artboard_data_bind_value_for_path(path.as_ref(), value);
+            }
+        }
+
+        for index in 0..self.artboard_formula_token_bindings.len() {
+            if !self.artboard_formula_token_bindings[index].artboard_converter_reachable {
+                continue;
+            }
+            let binding = &self.artboard_formula_token_bindings[index];
+            let update = runtime_owned_view_model_value_for_candidates(
+                file,
+                candidates,
+                &binding.path,
+                &binding.default_value,
+            );
+            if let Some(value) = update {
+                let path = binding.path.clone();
+                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            }
+        }
+
+        for index in 0..self.artboard_converter_property_bindings.len() {
+            let binding = &self.artboard_converter_property_bindings[index];
+            let update = runtime_owned_view_model_value_for_candidates(
+                file,
+                candidates,
+                &binding.path,
+                &binding.default_value,
+            );
+            if let Some(value) = update {
+                let path = binding.path.clone();
+                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            }
+        }
+
+        for index in 0..self.artboard_nested_host_bindings.len() {
+            let path = self.artboard_nested_host_bindings[index].path.clone();
+            let binding = &self.artboard_nested_host_bindings[index];
+            let update = runtime_owned_view_model_binding_value_for_candidates(
+                file,
+                candidates,
+                &binding.path,
+                binding.path_is_name_based,
+                allow_full_context_bindings,
+            );
+            if let Some(value) = update
+                && self.artboard_data_bind_values.get(&path) != Some(&value)
+            {
+                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            }
+        }
+
+        let mut component_list_updates = Vec::new();
+        for binding in &mut self.artboard_list_bindings {
+            let source = candidates.iter().find_map(|candidate| {
+                let context = candidate.context.borrow();
+                candidate.context_chain.iter().find_map(|context_path| {
+                    let property_path = context
+                        .property_path_for_context_source_path_with_manifest_mode(
+                            file,
+                            context_path,
+                            &binding.path,
+                            false,
+                            allow_full_context_bindings,
+                        )?;
+                    runtime_owned_view_model_list_source_for_property_path(&context, &property_path)
+                })
+            });
+            if let Some(source) = source {
+                component_list_updates.push(binding.apply_resolved_source(file, source));
+            }
+        }
+        for update in component_list_updates {
+            changed |= update.binding_changed;
+            if let Some(source) = update.source {
+                self.component_list_sources
+                    .insert(update.target_local_id, source);
+            } else {
+                self.component_list_sources.remove(&update.target_local_id);
+            }
+            if let Some(items) = update.items {
+                changed |= self.sync_component_list_items(file, update.target_local_id, items);
+            }
+        }
+
+        let mut text_lists_changed = false;
+        for binding in &mut self.artboard_text_list_bindings {
+            let source = candidates.iter().find_map(|candidate| {
+                let context = candidate.context.borrow();
+                candidate.context_chain.iter().find_map(|context_path| {
+                    let property_path = context
+                        .property_path_for_context_source_path_with_manifest_mode(
+                            file,
+                            context_path,
+                            &binding.path,
+                            binding.path_is_name_based,
+                            allow_full_context_bindings,
+                        )?;
+                    context.list_handle_by_property_path(&property_path)
+                })
+            });
+            text_lists_changed |= source.is_some();
+            binding.source = source;
+        }
+        if text_lists_changed {
+            self.mark_path_changed();
+            self.mark_prepared_changed();
+            self.mark_layout_changed();
+            changed = true;
         }
         changed
+    }
+
+    fn bind_owned_name_based_color_values_for_candidates(
+        &mut self,
+        file: &RuntimeFile,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    ) -> bool {
+        let Some(artboard_index) = file
+            .artboards()
+            .into_iter()
+            .position(|artboard| artboard.id == self.graph_global_id)
+        else {
+            return false;
+        };
+        let Some(color_key) = solid_color_value_property_key() else {
+            return false;
+        };
+        let updates = file
+            .artboard_data_binds(artboard_index)
+            .into_iter()
+            .filter_map(|data_bind| {
+                if !data_bind_flags_apply_source_to_target(
+                    data_bind.object.uint_property("flags").unwrap_or(0),
+                ) || !file
+                    .data_bind_is_name_based_for_object(data_bind.object)
+                    .unwrap_or(false)
+                    || data_bind.target?.type_name != "SolidColor"
+                    || u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?
+                        != color_key
+                {
+                    return None;
+                }
+                let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
+                let value = candidates.iter().find_map(|candidate| {
+                    let context = candidate.context.borrow();
+                    candidate.context_chain.iter().find_map(|context_path| {
+                        let property_path = context
+                            .property_path_for_context_source_path_with_manifest_mode(
+                                file,
+                                context_path,
+                                &path,
+                                true,
+                                true,
+                            )?;
+                        context.color_value_by_property_path(&property_path)
+                    })
+                })?;
+                Some((data_bind.target_local_id?, value))
+            })
+            .collect::<Vec<_>>();
+        updates.into_iter().fold(false, |changed, (target, value)| {
+            self.set_color_property(target, color_key, value) || changed
+        })
     }
 
     fn bind_owned_name_based_color_values(
@@ -3363,6 +4932,40 @@ impl ArtboardInstance {
         runtime_owned_view_model_context_path_for_context_chain(context, context_chain, path)
     }
 
+    fn owned_view_model_context_candidates_for_nested_host(
+        &self,
+        file: &RuntimeFile,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        host_local_id: usize,
+        scripting_manifest: bool,
+    ) -> Vec<RuntimeOwnedViewModelBindingCandidate> {
+        candidates
+            .iter()
+            .map(|candidate| {
+                let context = candidate.context.borrow();
+                let context_chain = candidate.context_chain();
+                let child_context = self.owned_view_model_context_chain_for_nested_host(
+                    file,
+                    &context,
+                    &context_chain,
+                    host_local_id,
+                    scripting_manifest,
+                );
+                let mut child_context_chain = Vec::with_capacity(
+                    candidate.context_chain.len() + usize::from(child_context.is_some()),
+                );
+                if let Some(child_context) = child_context {
+                    child_context_chain.push(child_context.as_slice().to_vec());
+                }
+                child_context_chain.extend(candidate.context_chain.iter().cloned());
+                RuntimeOwnedViewModelBindingCandidate {
+                    context: candidate.context.clone(),
+                    context_chain: child_context_chain,
+                }
+            })
+            .collect()
+    }
+
     pub(crate) fn clear_default_text_property_context(&mut self) -> bool {
         let Some(text_property_key) =
             runtime_data_bind_property_key_for_name("TextValueRun", "text")
@@ -3395,6 +4998,8 @@ impl ArtboardInstance {
         // drop the retained owned-context key so a later owned rebind is not
         // skipped against stale defaults.
         self.artboard_owned_context_key = None;
+        self.artboard_owned_view_model_context = None;
+        self.artboard_owned_view_model_candidates.clear();
         let mut changed = false;
         let paths = self
             .artboard_property_bindings
@@ -3444,7 +5049,38 @@ impl ArtboardInstance {
             else {
                 continue;
             };
-            changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            let mut reset_font_binding_indices = Vec::new();
+            if let RuntimeDataBindGraphValue::Asset(file_asset_index) = &value {
+                for (index, binding) in self
+                    .artboard_image_asset_bindings
+                    .iter_mut()
+                    .enumerate()
+                    .filter(|(_, binding)| binding.target.is_font() && binding.path == path)
+                {
+                    // A newly selected ViewModelInstance owns a distinct
+                    // private FontAsset. Do not leak a live font retained by
+                    // the previously bound instance merely because both
+                    // serialized indices happen to match.
+                    let next = RuntimeFontAssetValue::from_file_asset_index(*file_asset_index);
+                    if binding
+                        .font_value
+                        .as_ref()
+                        .is_none_or(|current| !runtime_font_asset_values_equal(current, &next))
+                    {
+                        binding.font_value = Some(next);
+                        reset_font_binding_indices.push(index);
+                    }
+                }
+            }
+            let value_changed = self.set_artboard_data_bind_value_for_path(&path, value);
+            changed |= value_changed;
+            if !value_changed {
+                for index in reset_font_binding_indices {
+                    self.artboard_data_bind_target_queues
+                        .enqueue_image_asset(index);
+                    changed = true;
+                }
+            }
         }
         for binding in &mut self.artboard_list_bindings {
             let Some(source_value) = binding.default_value.resolve_from_view_model_instance(
@@ -3458,15 +5094,20 @@ impl ArtboardInstance {
                 Some(converter) => runtime_data_bind_graph_convert_value(converter, &source_value),
                 None => Some(source_value.clone()),
             };
+            binding.source_value = Some(source_value.clone());
             binding.source_list_size = match &source_value {
                 RuntimeDataBindGraphValue::List { item_count } => Some(*item_count),
                 _ => None,
             };
-            binding.source_number_value = match source_value {
-                RuntimeDataBindGraphValue::Number(value) => Some(value),
+            binding.source_number_value = match &source_value {
+                RuntimeDataBindGraphValue::Number(value) => Some(*value),
                 _ => None,
             };
-            binding.should_reset_instances = binding.source_number_value.is_some();
+            binding.should_reset_instances = binding
+                .converter
+                .as_ref()
+                .and_then(RuntimeDataBindGraphConverter::number_to_list_view_model_id)
+                .is_some();
             let target_list_size = match target_value {
                 Some(RuntimeDataBindGraphValue::List { .. }) => Some(0),
                 _ => None,
@@ -3483,24 +5124,141 @@ impl ArtboardInstance {
         self.advance_artboard_data_binds_with_elapsed(0.0)
     }
 
+    /// Repoint the isolated paint evaluator's owned-context writes without
+    /// touching the live occurrence. Descendants participate because host
+    /// collection advances their data-bind containers too.
+    pub(crate) fn detach_initial_nested_layout_paint_binding_contexts(&mut self) {
+        let mut detached_handles = Vec::new();
+        self.detach_initial_nested_layout_paint_binding_contexts_recursive(&mut detached_handles);
+    }
+
+    fn detach_initial_nested_layout_paint_binding_contexts_recursive(
+        &mut self,
+        detached_handles: &mut Vec<(RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelHandle)>,
+    ) {
+        for state in self.artboard_shared_data_bind_converter_states.values_mut() {
+            state.converter.detach_scripted_instance();
+        }
+        for converter in self
+            .artboard_property_bindings
+            .iter_mut()
+            .filter_map(|binding| binding.converter.as_mut())
+            .chain(
+                self.artboard_custom_property_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+            .chain(
+                self.artboard_formula_token_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+            .chain(
+                self.artboard_converter_property_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+            .chain(
+                self.artboard_list_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+        {
+            converter.detach_scripted_instance();
+        }
+        if !self.artboard_owned_view_model_candidates.is_empty() {
+            let candidates = self
+                .artboard_owned_view_model_candidates
+                .iter()
+                .map(|candidate| {
+                    let context = detached_handles
+                        .iter()
+                        .find(|(source, _)| source.ptr_eq(&candidate.context))
+                        .map(|(_, detached)| detached.clone())
+                        .unwrap_or_else(|| {
+                            let detached = RuntimeOwnedViewModelHandle::new(
+                                candidate.context.borrow().clone(),
+                            );
+                            detached_handles.push((candidate.context.clone(), detached.clone()));
+                            detached
+                        });
+                    RuntimeOwnedViewModelBindingCandidate {
+                        context,
+                        context_chain: candidate.context_chain.clone(),
+                    }
+                })
+                .collect::<Vec<_>>();
+            self.artboard_owned_view_model_candidates = candidates.clone();
+            if let Some(file) = self.runtime_file_arc() {
+                self.bind_owned_view_model_target_to_source_bindings(&file, &candidates, true);
+            }
+        }
+
+        for nested in self.nested_artboards.values_mut() {
+            nested
+                .child
+                .detach_initial_nested_layout_paint_binding_contexts_recursive(detached_handles);
+        }
+        for item in self.component_list_items.values_mut().flatten() {
+            item.child
+                .detach_initial_nested_layout_paint_binding_contexts_recursive(detached_handles);
+        }
+    }
+
     pub(crate) fn set_artboard_data_bind_value_for_path(
         &mut self,
         path: &[u32],
         value: RuntimeDataBindGraphValue,
     ) -> bool {
+        self.set_artboard_data_bind_value_for_path_with_suppressed_data_bind(path, value, None)
+    }
+
+    fn set_artboard_data_bind_value_for_path_with_suppressed_data_bind(
+        &mut self,
+        path: &[u32],
+        value: RuntimeDataBindGraphValue,
+        suppressed_data_bind_index: Option<usize>,
+    ) -> bool {
         if self.artboard_data_bind_values.get(path) == Some(&value) {
             return false;
+        }
+        self.mark_artboard_data_bind_work_dirty();
+        if let RuntimeDataBindGraphValue::Asset(file_asset_index) = &value {
+            for binding in self
+                .artboard_image_asset_bindings
+                .iter_mut()
+                .filter(|binding| binding.target.is_font() && binding.path == path)
+            {
+                match binding.font_value.as_mut() {
+                    Some(font_value) => {
+                        font_value.set_file_asset_index(*file_asset_index);
+                    }
+                    None => {
+                        binding.font_value = Some(RuntimeFontAssetValue::from_file_asset_index(
+                            *file_asset_index,
+                        ));
+                    }
+                }
+            }
         }
         let number_value = match &value {
             RuntimeDataBindGraphValue::Number(value) => Some(*value),
             _ => None,
         };
         self.artboard_data_bind_values.insert(path.to_vec(), value);
-        self.reset_artboard_property_formula_random_state_for_path(path);
-        self.enqueue_artboard_data_bind_targets_for_path(path);
+        self.reset_artboard_property_formula_random_state_for_path_with_suppressed_data_bind(
+            path,
+            suppressed_data_bind_index,
+        );
+        self.enqueue_artboard_data_bind_targets_for_path_with_suppressed_data_bind(
+            path,
+            suppressed_data_bind_index,
+        );
         if let Some(value) = number_value {
-            self.refresh_artboard_operation_view_model_number_converter_dependents_for_path(
-                path, value,
+            self.refresh_artboard_operation_view_model_number_converter_dependents_for_path_with_suppressed_data_bind(
+                path,
+                value,
+                suppressed_data_bind_index,
             );
         }
         true
@@ -3521,16 +5279,94 @@ impl ArtboardInstance {
         self.advance_artboard_data_binds_with_root_transform(Mat2D::IDENTITY, elapsed_seconds)
     }
 
+    fn refresh_owned_view_model_artboard_context_if_mutated(&mut self) -> bool {
+        if self.artboard_owned_view_model_candidates.is_empty()
+            || self.artboard_owned_context_key.as_ref().is_some_and(|key| {
+                key.matches_candidate_mutations(&self.artboard_owned_view_model_candidates)
+            })
+        {
+            return false;
+        }
+        let Some(file) = self.runtime_file_arc() else {
+            return false;
+        };
+        let candidates = self.artboard_owned_view_model_candidates.clone();
+        // A value mutation does not relink the DataContext tree in C++.
+        // Dependents are dirtied on their own DataBindContainer and observe
+        // the shared source when that container reaches its scheduled
+        // updateDataBinds pass. Refresh only this artboard here; recursively
+        // rebinding descendants makes later siblings observe a reverse write
+        // before their C++ counterpart and also resets stateful converters.
+        if !self.retain_owned_view_model_context_candidates(&candidates) {
+            return false;
+        }
+        self.mark_artboard_data_bind_work_dirty();
+        self.stateful_nested_view_model_contexts_dirty = true;
+        self.bind_owned_view_model_target_to_source_bindings(&file, &candidates, true);
+        let mut changed = self.refresh_artboard_converter_dependents(|converter| {
+            runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
+                converter,
+                &candidates,
+            )
+        });
+        changed |=
+            self.bind_owned_view_model_artboard_values_for_candidates(&file, &candidates, true);
+        self.artboard_data_bind_source_queues
+            .enqueue_numeric_push_sources();
+        changed
+    }
+
+    #[inline]
     pub(crate) fn advance_artboard_data_binds_with_root_transform(
         &mut self,
         root_transform: Mat2D,
         elapsed_seconds: f32,
     ) -> bool {
-        let mut changed = false;
+        // Match C++'s cheap clean `DataBindContainer::updateDataBinds` return
+        // before entering the active reconciliation routine. An owned-context
+        // refresh can itself dirty this epoch, so only bypass that refresh when
+        // no candidate exists and always re-read the epoch afterwards.
+        let clean_identity_pass = elapsed_seconds == 0.0
+            && root_transform == Mat2D::IDENTITY
+            && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
+            && self.artboard_list_bindings.is_empty();
+        if clean_identity_pass && self.artboard_owned_view_model_candidates.is_empty() {
+            return false;
+        }
+        let refreshed_owned_context = self.refresh_owned_view_model_artboard_context_if_mutated();
+        if elapsed_seconds == 0.0
+            && root_transform == Mat2D::IDENTITY
+            && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
+            && self.artboard_list_bindings.is_empty()
+        {
+            return refreshed_owned_context;
+        }
+        self.advance_active_artboard_data_binds_with_root_transform(
+            root_transform,
+            elapsed_seconds,
+            refreshed_owned_context,
+        )
+    }
+
+    #[inline(never)]
+    fn advance_active_artboard_data_binds_with_root_transform(
+        &mut self,
+        root_transform: Mat2D,
+        elapsed_seconds: f32,
+        refreshed_owned_context: bool,
+    ) -> bool {
+        let dirty_epoch_at_start = self.artboard_data_bind_dirty_epoch;
+        let mut changed = refreshed_owned_context;
         // C++ DataBindContainer::updateDataBind updates converter dependents
         // before applying a target-to-source binding.
         changed |= self.update_artboard_formula_token_bindings();
         changed |= self.update_artboard_converter_property_bindings();
+        // A two-way reconcile carries both direction bits. C++ runs the
+        // source-to-target half before reading the target only when the
+        // authored SourceToTargetRunsFirst flag is set. Keep pure toTarget
+        // binds and target-first two-way binds on the ordinary post-source
+        // lane below.
+        changed |= self.apply_artboard_property_bindings_for_precedence(true);
         if self
             .artboard_data_bind_source_queues
             .has_custom_property_update_indices()
@@ -3547,7 +5383,7 @@ impl ArtboardInstance {
         changed |= self.update_artboard_layout_computed_bindings(root_transform);
         changed |= self.update_artboard_solo_source_bindings();
         changed |= self.update_artboard_numeric_source_bindings();
-        changed |= self.apply_artboard_property_bindings();
+        changed |= self.apply_artboard_property_bindings_for_precedence(false);
         changed |= self.apply_artboard_image_asset_bindings();
         if elapsed_seconds != 0.0 {
             let property_converters_changed =
@@ -3559,25 +5395,63 @@ impl ArtboardInstance {
                 changed |= self.apply_artboard_image_asset_bindings();
             }
         }
+        let runtime_file = self.runtime_file_arc();
+        let mut generated_list_updates = Vec::new();
         for binding in &mut self.artboard_list_bindings {
-            let target_value = match binding.converter.as_ref() {
-                Some(converter) => {
-                    runtime_data_bind_graph_convert_value(converter, &binding.default_value)
+            if let (Some(source_value), Some(file)) =
+                (binding.source_value.clone(), runtime_file.as_deref())
+                && let Some(converter) = binding.converter.as_ref()
+                && let Some(RuntimeArtboardListConvertedValue {
+                    value: RuntimeDataBindGraphValue::List { item_count },
+                    generated_view_model_id: Some(view_model_id),
+                }) = runtime_artboard_convert_list_value(
+                    converter,
+                    RuntimeArtboardListConvertedValue {
+                        value: source_value.clone(),
+                        generated_view_model_id: None,
+                    },
+                )
+            {
+                generated_list_updates.push(binding.reconcile_number_to_list_items(
+                    file,
+                    source_value,
+                    item_count,
+                    view_model_id,
+                ));
+                continue;
+            }
+            let target_list_size = if let Some(source_list_size) = binding.source_list_size {
+                Some(source_list_size)
+            } else {
+                let target_value = match binding.converter.as_ref() {
+                    Some(converter) => {
+                        runtime_data_bind_graph_convert_value(converter, &binding.default_value)
+                    }
+                    None => Some(binding.default_value.clone()),
+                };
+                match target_value {
+                    Some(RuntimeDataBindGraphValue::List { item_count }) => Some(item_count),
+                    _ => None,
                 }
-                None => Some(binding.default_value.clone()),
-            };
-            let target_list_size = match target_value {
-                Some(RuntimeDataBindGraphValue::List { item_count }) => Some(item_count),
-                _ => None,
             };
             if binding.target_list_size != target_list_size {
                 binding.target_list_size = target_list_size;
                 changed = true;
             }
         }
+        for update in generated_list_updates {
+            changed |= update.binding_changed;
+            self.component_list_sources.remove(&update.target_local_id);
+            if let (Some(file), Some(items)) = (runtime_file.as_deref(), update.items) {
+                changed |= self.sync_component_list_items(file, update.target_local_id, items);
+            }
+        }
         changed |= self.apply_artboard_solo_bindings();
         changed |= self.apply_artboard_nested_host_bindings();
         changed |= self.sync_nested_child_artboard_data_contexts();
+        if self.artboard_data_bind_dirty_epoch == dirty_epoch_at_start {
+            self.artboard_data_bind_processed_epoch = dirty_epoch_at_start;
+        }
         changed
     }
 
@@ -3593,17 +5467,44 @@ impl ArtboardInstance {
             .artboard_data_bind_source_queues
             .take_numeric_source_update_indices();
         for index in indices.iter().copied() {
-            let Some(binding) = self.artboard_numeric_source_bindings.get(index) else {
+            let Some((target_local_id, property_key, property, path, owned_context_source)) = self
+                .artboard_numeric_source_bindings
+                .get(index)
+                .map(|binding| {
+                    (
+                        binding.target_local_id,
+                        binding.property_key,
+                        binding.property,
+                        binding.path.clone(),
+                        binding.owned_context_source.clone(),
+                    )
+                })
+            else {
                 continue;
             };
-            let value = self.artboard_numeric_source_binding_value(
-                binding.target_local_id,
-                binding.property_key,
-                binding.property,
-            );
+            // C++ `DataBindContainer::updateDataBinds` skips persisting
+            // computed targets while their component is collapsed. Keep the
+            // previously bound source value instead of publishing the layout
+            // engine's display:none zero bounds.
+            if self.runtime_component_is_collapsed_for_draw(target_local_id) {
+                continue;
+            }
+            let value =
+                self.artboard_numeric_source_binding_value(target_local_id, property_key, property);
             let Some(value) = value else { continue };
             let value = RuntimeDataBindGraphValue::Number(value);
-            let path = binding.path.clone();
+            if let Some(source) = owned_context_source {
+                changed |= source.sync_value(&value);
+            } else if let Some(file) = self.runtime_file_arc() {
+                changed |= runtime_owned_view_model_sync_value_for_candidates(
+                    &file,
+                    &self.artboard_owned_view_model_candidates,
+                    &path,
+                    false,
+                    &value,
+                )
+                .unwrap_or(false);
+            }
             changed |= self.set_artboard_data_bind_value_for_path(&path, value);
         }
         self.artboard_data_bind_source_queues
@@ -3797,7 +5698,24 @@ impl ArtboardInstance {
 
     fn set_artboard_formula_token_value(&mut self, token_id: u32, value: f32) -> bool {
         let mut changed = false;
+        let mut shared_changed = Vec::new();
+        for (data_bind_index, state) in &mut self.artboard_shared_data_bind_converter_states {
+            if state.converter.set_formula_token_value(token_id, value) {
+                state.converter_state.reset_formula_randoms();
+                shared_changed.push(*data_bind_index);
+                changed = true;
+            }
+        }
+        for data_bind_index in shared_changed {
+            self.enqueue_artboard_shared_converter_direction(data_bind_index);
+        }
         for index in 0..self.artboard_property_bindings.len() {
+            if self
+                .artboard_shared_data_bind_converter_states
+                .contains_key(&self.artboard_property_bindings[index].data_bind_index)
+            {
+                continue;
+            }
             let binding_changed = {
                 let binding = &mut self.artboard_property_bindings[index];
                 let Some(converter) = binding.converter.as_mut() else {
@@ -3816,6 +5734,12 @@ impl ArtboardInstance {
             }
         }
         for index in 0..self.artboard_custom_property_bindings.len() {
+            if self
+                .artboard_shared_data_bind_converter_states
+                .contains_key(&self.artboard_custom_property_bindings[index].data_bind_index)
+            {
+                continue;
+            }
             let binding_changed = {
                 let binding = &mut self.artboard_custom_property_bindings[index];
                 let Some(converter) = binding.converter.as_mut() else {
@@ -3839,7 +5763,24 @@ impl ArtboardInstance {
 
     fn set_artboard_operation_value(&mut self, target_global_id: u32, value: f32) -> bool {
         let mut changed = false;
+        let mut shared_changed = Vec::new();
+        for (data_bind_index, state) in &mut self.artboard_shared_data_bind_converter_states {
+            if state.converter.set_operation_value(target_global_id, value) {
+                state.converter_state.reset_formula_randoms();
+                shared_changed.push(*data_bind_index);
+                changed = true;
+            }
+        }
+        for data_bind_index in shared_changed {
+            self.enqueue_artboard_shared_converter_direction(data_bind_index);
+        }
         for index in 0..self.artboard_property_bindings.len() {
+            if self
+                .artboard_shared_data_bind_converter_states
+                .contains_key(&self.artboard_property_bindings[index].data_bind_index)
+            {
+                continue;
+            }
             let binding_changed = {
                 let binding = &mut self.artboard_property_bindings[index];
                 let Some(converter) = binding.converter.as_mut() else {
@@ -3858,6 +5799,12 @@ impl ArtboardInstance {
             }
         }
         for index in 0..self.artboard_custom_property_bindings.len() {
+            if self
+                .artboard_shared_data_bind_converter_states
+                .contains_key(&self.artboard_custom_property_bindings[index].data_bind_index)
+            {
+                continue;
+            }
             let binding_changed = {
                 let binding = &mut self.artboard_custom_property_bindings[index];
                 let Some(converter) = binding.converter.as_mut() else {
@@ -3981,20 +5928,45 @@ impl ArtboardInstance {
             .persisting_layout_computed()
             .to_vec();
         for index in indices {
-            let Some(binding) = self.artboard_layout_computed_bindings.get(index) else {
+            let Some((target_local_id, property, path, owned_context_source)) = self
+                .artboard_layout_computed_bindings
+                .get(index)
+                .map(|binding| {
+                    (
+                        binding.target_local_id,
+                        binding.property,
+                        binding.path.clone(),
+                        binding.owned_context_source.clone(),
+                    )
+                })
+            else {
                 continue;
             };
+            if self.runtime_component_is_collapsed_for_draw(target_local_id) {
+                continue;
+            }
             let value = self.runtime_graph().and_then(|graph| {
                 self.artboard_layout_computed_binding_value(
-                    binding.target_local_id,
-                    binding.property,
+                    target_local_id,
+                    property,
                     graph,
                     root_transform,
                 )
             });
             let Some(value) = value else { continue };
             let value = RuntimeDataBindGraphValue::Number(value);
-            let path = binding.path.clone();
+            if let Some(source) = owned_context_source {
+                changed |= source.sync_value(&value);
+            } else if let Some(file) = self.runtime_file_arc() {
+                changed |= runtime_owned_view_model_sync_value_for_candidates(
+                    &file,
+                    &self.artboard_owned_view_model_candidates,
+                    path.as_ref(),
+                    false,
+                    &value,
+                )
+                .unwrap_or(false);
+            }
             changed |= self.set_artboard_data_bind_value_for_path(path.as_ref(), value);
         }
         changed
@@ -4031,11 +6003,28 @@ impl ArtboardInstance {
     }
 
     fn apply_artboard_property_bindings(&mut self) -> bool {
-        let mut changed = false;
-        for index in self
+        let indices = self
             .artboard_data_bind_target_queues
-            .drain_dirty_properties()
-        {
+            .drain_dirty_properties();
+        self.apply_artboard_property_binding_indices(indices)
+    }
+
+    fn apply_artboard_property_bindings_for_precedence(
+        &mut self,
+        source_to_target_runs_first: bool,
+    ) -> bool {
+        let indices = self
+            .artboard_data_bind_target_queues
+            .drain_dirty_properties_for_precedence(
+                &self.artboard_property_bindings,
+                source_to_target_runs_first,
+            );
+        self.apply_artboard_property_binding_indices(indices)
+    }
+
+    fn apply_artboard_property_binding_indices(&mut self, indices: Vec<usize>) -> bool {
+        let mut changed = false;
+        for index in indices {
             let Some((data_bind_index, target_local_id, property_key, value)) =
                 self.converted_artboard_property_binding_value(index)
             else {
@@ -4056,41 +6045,53 @@ impl ArtboardInstance {
             .artboard_data_bind_target_queues
             .drain_dirty_image_assets()
         {
-            let Some((target_local_id, value)) =
-                self.artboard_image_asset_bindings
-                    .get(index)
-                    .map(|binding| {
-                        let value = self
-                            .artboard_data_bind_values
-                            .get(&binding.path)
-                            .cloned()
-                            .unwrap_or_else(|| binding.default_value.clone());
-                        (binding.target_local_id, value)
-                    })
+            let Some((target, value, font_value)) = self
+                .artboard_image_asset_bindings
+                .get(index)
+                .map(|binding| {
+                    let value = self
+                        .artboard_data_bind_values
+                        .get(&binding.path)
+                        .cloned()
+                        .unwrap_or_else(|| binding.default_value.clone());
+                    (binding.target, value, binding.font_value.clone())
+                })
             else {
                 continue;
             };
-            changed |= self.apply_artboard_image_asset_binding_value(target_local_id, &value);
+            changed |= self.apply_artboard_image_asset_binding_value(target, &value, font_value);
         }
         changed
     }
 
     fn apply_artboard_image_asset_binding_value(
         &mut self,
-        target_local_id: usize,
+        target: RuntimeArtboardAssetBindingTarget,
         value: &RuntimeDataBindGraphValue,
+        font_value: Option<RuntimeFontAssetValue>,
     ) -> bool {
-        // Mirrors C++ `src/data_bind/context/context_value_asset_image.cpp`:
-        // applying an asset-image value to an Image target swaps the Image's
-        // asset pointer. Missing/sentinel values use the view-model instance's
-        // private empty ImageAsset, which makes Image::draw return early.
         let RuntimeDataBindGraphValue::Asset(value) = value else {
             return false;
         };
-        let asset_global = self
-            .runtime_file()
-            .and_then(|file| runtime_image_asset_global_for_file_asset_index(file, *value));
-        self.set_image_asset_override(target_local_id, asset_global)
+        match target {
+            RuntimeArtboardAssetBindingTarget::Image(target_local_id) => {
+                // Mirrors C++ `context_value_asset_image.cpp`: missing values
+                // use the private empty ImageAsset, so Image::draw returns.
+                let asset_global = self
+                    .runtime_file()
+                    .and_then(|file| runtime_image_asset_global_for_file_asset_index(file, *value));
+                self.set_image_asset_override(target_local_id, asset_global)
+            }
+            RuntimeArtboardAssetBindingTarget::Font(target_local_id) => {
+                // C++ TextStyle::setAsset swaps the retained FontAsset pointer
+                // without rewriting the serialized fontAssetId property.
+                self.set_text_style_font_override(
+                    target_local_id,
+                    font_value
+                        .unwrap_or_else(|| RuntimeFontAssetValue::from_file_asset_index(*value)),
+                )
+            }
+        }
     }
 
     fn converted_artboard_property_binding_value(
@@ -4102,28 +6103,27 @@ impl ArtboardInstance {
             .pending_value
             .take()
             .or_else(|| self.artboard_data_bind_values.get(&binding.path).cloned())?;
-        let converted = match binding.converter.as_ref() {
-            Some(RuntimeDataBindGraphConverter::ToString { .. }) => match value {
-                RuntimeDataBindGraphValue::Enum(value) => {
-                    let index = usize::try_from(value).ok()?;
-                    binding
-                        .enum_value_names
-                        .get(index)
-                        .cloned()
-                        .map(RuntimeDataBindGraphValue::String)
-                }
-                _ => binding.converter_state.convert_value_with_formula_randoms(
-                    binding.converter.as_ref()?,
-                    &value,
-                    &mut self.artboard_formula_random_source,
-                ),
-            },
-            Some(converter) => binding.converter_state.convert_value_with_formula_randoms(
-                converter,
-                &value,
+        let converted = if let Some(shared) = self
+            .artboard_shared_data_bind_converter_states
+            .get_mut(&binding.data_bind_index)
+        {
+            runtime_artboard_convert_property_binding_value(
+                &shared.converter,
+                &mut shared.converter_state,
+                value,
+                &binding.enum_value_names,
                 &mut self.artboard_formula_random_source,
-            ),
-            None => Some(value),
+            )
+        } else if let Some(converter) = binding.converter.as_ref() {
+            runtime_artboard_convert_property_binding_value(
+                converter,
+                &mut binding.converter_state,
+                value,
+                &binding.enum_value_names,
+                &mut self.artboard_formula_random_source,
+            )
+        } else {
+            Some(value)
         }?;
         Some((
             binding.data_bind_index,
@@ -4134,7 +6134,43 @@ impl ArtboardInstance {
     }
 
     fn reset_artboard_property_formula_random_state_for_path(&mut self, path: &[u32]) {
+        self.reset_artboard_property_formula_random_state_for_path_with_suppressed_data_bind(
+            path, None,
+        );
+    }
+
+    fn reset_artboard_property_formula_random_state_for_path_with_suppressed_data_bind(
+        &mut self,
+        path: &[u32],
+        suppressed_data_bind_index: Option<usize>,
+    ) {
+        let shared_indices = self
+            .artboard_property_bindings
+            .iter()
+            .filter(|binding| {
+                binding.path == path && Some(binding.data_bind_index) != suppressed_data_bind_index
+            })
+            .map(|binding| binding.data_bind_index)
+            .collect::<Vec<_>>();
+        for data_bind_index in shared_indices {
+            if let Some(state) = self
+                .artboard_shared_data_bind_converter_states
+                .get_mut(&data_bind_index)
+                && runtime_data_bind_graph_converter_contains_source_change_random(&state.converter)
+            {
+                state.converter_state.reset_formula_randoms();
+            }
+        }
         for binding in &mut self.artboard_property_bindings {
+            if Some(binding.data_bind_index) == suppressed_data_bind_index {
+                continue;
+            }
+            if self
+                .artboard_shared_data_bind_converter_states
+                .contains_key(&binding.data_bind_index)
+            {
+                continue;
+            }
             if binding.path == path
                 && binding
                     .converter
@@ -4148,29 +6184,70 @@ impl ArtboardInstance {
 
     fn refresh_artboard_converter_dependents(
         &mut self,
+        update: impl FnMut(&mut RuntimeDataBindGraphConverter) -> bool,
+    ) -> bool {
+        self.refresh_artboard_converter_dependents_with_suppressed_data_bind(None, update)
+    }
+
+    fn refresh_artboard_converter_dependents_with_suppressed_data_bind(
+        &mut self,
+        suppressed_data_bind_index: Option<usize>,
         mut update: impl FnMut(&mut RuntimeDataBindGraphConverter) -> bool,
     ) -> bool {
         let mut changed = false;
 
+        let mut shared_changed = Vec::new();
+        for (data_bind_index, state) in &mut self.artboard_shared_data_bind_converter_states {
+            if update(&mut state.converter) {
+                shared_changed.push(*data_bind_index);
+                changed = true;
+            }
+        }
+        for data_bind_index in shared_changed {
+            if Some(data_bind_index) != suppressed_data_bind_index {
+                self.enqueue_artboard_shared_converter_direction(data_bind_index);
+            }
+        }
+
         for index in 0..self.artboard_property_bindings.len() {
+            if self
+                .artboard_shared_data_bind_converter_states
+                .contains_key(&self.artboard_property_bindings[index].data_bind_index)
+            {
+                continue;
+            }
             let binding_changed = {
                 let binding = &mut self.artboard_property_bindings[index];
                 binding.converter.as_mut().is_some_and(&mut update)
             };
             if binding_changed {
-                self.enqueue_artboard_property_binding_target(index);
+                if Some(self.artboard_property_bindings[index].data_bind_index)
+                    != suppressed_data_bind_index
+                {
+                    self.enqueue_artboard_property_binding_target(index);
+                }
                 changed = true;
             }
         }
 
         for index in 0..self.artboard_custom_property_bindings.len() {
+            if self
+                .artboard_shared_data_bind_converter_states
+                .contains_key(&self.artboard_custom_property_bindings[index].data_bind_index)
+            {
+                continue;
+            }
             let binding_changed = {
                 let binding = &mut self.artboard_custom_property_bindings[index];
                 binding.converter.as_mut().is_some_and(&mut update)
             };
             if binding_changed {
-                self.artboard_data_bind_source_queues
-                    .enqueue_custom_property(index);
+                if Some(self.artboard_custom_property_bindings[index].data_bind_index)
+                    != suppressed_data_bind_index
+                {
+                    self.artboard_data_bind_source_queues
+                        .enqueue_custom_property(index);
+                }
                 changed = true;
             }
         }
@@ -4202,21 +6279,44 @@ impl ArtboardInstance {
         changed
     }
 
-    fn refresh_artboard_operation_view_model_number_converter_dependents_for_path(
+    fn refresh_artboard_operation_view_model_number_converter_dependents_for_path_with_suppressed_data_bind(
         &mut self,
         path: &[u32],
         value: f32,
+        suppressed_data_bind_index: Option<usize>,
     ) -> bool {
-        self.refresh_artboard_converter_dependents(|converter| {
-            runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
-                converter, path, value,
-            )
-        })
+        self.refresh_artboard_converter_dependents_with_suppressed_data_bind(
+            suppressed_data_bind_index,
+            |converter| {
+                runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
+                    converter, path, value,
+                )
+            },
+        )
     }
 
     fn advance_artboard_property_binding_converters(&mut self, elapsed_seconds: f32) -> bool {
         let mut changed = false;
+        let mut shared_changed = Vec::new();
+        for (data_bind_index, state) in &mut self.artboard_shared_data_bind_converter_states {
+            let advance = state
+                .converter_state
+                .advance_converter(Some(&state.converter), elapsed_seconds);
+            if advance.changed {
+                shared_changed.push(*data_bind_index);
+                changed = true;
+            }
+        }
+        for data_bind_index in shared_changed {
+            self.enqueue_artboard_shared_converter_direction(data_bind_index);
+        }
         for index in 0..self.artboard_property_bindings.len() {
+            if self
+                .artboard_shared_data_bind_converter_states
+                .contains_key(&self.artboard_property_bindings[index].data_bind_index)
+            {
+                continue;
+            }
             let advance = {
                 let binding = &mut self.artboard_property_bindings[index];
                 binding
@@ -4237,6 +6337,12 @@ impl ArtboardInstance {
     ) -> bool {
         let mut changed = false;
         for index in 0..self.artboard_custom_property_bindings.len() {
+            if self
+                .artboard_shared_data_bind_converter_states
+                .contains_key(&self.artboard_custom_property_bindings[index].data_bind_index)
+            {
+                continue;
+            }
             let advance = {
                 let binding = &mut self.artboard_custom_property_bindings[index];
                 binding
@@ -4259,16 +6365,40 @@ impl ArtboardInstance {
             .persisting_solo_sources()
             .to_vec();
         for index in indices {
-            let Some(binding) = self.artboard_solo_source_bindings.get(index) else {
+            let Some((target_local_id, enum_value_names, path, owned_context_source)) = self
+                .artboard_solo_source_bindings
+                .get(index)
+                .map(|binding| {
+                    (
+                        binding.target_local_id,
+                        binding.enum_value_names.clone(),
+                        binding.path.clone(),
+                        binding.owned_context_source.clone(),
+                    )
+                })
+            else {
                 continue;
             };
-            let Some(value) = self.artboard_solo_source_binding_value(
-                binding.target_local_id,
-                &binding.enum_value_names,
-            ) else {
+            if self.runtime_component_is_collapsed_for_draw(target_local_id) {
+                continue;
+            }
+            let Some(value) =
+                self.artboard_solo_source_binding_value(target_local_id, &enum_value_names)
+            else {
                 continue;
             };
-            let path = binding.path.clone();
+            if let Some(source) = owned_context_source {
+                changed |= source.sync_value(&value);
+            } else if let Some(file) = self.runtime_file_arc() {
+                changed |= runtime_owned_view_model_sync_value_for_candidates(
+                    &file,
+                    &self.artboard_owned_view_model_candidates,
+                    path.as_ref(),
+                    false,
+                    &value,
+                )
+                .unwrap_or(false);
+            }
             changed |= self.set_artboard_data_bind_value_for_path(path.as_ref(), value);
         }
         changed
@@ -4374,6 +6504,19 @@ impl ArtboardInstance {
     }
 
     fn update_artboard_custom_property_binding(&mut self, index: usize) -> bool {
+        let Some((data_bind_index, path_is_name_based, owned_context_source)) = self
+            .artboard_custom_property_bindings
+            .get(index)
+            .map(|binding| {
+                (
+                    binding.data_bind_index,
+                    binding.path_is_name_based,
+                    binding.owned_context_source.clone(),
+                )
+            })
+        else {
+            return false;
+        };
         let Some(target_value) = self.artboard_custom_property_binding_target_value(index) else {
             return false;
         };
@@ -4382,7 +6525,26 @@ impl ArtboardInstance {
         else {
             return false;
         };
-        self.set_artboard_data_bind_value_for_path(path.as_ref(), value)
+        let context_changed = if let Some(source) = owned_context_source {
+            source.sync_value(&value)
+        } else {
+            self.runtime_file_arc()
+                .and_then(|file| {
+                    runtime_owned_view_model_sync_value_for_candidates(
+                        &file,
+                        &self.artboard_owned_view_model_candidates,
+                        path.as_ref(),
+                        path_is_name_based,
+                        &value,
+                    )
+                })
+                .unwrap_or(false)
+        };
+        self.set_artboard_data_bind_value_for_path_with_suppressed_data_bind(
+            path.as_ref(),
+            value,
+            Some(data_bind_index),
+        ) || context_changed
     }
 
     fn artboard_custom_property_binding_target_value(
@@ -4418,16 +6580,33 @@ impl ArtboardInstance {
         value: &RuntimeDataBindGraphValue,
     ) -> Option<(Arc<[u32]>, RuntimeDataBindGraphValue)> {
         let binding = self.artboard_custom_property_bindings.get_mut(index)?;
-        let converted = match binding.converter.as_ref() {
-            None => value.clone(),
-            Some(converter) if binding.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0 => {
+        let shared = self
+            .artboard_shared_data_bind_converter_states
+            .get_mut(&binding.data_bind_index);
+        let converted = match (shared, binding.converter.as_ref()) {
+            (Some(shared), _) if binding.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0 => {
+                shared.converter_state.convert_value_with_formula_randoms(
+                    &shared.converter,
+                    value,
+                    &mut self.artboard_formula_random_source,
+                )?
+            }
+            (Some(shared), _) => shared
+                .converter_state
+                .reverse_convert_value_with_formula_randoms(
+                    &shared.converter,
+                    value,
+                    &mut self.artboard_formula_random_source,
+                )?,
+            (None, None) => value.clone(),
+            (None, Some(converter)) if binding.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0 => {
                 binding.converter_state.convert_value_with_formula_randoms(
                     converter,
                     value,
                     &mut self.artboard_formula_random_source,
                 )?
             }
-            Some(converter) => binding
+            (None, Some(converter)) => binding
                 .converter_state
                 .reverse_convert_value_with_formula_randoms(
                     converter,
@@ -4516,6 +6695,19 @@ impl ArtboardInstance {
             );
         }
         changed
+    }
+
+    pub(crate) fn nested_artboard_host_has_artboard_data_bind(
+        &self,
+        target_local_id: usize,
+    ) -> bool {
+        self.artboard_nested_host_bindings.iter().any(|binding| {
+            binding.target_local_id == target_local_id
+                && matches!(
+                    binding.property,
+                    RuntimeArtboardNestedHostProperty::ArtboardId { .. }
+                )
+        })
     }
 
     fn apply_artboard_nested_host_binding_value(
@@ -4707,6 +6899,9 @@ impl ArtboardInstance {
     }
 
     fn sync_stateful_nested_view_model_contexts(&mut self) -> bool {
+        if !std::mem::replace(&mut self.stateful_nested_view_model_contexts_dirty, false) {
+            return false;
+        }
         let Some(parent_key) = runtime_data_bind_component_parent_id_key() else {
             return false;
         };
@@ -4714,44 +6909,124 @@ impl ArtboardInstance {
         else {
             return false;
         };
-        let Some(property_value_key) =
-            runtime_data_bind_property_key_for_name("ViewModelInstanceViewModel", "propertyValue")
-        else {
-            return false;
-        };
 
-        let mut updates = BTreeMap::<usize, Vec<(usize, usize)>>::new();
+        // C++ NestedArtboard retains the authored ViewModelInstance children
+        // by pointer, so keyframes and data binds on those children are visible
+        // to the mounted artboard immediately. Rust owns a detached context;
+        // reconcile every supported live value before rebinding descendants.
+        let mut updates = BTreeMap::<usize, Vec<RuntimeStatefulViewModelUpdate>>::new();
         for host_local_id in &self.nested_artboard_locals {
-            let Some(instance_local_id) = self
-                .nested_artboards
-                .get(host_local_id)
-                .and_then(|nested| nested.stateful_view_model_instance_local)
-            else {
+            let Some(nested) = self.nested_artboards.get(host_local_id) else {
                 continue;
             };
+            let roots_by_local = nested
+                .stateful_view_model_instance_locals_by_id
+                .iter()
+                .filter_map(|(&view_model_id, &instance_local_id)| {
+                    usize::try_from(view_model_id)
+                        .ok()
+                        .map(|view_model_index| (instance_local_id, view_model_index))
+                })
+                .collect::<BTreeMap<_, _>>();
             for slot in &self.slots {
-                if slot.type_name != Some("ViewModelInstanceViewModel")
-                    || self.uint_property(slot.local_id, parent_key)
-                        != u64::try_from(instance_local_id).ok()
-                {
+                let Some(type_name) = slot.type_name else {
+                    continue;
+                };
+                if !type_name.starts_with("ViewModelInstance") || type_name == "ViewModelInstance" {
                     continue;
                 }
-                let Some(property_index) = self
-                    .uint_property(slot.local_id, property_id_key)
-                    .and_then(|value| usize::try_from(value).ok())
+
+                let mut property_path = Vec::new();
+                let mut current_local = slot.local_id;
+                let mut visited = BTreeSet::new();
+                let (instance_local_id, view_model_index) = loop {
+                    if !visited.insert(current_local) {
+                        break (usize::MAX, usize::MAX);
+                    }
+                    let Some(property_index) = self
+                        .uint_property(current_local, property_id_key)
+                        .and_then(|value| usize::try_from(value).ok())
+                    else {
+                        break (usize::MAX, usize::MAX);
+                    };
+                    property_path.push(property_index);
+                    let Some(parent_local) = self
+                        .uint_property(current_local, parent_key)
+                        .and_then(|value| usize::try_from(value).ok())
+                    else {
+                        break (usize::MAX, usize::MAX);
+                    };
+                    if let Some(&view_model_index) = roots_by_local.get(&parent_local) {
+                        break (parent_local, view_model_index);
+                    }
+                    current_local = parent_local;
+                };
+                if instance_local_id == usize::MAX {
+                    continue;
+                }
+                property_path.reverse();
+
+                let Some(value_key) =
+                    runtime_data_bind_property_key_for_name(type_name, "propertyValue")
                 else {
                     continue;
                 };
-                let Some(instance_index) = self
-                    .uint_property(slot.local_id, property_value_key)
-                    .and_then(|value| usize::try_from(value).ok())
-                else {
-                    continue;
+                let value = match type_name {
+                    "ViewModelInstanceNumber" => self
+                        .double_property(slot.local_id, value_key)
+                        .map(RuntimeDataBindGraphValue::Number)
+                        .map(RuntimeStatefulViewModelValueUpdate::Value),
+                    "ViewModelInstanceBoolean" => self
+                        .bool_property(slot.local_id, value_key)
+                        .map(RuntimeDataBindGraphValue::Boolean)
+                        .map(RuntimeStatefulViewModelValueUpdate::Value),
+                    "ViewModelInstanceString" => self
+                        .string_property(slot.local_id, value_key)
+                        .map(|value| RuntimeDataBindGraphValue::String(value.to_vec()))
+                        .map(RuntimeStatefulViewModelValueUpdate::Value),
+                    "ViewModelInstanceColor" => self
+                        .color_property(slot.local_id, value_key)
+                        .map(RuntimeDataBindGraphValue::Color)
+                        .map(RuntimeStatefulViewModelValueUpdate::Value),
+                    "ViewModelInstanceEnum" => self
+                        .uint_property(slot.local_id, value_key)
+                        .map(RuntimeDataBindGraphValue::Enum)
+                        .map(RuntimeStatefulViewModelValueUpdate::Value),
+                    "ViewModelInstanceSymbolListIndex" => self
+                        .uint_property(slot.local_id, value_key)
+                        .map(RuntimeDataBindGraphValue::SymbolListIndex)
+                        .map(RuntimeStatefulViewModelValueUpdate::Value),
+                    "ViewModelInstanceAssetImage" => self
+                        .uint_property(slot.local_id, value_key)
+                        .map(RuntimeDataBindGraphValue::Asset)
+                        .map(RuntimeStatefulViewModelValueUpdate::Value),
+                    "ViewModelInstanceAssetFont" => self
+                        .uint_property(slot.local_id, value_key)
+                        .map(RuntimeStatefulViewModelValueUpdate::FontAsset),
+                    "ViewModelInstanceArtboard" => self
+                        .uint_property(slot.local_id, value_key)
+                        .map(RuntimeDataBindGraphValue::Artboard)
+                        .map(RuntimeStatefulViewModelValueUpdate::Value),
+                    "ViewModelInstanceTrigger" => self
+                        .uint_property(slot.local_id, value_key)
+                        .map(RuntimeDataBindGraphValue::Trigger)
+                        .map(RuntimeStatefulViewModelValueUpdate::Value),
+                    "ViewModelInstanceViewModel" => self
+                        .uint_property(slot.local_id, value_key)
+                        .and_then(|value| usize::try_from(value).ok())
+                        .map(RuntimeStatefulViewModelValueUpdate::ViewModelInstance),
+                    _ => None,
                 };
+                let Some(value) = value else { continue };
                 updates
                     .entry(*host_local_id)
                     .or_default()
-                    .push((property_index, instance_index));
+                    .push(RuntimeStatefulViewModelUpdate {
+                        instance_local_id,
+                        view_model_index,
+                        property_path,
+                        value,
+                    });
             }
         }
 
@@ -4759,31 +7034,111 @@ impl ArtboardInstance {
         let Some(file) = self.runtime_file_arc() else {
             return false;
         };
-        for (host_local_id, updates) in updates {
+        let parent_candidates = self.artboard_owned_view_model_candidates.clone();
+        for (host_local_id, mut updates) in updates {
+            // A parent ViewModel selection must be applied before values below
+            // that pointer are reconciled into its newly active instance.
+            updates.sort_by_key(|update| update.property_path.len());
+            let inherited_candidates = self.owned_view_model_context_candidates_for_nested_host(
+                &file,
+                &parent_candidates,
+                host_local_id,
+                true,
+            );
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
-            let Some(context) = nested.stateful_view_model_context.as_mut() else {
-                continue;
-            };
-            let context_changed = updates.into_iter().fold(false, |changed, update| {
-                context.set_view_model_by_property_index(update.0, update.1) || changed
-            });
+            let mut context_changed = false;
+            for update in updates {
+                let context = if nested.stateful_view_model_instance_local
+                    == Some(update.instance_local_id)
+                {
+                    nested.stateful_view_model_context.as_mut()
+                } else {
+                    nested
+                        .stateful_global_view_model_contexts
+                        .get_mut(&update.view_model_index)
+                };
+                let Some(context) = context else { continue };
+                let value_changed = match update.value {
+                    RuntimeStatefulViewModelValueUpdate::Value(
+                        RuntimeDataBindGraphValue::Number(value),
+                    ) => context.sync_number_by_property_path(&update.property_path, value),
+                    RuntimeStatefulViewModelValueUpdate::Value(
+                        RuntimeDataBindGraphValue::Boolean(value),
+                    ) => context.sync_boolean_by_property_path(&update.property_path, value),
+                    RuntimeStatefulViewModelValueUpdate::Value(
+                        RuntimeDataBindGraphValue::String(value),
+                    ) => context.sync_string_by_property_path(&update.property_path, &value),
+                    RuntimeStatefulViewModelValueUpdate::Value(
+                        RuntimeDataBindGraphValue::Color(value),
+                    ) => context.sync_color_by_property_path(&update.property_path, value),
+                    RuntimeStatefulViewModelValueUpdate::Value(
+                        RuntimeDataBindGraphValue::Enum(value),
+                    ) => context.sync_enum_by_property_path(&update.property_path, value),
+                    RuntimeStatefulViewModelValueUpdate::Value(
+                        RuntimeDataBindGraphValue::SymbolListIndex(value),
+                    ) => context
+                        .sync_symbol_list_index_by_property_path(&update.property_path, value),
+                    RuntimeStatefulViewModelValueUpdate::Value(
+                        RuntimeDataBindGraphValue::Asset(value),
+                    ) => context.sync_asset_by_property_path(&update.property_path, value),
+                    RuntimeStatefulViewModelValueUpdate::FontAsset(value) => {
+                        context.sync_font_asset_index_by_property_path(&update.property_path, value)
+                    }
+                    RuntimeStatefulViewModelValueUpdate::Value(
+                        RuntimeDataBindGraphValue::Artboard(value),
+                    ) => context.sync_artboard_by_property_path(&update.property_path, value),
+                    RuntimeStatefulViewModelValueUpdate::Value(
+                        RuntimeDataBindGraphValue::Trigger(value),
+                    ) => context.sync_trigger_by_property_path(&update.property_path, value),
+                    RuntimeStatefulViewModelValueUpdate::ViewModelInstance(instance_index) => {
+                        context
+                            .set_view_model_by_property_path(&update.property_path, instance_index)
+                    }
+                    RuntimeStatefulViewModelValueUpdate::Value(_) => false,
+                };
+                context_changed |= value_changed;
+            }
             if !context_changed {
                 continue;
             }
-            let context = context.clone();
-            let context_chain: [&[usize]; 1] = [&[]];
-            changed = true;
-            changed |=
-                nested.bind_owned_view_model_animation_contexts(&file, &context, &context_chain);
-            changed |= nested.child.bind_owned_view_model_artboard_context_chain(
-                &file,
-                &context,
-                &context_chain,
-                true,
-                true,
+
+            let mut nested_candidates = Vec::new();
+            if let Some(context) = nested.stateful_view_model_context.clone() {
+                nested_candidates.push(RuntimeOwnedViewModelBindingCandidate::root(&context));
+            }
+            nested_candidates.extend(
+                nested
+                    .stateful_global_view_model_contexts
+                    .values()
+                    .map(RuntimeOwnedViewModelBindingCandidate::root),
             );
+            nested_candidates.extend(inherited_candidates);
+            changed = true;
+            changed |= nested
+                .bind_owned_view_model_animation_context_candidates(&file, &nested_candidates);
+            changed |= nested
+                .child
+                .bind_owned_view_model_artboard_context_candidates(
+                    &file,
+                    &nested_candidates,
+                    true,
+                    true,
+                );
+            // C++ retains authored view-model instances by pointer, so the
+            // mounted child observes the new value during the same host-first
+            // updateDataBinds pass. Rust rebinds a detached owned snapshot;
+            // flush its queued bindings now, before the parent measures a
+            // hug-sized NestedArtboardLayout from the child.
+            changed |= nested.child.advance_artboard_data_binds();
+            changed |= nested.child.update_pass();
+        }
+        if changed {
+            // The mounted child can be a hug-sized provider in this artboard's
+            // layout tree, so its live text/shape size participates in the
+            // parent's layout cache key.
+            self.mark_layout_changed();
         }
         changed
     }
@@ -4820,7 +7175,13 @@ impl ArtboardInstance {
                     .map(RuntimeDataBindGraphValue::Enum)
             }
             RuntimeDataBindGraphValue::Asset(_) => {
-                let property_value_key = runtime_data_bind_view_model_instance_asset_value_key()?;
+                let property_value_key = if self.slot(source_local).and_then(|slot| slot.type_name)
+                    == Some("ViewModelInstanceAssetFont")
+                {
+                    runtime_data_bind_view_model_instance_font_asset_value_key()?
+                } else {
+                    runtime_data_bind_view_model_instance_asset_value_key()?
+                };
                 self.uint_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Asset)
             }
@@ -4882,6 +7243,522 @@ impl ArtboardInstance {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    #[test]
+    fn scripted_converter_defers_default_output_kind_validation() {
+        let converter = RuntimeDataBindGraphConverter::Scripted {
+            global_id: 42,
+            instance: None,
+        };
+        let numeric_default = RuntimeDataBindGraphValue::Number(10_001.0);
+
+        assert!(!artboard_property_binding_value_matches_kind(
+            &numeric_default,
+            FieldKind::String
+        ));
+        assert!(artboard_property_binding_accepts_default(
+            Some(&converter),
+            &numeric_default,
+            FieldKind::String
+        ));
+    }
+
+    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: nuxie_schema::definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
+        AuthoringProperty {
+            key: property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value,
+        }
+    }
+
+    fn list_binding_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Items".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyList",
+                vec![property(
+                    "ViewModelPropertyList",
+                    "name",
+                    AuthoringValue::String("items".to_owned()),
+                )],
+            ),
+        ])
+        .expect("list binding fixture imports")
+    }
+
+    fn font_binding_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "FontAsset",
+                vec![property("FontAsset", "assetId", AuthoringValue::Uint(7))],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Model".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyAssetFont",
+                vec![property(
+                    "ViewModelPropertyAssetFont",
+                    "name",
+                    AuthoringValue::String("font".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![property(
+                    "ViewModelInstance",
+                    "viewModelId",
+                    AuthoringValue::Uint(0),
+                )],
+            ),
+            record(
+                "ViewModelInstanceAssetFont",
+                vec![
+                    property(
+                        "ViewModelInstanceAssetFont",
+                        "parentId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceAssetFont",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceAssetFont",
+                        "propertyValue",
+                        AuthoringValue::Uint(0),
+                    ),
+                ],
+            ),
+            record(
+                "Artboard",
+                vec![
+                    property("Artboard", "width", AuthoringValue::Double(100.0)),
+                    property("Artboard", "height", AuthoringValue::Double(100.0)),
+                    property("Artboard", "viewModelId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            record(
+                "Text",
+                vec![property("Text", "parentId", AuthoringValue::Uint(0))],
+            ),
+            record(
+                "TextStylePaint",
+                vec![
+                    property("TextStylePaint", "parentId", AuthoringValue::Uint(1)),
+                    property("TextStylePaint", "fontAssetId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            record(
+                "DataBindContext",
+                vec![
+                    property(
+                        "DataBindContext",
+                        "propertyKey",
+                        AuthoringValue::Uint(u64::from(
+                            property_key_for_name("TextStyle", "fontAssetId")
+                                .expect("fontAssetId key"),
+                        )),
+                    ),
+                    property(
+                        "DataBindContext",
+                        "sourcePathIds",
+                        AuthoringValue::Bytes(vec![0, 0]),
+                    ),
+                ],
+            ),
+        ])
+        .expect("font binding fixture imports")
+    }
+
+    fn shape_length_binding_fixture() -> RuntimeFile {
+        let shape_length_key =
+            property_key_for_name("Shape", "length").expect("shape length property key");
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Model".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("length".to_owned()),
+                )],
+            ),
+            record(
+                "Artboard",
+                vec![property("Artboard", "viewModelId", AuthoringValue::Uint(0))],
+            ),
+            record(
+                "Shape",
+                vec![
+                    property("Shape", "parentId", AuthoringValue::Uint(0)),
+                    property("Shape", "scaleX", AuthoringValue::Double(2.0)),
+                    property("Shape", "scaleY", AuthoringValue::Double(3.0)),
+                ],
+            ),
+            record(
+                "DataBindContext",
+                vec![
+                    property(
+                        "DataBindContext",
+                        "propertyKey",
+                        AuthoringValue::Uint(u64::from(shape_length_key)),
+                    ),
+                    property(
+                        "DataBindContext",
+                        "sourcePathIds",
+                        AuthoringValue::Bytes(vec![0, 0]),
+                    ),
+                    property("DataBindContext", "flags", AuthoringValue::Uint(1)),
+                ],
+            ),
+            record(
+                "Rectangle",
+                vec![
+                    property("Rectangle", "parentId", AuthoringValue::Uint(1)),
+                    property("Rectangle", "width", AuthoringValue::Double(10.0)),
+                    property("Rectangle", "height", AuthoringValue::Double(20.0)),
+                ],
+            ),
+        ])
+        .expect("shape length binding fixture imports")
+    }
+
+    #[test]
+    fn update_pass_repolls_shape_length_after_components_settle() {
+        let file = shape_length_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("shape length graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard builds");
+
+        assert!(artboard.update_pass());
+        assert_eq!(
+            artboard.artboard_data_bind_values.get(&[0_u32, 0][..]),
+            Some(&RuntimeDataBindGraphValue::Number(160.0)),
+            "C++ polls computed target-to-source bindings again after component transforms settle"
+        );
+
+        let scale_x_key = property_key_for_name("Shape", "scaleX").expect("shape scaleX key");
+        assert!(artboard.set_double_property(1, scale_x_key, 4.0));
+        assert!(artboard.update_pass());
+        assert_eq!(
+            artboard.artboard_data_bind_values.get(&[0_u32, 0][..]),
+            Some(&RuntimeDataBindGraphValue::Number(200.0)),
+            "the clean-frame epoch guard must not suppress C++'s post-component derived-value poll"
+        );
+    }
+
+    #[test]
+    fn isolated_paint_binding_evaluator_does_not_publish_to_live_owned_context() {
+        let file = shape_length_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("shape length graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard builds");
+        let context = RuntimeOwnedViewModelContext::from_main(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("owned context"),
+        );
+
+        artboard.bind_owned_view_model_artboard_contexts(&file, &context);
+        assert_eq!(artboard.artboard_owned_view_model_candidates.len(), 1);
+        assert!(artboard.update_pass());
+        let live_value = context
+            .main()
+            .and_then(|main| main.number_value_by_property_name("length"))
+            .expect("published live shape length");
+        let live_generation = context.main().expect("live context").mutation_generation();
+
+        let mut evaluator = artboard.clone();
+        evaluator.detach_initial_nested_layout_paint_binding_contexts();
+        let scale_x_key = property_key_for_name("Shape", "scaleX").expect("shape scaleX key");
+        assert!(evaluator.set_double_property(1, scale_x_key, 4.0));
+        assert!(evaluator.update_pass());
+
+        assert_eq!(
+            context
+                .main()
+                .and_then(|main| main.number_value_by_property_name("length")),
+            Some(live_value)
+        );
+        assert_eq!(
+            context.main().expect("live context").mutation_generation(),
+            live_generation,
+            "isolated full data-bind evaluation must not publish into the mounted occurrence"
+        );
+        assert!(
+            evaluator.artboard_owned_view_model_candidates[0]
+                .context
+                .borrow()
+                .number_value_by_property_name("length")
+                .is_some_and(|value| value > live_value),
+            "the detached candidate still receives the evaluator's computed result"
+        );
+    }
+
+    fn same_artboard_binding_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Model".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyArtboard",
+                vec![property(
+                    "ViewModelPropertyArtboard",
+                    "name",
+                    AuthoringValue::String("child".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![property(
+                    "ViewModelInstance",
+                    "viewModelId",
+                    AuthoringValue::Uint(0),
+                )],
+            ),
+            record(
+                "ViewModelInstanceArtboard",
+                vec![
+                    property(
+                        "ViewModelInstanceArtboard",
+                        "parentId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceArtboard",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceArtboard",
+                        "propertyValue",
+                        AuthoringValue::Uint(1),
+                    ),
+                ],
+            ),
+            record(
+                "Artboard",
+                vec![
+                    property("Artboard", "width", AuthoringValue::Double(100.0)),
+                    property("Artboard", "height", AuthoringValue::Double(100.0)),
+                    property("Artboard", "viewModelId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            record(
+                "NestedArtboard",
+                vec![
+                    property("NestedArtboard", "parentId", AuthoringValue::Uint(0)),
+                    property("NestedArtboard", "artboardId", AuthoringValue::Uint(1)),
+                ],
+            ),
+            record(
+                "DataBindContext",
+                vec![
+                    property(
+                        "DataBindContext",
+                        "propertyKey",
+                        AuthoringValue::Uint(u64::from(
+                            property_key_for_name("NestedArtboard", "artboardId")
+                                .expect("artboardId key"),
+                        )),
+                    ),
+                    property(
+                        "DataBindContext",
+                        "sourcePathIds",
+                        AuthoringValue::Bytes(vec![0, 0]),
+                    ),
+                ],
+            ),
+            record(
+                "Artboard",
+                vec![
+                    property("Artboard", "width", AuthoringValue::Double(50.0)),
+                    property("Artboard", "height", AuthoringValue::Double(50.0)),
+                ],
+            ),
+        ])
+        .expect("same-artboard binding fixture imports")
+    }
+
+    #[test]
+    fn first_artboard_binding_recreates_an_equal_authored_nested_source() {
+        let file = same_artboard_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has a parent artboard");
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("parent artboard builds");
+        let host_local = graph.nested_artboards[0].local_id;
+        let original_identity = artboard.nested_artboards[&host_local]
+            .child
+            .instance_identity();
+        let context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+            .expect("serialized view model instance builds");
+
+        assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+
+        let replacement = &artboard.nested_artboards[&host_local];
+        assert_ne!(replacement.child.instance_identity(), original_identity);
+        assert_eq!(replacement.render_cache_revision, 1);
+    }
+
+    #[test]
+    fn font_binding_retains_live_font_value_and_applies_text_style_override() {
+        let file = font_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("font binding graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard builds");
+        let mut context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+            .expect("serialized view model instance builds");
+
+        assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+        let serialized = artboard
+            .text_style_font_override(2)
+            .expect("serialized font override was applied");
+        assert_eq!(serialized.file_asset_index(), 0);
+        assert_eq!(serialized.live_font_bytes(), None);
+
+        let live: Arc<[u8]> = vec![1, 2, 3, 4].into();
+        assert!(context.set_live_font_bytes_by_property_name("font", Some(Arc::clone(&live))));
+        assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+        let value = artboard
+            .text_style_font_override(2)
+            .expect("font override was applied to TextStylePaint");
+        assert_eq!(
+            value.file_asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+        );
+        assert_eq!(value.live_font_bytes(), Some(live.as_ref()));
+
+        assert!(context.set_font_asset_index_by_property_name("font", 0));
+        assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+        let file_backed = artboard
+            .text_style_font_override(2)
+            .expect("file-backed font override was reapplied");
+        assert_eq!(file_backed.file_asset_index(), 0);
+        assert_eq!(
+            file_backed.live_font_bytes(),
+            Some(live.as_ref()),
+            "assigning a file index preserves the private live font, while resolution lets the file asset win"
+        );
+    }
+
+    #[test]
+    fn shared_owned_context_mutations_refresh_without_an_explicit_rebind() {
+        let file = font_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("font binding graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard builds");
+        let context = RuntimeOwnedViewModelContext::from_main(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+                .expect("serialized view model instance builds"),
+        );
+
+        assert!(artboard.bind_owned_view_model_artboard_contexts(&file, &context));
+        assert!(artboard.advance_artboard_data_binds());
+
+        let live: Arc<[u8]> = vec![5, 6, 7, 8].into();
+        assert!(
+            context
+                .main_mut()
+                .expect("main view model remains shared")
+                .set_live_font_bytes_by_property_name("font", Some(Arc::clone(&live)))
+        );
+        assert!(artboard.advance_artboard_data_binds());
+
+        let refreshed = artboard
+            .text_style_font_override(2)
+            .expect("shared mutation refreshed the font override");
+        assert_eq!(refreshed.live_font_bytes(), Some(live.as_ref()));
+    }
+
+    fn list_binding(
+        converter: RuntimeDataBindGraphConverter,
+    ) -> RuntimeArtboardListBindingInstance {
+        RuntimeArtboardListBindingInstance {
+            data_bind_index: 0,
+            target_local_id: 1,
+            path: vec![0, 0],
+            converter: Some(converter),
+            default_value: RuntimeDataBindGraphValue::List { item_count: 0 },
+            source_value: None,
+            source_list_size: None,
+            source_number_value: None,
+            target_list_size: None,
+            should_reset_instances: false,
+            generated_view_model_id: None,
+            generated_items: Vec::new(),
+        }
+    }
+
+    fn list_handle_with_items(
+        file: &RuntimeFile,
+        item_count: usize,
+    ) -> RuntimeOwnedViewModelListHandle {
+        let mut source = RuntimeOwnedViewModelInstance::new(file, 0).expect("source instance");
+        for _ in 0..item_count {
+            let item = Rc::new(RefCell::new(
+                RuntimeOwnedViewModelInstance::new(file, 0).expect("list item instance"),
+            ));
+            assert!(source.push_list_item_by_property_name("items", item));
+        }
+        source
+            .list_handle_by_property_path(&[0])
+            .expect("items list handle")
+    }
 
     #[test]
     fn nested_artboard_layout_is_a_nested_artboard() {
@@ -4891,6 +7768,49 @@ mod tests {
             .int;
 
         assert!(runtime_type_is_a(type_key, "NestedArtboard"));
+    }
+
+    #[test]
+    fn list_converter_group_runs_list_to_length_before_number_to_list() {
+        let file = list_binding_fixture();
+        let source = list_handle_with_items(&file, 3);
+        let mut binding = list_binding(RuntimeDataBindGraphConverter::Group(vec![
+            RuntimeDataBindGraphConverter::ListToLength,
+            RuntimeDataBindGraphConverter::NumberToList {
+                global_id: 1,
+                view_model_id: 0,
+                view_model_count: 1,
+            },
+        ]));
+
+        let update =
+            binding.apply_resolved_source(&file, RuntimeArtboardListResolvedSource::List(source));
+
+        assert!(update.source.is_none());
+        assert_eq!(update.items.as_ref().map(Vec::len), Some(3));
+        assert_eq!(binding.source_list_size, Some(3));
+        assert_eq!(binding.target_list_size, Some(3));
+        assert!(binding.should_reset_instances);
+        assert_eq!(binding.generated_view_model_id, Some(0));
+    }
+
+    #[test]
+    fn number_to_list_preserves_a_list_input() {
+        let file = list_binding_fixture();
+        let source = list_handle_with_items(&file, 2);
+        let mut binding = list_binding(RuntimeDataBindGraphConverter::NumberToList {
+            global_id: 1,
+            view_model_id: 0,
+            view_model_count: 1,
+        });
+
+        let update =
+            binding.apply_resolved_source(&file, RuntimeArtboardListResolvedSource::List(source));
+
+        assert!(update.source.is_some());
+        assert_eq!(update.items.as_ref().map(Vec::len), Some(2));
+        assert!(!binding.should_reset_instances);
+        assert!(binding.generated_items.is_empty());
     }
 
     fn custom_binding(
@@ -4906,12 +7826,116 @@ mod tests {
             path: shared_data_bind_path(vec![1]),
             path_is_name_based: false,
             owned_context_source_path: None,
+            owned_context_source: None,
             flags: 0,
             value_kind: RuntimeArtboardDataBindValueKind::Number,
             converter,
             converter_state: RuntimeDataBindGraphConverterState::None,
             default_value: RuntimeDataBindGraphValue::Number(0.0),
         }
+    }
+
+    fn property_binding(
+        data_bind_index: usize,
+        flags: u64,
+    ) -> RuntimeArtboardPropertyBindingInstance {
+        RuntimeArtboardPropertyBindingInstance {
+            data_bind_index,
+            flags,
+            target_local_id: data_bind_index + 1,
+            property_key: u16::try_from(data_bind_index + 1).unwrap(),
+            path: vec![u32::try_from(data_bind_index + 1).unwrap()],
+            path_is_name_based: false,
+            owned_context_source_path: None,
+            enum_value_names: Vec::new(),
+            converter: None,
+            converter_state: RuntimeDataBindGraphConverterState::None,
+            default_value: RuntimeDataBindGraphValue::Number(0.0),
+            default_value_is_resolved: true,
+            snapshots_source_value: false,
+            pending_value: None,
+        }
+    }
+
+    #[test]
+    fn target_queues_partition_two_way_reconcile_by_cpp_precedence() {
+        let bindings = vec![
+            property_binding(0, (1 << 1) | (1 << 3)),
+            property_binding(1, 1 << 1),
+            property_binding(2, 0),
+        ];
+        let mut queues = RuntimeArtboardDataBindTargetQueues::new(&bindings, &[], &[]);
+
+        assert_eq!(
+            queues.drain_dirty_properties_for_precedence(&bindings, true),
+            vec![0],
+            "source-first two-way bindings run before target-to-source reconcile"
+        );
+        assert_eq!(
+            queues.drain_dirty_properties_for_precedence(&bindings, false),
+            vec![1, 2],
+            "target-first two-way and pure toTarget bindings retain the ordinary lane"
+        );
+    }
+
+    #[test]
+    fn two_way_converter_uses_one_shared_state_and_latches_favored_origin() {
+        let mut source_first = property_binding(7, (1 << 1) | (1 << 3));
+        source_first.converter = Some(RuntimeDataBindGraphConverter::PassThrough);
+        source_first.converter_state =
+            RuntimeDataBindGraphConverterState::for_converter(source_first.converter.as_ref());
+        let mut source_first_reverse = custom_binding(
+            7,
+            source_first.target_local_id,
+            source_first.property_key,
+            source_first.converter.clone(),
+        );
+        source_first_reverse.flags = source_first.flags;
+
+        let source_first_states = build_artboard_shared_data_bind_converter_states(
+            &[source_first],
+            &[source_first_reverse],
+        );
+        assert_eq!(source_first_states.len(), 1);
+        assert!(!source_first_states[&7].target_origin);
+
+        let mut target_first = property_binding(8, 1 << 1);
+        target_first.converter = Some(RuntimeDataBindGraphConverter::PassThrough);
+        let mut target_first_reverse = custom_binding(
+            8,
+            target_first.target_local_id,
+            target_first.property_key,
+            target_first.converter.clone(),
+        );
+        target_first_reverse.flags = target_first.flags;
+
+        let target_first_states = build_artboard_shared_data_bind_converter_states(
+            &[target_first],
+            &[target_first_reverse],
+        );
+        assert_eq!(target_first_states.len(), 1);
+        assert!(target_first_states[&8].target_origin);
+    }
+
+    #[test]
+    fn target_to_source_write_suppresses_only_its_own_source_to_target_binding() {
+        let mut origin = property_binding(7, 1 << 1);
+        origin.path = vec![41];
+        let mut observer = property_binding(8, 0);
+        observer.path = origin.path.clone();
+        let bindings = vec![origin, observer];
+        let mut queues = RuntimeArtboardDataBindTargetQueues::new(&bindings, &[], &[]);
+
+        assert_eq!(queues.drain_dirty_properties(), vec![0, 1]);
+        assert_eq!(
+            queues.enqueue_path(&[41], Some(0)),
+            vec![1],
+            "C++ suppressDirt skips the originating DataBind but still notifies other observers"
+        );
+        assert_eq!(queues.drain_dirty_properties(), vec![1]);
+
+        assert_eq!(queues.enqueue_path(&[41], None), vec![0, 1]);
+        assert_eq!(queues.drain_dirty_properties(), vec![0, 1]);
     }
 
     fn numeric_binding(
@@ -4926,6 +7950,7 @@ mod tests {
             property_key,
             property,
             path: vec![2],
+            owned_context_source: None,
         }
     }
 
@@ -5056,6 +8081,7 @@ mod tests {
             target_local_id: 9,
             property: RuntimeLayoutComputedProperty::WorldX,
             path: shared_data_bind_path(vec![3]),
+            owned_context_source: None,
         }];
         let numeric_bindings = vec![
             numeric_binding(2, 7, 11, RuntimeArtboardNumericSourceProperty::DirectDouble),
@@ -5065,6 +8091,7 @@ mod tests {
             target_local_id: 14,
             path: shared_data_bind_path(vec![4]),
             enum_value_names: vec![b"first".to_vec()],
+            owned_context_source: None,
         }];
         let mut queues = RuntimeArtboardDataBindSourceQueues::new(
             &custom_bindings,
@@ -5072,6 +8099,9 @@ mod tests {
             &numeric_bindings,
             &solo_bindings,
         );
+
+        assert!(queues.observes_target_property(7, 11));
+        assert!(!queues.observes_target_property(99, 99));
 
         assert_eq!(
             queues.drain_custom_property_update_indices(),
@@ -5237,9 +8267,9 @@ mod tests {
             Vec::<usize>::new()
         );
 
-        queues.enqueue_path(&[2]);
-        queues.enqueue_path(&[2]);
-        queues.enqueue_path(&[99]);
+        queues.enqueue_path(&[2], None);
+        queues.enqueue_path(&[2], None);
+        queues.enqueue_path(&[99], None);
 
         assert_eq!(queues.drain_dirty_converter_properties(), vec![1]);
         assert_eq!(
@@ -5247,15 +8277,15 @@ mod tests {
             Vec::<usize>::new()
         );
 
-        queues.enqueue_path(&[3]);
+        queues.enqueue_path(&[3], None);
 
         assert_eq!(queues.drain_dirty_converter_properties(), vec![2]);
 
-        queues.enqueue_path(&[4]);
+        queues.enqueue_path(&[4], None);
 
         assert_eq!(queues.drain_dirty_converter_properties(), vec![3]);
 
-        queues.enqueue_path(&[5]);
+        queues.enqueue_path(&[5], None);
 
         assert_eq!(queues.drain_dirty_converter_properties(), vec![4]);
     }

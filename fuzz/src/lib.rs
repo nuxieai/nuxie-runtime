@@ -125,16 +125,17 @@ fn drive(data: &[u8], pointer_events: &[PointerEvent]) -> Option<()> {
         }
 
         // prepare + draw through the null renderer.
-        if instance
-            .prepare_static_artboard_tree_paints(
-                &runtime,
-                artboard,
-                &graph.artboards,
-                &mut factory,
-                &mut paint_cache,
-                &mut path_cache,
-            )
-            .is_err()
+        if paint_cache.needs_paint_preparation(&instance, artboard)
+            && instance
+                .prepare_static_artboard_tree_paints(
+                    &runtime,
+                    artboard,
+                    &graph.artboards,
+                    &mut factory,
+                    &mut paint_cache,
+                    &mut path_cache,
+                )
+                .is_err()
         {
             return Some(());
         }

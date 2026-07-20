@@ -35,6 +35,20 @@ const cases = [
     path: "?force-webgl2-fallback=1",
     expected: ["backend=webgl2 fallback=true", "forced-webgpu=fail-closed"],
   },
+  {
+    path: "?force-webgpu-compatibility=1",
+    expected: [
+      "backend=webgpu fallback=false",
+      "compatibility=selected requested-vertex-storage-limit=",
+    ],
+  },
+  {
+    path: "?force-webgpu-compatibility=1&force-no-ssbo=1",
+    expected: [
+      "backend=webgpu fallback=false",
+      "compatibility=selected vertex-storage-limit=0 polyfill=rendered",
+    ],
+  },
 ];
 
 (async () => {
@@ -42,6 +56,12 @@ const cases = [
   try {
     for (const testCase of cases) {
       const page = await browser.newPage();
+      page.on("console", (message) =>
+        console.log(`browser console ${message.type()}: ${message.text()}`),
+      );
+      page.on("pageerror", (error) =>
+        console.error(`browser page error: ${error.stack || String(error)}`),
+      );
       await page.goto(`${baseUrl}${testCase.path}`, { waitUntil: "networkidle" });
       await page.waitForFunction(
         () => ["passed", "failed"].includes(document.body.dataset.status),

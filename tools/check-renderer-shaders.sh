@@ -6,10 +6,10 @@ committed="$root/crates/nuxie-renderer/src/generated"
 work="$(mktemp -d "${TMPDIR:-/tmp}/nuxie-renderer-shaders.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
-expected_module_count="60"
-expected_module_digest="ad5eb6f60c30d74e34871e9dafdb2095906dc945c2bd6e765e6e107140fa2e44"
-expected_cpp_header_count="50"
-expected_cpp_header_digest="0ba25987fbf839d5eedf88de61e11b0ea1b9321a242ade5d912a7f40ae000708"
+expected_module_count="66"
+expected_module_digest="ad49aadacc61a69a5ce29bc2bfacd030e707c1f10eaa6f74795dc573858bea27"
+expected_cpp_header_count="56"
+expected_cpp_header_digest="9b10df662a71ad939053cb9b9120319e28594dce3052206d0b9e002c4a376780"
 
 RIVE_RUNTIME_DIR="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}" \
 RENDERER_SHADER_OUTPUT_DIR="$work/generated" \

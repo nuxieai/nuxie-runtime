@@ -12,6 +12,7 @@
 //! runtime does not embed — useful for tests and future editor-style flows.
 
 mod bytecode;
+mod mat4;
 mod renderer;
 mod view_model;
 
@@ -23,17 +24,19 @@ use std::rc::Rc;
 use bytecode::validate_luau_bytecode;
 use luaur_rt::ffi::lua_error;
 use luaur_rt::{
-    AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, UserData,
-    UserDataFields, UserDataMethods, Value, Vector as LuaVector,
+    AnyUserData, Buffer as LuaBuffer, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table,
+    UserData, UserDataFields, UserDataMethods, Value, Vector as LuaVector,
 };
 use luaur_vm::functions::luau_load::luau_load;
+use mat4::install_mat4_global;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
     ScriptArtboard, ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance,
-    ScriptMethod, ScriptValue, ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
+    ScriptListenerInvocation, ScriptMethod, ScriptValue, ScriptViewModel,
+    ScriptingVm as RuntimeScriptingVm,
 };
 use renderer::RendererBindings;
-use view_model::{ScriptedContext, create_scripted_view_model};
+use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
 
 use crate::envelope::SignedContent;
 
@@ -43,6 +46,39 @@ pub use luaur_rt::{Error, Result};
 /// `src/lua/rive_lua_libs.cpp`).
 const MODULE_CACHE_KEY: &str = "rive_scripting_registered_modules";
 
+/// Library version a script or module belongs to. `(0, 0)` is the host file.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ScopeKey {
+    pub library_id: u64,
+    pub library_version_id: u64,
+}
+
+impl ScopeKey {
+    pub const ROOT: Self = Self::new(0, 0);
+
+    const UNPINNED: Self = Self::new(u64::MAX, u64::MAX);
+
+    pub const fn new(library_id: u64, library_version_id: u64) -> Self {
+        Self {
+            library_id,
+            library_version_id,
+        }
+    }
+
+    pub const fn is_root(self) -> bool {
+        self.library_id == 0 && self.library_version_id == 0
+    }
+}
+
+#[derive(Debug, Default)]
+struct ScriptScopes {
+    /// One table per caller scope: import label -> pinned library version.
+    pins: BTreeMap<ScopeKey, BTreeMap<String, ScopeKey>>,
+    /// Readable chunkname -> scope. This also covers editor-style callers
+    /// without a retained module descriptor.
+    chunk_scopes: BTreeMap<String, ScopeKey>,
+}
+
 /// A booted Luau VM.
 ///
 /// Thin wrapper over [`luaur_rt::Lua`] with the Rive-specific entry points;
@@ -51,9 +87,25 @@ pub struct ScriptVm {
     lua: Lua,
     rive_globals_installed: Cell<bool>,
     renderer_bindings: RendererBindings,
+    view_model_frame_context: ScriptViewModelFrameContext,
+    scopes: Rc<RefCell<ScriptScopes>>,
     view_models: BTreeMap<String, ScriptViewModel>,
     default_context_view_model: Option<ScriptViewModel>,
     default_context_parent_view_models: Vec<ScriptViewModel>,
+}
+
+/// Cloneable handle for the detached view-model roots owned by one scripting
+/// VM. Hosts that retain Lua-backed script instances without retaining the
+/// [`ScriptVm`] wrapper use this to perform the one root-frame tail advance.
+#[derive(Debug, Clone)]
+pub struct DetachedViewModelFrame {
+    context: ScriptViewModelFrameContext,
+}
+
+impl DetachedViewModelFrame {
+    pub fn advance(&self) -> bool {
+        self.context.advance_detached()
+    }
 }
 
 /// File-registered protocol generator. The script chunk has already executed;
@@ -77,11 +129,106 @@ pub struct LuaScriptInstance {
     renderer_bindings: RendererBindings,
     context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
     context: Option<AnyUserData>,
+    context_missing_requested_data: Rc<Cell<bool>>,
+    context_parent_view_models: Vec<ScriptViewModel>,
+    generator: Option<Function>,
+    user_init_done: bool,
+    init_retry_requires_recreation: bool,
 }
 
 #[derive(Debug, Clone)]
 struct ScriptedDataValue {
     value: ScriptValue,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ScriptedPointerEvent {
+    invocation: ScriptListenerInvocation,
+}
+
+impl ScriptedPointerEvent {
+    fn new(invocation: ScriptListenerInvocation) -> Self {
+        Self { invocation }
+    }
+
+    fn pointer(self) -> Option<(i32, (f32, f32), (f32, f32), &'static str, f32)> {
+        match self.invocation {
+            ScriptListenerInvocation::None => None,
+            ScriptListenerInvocation::Pointer {
+                pointer_id,
+                position,
+                previous_position,
+                kind,
+                time_stamp,
+            } => Some((
+                pointer_id,
+                position,
+                previous_position,
+                kind.as_str(),
+                time_stamp,
+            )),
+        }
+    }
+}
+
+impl UserData for ScriptedPointerEvent {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("id", |_, this| {
+            Ok(this.pointer().map(|value| value.0).unwrap_or(0))
+        });
+        fields.add_field_method_get("position", |_, this| {
+            let (x, y) = this.pointer().map(|value| value.1).unwrap_or((0.0, 0.0));
+            Ok(LuaVector::new(x, y, 0.0))
+        });
+        fields.add_field_method_get("previousPosition", |_, this| {
+            let (x, y) = this.pointer().map(|value| value.2).unwrap_or((0.0, 0.0));
+            Ok(LuaVector::new(x, y, 0.0))
+        });
+        fields.add_field_method_get("type", |_, this| {
+            Ok(this.pointer().map(|value| value.3).unwrap_or("unknown"))
+        });
+        fields.add_field_method_get("timeStamp", |_, this| {
+            Ok(this.pointer().map(|value| value.4).unwrap_or(0.0))
+        });
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        // Hit opacity feeds the C++ hit-test result. State-machine listener
+        // actions run after the hit has already been resolved, so retaining
+        // the callable surface is sufficient here.
+        methods.add_method_mut("hit", |_, _, _: Option<bool>| Ok(()));
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ScriptedInvocation {
+    invocation: ScriptListenerInvocation,
+}
+
+impl ScriptedInvocation {
+    fn new(invocation: ScriptListenerInvocation) -> Self {
+        Self { invocation }
+    }
+}
+
+impl UserData for ScriptedInvocation {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("isPointerEvent", |_, this, ()| {
+            Ok(matches!(
+                this.invocation,
+                ScriptListenerInvocation::Pointer { .. }
+            ))
+        });
+        methods.add_method("isNone", |_, this, ()| {
+            Ok(matches!(this.invocation, ScriptListenerInvocation::None))
+        });
+        methods.add_method("asPointerEvent", |lua, this, ()| match this.invocation {
+            ScriptListenerInvocation::Pointer { .. } => Ok(Some(
+                lua.create_userdata(ScriptedPointerEvent::new(this.invocation))?,
+            )),
+            ScriptListenerInvocation::None => Ok(None),
+        });
+    }
 }
 
 impl ScriptedDataValue {
@@ -157,11 +304,17 @@ impl UserData for ScriptedDataValue {
 
 impl LuaScriptInstance {
     pub fn new(table: Table) -> Self {
+        let frame_context = ScriptViewModelFrameContext::for_lua(&table.lua());
         Self {
             table,
-            renderer_bindings: RendererBindings::default(),
+            renderer_bindings: RendererBindings::new(frame_context),
             context_view_model: Rc::new(RefCell::new(None)),
             context: None,
+            context_missing_requested_data: Rc::new(Cell::new(false)),
+            context_parent_view_models: Vec::new(),
+            generator: None,
+            user_init_done: false,
+            init_retry_requires_recreation: false,
         }
     }
 
@@ -170,12 +323,20 @@ impl LuaScriptInstance {
         renderer_bindings: RendererBindings,
         context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
         context: Option<AnyUserData>,
+        context_missing_requested_data: Rc<Cell<bool>>,
+        context_parent_view_models: Vec<ScriptViewModel>,
+        generator: Option<Function>,
     ) -> Self {
         Self {
             table,
             renderer_bindings,
             context_view_model,
             context,
+            context_missing_requested_data,
+            context_parent_view_models,
+            generator,
+            user_init_done: false,
+            init_retry_requires_recreation: false,
         }
     }
 
@@ -221,6 +382,53 @@ impl Default for ScriptVm {
     }
 }
 
+fn normalize_chunk_source(source: &str) -> &str {
+    source
+        .strip_prefix('=')
+        .or_else(|| source.strip_prefix('@'))
+        .unwrap_or(source)
+}
+
+fn caller_chunk_source(lua: &Lua) -> Option<String> {
+    // Level zero is this Rust callback. The immediate Lua caller is normally
+    // level one; keep walking through native helper frames (for example pcall)
+    // until the actual defining Lua chunk is found.
+    for level in 1..=32 {
+        let frame = lua.inspect_stack(level)?;
+        let Some(source) = frame.source() else {
+            continue;
+        };
+        let source = normalize_chunk_source(source);
+        if source != "[C]" {
+            return Some(source.to_owned());
+        }
+    }
+    None
+}
+
+fn resolve_require_key(scopes: &ScriptScopes, caller_chunkname: &str, request: &str) -> String {
+    let caller = scopes
+        .chunk_scopes
+        .get(normalize_chunk_source(caller_chunkname))
+        .copied()
+        .unwrap_or(ScopeKey::ROOT);
+
+    let (path, target) = if let Some(rest) = request.strip_prefix("lib:") {
+        let (label, path) = rest.split_once('/').unwrap_or((rest, ""));
+        let target = scopes
+            .pins
+            .get(&caller)
+            .and_then(|pins| pins.get(label))
+            .copied()
+            .unwrap_or(ScopeKey::UNPINNED);
+        (path, target)
+    } else {
+        (request, caller)
+    };
+
+    ScriptVm::scoped_module_key(path, target)
+}
+
 impl ScriptVm {
     pub fn instantiate_script_with_factory(
         &mut self,
@@ -233,21 +441,39 @@ impl ScriptVm {
         self.instantiate_registered_script_with_factory(&program, host, factory)
     }
 
-    /// Execute one protocol ScriptAsset chunk exactly once for a File and
-    /// retain the generator it returns.
+    /// Execute one protocol ScriptAsset chunk and return the generator it
+    /// produces. FileAsset-identity caching belongs to the caller because a
+    /// name and library scope are not unique protocol-script identities.
     pub fn register_protocol_script_with_factory(
         &self,
         name: &str,
         payload: &[u8],
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<ScriptProgram, ScriptError> {
+        self.register_protocol_script_with_factory_scoped(name, ScopeKey::ROOT, payload, factory)
+    }
+
+    /// Scope-aware protocol registration. The readable scoped chunkname stays
+    /// attached to the returned generator and every closure it creates. Unlike
+    /// modules, protocol scripts never consult the name-and-scope module cache:
+    /// a protocol ScriptAsset is identified by its serialized FileAsset record.
+    pub fn register_protocol_script_with_factory_scoped(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        payload: &[u8],
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<ScriptProgram, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         bindings.with_factory_context(factory, || {
             self.install_rive_globals().map_err(script_error)?;
+            let chunkname = Self::readable_chunkname(name, scope);
+            self.set_chunkname_scope(&chunkname, scope);
+            let chunk = self
+                .load_script_asset_payload(&chunkname, payload)
+                .map_err(script_error)?;
             let generator = self
-                .load_script_asset_payload(name, payload)
-                .map_err(script_error)?
-                .call(())
+                .execute_loaded_module(&chunkname, chunk)
                 .map_err(script_error)?;
             Ok(ScriptProgram { generator })
         })
@@ -264,11 +490,14 @@ impl ScriptVm {
         let bindings = self.renderer_bindings.clone();
         bindings.with_factory_context(factory, || {
             let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
+            let context_missing_requested_data = Rc::new(Cell::new(false));
+            let context_parent_view_models = self.default_context_parent_view_models.clone();
             let context = self
                 .lua
                 .create_userdata(ScriptedContext::new(
                     Rc::clone(&context_view_model),
-                    self.default_context_parent_view_models.clone(),
+                    context_parent_view_models.clone(),
+                    Rc::clone(&context_missing_requested_data),
                 ))
                 .map_err(script_error)?;
             let instance: Table = program
@@ -280,24 +509,38 @@ impl ScriptVm {
                 self.renderer_bindings.clone(),
                 context_view_model,
                 Some(context),
+                context_missing_requested_data,
+                context_parent_view_models,
+                Some(program.generator.clone()),
             )) as Box<dyn ScriptInstance>)
         })
     }
 
     /// Boot a VM with the Luau standard libraries open.
     pub fn new() -> Self {
+        let lua = Lua::new();
+        let view_model_frame_context = ScriptViewModelFrameContext::default();
+        lua.set_app_data(view_model_frame_context.clone());
         Self {
-            lua: Lua::new(),
+            lua,
             rive_globals_installed: Cell::new(false),
-            renderer_bindings: RendererBindings::default(),
+            renderer_bindings: RendererBindings::new(view_model_frame_context.clone()),
+            view_model_frame_context,
+            scopes: Rc::new(RefCell::new(ScriptScopes::default())),
             view_models: BTreeMap::new(),
             default_context_view_model: None,
             default_context_parent_view_models: Vec::new(),
         }
     }
 
+    /// Register the file's view-model definitions and keep `Data` current even
+    /// when this VM's globals were initialized before the file was attached.
     pub fn set_view_models(&mut self, view_models: BTreeMap<String, ScriptViewModel>) {
         self.view_models = view_models;
+        if self.rive_globals_installed.get() {
+            view_model::install_data_global(&self.lua, &self.view_models)
+                .expect("refreshing the initialized Data global should succeed");
+        }
     }
 
     pub fn set_default_context_view_model(&mut self, view_model: Option<ScriptViewModel>) {
@@ -319,6 +562,21 @@ impl ScriptVm {
         &self.lua
     }
 
+    /// Consume every owner-tracked, parentless script view-model root at the
+    /// end of the host frame. The host calls this once after its root state
+    /// machine advance; script-driven child artboards deliberately do not.
+    pub fn advance_detached_view_models(&self) -> bool {
+        self.view_model_frame_context.advance_detached()
+    }
+
+    /// Retain the detached-view-model frame state independently of the VM
+    /// wrapper. Lua values remain owned by the script instances themselves.
+    pub fn detached_view_model_frame(&self) -> DetachedViewModelFrame {
+        DetachedViewModelFrame {
+            context: self.view_model_frame_context.clone(),
+        }
+    }
+
     /// Install the Rive globals that Luau bytecode resolves with GETIMPORT.
     ///
     /// This mirrors the relevant early part of C++ `ScriptingVM::init`:
@@ -330,6 +588,8 @@ impl ScriptVm {
         }
 
         install_vector_global(&self.lua)?;
+        install_mat4_global(&self.lua)?;
+        install_math_fround(&self.lua)?;
         install_data_value_global(&self.lua)?;
 
         let late = self
@@ -394,12 +654,36 @@ impl ScriptVm {
 
     /// Load and *execute* a script/module payload, returning what the chunk
     /// returns (protocol scripts return their generator function; utility
-    /// modules return a table) — the spike-sized twin of C++
-    /// `ScriptingVM::registerScript` / `registerModule`
-    /// (`src/lua/rive_lua_libs.cpp`), minus the per-module sandboxed thread
-    /// and require-cache bookkeeping.
+    /// modules return a table) — the twin of C++ `ScriptingVM::loadModule` /
+    /// `executeModule`. Every chunk executes with its own writable global proxy,
+    /// so one ScriptAsset cannot overwrite another ScriptAsset's globals.
     pub fn run_bytecode<R: FromLuaMulti>(&self, chunk_name: &str, bytecode: &[u8]) -> Result<R> {
-        self.load_bytecode(chunk_name, bytecode)?.call(())
+        let chunk = self.load_bytecode(chunk_name, bytecode)?;
+        self.execute_loaded_module(chunk_name, chunk)
+    }
+
+    /// Execute a loaded script/module with the same environment isolation as
+    /// C++ `loadModule`: the chunk gets a fresh writable globals proxy whose
+    /// reads fall through to the VM's sandboxed Rive globals. C++ installs this
+    /// table on a temporary coroutine; setting the loaded closure environment
+    /// directly preserves the same retained-closure behavior without relying
+    /// on a coroutine after registration returns.
+    fn execute_loaded_module<R: FromLuaMulti>(
+        &self,
+        display_name: &str,
+        chunk: Function,
+    ) -> Result<R> {
+        let environment = self.lua.create_table();
+        let metatable = self.lua.create_table();
+        metatable.set("__index", self.lua.globals())?;
+        metatable.set_readonly(true);
+        environment.set_metatable(Some(metatable))?;
+        if !chunk.set_environment(environment)? {
+            return Err(Error::runtime(format!(
+                "module '{display_name}' could not install its sandbox environment"
+            )));
+        }
+        chunk.call(())
     }
 
     /// Load a raw `ScriptAsset` payload as it appears in a `.riv` file:
@@ -424,13 +708,73 @@ impl ScriptVm {
         Ok(cache)
     }
 
-    /// Install Rive's custom `require`, which resolves plain module names
-    /// against the registered-module cache (`require("Transform2")`).
+    /// Require-cache key for a module in `scope`; root keeps its bare name.
+    pub fn scoped_module_key(name: &str, scope: ScopeKey) -> String {
+        if scope.is_root() {
+            name.to_owned()
+        } else {
+            format!(
+                "{name}\u{1f}{}:{}",
+                scope.library_id, scope.library_version_id
+            )
+        }
+    }
+
+    /// Human-readable chunkname baked into bytecode and source functions.
+    /// Scoped names deliberately contain no colon because trace tooling treats
+    /// a colon as the separator before a line number.
+    pub fn readable_chunkname(name: &str, scope: ScopeKey) -> String {
+        if scope.is_root() {
+            name.to_owned()
+        } else {
+            format!("{}-{}/{name}", scope.library_id, scope.library_version_id)
+        }
+    }
+
+    /// Pin one `lib:` label for a caller scope to a concrete library version.
+    pub fn add_import(&self, caller: ScopeKey, library_name: &str, target: ScopeKey) {
+        self.scopes
+            .borrow_mut()
+            .pins
+            .entry(caller)
+            .or_default()
+            .insert(library_name.to_owned(), target);
+    }
+
+    /// Seed scope for a chunk without retained module metadata.
+    pub fn set_chunkname_scope(&self, chunkname: &str, scope: ScopeKey) {
+        self.scopes
+            .borrow_mut()
+            .chunk_scopes
+            .insert(normalize_chunk_source(chunkname).to_owned(), scope);
+    }
+
+    /// Resolve a request relative to a named caller chunk. Public for tooling
+    /// and conformance probes; `require` itself derives this chunk from the
+    /// active Luau stack.
+    pub fn resolve_require(&self, caller_chunkname: &str, request: &str) -> String {
+        resolve_require_key(
+            &self.scopes.borrow(),
+            normalize_chunk_source(caller_chunkname),
+            request,
+        )
+    }
+
+    /// Install Rive's custom `require`, resolving bare names in the caller's
+    /// scope and `lib:` names through that caller scope's serialized pins.
     fn install_require_global(&self, cache: Table) -> Result<()> {
         let lookup = cache.clone();
-        let require = self.lua.create_function(move |_, name: String| {
-            match lookup.get::<Value>(name.as_str())? {
-                Value::Nil => Err(Error::runtime(format!("module '{name}' not found"))),
+        let scopes = Rc::clone(&self.scopes);
+        let require = self.lua.create_function(move |lua, name: String| {
+            // The defining chunk remains on the Luau stack when a returned
+            // closure lazily calls require. Reading that frame is therefore
+            // scope-correct even long after module registration finished.
+            let caller = caller_chunk_source(lua).unwrap_or_default();
+            let cache_key = resolve_require_key(&scopes.borrow(), &caller, &name);
+            match lookup.get::<Value>(cache_key.as_str())? {
+                Value::Nil => Err(Error::runtime(format!(
+                    "require could not find a script named {name}"
+                ))),
                 value => Ok(value),
             }
         })?;
@@ -444,15 +788,31 @@ impl ScriptVm {
 
     /// The module previously registered under `name`, if any.
     pub fn registered_module(&self, name: &str) -> Result<Value> {
-        self.module_cache()?.get(name)
+        self.registered_module_scoped(name, ScopeKey::ROOT)
+    }
+
+    /// The module previously registered under `name` in `scope`, if any.
+    pub fn registered_module_scoped(&self, name: &str, scope: ScopeKey) -> Result<Value> {
+        self.module_cache()?
+            .get(Self::scoped_module_key(name, scope))
     }
 
     /// Execute a `ScriptAsset` payload (envelope + Luau bytecode) and cache
     /// its result under `name` so scripts can `require` it — the twin of
     /// C++ `ScriptingVM::registerModule`. Idempotent per name.
     pub fn register_module(&self, name: &str, payload: &[u8]) -> Result<Value> {
+        self.register_module_scoped(name, ScopeKey::ROOT, payload)
+    }
+
+    /// Scope-aware twin of [`Self::register_module`].
+    pub fn register_module_scoped(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        payload: &[u8],
+    ) -> Result<Value> {
         self.install_rive_globals()?;
-        self.register_module_after_init(name, payload)
+        self.register_module_after_init(name, scope, payload)
     }
 
     /// Register a module while exposing the draw call's renderer factory to
@@ -463,26 +823,88 @@ impl ScriptVm {
         payload: &[u8],
         factory: &mut dyn RenderFactory,
     ) -> Result<Value> {
-        let bindings = self.renderer_bindings.clone();
-        bindings.with_factory_context(factory, || self.register_module(name, payload))
+        self.register_module_with_factory_scoped(name, ScopeKey::ROOT, payload, factory)
     }
 
-    fn register_module_after_init(&self, name: &str, payload: &[u8]) -> Result<Value> {
-        let cache = self.module_cache()?;
-        if let value @ (Value::Table(_) | Value::Function(_)) = cache.get::<Value>(name)? {
+    /// Scope-aware module registration with a renderer factory in context.
+    pub fn register_module_with_factory_scoped(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        payload: &[u8],
+        factory: &mut dyn RenderFactory,
+    ) -> Result<Value> {
+        let bindings = self.renderer_bindings.clone();
+        bindings.with_factory_context(factory, || {
+            self.register_module_scoped(name, scope, payload)
+        })
+    }
+
+    fn register_module_after_init(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        payload: &[u8],
+    ) -> Result<Value> {
+        let cache_key = Self::scoped_module_key(name, scope);
+        if let value @ (Value::Table(_) | Value::Function(_)) =
+            self.module_cache()?.get::<Value>(cache_key.as_str())?
+        {
             return Ok(value);
         }
-        let result: Value = self.load_script_asset_payload(name, payload)?.call(())?;
+        let chunkname = Self::readable_chunkname(name, scope);
+        self.set_chunkname_scope(&chunkname, scope);
+        let function = self.load_script_asset_payload(&chunkname, payload)?;
+        self.register_loaded_module(name, scope, function)
+    }
+
+    fn register_loaded_module(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        function: Function,
+    ) -> Result<Value> {
+        let cache = self.module_cache()?;
+        let cache_key = Self::scoped_module_key(name, scope);
+        if let value @ (Value::Table(_) | Value::Function(_)) =
+            cache.get::<Value>(cache_key.as_str())?
+        {
+            return Ok(value);
+        }
+        let display = Self::readable_chunkname(name, scope);
+        let result: Value = self.execute_loaded_module(&display, function)?;
         match &result {
             Value::Table(_) | Value::Function(_) => {}
             other => {
                 return Err(Error::runtime(format!(
-                    "module '{name}' must return a table or function, got {other:?}"
+                    "module '{display}' must return a table or function, got {other:?}"
                 )));
             }
         }
-        cache.set(name, result.clone())?;
+        cache.set(cache_key, result.clone())?;
         Ok(result)
+    }
+
+    /// Compile and register a source module. Runtime `.riv` execution uses the
+    /// bytecode methods; this source entry point supports editor/tooling flows
+    /// and conformance tests with the identical scope machinery.
+    pub fn register_source_module_scoped(
+        &self,
+        name: &str,
+        scope: ScopeKey,
+        source: &str,
+    ) -> Result<Value> {
+        self.install_rive_globals()?;
+        let cache_key = Self::scoped_module_key(name, scope);
+        if let value @ (Value::Table(_) | Value::Function(_)) =
+            self.module_cache()?.get::<Value>(cache_key.as_str())?
+        {
+            return Ok(value);
+        }
+        let chunkname = Self::readable_chunkname(name, scope);
+        self.set_chunkname_scope(&chunkname, scope);
+        let function = self.lua.load(source).set_name(&chunkname).into_function()?;
+        self.register_loaded_module(name, scope, function)
     }
 
     /// Register a batch of modules, retrying until a pass makes no progress
@@ -493,13 +915,29 @@ impl ScriptVm {
         &self,
         modules: impl IntoIterator<Item = (&'a str, &'a [u8])>,
     ) -> Vec<(&'a str, Error)> {
-        let mut pending: Vec<(&str, &[u8])> = modules.into_iter().collect();
+        self.perform_scoped_registration(
+            modules
+                .into_iter()
+                .map(|(name, payload)| (name, ScopeKey::ROOT, payload)),
+        )
+        .into_iter()
+        .map(|(name, _, error)| (name, error))
+        .collect()
+    }
+
+    /// Scope-aware registration retry loop. A missing dependency may become
+    /// available in a later pass, including under a different library pin.
+    pub fn perform_scoped_registration<'a>(
+        &self,
+        modules: impl IntoIterator<Item = (&'a str, ScopeKey, &'a [u8])>,
+    ) -> Vec<(&'a str, ScopeKey, Error)> {
+        let mut pending: Vec<(&str, ScopeKey, &[u8])> = modules.into_iter().collect();
         loop {
             let mut failures = Vec::new();
             let before = pending.len();
-            for (name, payload) in pending {
-                if let Err(error) = self.register_module(name, payload) {
-                    failures.push((name, payload, error));
+            for (name, scope, payload) in pending {
+                if let Err(error) = self.register_module_scoped(name, scope, payload) {
+                    failures.push((name, scope, payload, error));
                 }
             }
             if failures.is_empty() {
@@ -509,12 +947,12 @@ impl ScriptVm {
                 // No progress this pass: report what is left.
                 return failures
                     .into_iter()
-                    .map(|(name, _, error)| (name, error))
+                    .map(|(name, scope, _, error)| (name, scope, error))
                     .collect();
             }
             pending = failures
                 .into_iter()
-                .map(|(name, payload, _)| (name, payload))
+                .map(|(name, scope, payload, _)| (name, scope, payload))
                 .collect();
         }
     }
@@ -535,6 +973,9 @@ impl ScriptVm {
             table,
             self.renderer_bindings.clone(),
             Rc::new(RefCell::new(None)),
+            None,
+            Rc::new(Cell::new(false)),
+            Vec::new(),
             None,
         )
     }
@@ -580,7 +1021,8 @@ fn install_vector_global(lua: &Lua) -> Result<()> {
         lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
             let x = lhs.x() - rhs.x();
             let y = lhs.y() - rhs.y();
-            Ok((x * x + y * y).sqrt())
+            let z = lhs.z() - rhs.z();
+            Ok((x * x + y * y + z * z).sqrt())
         })?,
     )?;
     vector.set(
@@ -588,14 +1030,13 @@ fn install_vector_global(lua: &Lua) -> Result<()> {
         lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
             let x = lhs.x() - rhs.x();
             let y = lhs.y() - rhs.y();
-            Ok(x * x + y * y)
+            let z = lhs.z() - rhs.z();
+            Ok(x * x + y * y + z * z)
         })?,
     )?;
     vector.set(
         "dot",
-        lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
-            Ok(lhs.x() * rhs.x() + lhs.y() * rhs.y())
-        })?,
+        lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| Ok(vector_dot3(lhs, rhs)))?,
     )?;
     vector.set(
         "cross",
@@ -604,12 +1045,22 @@ fn install_vector_global(lua: &Lua) -> Result<()> {
         })?,
     )?;
     vector.set(
+        "cross3",
+        lua.create_function(|_, (a, b): (LuaVector, LuaVector)| {
+            Ok(LuaVector::new(
+                a.y() * b.z() - a.z() * b.y(),
+                a.z() * b.x() - a.x() * b.z(),
+                a.x() * b.y() - a.y() * b.x(),
+            ))
+        })?,
+    )?;
+    vector.set(
         "scaleAndAdd",
         lua.create_function(|_, (a, b, scale): (LuaVector, LuaVector, f32)| {
             Ok(LuaVector::new(
                 a.x() + b.x() * scale,
                 a.y() + b.y() * scale,
-                0.0,
+                a.z() + b.z() * scale,
             ))
         })?,
     )?;
@@ -619,7 +1070,7 @@ fn install_vector_global(lua: &Lua) -> Result<()> {
             Ok(LuaVector::new(
                 a.x() - b.x() * scale,
                 a.y() - b.y() * scale,
-                0.0,
+                a.z() - b.z() * scale,
             ))
         })?,
     )?;
@@ -627,15 +1078,27 @@ fn install_vector_global(lua: &Lua) -> Result<()> {
         "lerp",
         lua.create_function(|_, (lhs, rhs, factor): (LuaVector, LuaVector, f32)| {
             Ok(LuaVector::new(
-                lhs.x() + (rhs.x() - lhs.x()) * factor,
-                lhs.y() + (rhs.y() - lhs.y()) * factor,
-                0.0,
+                vector_lerp_component(lhs.x(), rhs.x(), factor),
+                vector_lerp_component(lhs.y(), rhs.y(), factor),
+                vector_lerp_component(lhs.z(), rhs.z(), factor),
             ))
         })?,
     )?;
     vector.set(
         "xy",
-        lua.create_function(|_, (x, y): (f32, f32)| Ok(LuaVector::new(x, y, 0.0)))?,
+        lua.create_function(|_, (x, y): (Option<f32>, Option<f32>)| {
+            Ok(LuaVector::new(x.unwrap_or(0.0), y.unwrap_or(0.0), 0.0))
+        })?,
+    )?;
+    vector.set(
+        "xyz",
+        lua.create_function(|_, (x, y, z): (Option<f32>, Option<f32>, Option<f32>)| {
+            Ok(LuaVector::new(
+                x.unwrap_or(0.0),
+                y.unwrap_or(0.0),
+                z.unwrap_or(0.0),
+            ))
+        })?,
     )?;
     vector.set(
         "origin",
@@ -643,27 +1106,41 @@ fn install_vector_global(lua: &Lua) -> Result<()> {
     )?;
     vector.set(
         "length",
-        lua.create_function(|_, value: LuaVector| {
-            Ok((value.x() * value.x() + value.y() * value.y()).sqrt())
-        })?,
+        lua.create_function(|_, value: LuaVector| Ok(vector_dot3(value, value).sqrt()))?,
     )?;
     vector.set(
         "lengthSquared",
-        lua.create_function(|_, value: LuaVector| {
-            Ok(value.x() * value.x() + value.y() * value.y())
-        })?,
+        lua.create_function(|_, value: LuaVector| Ok(vector_dot3(value, value)))?,
     )?;
     vector.set(
         "normalized",
         lua.create_function(|_, value: LuaVector| {
-            let length_squared = value.x() * value.x() + value.y() * value.y();
+            let length_squared = vector_dot3(value, value);
             let scale = if length_squared > 0.0 {
                 1.0 / length_squared.sqrt()
             } else {
                 1.0
             };
-            Ok(LuaVector::new(value.x() * scale, value.y() * scale, 0.0))
+            Ok(LuaVector::new(
+                value.x() * scale,
+                value.y() * scale,
+                value.z() * scale,
+            ))
         })?,
+    )?;
+    vector.set(
+        "writeToBuffer",
+        lua.create_function(|_, (value, buffer, offset): (LuaVector, LuaBuffer, i64)| {
+            write_vector_buffer(value, &buffer, offset, None, "writeToBuffer")
+        })?,
+    )?;
+    vector.set(
+        "writeVec4",
+        lua.create_function(
+            |_, (value, buffer, offset, w): (LuaVector, LuaBuffer, i64, f32)| {
+                write_vector_buffer(value, &buffer, offset, Some(w), "writeVec4")
+            },
+        )?,
     )?;
 
     let metatable = lua.create_table();
@@ -680,8 +1157,127 @@ fn install_vector_global(lua: &Lua) -> Result<()> {
         )?,
     )?;
     vector.set_metatable(Some(metatable))?;
+
+    // Rive replaces Luau's built-in vector metatable so instance syntax
+    // (`value:length()`) reaches the same bindings as `Vector.length(value)`.
+    // An __index callback also preserves axis and numeric component access.
+    let methods = vector.clone();
+    let value_metatable = lua.create_table();
+    value_metatable.set(
+        "__index",
+        lua.create_function(move |_, (value, key): (LuaVector, Value)| {
+            if let Some(component) = vector_component(value, &key)? {
+                return Ok(Value::Number(component as f64));
+            }
+
+            if let Value::String(name) = &key {
+                let name = name.to_str()?;
+                if matches!(
+                    name.as_str(),
+                    "length"
+                        | "lengthSquared"
+                        | "normalized"
+                        | "distance"
+                        | "distanceSquared"
+                        | "dot"
+                        | "lerp"
+                        | "writeToBuffer"
+                        | "writeVec4"
+                ) {
+                    let method: Value = methods.get(name.as_str())?;
+                    if !matches!(method, Value::Nil) {
+                        return Ok(method);
+                    }
+                }
+            }
+
+            Err(Error::runtime(format!(
+                "'{}' is not a valid index of Vector",
+                vector_index_name(&key)
+            )))
+        })?,
+    )?;
+    value_metatable.set_readonly(true);
+    lua.set_type_metatable::<LuaVector>(Some(value_metatable));
+
     vector.set_readonly(true);
     lua.globals().set("Vector", vector)
+}
+
+#[inline]
+fn vector_dot3(lhs: LuaVector, rhs: LuaVector) -> f32 {
+    lhs.x() * rhs.x() + lhs.y() * rhs.y() + lhs.z() * rhs.z()
+}
+
+#[inline]
+fn vector_lerp_component(a: f32, b: f32, factor: f32) -> f32 {
+    if factor == 1.0 {
+        b
+    } else {
+        a + (b - a) * factor
+    }
+}
+
+fn write_vector_buffer(
+    value: LuaVector,
+    buffer: &LuaBuffer,
+    offset: i64,
+    w: Option<f32>,
+    method: &'static str,
+) -> Result<()> {
+    let byte_len = if w.is_some() { 16 } else { 12 };
+    let error = || Error::runtime(format!("Vector:{method} offset out of range"));
+    let offset = usize::try_from(offset).map_err(|_| error())?;
+    if offset > buffer.len().saturating_sub(byte_len) || buffer.len() < byte_len {
+        return Err(error());
+    }
+
+    let mut bytes = [0_u8; 16];
+    for (index, component) in [value.x(), value.y(), value.z()].into_iter().enumerate() {
+        let start = index * 4;
+        bytes[start..start + 4].copy_from_slice(&component.to_ne_bytes());
+    }
+    if let Some(w) = w {
+        bytes[12..16].copy_from_slice(&w.to_ne_bytes());
+    }
+    buffer.write_bytes(offset, &bytes[..byte_len]);
+    Ok(())
+}
+
+fn vector_component(value: LuaVector, key: &Value) -> Result<Option<f32>> {
+    let index = match key {
+        Value::String(name) => match name.to_str()?.as_str() {
+            "x" | "1" => Some(0),
+            "y" | "2" => Some(1),
+            "z" | "3" => Some(2),
+            _ => None,
+        },
+        Value::Integer(1) => Some(0),
+        Value::Integer(2) => Some(1),
+        Value::Integer(3) => Some(2),
+        Value::Number(number) if *number == 1.0 => Some(0),
+        Value::Number(number) if *number == 2.0 => Some(1),
+        Value::Number(number) if *number == 3.0 => Some(2),
+        _ => None,
+    };
+    Ok(index.map(|index| [value.x(), value.y(), value.z()][index]))
+}
+
+fn vector_index_name(key: &Value) -> String {
+    match key {
+        Value::String(value) => value
+            .to_str()
+            .unwrap_or_else(|_| "<non-utf8 string>".to_owned()),
+        other => format!("{other:?}"),
+    }
+}
+
+fn install_math_fround(lua: &Lua) -> Result<()> {
+    let math: Table = lua.globals().get("math")?;
+    math.set(
+        "fround",
+        lua.create_function(|_, value: f64| Ok(f64::from(value as f32)))?,
+    )
 }
 
 impl RuntimeScriptingVm for ScriptVm {
@@ -707,17 +1303,21 @@ impl RuntimeScriptingVm for ScriptVm {
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         ScriptVm::install_rive_globals(self).map_err(script_error)?;
-        let generator: Function = self
+        let chunk = self
             .load_script_asset_payload(name, payload)
-            .map_err(script_error)?
-            .call(())
+            .map_err(script_error)?;
+        let generator: Function = self
+            .execute_loaded_module(name, chunk)
             .map_err(script_error)?;
         let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
+        let context_missing_requested_data = Rc::new(Cell::new(false));
+        let context_parent_view_models = self.default_context_parent_view_models.clone();
         let context = self
             .lua
             .create_userdata(ScriptedContext::new(
                 Rc::clone(&context_view_model),
-                self.default_context_parent_view_models.clone(),
+                context_parent_view_models.clone(),
+                Rc::clone(&context_missing_requested_data),
             ))
             .map_err(script_error)?;
         let instance: Table = generator.call(context.clone()).map_err(script_error)?;
@@ -726,7 +1326,14 @@ impl RuntimeScriptingVm for ScriptVm {
             self.renderer_bindings.clone(),
             context_view_model,
             Some(context),
+            context_missing_requested_data,
+            context_parent_view_models,
+            Some(generator),
         )))
+    }
+
+    fn advance_detached_view_models(&mut self) -> bool {
+        ScriptVm::advance_detached_view_models(self)
     }
 }
 
@@ -754,6 +1361,36 @@ impl ScriptInstance for LuaScriptInstance {
         script_value_from_lua(value).map_err(script_error)
     }
 
+    fn call_listener_action(
+        &mut self,
+        invocation: ScriptListenerInvocation,
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<(), ScriptError> {
+        let perform_action: Value = self.table.get("performAction").map_err(script_error)?;
+        if let Value::Function(function) = perform_action {
+            let lua = self.table.lua();
+            let invocation = lua
+                .create_userdata(ScriptedInvocation::new(invocation))
+                .map_err(script_error)?;
+            let _: () = function
+                .call((self.table.clone(), invocation))
+                .map_err(script_error)?;
+            return Ok(());
+        }
+
+        let perform: Value = self.table.get("perform").map_err(script_error)?;
+        if let Value::Function(function) = perform {
+            let lua = self.table.lua();
+            let pointer = lua
+                .create_userdata(ScriptedPointerEvent::new(invocation))
+                .map_err(script_error)?;
+            let _: () = function
+                .call((self.table.clone(), pointer))
+                .map_err(script_error)?;
+        }
+        Ok(())
+    }
+
     fn call_method_with_factory(
         &mut self,
         method: ScriptMethod,
@@ -771,10 +1408,82 @@ impl ScriptInstance for LuaScriptInstance {
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<bool, ScriptError> {
         let bindings = self.renderer_bindings.clone();
-        bindings.with_factory_context(factory, || {
-            let value = self.call_method_value(ScriptMethod::Init, &[])?;
-            Ok(!matches!(value, Value::Nil | Value::Boolean(false)))
-        })
+        let result = bindings.with_factory_context(factory, || {
+            let missing_before = self.context_missing_requested_data.replace(false);
+            let value = self.call_method_value(ScriptMethod::Init, &[]);
+            let missing_during = self.context_missing_requested_data.replace(false);
+            let value = value?;
+            Ok(!missing_before
+                && !missing_during
+                && !matches!(value, Value::Nil | Value::Boolean(false)))
+        });
+        match result {
+            Ok(initialized) => {
+                self.user_init_done = initialized;
+                self.init_retry_requires_recreation = !initialized && self.generator.is_some();
+                Ok(initialized)
+            }
+            Err(error) => {
+                self.user_init_done = false;
+                self.init_retry_requires_recreation = self.generator.is_some();
+                Err(error)
+            }
+        }
+    }
+
+    fn user_init_pending(&self) -> std::result::Result<bool, ScriptError> {
+        if self.user_init_done {
+            return Ok(false);
+        }
+        let value: Value = self
+            .table
+            .get(ScriptMethod::Init.as_str())
+            .map_err(script_error)?;
+        Ok(matches!(value, Value::Function(_)))
+    }
+
+    fn invalidate_for_init_retry(&mut self) {
+        self.user_init_done = false;
+        self.init_retry_requires_recreation = self.generator.is_some();
+    }
+
+    fn prepare_init_retry_with_factory(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<(), ScriptError> {
+        if !self.init_retry_requires_recreation {
+            return Ok(());
+        }
+        let Some(generator) = self.generator.clone() else {
+            self.context_missing_requested_data.set(false);
+            self.init_retry_requires_recreation = false;
+            return Ok(());
+        };
+
+        let lua = self.table.lua();
+        let context_view_model = Rc::clone(&self.context_view_model);
+        let context_parent_view_models = self.context_parent_view_models.clone();
+        let bindings = self.renderer_bindings.clone();
+        let (table, context, missing_requested_data) =
+            bindings.with_factory_context(factory, || {
+                let missing_requested_data = Rc::new(Cell::new(false));
+                let context = lua
+                    .create_userdata(ScriptedContext::new(
+                        context_view_model,
+                        context_parent_view_models,
+                        Rc::clone(&missing_requested_data),
+                    ))
+                    .map_err(script_error)?;
+                let table = generator.call(context.clone()).map_err(script_error)?;
+                Ok((table, context, missing_requested_data))
+            })?;
+
+        self.table = table;
+        self.context = Some(context);
+        self.context_missing_requested_data = missing_requested_data;
+        self.user_init_done = false;
+        self.init_retry_requires_recreation = false;
+        Ok(())
     }
 
     fn call_path_effect_update(
@@ -890,4 +1599,172 @@ fn script_value_from_lua(value: Value) -> Result<ScriptValue> {
             )));
         }
     })
+}
+
+#[cfg(test)]
+mod context_init_tests {
+    use super::*;
+    use nuxie_render_api::NullFactory;
+    use nuxie_runtime::NoopScriptHost;
+
+    #[test]
+    fn protected_host_callback_errors_remain_catchable() {
+        let lua = Lua::new();
+        let host_error = lua
+            .create_function(|_, (): ()| -> Result<()> {
+                Err(Error::runtime("expected host error"))
+            })
+            .expect("host callback");
+        lua.globals()
+            .set("hostError", host_error)
+            .expect("host callback global");
+
+        let (ok, message): (bool, String) = lua
+            .load("return pcall(hostError)")
+            .eval()
+            .expect("pcall catches the host error");
+
+        assert!(!ok);
+        assert_eq!(message, "runtime error: expected host error");
+    }
+
+    #[test]
+    fn registered_protocol_chunks_keep_their_writable_globals_isolated() {
+        let vm = ScriptVm::new();
+        vm.install_rive_globals().expect("Rive globals");
+        let first_chunk = vm
+            .load(
+                "first",
+                r#"
+                CollisionValue = "first"
+                return function()
+                    return { value = CollisionValue }
+                end
+                "#,
+            )
+            .expect("first chunk");
+        let second_chunk = vm
+            .load(
+                "second",
+                r#"
+                CollisionValue = "second"
+                return function()
+                    return { value = CollisionValue }
+                end
+                "#,
+            )
+            .expect("second chunk");
+
+        let first: Function = vm
+            .execute_loaded_module("first", first_chunk)
+            .expect("register first protocol");
+        let second: Function = vm
+            .execute_loaded_module("second", second_chunk)
+            .expect("register second protocol");
+        let first_instance: Table = first.call(()).expect("instantiate first protocol");
+        let second_instance: Table = second.call(()).expect("instantiate second protocol");
+
+        assert_eq!(first_instance.get::<String>("value").unwrap(), "first");
+        assert_eq!(second_instance.get::<String>("value").unwrap(), "second");
+        assert!(matches!(vm.global("CollisionValue").unwrap(), Value::Nil));
+    }
+
+    #[test]
+    fn registered_utility_modules_keep_their_writable_globals_isolated() {
+        let vm = ScriptVm::new();
+        let first = vm
+            .register_source_module_scoped(
+                "first",
+                ScopeKey::ROOT,
+                r#"
+                CollisionValue = "first"
+                return { read = function() return CollisionValue end }
+                "#,
+            )
+            .expect("register first module");
+        let second = vm
+            .register_source_module_scoped(
+                "second",
+                ScopeKey::ROOT,
+                r#"
+                CollisionValue = "second"
+                return { read = function() return CollisionValue end }
+                "#,
+            )
+            .expect("register second module");
+        let Value::Table(first) = first else {
+            panic!("first module did not return a table");
+        };
+        let Value::Table(second) = second else {
+            panic!("second module did not return a table");
+        };
+        let first_read: Function = first.get("read").unwrap();
+        let second_read: Function = second.get("read").unwrap();
+
+        assert_eq!(first_read.call::<String>(()).unwrap(), "first");
+        assert_eq!(second_read.call::<String>(()).unwrap(), "second");
+    }
+
+    #[test]
+    fn failed_init_recreates_the_script_lifetime_before_retry() {
+        let lua = Lua::new();
+        let frame_context = ScriptViewModelFrameContext::default();
+        lua.set_app_data(frame_context.clone());
+        lua.globals()
+            .set("generations", 0)
+            .expect("generation global");
+        let generator: Function = lua
+            .load(
+                r#"
+                return function()
+                    generations += 1
+                    return {
+                        generation = generations,
+                        init = function() return true end,
+                    }
+                end
+                "#,
+            )
+            .eval()
+            .expect("script generator");
+        let missing_requested_data = Rc::new(Cell::new(false));
+        let context_view_model = Rc::new(RefCell::new(None));
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                Rc::clone(&context_view_model),
+                Vec::new(),
+                Rc::clone(&missing_requested_data),
+            ))
+            .expect("scripted context");
+        let table: Table = generator.call(context.clone()).expect("script table");
+        let mut instance = LuaScriptInstance::with_renderer_bindings(
+            table,
+            RendererBindings::new(frame_context),
+            context_view_model,
+            Some(context),
+            missing_requested_data,
+            Vec::new(),
+            Some(generator),
+        );
+        let mut factory = NullFactory::new();
+        let mut host = NoopScriptHost;
+
+        instance.context_missing_requested_data.set(true);
+        assert!(
+            !instance
+                .call_init_with_factory(&mut host, &mut factory)
+                .expect("cold init")
+        );
+        assert!(instance.user_init_pending().expect("pending cold init"));
+        instance
+            .prepare_init_retry_with_factory(&mut factory)
+            .expect("recreate script lifetime");
+        assert_eq!(instance.table.get::<i64>("generation").unwrap(), 2);
+        assert!(
+            instance
+                .call_init_with_factory(&mut host, &mut factory)
+                .expect("bound retry")
+        );
+        assert!(!instance.user_init_pending().expect("completed retry"));
+    }
 }

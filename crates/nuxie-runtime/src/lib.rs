@@ -75,7 +75,9 @@ pub(crate) use state_machine::{
     StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
     StateMachineTransitionDurationInstance,
 };
-pub use text::{embedded_font_is_parseable, static_text_support_error};
+pub use text::{
+    embedded_font_is_parseable, embedded_fonts_are_parseable, static_text_support_error,
+};
 pub use view_model::{
     RuntimeDataContext, RuntimeDataContextInstanceRef, RuntimeDataContextLookupKind,
     RuntimeDataContextLookupReport, RuntimeDataContextValueRef,

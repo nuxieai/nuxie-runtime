@@ -11,7 +11,7 @@ use nuxie_graph::{
 use nuxie_render_api::{Aabb as RenderAabb, Vec2D as RenderVec2D};
 use nuxie_schema::definition_by_name;
 use skrifa::instance::{LocationRef, Size};
-use skrifa::outline::pen::PathStyle;
+use skrifa::outline::pen::{NullPen, PathStyle};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::TableProvider;
 use skrifa::setting::VariationSetting;
@@ -55,7 +55,49 @@ const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
 /// committed scene cannot defer malformed-font failure until layout or draw.
 #[must_use]
 pub fn embedded_font_is_parseable(font_bytes: &[u8]) -> bool {
-    HarfFontRef::new(font_bytes).is_ok() && SkrifaFontRef::new(font_bytes).is_ok()
+    if HarfFontRef::new(font_bytes).is_err() {
+        return false;
+    }
+
+    std::panic::catch_unwind(|| {
+        let Ok(font) = SkrifaFontRef::new(font_bytes) else {
+            return false;
+        };
+        let Ok(maxp) = font.maxp() else {
+            return false;
+        };
+        let outlines = font.outline_glyphs();
+        for glyph_index in 0..u32::from(maxp.num_glyphs()) {
+            let Some(outline) = outlines.get(GlyphId::new(glyph_index)) else {
+                continue;
+            };
+            if outline
+                .draw(
+                    DrawSettings::unhinted(Size::unscaled(), LocationRef::default()),
+                    &mut NullPen,
+                )
+                .is_err()
+            {
+                return false;
+            }
+        }
+        true
+    })
+    .unwrap_or(false)
+}
+
+/// Whether every in-band `FontAsset` can be safely consumed by the text
+/// backends. Hosted font assets without in-band contents remain valid and are
+/// checked when their bytes are attached.
+#[must_use]
+pub fn embedded_fonts_are_parseable(runtime: &RuntimeFile) -> bool {
+    runtime
+        .file_assets()
+        .into_iter()
+        .filter(|asset| asset.type_name == "FontAsset")
+        .all(|asset| {
+            embedded_file_asset_bytes(runtime, asset.id).is_none_or(embedded_font_is_parseable)
+        })
 }
 
 pub fn static_text_support_error(
@@ -5926,7 +5968,40 @@ mod tests {
         decoded
     }
 
+    fn malformed_outline_font_bytes() -> Vec<u8> {
+        let mut bytes = fixture_font_bytes();
+        let table_count = usize::from(u16::from_be_bytes([bytes[4], bytes[5]]));
+        let glyf_offset = (0..table_count)
+            .map(|index| 12 + index * 16)
+            .find_map(|record| {
+                (bytes.get(record..record + 4) == Some(b"glyf")).then(|| {
+                    u32::from_be_bytes([
+                        bytes[record + 8],
+                        bytes[record + 9],
+                        bytes[record + 10],
+                        bytes[record + 11],
+                    ]) as usize
+                })
+            })
+            .expect("fixture has a glyf table");
+        assert_ne!(
+            i16::from_be_bytes([bytes[glyf_offset], bytes[glyf_offset + 1]]),
+            0,
+            "fixture glyph zero must have contours before corruption"
+        );
+        bytes[glyf_offset..glyf_offset + 2].copy_from_slice(&0i16.to_be_bytes());
+        bytes[glyf_offset + 10..glyf_offset + 12].copy_from_slice(&0u16.to_be_bytes());
+        bytes
+    }
+
     fn baseline_origin_text_runtime_with_sizing(sizing_value: u64) -> (RuntimeFile, GraphFile) {
+        baseline_origin_text_runtime_with_sizing_and_font(sizing_value, fixture_font_bytes())
+    }
+
+    fn baseline_origin_text_runtime_with_sizing_and_font(
+        sizing_value: u64,
+        font_bytes: Vec<u8>,
+    ) -> (RuntimeFile, GraphFile) {
         let records = vec![
             authoring_record("Backboard", Vec::new()),
             authoring_record(
@@ -5938,7 +6013,7 @@ mod tests {
                 vec![property(
                     "FileAssetContents",
                     "bytes",
-                    AuthoringValue::Bytes(fixture_font_bytes()),
+                    AuthoringValue::Bytes(font_bytes),
                 )],
             ),
             authoring_record(
@@ -5992,6 +6067,28 @@ mod tests {
         let graph =
             GraphFile::from_runtime_file(&runtime).expect("baseline-origin Text graph builds");
         (runtime, graph)
+    }
+
+    #[test]
+    fn embedded_font_validation_rejects_outline_reader_panics() {
+        let malformed = malformed_outline_font_bytes();
+        assert!(
+            HarfFontRef::new(&malformed).is_ok() && SkrifaFontRef::new(&malformed).is_ok(),
+            "the shallow parsers must accept the regression font"
+        );
+        assert!(matches!(
+            std::panic::catch_unwind(|| embedded_font_is_parseable(&malformed)),
+            Ok(false)
+        ));
+    }
+
+    #[test]
+    fn embedded_font_catalog_rejects_a_malformed_in_band_font() {
+        let (runtime, _) = baseline_origin_text_runtime_with_sizing_and_font(
+            TEXT_SIZING_FIXED,
+            malformed_outline_font_bytes(),
+        );
+        assert!(!embedded_fonts_are_parseable(&runtime));
     }
 
     fn baseline_origin_text_runtime() -> (RuntimeFile, GraphFile) {

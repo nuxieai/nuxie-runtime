@@ -5,8 +5,8 @@ current evidence, open gates, and decisions needed by the next session.
 
 **State: R0-R5 and the post-R exactness follow-up are complete.** Phase S
 manual cycle 2 through upstream `d788e8ec` is complete. The write-capable
-worker's two-clean-cycle trust threshold is satisfied; it remains paused
-pending a standing approval and publication of the closeout to `origin/main`.
+worker is active after satisfying its two-clean-cycle trust threshold. With no
+standing approvals, it fails closed and may only report blockers.
 
 ## Metric
 

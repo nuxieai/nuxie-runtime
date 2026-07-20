@@ -431,9 +431,10 @@ workflow in `docs/upstream-sync-map.md` (`/sync-upstream` command): triage
 new upstream commits with impact/risk/effort ratings, a HARD user-approval
 gate on every port decision, then port-and-advance-the-pin with the golden
 ratchet as proof of completeness. The read-only drift scout is active. The
-write-capable worker's two-clean-cycle trust threshold is satisfied, but it
-remains paused until a standing approval is recorded. Added 2026-07-09 by
-user decision; threshold reached in manual cycle 2 on 2026-07-19.
+write-capable worker is active after satisfying its two-clean-cycle trust
+threshold; with no standing approvals, it fails closed and may only report
+blockers. Added 2026-07-09 by user decision; threshold reached and worker
+activated after manual cycle 2 on 2026-07-19.
 
 ## Phase R: Renderer Port (separate map)
 

@@ -4,9 +4,9 @@ Companion to `docs/porting-map-v2.md`. Defines the recurring workflow that
 keeps Nuxie runtime current with `rive-app/rive-runtime` after the V2/M8
 migration completes. M8, renderer Phase R, and two clean manual Phase S cycles
 are complete. A read-only weekly drift scout is active. The write-capable
-parity worker has met its trust-count threshold but remains paused until an
-applicable standing approval is recorded and this closeout reaches
-`origin/main`.
+parity worker is also active after meeting its trust-count threshold. With no
+standing approvals recorded, its prompt fails closed and permits blocker-only
+reporting rather than repository changes.
 
 ## Why this works here
 
@@ -127,12 +127,13 @@ does not edit a checkout, port code, or open a pull request.
 
 The write-capable Phase S parity worker may be enabled only after two clean
 manual cycles have been recorded. That trust-count threshold is now met, but
-the worker remains paused while Standing approvals is `none`. When enabled,
-it may run steps 1-2 and act only on standing approvals recorded below; it
-never infers approval from an earlier cycle and never merges its own pull
-request. The user may pre-approve categories (for example, "auto-port
-critical-fix + schema-mechanical with green ratchet"); record the decision
-here before the worker is enabled.
+Standing approvals remains `none`. The worker is active, but its prompt fails
+closed and makes no repository changes when no applicable approval exists. It
+may run steps 1-2 and act only on standing approvals recorded below; it never
+infers approval from an earlier cycle and never merges its own pull request.
+The user may pre-approve categories (for example, "auto-port critical-fix +
+schema-mechanical with green ratchet"); record the decision here before the
+worker may act on that category.
 
 ## State
 
@@ -152,9 +153,9 @@ here before the worker is enabled.
   surfaces remain explicitly deferred for the next inventory:
   `deferred-2026-07-19-luau-engine` and `deferred-2026-07-19-ore-gpu`, both at
   staleness 1 (full evidence and exit criteria are in the cycle triage). The
-  write-capable Phase S worker's trust-count threshold is satisfied; it
-  remains paused pending a standing approval and publication of this state to
-  `origin/main`.
+  write-capable Phase S worker is active after satisfying its trust-count
+  threshold. With Standing approvals at `none`, it remains fail-closed for
+  mutations and may only return a blocker report.
 - Current-revision pin registry (advance with each completed Phase S cycle):
   - `.github/workflows/ci.yml` top-level `RIVE_RUNTIME_REF`
   - `tools/fetch-test-assets.sh`

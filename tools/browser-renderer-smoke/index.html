@@ -31,7 +31,17 @@
 
       const status = document.querySelector("#status");
       try {
-        const forceFallback = new URLSearchParams(location.search).has("force-webgl2-fallback");
+        const search = new URLSearchParams(location.search);
+        const forceFallback = search.has("force-webgl2-fallback");
+        const forceCompatibility = search.has("force-webgpu-compatibility");
+        const forceNoSsbo = search.has("force-no-ssbo");
+        let compatibilityProbe = null;
+        if (forceFallback && forceCompatibility) {
+          throw new Error("browser smoke fallback modes are mutually exclusive");
+        }
+        if (forceNoSsbo && !forceCompatibility) {
+          throw new Error("force-no-ssbo requires force-webgpu-compatibility");
+        }
         if (forceFallback) {
           Object.defineProperty(navigator, "gpu", {
             configurable: true,
@@ -40,6 +50,96 @@
           document.querySelector("#webgpu-section").hidden = true;
           document.querySelector("#webgl2-section").hidden = true;
           document.querySelector("#fallback-section").hidden = false;
+        }
+        if (forceCompatibility) {
+          const gpu = navigator.gpu;
+          if (!gpu) {
+            throw new Error("forced Compatibility smoke requires WebGPU");
+          }
+          compatibilityProbe = {
+            featureLevelRequested: false,
+            advertisedVertexStorageLimit: null,
+            requestedVertexStorageLimit: null,
+          };
+          window.__compatibilityProbe = compatibilityProbe;
+          const requestAdapter = gpu.requestAdapter.bind(gpu);
+          const compatibilityGpu = new Proxy(gpu, {
+            get(target, property) {
+              if (property === "requestAdapter") {
+                return async (options = {}) => {
+                  // Force the renderer's first, Core-level admission attempt
+                  // to fail so its production Compatibility retry runs.
+                  if (options.featureLevel !== "compatibility") {
+                    throw new Error("forced Core WebGPU admission failure");
+                  }
+                  compatibilityProbe.featureLevelRequested = true;
+                  const adapter = await requestAdapter(options);
+                  if (!adapter) {
+                    return null;
+                  }
+                  const nativeLimits = Reflect.get(adapter, "limits", adapter);
+                  const nativeVertexStorageLimit = Reflect.get(
+                    nativeLimits,
+                    "maxStorageBuffersInVertexStage",
+                    nativeLimits,
+                  );
+                  const advertisedVertexStorageLimit = forceNoSsbo
+                    ? 0
+                    : nativeVertexStorageLimit;
+                  compatibilityProbe.advertisedVertexStorageLimit =
+                    advertisedVertexStorageLimit;
+                  const compatibilityLimits = new Proxy(nativeLimits, {
+                    get(target, property) {
+                      // Exercise the no-SSBO branch even on a Core-capable CI
+                      // GPU while retaining the browser's real remaining
+                      // Compatibility limits.
+                      if (property === "maxStorageBuffersInVertexStage") {
+                        return advertisedVertexStorageLimit;
+                      }
+                      return Reflect.get(target, property, target);
+                    },
+                  });
+                  return new Proxy(adapter, {
+                    get(target, property) {
+                      if (property === "limits") {
+                        return compatibilityLimits;
+                      }
+                      if (property === "requestDevice") {
+                        return async (descriptor = {}) => {
+                          const requiredLimits = descriptor.requiredLimits ?? {};
+                          const requested = Object.prototype.hasOwnProperty.call(
+                            requiredLimits,
+                            "maxStorageBuffersInVertexStage",
+                          )
+                            ? requiredLimits.maxStorageBuffersInVertexStage
+                            : undefined;
+                          compatibilityProbe.requestedVertexStorageLimit = requested;
+                          const expected = Number.isFinite(advertisedVertexStorageLimit)
+                            ? Math.min(4, advertisedVertexStorageLimit)
+                            : undefined;
+                          if (requested !== expected) {
+                            throw new Error(
+                              `renderer requested Compatibility vertex-storage limit ${requested}; expected ${expected}`,
+                            );
+                          }
+                          return target.requestDevice(descriptor);
+                        };
+                      }
+                      const value = Reflect.get(target, property, target);
+                      return typeof value === "function" ? value.bind(target) : value;
+                    },
+                  });
+                };
+              }
+              const value = Reflect.get(target, property, target);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          });
+          Object.defineProperty(navigator, "gpu", {
+            configurable: true,
+            value: compatibilityGpu,
+          });
+          document.querySelector("#webgl2-section").hidden = true;
         }
         await init();
         const streamCases = [
@@ -55,7 +155,9 @@
         ];
         const results = forceFallback
           ? [await run_backend(document.querySelector("#fallback"), "auto")]
-          : [
+          : forceCompatibility
+            ? [await run_backend(document.querySelector("#webgpu"), "webgpu")]
+            : [
               await run_backend(document.querySelector("#webgpu"), "webgpu"),
               await run_backend(document.querySelector("#webgl2"), "webgl2"),
             ];
@@ -70,7 +172,7 @@
             results.push("forced-webgpu=fail-closed");
           }
         }
-        if (!forceFallback) {
+        if (!forceFallback && !forceCompatibility) {
           for (const testCase of streamCases) {
             const { name, suite } = testCase;
             const label = testCase.reference ?? `${suite}-${name}`;
@@ -97,6 +199,27 @@
             document.querySelector("#unsupported"),
             document.querySelector("#abandoned"),
           ));
+        }
+        if (forceCompatibility) {
+          const expectedVertexStorageLimit = Number.isFinite(
+            compatibilityProbe.advertisedVertexStorageLimit,
+          )
+            ? Math.min(4, compatibilityProbe.advertisedVertexStorageLimit)
+            : undefined;
+          if (
+            !compatibilityProbe.featureLevelRequested ||
+            compatibilityProbe.requestedVertexStorageLimit !==
+              expectedVertexStorageLimit
+          ) {
+            throw new Error(
+              `Compatibility retry was incomplete: ${JSON.stringify(compatibilityProbe)}`,
+            );
+          }
+          results.push(
+            forceNoSsbo
+              ? "compatibility=selected vertex-storage-limit=0 polyfill=rendered"
+              : `compatibility=selected requested-vertex-storage-limit=${compatibilityProbe.requestedVertexStorageLimit} rendered`,
+          );
         }
         if (forceFallback && !results[0].includes("backend=webgl2 fallback=true")) {
           throw new Error(`automatic fallback selected the wrong backend: ${results[0]}`);

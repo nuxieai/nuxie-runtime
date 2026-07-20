@@ -67,6 +67,52 @@ impl Adapter {
         }
     }
 
+    /// Returns the browser WebGPU adapter's vertex-stage storage-buffer limit.
+    ///
+    /// `None` means the browser does not expose the Compatibility-mode limit
+    /// yet. The generic [`Limits::max_storage_buffers_per_shader_stage`] value
+    /// cannot be substituted: on a Compatibility device the vertex-stage
+    /// limit can be zero even when the generic adapter limit is nonzero.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this adapter is not using the browser WebGPU backend.
+    #[cfg(webgpu)]
+    pub fn webgpu_max_storage_buffers_in_vertex_stage(&self) -> Option<u32> {
+        self.inner.as_webgpu().max_storage_buffers_in_vertex_stage()
+    }
+
+    /// Requests a browser WebGPU device with an explicit vertex-stage
+    /// storage-buffer limit.
+    ///
+    /// Call [`Adapter::webgpu_max_storage_buffers_in_vertex_stage`] first and
+    /// do not request a value larger than the returned limit. This narrow API
+    /// exists until the per-stage Compatibility limits are represented by
+    /// [`Limits`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if this adapter is not using the browser WebGPU backend.
+    #[cfg(webgpu)]
+    pub fn request_device_with_max_storage_buffers_in_vertex_stage(
+        &self,
+        desc: &DeviceDescriptor<'_>,
+        max_storage_buffers_in_vertex_stage: u32,
+    ) -> impl Future<Output = Result<(Device, Queue), RequestDeviceError>> + WasmNotSend {
+        let device = self
+            .inner
+            .as_webgpu()
+            .request_device_with_max_storage_buffers_in_vertex_stage(
+                desc,
+                max_storage_buffers_in_vertex_stage,
+            );
+        async move {
+            device
+                .await
+                .map(|(device, queue)| (Device { inner: device }, Queue { inner: queue }))
+        }
+    }
+
     /// Create a wgpu [`Device`] and [`Queue`] from a wgpu-hal [`hal::OpenDevice`].
     ///
     /// # Safety

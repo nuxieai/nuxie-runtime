@@ -22,8 +22,7 @@ fn run() -> Result<(), String> {
 }
 
 fn run_single(options: &Options, target: &RunTarget) -> Result<(), String> {
-    let cpp = measure_runner("cpp", &options.cpp_runner, target, options)?;
-    let rust = measure_runner("rust", &options.rust_runner, target, options)?;
+    let (cpp, rust) = measure_runners(target, options)?;
 
     println!("perf-compare file={}", target.file.display());
     println!(
@@ -32,6 +31,7 @@ fn run_single(options: &Options, target: &RunTarget) -> Result<(), String> {
     );
     print_metric(options.runner_benchmark, options.benchmark_repeat);
     print_aggregate_mode(options.aggregate);
+    print_runner_order(options.runner_order);
     print_measurements("cpp", cpp.total);
     print_measurements("rust", rust.total);
     let file = FileResult {
@@ -74,9 +74,9 @@ fn run_corpus(options: &Options, corpus: &Path) -> Result<(), String> {
     );
     print_metric(options.runner_benchmark, options.benchmark_repeat);
     print_aggregate_mode(options.aggregate);
+    print_runner_order(options.runner_order);
     for target in &targets {
-        let cpp = measure_runner("cpp", &options.cpp_runner, target, options)?;
-        let rust = measure_runner("rust", &options.rust_runner, target, options)?;
+        let (cpp, rust) = measure_runners(target, options)?;
         let ratio = measurement_value(rust.total, options.aggregate).as_secs_f64()
             / measurement_value(cpp.total, options.aggregate).as_secs_f64();
         println!(
@@ -181,6 +181,10 @@ fn print_aggregate_mode(mode: AggregateMode) {
     println!("perf-compare aggregate={}", mode.as_str());
 }
 
+fn print_runner_order(order: RunnerOrder) {
+    println!("perf-compare runner_order={}", order.as_str());
+}
+
 /// Write the machine-readable report when `--json` was passed. Runs before
 /// the max-ratio gate so threshold failures still leave an artifact behind.
 fn write_json_report_if_requested(
@@ -212,6 +216,9 @@ fn render_json_report(options: &Options, files: &[FileResult], aggregate: &Aggre
     out.push(',');
     push_json_key(&mut out, "warmups");
     out.push_str(&options.warmups.to_string());
+    out.push(',');
+    push_json_key(&mut out, "runner_order");
+    push_json_string(&mut out, options.runner_order.as_str());
     out.push(',');
     if options.runner_benchmark {
         push_json_key(&mut out, "benchmark_repeat");
@@ -417,6 +424,7 @@ struct Options {
     mode: Mode,
     iterations: usize,
     warmups: usize,
+    runner_order: RunnerOrder,
     aggregate: AggregateMode,
     corpus_limit: Option<usize>,
     corpus_ids: Option<Vec<String>>,
@@ -437,6 +445,29 @@ enum Mode {
 enum AggregateMode {
     Median,
     Min,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RunnerOrder {
+    CppFirst,
+    RustFirst,
+}
+
+impl RunnerOrder {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "cpp-first" => Ok(Self::CppFirst),
+            "rust-first" => Ok(Self::RustFirst),
+            other => Err(format!("unknown runner order: {other}")),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::CppFirst => "cpp-first",
+            Self::RustFirst => "rust-first",
+        }
+    }
 }
 
 impl AggregateMode {
@@ -476,6 +507,7 @@ impl Options {
         let mut sample_count = 1usize;
         let mut iterations = 5usize;
         let mut warmups = 0usize;
+        let mut runner_order = RunnerOrder::CppFirst;
         let mut aggregate = AggregateMode::Median;
         let mut corpus_limit = None;
         let mut corpus_ids = None;
@@ -506,6 +538,7 @@ impl Options {
                 }
                 "--corpus-ids" => corpus_ids = Some(parse_csv_ids(&value(arg)?, "--corpus-ids")?),
                 "--aggregate" => aggregate = AggregateMode::parse(&value(arg)?)?,
+                "--runner-order" => runner_order = RunnerOrder::parse(&value(arg)?)?,
                 "--max-ratio" => max_ratio = Some(parse_ratio(&value(arg)?)?),
                 "--runner-benchmark" => runner_benchmark = true,
                 "--benchmark-repeat" => {
@@ -529,7 +562,7 @@ impl Options {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--aggregate median|min] [--corpus-limit N | --corpus-ids a,b] [--max-ratio N] [--runner-benchmark] [--benchmark-repeat N] [--json path] [--meta key=value ...] [--cpp-runner path] [--rust-runner path]"
+                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--runner-order cpp-first|rust-first] [--aggregate median|min] [--corpus-limit N | --corpus-ids a,b] [--max-ratio N] [--runner-benchmark] [--benchmark-repeat N] [--json path] [--meta key=value ...] [--cpp-runner path] [--rust-runner path]"
                     );
                     std::process::exit(0);
                 }
@@ -576,6 +609,7 @@ impl Options {
             mode,
             iterations,
             warmups,
+            runner_order,
             aggregate,
             corpus_limit,
             corpus_ids,
@@ -803,6 +837,24 @@ fn measure_runner(
         )?);
     }
     Ok(summarize_samples(&samples))
+}
+
+fn measure_runners(
+    target: &RunTarget,
+    options: &Options,
+) -> Result<(RunnerMeasurements, RunnerMeasurements), String> {
+    match options.runner_order {
+        RunnerOrder::CppFirst => {
+            let cpp = measure_runner("cpp", &options.cpp_runner, target, options)?;
+            let rust = measure_runner("rust", &options.rust_runner, target, options)?;
+            Ok((cpp, rust))
+        }
+        RunnerOrder::RustFirst => {
+            let rust = measure_runner("rust", &options.rust_runner, target, options)?;
+            let cpp = measure_runner("cpp", &options.cpp_runner, target, options)?;
+            Ok((cpp, rust))
+        }
+    }
 }
 
 fn summarize_samples(samples: &[RunSample]) -> RunnerMeasurements {
@@ -1280,6 +1332,8 @@ mod tests {
             "--runner-benchmark".to_owned(),
             "--benchmark-repeat".to_owned(),
             "11".to_owned(),
+            "--runner-order".to_owned(),
+            "rust-first".to_owned(),
         ])
         .expect("parse options");
 
@@ -1288,6 +1342,7 @@ mod tests {
         assert_eq!(options.max_ratio, Some(1.5));
         assert!(options.runner_benchmark);
         assert_eq!(options.benchmark_repeat, 11);
+        assert_eq!(options.runner_order, RunnerOrder::RustFirst);
     }
 
     #[test]
@@ -1336,6 +1391,18 @@ mod tests {
         ])
         .unwrap_err();
         assert!(error.contains("unknown aggregate mode"));
+    }
+
+    #[test]
+    fn rejects_unknown_runner_order() {
+        let error = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--runner-order".to_owned(),
+            "fastest-first".to_owned(),
+        ])
+        .unwrap_err();
+        assert!(error.contains("unknown runner order"));
     }
 
     #[test]
@@ -1828,6 +1895,7 @@ status = "exact"
         assert_valid_json(&report);
 
         assert!(report.contains("\"schema\":\"rive-perf-compare-json-v1\""));
+        assert!(report.contains("\"runner_order\":\"cpp-first\""));
         assert!(report.contains("\"metric\":\"runner_hot_loop_ms\""));
         // benchmark_repeat rides along whenever the hot-loop metric is used.
         assert!(report.contains("\"benchmark_repeat\":1"));

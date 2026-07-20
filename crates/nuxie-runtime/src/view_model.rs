@@ -1,6 +1,7 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use nuxie_binary::{
     RuntimeDataValue, RuntimeFile, RuntimeObject, RuntimeViewModel, RuntimeViewModelInstance,
@@ -1520,9 +1521,307 @@ pub struct RuntimeOwnedViewModelInstance {
     symbol_list_indices: Vec<RuntimeOwnedViewModelSymbolListIndex>,
     lists: Vec<RuntimeOwnedViewModelList>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
+    font_assets: Vec<RuntimeOwnedViewModelFontAsset>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
     view_models: Vec<RuntimeOwnedViewModelViewModel>,
+}
+
+/// Shared ownership for one mutable runtime-owned view-model instance.
+///
+/// C++ passes `rcp<ViewModelInstance>` through data contexts and scripting.
+/// Keeping the shared identity explicit here prevents a context clone or a
+/// script wrapper from silently forking the instance's mutable values.
+#[derive(Debug, Clone)]
+pub struct RuntimeOwnedViewModelHandle {
+    instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+}
+
+impl RuntimeOwnedViewModelHandle {
+    pub fn new(instance: RuntimeOwnedViewModelInstance) -> Self {
+        Self {
+            instance: Rc::new(RefCell::new(instance)),
+        }
+    }
+
+    pub fn borrow(&self) -> Ref<'_, RuntimeOwnedViewModelInstance> {
+        self.instance.borrow()
+    }
+
+    pub fn borrow_mut(&self) -> RefMut<'_, RuntimeOwnedViewModelInstance> {
+        self.instance.borrow_mut()
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.instance, &other.instance)
+    }
+
+    pub(crate) fn from_shared(instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>) -> Self {
+        Self { instance }
+    }
+
+    pub(crate) fn shared(&self) -> Rc<RefCell<RuntimeOwnedViewModelInstance>> {
+        Rc::clone(&self.instance)
+    }
+}
+
+impl From<RuntimeOwnedViewModelInstance> for RuntimeOwnedViewModelHandle {
+    fn from(instance: RuntimeOwnedViewModelInstance) -> Self {
+        Self::new(instance)
+    }
+}
+
+/// The ordered set of owned view-model instances visible to an artboard or
+/// state machine.
+///
+/// Rive resolves the main instance first, followed by global slots in file
+/// view-model order. A global slot is addressed by the declared global view
+/// model, independently of the view model that produced the occupying
+/// instance. That distinction is what permits a different view model to be
+/// installed as an override for a global slot.
+#[derive(Debug, Clone, Default)]
+pub struct RuntimeOwnedViewModelContext {
+    main: Option<RuntimeOwnedViewModelHandle>,
+    global_slots: BTreeMap<usize, RuntimeOwnedViewModelHandle>,
+}
+
+impl RuntimeOwnedViewModelContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_main(main: RuntimeOwnedViewModelInstance) -> Self {
+        Self::from_main_handle(RuntimeOwnedViewModelHandle::new(main))
+    }
+
+    pub fn from_main_handle(main: RuntimeOwnedViewModelHandle) -> Self {
+        Self {
+            main: Some(main),
+            global_slots: BTreeMap::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.main.is_none() && self.global_slots.is_empty()
+    }
+
+    pub fn main(&self) -> Option<Ref<'_, RuntimeOwnedViewModelInstance>> {
+        self.main.as_ref().map(RuntimeOwnedViewModelHandle::borrow)
+    }
+
+    pub fn main_mut(&self) -> Option<RefMut<'_, RuntimeOwnedViewModelInstance>> {
+        self.main
+            .as_ref()
+            .map(RuntimeOwnedViewModelHandle::borrow_mut)
+    }
+
+    pub fn main_handle(&self) -> Option<&RuntimeOwnedViewModelHandle> {
+        self.main.as_ref()
+    }
+
+    pub fn set_main(&mut self, main: RuntimeOwnedViewModelInstance) {
+        self.set_main_handle(RuntimeOwnedViewModelHandle::new(main));
+    }
+
+    pub fn set_main_handle(&mut self, main: RuntimeOwnedViewModelHandle) {
+        self.main = Some(main);
+    }
+
+    pub fn take_main(&mut self) -> Option<RuntimeOwnedViewModelHandle> {
+        self.main.take()
+    }
+
+    /// Returns instances in C++ `DataContext::viewModelInstances()` order:
+    /// main first, then globals by their file view-model slot.
+    pub fn instances(&self) -> impl Iterator<Item = Ref<'_, RuntimeOwnedViewModelInstance>> {
+        self.handles().map(RuntimeOwnedViewModelHandle::borrow)
+    }
+
+    pub fn handles(&self) -> impl Iterator<Item = &RuntimeOwnedViewModelHandle> {
+        self.main.iter().chain(self.global_slots.values())
+    }
+
+    pub fn global_slot(
+        &self,
+        view_model_index: usize,
+    ) -> Option<Ref<'_, RuntimeOwnedViewModelInstance>> {
+        self.global_slots
+            .get(&view_model_index)
+            .map(RuntimeOwnedViewModelHandle::borrow)
+    }
+
+    pub fn global_slot_mut(
+        &self,
+        view_model_index: usize,
+    ) -> Option<RefMut<'_, RuntimeOwnedViewModelInstance>> {
+        self.global_slots
+            .get(&view_model_index)
+            .map(RuntimeOwnedViewModelHandle::borrow_mut)
+    }
+
+    pub fn global_slot_handle(
+        &self,
+        view_model_index: usize,
+    ) -> Option<&RuntimeOwnedViewModelHandle> {
+        self.global_slots.get(&view_model_index)
+    }
+
+    pub fn global_named(
+        &self,
+        file: &RuntimeFile,
+        name: &str,
+    ) -> Option<Ref<'_, RuntimeOwnedViewModelInstance>> {
+        let slot = runtime_global_view_model_index_named(file, name)?;
+        self.global_slot(slot)
+    }
+
+    pub fn global_named_mut(
+        &self,
+        file: &RuntimeFile,
+        name: &str,
+    ) -> Option<RefMut<'_, RuntimeOwnedViewModelInstance>> {
+        let slot = runtime_global_view_model_index_named(file, name)?;
+        self.global_slot_mut(slot)
+    }
+
+    /// Installs `instance` into the named global slot. The instance's own view
+    /// model intentionally need not match the slot's declared view model.
+    pub fn set_global_named(
+        &mut self,
+        file: &RuntimeFile,
+        name: &str,
+        instance: RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        let Some(slot) = runtime_global_view_model_index_named(file, name) else {
+            return false;
+        };
+        self.global_slots
+            .insert(slot, RuntimeOwnedViewModelHandle::new(instance));
+        true
+    }
+
+    pub fn set_global_named_handle(
+        &mut self,
+        file: &RuntimeFile,
+        name: &str,
+        instance: RuntimeOwnedViewModelHandle,
+    ) -> bool {
+        let Some(slot) = runtime_global_view_model_index_named(file, name) else {
+            return false;
+        };
+        self.global_slots.insert(slot, instance);
+        true
+    }
+
+    pub fn set_global_slot(
+        &mut self,
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance: RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        if !runtime_view_model_is_global(file, view_model_index) {
+            return false;
+        }
+        self.global_slots
+            .insert(view_model_index, RuntimeOwnedViewModelHandle::new(instance));
+        true
+    }
+
+    pub fn set_global_slot_handle(
+        &mut self,
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance: RuntimeOwnedViewModelHandle,
+    ) -> bool {
+        if !runtime_view_model_is_global(file, view_model_index) {
+            return false;
+        }
+        self.global_slots.insert(view_model_index, instance);
+        true
+    }
+
+    /// Completes any missing instances the same way C++ state-machine `bind()`
+    /// does: the artboard's main default first, then every global default.
+    /// Existing slots, including cross-view-model overrides, are preserved.
+    pub fn complete_for_artboard(&mut self, file: &RuntimeFile, artboard_index: usize) -> bool {
+        let main_view_model_index = file
+            .resolved_view_model_for_artboard(artboard_index)
+            .map(|view_model| view_model.view_model_index);
+        self.complete(file, main_view_model_index)
+    }
+
+    pub fn complete(&mut self, file: &RuntimeFile, main_view_model_index: Option<usize>) -> bool {
+        let mut changed = false;
+        if self.main.is_none() {
+            if let Some(view_model_index) = main_view_model_index {
+                if let Some(instance) =
+                    runtime_default_owned_view_model_instance(file, view_model_index)
+                {
+                    self.main = Some(RuntimeOwnedViewModelHandle::new(instance));
+                    changed = true;
+                }
+            }
+        }
+        for view_model_index in runtime_global_view_model_indices(file) {
+            if self.global_slots.contains_key(&view_model_index) {
+                continue;
+            }
+            let Some(instance) = runtime_default_owned_view_model_instance(file, view_model_index)
+            else {
+                continue;
+            };
+            self.global_slots
+                .insert(view_model_index, RuntimeOwnedViewModelHandle::new(instance));
+            changed = true;
+        }
+        changed
+    }
+}
+
+fn runtime_default_owned_view_model_instance(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> Option<RuntimeOwnedViewModelInstance> {
+    RuntimeOwnedViewModelInstance::from_instance(file, view_model_index, 0)
+        .or_else(|| RuntimeOwnedViewModelInstance::new(file, view_model_index))
+}
+
+fn runtime_view_model_is_global(file: &RuntimeFile, view_model_index: usize) -> bool {
+    file.view_model(view_model_index)
+        .and_then(|view_model| view_model.object.uint_property("viewModelType"))
+        == Some(2)
+}
+
+pub fn runtime_global_view_model_indices(file: &RuntimeFile) -> Vec<usize> {
+    file.view_models()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, view_model)| {
+            (view_model.object.uint_property("viewModelType") == Some(2)).then_some(index)
+        })
+        .collect()
+}
+
+pub fn runtime_global_view_model_names(file: &RuntimeFile) -> Vec<String> {
+    runtime_global_view_model_indices(file)
+        .into_iter()
+        .filter_map(|index| {
+            file.view_model(index)
+                .and_then(|view_model| view_model.object.string_property("name"))
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
+fn runtime_global_view_model_index_named(file: &RuntimeFile, name: &str) -> Option<usize> {
+    file.view_models()
+        .iter()
+        .enumerate()
+        .find_map(|(index, view_model)| {
+            (view_model.object.uint_property("viewModelType") == Some(2)
+                && view_model.object.string_property("name") == Some(name))
+            .then_some(index)
+        })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1631,6 +1930,21 @@ impl RuntimeOwnedViewModelAssetSourceHandle {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelFontAssetSourceHandle {
+    property_path: Vec<usize>,
+}
+
+impl RuntimeOwnedViewModelFontAssetSourceHandle {
+    pub fn property_index(&self) -> usize {
+        self.property_path[self.property_path.len() - 1]
+    }
+
+    pub fn path(&self) -> &[usize] {
+        &self.property_path
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeOwnedViewModelArtboardSourceHandle {
     property_path: Vec<usize>,
 }
@@ -1680,13 +1994,57 @@ pub(crate) struct RuntimeOwnedViewModelListHandle {
     value: Rc<RefCell<RuntimeOwnedViewModelListValue>>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeOwnedViewModelListItemEntry {
+    pub(crate) occurrence_identity: u64,
+    pub(crate) instance: RuntimeOwnedViewModelHandle,
+}
+
 impl RuntimeOwnedViewModelListHandle {
-    pub(crate) fn items(&self) -> Vec<RuntimeOwnedViewModelInstance> {
+    pub(crate) fn items(&self) -> Vec<RuntimeOwnedViewModelHandle> {
         self.value
             .borrow()
             .items
             .iter()
-            .map(|item| item.borrow().clone())
+            .map(|item| RuntimeOwnedViewModelHandle::from_shared(Rc::clone(&item.instance)))
+            .collect()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn item_entries(&self) -> Vec<RuntimeOwnedViewModelListItemEntry> {
+        self.value
+            .borrow()
+            .items
+            .iter()
+            .map(|item| RuntimeOwnedViewModelListItemEntry {
+                occurrence_identity: item.occurrence_identity,
+                instance: RuntimeOwnedViewModelHandle::from_shared(Rc::clone(&item.instance)),
+            })
+            .collect()
+    }
+
+    /// Mirrors `ArtboardComponentList::updateList`: immediately before rows
+    /// are mounted, C++ writes each wrapper's current logical position into
+    /// the synthetic `itemIndex` symbol on its view-model instance. Mutate the
+    /// shared list instances before taking the row snapshots so bindings and
+    /// public handles observe the same value.
+    pub(crate) fn item_entries_with_logical_indices(
+        &self,
+        file: &RuntimeFile,
+    ) -> Vec<RuntimeOwnedViewModelListItemEntry> {
+        self.value
+            .borrow()
+            .items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let instance = RuntimeOwnedViewModelHandle::from_shared(Rc::clone(&item.instance));
+                set_component_list_item_index(file, &mut instance.borrow_mut(), index);
+                RuntimeOwnedViewModelListItemEntry {
+                    occurrence_identity: item.occurrence_identity,
+                    instance,
+                }
+            })
             .collect()
     }
 
@@ -1696,7 +2054,7 @@ impl RuntimeOwnedViewModelListHandle {
             .items
             .iter()
             .filter_map(|item| {
-                let item = item.borrow();
+                let item = item.instance.borrow();
                 Some((
                     item.string_value_by_property_name("textContent")?.to_vec(),
                     item.string_value_by_property_name("textStyle")
@@ -1706,6 +2064,25 @@ impl RuntimeOwnedViewModelListHandle {
             })
             .collect()
     }
+}
+
+pub(crate) fn set_component_list_item_index(
+    _file: &RuntimeFile,
+    instance: &mut RuntimeOwnedViewModelInstance,
+    index: usize,
+) -> bool {
+    // `ViewModelInstanceValue::registerSymbol` overwrites the itemIndex
+    // symbol as values are registered. Generated instances register in
+    // property order; imported instances register in instance-value order.
+    // The constructors preserve that winner as the last entry here.
+    let Some(property_index) = instance
+        .symbol_list_indices
+        .last()
+        .map(|symbol_list_index| symbol_list_index.property_index)
+    else {
+        return false;
+    };
+    instance.set_symbol_list_index_by_property_index(property_index, index as u64)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1768,13 +2145,154 @@ struct RuntimeOwnedViewModelList {
 #[derive(Debug, Clone, Default)]
 struct RuntimeOwnedViewModelListValue {
     item_count: usize,
-    items: Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
+    items: Vec<RuntimeOwnedViewModelListItem>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelListItem {
+    occurrence_identity: u64,
+    instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+}
+
+fn reset_runtime_owned_triggers(triggers: &mut [RuntimeOwnedViewModelTrigger]) -> bool {
+    let mut changed = false;
+    for trigger in triggers {
+        if trigger.value != 0 {
+            trigger.value = 0;
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn collect_runtime_owned_list_children(
+    lists: &[RuntimeOwnedViewModelList],
+    children: &mut Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
+) {
+    for list in lists {
+        children.extend(
+            list.value
+                .borrow()
+                .items
+                .iter()
+                .map(|item| Rc::clone(&item.instance)),
+        );
+    }
+}
+
+impl RuntimeOwnedViewModelListItem {
+    fn new(instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>) -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT_OCCURRENCE_IDENTITY: AtomicU64 = AtomicU64::new(0);
+        Self {
+            occurrence_identity: NEXT_OCCURRENCE_IDENTITY.fetch_add(1, Ordering::Relaxed),
+            instance,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelAsset {
     property_index: usize,
     value: u64,
+}
+
+/// The two-part value stored by C++ `ViewModelInstanceAssetFont`.
+///
+/// `file_asset_index` is the serialized `propertyValue` and names a dense
+/// file-asset entry. `live_font_bytes` is the private runtime-only FontAsset
+/// used when that index does not resolve to a file FontAsset. Assigning a live
+/// font sets the index to the C++ missing-id sentinel; assigning a file index
+/// deliberately preserves the private value, matching the upstream object.
+#[derive(Debug, Clone)]
+pub struct RuntimeFontAssetValue {
+    file_asset_index: u64,
+    live_font_bytes: Option<Arc<[u8]>>,
+}
+
+impl RuntimeFontAssetValue {
+    pub const MISSING_FILE_ASSET_INDEX: u64 = u32::MAX as u64;
+
+    pub fn from_file_asset_index(file_asset_index: u64) -> Self {
+        Self {
+            file_asset_index,
+            live_font_bytes: None,
+        }
+    }
+
+    pub fn file_asset_index(&self) -> u64 {
+        self.file_asset_index
+    }
+
+    pub fn live_font_bytes(&self) -> Option<&[u8]> {
+        self.live_font_bytes.as_deref()
+    }
+
+    pub fn live_font_bytes_arc(&self) -> Option<&Arc<[u8]>> {
+        self.live_font_bytes.as_ref()
+    }
+
+    pub(crate) fn same_runtime_value(&self, value: &Self) -> bool {
+        if self.file_asset_index != value.file_asset_index {
+            return false;
+        }
+        match (&self.live_font_bytes, &value.live_font_bytes) {
+            (Some(current), Some(next)) => Arc::ptr_eq(current, next),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+
+    pub(crate) fn set_file_asset_index(&mut self, file_asset_index: u64) -> bool {
+        if self.file_asset_index == file_asset_index {
+            return false;
+        }
+        self.file_asset_index = file_asset_index;
+        true
+    }
+
+    pub(crate) fn set_live_font_bytes(&mut self, font_bytes: Option<Arc<[u8]>>) -> bool {
+        let same_live_font = match (&self.live_font_bytes, &font_bytes) {
+            (Some(current), Some(next)) => Arc::ptr_eq(current, next),
+            (None, None) => true,
+            _ => false,
+        };
+        let was_missing = self.file_asset_index == Self::MISSING_FILE_ASSET_INDEX;
+        self.file_asset_index = Self::MISSING_FILE_ASSET_INDEX;
+        if same_live_font {
+            return !was_missing;
+        }
+        self.live_font_bytes = font_bytes;
+        true
+    }
+
+    /// Apply the complete value carried by a font data bind.
+    ///
+    /// This deliberately differs from [`Self::set_file_asset_index`]. A
+    /// public `propertyValue` write preserves the private live font in C++,
+    /// while `ViewModelInstanceAssetFont::applyValue(DataValueInteger*)`
+    /// first applies (and therefore clears or replaces) the retained Font
+    /// payload before falling back to the serialized file-asset index.
+    pub(crate) fn apply_data_bind_value(&mut self, value: &Self) -> bool {
+        if self.same_runtime_value(value) {
+            return false;
+        }
+        self.file_asset_index = value.file_asset_index;
+        self.live_font_bytes = value.live_font_bytes.clone();
+        true
+    }
+}
+
+impl Default for RuntimeFontAssetValue {
+    fn default() -> Self {
+        Self::from_file_asset_index(Self::MISSING_FILE_ASSET_INDEX)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelFontAsset {
+    property_index: usize,
+    value: RuntimeFontAssetValue,
 }
 
 #[derive(Debug, Clone)]
@@ -1812,6 +2330,8 @@ struct RuntimeOwnedViewModelViewModel {
     imported_lists: BTreeMap<u32, Vec<RuntimeOwnedViewModelList>>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
     imported_assets: BTreeMap<u32, Vec<RuntimeOwnedViewModelAsset>>,
+    font_assets: Vec<RuntimeOwnedViewModelFontAsset>,
+    imported_font_assets: BTreeMap<u32, Vec<RuntimeOwnedViewModelFontAsset>>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     imported_artboards: BTreeMap<u32, Vec<RuntimeOwnedViewModelArtboard>>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
@@ -1835,6 +2355,16 @@ impl RuntimeOwnedViewModelViewModel {
     fn generated_children_mut(&mut self) -> Option<&mut Vec<RuntimeOwnedViewModelViewModel>> {
         match self.value {
             RuntimeViewModelPointer::OwnedGenerated { .. } => Some(&mut self.children),
+            _ => None,
+        }
+    }
+
+    fn active_children_mut(&mut self) -> Option<&mut Vec<RuntimeOwnedViewModelViewModel>> {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => Some(&mut self.children),
+            RuntimeViewModelPointer::Imported { object_id } => {
+                self.imported_children.get_mut(&object_id)
+            }
             _ => None,
         }
     }
@@ -2068,6 +2598,7 @@ impl RuntimeOwnedViewModelViewModel {
             ),
             lists: active_values!(&self.lists, self.imported_lists),
             assets: active_values!(&self.assets, self.imported_assets),
+            font_assets: active_values!(&self.font_assets, self.imported_font_assets),
             artboards: active_values!(&self.artboards, self.imported_artboards),
             triggers: active_values!(&self.triggers, self.imported_triggers),
             view_models: match self.value {
@@ -2103,6 +2634,37 @@ impl RuntimeOwnedViewModelViewModel {
                         .find(|asset| asset.property_index == property_index)
                 })
                 .map(|asset| asset.value),
+            _ => None,
+        }
+    }
+
+    fn font_asset_value_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<&RuntimeFontAssetValue> {
+        self.font_assets
+            .iter()
+            .find(|asset| asset.property_index == property_index)
+            .map(|asset| &asset.value)
+    }
+
+    fn active_font_asset_value_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<&RuntimeFontAssetValue> {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                self.font_asset_value_by_property_index(property_index)
+            }
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_font_assets
+                .get(&object_id)
+                .and_then(|assets| {
+                    assets
+                        .iter()
+                        .find(|asset| asset.property_index == property_index)
+                })
+                .map(|asset| &asset.value),
             _ => None,
         }
     }
@@ -2154,6 +2716,42 @@ impl RuntimeOwnedViewModelViewModel {
                 })
                 .map(|trigger| trigger.value),
             _ => None,
+        }
+    }
+
+    /// Mirrors the recursive portion of C++
+    /// `ViewModelInstanceViewModel::advanced()` for the currently selected
+    /// nested instance. Shared list children are returned to the caller so it
+    /// can recurse after releasing this instance's mutable borrow.
+    fn advance_script_frame(
+        &mut self,
+        shared_children: &mut Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
+    ) -> bool {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                let mut changed = reset_runtime_owned_triggers(&mut self.triggers);
+                collect_runtime_owned_list_children(&self.lists, shared_children);
+                for child in &mut self.children {
+                    changed |= child.advance_script_frame(shared_children);
+                }
+                changed
+            }
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let mut changed = self
+                    .imported_triggers
+                    .get_mut(&object_id)
+                    .is_some_and(|triggers| reset_runtime_owned_triggers(triggers));
+                if let Some(lists) = self.imported_lists.get(&object_id) {
+                    collect_runtime_owned_list_children(lists, shared_children);
+                }
+                if let Some(children) = self.imported_children.get_mut(&object_id) {
+                    for child in children {
+                        changed |= child.advance_script_frame(shared_children);
+                    }
+                }
+                changed
+            }
+            RuntimeViewModelPointer::Null | RuntimeViewModelPointer::DataContextRoot => false,
         }
     }
 
@@ -2238,9 +2836,10 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if color.value != value {
-            color.value = value;
+        if color.value == value {
+            return false;
         }
+        color.value = value;
         true
     }
 
@@ -2346,6 +2945,58 @@ impl RuntimeOwnedViewModelViewModel {
         true
     }
 
+    fn set_font_asset_index_by_property_name(
+        &mut self,
+        property_name: &str,
+        file_asset_index: u64,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_font_asset_index_by_property_index(property_index, file_asset_index)
+    }
+
+    fn set_font_asset_index_by_property_index(
+        &mut self,
+        property_index: usize,
+        file_asset_index: u64,
+    ) -> bool {
+        let Some(asset) = self
+            .font_assets
+            .iter_mut()
+            .find(|asset| asset.property_index == property_index)
+        else {
+            return false;
+        };
+        asset.value.set_file_asset_index(file_asset_index)
+    }
+
+    fn set_live_font_bytes_by_property_name(
+        &mut self,
+        property_name: &str,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_live_font_bytes_by_property_index(property_index, font_bytes)
+    }
+
+    fn set_live_font_bytes_by_property_index(
+        &mut self,
+        property_index: usize,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let Some(asset) = self
+            .font_assets
+            .iter_mut()
+            .find(|asset| asset.property_index == property_index)
+        else {
+            return false;
+        };
+        asset.value.set_live_font_bytes(font_bytes)
+    }
+
     fn set_artboard_by_property_name(&mut self, property_name: &str, value: u64) -> bool {
         let Some(property_index) = self.property_index_by_name(property_name) else {
             return false;
@@ -2387,6 +3038,298 @@ impl RuntimeOwnedViewModelViewModel {
             return false;
         }
         trigger.value = value;
+        true
+    }
+
+    fn sync_number_by_property_index(&mut self, property_index: usize, value: f32) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.numbers,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_numbers.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_boolean_by_property_index(&mut self, property_index: usize, value: bool) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.booleans,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_booleans.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_string_by_property_index(&mut self, property_index: usize, value: &[u8]) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.strings,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_strings.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value.to_vec();
+        true
+    }
+
+    fn sync_color_by_property_index(&mut self, property_index: usize, value: u32) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.colors,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_colors.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_enum_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.enums,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_enums.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_symbol_list_index_by_property_index(
+        &mut self,
+        property_index: usize,
+        value: u64,
+    ) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.symbol_list_indices,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_symbol_list_indices.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_asset_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.assets,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_assets.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_font_asset_index_by_property_index(
+        &mut self,
+        property_index: usize,
+        file_asset_index: u64,
+    ) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.font_assets,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_font_assets.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        current.value.set_file_asset_index(file_asset_index)
+    }
+
+    fn sync_live_font_bytes_by_property_index(
+        &mut self,
+        property_index: usize,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.font_assets,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_font_assets.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        current.value.set_live_font_bytes(font_bytes)
+    }
+
+    fn apply_font_asset_data_bind_value_by_property_index(
+        &mut self,
+        property_index: usize,
+        value: &RuntimeFontAssetValue,
+    ) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.font_assets,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_font_assets.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        current.value.apply_data_bind_value(value)
+    }
+
+    fn sync_artboard_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.artboards,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_artboards.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
+        true
+    }
+
+    fn sync_trigger_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
+        let values = match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.triggers,
+            RuntimeViewModelPointer::Imported { object_id } => {
+                let Some(values) = self.imported_triggers.get_mut(&object_id) else {
+                    return false;
+                };
+                values
+            }
+            _ => return false,
+        };
+        let Some(current) = values
+            .iter_mut()
+            .find(|current| current.property_index == property_index)
+        else {
+            return false;
+        };
+        if current.value == value {
+            return false;
+        }
+        current.value = value;
         true
     }
 }
@@ -3416,7 +4359,8 @@ fn runtime_owned_view_model_symbol_list_indices_for_instance(
     view_model_index: usize,
     view_model_instance: &RuntimeObject,
 ) -> Vec<RuntimeOwnedViewModelSymbolListIndex> {
-    file.view_model(view_model_index)
+    let mut values: Vec<RuntimeOwnedViewModelSymbolListIndex> = file
+        .view_model(view_model_index)
         .map(|view_model| {
             view_model
                 .properties
@@ -3443,7 +4387,23 @@ fn runtime_owned_view_model_symbol_list_indices_for_instance(
                 })
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    // C++'s symbol table is last-registration-wins, and imported value order
+    // is independent of view-model property order. Move the exact symbol-map
+    // winner to the end so component-list index writes target the same value.
+    if let Some(property_index) = file
+        .view_model_instance_value_for_symbol_object(view_model_instance, 15)
+        .and_then(|value| value.uint_property("viewModelPropertyId"))
+        .and_then(|property_index| usize::try_from(property_index).ok())
+        && let Some(position) = values
+            .iter()
+            .position(|value| value.property_index == property_index)
+    {
+        let value = values.remove(position);
+        values.push(value);
+    }
+    values
 }
 
 fn runtime_owned_view_model_imported_symbol_list_indices(
@@ -3528,7 +4488,11 @@ fn runtime_owned_view_model_lists_for_instance(
                                                 item,
                                             )?;
                                         runtime_owned_view_model_list_item_instance(file, reference)
-                                            .map(|instance| Rc::new(RefCell::new(instance)))
+                                            .map(|instance| {
+                                                RuntimeOwnedViewModelListItem::new(Rc::new(
+                                                    RefCell::new(instance),
+                                                ))
+                                            })
                                     })
                                     .collect::<Vec<_>>();
                                 (item_count, hydrated)
@@ -3680,6 +4644,88 @@ fn runtime_owned_view_model_imported_assets(
         .unwrap_or_default()
 }
 
+fn runtime_owned_view_model_font_assets(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> Vec<RuntimeOwnedViewModelFontAsset> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    (property.type_name == "ViewModelPropertyAssetFont").then_some(
+                        RuntimeOwnedViewModelFontAsset {
+                            property_index,
+                            value: RuntimeFontAssetValue::default(),
+                        },
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_font_assets_for_instance(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    view_model_instance: &RuntimeObject,
+) -> Vec<RuntimeOwnedViewModelFontAsset> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    if property.type_name != "ViewModelPropertyAssetFont" {
+                        return None;
+                    }
+                    let path = [
+                        u32::try_from(view_model_index).ok()?,
+                        u32::try_from(property_index).ok()?,
+                    ];
+                    let source = file.data_context_view_model_property_for_instance(
+                        view_model_instance,
+                        &path,
+                    )?;
+                    let file_asset_index =
+                        file.view_model_instance_font_asset_index_for_object(source)?;
+                    Some(RuntimeOwnedViewModelFontAsset {
+                        property_index,
+                        value: RuntimeFontAssetValue::from_file_asset_index(file_asset_index),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_imported_font_assets(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> BTreeMap<u32, Vec<RuntimeOwnedViewModelFontAsset>> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .instances
+                .into_iter()
+                .map(|instance| {
+                    (
+                        instance.object.id,
+                        runtime_owned_view_model_font_assets_for_instance(
+                            file,
+                            view_model_index,
+                            instance.object,
+                        ),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn runtime_owned_view_model_artboards(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -3694,7 +4740,9 @@ fn runtime_owned_view_model_artboards(
                     (property.type_name == "ViewModelPropertyArtboard").then_some(
                         RuntimeOwnedViewModelArtboard {
                             property_index,
-                            value: 0,
+                            // C++ `ViewModelInstanceArtboardBase` initializes
+                            // an unassigned property to its `-1` sentinel.
+                            value: u64::from(u32::MAX),
                         },
                     )
                 })
@@ -4157,6 +5205,16 @@ fn runtime_owned_view_model_property_children(
                         runtime_owned_view_model_imported_assets(file, view_model_index)
                     })
                     .unwrap_or_default(),
+                font_assets: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_font_assets(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
+                imported_font_assets: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_imported_font_assets(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
                 artboards: referenced_view_model_index
                     .map(|view_model_index| {
                         runtime_owned_view_model_artboards(file, view_model_index)
@@ -4195,6 +5253,11 @@ impl RuntimeOwnedViewModelInstance {
         self.number_value_by_property_index(property_index)
     }
 
+    pub fn color_value_by_property_name(&self, property_name: &str) -> Option<u32> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.color_value_by_property_index(property_index)
+    }
+
     /// Resolve a schema property ordinal to its dense numeric-value slot.
     ///
     /// Callers that retain the returned slot may subsequently read and write
@@ -4219,6 +5282,11 @@ impl RuntimeOwnedViewModelInstance {
     pub fn boolean_value_by_property_name(&self, property_name: &str) -> Option<bool> {
         let property_index = self.property_index_by_name(property_name)?;
         self.boolean_value_by_property_index(property_index)
+    }
+
+    pub fn trigger_value_by_property_name(&self, property_name: &str) -> Option<u64> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.trigger_value_by_property_index(property_index)
     }
 
     pub fn nested_view_model_selection_by_property_name(
@@ -4275,6 +5343,25 @@ impl RuntimeOwnedViewModelInstance {
             self.mark_mutated();
         }
         changed
+    }
+
+    /// Advance the values stored directly in this instance and in embedded
+    /// view-model properties. C++ `ViewModelInstance::advanced()` also walks
+    /// list items; those are shared `Rc` instances in Rust, so they are
+    /// returned for recursion after this `RefCell` borrow is released.
+    pub(crate) fn advance_script_frame_local(
+        &mut self,
+    ) -> (bool, Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>) {
+        let mut shared_children = Vec::new();
+        let mut changed = reset_runtime_owned_triggers(&mut self.triggers);
+        collect_runtime_owned_list_children(&self.lists, &mut shared_children);
+        for view_model in &mut self.view_models {
+            changed |= view_model.advance_script_frame(&mut shared_children);
+        }
+        if changed {
+            self.mark_mutated();
+        }
+        (changed, shared_children)
     }
 
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
@@ -4353,6 +5440,11 @@ impl RuntimeOwnedViewModelInstance {
                 runtime_owned_view_model_assets_for_instance(file, view_model_index, instance)
             })
             .unwrap_or_else(|| runtime_owned_view_model_assets(file, view_model_index));
+        let font_assets = instance
+            .map(|instance| {
+                runtime_owned_view_model_font_assets_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_font_assets(file, view_model_index));
         let artboards = instance
             .map(|instance| {
                 runtime_owned_view_model_artboards_for_instance(file, view_model_index, instance)
@@ -4384,6 +5476,7 @@ impl RuntimeOwnedViewModelInstance {
             symbol_list_indices,
             lists,
             assets,
+            font_assets,
             artboards,
             triggers,
             view_models,
@@ -4839,10 +5932,11 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if color.value != value {
-            color.value = value;
-            self.mark_mutated();
+        if color.value == value {
+            return false;
         }
+        color.value = value;
+        self.mark_mutated();
         true
     }
 
@@ -5146,6 +6240,16 @@ impl RuntimeOwnedViewModelInstance {
         self.set_symbol_list_index_by_property_index(property_index, value)
     }
 
+    /// Current value of the synthetic component-list `itemIndex` symbol.
+    ///
+    /// C++ symbol registration is last-writer-wins; construction keeps that
+    /// winning symbol as the final entry in `symbol_list_indices`.
+    pub fn component_list_item_index(&self) -> Option<u64> {
+        self.symbol_list_indices
+            .last()
+            .map(|symbol_list_index| symbol_list_index.value)
+    }
+
     pub fn symbol_list_index_source_handle_by_property_name(
         &self,
         property_name: &str,
@@ -5341,8 +6445,16 @@ impl RuntimeOwnedViewModelInstance {
             self.list_value_by_property_name(property_name)?
                 .borrow()
                 .items
-                .clone(),
+                .iter()
+                .map(|item| Rc::clone(&item.instance))
+                .collect(),
         )
+    }
+
+    pub(crate) fn script_list_children(&self) -> Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
+        let mut children = Vec::new();
+        collect_runtime_owned_list_children(&self.lists, &mut children);
+        children
     }
 
     pub(crate) fn push_list_item_by_property_name(
@@ -5354,7 +6466,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         let mut list = list.borrow_mut();
-        list.items.push(item);
+        list.items.push(RuntimeOwnedViewModelListItem::new(item));
         list.item_count = list.items.len();
         drop(list);
         self.mark_mutated();
@@ -5372,7 +6484,8 @@ impl RuntimeOwnedViewModelInstance {
         };
         let mut list = list.borrow_mut();
         let index = index.min(list.items.len());
-        list.items.insert(index, item);
+        list.items
+            .insert(index, RuntimeOwnedViewModelListItem::new(item));
         list.item_count = list.items.len();
         drop(list);
         self.mark_mutated();
@@ -5389,7 +6502,7 @@ impl RuntimeOwnedViewModelInstance {
         list.item_count = list.items.len();
         drop(list);
         self.mark_mutated();
-        Some(item)
+        Some(item.instance)
     }
 
     pub(crate) fn shift_list_item_by_property_name(
@@ -5405,7 +6518,7 @@ impl RuntimeOwnedViewModelInstance {
         list.item_count = list.items.len();
         drop(list);
         self.mark_mutated();
-        Some(item)
+        Some(item.instance)
     }
 
     pub(crate) fn swap_list_items_by_property_name(
@@ -5473,11 +6586,12 @@ impl RuntimeOwnedViewModelInstance {
         let mut list = list.borrow_mut();
         let old_len = list.items.len();
         if remove_all {
-            list.items.retain(|candidate| !Rc::ptr_eq(candidate, item));
+            list.items
+                .retain(|candidate| !Rc::ptr_eq(&candidate.instance, item));
         } else if let Some(index) = list
             .items
             .iter()
-            .position(|candidate| Rc::ptr_eq(candidate, item))
+            .position(|candidate| Rc::ptr_eq(&candidate.instance, item))
         {
             list.items.remove(index);
         }
@@ -5625,6 +6739,11 @@ impl RuntimeOwnedViewModelInstance {
         self.set_asset_by_property_index(property_index, value)
     }
 
+    pub fn asset_value_by_property_name(&self, property_name: &str) -> Option<u64> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.asset_value_by_property_index(property_index)
+    }
+
     pub fn asset_source_handle_by_property_name(
         &self,
         property_name: &str,
@@ -5732,6 +6851,263 @@ impl RuntimeOwnedViewModelInstance {
         let property_index = view_model.property_index_by_name(asset_name)?;
         if !view_model
             .assets
+            .iter()
+            .any(|asset| asset.property_index == property_index)
+        {
+            return None;
+        }
+        let mut property_path = view_model_path;
+        property_path.push(property_index);
+        Some(property_path)
+    }
+
+    pub fn font_asset_value_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<&RuntimeFontAssetValue> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.font_asset_value_by_property_index(property_index)
+    }
+
+    pub fn set_font_asset_index_by_property_index(
+        &mut self,
+        property_index: usize,
+        file_asset_index: u64,
+    ) -> bool {
+        let Some(asset) = self
+            .font_assets
+            .iter_mut()
+            .find(|asset| asset.property_index == property_index)
+        else {
+            return false;
+        };
+        let changed = asset.value.set_file_asset_index(file_asset_index);
+        self.track_mutation(changed)
+    }
+
+    pub fn set_font_asset_index_by_property_name(
+        &mut self,
+        property_name: &str,
+        file_asset_index: u64,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_font_asset_index_by_property_index(property_index, file_asset_index)
+    }
+
+    pub fn set_live_font_bytes_by_property_index(
+        &mut self,
+        property_index: usize,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let Some(asset) = self
+            .font_assets
+            .iter_mut()
+            .find(|asset| asset.property_index == property_index)
+        else {
+            return false;
+        };
+        let changed = asset.value.set_live_font_bytes(font_bytes);
+        self.track_mutation(changed)
+    }
+
+    pub fn set_live_font_bytes_by_property_name(
+        &mut self,
+        property_name: &str,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_live_font_bytes_by_property_index(property_index, font_bytes)
+    }
+
+    pub fn font_asset_source_handle_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelFontAssetSourceHandle> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.font_assets
+            .iter()
+            .any(|asset| asset.property_index == property_index)
+            .then_some(RuntimeOwnedViewModelFontAssetSourceHandle {
+                property_path: vec![property_index],
+            })
+    }
+
+    pub fn font_asset_source_handle_by_property_name_path(
+        &self,
+        property_path: &str,
+    ) -> Option<RuntimeOwnedViewModelFontAssetSourceHandle> {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return None;
+        }
+        let property_path = self.font_asset_property_path_by_names(&property_path)?;
+        Some(RuntimeOwnedViewModelFontAssetSourceHandle { property_path })
+    }
+
+    pub fn set_font_asset_index_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelFontAssetSourceHandle,
+        file_asset_index: u64,
+    ) -> bool {
+        self.set_font_asset_index_by_property_path(&handle.property_path, file_asset_index)
+    }
+
+    pub fn set_live_font_bytes_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelFontAssetSourceHandle,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        self.set_live_font_bytes_by_property_path(&handle.property_path, font_bytes)
+    }
+
+    pub fn set_font_asset_index_by_property_name_path(
+        &mut self,
+        property_path: &str,
+        file_asset_index: u64,
+    ) -> bool {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return false;
+        }
+        self.set_font_asset_index_by_property_names(&property_path, file_asset_index)
+    }
+
+    pub fn set_live_font_bytes_by_property_name_path(
+        &mut self,
+        property_path: &str,
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return false;
+        }
+        self.set_live_font_bytes_by_property_names(&property_path, font_bytes)
+    }
+
+    fn set_font_asset_index_by_property_names(
+        &mut self,
+        property_path: &[&str],
+        file_asset_index: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_font_asset_index_by_property_name(property_path[0], file_asset_index);
+        }
+        let Some((asset_name, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_names_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        let changed =
+            view_model.set_font_asset_index_by_property_name(asset_name, file_asset_index);
+        self.track_mutation(changed)
+    }
+
+    fn set_live_font_bytes_by_property_names(
+        &mut self,
+        property_path: &[&str],
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_live_font_bytes_by_property_name(property_path[0], font_bytes);
+        }
+        let Some((asset_name, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_names_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        let changed = view_model.set_live_font_bytes_by_property_name(asset_name, font_bytes);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn set_font_asset_index_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        file_asset_index: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_font_asset_index_by_property_index(property_path[0], file_asset_index);
+        }
+        let Some((asset_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        let changed =
+            view_model.set_font_asset_index_by_property_index(*asset_index, file_asset_index);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn set_live_font_bytes_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_live_font_bytes_by_property_index(property_path[0], font_bytes);
+        }
+        let Some((asset_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        let changed = view_model.set_live_font_bytes_by_property_index(*asset_index, font_bytes);
+        self.track_mutation(changed)
+    }
+
+    fn font_asset_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
+        if property_path.len() == 1 {
+            let property_index = self.property_index_by_name(property_path[0])?;
+            return self
+                .font_assets
+                .iter()
+                .any(|asset| asset.property_index == property_index)
+                .then_some(vec![property_index]);
+        }
+
+        let (asset_name, view_model_names) = property_path.split_last()?;
+        let (view_model_path, view_model) =
+            self.view_model_property_path_by_names(view_model_names)?;
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return None;
+        }
+        let property_index = view_model.property_index_by_name(asset_name)?;
+        if !view_model
+            .font_assets
             .iter()
             .any(|asset| asset.property_index == property_index)
         {
@@ -6068,7 +7444,8 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         instance_index: usize,
     ) -> bool {
-        let Some(view_model) = self.view_model_by_property_path_mut(property_path) else {
+        let Some(view_model) = self.relinkable_view_model_by_property_path_mut(property_path)
+        else {
             return false;
         };
         let Some(object_id) = view_model
@@ -6237,11 +7614,256 @@ impl RuntimeOwnedViewModelInstance {
             .find(|view_model| view_model.property_index == *property_index)?;
         for property_index in rest {
             view_model = view_model
+                .active_children_mut()?
+                .iter_mut()
+                .find(|view_model| view_model.property_index == *property_index)?;
+        }
+        Some(view_model)
+    }
+
+    fn relinkable_view_model_by_property_path_mut(
+        &mut self,
+        property_path: &[usize],
+    ) -> Option<&mut RuntimeOwnedViewModelViewModel> {
+        let (property_index, rest) = property_path.split_first()?;
+        let mut view_model = self
+            .view_models
+            .iter_mut()
+            .find(|view_model| view_model.property_index == *property_index)?;
+        for property_index in rest {
+            view_model = view_model
                 .generated_children_mut()?
                 .iter_mut()
                 .find(|view_model| view_model.property_index == *property_index)?;
         }
         Some(view_model)
+    }
+
+    pub(crate) fn sync_number_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: f32,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_number_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_number_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_boolean_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: bool,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_boolean_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_boolean_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_string_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: &[u8],
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_string_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_string_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_color_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u32,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_color_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_color_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_enum_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_enum_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_enum_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_symbol_list_index_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_symbol_list_index_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_symbol_list_index_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_asset_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_asset_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_asset_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_font_asset_index_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        file_asset_index: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_font_asset_index_by_property_index(property_path[0], file_asset_index);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed =
+            view_model.sync_font_asset_index_by_property_index(*property_index, file_asset_index);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_live_font_bytes_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        font_bytes: Option<Arc<[u8]>>,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_live_font_bytes_by_property_index(property_path[0], font_bytes);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed =
+            view_model.sync_live_font_bytes_by_property_index(*property_index, font_bytes);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn apply_font_asset_data_bind_value_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: &RuntimeFontAssetValue,
+    ) -> bool {
+        if property_path.len() == 1 {
+            let Some(asset) = self
+                .font_assets
+                .iter_mut()
+                .find(|asset| asset.property_index == property_path[0])
+            else {
+                return false;
+            };
+            let changed = asset.value.apply_data_bind_value(value);
+            return self.track_mutation(changed);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed =
+            view_model.apply_font_asset_data_bind_value_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_artboard_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_artboard_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_artboard_by_property_index(*property_index, value);
+        self.track_mutation(changed)
+    }
+
+    pub(crate) fn sync_trigger_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        value: u64,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_trigger_by_property_index(property_path[0], value);
+        }
+        let Some((property_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        let changed = view_model.sync_trigger_by_property_index(*property_index, value);
+        self.track_mutation(changed)
     }
 
     fn view_model_by_property_names_mut(
@@ -6600,6 +8222,50 @@ impl RuntimeOwnedViewModelInstance {
         match parent {
             Some(view_model) => view_model.active_asset_value_by_property_index(property_index),
             None => self.asset_value_by_property_index(property_index),
+        }
+    }
+
+    fn font_asset_value_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<&RuntimeFontAssetValue> {
+        self.font_assets
+            .iter()
+            .find(|asset| asset.property_index == property_index)
+            .map(|asset| &asset.value)
+    }
+
+    pub(crate) fn font_asset_value_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<&RuntimeFontAssetValue> {
+        if property_path.len() == 1 {
+            return self.font_asset_value_by_property_index(property_path[0]);
+        }
+        let (property_index, view_model_path) = property_path.split_last()?;
+        let view_model = self.view_model_by_property_path(view_model_path)?;
+        view_model.active_font_asset_value_by_property_index(*property_index)
+    }
+
+    pub(crate) fn font_asset_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<&RuntimeFontAssetValue> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.font_asset_value_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => {
+                view_model.active_font_asset_value_by_property_index(property_index)
+            }
+            None => self.font_asset_value_by_property_index(property_index),
         }
     }
 
@@ -7423,4 +9089,587 @@ fn runtime_object_u32_property(object: &RuntimeObject, property: &str) -> u32 {
         .uint_property(property)
         .and_then(|value| u32::try_from(value).ok())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod owned_context_tests {
+    use super::*;
+    use crate::properties::property_key_for_name;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+    use nuxie_schema::definition_by_name;
+
+    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn property(type_name: &str, name: &str, value: AuthoringValue) -> AuthoringProperty {
+        AuthoringProperty {
+            key: property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value,
+        }
+    }
+
+    fn view_model_records(
+        name: &str,
+        view_model_type: u64,
+        view_model_index: u64,
+        value: f32,
+    ) -> Vec<AuthoringRecord> {
+        vec![
+            record(
+                "ViewModel",
+                vec![
+                    property("ViewModel", "name", AuthoringValue::String(name.to_owned())),
+                    property(
+                        "ViewModel",
+                        "viewModelType",
+                        AuthoringValue::Uint(view_model_type),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("value".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![
+                    property(
+                        "ViewModelInstance",
+                        "viewModelId",
+                        AuthoringValue::Uint(view_model_index),
+                    ),
+                    property(
+                        "ViewModelInstance",
+                        "name",
+                        AuthoringValue::String("Default".to_owned()),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelInstanceNumber",
+                vec![
+                    property(
+                        "ViewModelInstanceNumber",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceNumber",
+                        "propertyValue",
+                        AuthoringValue::Double(value),
+                    ),
+                ],
+            ),
+        ]
+    }
+
+    fn global_context_fixture() -> RuntimeFile {
+        let mut records = vec![record("Backboard", Vec::new())];
+        records.extend(view_model_records("Global Z", 2, 0, 10.0));
+        records.extend(view_model_records("Main", 0, 1, 20.0));
+        records.extend(view_model_records("Global A", 2, 2, 30.0));
+        records.push(record(
+            "Artboard",
+            vec![property("Artboard", "viewModelId", AuthoringValue::Uint(1))],
+        ));
+        RuntimeFile::from_authoring_records(records).expect("global context fixture imports")
+    }
+
+    fn symbol_list_index_order_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Rows".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertySymbolListIndex",
+                vec![property(
+                    "ViewModelPropertySymbolListIndex",
+                    "name",
+                    AuthoringValue::String("first".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertySymbolListIndex",
+                vec![property(
+                    "ViewModelPropertySymbolListIndex",
+                    "name",
+                    AuthoringValue::String("second".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![
+                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    property(
+                        "ViewModelInstance",
+                        "name",
+                        AuthoringValue::String("Default".to_owned()),
+                    ),
+                ],
+            ),
+            // Imported value order deliberately opposes property order. C++
+            // registers `second` and then overwrites itemIndex with `first`.
+            record(
+                "ViewModelInstanceSymbolListIndex",
+                vec![
+                    property(
+                        "ViewModelInstanceSymbolListIndex",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(1),
+                    ),
+                    property(
+                        "ViewModelInstanceSymbolListIndex",
+                        "propertyValue",
+                        AuthoringValue::Uint(22),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelInstanceSymbolListIndex",
+                vec![
+                    property(
+                        "ViewModelInstanceSymbolListIndex",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceSymbolListIndex",
+                        "propertyValue",
+                        AuthoringValue::Uint(11),
+                    ),
+                ],
+            ),
+        ])
+        .expect("symbol-list-index order fixture imports")
+    }
+
+    fn nested_trigger_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Root".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyViewModel",
+                vec![
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "name",
+                        AuthoringValue::String("child".to_owned()),
+                    ),
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "viewModelReferenceId",
+                        AuthoringValue::Uint(1),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Child".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyTrigger",
+                vec![property(
+                    "ViewModelPropertyTrigger",
+                    "name",
+                    AuthoringValue::String("fire".to_owned()),
+                )],
+            ),
+        ])
+        .expect("nested trigger fixture imports")
+    }
+
+    #[test]
+    fn generated_artboard_property_starts_unassigned() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Main".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyArtboard",
+                vec![property(
+                    "ViewModelPropertyArtboard",
+                    "name",
+                    AuthoringValue::String("artboard".to_owned()),
+                )],
+            ),
+        ])
+        .expect("artboard property fixture imports");
+        let context =
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("generated view-model instance");
+
+        assert_eq!(
+            context.artboard_value_by_property_path(&[0]),
+            Some(u64::from(u32::MAX))
+        );
+    }
+
+    #[test]
+    fn font_assets_preserve_file_identity_and_private_live_value_without_becoming_images() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "FontAsset",
+                vec![property("FontAsset", "assetId", AuthoringValue::Uint(7))],
+            ),
+            record(
+                "ImageAsset",
+                vec![property("ImageAsset", "assetId", AuthoringValue::Uint(8))],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Main".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyAssetFont",
+                vec![property(
+                    "ViewModelPropertyAssetFont",
+                    "name",
+                    AuthoringValue::String("font".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyAssetImage",
+                vec![property(
+                    "ViewModelPropertyAssetImage",
+                    "name",
+                    AuthoringValue::String("image".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![
+                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    property(
+                        "ViewModelInstance",
+                        "name",
+                        AuthoringValue::String("Default".to_owned()),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelInstanceAssetFont",
+                vec![
+                    property(
+                        "ViewModelInstanceAssetFont",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceAssetFont",
+                        "propertyValue",
+                        AuthoringValue::Uint(0),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelInstanceAssetImage",
+                vec![
+                    property(
+                        "ViewModelInstanceAssetImage",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(1),
+                    ),
+                    property(
+                        "ViewModelInstanceAssetImage",
+                        "propertyValue",
+                        AuthoringValue::Uint(1),
+                    ),
+                ],
+            ),
+        ])
+        .expect("font asset view-model fixture imports");
+        let mut context = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+            .expect("imported view-model instance");
+
+        assert_eq!(
+            context
+                .font_asset_value_by_property_name("font")
+                .map(RuntimeFontAssetValue::file_asset_index),
+            Some(0)
+        );
+        assert!(
+            context
+                .asset_source_handle_by_property_name("font")
+                .is_none()
+        );
+        assert!(
+            context
+                .font_asset_source_handle_by_property_name("image")
+                .is_none()
+        );
+        assert_eq!(context.asset_value_by_property_path(&[1]), Some(1));
+
+        let live: Arc<[u8]> = vec![1, 2, 3, 4].into();
+        assert!(context.set_live_font_bytes_by_property_name("font", Some(Arc::clone(&live))));
+        let live_value = context
+            .font_asset_value_by_property_name("font")
+            .expect("font value");
+        assert_eq!(
+            live_value.file_asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+        );
+        assert!(
+            live_value
+                .live_font_bytes_arc()
+                .is_some_and(|value| Arc::ptr_eq(value, &live))
+        );
+        assert!(
+            !context.set_live_font_bytes_by_property_name("font", Some(Arc::clone(&live))),
+            "reassigning the same live font pointer is a no-op once the sentinel is set"
+        );
+
+        assert!(context.set_font_asset_index_by_property_name("font", 0));
+        let file_value = context
+            .font_asset_value_by_property_name("font")
+            .expect("font value");
+        assert_eq!(file_value.file_asset_index(), 0);
+        assert!(
+            file_value
+                .live_font_bytes_arc()
+                .is_some_and(|value| Arc::ptr_eq(value, &live)),
+            "setting a file identity preserves the private live fallback like C++"
+        );
+
+        let listener_live: Arc<[u8]> = vec![5, 6, 7, 8].into();
+        let mut listener_value = RuntimeFontAssetValue::default();
+        assert!(listener_value.set_live_font_bytes(Some(Arc::clone(&listener_live))));
+        assert!(context.apply_font_asset_data_bind_value_by_property_path(&[0], &listener_value,));
+        let applied_live = context
+            .font_asset_value_by_property_name("font")
+            .expect("font value");
+        assert_eq!(
+            applied_live.file_asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+        );
+        assert!(
+            applied_live
+                .live_font_bytes_arc()
+                .is_some_and(|value| Arc::ptr_eq(value, &listener_live)),
+            "a listener/data-bind round-trip retains the live font payload"
+        );
+
+        let listener_file_value = RuntimeFontAssetValue::from_file_asset_index(0);
+        assert!(
+            context.apply_font_asset_data_bind_value_by_property_path(&[0], &listener_file_value,)
+        );
+        let applied_file = context
+            .font_asset_value_by_property_name("font")
+            .expect("font value");
+        assert_eq!(applied_file.file_asset_index(), 0);
+        assert_eq!(
+            applied_file.live_font_bytes(),
+            None,
+            "a file-font listener value clears the previous private live font"
+        );
+
+        assert!(context.set_live_font_bytes_by_property_name("font", None));
+        let cleared = context
+            .font_asset_value_by_property_name("font")
+            .expect("font value");
+        assert_eq!(
+            cleared.file_asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+        );
+        assert_eq!(cleared.live_font_bytes(), None);
+    }
+
+    #[test]
+    fn global_view_models_keep_file_order_and_complete_defaults() {
+        let file = global_context_fixture();
+        assert_eq!(runtime_global_view_model_indices(&file), vec![0, 2]);
+        assert_eq!(
+            runtime_global_view_model_names(&file),
+            vec!["Global Z".to_owned(), "Global A".to_owned()]
+        );
+
+        let mut context = RuntimeOwnedViewModelContext::new();
+        assert!(context.complete_for_artboard(&file, 0));
+        assert!(!context.complete_for_artboard(&file, 0));
+        assert_eq!(
+            context
+                .instances()
+                .map(|instance| instance.view_model_index())
+                .collect::<Vec<_>>(),
+            vec![1, 0, 2]
+        );
+        assert_eq!(
+            context
+                .global_named(&file, "Global Z")
+                .and_then(|instance| instance.number_value_by_property_name("value")),
+            Some(10.0)
+        );
+    }
+
+    #[test]
+    fn global_slots_allow_cross_view_model_overrides_and_reject_standard_names() {
+        let file = global_context_fixture();
+        let override_instance = RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+            .expect("main default instance");
+        let mut context = RuntimeOwnedViewModelContext::new();
+        assert!(context.set_global_named(&file, "Global Z", override_instance));
+        assert!(
+            !context.set_global_named(
+                &file,
+                "Main",
+                RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+                    .expect("global default instance")
+            )
+        );
+        assert!(context.complete_for_artboard(&file, 0));
+        assert_eq!(
+            context
+                .instances()
+                .map(|instance| instance.view_model_index())
+                .collect::<Vec<_>>(),
+            vec![1, 1, 2]
+        );
+        assert_eq!(
+            context
+                .global_named(&file, "Global Z")
+                .and_then(|instance| instance.number_value_by_property_name("value")),
+            Some(20.0)
+        );
+    }
+
+    #[test]
+    fn list_occurrences_keep_wrapper_identity_separate_from_instance_identity() {
+        let file = global_context_fixture();
+        let instance = Rc::new(RefCell::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("main default instance"),
+        ));
+        let handle = RuntimeOwnedViewModelListHandle {
+            value: Rc::new(RefCell::new(RuntimeOwnedViewModelListValue {
+                item_count: 2,
+                items: vec![
+                    RuntimeOwnedViewModelListItem::new(Rc::clone(&instance)),
+                    RuntimeOwnedViewModelListItem::new(instance),
+                ],
+            })),
+        };
+
+        let entries = handle.item_entries();
+        assert_eq!(entries.len(), 2);
+        assert_ne!(
+            entries[0].occurrence_identity,
+            entries[1].occurrence_identity
+        );
+        assert_eq!(
+            entries[0].instance.borrow().instance_identity(),
+            entries[1].instance.borrow().instance_identity()
+        );
+        assert!(entries[0].instance.ptr_eq(&entries[1].instance));
+    }
+
+    #[test]
+    fn owned_context_clones_retain_main_handle_identity_and_mutations() {
+        let file = global_context_fixture();
+        let handle = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("main default instance"),
+        );
+        let context = RuntimeOwnedViewModelContext::from_main_handle(handle.clone());
+        let alias = context.clone();
+
+        assert!(
+            context
+                .main_handle()
+                .is_some_and(|main| main.ptr_eq(&handle))
+        );
+        assert!(alias.main_handle().is_some_and(|main| main.ptr_eq(&handle)));
+        assert!(
+            alias
+                .main_mut()
+                .is_some_and(|mut main| main.set_number_by_property_name("value", 42.0))
+        );
+        assert_eq!(
+            context
+                .main()
+                .and_then(|main| main.number_value_by_property_name("value")),
+            Some(42.0)
+        );
+    }
+
+    #[test]
+    fn component_list_item_index_uses_cpp_symbol_registration_order() {
+        let file = symbol_list_index_order_fixture();
+        let mut imported =
+            RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0).expect("imported instance");
+
+        assert!(set_component_list_item_index(&file, &mut imported, 7));
+        assert_eq!(
+            imported.symbol_list_index_value_by_property_path(&[0]),
+            Some(7)
+        );
+        assert_eq!(
+            imported.symbol_list_index_value_by_property_path(&[1]),
+            Some(22)
+        );
+
+        let mut generated =
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("generated instance");
+        assert!(set_component_list_item_index(&file, &mut generated, 9));
+        assert_eq!(
+            generated.symbol_list_index_value_by_property_path(&[0]),
+            Some(0)
+        );
+        assert_eq!(
+            generated.symbol_list_index_value_by_property_path(&[1]),
+            Some(9)
+        );
+    }
+
+    #[test]
+    fn script_frame_advance_resets_embedded_view_model_triggers() {
+        let file = nested_trigger_fixture();
+        let mut instance =
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("generated root instance");
+        assert!(instance.set_trigger_by_property_name_path("child/fire", 1));
+        assert_eq!(instance.trigger_value_by_property_path(&[0, 0]), Some(1));
+
+        let (changed, shared_children) = instance.advance_script_frame_local();
+
+        assert!(changed);
+        assert!(shared_children.is_empty());
+        assert_eq!(instance.trigger_value_by_property_path(&[0, 0]), Some(0));
+    }
 }

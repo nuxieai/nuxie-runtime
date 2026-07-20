@@ -430,8 +430,11 @@ After M8, Nuxie runtime tracks `rive-app/rive-runtime` through the recurring
 workflow in `docs/upstream-sync-map.md` (`/sync-upstream` command): triage
 new upstream commits with impact/risk/effort ratings, a HARD user-approval
 gate on every port decision, then port-and-advance-the-pin with the golden
-ratchet as proof of completeness. Nightly automation runs triage-only after
-two clean manual cycles. Added 2026-07-09 by user decision.
+ratchet as proof of completeness. The read-only drift scout is active. The
+write-capable worker is active after satisfying its two-clean-cycle trust
+threshold; with no standing approvals, it fails closed and may only report
+blockers. Added 2026-07-09 by user decision; threshold reached and worker
+activated after manual cycle 2 on 2026-07-19.
 
 ## Phase R: Renderer Port (separate map)
 

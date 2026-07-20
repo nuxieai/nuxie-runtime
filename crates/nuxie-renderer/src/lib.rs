@@ -32,6 +32,7 @@ mod msaa_image_mesh_pipeline;
 mod msaa_stencil_pipeline;
 mod path_pipeline;
 mod skyline;
+mod storage_texture;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 mod surface;
 #[cfg(test)]
@@ -157,6 +158,9 @@ fn device_failure_priority(kind: WgpuDeviceFailureKind) -> u8 {
 }
 
 const MAX_ATOMIC_PATHS: usize = logical_flush::MAX_PATH_COUNT;
+// Rive's per-flush vertex shaders use at most four logical storage buffers.
+// Devices below this threshold use the texture-backed compatibility path.
+const MAX_VERTEX_STORAGE_BUFFERS: u32 = 4;
 // C++ RenderContextWebGPUImpl only advertises generic storage-buffer atomics.
 // Its clockwiseAtomic interlock mode is unreachable, even when a frame enables
 // the global clockwise-fill override.
@@ -175,6 +179,83 @@ const MAX_CACHED_STROKE_PREPARATION_SCRATCHES: usize = 1;
 // Match C++ RenderContext's retained 1 MiB per-frame allocator while dropping
 // pathological overflow storage instead of keeping it for the process lifetime.
 const MAX_RETAINED_STROKE_PREPARATION_BYTES: usize = 1 << 20;
+// C++ IAABB::makeMaximal(): intersecting this with any ordinary pixel bounds
+// returns those bounds unchanged.
+const MAXIMAL_PIXEL_BOUNDS: [i32; 4] = [i32::MIN, i32::MIN, i32::MAX, i32::MAX];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RendererCapabilities {
+    polyfill_vertex_storage_buffers: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CompatibilityVertexStoragePlan {
+    required_limit: Option<u32>,
+    effective_limit: u32,
+}
+
+impl CompatibilityVertexStoragePlan {
+    #[cfg(any(test, target_arch = "wasm32"))]
+    const fn from_adapter_limit(adapter_limit: Option<u32>) -> Self {
+        match adapter_limit {
+            Some(adapter_limit) => {
+                let requested_limit = if adapter_limit < MAX_VERTEX_STORAGE_BUFFERS {
+                    adapter_limit
+                } else {
+                    MAX_VERTEX_STORAGE_BUFFERS
+                };
+                Self {
+                    required_limit: Some(requested_limit),
+                    effective_limit: requested_limit,
+                }
+            }
+            None => Self {
+                required_limit: None,
+                effective_limit: 0,
+            },
+        }
+    }
+}
+
+impl RendererCapabilities {
+    fn from_adapter(
+        limits: &wgpu::Limits,
+        downlevel: &wgpu::DownlevelCapabilities,
+        vertex_storage_limit_override: Option<u32>,
+        force_polyfill: bool,
+    ) -> Self {
+        let vertex_storage_limit =
+            vertex_storage_limit_override.unwrap_or(limits.max_storage_buffers_per_shader_stage);
+        Self {
+            polyfill_vertex_storage_buffers: force_polyfill
+                || vertex_storage_limit < MAX_VERTEX_STORAGE_BUFFERS
+                || (vertex_storage_limit_override.is_none()
+                    && !downlevel
+                        .flags
+                        .contains(wgpu::DownlevelFlags::VERTEX_STORAGE)),
+        }
+    }
+
+    const fn required_storage_buffers(self, mode: RenderMode, adapter_limit: u32) -> u32 {
+        if self.polyfill_vertex_storage_buffers {
+            0
+        } else if matches!(mode, RenderMode::ClockwiseAtomic) {
+            // The generic atomic pipeline also binds three fragment-stage PLS
+            // planes; retain the established device requirement for that mode.
+            7
+        } else {
+            // Preserve the established seven-buffer device on capable
+            // adapters (tests and embedders can build optional atomic objects
+            // from it), but do not exclude valid four-to-six-buffer MSAA
+            // devices.
+            if adapter_limit < 7 {
+                adapter_limit
+            } else {
+                7
+            }
+        }
+    }
+}
 
 fn texture_extent_supported(width: u32, height: u32, max_dimension: u32) -> bool {
     width != 0 && height != 0 && width <= max_dimension && height <= max_dimension
@@ -226,7 +307,7 @@ struct Context {
     patch_index_buffer: wgpu::Buffer,
     tessellator: tessellator::Tessellator,
     path_pipeline: path_pipeline::PathPipeline,
-    atomic_pipeline: atomic_pipeline::AtomicPipeline,
+    atomic_pipeline: Option<atomic_pipeline::AtomicPipeline>,
     clockwise_atomic_pipeline: Option<clockwise_atomic_pipeline::ClockwiseAtomicPipeline>,
     atlas_pipeline: atlas_pipeline::AtlasPipeline,
     composite_pipeline: composite_pipeline::CompositePipeline,
@@ -505,6 +586,174 @@ pub enum RenderMode {
     ClockwiseAtomic,
 }
 
+struct RequestedWgpuDevice {
+    adapter: wgpu::Adapter,
+    adapter_info: WgpuAdapterInfo,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    capabilities: RendererCapabilities,
+}
+
+fn webgpu_adapter_options() -> wgpu::RequestAdapterOptions<'static, 'static> {
+    wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::HighPerformance,
+        compatible_surface: None,
+        force_fallback_adapter: false,
+        apply_limit_buckets: false,
+    }
+}
+
+async fn finish_wgpu_device_request(
+    adapter: wgpu::Adapter,
+    width: u32,
+    height: u32,
+    mode: RenderMode,
+    force_vertex_storage_polyfill: bool,
+    compatibility_plan: Option<CompatibilityVertexStoragePlan>,
+) -> Result<RequestedWgpuDevice, RendererError> {
+    let raw_adapter_info = adapter.get_info();
+    let adapter_info = WgpuAdapterInfo {
+        backend: format!("{:?}", raw_adapter_info.backend).to_ascii_lowercase(),
+        name: raw_adapter_info.name,
+        vendor: raw_adapter_info.vendor,
+        device: raw_adapter_info.device,
+        driver: raw_adapter_info.driver,
+        driver_info: raw_adapter_info.driver_info,
+    };
+    let adapter_limits = adapter.limits();
+    let capabilities = RendererCapabilities::from_adapter(
+        &adapter_limits,
+        &adapter.get_downlevel_capabilities(),
+        compatibility_plan.map(|plan| plan.effective_limit),
+        force_vertex_storage_polyfill,
+    );
+    if capabilities.polyfill_vertex_storage_buffers && matches!(mode, RenderMode::ClockwiseAtomic) {
+        return Err(RendererError::Unsupported(
+            "clockwise-atomic mode requires vertex-stage storage buffers",
+        ));
+    }
+    validate_texture_extent(
+        "render target",
+        width,
+        height,
+        adapter_limits.max_texture_dimension_2d,
+    )?;
+
+    // Compatibility adapters can advertise Core-only optional features. Do
+    // not request one while opening a Compatibility device; the no-clip WGSL
+    // variants are already selected when the resulting device lacks it.
+    let required_features = if compatibility_plan.is_some() {
+        wgpu::Features::empty()
+    } else {
+        adapter.features() & wgpu::Features::CLIP_DISTANCES
+    };
+    let descriptor = wgpu::DeviceDescriptor {
+        label: Some("nuxie-renderer-device"),
+        required_features,
+        required_limits: wgpu::Limits {
+            max_storage_buffers_per_shader_stage: capabilities.required_storage_buffers(
+                mode,
+                adapter_limits.max_storage_buffers_per_shader_stage,
+            ),
+            max_texture_dimension_2d: adapter_limits.max_texture_dimension_2d,
+            ..wgpu::Limits::downlevel_defaults()
+        },
+        experimental_features: wgpu::ExperimentalFeatures::disabled(),
+        memory_hints: wgpu::MemoryHints::MemoryUsage,
+        trace: wgpu::Trace::Off,
+    };
+
+    #[cfg(target_arch = "wasm32")]
+    let device_result = match compatibility_plan.and_then(|plan| plan.required_limit) {
+        Some(limit) => {
+            adapter
+                .request_device_with_max_storage_buffers_in_vertex_stage(&descriptor, limit)
+                .await
+        }
+        None => adapter.request_device(&descriptor).await,
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    let device_result = adapter.request_device(&descriptor).await;
+
+    let (device, queue) =
+        device_result.map_err(|error| RendererError::Device(error.to_string()))?;
+    Ok(RequestedWgpuDevice {
+        adapter,
+        adapter_info,
+        device,
+        queue,
+        capabilities,
+    })
+}
+
+async fn request_core_wgpu_device(
+    instance: &wgpu::Instance,
+    width: u32,
+    height: u32,
+    mode: RenderMode,
+    force_vertex_storage_polyfill: bool,
+) -> Result<RequestedWgpuDevice, RendererError> {
+    let adapter = instance
+        .request_adapter(&webgpu_adapter_options())
+        .await
+        .map_err(|error| RendererError::Adapter(error.to_string()))?;
+    finish_wgpu_device_request(
+        adapter,
+        width,
+        height,
+        mode,
+        force_vertex_storage_polyfill,
+        None,
+    )
+    .await
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn request_compatibility_wgpu_device(
+    instance: &wgpu::Instance,
+    width: u32,
+    height: u32,
+    mode: RenderMode,
+    force_vertex_storage_polyfill: bool,
+) -> Result<RequestedWgpuDevice, RendererError> {
+    let adapter = instance
+        .request_adapter_with_feature_level(
+            &webgpu_adapter_options(),
+            wgpu::wgt::FeatureLevel::Compatibility,
+        )
+        .await
+        .map_err(|error| RendererError::Adapter(error.to_string()))?;
+    let compatibility_plan = CompatibilityVertexStoragePlan::from_adapter_limit(
+        adapter.webgpu_max_storage_buffers_in_vertex_stage(),
+    );
+    finish_wgpu_device_request(
+        adapter,
+        width,
+        height,
+        mode,
+        force_vertex_storage_polyfill,
+        Some(compatibility_plan),
+    )
+    .await
+}
+
+#[cfg(target_arch = "wasm32")]
+fn compatibility_fallback_error(
+    core_error: RendererError,
+    compatibility_error: RendererError,
+) -> RendererError {
+    let core_error = core_error.to_string();
+    match compatibility_error {
+        RendererError::Adapter(message) => RendererError::Adapter(format!(
+            "Core WebGPU initialization failed ({core_error}); Compatibility adapter failed ({message})"
+        )),
+        RendererError::Device(message) => RendererError::Device(format!(
+            "Core WebGPU initialization failed ({core_error}); Compatibility device failed ({message})"
+        )),
+        error => error,
+    }
+}
+
 impl WgpuFactory {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
@@ -530,58 +779,58 @@ impl WgpuFactory {
         height: u32,
         mode: RenderMode,
     ) -> Result<Self, RendererError> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        Self::new_async_with_instance(instance, None, width, height, mode).await
+        Self::new_async_with_mode_inner(width, height, mode, false).await
     }
 
-    async fn new_async_with_instance(
-        instance: wgpu::Instance,
-        compatible_surface: Option<&wgpu::Surface<'_>>,
+    async fn new_async_with_mode_inner(
         width: u32,
         height: u32,
         mode: RenderMode,
+        force_vertex_storage_polyfill: bool,
     ) -> Result<Self, RendererError> {
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface,
-                force_fallback_adapter: false,
-                apply_limit_buckets: false,
-            })
-            .await
-            .map_err(|error| RendererError::Adapter(error.to_string()))?;
-        let adapter_info = adapter.get_info();
-        let adapter_info = WgpuAdapterInfo {
-            backend: format!("{:?}", adapter_info.backend).to_ascii_lowercase(),
-            name: adapter_info.name,
-            vendor: adapter_info.vendor,
-            device: adapter_info.device,
-            driver: adapter_info.driver,
-            driver_info: adapter_info.driver_info,
-        };
-        let adapter_limits = adapter.limits();
-        validate_texture_extent(
-            "render target",
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        #[cfg(not(target_arch = "wasm32"))]
+        let requested_device = request_core_wgpu_device(
+            &instance,
             width,
             height,
-            adapter_limits.max_texture_dimension_2d,
-        )?;
-        let required_features = adapter.features() & wgpu::Features::CLIP_DISTANCES;
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("nuxie-renderer-device"),
-                required_features,
-                required_limits: wgpu::Limits {
-                    max_storage_buffers_per_shader_stage: 7,
-                    max_texture_dimension_2d: adapter_limits.max_texture_dimension_2d,
-                    ..wgpu::Limits::downlevel_defaults()
-                },
-                experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                memory_hints: wgpu::MemoryHints::MemoryUsage,
-                trace: wgpu::Trace::Off,
-            })
-            .await
-            .map_err(|error| RendererError::Device(error.to_string()))?;
+            mode,
+            force_vertex_storage_polyfill,
+        )
+        .await?;
+        #[cfg(target_arch = "wasm32")]
+        let requested_device = match request_core_wgpu_device(
+            &instance,
+            width,
+            height,
+            mode,
+            force_vertex_storage_polyfill,
+        )
+        .await
+        {
+            Ok(requested_device) => requested_device,
+            Err(core_error @ (RendererError::Adapter(_) | RendererError::Device(_))) => {
+                request_compatibility_wgpu_device(
+                    &instance,
+                    width,
+                    height,
+                    mode,
+                    force_vertex_storage_polyfill,
+                )
+                .await
+                .map_err(|compatibility_error| {
+                    compatibility_fallback_error(core_error, compatibility_error)
+                })?
+            }
+            Err(error) => return Err(error),
+        };
+        let RequestedWgpuDevice {
+            adapter,
+            adapter_info,
+            device,
+            queue,
+            capabilities,
+        } = requested_device;
         let device_health = Arc::new(DeviceHealth::default());
         let uncaptured_health = Arc::clone(&device_health);
         device.on_uncaptured_error(Arc::new(move |error| {
@@ -715,16 +964,18 @@ impl WgpuFactory {
                 contents: bytemuck::cast_slice(&patch_indices),
                 usage: wgpu::BufferUsages::INDEX,
             });
-        let tessellator = tessellator::Tessellator::new(&device);
-        let path_pipeline = path_pipeline::PathPipeline::new(&device);
-        let atomic_pipeline = atomic_pipeline::AtomicPipeline::new(&device);
+        let tessellator = tessellator::Tessellator::new(&device, capabilities);
+        let path_pipeline = path_pipeline::PathPipeline::new(&device, capabilities);
+        let atomic_pipeline = matches!(mode, RenderMode::ClockwiseAtomic)
+            .then(|| atomic_pipeline::AtomicPipeline::new(&device));
         let clockwise_atomic_pipeline = WEBGPU_SUPPORTS_CLOCKWISE_ATOMIC_MODE
             .then(|| clockwise_atomic_pipeline::ClockwiseAtomicPipeline::new(&device));
-        let atlas_pipeline = atlas_pipeline::AtlasPipeline::new(&device);
+        let atlas_pipeline = atlas_pipeline::AtlasPipeline::new(&device, capabilities);
         let composite_pipeline = composite_pipeline::CompositePipeline::new(&device);
         let gradient_pipeline = gradient_pipeline::GradientPipeline::new(&device);
         let mipmap_pipeline = mipmap_pipeline::MipmapPipeline::new(&device);
-        let msaa_atlas_pipeline = msaa_atlas_pipeline::MsaaAtlasPipeline::new(&device);
+        let msaa_atlas_pipeline =
+            msaa_atlas_pipeline::MsaaAtlasPipeline::new(&device, capabilities);
         let msaa_image_mesh_pipeline =
             msaa_image_mesh_pipeline::MsaaImageMeshPipeline::new(&device);
         let msaa_stencil_pipeline = msaa_stencil_pipeline::MsaaStencilPipeline::new(&device);
@@ -1363,7 +1614,11 @@ struct DrawState {
     transform: Mat2D,
     opacity: f32,
     clip_rect: Option<ClipRectState>,
-    clip_is_empty: bool,
+    // Mirrors C++ RiveRenderer::RenderState::overallClipPixelBounds. This is
+    // the pixel-space intersection of every active clip rectangle and path.
+    // Keeping it on the save/restore stack lets draw admission reject fully
+    // clipped work before clip replay or tessellation.
+    overall_clip_pixel_bounds: [i32; 4],
     clip_stack_height: usize,
 }
 
@@ -1373,7 +1628,7 @@ impl Default for DrawState {
             transform: Mat2D::IDENTITY,
             opacity: 1.0,
             clip_rect: None,
-            clip_is_empty: false,
+            overall_clip_pixel_bounds: MAXIMAL_PIXEL_BOUNDS,
             clip_stack_height: 0,
         }
     }
@@ -2167,7 +2422,7 @@ impl Renderer for WgpuFrame {
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
         self.draw_calls = self.draw_calls.saturating_add(1);
-        if self.state.clip_is_empty {
+        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
             return;
         }
         let Some(path) = wgpu_path(path) else {
@@ -2196,7 +2451,9 @@ impl Renderer for WgpuFrame {
         let Some(pixel_bounds) = path_draw_pixel_bounds(path, paint, self.state.transform) else {
             return;
         };
-        if pixel_bounds_are_outside_frame(pixel_bounds, self.width, self.height) {
+        let clipped_pixel_bounds =
+            intersect_pixel_bounds(pixel_bounds, self.state.overall_clip_pixel_bounds);
+        if pixel_bounds_are_outside_frame(clipped_pixel_bounds, self.width, self.height) {
             return;
         }
         let Some(preparation) = prepare_path_draw_with_pixel_bounds(
@@ -2243,7 +2500,7 @@ impl Renderer for WgpuFrame {
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
-        if self.state.clip_is_empty {
+        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
             return;
         }
         let Some(path) = wgpu_path(path) else {
@@ -2257,7 +2514,7 @@ impl Renderer for WgpuFrame {
             return;
         }
         if path.raw_path.verbs().is_empty() {
-            self.state.clip_is_empty = true;
+            self.state.overall_clip_pixel_bounds = [0; 4];
             return;
         }
         // RenderContext::frameSupportsClipRects() only enables clip planes for
@@ -2285,7 +2542,7 @@ impl Renderer for WgpuFrame {
         opacity: f32,
     ) {
         self.draw_calls = self.draw_calls.saturating_add(1);
-        if self.state.clip_is_empty {
+        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
             return;
         }
         let Some(image) = image else {
@@ -2302,9 +2559,6 @@ impl Renderer for WgpuFrame {
             return;
         }
         let Some(texture) = &image.texture else {
-            return;
-        };
-        let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
             return;
         };
         // C++ RiveRenderer::drawImage uses ImageRectDraw only for atomics;
@@ -2325,6 +2579,17 @@ impl Renderer for WgpuFrame {
             valid: true,
             raw_path: Arc::new(raw_path),
             fill_rule: FillRule::NonZero,
+        };
+        let Some(pixel_bounds) = draw::path_pixel_bounds(&path.raw_path, image_matrix) else {
+            return;
+        };
+        let clipped_pixel_bounds =
+            intersect_pixel_bounds(pixel_bounds, self.state.overall_clip_pixel_bounds);
+        if pixel_bounds_are_outside_frame(clipped_pixel_bounds, self.width, self.height) {
+            return;
+        }
+        let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
+            return;
         };
         let state = DrawState {
             transform: image_matrix,
@@ -2374,7 +2639,7 @@ impl Renderer for WgpuFrame {
         opacity: f32,
     ) {
         self.draw_calls = self.draw_calls.saturating_add(1);
-        if self.state.clip_is_empty {
+        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
             return;
         }
         let Some(image) = image else {
@@ -2440,6 +2705,16 @@ impl Renderer for WgpuFrame {
                 .get_or_insert("unmapped image mesh buffers");
             return;
         };
+        // C++ ImageMeshDraw uses FULLSCREEN_PIXEL_BOUNDS. Applying the
+        // overall clip therefore reduces its admission bounds to the active
+        // clip itself; reject an off-frame clip before replaying its paths.
+        if pixel_bounds_are_outside_frame(
+            self.state.overall_clip_pixel_bounds,
+            self.width,
+            self.height,
+        ) {
+            return;
+        }
         let Some((clip_updates, clip_id)) = self.prepare_scheduled_clip_updates() else {
             return;
         };
@@ -2474,16 +2749,35 @@ impl Renderer for WgpuFrame {
 impl WgpuFrame {
     fn push_clip_path(&mut self, path: &WgpuPath) {
         let height = self.state.clip_stack_height;
-        if self
+        let needs_new_element = self
             .clips
             .get(height)
-            .is_none_or(|clip| !clip.is_equivalent(self.state.transform, path))
-        {
+            .is_none_or(|clip| !clip.is_equivalent(self.state.transform, path));
+        let pixel_bounds = if needs_new_element {
+            let Some(pixel_bounds) = draw::path_pixel_bounds(&path.raw_path, self.state.transform)
+            else {
+                self.state.overall_clip_pixel_bounds = [0; 4];
+                return;
+            };
+            pixel_bounds
+        } else {
+            let Some(pixel_bounds) = self.clips[height].pixel_bounds else {
+                self.state.overall_clip_pixel_bounds = [0; 4];
+                return;
+            };
+            pixel_bounds
+        };
+        self.state.overall_clip_pixel_bounds =
+            intersect_pixel_bounds(self.state.overall_clip_pixel_bounds, pixel_bounds);
+        if pixel_bounds_are_empty(self.state.overall_clip_pixel_bounds) {
+            return;
+        }
+        if needs_new_element {
             self.clips.truncate(height);
             self.clips.push(ClipElement {
                 path: path.clone(),
                 matrix: self.state.transform,
-                pixel_bounds: draw::path_pixel_bounds(&path.raw_path, self.state.transform),
+                pixel_bounds: Some(pixel_bounds),
                 prepared_fill: Arc::new(PreparedFillGeometry::new(path, self.state.transform)),
                 clip_id: 0,
             });
@@ -2713,6 +3007,15 @@ impl WgpuFrame {
         for (offset, clip) in self.clips[start..height].iter_mut().enumerate() {
             let replacement_id = (self.next_clip_id + offset as u32) as u16;
             clip.clip_id = replacement_id;
+            // C++ clears the precomputed authored bounds when clockwise-atomic
+            // nested clipping inverts the path around its parent content box.
+            // The inverse path has different bounds and must recompute them.
+            let prepared_pixel_bounds =
+                if self.mode == RenderMode::ClockwiseAtomic && parent_id != 0 {
+                    None
+                } else {
+                    clip.pixel_bounds
+                };
             updates.push(SolidDraw::new_with_prepared_fill_and_pixel_bounds(
                 clip.path.clone(),
                 WgpuPaint::default(),
@@ -2728,7 +3031,7 @@ impl WgpuFrame {
                 },
                 None,
                 Some(Arc::clone(&clip.prepared_fill)),
-                clip.pixel_bounds,
+                prepared_pixel_bounds,
             ));
             parent_id = replacement_id;
         }
@@ -2967,7 +3270,7 @@ impl WgpuFrame {
                     hsl_blend: bool,
                     image: Option<Arc<WgpuImageTexture>>,
                     image_sampler: ImageSampler,
-                    image_uniforms: Option<gpu::ImageDrawUniforms>,
+                    image_instance: Option<gpu::ImageDrawInstance>,
                     image_mesh: Option<PreparedImageMesh>,
                 }
 
@@ -3527,8 +3830,8 @@ impl WgpuFrame {
                             .as_ref()
                             .map(ImageDraw::sampler)
                             .unwrap_or_default(),
-                        image_uniforms: draw.image.as_ref().map(|image| {
-                            gpu::ImageDrawUniforms::new(
+                        image_instance: draw.image.as_ref().map(|image| {
+                            gpu::ImageDrawInstance::new(
                                 draw.state.transform,
                                 image.opacity(),
                                 image_clip_rect_inverse_matrix(draw.state.clip_rect),
@@ -4185,7 +4488,7 @@ impl WgpuFrame {
                         hsl_blend: draw.hsl_blend,
                         image: draw.image.as_ref().map(|image| &image.view),
                         image_sampler: draw.image_sampler,
-                        image_uniforms: draw.image_uniforms,
+                        image_instance: draw.image_instance,
                         image_mesh: draw.image_mesh.as_ref().map(|mesh| {
                             atomic_pipeline::ImageMeshBuffers {
                                 vertices: &mesh.vertices,
@@ -4333,14 +4636,19 @@ impl WgpuFrame {
                         );
                     }
                 } else {
+                    let atomic_pipeline = self
+                        .context
+                        .atomic_pipeline
+                        .as_ref()
+                        .expect("atomic render mode initialized without its pipeline");
                     let mut atomic_backing = atomic_backing.borrow_mut();
-                    let atomic_backing = atomic_backing
-                        .get_or_insert_with(|| self.context.atomic_pipeline.begin_frame_backing());
+                    let atomic_backing =
+                        atomic_backing.get_or_insert_with(|| atomic_pipeline.begin_frame_backing());
                     let mut uploads = tessellation_uploads.borrow_mut();
                     let batch_shared_draws = draws
                         .iter()
                         .all(|draw| matches!(draw.role, DrawRole::Content { clip_id: 0 }));
-                    let readbacks = self.context.atomic_pipeline.encode_batch(
+                    let readbacks = atomic_pipeline.encode_batch(
                         &self.context.device,
                         atomic_backing,
                         encoder,
@@ -4528,6 +4836,9 @@ impl WgpuFrame {
                 let mut pending_paths = Vec::with_capacity(draws.len());
                 let mut pending_atlas_draws = Vec::new();
                 let mut prepared_schedules = Vec::with_capacity(draws.len());
+                let mut image_instances = Vec::<gpu::ImageDrawInstance>::new();
+                let mut image_mesh_resources = None;
+                let mut image_groups = std::collections::HashMap::new();
                 for (draw_index, draw) in draws.iter().enumerate() {
                     let scheduled = draw_schedule.map(|schedule| schedule[draw_index]);
                     let z_index = scheduled.map_or_else(
@@ -4648,7 +4959,7 @@ impl WgpuFrame {
                                 unreachable!("non-content draw carried an image mesh")
                             }
                         };
-                        let image_uniforms = gpu::ImageDrawUniforms::new(
+                        let image_instance = gpu::ImageDrawInstance::new(
                             draw.state.transform,
                             mesh.opacity,
                             image_clip_rect_inverse_matrix(draw.state.clip_rect),
@@ -4656,22 +4967,35 @@ impl WgpuFrame {
                             mesh.blend_mode,
                             z_index,
                         );
-                        pending_draws.push(PendingDraw::ImageMesh(
-                            self.context.msaa_image_mesh_pipeline.prepare(
+                        let instance_index = u32::try_from(image_instances.len())
+                            .expect("MSAA image instance index overflow");
+                        image_instances.push(image_instance);
+                        let resources = image_mesh_resources.get_or_insert_with(|| {
+                            self.context.msaa_image_mesh_pipeline.prepare_resources(
                                 &self.context.device,
                                 &uniforms,
-                                &image_uniforms,
-                                if advanced_blend {
-                                    destination_view.as_ref()
-                                } else {
-                                    None
-                                },
+                                destination_view.as_ref(),
+                            )
+                        });
+                        let image_key =
+                            (Arc::as_ptr(&mesh.texture) as usize, mesh.sampler.as_key());
+                        let image_group = image_groups.entry(image_key).or_insert_with(|| {
+                            self.context.msaa_image_mesh_pipeline.prepare_image_group(
+                                &self.context.device,
                                 &mesh.texture.view,
                                 mesh.sampler,
+                            )
+                        });
+                        pending_draws.push(PendingDraw::ImageMesh(
+                            self.context.msaa_image_mesh_pipeline.prepare(
+                                resources,
+                                image_group,
+                                advanced_blend,
                                 &mesh.vertices,
                                 &mesh.uvs,
                                 &mesh.indices,
                                 mesh.index_count,
+                                instance_index,
                             ),
                             options,
                         ));
@@ -4977,6 +5301,19 @@ impl WgpuFrame {
                     }
                 }
                 debug_assert_eq!(pending_draws.len(), prepared_schedules.len());
+                let image_instance_buffer = if image_instances.is_empty() {
+                    None
+                } else {
+                    let payloads = [tessellator::FrameUploadPayload::Vertex(
+                        bytemuck::cast_slice(&image_instances),
+                    )];
+                    let mut uploads = tessellation_uploads.borrow_mut().upload_group(
+                        &self.context.device,
+                        encoder,
+                        &payloads,
+                    );
+                    Some(uploads.pop().expect("MSAA image instance upload missing"))
+                };
                 let mut prepared_atlas_draws = (0..pending_atlas_draws.len())
                     .map(|_| None)
                     .collect::<Vec<Option<msaa_atlas_pipeline::PreparedAtlasBlit>>>();
@@ -5143,6 +5480,7 @@ impl WgpuFrame {
                             prepared_atlas_draws[atlas_index] =
                                 Some(self.context.msaa_atlas_pipeline.prepare(
                                     &self.context.device,
+                                    encoder,
                                     &tessellation_view,
                                     &self.context.feather_lut.view,
                                     gradient_texture.as_ref().map(|texture| &texture.view),
@@ -5856,6 +6194,18 @@ impl WgpuFrame {
                                 pass.set_bind_group(1, &draw.image_group, &[]);
                                 pass.set_vertex_buffer(0, draw.vertices.slice(..));
                                 pass.set_vertex_buffer(1, draw.uvs.slice(..));
+                                let instance_offset = u64::from(draw.instance_index)
+                                    * std::mem::size_of::<gpu::ImageDrawInstance>() as u64;
+                                pass.set_vertex_buffer(
+                                    2,
+                                    image_instance_buffer
+                                        .as_ref()
+                                        .expect("prepared MSAA image mesh lost its instance stream")
+                                        .slice_at(
+                                            instance_offset,
+                                            std::mem::size_of::<gpu::ImageDrawInstance>() as u64,
+                                        ),
+                                );
                                 pass.set_index_buffer(
                                     draw.indices.slice(..),
                                     wgpu::IndexFormat::Uint16,
@@ -6853,7 +7203,7 @@ fn path_aabb(path: &RawPath) -> Option<[f32; 4]> {
 
 fn apply_clip_rect(state: &mut DrawState, mut rect: [f32; 4]) -> bool {
     if rect.iter().any(|value| value.is_nan()) || rect[0] >= rect[2] || rect[1] >= rect[3] {
-        state.clip_is_empty = true;
+        state.overall_clip_pixel_bounds = [0; 4];
         return true;
     }
     if let Some(existing) = state.clip_rect {
@@ -6868,7 +7218,7 @@ fn apply_clip_rect(state: &mut DrawState, mut rect: [f32; 4]) -> bool {
             existing.rect[3].min(transformed[3]),
         ];
         if rect[0] >= rect[2] || rect[1] >= rect[3] {
-            state.clip_is_empty = true;
+            state.overall_clip_pixel_bounds = [0; 4];
         }
         state.clip_rect = Some(ClipRectState {
             rect,
@@ -6880,6 +7230,14 @@ fn apply_clip_rect(state: &mut DrawState, mut rect: [f32; 4]) -> bool {
             matrix: state.transform,
         });
     }
+    let Some(clip_pixel_bounds) =
+        transformed_rect_pixel_bounds(state.clip_rect.expect("clip rectangle was just installed"))
+    else {
+        state.overall_clip_pixel_bounds = [0; 4];
+        return true;
+    };
+    state.overall_clip_pixel_bounds =
+        intersect_pixel_bounds(state.overall_clip_pixel_bounds, clip_pixel_bounds);
     true
 }
 
@@ -7732,6 +8090,47 @@ fn pixel_bounds_are_outside_frame(
         || bottom <= 0
         || left >= right
         || top >= bottom
+}
+
+fn pixel_bounds_are_empty([left, top, right, bottom]: [i32; 4]) -> bool {
+    left >= right || top >= bottom
+}
+
+fn intersect_pixel_bounds(a: [i32; 4], b: [i32; 4]) -> [i32; 4] {
+    [
+        a[0].max(b[0]),
+        a[1].max(b[1]),
+        a[2].min(b[2]),
+        a[3].min(b[3]),
+    ]
+}
+
+fn transformed_rect_pixel_bounds(clip: ClipRectState) -> Option<[i32; 4]> {
+    let [left, top, right, bottom] = clip.rect;
+    let corners = [
+        Vec2D::new(left, top),
+        Vec2D::new(right, top),
+        Vec2D::new(right, bottom),
+        Vec2D::new(left, bottom),
+    ];
+    let mut min = Vec2D::new(f32::INFINITY, f32::INFINITY);
+    let mut max = Vec2D::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
+    for corner in corners {
+        let point = clip.matrix.transform_point(corner);
+        min.x = min.x.min(point.x);
+        min.y = min.y.min(point.y);
+        max.x = max.x.max(point.x);
+        max.y = max.y.max(point.y);
+    }
+    if !min.x.is_finite() || !min.y.is_finite() || !max.x.is_finite() || !max.y.is_finite() {
+        return None;
+    }
+    Some([
+        min.x.floor() as i32,
+        min.y.floor() as i32,
+        max.x.ceil() as i32,
+        max.y.ceil() as i32,
+    ])
 }
 
 fn path_draw_pixel_bounds(
@@ -9840,6 +10239,162 @@ mod tests {
         };
 
     #[test]
+    fn vertex_storage_polyfill_follows_cpp_capability_threshold() {
+        let mut limits = wgpu::Limits::default();
+        let mut downlevel = wgpu::DownlevelCapabilities::default();
+
+        limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS;
+        assert!(
+            !RendererCapabilities::from_adapter(&limits, &downlevel, None, false)
+                .polyfill_vertex_storage_buffers
+        );
+
+        limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS - 1;
+        assert!(
+            RendererCapabilities::from_adapter(&limits, &downlevel, None, false)
+                .polyfill_vertex_storage_buffers
+        );
+
+        limits.max_storage_buffers_per_shader_stage = MAX_VERTEX_STORAGE_BUFFERS;
+        downlevel.flags.remove(wgpu::DownlevelFlags::VERTEX_STORAGE);
+        assert!(
+            RendererCapabilities::from_adapter(&limits, &downlevel, None, false)
+                .polyfill_vertex_storage_buffers
+        );
+        assert!(
+            !RendererCapabilities::from_adapter(
+                &limits,
+                &downlevel,
+                Some(MAX_VERTEX_STORAGE_BUFFERS),
+                false,
+            )
+            .polyfill_vertex_storage_buffers
+        );
+        assert!(
+            RendererCapabilities::from_adapter(
+                &limits,
+                &wgpu::DownlevelCapabilities::default(),
+                None,
+                true,
+            )
+            .polyfill_vertex_storage_buffers
+        );
+    }
+
+    #[test]
+    fn compatibility_vertex_storage_plan_requests_only_the_usable_limit() {
+        assert_eq!(
+            CompatibilityVertexStoragePlan::from_adapter_limit(None),
+            CompatibilityVertexStoragePlan {
+                required_limit: None,
+                effective_limit: 0,
+            }
+        );
+        for adapter_limit in 0..MAX_VERTEX_STORAGE_BUFFERS {
+            assert_eq!(
+                CompatibilityVertexStoragePlan::from_adapter_limit(Some(adapter_limit)),
+                CompatibilityVertexStoragePlan {
+                    required_limit: Some(adapter_limit),
+                    effective_limit: adapter_limit,
+                }
+            );
+        }
+        assert_eq!(
+            CompatibilityVertexStoragePlan::from_adapter_limit(Some(
+                MAX_VERTEX_STORAGE_BUFFERS + 8,
+            )),
+            CompatibilityVertexStoragePlan {
+                required_limit: Some(MAX_VERTEX_STORAGE_BUFFERS),
+                effective_limit: MAX_VERTEX_STORAGE_BUFFERS,
+            }
+        );
+    }
+
+    #[test]
+    fn generated_flat_varyings_are_compatibility_safe() {
+        let generated = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/generated");
+        let mut flat_varying_count = 0;
+        for entry in fs::read_dir(generated).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("wgsl") {
+                continue;
+            }
+            let source = fs::read_to_string(path).unwrap();
+            assert!(!source.contains("@interpolate(flat)"));
+            assert!(!source.contains("@interpolate(flat, first)"));
+            flat_varying_count += source.matches("@interpolate(flat, either)").count();
+        }
+        assert!(flat_varying_count != 0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn texture_backed_vertex_storage_matches_buffer_backed_msaa() {
+        let render = |force_polyfill| {
+            let factory = pollster::block_on(WgpuFactory::new_async_with_mode_inner(
+                64,
+                64,
+                RenderMode::Msaa,
+                force_polyfill,
+            ))
+            .unwrap();
+            let mut raw_path = RawPath::new();
+            raw_path.move_to(8.0, 8.0);
+            raw_path.line_to(56.0, 8.0);
+            raw_path.line_to(56.0, 56.0);
+            raw_path.line_to(8.0, 56.0);
+            raw_path.close();
+            let path = WgpuPath {
+                valid: true,
+                raw_path: Arc::new(raw_path),
+                fill_rule: FillRule::NonZero,
+            };
+            let paint = WgpuPaint {
+                color: 0xc040_80ff,
+                feather: 8.0,
+                ..Default::default()
+            };
+            let mut frame = factory.begin_frame(0x1020_3040);
+            frame.draw_path(&path, &paint);
+
+            // Cross the 128-texel row boundary in every polyfilled storage
+            // texture, including the 8-byte PaintData texture. The final row
+            // is intentionally partial.
+            let mut small_raw_path = RawPath::new();
+            small_raw_path.move_to(0.0, 0.0);
+            small_raw_path.line_to(3.0, 0.0);
+            small_raw_path.line_to(3.0, 3.0);
+            small_raw_path.line_to(0.0, 3.0);
+            small_raw_path.close();
+            let small_path = WgpuPath {
+                valid: true,
+                raw_path: Arc::new(small_raw_path),
+                fill_rule: FillRule::NonZero,
+            };
+            let small_paint = WgpuPaint {
+                color: 0xff20_c060,
+                ..Default::default()
+            };
+            for index in 0..140 {
+                frame.save();
+                frame.transform(Mat2D([
+                    1.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    (index % 14) as f32 * 4.0 + 4.0,
+                    (index / 14) as f32 * 4.0 + 4.0,
+                ]));
+                frame.draw_path(&small_path, &small_paint);
+                frame.restore();
+            }
+            frame.finish().unwrap()
+        };
+
+        assert_eq!(render(true), render(false));
+    }
+
+    #[test]
     fn texture_extent_validation_rejects_zero_and_oversized_dimensions() {
         assert!(validate_texture_extent("test", 1, 8, 8).is_ok());
         assert!(validate_texture_extent("test", 8, 8, 8).is_ok());
@@ -10339,6 +10894,43 @@ mod tests {
         assert_eq!(draw::interior_tessellation_build_count(), 0);
     }
 
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn repeated_atomic_image_rects_use_one_instance_upload_without_draw_batching() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 0, 0, 255])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(32, 16, RenderMode::ClockwiseAtomic).unwrap();
+        let image = factory.decode_image(&encoded).expect("image decodes");
+        let mut frame = factory.begin_frame_for_benchmark(0xff00_0000, true);
+        for index in 0..8 {
+            frame.save();
+            frame.transform(Mat2D([3.0, 0.0, 0.0, 3.0, 1.0 + index as f32 * 4.0, 2.0]));
+            frame.draw_image(
+                Some(image.as_ref()),
+                ImageSampler::default(),
+                BlendMode::SrcOver,
+                1.0,
+            );
+            frame.restore();
+        }
+
+        let work = frame.finish_for_benchmark().unwrap().backend_work;
+        assert_eq!(work.buffer_upload_calls, 4);
+        assert_eq!(work.buffer_upload_bytes, 2_192);
+        assert_eq!(work.gpu_draw_calls, 10);
+        assert_eq!(work.gpu_draw_instances, 10);
+        assert_eq!(work.bind_groups_created, 3);
+    }
+
     #[test]
     fn msaa_path_clip_applies_to_image_rect() {
         let mut encoded = Vec::new();
@@ -10448,6 +11040,23 @@ mod tests {
             assert_eq!(pixel(4, 4), [255, 0, 0, 255], "{mode:?}");
             assert_eq!(pixel(15, 15), [0, 0, 0, 255], "{mode:?}");
 
+            let mut translucent = factory.begin_frame(0xff00_0000);
+            translucent.draw_image_mesh(
+                Some(image.as_ref()),
+                ImageSampler::default(),
+                Some(vertices.as_ref()),
+                Some(uvs.as_ref()),
+                Some(indices.as_ref()),
+                3,
+                3,
+                BlendMode::SrcOver,
+                0.5,
+            );
+            let pixels = translucent.finish().unwrap();
+            let pixel = |x: usize, y: usize| &pixels[(y * 16 + x) * 4..(y * 16 + x + 1) * 4];
+            assert_eq!(pixel(4, 4), [127, 0, 0, 255], "{mode:?}");
+            assert_eq!(pixel(15, 15), [0, 0, 0, 255], "{mode:?}");
+
             for (blend_mode, expected) in [
                 (BlendMode::Screen, [255, 255, 0, 255]),
                 (BlendMode::Darken, [0, 0, 0, 255]),
@@ -10472,6 +11081,150 @@ mod tests {
                 assert_eq!(pixel(15, 15), [0, 255, 0, 255], "{mode:?} {blend_mode:?}");
             }
         }
+    }
+
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn repeated_msaa_image_meshes_share_instance_and_bind_resources_without_batching() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 0, 0, 255])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(32, 16, RenderMode::Msaa).unwrap();
+        let image = factory.decode_image(&encoded).expect("image decodes");
+        let mut vertices = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        vertices.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [0.0f32, 0.0],
+            [3.0, 0.0],
+            [0.0, 3.0],
+        ]));
+        vertices.unmap();
+        let mut uvs = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        uvs.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [0.0f32, 0.0],
+            [0.0, 0.0],
+            [0.0, 0.0],
+        ]));
+        uvs.unmap();
+        let mut indices = factory.make_render_buffer(
+            RenderBufferType::Index,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            6,
+        );
+        indices
+            .map_mut()
+            .copy_from_slice(bytemuck::cast_slice(&[0u16, 1, 2]));
+        indices.unmap();
+
+        let mut frame = factory.begin_frame_for_benchmark(0xff00_0000, true);
+        for index in 0..8 {
+            frame.save();
+            frame.transform(Mat2D([1.0, 0.0, 0.0, 1.0, 1.0 + index as f32 * 4.0, 2.0]));
+            frame.draw_image_mesh(
+                Some(image.as_ref()),
+                ImageSampler::default(),
+                Some(vertices.as_ref()),
+                Some(uvs.as_ref()),
+                Some(indices.as_ref()),
+                3,
+                3,
+                BlendMode::SrcOver,
+                1.0,
+            );
+            frame.restore();
+        }
+
+        let work = frame.finish_for_benchmark().unwrap().backend_work;
+        assert_eq!(work.buffer_upload_calls, 2);
+        assert_eq!(work.buffer_upload_bytes, 768);
+        assert_eq!(work.gpu_draw_calls, 8);
+        assert_eq!(work.gpu_draw_instances, 8);
+        assert_eq!(work.bind_groups_created, 2);
+    }
+
+    #[test]
+    fn image_mesh_with_an_offscreen_clip_is_rejected_before_clip_replay() {
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, 1, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&[255, 0, 0, 255])
+                .unwrap();
+        }
+        let mut factory = WgpuFactory::new_with_mode(16, 16, RenderMode::ClockwiseAtomic).unwrap();
+        let image = factory.decode_image(&encoded).expect("image decodes");
+        let mut vertices = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        vertices.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [2.0f32, 2.0],
+            [14.0, 2.0],
+            [2.0, 14.0],
+        ]));
+        vertices.unmap();
+        let mut uvs = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            24,
+        );
+        uvs.map_mut().copy_from_slice(bytemuck::cast_slice(&[
+            [0.0f32, 0.0],
+            [0.0, 0.0],
+            [0.0, 0.0],
+        ]));
+        uvs.unmap();
+        let mut indices = factory.make_render_buffer(
+            RenderBufferType::Index,
+            RenderBufferFlags::MappedOnceAtInitialization,
+            6,
+        );
+        indices
+            .map_mut()
+            .copy_from_slice(bytemuck::cast_slice(&[0u16, 1, 2]));
+        indices.unmap();
+        let offscreen_clip = triangle_path(
+            [[40.0, 40.0], [60.0, 40.0], [50.0, 60.0]],
+            FillRule::NonZero,
+        );
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.clip_path(&offscreen_clip);
+        frame.draw_image_mesh(
+            Some(image.as_ref()),
+            ImageSampler::default(),
+            Some(vertices.as_ref()),
+            Some(uvs.as_ref()),
+            Some(indices.as_ref()),
+            3,
+            3,
+            BlendMode::SrcOver,
+            1.0,
+        );
+
+        assert!(frame.draws.is_empty());
+        assert_eq!(frame.clips[0].clip_id, 0);
+        assert_eq!(frame.next_clip_id, 1);
     }
 
     #[test]
@@ -13688,6 +14441,37 @@ mod tests {
     }
 
     #[test]
+    fn batched_raw_path_rebuild_detaches_snapshots_and_invalidates_geometry_keys() {
+        let mut path = WgpuPath {
+            valid: true,
+            raw_path: Arc::new(RawPath::new()),
+            fill_rule: FillRule::NonZero,
+        };
+        path.move_to(1.0, 2.0);
+        path.line_to(3.0, 4.0);
+
+        let snapshot = path.clone();
+        let snapshot_key = PathTransformKey::new(&snapshot, Mat2D::IDENTITY);
+        path.raw_path_mut().rebuild(3, 3, |raw_path| {
+            raw_path.move_to(10.0, 20.0);
+            raw_path.line_to(30.0, 40.0);
+            raw_path.close();
+        });
+
+        assert!(!Arc::ptr_eq(&path.raw_path, &snapshot.raw_path));
+        assert_eq!(
+            PathTransformKey::new(&snapshot, Mat2D::IDENTITY),
+            snapshot_key
+        );
+        assert_ne!(PathTransformKey::new(&path, Mat2D::IDENTITY), snapshot_key);
+        assert_eq!(snapshot.raw_path.points().len(), 2);
+        assert_eq!(
+            path.raw_path.points(),
+            &[Vec2D::new(10.0, 20.0), Vec2D::new(30.0, 40.0)]
+        );
+    }
+
+    #[test]
     fn culls_path_draws_outside_the_cpp_frame_bounds() {
         let mut path = WgpuPath {
             valid: true,
@@ -13757,6 +14541,80 @@ mod tests {
             frame.draws[0].prepared_pixel_bounds,
             Some([-69, -69, 39, 39])
         );
+    }
+
+    #[test]
+    fn frame_admission_culls_draws_outside_the_active_clip_before_clip_replay() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let clip = triangle_path(
+            [[40.0, 40.0], [60.0, 40.0], [50.0, 60.0]],
+            FillRule::NonZero,
+        );
+        let content = rect_path([0.0, 0.0, 10.0, 10.0], FillRule::NonZero);
+        let paint = WgpuPaint::default();
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.clip_path(&clip);
+        assert_eq!(frame.state.overall_clip_pixel_bounds, [40, 40, 60, 60]);
+        assert_eq!(frame.state.clip_stack_height, 1);
+        assert_eq!(frame.clips[0].clip_id, 0);
+
+        draw::reset_fill_tessellation_build_count();
+        frame.draw_path(&content, &paint);
+
+        assert_eq!(draw::fill_tessellation_build_count(), 0);
+        assert!(frame.draws.is_empty());
+        assert_eq!(frame.clips[0].clip_id, 0);
+        assert_eq!(frame.next_clip_id, 1);
+    }
+
+    #[test]
+    fn disjoint_path_clips_make_the_state_empty_without_extending_the_clip_stack() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let outer = triangle_path(
+            [[40.0, 40.0], [60.0, 40.0], [50.0, 60.0]],
+            FillRule::NonZero,
+        );
+        let disjoint = triangle_path([[0.0, 0.0], [10.0, 0.0], [5.0, 10.0]], FillRule::NonZero);
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.clip_path(&outer);
+        frame.clip_path(&disjoint);
+
+        assert!(pixel_bounds_are_empty(
+            frame.state.overall_clip_pixel_bounds
+        ));
+        assert_eq!(frame.state.clip_stack_height, 1);
+        assert_eq!(frame.clips.len(), 1);
+        assert_eq!(frame.clips[0].path, outer);
+    }
+
+    #[test]
+    fn reused_clip_elements_reapply_their_pixel_bounds_before_stack_admission() {
+        let factory = WgpuFactory::new_with_mode(64, 64, RenderMode::ClockwiseAtomic).unwrap();
+        let clip = triangle_path(
+            [[40.0, 40.0], [60.0, 40.0], [50.0, 60.0]],
+            FillRule::NonZero,
+        );
+        let disjoint_rect = rect_path([0.0, 0.0, 10.0, 10.0], FillRule::NonZero);
+        let mut frame = factory.begin_frame(0xff00_0000);
+
+        frame.save();
+        frame.clip_path(&clip);
+        frame.restore();
+        assert_eq!(frame.state.clip_stack_height, 0);
+        assert_eq!(frame.clips.len(), 1);
+
+        frame.clip_path(&disjoint_rect);
+        assert_eq!(frame.state.overall_clip_pixel_bounds, [0, 0, 10, 10]);
+        frame.clip_path(&clip);
+
+        assert!(pixel_bounds_are_empty(
+            frame.state.overall_clip_pixel_bounds
+        ));
+        assert_eq!(frame.state.clip_stack_height, 0);
+        assert_eq!(frame.clips.len(), 1);
+        assert_eq!(frame.clips[0].path, clip);
     }
 
     #[test]
@@ -13969,6 +14827,7 @@ mod tests {
         frame.clip_path(&outer);
         frame.clip_path(&inner);
         assert_eq!(frame.state.clip_rect.unwrap().rect, [16.0, 8.0, 56.0, 48.0]);
+        assert_eq!(frame.state.overall_clip_pixel_bounds, [16, 8, 56, 48]);
         let aux = clip_rect_paint_aux(frame.state.clip_rect);
         for (actual, expected) in aux
             .clip_rect_inverse_matrix
@@ -13982,6 +14841,7 @@ mod tests {
         }
         frame.restore();
         assert!(frame.state.clip_rect.is_none());
+        assert_eq!(frame.state.overall_clip_pixel_bounds, MAXIMAL_PIXEL_BOUNDS);
     }
 
     #[test]

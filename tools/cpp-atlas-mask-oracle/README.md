@@ -586,11 +586,14 @@ mismatch on both the Xcode 15.4 CI image and Xcode 26 hosts. The patch is
 checked before use, skipped when Dawn is already compatible, and reversed on
 exit.
 
-On Xcode 26 or later, the harness also temporarily appends
+On every macOS host, the harness also temporarily appends
 `treat_warnings_as_errors=false` to Dawn's generated `out/release/args.gn`.
-This keeps legacy unsafe-buffer diagnostics visible but prevents the new clang
-default from promoting them to build-stopping errors. An explicit user value is
-never overwritten. It also sets `use_lld=false`, making Dawn emit regular
+Dawn uses its own pinned clang rather than Xcode's compiler, and that clang's
+unsafe-buffers plugin can emit diagnostics that `-Wno-error=unsafe-buffer-usage`
+does not demote while global `-Werror` is active. The setting keeps those
+diagnostics visible without making them build-stopping errors on either the
+Xcode 15.4 CI image or newer Xcode hosts. An explicit user value is never
+overwritten. The harness also sets `use_lld=false`, making Dawn emit regular
 archives that the Premake executable's Apple `ld` link step can consume. Before
 either temporary edit, the harness snapshots `args.gn`; its exit trap restores
 that snapshot and verifies byte equality with `cmp`, including blank lines.

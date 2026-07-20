@@ -36,6 +36,15 @@ Reproducers (now replayed by `make fuzz-regressions` under `fuzz_runtime/`):
   `runtime_object_for_local` / `object_parent_id`, reached from
   `GraphFile::from_runtime_file` during draw-order computation. A cyclic
   draw-rule / object reference chain looped forever.
+- `fuzz_pointer-hang-layout-control-parent-cycle.riv` (1,415 bytes, exact
+  libFuzzer artifact, SHA-1
+  `1e8c0e3e96e386ba46d941499975778cdf67adbf`) — hung in
+  `crates/nuxie-runtime/src/draw.rs`
+  `runtime_layout_control_size_for_path`, reached while preparing path
+  geometry after pointer-event replay. Its component-parent chain contains the
+  cycle `Shape 1 -> CubicDetachedVertex 53 -> PointsPath 2 -> Shape 1`. The
+  topology guards terminated earlier parent-chain queries, but this later
+  draw-phase layout-control walk had omitted the same visited-id guard.
 
 C++ parity: the reference `nuxie-runtime` **also hangs** on the original input
 (confirmed with the C++ golden runner — it spins in `Artboard::initialize` ->
@@ -43,8 +52,8 @@ C++ parity: the reference `nuxie-runtime` **also hangs** on the original input
 checks that a parent resolves to a `ContainerComponent`; it does not reject
 parent cycles.
 
-FIX (coordinator decision 2026-07-09, v2-status item 27): each parent/reference
-walk now carries a visited-id set, mirroring C++'s own cycle-guard idiom
+FIX (coordinator decision 2026-07-09, v2-status item 27): affected
+parent/reference walks carry a visited-id set, mirroring C++'s own cycle-guard idiom
 (`DependencySorter::visit`'s `m_Perm`/`m_Temp` visited sets,
 `src/dependency_sorter.cpp`; cf. `Artboard::validateObjects`'s bounded
 `for (int cycle = 0; cycle < 100; cycle++)`, `src/artboard.cpp`). This is a

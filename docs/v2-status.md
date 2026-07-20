@@ -13,8 +13,9 @@ the only memory the next session has. Update it every commit.
 - Non-manifest Phase S deferrals: the unavailable newer luaur VM engine and
   the baseline-unported optional ORE scripted-GPU host. Neither is an observed
   corpus divergence; both have explicit re-entry criteria in the cycle triage.
-- Current milestone: **Phase S manual cycle 1 complete; the write-capable
-  worker remains paused until two clean manual cycles are recorded.**
+- Current milestone: **Phase S manual cycle 2 complete; the write-capable
+  worker is active after satisfying its trust-count threshold. With no
+  standing approvals, it fails closed and may only report blockers.**
 
 ## Runtime Perf Fence
 
@@ -534,13 +535,15 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. M0-M8 and renderer Phase R are complete. Phase S manual cycle 1 advances
-   the active runtime pin to `d788e8ec`; default and forced-scripted candidate
+1. M0-M8 and renderer Phase R are complete. Phase S manual cycle 2 leaves the
+   active runtime pin at `d788e8ec`; default and forced-scripted candidate
    validation are exact across 317 files and 647 segments.
 2. The runtime performance ratchet is 1.0. Six order-balanced final reports
    pass at aggregate min Rust/C++=0.897-0.914.
-3. Keep the write-capable Phase S worker paused until a second clean manual
-   cycle is recorded. The read-only weekly drift scout remains active.
+3. The write-capable Phase S worker has met its two-clean-cycle trust
+   threshold and is active. With no standing approvals recorded, it fails
+   closed and may only report blockers. The read-only weekly drift scout also
+   remains active.
 
 19. M8 OPENED (user decision 2026-07-09; scope in porting-map-v2 #V2-9).
     Queue, in order:

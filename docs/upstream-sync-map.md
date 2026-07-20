@@ -2,9 +2,11 @@
 
 Companion to `docs/porting-map-v2.md`. Defines the recurring workflow that
 keeps Nuxie runtime current with `rive-app/rive-runtime` after the V2/M8
-migration completes. M8, renderer Phase R, and the first manual Phase S cycle
-are complete. A read-only weekly drift scout is active; the write-capable
-parity worker remains paused until two clean manual cycles are recorded.
+migration completes. M8, renderer Phase R, and two clean manual Phase S cycles
+are complete. A read-only weekly drift scout is active. The write-capable
+parity worker is also active after meeting its trust-count threshold. With no
+standing approvals recorded, its prompt fails closed and permits blocker-only
+reporting rather than repository changes.
 
 ## Why this works here
 
@@ -123,30 +125,37 @@ The active weekly drift scout is read-only: it inventories new upstream work,
 checks the repository's pin consistency, and reports a ranked delta queue. It
 does not edit a checkout, port code, or open a pull request.
 
-The write-capable Phase S parity worker remains paused until two clean manual
-cycles have been recorded. When enabled, it may run steps 1-2 and act only on
-standing approvals recorded below; it never infers approval from an earlier
-cycle and never merges its own pull request. Once trust is established, the
-user may pre-approve categories (for example, "auto-port critical-fix +
+The write-capable Phase S parity worker may be enabled only after two clean
+manual cycles have been recorded. That trust-count threshold is now met, but
+Standing approvals remains `none`. The worker is active, but its prompt fails
+closed and makes no repository changes when no applicable approval exists. It
+may run steps 1-2 and act only on standing approvals recorded below; it never
+infers approval from an earlier cycle and never merges its own pull request.
+The user may pre-approve categories (for example, "auto-port critical-fix +
 schema-mechanical with green ratchet"); record the decision here before the
-worker is enabled.
+worker may act on that category.
 
 ## State
 
 - LAST_SYNCED_SHA: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`
-- Clean manual cycles completed: 1
+- Clean manual cycles completed: 2
 - Standing approvals: none
-- Current cycle authorization: closed. The user-authorized ad hoc exact sync
-  through `d788e8ec6e8b598526607d6a1e8818e8b637b60c` completed on
-  2026-07-19; no cycle-scoped authorization remains active.
-- Current cycle status: manual cycle 1 is complete. The default and forced
-  scripted candidate ratchets cover 317 exact files and 647 exact segments,
-  with zero divergences, unsupported features, or not-yet entries. Two
-  non-manifest surfaces remain explicitly deferred and must resurface in the
-  next inventory: `deferred-2026-07-19-luau-engine` and
-  `deferred-2026-07-19-ore-gpu`, both at staleness 0 (full evidence and exit
-  criteria are in the cycle triage). The write-capable Phase S worker remains
-  paused until a second clean manual cycle is recorded.
+- Current cycle authorization: closed. The user-authorized manual cycle 2
+  local Luau hardening and closeout at
+  `d788e8ec6e8b598526607d6a1e8818e8b637b60c` completed on 2026-07-19; no
+  cycle-scoped authorization remains active.
+- Current cycle status: manual cycle 2 is complete. The upstream range was
+  empty, every active pin and `LAST_SYNCED_SHA` remain at `d788e8ec`, and the
+  default and forced-scripted candidate ratchets cover 317 exact files and
+  647 exact segments with zero divergences, unsupported features, or not-yet
+  entries. The approved local private-table hardening fixed the scoped-library
+  luaur stack assertion found by the initial scripted probe. Two non-manifest
+  surfaces remain explicitly deferred for the next inventory:
+  `deferred-2026-07-19-luau-engine` and `deferred-2026-07-19-ore-gpu`, both at
+  staleness 1 (full evidence and exit criteria are in the cycle triage). The
+  write-capable Phase S worker is active after satisfying its trust-count
+  threshold. With Standing approvals at `none`, it remains fail-closed for
+  mutations and may only return a blocker report.
 - Current-revision pin registry (advance with each completed Phase S cycle):
   - `.github/workflows/ci.yml` top-level `RIVE_RUNTIME_REF`
   - `tools/fetch-test-assets.sh`

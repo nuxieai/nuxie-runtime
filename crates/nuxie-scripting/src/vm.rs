@@ -675,7 +675,10 @@ impl ScriptVm {
     ) -> Result<R> {
         let environment = self.lua.create_table();
         let metatable = self.lua.create_table();
-        metatable.set("__index", self.lua.globals())?;
+        // This metatable is fresh and private, so no __newindex behavior can
+        // apply. Avoid the protected-set trampoline, which needs extra stack
+        // headroom that large candidate bytecode chunks do not always leave.
+        metatable.raw_set("__index", self.lua.globals())?;
         metatable.set_readonly(true);
         environment.set_metatable(Some(metatable))?;
         if !chunk.set_environment(environment)? {
@@ -881,7 +884,11 @@ impl ScriptVm {
                 )));
             }
         }
-        cache.set(cache_key, result.clone())?;
+        // The module cache is a private plain table with no metamethods. Raw
+        // insertion is therefore the exact operation we want, and it avoids
+        // luaur-rt's protected Table::set trampoline needing a fourth stack
+        // slot after a large candidate module graph has filled the base frame.
+        cache.raw_set(cache_key, result.clone())?;
         Ok(result)
     }
 

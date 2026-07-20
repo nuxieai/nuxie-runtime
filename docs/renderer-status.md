@@ -4,9 +4,9 @@ The execution contract is `docs/renderer-port-map.md`. This file records only
 current evidence, open gates, and decisions needed by the next session.
 
 **State: R0-R5 and the post-R exactness follow-up are complete.** Phase S
-manual cycle 1, the ad hoc sync through upstream `d788e8ec`, is complete. The
-write-capable worker remains paused until a second clean manual cycle is
-recorded.
+manual cycle 2 through upstream `d788e8ec` is complete. The write-capable
+worker is active after satisfying its two-clean-cycle trust threshold. With no
+standing approvals, it fails closed and may only report blockers.
 
 ## Metric
 

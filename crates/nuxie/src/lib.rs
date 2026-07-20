@@ -20,6 +20,7 @@ use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_runtime::{
     ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance, RuntimeRenderPaintCache, RuntimeRenderPathCache,
+    embedded_fonts_are_parseable,
 };
 
 pub mod flow_session;
@@ -848,6 +849,10 @@ impl File {
         runtime: RuntimeFile,
         _allow_unsigned_execution: bool,
     ) -> Result<Self> {
+        anyhow::ensure!(
+            embedded_fonts_are_parseable(&runtime),
+            "embedded FontAsset bytes are not a valid font"
+        );
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
         Ok(Self {
             #[cfg(feature = "scripting")]

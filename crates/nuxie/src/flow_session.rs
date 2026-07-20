@@ -458,6 +458,19 @@ pub struct FlowStateBatch {
     pub new_instances: Vec<FlowNewInstance>,
 }
 
+/// One semantic write to a named `TextValueRun` on the root artboard.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlowTextRunMutation {
+    pub name: String,
+    pub text: String,
+}
+
+/// One all-or-nothing set of root-artboard text-run writes.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FlowTextRunBatch {
+    pub mutations: Vec<FlowTextRunMutation>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlowPointerKind {
     Down,
@@ -509,6 +522,7 @@ pub enum FlowOperation {
     PointerBatch(FlowPointerBatch),
     Advance(FlowAdvance),
     Query(FlowQuery),
+    TextRunBatch(FlowTextRunBatch),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -905,6 +919,7 @@ impl FlowSession {
             FlowOperation::StateBatch(batch) => self.perform_state_batch(batch),
             FlowOperation::PointerBatch(batch) => self.perform_pointer_batch(batch, factory),
             FlowOperation::Advance(advance) => self.perform_advance(advance, factory),
+            FlowOperation::TextRunBatch(batch) => self.perform_text_run_batch(batch),
         }
     }
 
@@ -1255,6 +1270,67 @@ impl FlowSession {
         }
         result.settled = self.is_settled();
         include_reconciliation_values(&mut result, &self.bootstrap.values);
+        Ok(result)
+    }
+
+    fn perform_text_run_batch(
+        &mut self,
+        batch: FlowTextRunBatch,
+    ) -> Result<FlowResult, FlowSessionError> {
+        if batch.mutations.len() > MAX_BATCH_ITEMS {
+            return Err(FlowSessionError::new(
+                FlowSessionErrorKind::LimitExceeded,
+                "text-run batch item limit exceeded",
+            ));
+        }
+
+        let mut aggregate_text_bytes = 0_usize;
+        let mut encoded_payload_bytes = 0_usize;
+        for mutation in &batch.mutations {
+            validate_required_text_run_name(&mutation.name)?;
+            if mutation.text.len() > MAX_STRING_BYTES {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::LimitExceeded,
+                    "text-run value exceeds 1 MiB",
+                ));
+            }
+            checked_payload_add(&mut aggregate_text_bytes, mutation.text.len())?;
+            checked_payload_add(&mut encoded_payload_bytes, mutation.name.len())?;
+            checked_payload_add(&mut encoded_payload_bytes, mutation.text.len())?;
+        }
+        if aggregate_text_bytes > MAX_ENCODED_PAYLOAD_BYTES {
+            return Err(FlowSessionError::new(
+                FlowSessionErrorKind::LimitExceeded,
+                "text-run batch text exceeds 4 MiB",
+            ));
+        }
+        if encoded_payload_bytes > MAX_ENCODED_PAYLOAD_BYTES {
+            return Err(FlowSessionError::new(
+                FlowSessionErrorKind::LimitExceeded,
+                "encoded text-run batch exceeds 4 MiB",
+            ));
+        }
+
+        for mutation in &batch.mutations {
+            if !self.artboard.raw().has_root_text_value_run(&mutation.name) {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::NotFound,
+                    format!("root TextValueRun '{}' was not found", mutation.name),
+                ));
+            }
+        }
+
+        let mut changed = false;
+        for mutation in batch.mutations {
+            changed |= self
+                .artboard
+                .raw_mut()
+                .set_root_text_value_run(&mutation.name, mutation.text.into_bytes())
+                .unwrap_or(false);
+        }
+        let mut result = FlowResult::idle(self.is_settled());
+        result.dirty = changed;
+        result.wake_after_seconds = changed.then_some(0.0);
         Ok(result)
     }
 
@@ -3425,6 +3501,22 @@ fn validate_required_id_path(value: &str, label: &str) -> Result<(), FlowSession
     Ok(())
 }
 
+fn validate_required_text_run_name(value: &str) -> Result<(), FlowSessionError> {
+    if value.is_empty() {
+        return Err(FlowSessionError::new(
+            FlowSessionErrorKind::InvalidArgument,
+            "text-run name must not be empty",
+        ));
+    }
+    if value.len() > MAX_ID_PATH_BYTES {
+        return Err(FlowSessionError::new(
+            FlowSessionErrorKind::LimitExceeded,
+            format!("text-run name exceeds {MAX_ID_PATH_BYTES} UTF-8 bytes"),
+        ));
+    }
+    Ok(())
+}
+
 fn prevalidate_and_apply_mutation(
     machine: Option<&mut StateMachineInstance>,
     instances: &BTreeMap<FlowInstanceId, ViewModelInstance>,
@@ -4667,6 +4759,7 @@ mod tests {
 
     use super::*;
     use crate::File;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
 
     const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
     const SMI_FIXTURE: &[u8] = include_bytes!("../../../fixtures/animation/smi_test.riv");
@@ -4684,6 +4777,80 @@ mod tests {
         )
         .expect("create SMI session")
         .0
+    }
+
+    fn text_run_record(
+        type_name: &str,
+        properties: Vec<(&str, AuthoringValue)>,
+    ) -> AuthoringRecord {
+        let definition =
+            nuxie_schema::definition_by_name(type_name).expect("text-run fixture record type");
+        let properties = properties
+            .into_iter()
+            .map(|(property_name, value)| {
+                let property = std::iter::once(definition.name)
+                    .chain(definition.ancestors.iter().copied())
+                    .filter_map(nuxie_schema::definition_by_name)
+                    .flat_map(|owner| owner.properties)
+                    .find(|property| property.name == property_name)
+                    .expect("text-run fixture property");
+                AuthoringProperty {
+                    key: property.key.int,
+                    value,
+                }
+            })
+            .collect();
+        AuthoringRecord {
+            type_key: definition.type_key.int,
+            properties,
+        }
+    }
+
+    fn text_run_session() -> FlowSession {
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            text_run_record("Backboard", Vec::new()),
+            text_run_record(
+                "Artboard",
+                vec![
+                    ("name", AuthoringValue::String("Root".to_owned())),
+                    ("width", AuthoringValue::Double(100.0)),
+                    ("height", AuthoringValue::Double(100.0)),
+                ],
+            ),
+            text_run_record(
+                "Text",
+                vec![("name", AuthoringValue::String("Text".to_owned()))],
+            ),
+            text_run_record(
+                "TextValueRun",
+                vec![
+                    ("parentId", AuthoringValue::Uint(1)),
+                    ("name", AuthoringValue::String("headline".to_owned())),
+                    ("text", AuthoringValue::String("initial".to_owned())),
+                ],
+            ),
+            text_run_record(
+                "TextValueRun",
+                vec![
+                    ("parentId", AuthoringValue::Uint(1)),
+                    ("name", AuthoringValue::String("headline".to_owned())),
+                    ("text", AuthoringValue::String("duplicate".to_owned())),
+                ],
+            ),
+            text_run_record(
+                "TextValueRun",
+                vec![
+                    ("parentId", AuthoringValue::Uint(1)),
+                    ("name", AuthoringValue::String("group//headline".to_owned())),
+                    ("text", AuthoringValue::String("literal".to_owned())),
+                ],
+            ),
+        ])
+        .expect("build text-run fixture");
+        let file = Arc::new(File::from_runtime(runtime).expect("import text-run fixture"));
+        FlowSession::create(file, FlowSessionConfig::default())
+            .expect("create text-run session")
+            .0
     }
 
     fn external_fixture(relative: &str) -> Vec<u8> {
@@ -4984,6 +5151,148 @@ mod tests {
         assert!(result.outputs.is_empty());
         assert_eq!(result.snapshot, Some(bootstrap));
         assert!(!result.dirty);
+    }
+
+    #[test]
+    fn text_run_batch_marks_only_actual_text_changes_dirty_and_immediately_wakeable() {
+        let mut session = text_run_session();
+        let operation = |text: &str| {
+            FlowOperation::TextRunBatch(FlowTextRunBatch {
+                mutations: vec![FlowTextRunMutation {
+                    name: "headline".to_owned(),
+                    text: text.to_owned(),
+                }],
+            })
+        };
+
+        let changed = session
+            .perform(operation("updated"))
+            .expect("change named text run");
+        assert!(changed.dirty);
+        assert_eq!(changed.wake_after_seconds, Some(0.0));
+        assert!(changed.outputs.is_empty());
+
+        let unchanged = session
+            .perform(operation("updated"))
+            .expect("repeat named text run value");
+        assert!(!unchanged.dirty);
+        assert_eq!(unchanged.wake_after_seconds, None);
+        assert!(unchanged.outputs.is_empty());
+
+        let empty = session
+            .perform(FlowOperation::TextRunBatch(FlowTextRunBatch::default()))
+            .expect("an empty text-run batch is a clean no-op");
+        assert!(!empty.dirty);
+        assert_eq!(empty.wake_after_seconds, None);
+    }
+
+    #[test]
+    fn text_run_batch_resolves_every_root_name_before_any_write() {
+        let mut session = text_run_session();
+        let error = session
+            .perform(FlowOperation::TextRunBatch(FlowTextRunBatch {
+                mutations: vec![
+                    FlowTextRunMutation {
+                        name: "headline".to_owned(),
+                        text: "updated".to_owned(),
+                    },
+                    FlowTextRunMutation {
+                        name: "missing".to_owned(),
+                        text: "ignored".to_owned(),
+                    },
+                ],
+            }))
+            .expect_err("a missing root run rejects the complete batch");
+
+        assert_eq!(error.kind(), FlowSessionErrorKind::NotFound);
+        assert_eq!(error.message(), "root TextValueRun 'missing' was not found");
+        let unchanged = session
+            .perform(FlowOperation::TextRunBatch(FlowTextRunBatch {
+                mutations: vec![FlowTextRunMutation {
+                    name: "headline".to_owned(),
+                    text: "initial".to_owned(),
+                }],
+            }))
+            .expect("failed batch leaves the first run unchanged");
+        assert!(!unchanged.dirty);
+    }
+
+    #[test]
+    fn text_run_name_treats_slashes_as_literal_authored_characters() {
+        let mut session = text_run_session();
+        let result = session
+            .perform(FlowOperation::TextRunBatch(FlowTextRunBatch {
+                mutations: vec![FlowTextRunMutation {
+                    name: "group//headline".to_owned(),
+                    text: "updated".to_owned(),
+                }],
+            }))
+            .expect("an exact authored name is not interpreted as a path");
+
+        assert!(result.dirty);
+        assert_eq!(result.wake_after_seconds, Some(0.0));
+    }
+
+    #[test]
+    fn text_run_batch_enforces_item_name_text_and_aggregate_payload_bounds() {
+        let mutation = |name: String, text: String| FlowTextRunMutation { name, text };
+
+        let mut session = text_run_session();
+        let error = session
+            .perform(FlowOperation::TextRunBatch(FlowTextRunBatch {
+                mutations: vec![
+                    mutation("headline".to_owned(), String::new());
+                    MAX_BATCH_ITEMS + 1
+                ],
+            }))
+            .expect_err("batch item count is bounded");
+        assert_eq!(error.kind(), FlowSessionErrorKind::LimitExceeded);
+
+        let error = session
+            .perform(FlowOperation::TextRunBatch(FlowTextRunBatch {
+                mutations: vec![mutation(String::new(), "text".to_owned())],
+            }))
+            .expect_err("text-run names are required");
+        assert_eq!(error.kind(), FlowSessionErrorKind::InvalidArgument);
+        assert_eq!(error.message(), "text-run name must not be empty");
+
+        let error = session
+            .perform(FlowOperation::TextRunBatch(FlowTextRunBatch {
+                mutations: vec![mutation(
+                    "n".repeat(MAX_ID_PATH_BYTES + 1),
+                    "text".to_owned(),
+                )],
+            }))
+            .expect_err("text-run names are bounded");
+        assert_eq!(error.kind(), FlowSessionErrorKind::LimitExceeded);
+
+        let error = session
+            .perform(FlowOperation::TextRunBatch(FlowTextRunBatch {
+                mutations: vec![mutation(
+                    "headline".to_owned(),
+                    "t".repeat(MAX_STRING_BYTES + 1),
+                )],
+            }))
+            .expect_err("individual text values are bounded");
+        assert_eq!(error.kind(), FlowSessionErrorKind::LimitExceeded);
+        assert_eq!(error.message(), "text-run value exceeds 1 MiB");
+
+        let one_mib = "t".repeat(MAX_STRING_BYTES);
+        let error = session
+            .perform(FlowOperation::TextRunBatch(FlowTextRunBatch {
+                mutations: vec![mutation("headline".to_owned(), one_mib.clone()); 5],
+            }))
+            .expect_err("aggregate text is bounded");
+        assert_eq!(error.kind(), FlowSessionErrorKind::LimitExceeded);
+        assert_eq!(error.message(), "text-run batch text exceeds 4 MiB");
+
+        let error = session
+            .perform(FlowOperation::TextRunBatch(FlowTextRunBatch {
+                mutations: vec![mutation("headline".to_owned(), one_mib); 4],
+            }))
+            .expect_err("names also count toward the operation payload envelope");
+        assert_eq!(error.kind(), FlowSessionErrorKind::LimitExceeded);
+        assert_eq!(error.message(), "encoded text-run batch exceeds 4 MiB");
     }
 
     #[test]

@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 _Static_assert(NUX_RUNTIME_ABI_MAJOR == 1, "unexpected runtime ABI major");
-_Static_assert(NUX_RUNTIME_ABI_MINOR == 4, "unexpected runtime ABI minor");
-_Static_assert(NUX_FLOW_SESSION_ABI_MINOR == 4,
+_Static_assert(NUX_RUNTIME_ABI_MINOR == 5, "unexpected runtime ABI minor");
+_Static_assert(NUX_FLOW_SESSION_ABI_MINOR == 5,
                "unexpected flow-session ABI minor");
 _Static_assert(NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY == 1,
                "script authorization values are part of the ABI");
@@ -27,6 +27,8 @@ _Static_assert(NUX_FLOW_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER == 11,
                "player-input mutation kinds are part of the ABI");
 _Static_assert(NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL == 12,
                "view-model replacement kind is part of the ABI");
+_Static_assert(NUX_FLOW_SESSION_OPERATION_KIND_TEXT_RUN_BATCH == 5,
+               "text-run operation kind is part of the ABI");
 _Static_assert(NUX_FLOW_OUTPUT_KIND_HOST_COMMAND == 5,
                "host-command output kind is part of the ABI");
 _Static_assert(NUX_FLOW_VALUE_KIND_LIST_INDEX == 10,
@@ -84,8 +86,8 @@ _Static_assert(offsetof(struct NuxFrameOperation, completion_context) == 24,
 _Static_assert(offsetof(struct NuxFrameOperation, completion_callback) == 32,
                "unexpected NuxFrameOperation.completion_callback offset");
 
-/* ABI 1.4 retains every ABI 1.3 caller-owned layout, including the ABI 1.2
- * inputs and their ABI 1.1 prefixes, while adding typed host commands. */
+/* ABI 1.5 retains every ABI 1.4 caller-owned prefix while adding the semantic
+ * root TextValueRun batch to the configured operation. */
 _Static_assert(sizeof(struct NuxFlowConfiguredSessionDescriptor) == 40,
                "unexpected NuxFlowConfiguredSessionDescriptor layout");
 _Static_assert(offsetof(struct NuxFlowConfiguredSessionDescriptor,
@@ -115,6 +117,16 @@ _Static_assert(sizeof(struct NuxFlowStateBatch) == 56,
                "unexpected NuxFlowStateBatch layout");
 _Static_assert(offsetof(struct NuxFlowStateBatch, value_arena) == 16,
                "unexpected NuxFlowStateBatch.value_arena offset");
+_Static_assert(sizeof(struct NuxFlowTextRunMutation) == 40,
+               "unexpected NuxFlowTextRunMutation layout");
+_Static_assert(offsetof(struct NuxFlowTextRunMutation, name) == 8,
+               "unexpected NuxFlowTextRunMutation.name offset");
+_Static_assert(offsetof(struct NuxFlowTextRunMutation, text) == 24,
+               "unexpected NuxFlowTextRunMutation.text offset");
+_Static_assert(sizeof(struct NuxFlowTextRunBatch) == 24,
+               "unexpected NuxFlowTextRunBatch layout");
+_Static_assert(offsetof(struct NuxFlowTextRunBatch, mutations) == 8,
+               "unexpected NuxFlowTextRunBatch.mutations offset");
 _Static_assert(sizeof(struct NuxFlowPointerEvent) == 24,
                "unexpected NuxFlowPointerEvent layout");
 _Static_assert(offsetof(struct NuxFlowPointerEvent, timestamp_seconds) == 20,
@@ -129,10 +141,12 @@ _Static_assert(sizeof(struct NuxFlowQuery) == 8,
                "unexpected NuxFlowQuery layout");
 _Static_assert(sizeof(struct NuxFlowQueryBatch) == 24,
                "unexpected NuxFlowQueryBatch layout");
-_Static_assert(sizeof(struct NuxFlowSessionOperation) == 48,
+_Static_assert(sizeof(struct NuxFlowSessionOperation) == 56,
                "unexpected NuxFlowSessionOperation layout");
 _Static_assert(offsetof(struct NuxFlowSessionOperation, state_batch) == 16,
                "unexpected NuxFlowSessionOperation.state_batch offset");
+_Static_assert(offsetof(struct NuxFlowSessionOperation, text_run_batch) == 48,
+               "unexpected NuxFlowSessionOperation.text_run_batch offset");
 _Static_assert(sizeof(struct NuxFlowPlayerMetadataView) == 64,
                "unexpected NuxFlowPlayerMetadataView layout");
 _Static_assert(offsetof(struct NuxFlowPlayerMetadataView, selection) == 8,

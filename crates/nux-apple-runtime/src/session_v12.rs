@@ -1,4 +1,4 @@
-//! ABI 1.4's bounded, coarse flow-session protocol.
+//! ABI 1.5's bounded, coarse flow-session protocol.
 //!
 //! The C layouts in this module are deliberately independent from the Rust
 //! session model. Every caller-owned view is validated and copied before the
@@ -9,7 +9,7 @@
 use super::*;
 use std::{collections::HashSet, ffi::c_void, ptr, slice};
 
-pub const NUX_FLOW_SESSION_ABI_MINOR: u16 = 4;
+pub const NUX_FLOW_SESSION_ABI_MINOR: u16 = 5;
 
 pub const NUX_FLOW_MAX_ID_BYTE_LENGTH: u64 = 4_096;
 pub const NUX_FLOW_MAX_PATH_BYTE_LENGTH: u64 = 4_096;
@@ -58,6 +58,7 @@ pub const NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH: NuxFlowSessionOperationKi
 pub const NUX_FLOW_SESSION_OPERATION_KIND_POINTER_BATCH: NuxFlowSessionOperationKind = 2;
 pub const NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE: NuxFlowSessionOperationKind = 3;
 pub const NUX_FLOW_SESSION_OPERATION_KIND_QUERY: NuxFlowSessionOperationKind = 4;
+pub const NUX_FLOW_SESSION_OPERATION_KIND_TEXT_RUN_BATCH: NuxFlowSessionOperationKind = 5;
 
 /// Stable-width canonical-state mutation kind.
 pub type NuxFlowStateMutationKind = u32;
@@ -156,7 +157,7 @@ pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_OBJECT: NuxFlowSchemaPropertyKind = 10;
 pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_NULL: NuxFlowSchemaPropertyKind = 11;
 pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX: NuxFlowSchemaPropertyKind = 12;
 
-/// ABI 1.4 configured-session descriptor. `minimum_abi_minor` must be 4 for
+/// ABI 1.5 configured-session descriptor. `minimum_abi_minor` must be 5 for
 /// this surface. A null `artboard_name` selects the default artboard. A null
 /// `player_name` uses the authored fallback policy; a nonempty UTF-8 name
 /// explicitly selects a state machine. Linear animations are fallback-only.
@@ -282,6 +283,25 @@ pub struct NuxFlowStateBatch {
     pub mutation_count: u64,
 }
 
+/// One semantic write to an exactly named `TextValueRun` on the root
+/// artboard. Array elements require the exact published size.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxFlowTextRunMutation {
+    pub struct_size: u32,
+    pub name: NuxByteView,
+    pub text: NuxByteView,
+}
+
+/// One all-or-nothing root-artboard text-run batch.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxFlowTextRunBatch {
+    pub struct_size: u32,
+    pub mutations: *const NuxFlowTextRunMutation,
+    pub mutation_count: u64,
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxFlowPointerEvent {
@@ -335,8 +355,8 @@ pub struct NuxFlowQueryBatch {
     pub query_count: u64,
 }
 
-/// ABI 1.4 tagged generic operation. `required_abi_major` and
-/// `minimum_abi_minor` must be exactly 1 and 4. Exactly the pointer selected by
+/// ABI 1.5 tagged generic operation. `required_abi_major` and
+/// `minimum_abi_minor` must be exactly 1 and 5. Exactly the pointer selected by
 /// `kind` must be non-null and the other payload pointers must be null.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -349,6 +369,7 @@ pub struct NuxFlowSessionOperation {
     pub pointer_batch: *const NuxFlowPointerBatch,
     pub advance: *const NuxFlowAdvanceOperation,
     pub query_batch: *const NuxFlowQueryBatch,
+    pub text_run_batch: *const NuxFlowTextRunBatch,
 }
 
 /// Borrowed selected-player metadata owned by a session result.
@@ -448,7 +469,7 @@ pub struct NuxFlowCreatedInstanceView {
 }
 
 /// Borrowed exact-order output owned by a session result. `payload_root_index`
-/// is `UINT32_MAX` when the item has no typed arena payload. ABI 1.4 host
+/// is `UINT32_MAX` when the item has no typed arena payload. ABI 1.5 host
 /// commands always use an object node as their typed payload root and leave the
 /// opaque `payload` byte view empty.
 #[repr(C)]
@@ -495,7 +516,7 @@ pub struct NuxFlowEventPropertyView {
     pub name: NuxByteView,
 }
 
-/// Opaque owned ABI 1.4 result. Every borrowed view returned by an accessor
+/// Opaque owned ABI 1.5 result. Every borrowed view returned by an accessor
 /// remains valid until this handle is freed.
 pub struct NuxFlowSessionResult {
     _private: [u8; 0],
@@ -566,6 +587,12 @@ struct OwnedStateBatch {
     mutations: Vec<OwnedStateMutation>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OwnedTextRunMutation {
+    name: Vec<u8>,
+    text: Vec<u8>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct OwnedPointerEvent {
     kind: NuxFlowPointerEventKind,
@@ -608,6 +635,7 @@ enum OwnedSessionOperation {
     PointerBatch(Vec<OwnedPointerEvent>),
     Advance(OwnedAdvanceOperation),
     Query(Vec<OwnedQuery>),
+    TextRunBatch(Vec<OwnedTextRunMutation>),
 }
 
 #[derive(Debug, Default)]
@@ -628,7 +656,7 @@ impl PayloadBudget {
     }
 }
 
-fn validate_v14_version(required_major: u16, minimum_minor: u16) -> Result<(), NuxStatus> {
+fn validate_v15_version(required_major: u16, minimum_minor: u16) -> Result<(), NuxStatus> {
     if required_major == NUX_RUNTIME_ABI_MAJOR && minimum_minor == NUX_FLOW_SESSION_ABI_MINOR {
         Ok(())
     } else {
@@ -712,7 +740,7 @@ unsafe fn copy_configured_session_descriptor(
         return Err(NuxStatus::InvalidArgument);
     }
     let descriptor = unsafe { descriptor.read() };
-    validate_v14_version(descriptor.required_abi_major, descriptor.minimum_abi_minor)?;
+    validate_v15_version(descriptor.required_abi_major, descriptor.minimum_abi_minor)?;
     let mut budget = PayloadBudget::default();
     let artboard_name = copy_optional_utf8(
         descriptor.artboard_name,
@@ -1265,6 +1293,46 @@ fn value_root_has_kind(
         .is_some_and(|node| node.kind == expected_kind)
 }
 
+unsafe fn copy_text_run_batch(
+    batch: *const NuxFlowTextRunBatch,
+) -> Result<Vec<OwnedTextRunMutation>, NuxStatus> {
+    if batch.is_null() {
+        return Err(NuxStatus::NullArgument);
+    }
+    if unsafe { read_struct_size(batch) } < size_u32::<NuxFlowTextRunBatch>() {
+        return Err(NuxStatus::InvalidArgument);
+    }
+    let batch = unsafe { batch.read() };
+    let raw_mutations = unsafe {
+        copy_array(
+            batch.mutations,
+            batch.mutation_count,
+            NUX_FLOW_MAX_BATCH_ITEM_COUNT,
+        )?
+    };
+    let mut budget = PayloadBudget::default();
+    let mut aggregate_text_bytes = 0_usize;
+    let mut mutations = Vec::with_capacity(raw_mutations.len());
+    for mutation in raw_mutations {
+        if mutation.struct_size != size_u32::<NuxFlowTextRunMutation>() {
+            return Err(NuxStatus::InvalidArgument);
+        }
+        let name = copy_required_utf8(mutation.name, NUX_FLOW_MAX_ID_BYTE_LENGTH, &mut budget)?;
+        let text = copy_bytes(mutation.text, NUX_FLOW_MAX_STRING_BYTE_LENGTH, &mut budget)?;
+        if std::str::from_utf8(&text).is_err() {
+            return Err(NuxStatus::InvalidArgument);
+        }
+        aggregate_text_bytes = aggregate_text_bytes
+            .checked_add(text.len())
+            .ok_or(NuxStatus::InvalidArgument)?;
+        if aggregate_text_bytes > NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize {
+            return Err(NuxStatus::InvalidArgument);
+        }
+        mutations.push(OwnedTextRunMutation { name, text });
+    }
+    Ok(mutations)
+}
+
 unsafe fn copy_pointer_batch(
     batch: *const NuxFlowPointerBatch,
 ) -> Result<Vec<OwnedPointerEvent>, NuxStatus> {
@@ -1420,12 +1488,13 @@ unsafe fn copy_session_operation(
         return Err(NuxStatus::InvalidArgument);
     }
     let operation = unsafe { operation.read() };
-    validate_v14_version(operation.required_abi_major, operation.minimum_abi_minor)?;
+    validate_v15_version(operation.required_abi_major, operation.minimum_abi_minor)?;
     let selected_payload_count = [
         !operation.state_batch.is_null(),
         !operation.pointer_batch.is_null(),
         !operation.advance.is_null(),
         !operation.query_batch.is_null(),
+        !operation.text_run_batch.is_null(),
     ]
     .into_iter()
     .filter(|selected| *selected)
@@ -1438,7 +1507,8 @@ unsafe fn copy_session_operation(
             if !operation.state_batch.is_null()
                 && operation.pointer_batch.is_null()
                 && operation.advance.is_null()
-                && operation.query_batch.is_null() =>
+                && operation.query_batch.is_null()
+                && operation.text_run_batch.is_null() =>
         {
             unsafe { copy_state_batch(operation.state_batch) }
                 .map(OwnedSessionOperation::StateBatch)
@@ -1447,7 +1517,8 @@ unsafe fn copy_session_operation(
             if operation.state_batch.is_null()
                 && !operation.pointer_batch.is_null()
                 && operation.advance.is_null()
-                && operation.query_batch.is_null() =>
+                && operation.query_batch.is_null()
+                && operation.text_run_batch.is_null() =>
         {
             unsafe { copy_pointer_batch(operation.pointer_batch) }
                 .map(OwnedSessionOperation::PointerBatch)
@@ -1456,7 +1527,8 @@ unsafe fn copy_session_operation(
             if operation.state_batch.is_null()
                 && operation.pointer_batch.is_null()
                 && !operation.advance.is_null()
-                && operation.query_batch.is_null() =>
+                && operation.query_batch.is_null()
+                && operation.text_run_batch.is_null() =>
         {
             unsafe { copy_advance_operation(operation.advance) }.map(OwnedSessionOperation::Advance)
         }
@@ -1464,9 +1536,20 @@ unsafe fn copy_session_operation(
             if operation.state_batch.is_null()
                 && operation.pointer_batch.is_null()
                 && operation.advance.is_null()
-                && !operation.query_batch.is_null() =>
+                && !operation.query_batch.is_null()
+                && operation.text_run_batch.is_null() =>
         {
             unsafe { copy_query_batch(operation.query_batch) }.map(OwnedSessionOperation::Query)
+        }
+        NUX_FLOW_SESSION_OPERATION_KIND_TEXT_RUN_BATCH
+            if operation.state_batch.is_null()
+                && operation.pointer_batch.is_null()
+                && operation.advance.is_null()
+                && operation.query_batch.is_null()
+                && !operation.text_run_batch.is_null() =>
+        {
+            unsafe { copy_text_run_batch(operation.text_run_batch) }
+                .map(OwnedSessionOperation::TextRunBatch)
         }
         _ => Err(NuxStatus::InvalidArgument),
     }
@@ -2381,7 +2464,7 @@ fn replace_session_result(
     if result.validate().is_err() {
         result = FlowSessionResultHandle::failure(
             NuxStatus::RuntimeError,
-            "runtime produced an invalid or oversized ABI 1.4 result",
+            "runtime produced an invalid or oversized ABI 1.5 result",
         );
     }
     let status = result.status;
@@ -2487,7 +2570,7 @@ mod configured_session_seam {
         append_outputs(&mut result, creation.outputs)?;
         result
             .validate()
-            .map_err(|_| RuntimeFailure::runtime("bootstrap exceeds ABI 1.4 bounds"))?;
+            .map_err(|_| RuntimeFailure::runtime("bootstrap exceeds ABI 1.5 bounds"))?;
         let session_id = state.allocate_session_id()?;
         state.sessions.insert(
             session_id,
@@ -2575,7 +2658,7 @@ mod configured_session_seam {
                     replace_player_inputs(&mut combined, inputs)?;
                     combined.has_player_inputs = true;
                     combined.validate().map_err(|_| {
-                        RuntimeFailure::runtime("query result exceeds ABI 1.4 bounds")
+                        RuntimeFailure::runtime("query result exceeds ABI 1.5 bounds")
                     })?;
                 }
                 return Ok(combined);
@@ -2594,6 +2677,29 @@ mod configured_session_seam {
                                 x: event.x,
                                 y: event.y,
                                 timestamp_seconds: event.timestamp_seconds,
+                            })
+                        })
+                        .collect::<Result<Vec<_>, RuntimeFailure>>()?,
+                })
+            }
+            OwnedSessionOperation::TextRunBatch(mutations) => {
+                core::FlowOperation::TextRunBatch(core::FlowTextRunBatch {
+                    mutations: mutations
+                        .into_iter()
+                        .map(|mutation| {
+                            Ok(core::FlowTextRunMutation {
+                                name: String::from_utf8(mutation.name).map_err(|_| {
+                                    RuntimeFailure::new(
+                                        NuxStatus::InvalidArgument,
+                                        "text-run name is not UTF-8",
+                                    )
+                                })?,
+                                text: String::from_utf8(mutation.text).map_err(|_| {
+                                    RuntimeFailure::new(
+                                        NuxStatus::InvalidArgument,
+                                        "text-run value is not UTF-8",
+                                    )
+                                })?,
                             })
                         })
                         .collect::<Result<Vec<_>, RuntimeFailure>>()?,
@@ -3381,7 +3487,7 @@ mod configured_session_seam {
         append_outputs(translated, result.outputs)?;
         translated
             .validate()
-            .map_err(|_| RuntimeFailure::runtime("flow result exceeds ABI 1.4 bounds"))?;
+            .map_err(|_| RuntimeFailure::runtime("flow result exceeds ABI 1.5 bounds"))?;
         Ok(())
     }
 
@@ -3704,7 +3810,7 @@ mod configured_session_seam {
 
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
-/// Creates one independent screen session using the ABI 1.4 player-selection
+/// Creates one independent screen session using the ABI 1.5 player-selection
 /// and bootstrap-result contract. Creation never performs an observable
 /// advance. Authenticated script initialization may return ordered cycle-zero
 /// host-work outputs. The returned result owns those outputs, player metadata,
@@ -3744,7 +3850,7 @@ pub unsafe extern "C" fn nux_flow_render_session_create_configured(
                         out_result,
                         status,
                         if status == NuxStatus::AbiMismatch {
-                            "configured session requires ABI 1.4"
+                            "configured session requires ABI 1.5"
                         } else {
                             "configured session descriptor is malformed or oversized"
                         },
@@ -3770,7 +3876,7 @@ pub unsafe extern "C" fn nux_flow_render_session_create_configured(
 
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
-/// Performs one fully copied ABI 1.4 operation on the session's pinned worker.
+/// Performs one fully copied ABI 1.5 operation on the session's pinned worker.
 /// Rust never calls Swift reentrantly; ordered outputs are returned in the owned
 /// result. State batches are atomic and pointer batches preserve immediate
 /// subcycles inside their returned `cycle` values.
@@ -3803,7 +3909,7 @@ pub unsafe extern "C" fn nux_flow_render_session_perform(
                         out_result,
                         status,
                         if status == NuxStatus::AbiMismatch {
-                            "session operation requires ABI 1.4"
+                            "session operation requires ABI 1.5"
                         } else {
                             "session operation is malformed or exceeds a published bound"
                         },
@@ -3829,7 +3935,7 @@ pub unsafe extern "C" fn nux_flow_render_session_perform(
 }
 
 #[unsafe(no_mangle)]
-/// Returns an ABI 1.4 session result's status, or `NULL_ARGUMENT` for null.
+/// Returns an ABI 1.5 session result's status, or `NULL_ARGUMENT` for null.
 ///
 /// # Safety
 ///
@@ -4924,7 +5030,7 @@ pub unsafe extern "C" fn nux_flow_session_result_diagnostic_at(
 }
 
 #[unsafe(no_mangle)]
-/// Releases one ABI 1.4 session result. Null is a no-op.
+/// Releases one ABI 1.5 session result. Null is a no-op.
 ///
 /// # Safety
 ///
@@ -4970,7 +5076,7 @@ mod tests {
         NuxFlowConfiguredSessionDescriptor {
             struct_size: size_u32::<NuxFlowConfiguredSessionDescriptor>(),
             required_abi_major: 1,
-            minimum_abi_minor: 4,
+            minimum_abi_minor: 5,
             artboard_name: NuxByteView::default(),
             player_name: NuxByteView::default(),
         }
@@ -4980,12 +5086,13 @@ mod tests {
         NuxFlowSessionOperation {
             struct_size: size_u32::<NuxFlowSessionOperation>(),
             required_abi_major: 1,
-            minimum_abi_minor: 4,
+            minimum_abi_minor: 5,
             kind,
             state_batch: ptr::null(),
             pointer_batch: ptr::null(),
             advance: ptr::null(),
             query_batch: ptr::null(),
+            text_run_batch: ptr::null(),
         }
     }
 
@@ -5208,6 +5315,30 @@ mod tests {
     }
 
     #[cfg(feature = "apple-product")]
+    fn text_run_apple_seam_artifact() -> Vec<u8> {
+        let mut output = b"RIVE".to_vec();
+        scripted_fixture_push_var_uint(&mut output, 7);
+        scripted_fixture_push_var_uint(&mut output, 0);
+        scripted_fixture_push_var_uint(&mut output, 9_403);
+        scripted_fixture_push_var_uint(&mut output, 0);
+        scripted_fixture_push_object(&mut output, "Backboard", |_| {});
+        scripted_fixture_push_object(&mut output, "Artboard", |output| {
+            scripted_fixture_push_string(output, "Artboard", "name", "Root");
+            scripted_fixture_push_f32(output, "Artboard", "width", 100.0);
+            scripted_fixture_push_f32(output, "Artboard", "height", 100.0);
+        });
+        scripted_fixture_push_object(&mut output, "Text", |output| {
+            scripted_fixture_push_string(output, "Text", "name", "Text");
+        });
+        scripted_fixture_push_object(&mut output, "TextValueRun", |output| {
+            scripted_fixture_push_uint(output, "TextValueRun", "parentId", 1);
+            scripted_fixture_push_string(output, "TextValueRun", "name", "headline");
+            scripted_fixture_push_string(output, "TextValueRun", "text", "initial");
+        });
+        output
+    }
+
+    #[cfg(feature = "apple-product")]
     fn with_signed_scripted_apple_import_request<R>(
         body: impl FnOnce(&NuxFlowImportRequest) -> R,
     ) -> R {
@@ -5332,21 +5463,22 @@ mod tests {
     }
 
     #[test]
-    fn abi_14_handshake_preserves_structurally_valid_abi_11_through_13_compatibility() {
+    fn abi_15_handshake_preserves_structurally_valid_abi_11_through_14_compatibility() {
         assert_eq!(NUX_RUNTIME_ABI_MAJOR, 1);
-        assert_eq!(NUX_RUNTIME_ABI_MINOR, 4);
-        assert_eq!(NUX_FLOW_SESSION_ABI_MINOR, 4);
+        assert_eq!(NUX_RUNTIME_ABI_MINOR, 5);
+        assert_eq!(NUX_FLOW_SESSION_ABI_MINOR, 5);
         assert_eq!(MINIMUM_SUPPORTED_ABI_MINOR, 1);
         assert_eq!(nux_runtime_require_abi(1, 1), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 2), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 3), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 4), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(1, 5), NuxStatus::AbiMismatch);
+        assert_eq!(nux_runtime_require_abi(1, 5), NuxStatus::Ok);
+        assert_eq!(nux_runtime_require_abi(1, 6), NuxStatus::AbiMismatch);
         assert_eq!(nux_runtime_require_abi(2, 1), NuxStatus::AbiMismatch);
     }
 
     #[test]
-    fn abi_14_layouts_preserve_abi_11_through_13_prefixes() {
+    fn abi_15_layouts_add_the_text_run_batch_after_abi_14_prefixes() {
         assert_eq!(std::mem::size_of::<NuxFlowSessionDescriptor>(), 40);
         assert_eq!(std::mem::size_of::<NuxFrameOperation>(), 40);
         assert_eq!(
@@ -5360,11 +5492,20 @@ mod tests {
         assert_eq!(std::mem::size_of::<NuxFlowInstanceReference>(), 16);
         assert_eq!(std::mem::size_of::<NuxFlowStateMutation>(), 88);
         assert_eq!(std::mem::size_of::<NuxFlowStateBatch>(), 56);
+        assert_eq!(std::mem::size_of::<NuxFlowTextRunMutation>(), 40);
+        assert_eq!(std::mem::offset_of!(NuxFlowTextRunMutation, name), 8);
+        assert_eq!(std::mem::offset_of!(NuxFlowTextRunMutation, text), 24);
+        assert_eq!(std::mem::size_of::<NuxFlowTextRunBatch>(), 24);
+        assert_eq!(std::mem::offset_of!(NuxFlowTextRunBatch, mutations), 8);
         assert_eq!(std::mem::size_of::<NuxFlowPointerEvent>(), 24);
         assert_eq!(std::mem::size_of::<NuxFlowPointerBatch>(), 24);
         assert_eq!(std::mem::size_of::<NuxFlowAdvanceOperation>(), 48);
         assert_eq!(std::mem::size_of::<NuxFlowQuery>(), 8);
-        assert_eq!(std::mem::size_of::<NuxFlowSessionOperation>(), 48);
+        assert_eq!(std::mem::size_of::<NuxFlowSessionOperation>(), 56);
+        assert_eq!(
+            std::mem::offset_of!(NuxFlowSessionOperation, text_run_batch),
+            48
+        );
         assert_eq!(std::mem::size_of::<NuxFlowPlayerMetadataView>(), 64);
         assert_eq!(std::mem::size_of::<NuxFlowPlayerInputView>(), 32);
         assert_eq!(std::mem::size_of::<NuxFlowSchemaPropertyView>(), 80);
@@ -5792,12 +5933,17 @@ mod tests {
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
-        descriptor.minimum_abi_minor = 5;
+        descriptor.minimum_abi_minor = 4;
         assert!(matches!(
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
-        descriptor.minimum_abi_minor = 4;
+        descriptor.minimum_abi_minor = 6;
+        assert!(matches!(
+            unsafe { copy_configured_session_descriptor(&descriptor) },
+            Err(NUX_STATUS_ABI_MISMATCH)
+        ));
+        descriptor.minimum_abi_minor = 5;
         assert!(unsafe { copy_configured_session_descriptor(&descriptor) }.is_ok());
         descriptor.required_abi_major = 2;
         assert!(matches!(
@@ -5816,7 +5962,7 @@ mod tests {
     }
 
     #[test]
-    fn session_operation_requires_the_exact_abi_14_handshake() {
+    fn session_operation_requires_the_exact_abi_15_handshake() {
         let advance = NuxFlowAdvanceOperation {
             struct_size: size_u32::<NuxFlowAdvanceOperation>(),
             timestamp_seconds: 0.0,
@@ -5833,22 +5979,242 @@ mod tests {
             Ok(OwnedSessionOperation::Advance(_))
         ));
 
-        request.minimum_abi_minor = 3;
+        request.minimum_abi_minor = 4;
+        assert!(matches!(
+            unsafe { copy_session_operation(&request) },
+            Err(NUX_STATUS_ABI_MISMATCH)
+        ));
+        request.minimum_abi_minor = 6;
         assert!(matches!(
             unsafe { copy_session_operation(&request) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
         request.minimum_abi_minor = 5;
-        assert!(matches!(
-            unsafe { copy_session_operation(&request) },
-            Err(NUX_STATUS_ABI_MISMATCH)
-        ));
-        request.minimum_abi_minor = 4;
         request.required_abi_major = 2;
         assert!(matches!(
             unsafe { copy_session_operation(&request) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
+    }
+
+    #[test]
+    fn text_run_batch_copy_preserves_literal_names_empty_text_and_exclusive_tagging() {
+        let mutation = NuxFlowTextRunMutation {
+            struct_size: size_u32::<NuxFlowTextRunMutation>(),
+            name: bytes(b"group//headline"),
+            text: bytes(b""),
+        };
+        let batch = NuxFlowTextRunBatch {
+            struct_size: size_u32::<NuxFlowTextRunBatch>(),
+            mutations: &mutation,
+            mutation_count: 1,
+        };
+        assert_eq!(
+            unsafe { copy_text_run_batch(&batch) }.expect("copy text-run batch"),
+            vec![OwnedTextRunMutation {
+                name: b"group//headline".to_vec(),
+                text: Vec::new(),
+            }]
+        );
+
+        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_TEXT_RUN_BATCH);
+        request.text_run_batch = &batch;
+        assert!(matches!(
+            unsafe { copy_session_operation(&request) },
+            Ok(OwnedSessionOperation::TextRunBatch(mutations))
+                if mutations.len() == 1
+                    && mutations.first().is_some_and(|mutation| {
+                        mutation.name == b"group//headline" && mutation.text.is_empty()
+                    })
+        ));
+
+        let query = NuxFlowQueryBatch {
+            struct_size: size_u32::<NuxFlowQueryBatch>(),
+            queries: ptr::null(),
+            query_count: 0,
+        };
+        request.query_batch = &query;
+        assert!(matches!(
+            unsafe { copy_session_operation(&request) },
+            Err(NUX_STATUS_INVALID_ARGUMENT)
+        ));
+    }
+
+    #[test]
+    fn text_run_batch_copy_enforces_exact_elements_and_published_byte_bounds() {
+        let name = vec![b'n'; NUX_FLOW_MAX_ID_BYTE_LENGTH as usize + 1];
+        let text = vec![b't'; NUX_FLOW_MAX_STRING_BYTE_LENGTH as usize + 1];
+        let mut mutation = NuxFlowTextRunMutation {
+            struct_size: size_u32::<NuxFlowTextRunMutation>(),
+            name: bytes(b"headline"),
+            text: bytes(b"updated"),
+        };
+        let mut batch = NuxFlowTextRunBatch {
+            struct_size: size_u32::<NuxFlowTextRunBatch>(),
+            mutations: &mutation,
+            mutation_count: 1,
+        };
+
+        mutation.struct_size -= 1;
+        assert!(matches!(
+            unsafe { copy_text_run_batch(&batch) },
+            Err(NUX_STATUS_INVALID_ARGUMENT)
+        ));
+        mutation.struct_size = size_u32::<NuxFlowTextRunMutation>();
+        mutation.name = bytes(&name);
+        assert!(matches!(
+            unsafe { copy_text_run_batch(&batch) },
+            Err(NUX_STATUS_INVALID_ARGUMENT)
+        ));
+        mutation.name = bytes(b"headline");
+        mutation.text = bytes(&text);
+        assert!(matches!(
+            unsafe { copy_text_run_batch(&batch) },
+            Err(NUX_STATUS_INVALID_ARGUMENT)
+        ));
+
+        let one_mib = vec![b't'; NUX_FLOW_MAX_STRING_BYTE_LENGTH as usize];
+        mutation.text = bytes(&one_mib);
+        let mutations = [mutation; 5];
+        batch.mutations = mutations.as_ptr();
+        batch.mutation_count = mutations.len() as u64;
+        assert!(matches!(
+            unsafe { copy_text_run_batch(&batch) },
+            Err(NUX_STATUS_INVALID_ARGUMENT)
+        ));
+
+        batch.mutations = ptr::dangling();
+        batch.mutation_count = NUX_FLOW_MAX_BATCH_ITEM_COUNT + 1;
+        assert!(matches!(
+            unsafe { copy_text_run_batch(&batch) },
+            Err(NUX_STATUS_INVALID_ARGUMENT)
+        ));
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn configured_text_run_batch_crosses_the_public_abi_atomically_and_recovers_after_not_found() {
+        let worker = match RuntimeWorker::spawn(text_run_apple_seam_artifact()) {
+            Ok(worker) => worker,
+            Err(_) => panic!("import authored text-run fixture"),
+        };
+        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle { worker }))
+            .cast::<NuxFlowRuntimeContext>();
+        let descriptor = configured_descriptor();
+        let mut session = ptr::null_mut();
+        let mut create_result = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_flow_render_session_create_configured(
+                    context,
+                    &descriptor,
+                    &mut session,
+                    &mut create_result,
+                )
+            },
+            NuxStatus::Ok
+        );
+        assert!(!session.is_null());
+        assert_eq!(
+            unsafe { nux_flow_session_result_status(create_result) },
+            NuxStatus::Ok
+        );
+        unsafe { nux_flow_session_result_free(create_result) };
+
+        let perform_text_batch = |pairs: &[(&[u8], &[u8])]| {
+            let mutations = pairs
+                .iter()
+                .map(|(name, text)| NuxFlowTextRunMutation {
+                    struct_size: size_u32::<NuxFlowTextRunMutation>(),
+                    name: bytes(name),
+                    text: bytes(text),
+                })
+                .collect::<Vec<_>>();
+            let batch = NuxFlowTextRunBatch {
+                struct_size: size_u32::<NuxFlowTextRunBatch>(),
+                mutations: mutations.as_ptr(),
+                mutation_count: mutations.len() as u64,
+            };
+            let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_TEXT_RUN_BATCH);
+            request.text_run_batch = &batch;
+            let mut result = ptr::null_mut();
+            let status = unsafe { nux_flow_render_session_perform(session, &request, &mut result) };
+            (status, result)
+        };
+
+        let (status, changed_result) = perform_text_batch(&[(b"headline", b"updated")]);
+        assert_eq!(status, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_flow_session_result_status(changed_result) },
+            NuxStatus::Ok
+        );
+        assert!(unsafe { nux_flow_session_result_is_dirty(changed_result) });
+        let mut wake_after = f64::NAN;
+        assert_eq!(
+            unsafe { nux_flow_session_result_wake_after_seconds(changed_result, &mut wake_after) },
+            NuxStatus::Ok
+        );
+        assert_eq!(wake_after, 0.0);
+        unsafe { nux_flow_session_result_free(changed_result) };
+
+        let (status, unchanged_result) = perform_text_batch(&[(b"headline", b"updated")]);
+        assert_eq!(status, NuxStatus::Ok);
+        assert!(!unsafe { nux_flow_session_result_is_dirty(unchanged_result) });
+        assert_eq!(
+            unsafe {
+                nux_flow_session_result_wake_after_seconds(unchanged_result, &mut wake_after)
+            },
+            NuxStatus::NotFound
+        );
+        unsafe { nux_flow_session_result_free(unchanged_result) };
+
+        let (status, missing_result) =
+            perform_text_batch(&[(b"headline", b"must-not-commit"), (b"missing", b"ignored")]);
+        assert_eq!(status, NuxStatus::NotFound);
+        assert_eq!(
+            unsafe { nux_flow_session_result_status(missing_result) },
+            NuxStatus::NotFound
+        );
+        assert!(!unsafe { nux_flow_session_result_is_dirty(missing_result) });
+        assert_eq!(
+            unsafe { nux_flow_session_result_diagnostic_count(missing_result) },
+            1
+        );
+        let mut diagnostic = NuxDiagnosticView::default();
+        assert_eq!(
+            unsafe { nux_flow_session_result_diagnostic_at(missing_result, 0, &mut diagnostic) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            copied_byte_view(diagnostic.code),
+            diagnostic_code_for_status(NuxStatus::NotFound)
+        );
+        assert_eq!(
+            copied_byte_view(diagnostic.message),
+            b"root TextValueRun 'missing' was not found"
+        );
+        unsafe { nux_flow_session_result_free(missing_result) };
+
+        // The rejected batch did not commit its first write or poison the
+        // session: replaying the prior value remains a clean success.
+        let (status, recovered_result) = perform_text_batch(&[(b"headline", b"updated")]);
+        assert_eq!(status, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_flow_session_result_status(recovered_result) },
+            NuxStatus::Ok
+        );
+        assert!(!unsafe { nux_flow_session_result_is_dirty(recovered_result) });
+        assert_eq!(
+            unsafe {
+                nux_flow_session_result_wake_after_seconds(recovered_result, &mut wake_after)
+            },
+            NuxStatus::NotFound
+        );
+        unsafe {
+            nux_flow_session_result_free(recovered_result);
+            nux_flow_render_session_free(session);
+            nux_flow_runtime_context_free(context);
+        }
     }
 
     #[test]
@@ -7860,7 +8226,7 @@ mod tests {
     }
 
     #[test]
-    fn every_v14_export_has_a_panic_firewall() {
+    fn every_flow_session_export_has_a_panic_firewall() {
         let source = include_str!("session_v12.rs");
         let mut checked = 0usize;
         for prefix in ["pub unsafe extern \"C\" fn ", "pub extern \"C\" fn "] {
@@ -7872,7 +8238,7 @@ mod tests {
                 assert!(
                     first_statement.starts_with("ffi_guard(")
                         || first_statement.starts_with("ffi_guard_with_session_result("),
-                    "v1.4 export is missing its panic firewall: {}",
+                    "flow-session export is missing its panic firewall: {}",
                     rest.lines().next().unwrap_or_default()
                 );
                 checked += 1;

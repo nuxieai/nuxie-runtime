@@ -20,9 +20,9 @@ env:
   DEPOT_TOOLS_REF: 1709e20d5ca2afe97bfa726168719c3b77eb9883
 
 jobs:
-  # The jobs and fork-routing decision live in the reviewed reusable workflow.
-  # Pinning its immutable merge commit makes runner-group authorization
-  # independent of this pull request's synthetic merge ref.
+  # Pin the immutable, administrator-reviewed workflow boundary. Its internal
+  # event check keeps fork pull requests on GitHub-hosted macOS while trusted
+  # same-repository changes can use the selected Nuxie runner group.
   apple-runtime-ci:
     name: Apple runtime
     uses: nuxieai/nuxie-runtime/.github/workflows/_trusted-macos.yml@a99754b0de18aadba25f29b1ee7a9b1727742a3f

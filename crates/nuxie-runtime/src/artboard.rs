@@ -291,7 +291,7 @@ pub struct ArtboardInstance {
     text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
     has_legacy_image_layout_scales: Cell<bool>,
     legacy_image_layout_scales: RefCell<BTreeMap<usize, RuntimeLegacyImageLayoutScaleState>>,
-    external_font_assets: BTreeMap<u32, Arc<[u8]>>,
+    external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
     pub(crate) cache_epoch: u64,
@@ -510,6 +510,7 @@ pub(crate) struct RuntimeComponentListLogicalItem {
 struct RuntimeArtboardBuildContext {
     file: Arc<RuntimeFile>,
     artboards: Arc<Vec<ArtboardGraph>>,
+    external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
     artboard_index_by_global: Arc<Vec<Option<usize>>>,
     nested_structure_epoch: Arc<AtomicU64>,
     paint_preparation_epoch: Arc<AtomicU64>,
@@ -610,6 +611,12 @@ fn state_machine_requires_outer_update_probe(instance: &StateMachineInstance) ->
 }
 
 impl ArtboardInstance {
+    /// Validate bytes against both font backends used by runtime text.
+    #[must_use]
+    pub fn external_font_bytes_are_parseable(bytes: &[u8]) -> bool {
+        crate::text::embedded_font_is_parseable(bytes)
+    }
+
     fn reset_layout_constraint_bounds_for_new_occurrence(&mut self) {
         self.layout_constraint_bounds_enabled = false;
         self.layout_constraint_bounds = None;
@@ -710,6 +717,7 @@ impl ArtboardInstance {
         let context = RuntimeArtboardBuildContext {
             file: Arc::new(file.clone()),
             artboards: Arc::new(artboards.clone()),
+            external_font_assets: Arc::new(BTreeMap::new()),
             artboard_index_by_global: Arc::new(build_artboard_index_by_global(&artboards)),
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
             paint_preparation_epoch: Arc::new(AtomicU64::new(0)),
@@ -729,9 +737,21 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         artboards: &[ArtboardGraph],
     ) -> Result<Self> {
+        Self::from_graph_with_artboards_and_external_fonts(file, graph, artboards, &BTreeMap::new())
+    }
+
+    /// Instantiate an artboard tree with a validated file-owned external font
+    /// snapshot keyed by semantic `FileAsset.assetId`.
+    pub fn from_graph_with_artboards_and_external_fonts(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        external_font_assets: &BTreeMap<u32, Arc<[u8]>>,
+    ) -> Result<Self> {
         let context = RuntimeArtboardBuildContext {
             file: Arc::new(file.clone()),
             artboards: Arc::new(artboards.to_vec()),
+            external_font_assets: Arc::new(external_font_assets.clone()),
             artboard_index_by_global: Arc::new(build_artboard_index_by_global(artboards)),
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
             paint_preparation_epoch: Arc::new(AtomicU64::new(0)),
@@ -754,6 +774,10 @@ impl ArtboardInstance {
         build_context: Option<RuntimeArtboardBuildContext>,
         layout_constraint_bounds_enabled: bool,
     ) -> Result<Self> {
+        let external_font_assets = build_context
+            .as_ref()
+            .map(|context| Arc::clone(&context.external_font_assets))
+            .unwrap_or_default();
         let inserted = visiting.insert(graph.global_id);
         let dimensions =
             RuntimeArtboardDimensions::from_object(file.object(graph.global_id as usize));
@@ -961,7 +985,7 @@ impl ArtboardInstance {
             text_style_font_overrides: BTreeMap::new(),
             has_legacy_image_layout_scales: Cell::new(false),
             legacy_image_layout_scales: RefCell::new(BTreeMap::new()),
-            external_font_assets: BTreeMap::new(),
+            external_font_assets,
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
@@ -986,50 +1010,41 @@ impl ArtboardInstance {
         Ok(instance)
     }
 
-    /// Attach already-loaded bytes to a file-wide external `FontAsset` identity.
-    ///
-    /// This performs no I/O. `asset_id` is the serialized `FileAsset.assetId`,
-    /// not the asset's ordinal in [`RuntimeFile::file_assets`]. Validation is
-    /// complete before the instance-local map changes, and embedded contents
-    /// remain authoritative when the file contains them. The attachment is
-    /// local to this artboard instance in the current E2 subset; nested
-    /// artboard instances do not inherit it.
-    pub fn attach_external_font_asset_bytes(
+    pub(crate) fn external_font_asset_bytes(&self, asset_id: u32) -> Option<&[u8]> {
+        self.external_font_assets.get(&asset_id).map(AsRef::as_ref)
+    }
+
+    /// Replace the validated external-font snapshot for this complete runtime
+    /// tree, including contexts used by children materialized later.
+    pub fn replace_external_font_asset_snapshot(
         &mut self,
-        asset_id: u32,
-        bytes: Arc<[u8]>,
-    ) -> std::result::Result<(), ExternalFontAssetError> {
-        let Some(actual) = self.runtime_file().and_then(|runtime| {
-            runtime
-                .file_assets()
-                .into_iter()
-                .find(|asset| asset.uint_property("assetId") == Some(u64::from(asset_id)))
-                .map(|asset| asset.type_name)
-        }) else {
-            return Err(ExternalFontAssetError::UnknownAsset { asset_id });
-        };
-        if actual != "FontAsset" {
-            return Err(ExternalFontAssetError::WrongAssetKind { asset_id, actual });
+        external_font_assets: &BTreeMap<u32, Arc<[u8]>>,
+    ) {
+        self.apply_external_font_asset_snapshot(Arc::new(external_font_assets.clone()));
+    }
+
+    fn apply_external_font_asset_snapshot(
+        &mut self,
+        external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
+    ) {
+        self.external_font_assets = Arc::clone(&external_font_assets);
+        if let Some(context) = self.build_context.as_mut() {
+            context.external_font_assets = Arc::clone(&external_font_assets);
         }
-        if !crate::text::embedded_font_is_parseable(&bytes) {
-            return Err(ExternalFontAssetError::InvalidFont { asset_id });
+        for nested in self.nested_artboards.values_mut() {
+            nested
+                .child
+                .apply_external_font_asset_snapshot(Arc::clone(&external_font_assets));
         }
-        if self
-            .external_font_assets
-            .get(&asset_id)
-            .is_some_and(|current| current.as_ref() == bytes.as_ref())
-        {
-            return Ok(());
+        for items in self.component_list_items.values_mut() {
+            for item in items {
+                item.child
+                    .apply_external_font_asset_snapshot(Arc::clone(&external_font_assets));
+            }
         }
-        self.external_font_assets.insert(asset_id, bytes);
         self.mark_text_changed();
         self.mark_path_changed();
         self.mark_layout_changed();
-        Ok(())
-    }
-
-    pub(crate) fn external_font_asset_bytes(&self, asset_id: u32) -> Option<&[u8]> {
-        self.external_font_assets.get(&asset_id).map(AsRef::as_ref)
     }
 
     pub fn component(&self, local_id: usize) -> Option<&RuntimeComponent> {
@@ -6102,7 +6117,7 @@ mod tests {
             text_style_font_overrides: BTreeMap::new(),
             has_legacy_image_layout_scales: Cell::new(false),
             legacy_image_layout_scales: RefCell::new(BTreeMap::new()),
-            external_font_assets: BTreeMap::new(),
+            external_font_assets: Arc::new(BTreeMap::new()),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
@@ -6378,10 +6393,10 @@ mod tests {
     }
 
     #[test]
-    fn artboard_clone_preserves_instance_local_external_font_attachment() {
+    fn artboard_clone_shares_the_file_owned_external_font_snapshot() {
         let mut original = synthetic_instance(Vec::new(), Vec::new());
         let bytes = Arc::<[u8]>::from(vec![1, 2, 3]);
-        original.external_font_assets.insert(7, Arc::clone(&bytes));
+        original.external_font_assets = Arc::new(BTreeMap::from([(7, Arc::clone(&bytes))]));
 
         let cloned = original.clone();
         let cloned_bytes = cloned
@@ -6389,6 +6404,10 @@ mod tests {
             .get(&7)
             .expect("cloned artboard retains external font asset");
 
+        assert!(Arc::ptr_eq(
+            &original.external_font_assets,
+            &cloned.external_font_assets
+        ));
         assert!(Arc::ptr_eq(&bytes, cloned_bytes));
     }
 
@@ -8457,6 +8476,59 @@ mod tests {
                 .iter()
                 .all(|component| component.dirt == ComponentDirt::FILTHY)
         );
+    }
+
+    #[test]
+    fn construction_seeds_file_owned_external_fonts_on_the_root_instance() {
+        let bytes = include_bytes!("../../../fixtures/graph/dependency_test.riv");
+        let file = read_runtime_file(bytes).expect("fixture should import");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture should graph");
+        let artboard = graph.artboards.first().expect("fixture has artboard");
+        let font_bytes = Arc::<[u8]>::from(vec![1, 2, 3]);
+        let external_fonts = BTreeMap::from([(7, Arc::clone(&font_bytes))]);
+
+        let instance = ArtboardInstance::from_graph_with_artboards_and_external_fonts(
+            &file,
+            artboard,
+            &graph.artboards,
+            &external_fonts,
+        )
+        .expect("instance builds with file-owned fonts");
+
+        assert_eq!(instance.external_font_asset_bytes(7), Some(&*font_bytes));
+        assert_eq!(
+            instance
+                .build_context
+                .as_ref()
+                .and_then(|context| context.external_font_assets.get(&7))
+                .map(AsRef::as_ref),
+            Some(&*font_bytes)
+        );
+    }
+
+    #[test]
+    fn replacing_file_owned_fonts_updates_existing_nested_children() {
+        let mut instance = synthetic_instance(Vec::new(), Vec::new());
+        instance
+            .nested_artboards
+            .insert(7, synthetic_nested_artboard_instance(0));
+        let font_bytes = Arc::<[u8]>::from(vec![1, 2, 3]);
+        let external_fonts = BTreeMap::from([(7, Arc::clone(&font_bytes))]);
+
+        instance.replace_external_font_asset_snapshot(&external_fonts);
+
+        let nested = instance
+            .nested_artboards
+            .get(&7)
+            .expect("nested child exists");
+        assert_eq!(
+            nested.child.external_font_asset_bytes(7),
+            Some(&*font_bytes)
+        );
+        assert!(Arc::ptr_eq(
+            &instance.external_font_assets,
+            &nested.child.external_font_assets
+        ));
     }
 
     fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {

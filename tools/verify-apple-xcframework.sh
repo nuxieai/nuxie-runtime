@@ -101,6 +101,10 @@ required_symbols=(
     _nux_flow_render_session_attach_apple_surface
     _nux_apple_surface_reattach
     _nux_flow_render_session_advance
+    _nux_operation_result_script_authorization
+    _nux_operation_result_authenticated_key_id
+    _nux_operation_result_diagnostic_count
+    _nux_operation_result_diagnostic_at
     _rust_eh_personality
 )
 for library in "${device_library}" "${simulator_library}"; do

@@ -4,7 +4,15 @@
 #include <stdint.h>
 
 _Static_assert(NUX_RUNTIME_ABI_MAJOR == 1, "unexpected runtime ABI major");
-_Static_assert(NUX_RUNTIME_ABI_MINOR == 0, "unexpected runtime ABI minor");
+_Static_assert(NUX_RUNTIME_ABI_MINOR == 1, "unexpected runtime ABI minor");
+_Static_assert(NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY == 1,
+               "script authorization values are part of the ABI");
+_Static_assert(NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED == 2,
+               "script authorization values are part of the ABI");
+_Static_assert(NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE == 1,
+               "external asset kinds are part of the ABI");
+_Static_assert(NUX_DIAGNOSTIC_SEVERITY_FATAL == 2,
+               "diagnostic severities are part of the ABI");
 _Static_assert(NUX_SURFACE_DISPOSITION_PRESENTED == 1,
                "surface disposition values are part of the ABI");
 _Static_assert(NUX_SURFACE_DISPOSITION_FATAL == 9,
@@ -17,10 +25,26 @@ _Static_assert(sizeof(struct NuxByteView) == 16,
                "unexpected NuxByteView layout");
 _Static_assert(offsetof(struct NuxByteView, len) == 8,
                "unexpected NuxByteView.len offset");
-_Static_assert(sizeof(struct NuxFlowImportRequest) == 24,
+_Static_assert(sizeof(struct NuxFlowAuthorizationKey) == 40,
+               "unexpected NuxFlowAuthorizationKey layout");
+_Static_assert(offsetof(struct NuxFlowAuthorizationKey, key_id) == 8,
+               "unexpected NuxFlowAuthorizationKey.key_id offset");
+_Static_assert(sizeof(struct NuxFlowExternalAsset) == 80,
+               "unexpected NuxFlowExternalAsset layout");
+_Static_assert(offsetof(struct NuxFlowExternalAsset, unique_name) == 16,
+               "unexpected NuxFlowExternalAsset.unique_name offset");
+_Static_assert(offsetof(struct NuxFlowExternalAsset, bytes) == 64,
+               "unexpected NuxFlowExternalAsset.bytes offset");
+_Static_assert(sizeof(struct NuxFlowImportRequest) == 112,
                "unexpected NuxFlowImportRequest layout");
 _Static_assert(offsetof(struct NuxFlowImportRequest, artifact_bytes) == 8,
                "unexpected NuxFlowImportRequest.artifact_bytes offset");
+_Static_assert(offsetof(struct NuxFlowImportRequest, selected_key) == 88,
+               "unexpected NuxFlowImportRequest.selected_key offset");
+_Static_assert(offsetof(struct NuxFlowImportRequest, external_asset_count) == 104,
+               "unexpected NuxFlowImportRequest.external_asset_count offset");
+_Static_assert(sizeof(struct NuxDiagnosticView) == 40,
+               "unexpected NuxDiagnosticView layout");
 _Static_assert(sizeof(struct NuxFlowSessionDescriptor) == 40,
                "unexpected NuxFlowSessionDescriptor layout");
 _Static_assert(offsetof(struct NuxFlowSessionDescriptor, artboard_name) == 8,
@@ -71,6 +95,18 @@ static void typecheck_product_api(void)
                          const struct NuxFrameOperation*,
                          struct NuxOperationResult**) =
         nux_flow_render_session_advance;
+    NuxScriptAuthorization (*script_authorization)(
+        const struct NuxOperationResult*) =
+        nux_operation_result_script_authorization;
+    NuxStatus (*authenticated_key_id)(const struct NuxOperationResult*,
+                                      struct NuxByteView*) =
+        nux_operation_result_authenticated_key_id;
+    uint64_t (*diagnostic_count)(const struct NuxOperationResult*) =
+        nux_operation_result_diagnostic_count;
+    NuxStatus (*diagnostic_at)(const struct NuxOperationResult*,
+                               uint64_t,
+                               struct NuxDiagnosticView*) =
+        nux_operation_result_diagnostic_at;
 
     (void)abi_major;
     (void)require_abi;
@@ -80,6 +116,10 @@ static void typecheck_product_api(void)
     (void)reattach_surface;
     (void)copy_metal_device;
     (void)advance;
+    (void)script_authorization;
+    (void)authenticated_key_id;
+    (void)diagnostic_count;
+    (void)diagnostic_at;
 }
 
 int main(void)

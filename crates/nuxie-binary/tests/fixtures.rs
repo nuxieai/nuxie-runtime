@@ -5832,6 +5832,13 @@ fn runtime_view_models_match_cpp_file_view_model_collection() {
         view_models[0].instances[0].values[0].object.type_name,
         "ViewModelInstanceBoolean"
     );
+    let publisher_value = file
+        .data_context_view_model_property_for_instance(view_models[0].instances[0].object, &[0, 0])
+        .expect("publisher-era instance value resolves through the data-context path");
+    assert_eq!(
+        file.view_model_instance_boolean_value_for_object(publisher_value),
+        Some(true)
+    );
 
     assert_eq!(
         view_models[1].object.string_property_bytes("name"),

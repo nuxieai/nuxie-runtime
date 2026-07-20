@@ -45,11 +45,14 @@ rust_compiler="$(rustup which --toolchain "${rust_toolchain}" rustc)"
 rust_host="$("${rust_compiler}" -vV | sed -n 's/^host: //p')"
 rust_sysroot="$("${rust_compiler}" --print sysroot)"
 rust_llvm_nm="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-nm"
-if [[ ! -x "${rust_llvm_nm}" ]]; then
-    echo "missing llvm-nm for Rust toolchain ${rust_toolchain}" >&2
-    echo "install it with: rustup component add --toolchain ${rust_toolchain} llvm-tools" >&2
-    exit 1
-fi
+rust_llvm_readobj="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-readobj"
+for rust_llvm_tool in "${rust_llvm_nm}" "${rust_llvm_readobj}"; do
+    if [[ ! -x "${rust_llvm_tool}" ]]; then
+        echo "missing $(basename "${rust_llvm_tool}") for Rust toolchain ${rust_toolchain}" >&2
+        echo "install it with: rustup component add --toolchain ${rust_toolchain} llvm-tools" >&2
+        exit 1
+    fi
+done
 
 expected_checksum="$(metadata_scalar swiftPackageChecksum string)"
 actual_checksum="$(swift package compute-checksum "${archive_path}")"
@@ -100,6 +103,33 @@ if [[ "${simulator_archs}" != *arm64* || "${simulator_archs}" != *x86_64* ]]; th
     echo "simulator library is missing a required architecture: ${simulator_archs}" >&2
     exit 1
 fi
+
+# Apple deprecated embedded bitcode, and `__LLVM,__bitcode` members produced
+# by a newer LLVM break symbol listing on consumers with an older Apple LLVM.
+# No archive member may retain a `__LLVM` segment.
+assert_no_llvm_segment() {
+    local library="$1"
+    local label="$2"
+    local sections
+    if ! sections="$("${rust_llvm_readobj}" --sections "${library}")"; then
+        echo "cannot inspect Mach-O sections in ${label}" >&2
+        exit 1
+    fi
+    if grep -q 'Segment: __LLVM' <<< "${sections}"; then
+        echo "${label} contains __LLVM segment sections (embedded bitcode)" >&2
+        exit 1
+    fi
+}
+
+phase "validate no embedded LLVM bitcode is shipped"
+assert_no_llvm_segment "${device_library}" "device library"
+# llvm-readobj walks every member of a thin archive but only one slice of a
+# universal file, so split the simulator library per architecture first.
+for simulator_arch in arm64 x86_64; do
+    thin_simulator_library="${verification_temp_dir}/libnux_apple_runtime-${simulator_arch}.a"
+    lipo "${simulator_library}" -thin "${simulator_arch}" -output "${thin_simulator_library}"
+    assert_no_llvm_segment "${thin_simulator_library}" "simulator library (${simulator_arch})"
+done
 headers_dir="$(dirname "${device_library}")/Headers"
 simulator_headers_dir="$(dirname "${simulator_library}")/Headers"
 require_file "${headers_dir}/nux_runtime.generated.h"

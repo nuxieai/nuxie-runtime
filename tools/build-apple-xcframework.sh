@@ -29,6 +29,7 @@ rust_compiler="$(rustup which --toolchain "${rust_toolchain}" rustc)"
 rust_host="$("${rust_compiler}" -vV | sed -n 's/^host: //p')"
 rust_sysroot="$("${rust_compiler}" --print sysroot)"
 rust_llvm_nm="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-nm"
+rust_llvm_objcopy="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-objcopy"
 runtime_revision="${NUX_RUNTIME_SOURCE_REVISION:-}"
 xcode_version="$(xcodebuild -version | sed -n 's/^Xcode //p')"
 xcode_build="$(xcodebuild -version | sed -n 's/^Build version //p')"
@@ -40,6 +41,7 @@ build_root="${output_root}/build"
 cargo_target_dir="${build_root}/cargo"
 headers_dir="${build_root}/Headers"
 simulator_dir="${build_root}/simulator"
+stripped_root="${build_root}/stripped"
 xcframework_path="${output_root}/NuxieRuntime.xcframework"
 archive_path="${output_root}/NuxieRuntime.xcframework.zip"
 metadata_path="${output_root}/artifact.json"
@@ -64,11 +66,13 @@ if [[ -z "${luaur_version}" ]]; then
     exit 10
 fi
 
-if [[ ! -x "${rust_llvm_nm}" ]]; then
-    echo "missing llvm-nm for Rust toolchain ${rust_toolchain}" >&2
-    echo "install it with: rustup component add --toolchain ${rust_toolchain} llvm-tools" >&2
-    exit 9
-fi
+for rust_llvm_tool in "${rust_llvm_nm}" "${rust_llvm_objcopy}"; do
+    if [[ ! -x "${rust_llvm_tool}" ]]; then
+        echo "missing $(basename "${rust_llvm_tool}") for Rust toolchain ${rust_toolchain}" >&2
+        echo "install it with: rustup component add --toolchain ${rust_toolchain} llvm-tools" >&2
+        exit 9
+    fi
+done
 
 phase() {
     printf '\n==> %s\n' "$1"
@@ -117,10 +121,11 @@ fi
 rm -rf \
     "${headers_dir}" \
     "${simulator_dir}" \
+    "${stripped_root}" \
     "${xcframework_path}" \
     "${archive_path}" \
     "${metadata_path}"
-mkdir -p "${output_root}" "${build_root}" "${headers_dir}" "${simulator_dir}"
+mkdir -p "${output_root}" "${build_root}" "${headers_dir}" "${simulator_dir}" "${stripped_root}"
 phase "Prepare deterministic Apple runtime output"
 report_disk
 
@@ -153,9 +158,28 @@ for target in "${targets[@]}"; do
     report_disk
 done
 
-device_library="${cargo_target_dir}/aarch64-apple-ios/${profile}/libnux_apple_runtime.a"
-arm_simulator_library="${cargo_target_dir}/aarch64-apple-ios-sim/${profile}/libnux_apple_runtime.a"
-intel_simulator_library="${cargo_target_dir}/x86_64-apple-ios/${profile}/libnux_apple_runtime.a"
+# Fat-LTO Rust staticlibs embed LLVM bitcode (`__LLVM,__bitcode` /
+# `__LLVM,__cmdline`) in some archive members. Apple deprecated embedded
+# bitcode: shipping it bloats the artifact and Apple LLVM older than the
+# bitcode's producer cannot parse those members (`llvm-nm` fails with
+# "Unknown attribute kind"). Strip the sections with the pinned Rust
+# toolchain's llvm-objcopy (Xcode's `bitcode_strip` is broken in 26.6) on
+# copies, so Cargo's incremental cache keeps its original objects.
+phase "Strip embedded LLVM bitcode from the runtime libraries"
+for target in "${targets[@]}"; do
+    mkdir -p "${stripped_root}/${target}"
+    cp "${cargo_target_dir}/${target}/${profile}/libnux_apple_runtime.a" \
+        "${stripped_root}/${target}/libnux_apple_runtime.a"
+    "${rust_llvm_objcopy}" \
+        --remove-section=__LLVM,__bitcode \
+        --remove-section=__LLVM,__cmdline \
+        "${stripped_root}/${target}/libnux_apple_runtime.a"
+done
+report_disk
+
+device_library="${stripped_root}/aarch64-apple-ios/libnux_apple_runtime.a"
+arm_simulator_library="${stripped_root}/aarch64-apple-ios-sim/libnux_apple_runtime.a"
+intel_simulator_library="${stripped_root}/x86_64-apple-ios/libnux_apple_runtime.a"
 simulator_library="${simulator_dir}/libnux_apple_runtime.a"
 
 phase "Create the universal simulator library"

@@ -611,6 +611,7 @@ fn refresh_bound_script_artboard_inputs(
         };
         let Some(bound_artboard_id) =
             nuxie_runtime::bound_script_artboard_input(runtime, &context.borrow(), input)
+                .map_err(|error| anyhow!(error))?
         else {
             continue;
         };
@@ -2461,13 +2462,16 @@ fn initialize_scripted_data_converters(
             let Some(name) = input.string_property("name") else {
                 continue;
             };
-            let value = context_model
-                .and_then(|model| {
+            let bound_value = match context_model {
+                Some(model) => {
                     let owned = model.owned_handle();
                     let root = owned.root_handle();
                     nuxie_runtime::bound_script_input_value(runtime, &root.borrow(), input)
-                })
-                .or_else(|| default_script_input_value(input));
+                        .map_err(|error| anyhow!(error))?
+                }
+                None => None,
+            };
+            let value = bound_value.or_else(|| default_script_input_value(input));
             if let Some(value) = value {
                 script_instance.set_input(name, value).with_context(|| {
                     format!(
@@ -3032,26 +3036,27 @@ fn rehydrate_script_inputs(
                 .with_context(|| format!("failed to rebind view-model script input '{name}'"))?;
             continue;
         }
-        let value = owned_view_model_context
-            .and_then(|context| {
+        let bound_value = match owned_view_model_context {
+            Some(context) => {
                 let root = context.root_handle();
                 nuxie_runtime::bound_script_input_value(runtime, &root.borrow(), object)
-            })
-            .or_else(|| match type_name {
-                "ScriptInputBoolean" => {
-                    object.bool_property("propertyValue").map(ScriptValue::Bool)
-                }
-                "ScriptInputColor" => object
-                    .color_property("propertyValue")
-                    .map(|value| ScriptValue::Number(value as f64)),
-                "ScriptInputNumber" => object
-                    .double_property("propertyValue")
-                    .map(|value| ScriptValue::Number(f64::from(value))),
-                "ScriptInputString" => object
-                    .string_property("propertyValue")
-                    .map(|value| ScriptValue::String(value.to_owned())),
-                _ => None,
-            });
+                    .map_err(|error| anyhow!(error))?
+            }
+            None => None,
+        };
+        let value = bound_value.or_else(|| match type_name {
+            "ScriptInputBoolean" => object.bool_property("propertyValue").map(ScriptValue::Bool),
+            "ScriptInputColor" => object
+                .color_property("propertyValue")
+                .map(|value| ScriptValue::Number(value as f64)),
+            "ScriptInputNumber" => object
+                .double_property("propertyValue")
+                .map(|value| ScriptValue::Number(f64::from(value))),
+            "ScriptInputString" => object
+                .string_property("propertyValue")
+                .map(|value| ScriptValue::String(value.to_owned())),
+            _ => None,
+        });
         if let Some(value) = value {
             instance
                 .set_script_input_for_global(scripted_global_id, name, value)

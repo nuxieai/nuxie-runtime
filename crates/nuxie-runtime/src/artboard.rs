@@ -6462,6 +6462,7 @@ mod tests {
             bindable_booleans: Arc::new(Vec::new()),
             view_model_triggers: Arc::new(Vec::new()),
             transition_duration_bindings: Arc::new(Vec::new()),
+            scripted_listener_actions: Vec::new(),
         }
     }
 

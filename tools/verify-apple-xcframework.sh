@@ -100,6 +100,16 @@ if [[ "${simulator_archs}" != *arm64* || "${simulator_archs}" != *x86_64* ]]; th
     echo "simulator library is missing a required architecture: ${simulator_archs}" >&2
     exit 1
 fi
+headers_dir="$(dirname "${device_library}")/Headers"
+simulator_headers_dir="$(dirname "${simulator_library}")/Headers"
+require_file "${headers_dir}/nux_runtime.generated.h"
+header_abi_major="$(sed -n 's/^#define NUX_RUNTIME_ABI_MAJOR //p' "${headers_dir}/nux_runtime.generated.h")"
+header_abi_minor="$(sed -n 's/^#define NUX_RUNTIME_ABI_MINOR //p' "${headers_dir}/nux_runtime.generated.h")"
+header_flow_session_abi_minor="$(sed -n 's/^#define NUX_FLOW_SESSION_ABI_MINOR //p' "${headers_dir}/nux_runtime.generated.h")"
+if [[ -z "${header_abi_major}" || -z "${header_abi_minor}" || -z "${header_flow_session_abi_minor}" ]]; then
+    echo "generated runtime header is missing an ABI version define" >&2
+    exit 1
+fi
 
 required_symbols=(
     _nux_runtime_abi_major
@@ -179,6 +189,9 @@ for target_and_library in \
     grep -Fq "\"rustc\":\"rustc ${rust_toolchain}" <<< "${provenance}"
     grep -Fq '"features":"apple-product"' <<< "${provenance}"
     grep -Fq "\"luaurVersion\":\"${luaur_version}\"" <<< "${provenance}"
+    grep -Fq "\"runtimeAbiMajor\":${header_abi_major}" <<< "${provenance}"
+    grep -Fq "\"runtimeAbiMinor\":${header_abi_minor}" <<< "${provenance}"
+    grep -Fq "\"flowSessionAbiMinor\":${header_flow_session_abi_minor}" <<< "${provenance}"
 done
 
 expected_public_headers="$(printf '%s\n' \
@@ -203,16 +216,12 @@ verify_public_header_allowlist() {
     fi
 }
 
-headers_dir="$(dirname "${device_library}")/Headers"
-simulator_headers_dir="$(dirname "${simulator_library}")/Headers"
 phase "validate the public header boundary"
 verify_public_header_allowlist "${headers_dir}"
 verify_public_header_allowlist "${simulator_headers_dir}"
 for public_header in module.modulemap nux_runtime.generated.h nux_runtime.h; do
     cmp "${headers_dir}/${public_header}" "${simulator_headers_dir}/${public_header}"
 done
-header_abi_major="$(sed -n 's/^#define NUX_RUNTIME_ABI_MAJOR //p' "${headers_dir}/nux_runtime.generated.h")"
-header_abi_minor="$(sed -n 's/^#define NUX_RUNTIME_ABI_MINOR //p' "${headers_dir}/nux_runtime.generated.h")"
 test "$(metadata_scalar abiMajor integer)" = "${header_abi_major}"
 test "$(metadata_scalar abiMinor integer)" = "${header_abi_minor}"
 

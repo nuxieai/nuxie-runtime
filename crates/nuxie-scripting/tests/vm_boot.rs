@@ -4,8 +4,8 @@
 
 use luaur_rt::{Function, Table, Value};
 use nuxie_runtime::{
-    NoopScriptHost, ScriptDataConverterMethod, ScriptInstance, ScriptListenerInvocation,
-    ScriptPointerEventKind, ScriptValue,
+    NoopScriptHost, ScriptDataConverterMethod, ScriptInstance, ScriptListenerActionMethod,
+    ScriptListenerInvocation, ScriptPointerEventKind, ScriptValue,
 };
 use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
 
@@ -349,12 +349,15 @@ fn scripted_listener_prefers_perform_action_and_preserves_pointer_payload() {
     let mut instance = LuaScriptInstance::new(table);
     instance
         .call_listener_action(
-            ScriptListenerInvocation::Pointer {
+            ScriptListenerActionMethod::PerformAction,
+            &ScriptListenerInvocation::Pointer {
                 pointer_id: 9,
-                position: (20.0, 30.0),
-                previous_position: (10.0, 15.0),
-                kind: ScriptPointerEventKind::Click,
-                time_stamp: 0.25,
+                x: 20.0,
+                y: 30.0,
+                previous_x: 10.0,
+                previous_y: 15.0,
+                event: ScriptPointerEventKind::Click,
+                timestamp_seconds: 0.25,
             },
             &mut NoopScriptHost,
         )

@@ -39,7 +39,7 @@ use std::{
 };
 
 pub const NUX_RUNTIME_ABI_MAJOR: u16 = 1;
-pub const NUX_RUNTIME_ABI_MINOR: u16 = 3;
+pub const NUX_RUNTIME_ABI_MINOR: u16 = 4;
 const MINIMUM_SUPPORTED_ABI_MINOR: u16 = 1;
 
 const MAX_ARTIFACT_BYTE_LENGTH: usize = 67_108_864;
@@ -51,6 +51,8 @@ const MAX_EXTERNAL_ASSET_TOTAL_BYTE_LENGTH: usize = 134_217_728;
 const MAX_SELECTOR_BYTE_LENGTH: usize = 4_096;
 const MAX_ASSET_SOURCE_KEY_BYTE_LENGTH: usize = MAX_MANIFEST_BYTE_LENGTH;
 const PANIC_DIAGNOSTIC: &str = "runtime panicked; the affected flow session is terminated";
+const RESULT_LIMIT_DIAGNOSTIC_CODE: &[u8] = b"nux_runtime.result_limit_exceeded";
+const SCRIPT_RESOURCE_DIAGNOSTIC_CODE: &[u8] = b"nux_runtime.script_resource_exceeded";
 const BUILD_PROVENANCE: &str = env!("NUX_RUNTIME_BUILD_PROVENANCE");
 
 fn ffi_guard<R>(fallback: R, body: impl FnOnce() -> R) -> R {
@@ -424,7 +426,11 @@ struct WorkerState {
 #[cfg(feature = "apple-product")]
 struct SessionState {
     is_fatal: bool,
+    fatal_diagnostic: Option<String>,
     flow_session: FlowSession,
+    // A stable address is part of the script renderer-domain contract. The
+    // factory belongs to the logical session, not to its optional surface.
+    factory: Box<WgpuFactory>,
     render_cache: Option<ArtboardRenderCache>,
     legacy_timestamp_seconds: f64,
     #[cfg(test)]
@@ -435,8 +441,28 @@ struct SessionState {
 #[cfg(feature = "apple-product")]
 struct SurfaceState {
     id: SurfaceId,
-    factory: WgpuFactory,
     surface: AppleSurface,
+}
+
+#[cfg(feature = "apple-product")]
+impl SessionState {
+    fn terminalize(&mut self, diagnostic: impl Into<String>) {
+        self.is_fatal = true;
+        self.fatal_diagnostic = Some(diagnostic.into());
+    }
+}
+
+#[cfg(feature = "apple-product")]
+fn terminalize_after_committed_advance_failure(
+    session: &mut SessionState,
+    phase: &str,
+    failure: RuntimeFailure,
+) -> RuntimeFailure {
+    session.terminalize(format!(
+        "flow session is terminal after a committed advance failed during {phase}: {}",
+        failure.diagnostic
+    ));
+    failure
 }
 
 #[cfg(feature = "apple-product")]
@@ -567,16 +593,52 @@ fn import_runtime_input(
 #[derive(Debug)]
 struct RuntimeFailure {
     status: NuxStatus,
+    diagnostic_code: &'static [u8],
     diagnostic: String,
 }
 
 #[cfg(feature = "apple-product")]
 impl RuntimeFailure {
     fn new(status: NuxStatus, diagnostic: impl Into<String>) -> Self {
+        Self::with_code(status, diagnostic_code_for_status(status), diagnostic)
+    }
+
+    fn with_code(
+        status: NuxStatus,
+        diagnostic_code: &'static [u8],
+        diagnostic: impl Into<String>,
+    ) -> Self {
         Self {
             status,
+            diagnostic_code,
             diagnostic: diagnostic.into(),
         }
+    }
+
+    fn flow_session(kind: FlowSessionErrorKind, diagnostic: impl Into<String>) -> Self {
+        let (status, diagnostic_code) = match kind {
+            FlowSessionErrorKind::NotFound => (
+                NuxStatus::NotFound,
+                diagnostic_code_for_status(NuxStatus::NotFound),
+            ),
+            FlowSessionErrorKind::InvalidArgument
+            | FlowSessionErrorKind::LimitExceeded
+            | FlowSessionErrorKind::Conflict => (
+                NuxStatus::InvalidArgument,
+                diagnostic_code_for_status(NuxStatus::InvalidArgument),
+            ),
+            FlowSessionErrorKind::ResultLimitExceeded => {
+                (NuxStatus::RuntimeError, RESULT_LIMIT_DIAGNOSTIC_CODE)
+            }
+            FlowSessionErrorKind::ScriptResourceExceeded => {
+                (NuxStatus::RuntimeError, SCRIPT_RESOURCE_DIAGNOSTIC_CODE)
+            }
+            FlowSessionErrorKind::Runtime => (
+                NuxStatus::RuntimeError,
+                diagnostic_code_for_status(NuxStatus::RuntimeError),
+            ),
+        };
+        Self::with_code(status, diagnostic_code, diagnostic)
     }
 
     fn runtime(diagnostic: impl Into<String>) -> Self {
@@ -592,14 +654,7 @@ impl RuntimeFailure {
 fn runtime_failure_from_flow_session(
     error: nuxie::flow_session::FlowSessionError,
 ) -> RuntimeFailure {
-    let status = match error.kind() {
-        FlowSessionErrorKind::NotFound => NuxStatus::NotFound,
-        FlowSessionErrorKind::InvalidArgument
-        | FlowSessionErrorKind::LimitExceeded
-        | FlowSessionErrorKind::Conflict => NuxStatus::InvalidArgument,
-        FlowSessionErrorKind::Runtime => NuxStatus::RuntimeError,
-    };
-    RuntimeFailure::new(status, error.message())
+    RuntimeFailure::flow_session(error.kind(), error.message())
 }
 
 #[cfg(feature = "apple-product")]
@@ -642,12 +697,14 @@ impl WorkerState {
         artboard_name: Option<String>,
         state_machine_name: Option<String>,
     ) -> Result<SessionId, RuntimeFailure> {
-        let (flow_session, _) = FlowSession::create(
+        let mut factory = self.make_session_factory()?;
+        let (flow_session, _) = FlowSession::create_with_factory(
             Arc::clone(&self.file),
             FlowSessionConfig {
                 artboard_name,
                 player_name: state_machine_name,
             },
+            factory.as_mut(),
         )
         .map_err(runtime_failure_from_flow_session)?;
         let render_cache = flow_session.new_render_cache();
@@ -656,7 +713,9 @@ impl WorkerState {
             id,
             SessionState {
                 is_fatal: false,
+                fatal_diagnostic: None,
                 flow_session,
+                factory,
                 render_cache: Some(render_cache),
                 legacy_timestamp_seconds: 0.0,
                 #[cfg(test)]
@@ -680,36 +739,35 @@ impl WorkerState {
     }
 
     fn require_live_session(&self, id: SessionId) -> Result<(), RuntimeFailure> {
-        if self.session(id)?.is_fatal {
-            Err(RuntimeFailure::runtime(PANIC_DIAGNOSTIC))
+        let session = self.session(id)?;
+        if session.is_fatal {
+            Err(RuntimeFailure::runtime(
+                session
+                    .fatal_diagnostic
+                    .as_deref()
+                    .unwrap_or(PANIC_DIAGNOSTIC),
+            ))
         } else {
             Ok(())
         }
     }
 
-    fn make_session_surface(
-        &mut self,
-        width: u32,
-        height: u32,
-    ) -> Result<(WgpuFactory, AppleSurface), RuntimeFailure> {
-        let dimensions = (width.max(1), height.max(1));
-        if let Some(shared) = self.shared_gpu_factory.as_ref() {
-            let mut factory = shared
-                .new_session_factory(dimensions.0, dimensions.1, RenderMode::Msaa)
-                .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?;
-            let surface = AppleSurface::attach(&mut factory, width, height)
-                .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?;
-            return Ok((factory, surface));
+    fn make_session_factory(&mut self) -> Result<Box<WgpuFactory>, RuntimeFailure> {
+        if self.shared_gpu_factory.is_none() {
+            self.shared_gpu_factory = Some(
+                WgpuFactory::new_with_mode(1, 1, RenderMode::Msaa)
+                    .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?,
+            );
         }
-
-        let (factory, surface) = AppleSurface::attach_with_factory(width, height, RenderMode::Msaa)
+        let Some(factory) = self.shared_gpu_factory.as_ref() else {
+            return Err(RuntimeFailure::surface(
+                "shared GPU factory initialization produced no factory",
+            ));
+        };
+        let factory = factory
+            .new_session_factory(1, 1, RenderMode::Msaa)
             .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?;
-        self.shared_gpu_factory = Some(
-            factory
-                .new_session_factory(1, 1, RenderMode::Msaa)
-                .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?,
-        );
-        Ok((factory, surface))
+        Ok(Box::new(factory))
     }
 
     fn attach_surface(
@@ -725,27 +783,27 @@ impl WorkerState {
                 "session already has an attached surface",
             ));
         }
-        let (factory, surface) = self.make_session_surface(width, height)?;
         let id = self.allocate_surface_id()?;
-        self.session_mut(session_id)?.attachment = Some(SurfaceState {
-            id,
-            factory,
-            surface,
-        });
+        let session = self.session_mut(session_id)?;
+        let surface = AppleSurface::attach(&mut session.factory, width, height)
+            .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?;
+        self.session_mut(session_id)?.attachment = Some(SurfaceState { id, surface });
         Ok(id)
     }
 
-    fn surface_mut(
+    fn session_surface_mut(
         &mut self,
         session_id: SessionId,
         surface_id: SurfaceId,
-    ) -> Result<&mut SurfaceState, RuntimeFailure> {
+    ) -> Result<(&mut WgpuFactory, &mut SurfaceState), RuntimeFailure> {
         self.require_live_session(session_id)?;
-        self.session_mut(session_id)?
+        let session = self.session_mut(session_id)?;
+        let attachment = session
             .attachment
             .as_mut()
             .filter(|attachment| attachment.id == surface_id)
-            .ok_or_else(|| RuntimeFailure::surface("surface is detached"))
+            .ok_or_else(|| RuntimeFailure::surface("surface is detached"))?;
+        Ok((session.factory.as_mut(), attachment))
     }
 
     fn remove_surface(&mut self, session_id: SessionId, surface_id: SurfaceId) {
@@ -774,7 +832,7 @@ impl WorkerState {
 
     fn poison_session(&mut self, session_id: SessionId) {
         if let Some(session) = self.sessions.get_mut(&session_id) {
-            session.is_fatal = true;
+            session.terminalize(PANIC_DIAGNOSTIC);
         }
     }
 }
@@ -1022,6 +1080,7 @@ fn assert_opaque_handle_storage_is_send_and_sync() {
     assert_send_and_sync::<AppleSurfaceHandle>();
 }
 
+#[derive(Clone)]
 struct OwnedDiagnostic {
     severity: NuxDiagnosticSeverity,
     code: Vec<u8>,
@@ -1082,6 +1141,14 @@ impl NuxOperationResult {
     }
 
     fn failure(status: NuxStatus, diagnostic: impl Into<Vec<u8>>) -> Self {
+        Self::failure_with_code(status, diagnostic_code_for_status(status), diagnostic)
+    }
+
+    fn failure_with_code(
+        status: NuxStatus,
+        code: impl Into<Vec<u8>>,
+        diagnostic: impl Into<Vec<u8>>,
+    ) -> Self {
         let diagnostic = diagnostic.into();
         Self {
             status,
@@ -1091,7 +1158,7 @@ impl NuxOperationResult {
             authenticated_key_id: Vec::new(),
             diagnostics: vec![OwnedDiagnostic {
                 severity: NUX_DIAGNOSTIC_SEVERITY_FATAL,
-                code: diagnostic_code_for_status(status).to_vec(),
+                code: code.into(),
                 message: diagnostic.clone(),
             }],
             diagnostic,
@@ -1260,7 +1327,10 @@ pub unsafe extern "C" fn nux_flow_runtime_context_free(context: *mut NuxFlowRunt
 
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
-/// Creates an independent logical screen session from a context.
+/// Creates an independent logical screen session from a context through the
+/// legacy ABI 1.1 surface. Cycle-zero host outputs produced while scripts are
+/// initialized are intentionally not returned by this entry point; use
+/// `nux_flow_render_session_create_configured` when those outputs are needed.
 ///
 /// # Safety
 ///
@@ -1445,10 +1515,11 @@ pub unsafe extern "C" fn nux_apple_surface_copy_metal_device(
                     .session
                     .worker
                     .call(Some(session_id), move |state| {
-                        let attachment = state.surface_mut(session_id, surface_id)?;
+                        let (factory, attachment) =
+                            state.session_surface_mut(session_id, surface_id)?;
                         attachment
                             .surface
-                            .copy_metal_device(&attachment.factory)
+                            .copy_metal_device(factory)
                             .map(|device| device.expose_provenance())
                             .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))
                     }) {
@@ -1495,10 +1566,11 @@ pub unsafe extern "C" fn nux_apple_surface_resize(
                 .session
                 .worker
                 .call(Some(session_id), move |state| {
-                    let attachment = state.surface_mut(session_id, surface_id)?;
+                    let (factory, attachment) =
+                        state.session_surface_mut(session_id, surface_id)?;
                     attachment
                         .surface
-                        .resize(&mut attachment.factory, pixel_width, pixel_height)
+                        .resize(factory, pixel_width, pixel_height)
                         .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))
                 }) {
                 Ok(Ok(disposition)) => {
@@ -1539,7 +1611,7 @@ pub unsafe extern "C" fn nux_apple_surface_detach(
                 .session
                 .worker
                 .call(Some(session_id), move |state| {
-                    let attachment = state.surface_mut(session_id, surface_id)?;
+                    let (_, attachment) = state.session_surface_mut(session_id, surface_id)?;
                     attachment.surface.detach();
                     Ok::<(), RuntimeFailure>(())
                 }) {
@@ -1591,10 +1663,11 @@ pub unsafe extern "C" fn nux_apple_surface_reattach(
                 .session
                 .worker
                 .call(Some(session_id), move |state| {
-                    let attachment = state.surface_mut(session_id, surface_id)?;
+                    let (factory, attachment) =
+                        state.session_surface_mut(session_id, surface_id)?;
                     attachment
                         .surface
-                        .reattach(&mut attachment.factory, pixel_width, pixel_height)
+                        .reattach(factory, pixel_width, pixel_height)
                         .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))
                 }) {
                 Ok(Ok(disposition)) => {
@@ -1702,43 +1775,70 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                 if !timestamp_seconds.is_finite() {
                     return Err(RuntimeFailure::runtime("legacy timestamp overflowed"));
                 }
-                let result = session
+                let preflight_disposition = if render {
+                    let attachment = session
+                        .attachment
+                        .as_ref()
+                        .ok_or_else(|| RuntimeFailure::surface("surface is not attached"))?;
+                    attachment
+                        .surface
+                        .preflight_present(&session.factory, drawable_identity != 0)
+                        .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?
+                } else {
+                    None
+                };
+                let mut result = session
                     .flow_session
-                    .perform(nuxie::flow_session::FlowOperation::Advance(
-                        nuxie::flow_session::FlowAdvance {
-                            timestamp_seconds,
-                            delta_seconds: elapsed_seconds,
-                            render,
-                        },
-                    ))
+                    .perform_with_factory(
+                        nuxie::flow_session::FlowOperation::Advance(
+                            nuxie::flow_session::FlowAdvance {
+                                timestamp_seconds,
+                                delta_seconds: elapsed_seconds,
+                                render,
+                            },
+                        ),
+                        session.factory.as_mut(),
+                    )
                     .map_err(runtime_failure_from_flow_session)?;
                 session.legacy_timestamp_seconds = timestamp_seconds;
                 let changed = result.dirty;
                 if !render {
                     return Ok((NuxSurfaceDisposition::None, changed));
                 }
-                let attachment = session
-                    .attachment
-                    .as_mut()
-                    .ok_or_else(|| RuntimeFailure::surface("surface is not attached"))?;
-                if let Some(disposition) = attachment
-                    .surface
-                    .preflight_present(&attachment.factory, drawable_identity != 0)
-                    .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?
-                {
+                if let Some(disposition) = preflight_disposition {
                     return Ok((surface_disposition(disposition), changed));
                 }
-                let (viewport_width, viewport_height) = attachment.surface.dimensions();
+                let Some((viewport_width, viewport_height)) = session
+                    .attachment
+                    .as_ref()
+                    .map(|attachment| attachment.surface.dimensions())
+                else {
+                    let failure = RuntimeFailure::runtime("preflighted surface became unavailable");
+                    return Err(terminalize_after_committed_advance_failure(
+                        session,
+                        "presentation setup",
+                        failure,
+                    ));
+                };
                 let bounds = session.flow_session.artboard_bounds();
-                let presentation_transform = centered_contain_transform(
+                let presentation_transform = match centered_contain_transform(
                     bounds.x,
                     bounds.y,
                     bounds.width,
                     bounds.height,
                     viewport_width,
                     viewport_height,
-                )?;
-                let mut frame = attachment.factory.begin_frame(0x0000_0000);
+                ) {
+                    Ok(transform) => transform,
+                    Err(failure) => {
+                        return Err(terminalize_after_committed_advance_failure(
+                            session,
+                            "presentation transform",
+                            failure,
+                        ));
+                    }
+                };
+                let mut frame = session.factory.begin_frame(0x0000_0000);
                 frame.transform(presentation_transform);
                 #[cfg(test)]
                 {
@@ -1747,18 +1847,50 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                 let render_cache = session
                     .render_cache
                     .get_or_insert_with(|| session.flow_session.new_render_cache());
-                session
-                    .flow_session
-                    .draw(&mut attachment.factory, &mut frame, render_cache)
-                    .map_err(runtime_failure_from_flow_session)?;
+                let draw_result = session.flow_session.draw_into_result(
+                    session.factory.as_mut(),
+                    &mut frame,
+                    render_cache,
+                    &mut result,
+                );
+                if let Err(error) = draw_result {
+                    let failure = runtime_failure_from_flow_session(error);
+                    return Err(terminalize_after_committed_advance_failure(
+                        session, "drawing", failure,
+                    ));
+                }
                 let drawable = ptr::with_exposed_provenance_mut::<c_void>(drawable_identity);
                 let completion = completion.into_renderer_completion();
-                let (disposition, _metrics) = unsafe {
-                    attachment
-                        .surface
-                        .present(&mut attachment.factory, frame, drawable, completion)
-                }
-                .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?;
+                let presentation = {
+                    let Some(attachment) = session.attachment.as_mut() else {
+                        let failure =
+                            RuntimeFailure::runtime("preflighted surface became unavailable");
+                        return Err(terminalize_after_committed_advance_failure(
+                            session,
+                            "presentation setup",
+                            failure,
+                        ));
+                    };
+                    unsafe {
+                        attachment.surface.present(
+                            &mut session.factory,
+                            frame,
+                            drawable,
+                            completion,
+                        )
+                    }
+                };
+                let (disposition, _metrics) = match presentation {
+                    Ok(presentation) => presentation,
+                    Err(error) => {
+                        let failure = RuntimeFailure::surface(format!("{error:#}"));
+                        return Err(terminalize_after_committed_advance_failure(
+                            session,
+                            "presentation",
+                            failure,
+                        ));
+                    }
+                };
                 Ok((surface_disposition(disposition), changed))
             }) {
                 Ok(Ok((disposition, changed))) => write_success(out_result, disposition, changed),
@@ -2219,6 +2351,19 @@ fn write_failure(
     status
 }
 
+fn write_failure_with_code(
+    out_result: *mut *mut NuxOperationResult,
+    status: NuxStatus,
+    code: impl Into<Vec<u8>>,
+    diagnostic: impl Into<Vec<u8>>,
+) -> NuxStatus {
+    replace_result(
+        out_result,
+        NuxOperationResult::failure_with_code(status, code, diagnostic),
+    );
+    status
+}
+
 fn write_import_failure(
     out_result: *mut *mut NuxOperationResult,
     status: NuxStatus,
@@ -2237,7 +2382,12 @@ fn write_runtime_failure(
     out_result: *mut *mut NuxOperationResult,
     failure: RuntimeFailure,
 ) -> NuxStatus {
-    write_failure(out_result, failure.status, failure.diagnostic)
+    write_failure_with_code(
+        out_result,
+        failure.status,
+        failure.diagnostic_code,
+        failure.diagnostic,
+    )
 }
 
 #[cfg(feature = "apple-product")]
@@ -2627,7 +2777,8 @@ mod tests {
         assert_eq!(nux_runtime_require_abi(2, 0), NuxStatus::AbiMismatch);
         assert_eq!(nux_runtime_require_abi(1, 2), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 3), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(1, 4), NuxStatus::AbiMismatch);
+        assert_eq!(nux_runtime_require_abi(1, 4), NuxStatus::Ok);
+        assert_eq!(nux_runtime_require_abi(1, 5), NuxStatus::AbiMismatch);
     }
 
     #[cfg(feature = "apple-product")]
@@ -3208,8 +3359,8 @@ mod tests {
             "\"schemaVersion\":1",
             "\"runtimeVersion\"",
             "\"runtimeAbiMajor\":1",
-            "\"runtimeAbiMinor\":3",
-            "\"flowSessionAbiMinor\":3",
+            "\"runtimeAbiMinor\":4",
+            "\"flowSessionAbiMinor\":4",
             "\"sourceRevision\"",
             "\"target\"",
             "\"profile\"",
@@ -3284,6 +3435,50 @@ mod tests {
             NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE
         );
         unsafe { nux_operation_result_free(result) };
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn flow_session_failure_codes_cross_the_legacy_structured_diagnostic_seam() {
+        let cases = [
+            (
+                FlowSessionErrorKind::ScriptResourceExceeded,
+                SCRIPT_RESOURCE_DIAGNOSTIC_CODE,
+            ),
+            (
+                FlowSessionErrorKind::ResultLimitExceeded,
+                RESULT_LIMIT_DIAGNOSTIC_CODE,
+            ),
+            (
+                FlowSessionErrorKind::Runtime,
+                diagnostic_code_for_status(NuxStatus::RuntimeError),
+            ),
+        ];
+
+        for (kind, expected_code) in cases {
+            let mut result = ptr::null_mut();
+            let failure = RuntimeFailure::flow_session(kind, "flow operation failed");
+            assert_eq!(
+                write_runtime_failure(&mut result, failure),
+                NuxStatus::RuntimeError
+            );
+            assert_eq!(
+                unsafe { nux_operation_result_status(result) },
+                NuxStatus::RuntimeError
+            );
+            assert_eq!(unsafe { nux_operation_result_diagnostic_count(result) }, 1);
+
+            let mut diagnostic = NuxDiagnosticView::default();
+            assert_eq!(
+                unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
+                NuxStatus::Ok
+            );
+            let code = unsafe {
+                slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize)
+            };
+            assert_eq!(code, expected_code);
+            unsafe { nux_operation_result_free(result) };
+        }
     }
 
     #[test]
@@ -3599,6 +3794,55 @@ mod tests {
         let diagnostic = unsafe { slice::from_raw_parts(diagnostic.data, diagnostic.len as usize) };
         assert_eq!(diagnostic, PANIC_DIAGNOSTIC.as_bytes());
         unsafe { nux_operation_result_free(result) };
+    }
+
+    #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]
+    #[test]
+    fn render_factory_is_session_owned_before_and_after_surface_attachment() {
+        let worker = product_fixture_worker();
+        let session_id = match worker.call(None, |state| state.create_session(None, None)) {
+            Ok(Ok(session_id)) => session_id,
+            _ => panic!("fixture must create a default render session"),
+        };
+        let factory_address = worker
+            .call(Some(session_id), move |state| {
+                state
+                    .session_mut(session_id)
+                    .map(|session| (&mut *session.factory as *mut WgpuFactory).addr())
+            })
+            .expect("worker must inspect the session factory")
+            .expect("session factory must exist before surface attachment");
+
+        let surface_id = match worker.call(Some(session_id), move |state| {
+            state.attach_surface(session_id, 8, 8)
+        }) {
+            Ok(Ok(surface_id)) => surface_id,
+            _ => panic!("fixture must attach logical Apple presentation state"),
+        };
+        let attached_factory_address = worker
+            .call(Some(session_id), move |state| {
+                state
+                    .session_mut(session_id)
+                    .map(|session| (&mut *session.factory as *mut WgpuFactory).addr())
+            })
+            .expect("worker must inspect the attached session factory")
+            .expect("session factory must remain available after attachment");
+        assert_eq!(attached_factory_address, factory_address);
+
+        worker
+            .call(Some(session_id), move |state| {
+                state.remove_surface(session_id, surface_id)
+            })
+            .expect("worker must detach logical Apple presentation state");
+        let detached_factory_address = worker
+            .call(Some(session_id), move |state| {
+                state
+                    .session_mut(session_id)
+                    .map(|session| (&mut *session.factory as *mut WgpuFactory).addr())
+            })
+            .expect("worker must inspect the detached session factory")
+            .expect("session factory must survive surface detachment");
+        assert_eq!(detached_factory_address, factory_address);
     }
 
     #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]

@@ -9,6 +9,10 @@ use nuxie_render_api::{
     BlendMode, Factory as RenderFactory, RawPath, RenderPaintStyle, Renderer, StrokeCap, StrokeJoin,
 };
 
+use crate::data_bind_graph::{
+    RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
+    runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter,
+};
 use crate::properties::property_key_for_name;
 use crate::{
     ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelContextHandle,
@@ -22,17 +26,44 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScriptError {
     message: String,
+    resource_code: Option<String>,
 }
 
 impl ScriptError {
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
+            resource_code: None,
+        }
+    }
+
+    /// Construct a terminal script-resource failure with its stable identity.
+    ///
+    /// The concrete scripting backend owns the resource taxonomy. The runtime
+    /// carries only its stable code so higher layers can classify the failure
+    /// without depending on a VM crate or matching human-readable text.
+    pub fn with_resource_code(
+        message: impl Into<String>,
+        resource_code: impl Into<String>,
+    ) -> Self {
+        Self {
+            message: message.into(),
+            resource_code: Some(resource_code.into()),
         }
     }
 
     pub fn message(&self) -> &str {
         &self.message
+    }
+
+    pub fn resource_code(&self) -> Option<&str> {
+        self.resource_code.as_deref()
+    }
+
+    /// Add human-readable execution context without erasing typed provenance.
+    pub fn with_context(mut self, context: impl fmt::Display) -> Self {
+        self.message = format!("{context}: {}", self.message);
+        self
     }
 }
 
@@ -63,6 +94,170 @@ pub struct ScriptModuleFailure {
     pub error: ScriptError,
 }
 
+/// One imported scripted listener action and the protocol asset it resolves.
+///
+/// `asset_ordinal` is the dense file-asset ordinal serialized in
+/// `ScriptedListenerAction.scriptAssetId`; it is deliberately not the
+/// semantic `FileAsset.assetId` or the asset object's global id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScriptListenerActionDefinition {
+    action_global_id: u32,
+    asset_ordinal: usize,
+    asset_name: String,
+    inputs: Vec<ScriptListenerInputDefinition>,
+}
+
+impl ScriptListenerActionDefinition {
+    #[cfg(test)]
+    pub(crate) fn new(action_global_id: u32, asset_ordinal: usize, asset_name: String) -> Self {
+        Self {
+            action_global_id,
+            asset_ordinal,
+            asset_name,
+            inputs: Vec::new(),
+        }
+    }
+
+    pub(crate) fn with_inputs(
+        action_global_id: u32,
+        asset_ordinal: usize,
+        asset_name: String,
+        inputs: Vec<ScriptListenerInputDefinition>,
+    ) -> Self {
+        Self {
+            action_global_id,
+            asset_ordinal,
+            asset_name,
+            inputs,
+        }
+    }
+
+    pub fn action_global_id(&self) -> u32 {
+        self.action_global_id
+    }
+
+    pub fn asset_ordinal(&self) -> usize {
+        self.asset_ordinal
+    }
+
+    pub fn asset_name(&self) -> &str {
+        &self.asset_name
+    }
+
+    /// Authored inputs owned by this exact listener-action occurrence.
+    ///
+    /// The global object id remains stable for the lifetime of the imported
+    /// file and lets the facade resolve the complete binary object (including
+    /// its data-bind metadata) only when a concrete occurrence is hydrated.
+    pub fn inputs(&self) -> &[ScriptListenerInputDefinition] {
+        &self.inputs
+    }
+}
+
+/// One authored input belonging to a scripted listener-action occurrence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScriptListenerInputDefinition {
+    input_global_id: u32,
+    kind: ScriptListenerInputKind,
+}
+
+impl ScriptListenerInputDefinition {
+    pub(crate) fn new(input_global_id: u32, kind: ScriptListenerInputKind) -> Self {
+        Self {
+            input_global_id,
+            kind,
+        }
+    }
+
+    pub fn input_global_id(self) -> u32 {
+        self.input_global_id
+    }
+
+    pub fn kind(self) -> ScriptListenerInputKind {
+        self.kind
+    }
+}
+
+/// The seven input kinds accepted by Rive scripted objects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptListenerInputKind {
+    Boolean,
+    Number,
+    Color,
+    String,
+    Trigger,
+    Artboard,
+    ViewModelProperty,
+}
+
+/// A fully resolved, occurrence-local listener hydration batch.
+///
+/// Callers construct the whole batch before touching a script table. Applying
+/// it always installs `Context.viewModel` first, then the authored/bound input
+/// values in source order. Trigger entries represent a bound trigger edge;
+/// ordinary initial trigger hydration intentionally produces no entry because
+/// the table field is the authored callback itself.
+pub struct ScriptListenerActionHydration {
+    context_view_model: Option<ScriptViewModel>,
+    inputs: Vec<ScriptListenerInputHydration>,
+}
+
+impl ScriptListenerActionHydration {
+    pub fn new(
+        context_view_model: Option<ScriptViewModel>,
+        inputs: Vec<ScriptListenerInputHydration>,
+    ) -> Self {
+        Self {
+            context_view_model,
+            inputs,
+        }
+    }
+
+    pub fn apply(
+        self,
+        instance: &mut dyn ScriptInstance,
+        host: &mut dyn ScriptHost,
+    ) -> Result<(), ScriptError> {
+        instance.set_context_view_model(self.context_view_model)?;
+        for input in self.inputs {
+            match input {
+                ScriptListenerInputHydration::Value { name, value } => {
+                    instance.set_input(&name, value)?;
+                }
+                ScriptListenerInputHydration::Artboard { name, artboard } => {
+                    instance.set_artboard_input(&name, artboard)?;
+                }
+                ScriptListenerInputHydration::ViewModel { name, view_model } => {
+                    instance.set_view_model_input(&name, view_model)?;
+                }
+                ScriptListenerInputHydration::Trigger { name } => {
+                    instance.call_input_trigger(&name, host)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// One resolved listener input operation.
+pub enum ScriptListenerInputHydration {
+    Value {
+        name: String,
+        value: ScriptValue,
+    },
+    Artboard {
+        name: String,
+        artboard: Box<dyn ScriptArtboard>,
+    },
+    ViewModel {
+        name: String,
+        view_model: ScriptViewModel,
+    },
+    Trigger {
+        name: String,
+    },
+}
+
 /// Lifecycle/input methods carried by scripted object instance tables.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScriptMethod {
@@ -72,13 +267,13 @@ pub enum ScriptMethod {
     Update,
     Draw,
     Evaluate,
-    Perform,
-    PerformAction,
     PointerDown,
     PointerMove,
     PointerUp,
     PointerEnter,
     PointerExit,
+    PerformAction,
+    Perform,
 }
 
 impl ScriptMethod {
@@ -90,13 +285,32 @@ impl ScriptMethod {
             ScriptMethod::Update => "update",
             ScriptMethod::Draw => "draw",
             ScriptMethod::Evaluate => "evaluate",
-            ScriptMethod::Perform => "perform",
-            ScriptMethod::PerformAction => "performAction",
             ScriptMethod::PointerDown => "pointerDown",
             ScriptMethod::PointerMove => "pointerMove",
             ScriptMethod::PointerUp => "pointerUp",
             ScriptMethod::PointerEnter => "pointerEnter",
             ScriptMethod::PointerExit => "pointerExit",
+            ScriptMethod::PerformAction => "performAction",
+            ScriptMethod::Perform => "perform",
+        }
+    }
+}
+
+/// The method selected for one scripted listener dispatch.
+///
+/// Runtime dispatch probes `performAction` first and only selects the legacy
+/// `perform` callback when the newer method is absent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptListenerActionMethod {
+    PerformAction,
+    Perform,
+}
+
+impl ScriptListenerActionMethod {
+    pub fn as_script_method(self) -> ScriptMethod {
+        match self {
+            Self::PerformAction => ScriptMethod::PerformAction,
+            Self::Perform => ScriptMethod::Perform,
         }
     }
 }
@@ -106,16 +320,22 @@ impl ScriptMethod {
 /// Scheduled state/transition actions use [`Self::None`]. Pointer listeners
 /// retain the concrete pointer payload so scripting backends can expose the
 /// same legacy `PointerEvent` shape as the C++ runtime.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ScriptListenerInvocation {
-    None,
     Pointer {
         pointer_id: i32,
-        position: (f32, f32),
-        previous_position: (f32, f32),
-        kind: ScriptPointerEventKind,
-        time_stamp: f32,
+        x: f32,
+        y: f32,
+        previous_x: f32,
+        previous_y: f32,
+        event: ScriptPointerEventKind,
+        timestamp_seconds: f32,
     },
+    ReportedEvent {
+        event_local_index: usize,
+        seconds_delay: f32,
+    },
+    None,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,6 +346,9 @@ pub enum ScriptPointerEventKind {
     Up,
     Move,
     Click,
+    DragStart,
+    DragEnd,
+    Drag,
 }
 
 impl ScriptPointerEventKind {
@@ -137,6 +360,9 @@ impl ScriptPointerEventKind {
             Self::Up => "pointerUp",
             Self::Move => "pointerMove",
             Self::Click => "click",
+            Self::DragStart => "pointerDragStart",
+            Self::DragEnd => "pointerDragEnd",
+            Self::Drag => "pointerDrag",
         }
     }
 }
@@ -869,40 +1095,29 @@ pub fn bound_script_input_value(
     file: &RuntimeFile,
     context: &RuntimeOwnedViewModelInstance,
     input: &RuntimeObject,
-) -> Option<ScriptValue> {
-    let property_key = property_key_for_name(input.type_name, "propertyValue")?;
-    let data_bind = (0..file.object_count()).find_map(|id| {
-        let data_bind = file.object(id)?;
-        (data_bind.type_name == "DataBindContext"
-            && data_bind.uint_property("propertyKey") == Some(u64::from(property_key))
-            && file
-                .data_bind_target_for_object(data_bind)
-                .is_some_and(|target| target.id == input.id)
-            && file
-                .data_bind_to_target_for_object(data_bind)
-                .unwrap_or(false))
-        .then_some(data_bind)
-    })?;
-    let source_path = file.data_bind_context_resolved_source_path_ids_for_object(data_bind)?;
-    let name_based = file
-        .data_bind_is_name_based_for_object(data_bind)
-        .unwrap_or(false);
-
-    match input.type_name {
-        "ScriptInputBoolean" => context
-            .boolean_value_by_context_source_path(file, &[], &source_path, name_based)
-            .map(ScriptValue::Bool),
-        "ScriptInputNumber" => context
-            .number_value_by_context_source_path(file, &[], &source_path, name_based)
-            .map(|value| ScriptValue::Number(f64::from(value))),
-        "ScriptInputColor" => context
-            .color_value_by_context_source_path(file, &[], &source_path, name_based)
-            .map(|value| ScriptValue::Number(value as f64)),
-        "ScriptInputString" => context
-            .string_value_by_context_source_path(file, &[], &source_path, name_based)
-            .map(|value| ScriptValue::String(String::from_utf8_lossy(value).into_owned())),
-        _ => None,
-    }
+) -> Result<Option<ScriptValue>, ScriptError> {
+    let Some(value) = bound_script_input_graph_value(file, context, input, "propertyValue")? else {
+        return Ok(None);
+    };
+    let value = match (input.type_name, value) {
+        ("ScriptInputBoolean", RuntimeDataBindGraphValue::Boolean(value)) => {
+            ScriptValue::Bool(value)
+        }
+        ("ScriptInputNumber", RuntimeDataBindGraphValue::Number(value)) => {
+            ScriptValue::Number(f64::from(value))
+        }
+        ("ScriptInputColor", RuntimeDataBindGraphValue::Color(value)) => ScriptValue::Color(value),
+        ("ScriptInputString", RuntimeDataBindGraphValue::String(value)) => {
+            ScriptValue::String(String::from_utf8_lossy(&value).into_owned())
+        }
+        (_, value) => {
+            return Err(ScriptError::new(format!(
+                "{} global {} data binding produced incompatible value {value:?}",
+                input.type_name, input.id
+            )));
+        }
+    };
+    Ok(Some(value))
 }
 
 /// Resolves a data-bound `ScriptInputArtboard` to its referenced artboard id.
@@ -910,12 +1125,53 @@ pub fn bound_script_artboard_input(
     file: &RuntimeFile,
     context: &RuntimeOwnedViewModelInstance,
     input: &RuntimeObject,
-) -> Option<u64> {
+) -> Result<Option<u64>, ScriptError> {
     if input.type_name != "ScriptInputArtboard" {
-        return None;
+        return Ok(None);
     }
-    let property_key = property_key_for_name(input.type_name, "artboardId")?;
-    let data_bind = (0..file.object_count()).find_map(|id| {
+    match bound_script_input_graph_value(file, context, input, "artboardId")? {
+        Some(RuntimeDataBindGraphValue::Artboard(value)) => Ok(Some(value)),
+        Some(value) => Err(ScriptError::new(format!(
+            "{} global {} data binding produced incompatible value {value:?}",
+            input.type_name, input.id
+        ))),
+        None => Ok(None),
+    }
+}
+
+/// Resolves the current count of a data-bound `ScriptInputTrigger`.
+///
+/// The listener hydrator compares counts across retained data-context rebinds
+/// and calls the table's authored trigger function only for a changed,
+/// non-zero value, matching `ScriptInputTrigger::propertyValueChanged`.
+pub fn bound_script_trigger_input(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+    input: &RuntimeObject,
+) -> Result<Option<u64>, ScriptError> {
+    if input.type_name != "ScriptInputTrigger" {
+        return Ok(None);
+    }
+    match bound_script_input_graph_value(file, context, input, "propertyValue")? {
+        Some(RuntimeDataBindGraphValue::Trigger(value)) => Ok(Some(value)),
+        Some(value) => Err(ScriptError::new(format!(
+            "{} global {} data binding produced incompatible value {value:?}",
+            input.type_name, input.id
+        ))),
+        None => Ok(None),
+    }
+}
+
+fn bound_script_input_graph_value(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+    input: &RuntimeObject,
+    property_name: &str,
+) -> Result<Option<RuntimeDataBindGraphValue>, ScriptError> {
+    let Some(property_key) = property_key_for_name(input.type_name, property_name) else {
+        return Ok(None);
+    };
+    let Some(data_bind) = (0..file.object_count()).find_map(|id| {
         let data_bind = file.object(id)?;
         (data_bind.type_name == "DataBindContext"
             && data_bind.uint_property("propertyKey") == Some(u64::from(property_key))
@@ -926,12 +1182,142 @@ pub fn bound_script_artboard_input(
                 .data_bind_to_target_for_object(data_bind)
                 .unwrap_or(false))
         .then_some(data_bind)
-    })?;
-    let source_path = file.data_bind_context_resolved_source_path_ids_for_object(data_bind)?;
+    }) else {
+        return Ok(None);
+    };
+    let Some(source_path) = file.data_bind_context_resolved_source_path_ids_for_object(data_bind)
+    else {
+        return Ok(None);
+    };
     let name_based = file
         .data_bind_is_name_based_for_object(data_bind)
         .unwrap_or(false);
-    context.artboard_value_by_context_source_path(file, &[], &source_path, name_based)
+    let Some(source) = owned_script_input_source_value(file, context, &source_path, name_based)
+    else {
+        return Ok(None);
+    };
+
+    let Some(converter_object) = file.resolved_data_converter_for_data_bind_object(data_bind)
+    else {
+        if data_bind
+            .uint_property("converterId")
+            .is_some_and(|id| id != u64::from(u32::MAX) && id != u64::MAX)
+        {
+            return Err(ScriptError::new(format!(
+                "{} global {} references an unresolved data converter",
+                input.type_name, input.id
+            )));
+        }
+        return Ok(Some(source));
+    };
+    let Some(converter) = runtime_data_bind_graph_converter(file, data_bind) else {
+        return Err(ScriptError::new(format!(
+            "{} global {} data converter '{}' could not be resolved",
+            input.type_name, input.id, converter_object.type_name
+        )));
+    };
+    if !script_input_converter_is_stateless(&converter) {
+        return Err(ScriptError::new(format!(
+            "{} global {} data converter '{}' requires retained converter state and is unsupported for scripted-listener inputs",
+            input.type_name, input.id, converter_object.type_name
+        )));
+    }
+    runtime_data_bind_graph_convert_value(&converter, &source)
+        .map(Some)
+        .ok_or_else(|| {
+            ScriptError::new(format!(
+                "{} global {} data converter '{}' rejected its bound source value",
+                input.type_name, input.id, converter_object.type_name
+            ))
+        })
+}
+
+fn script_input_converter_is_stateless(converter: &RuntimeDataBindGraphConverter) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::PassThrough
+        | RuntimeDataBindGraphConverter::BooleanNegate
+        | RuntimeDataBindGraphConverter::TriggerIncrement
+        | RuntimeDataBindGraphConverter::ToNumber
+        | RuntimeDataBindGraphConverter::ListToLength
+        | RuntimeDataBindGraphConverter::NumberToList { .. }
+        | RuntimeDataBindGraphConverter::ToString { .. }
+        | RuntimeDataBindGraphConverter::OperationValue { .. }
+        | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
+        | RuntimeDataBindGraphConverter::Rounder { .. }
+        | RuntimeDataBindGraphConverter::StringTrim { .. }
+        | RuntimeDataBindGraphConverter::StringRemoveZeros
+        | RuntimeDataBindGraphConverter::StringPad { .. } => true,
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            converters.iter().all(script_input_converter_is_stateless)
+        }
+        RuntimeDataBindGraphConverter::Scripted { .. }
+        | RuntimeDataBindGraphConverter::OperationViewModel { .. }
+        | RuntimeDataBindGraphConverter::RangeMapper { .. }
+        | RuntimeDataBindGraphConverter::Formula { .. }
+        | RuntimeDataBindGraphConverter::Interpolator { .. }
+        | RuntimeDataBindGraphConverter::Unsupported => false,
+    }
+}
+
+fn owned_script_input_source_value(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+    name_based: bool,
+) -> Option<RuntimeDataBindGraphValue> {
+    context
+        .number_value_by_context_source_path(file, &[], source_path, name_based)
+        .map(RuntimeDataBindGraphValue::Number)
+        .or_else(|| {
+            context
+                .boolean_value_by_context_source_path(file, &[], source_path, name_based)
+                .map(RuntimeDataBindGraphValue::Boolean)
+        })
+        .or_else(|| {
+            context
+                .string_value_by_context_source_path(file, &[], source_path, name_based)
+                .map(|value| RuntimeDataBindGraphValue::String(value.to_vec()))
+        })
+        .or_else(|| {
+            context
+                .color_value_by_context_source_path(file, &[], source_path, name_based)
+                .map(RuntimeDataBindGraphValue::Color)
+        })
+        .or_else(|| {
+            context
+                .enum_value_by_context_source_path(file, &[], source_path, name_based)
+                .map(RuntimeDataBindGraphValue::Enum)
+        })
+        .or_else(|| {
+            context
+                .symbol_list_index_value_by_context_source_path(file, &[], source_path, name_based)
+                .map(RuntimeDataBindGraphValue::SymbolListIndex)
+        })
+        .or_else(|| {
+            context
+                .list_item_count_by_context_source_path(file, &[], source_path, name_based)
+                .map(|item_count| RuntimeDataBindGraphValue::List { item_count })
+        })
+        .or_else(|| {
+            context
+                .asset_value_by_context_source_path(file, &[], source_path, name_based)
+                .map(RuntimeDataBindGraphValue::Asset)
+        })
+        .or_else(|| {
+            context
+                .artboard_value_by_context_source_path(file, &[], source_path, name_based)
+                .map(RuntimeDataBindGraphValue::Artboard)
+        })
+        .or_else(|| {
+            context
+                .trigger_value_by_context_source_path(file, &[], source_path, name_based)
+                .map(RuntimeDataBindGraphValue::Trigger)
+        })
+        .or_else(|| {
+            context
+                .view_model_value_by_context_source_path(file, &[], source_path, name_based)
+                .map(RuntimeDataBindGraphValue::ViewModel)
+        })
 }
 
 /// Resolves a `ScriptInputViewModelProperty` after its scripted object has a
@@ -1130,23 +1516,6 @@ pub trait ScriptInstance {
         host: &mut dyn ScriptHost,
     ) -> Result<ScriptValue, ScriptError>;
 
-    /// Invoke a scripted listener action. Backends override this to construct
-    /// their native `PointerEvent`/`Invocation` userdata. The default keeps
-    /// non-VM test doubles and future backends source-compatible.
-    fn call_listener_action(
-        &mut self,
-        invocation: ScriptListenerInvocation,
-        host: &mut dyn ScriptHost,
-    ) -> Result<(), ScriptError> {
-        let _ = invocation;
-        if self.has_method(ScriptMethod::PerformAction)? {
-            self.call_method(ScriptMethod::PerformAction, &[], host)?;
-        } else if self.has_method(ScriptMethod::Perform)? {
-            self.call_method(ScriptMethod::Perform, &[], host)?;
-        }
-        Ok(())
-    }
-
     fn call_method_with_factory(
         &mut self,
         method: ScriptMethod,
@@ -1156,6 +1525,33 @@ pub trait ScriptInstance {
     ) -> Result<ScriptValue, ScriptError> {
         let _ = factory;
         self.call_method(method, args, host)
+    }
+
+    /// Invoke one already-selected listener callback with its typed payload.
+    ///
+    /// Concrete VMs override this to create the native Invocation userdata
+    /// used by `performAction` (or the pointer placeholder used by legacy
+    /// `perform`). Keeping that conversion here avoids leaking VM types into
+    /// the state-machine module.
+    fn call_listener_action(
+        &mut self,
+        method: ScriptListenerActionMethod,
+        invocation: &ScriptListenerInvocation,
+        host: &mut dyn ScriptHost,
+    ) -> Result<(), ScriptError> {
+        let _ = invocation;
+        self.call_method(method.as_script_method(), &[], host)
+            .map(|_| ())
+    }
+
+    /// Invoke an authored `ScriptInputTrigger` callback by its input name.
+    /// Missing or non-function fields are a no-op, matching Rive's runtime.
+    fn call_input_trigger(
+        &mut self,
+        _name: &str,
+        _host: &mut dyn ScriptHost,
+    ) -> Result<(), ScriptError> {
+        Ok(())
     }
 
     /// Run an implemented user `init(self, context)` and apply Lua truthiness

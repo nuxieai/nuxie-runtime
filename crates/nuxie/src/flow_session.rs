@@ -7,9 +7,11 @@ use std::{
 };
 
 use crate::{
-    ArtboardRenderCache, Factory, File, LinearAnimationInstance, OwnedArtboardInstance, Renderer,
-    StateMachineInstance, ViewModelInstance,
+    ArtboardRenderCache, Factory, File, LinearAnimationInstance, NoopScriptHost,
+    OwnedArtboardInstance, Renderer, StateMachineInstance, ViewModelInstance,
 };
+#[cfg(feature = "scripting")]
+use crate::{LuaHostCommand, LuaHostValue};
 use nuxie_runtime::{
     RuntimeEventPropertyValue, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
     RuntimeViewModelLinkError, StateMachineReportedEvent,
@@ -44,6 +46,10 @@ pub enum FlowSessionErrorKind {
     NotFound,
     InvalidArgument,
     LimitExceeded,
+    /// A successfully-authored runtime result cannot fit the stable host ABI.
+    ResultLimitExceeded,
+    /// Authenticated script work exhausted a fixed VM/host-effect resource.
+    ScriptResourceExceeded,
     Conflict,
     Runtime,
 }
@@ -79,6 +85,28 @@ impl fmt::Display for FlowSessionError {
 }
 
 impl std::error::Error for FlowSessionError {}
+
+fn flow_script_error(error: crate::ScriptError) -> FlowSessionError {
+    let kind = if error.resource_code().is_some() {
+        FlowSessionErrorKind::ScriptResourceExceeded
+    } else {
+        FlowSessionErrorKind::Runtime
+    };
+    FlowSessionError::new(kind, format!("script execution failed: {error}"))
+}
+
+fn flow_anyhow_error(error: anyhow::Error) -> FlowSessionError {
+    let kind = if error.chain().any(|cause| {
+        cause
+            .downcast_ref::<crate::ScriptError>()
+            .is_some_and(|error| error.resource_code().is_some())
+    }) {
+        FlowSessionErrorKind::ScriptResourceExceeded
+    } else {
+        FlowSessionErrorKind::Runtime
+    };
+    FlowSessionError::new(kind, error.to_string())
+}
 
 /// Stable, session-scoped identity exposed to hosts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -236,6 +264,18 @@ pub struct FlowBootstrap {
     pub values: FlowValueArena,
 }
 
+/// Result produced while creating a factory-bound session. Script modules,
+/// protocol generators, and init hooks may enqueue host work, but creation
+/// never advances the selected player.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FlowSessionCreation {
+    pub bootstrap: FlowBootstrap,
+    pub outputs: Vec<FlowOutput>,
+    pub dirty: bool,
+    pub settled: bool,
+    pub wake_after_seconds: Option<f32>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FlowOutputPhase {
     /// Reserved for lifecycle callbacks queued by a host-facing session API.
@@ -258,6 +298,18 @@ pub enum FlowStateChangeValue {
         instance_id: FlowInstanceId,
         schema_name: String,
     },
+}
+
+/// Renderer-neutral value emitted by the private Nuxie Luau host module.
+/// Objects use a sorted map so equivalent script tables have one canonical
+/// representation across the Rust and Apple seams.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FlowHostValue {
+    Bool(bool),
+    Number(f64),
+    String(String),
+    List(Vec<FlowHostValue>),
+    Object(BTreeMap<String, FlowHostValue>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -285,7 +337,7 @@ pub enum FlowOutputPayload {
     },
     HostCommand {
         name: String,
-        payload: Vec<u8>,
+        payload: FlowHostValue,
     },
     RenderRequested {
         artboard_index: usize,
@@ -421,6 +473,7 @@ pub struct FlowPointerEvent {
     pub pointer_id: i32,
     pub x: f32,
     pub y: f32,
+    pub timestamp_seconds: f32,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -502,6 +555,15 @@ enum FlowPlayer {
     Static,
 }
 
+#[cfg(feature = "scripting")]
+fn detached_view_model_snapshot(instance: Option<&ViewModelInstance>) -> Option<ViewModelInstance> {
+    let instance = instance?;
+    let raw = RuntimeOwnedViewModelHandle::detached_graph(std::slice::from_ref(instance.handle()))
+        .into_iter()
+        .next()?;
+    Some(ViewModelInstance { raw })
+}
+
 /// Deep, renderer-neutral module owning one live flow.
 pub struct FlowSession {
     artboard: OwnedArtboardInstance,
@@ -517,6 +579,8 @@ pub struct FlowSession {
     pending_animation_events: Vec<StateMachineReportedEvent>,
     active_pointer_ids: BTreeSet<i32>,
     terminal_failure: Option<FlowSessionError>,
+    #[cfg(feature = "scripting")]
+    listener_binding_baseline: Option<ViewModelInstance>,
 }
 
 impl fmt::Debug for FlowSession {
@@ -646,6 +710,8 @@ impl FlowSession {
             pending_animation_events: Vec::new(),
             active_pointer_ids: BTreeSet::new(),
             terminal_failure: None,
+            #[cfg(feature = "scripting")]
+            listener_binding_baseline: None,
         };
         session.refresh_values()?;
         let bootstrap = session.bootstrap.clone();
@@ -653,8 +719,140 @@ impl FlowSession {
         Ok((session, bootstrap))
     }
 
+    /// Create a session in its stable renderer domain and synchronously
+    /// bootstrap authenticated scripts. Any host work emitted by module load,
+    /// protocol generation, or init is returned at cycle zero.
+    pub fn create_with_factory(
+        file: Arc<File>,
+        config: FlowSessionConfig,
+        factory: &mut dyn Factory,
+    ) -> Result<(Self, FlowSessionCreation), FlowSessionError> {
+        let (mut session, _) = Self::create(file, config)?;
+        #[cfg(feature = "scripting")]
+        let (outputs, dirty) = {
+            let mut outputs = Vec::new();
+            let mut dirty = false;
+            dirty |= session
+                .artboard
+                .prepare_flow_scripts(factory)
+                .map_err(|error| {
+                    flow_script_error(error.with_context("script bootstrap failed"))
+                })?;
+            let root_view_model = session
+                .root_instance_id
+                .and_then(|id| session.instances.get(&id))
+                .cloned();
+            // Retain the exact source read by initial listener hydration. Init
+            // callbacks can mutate the live root; those writes intentionally
+            // remain pending for the first advance-time binding flush.
+            let listener_binding_baseline = detached_view_model_snapshot(root_view_model.as_ref());
+            if let FlowPlayer::StateMachine(machine) = &mut session.player {
+                session
+                    .artboard
+                    .prepare_flow_listener_actions(machine, factory, root_view_model.as_ref())
+                    .map_err(|error| {
+                        flow_script_error(error.with_context("scripted listener bootstrap failed"))
+                    })?;
+                session.listener_binding_baseline = listener_binding_baseline;
+            }
+            let commands = session.artboard.drain_flow_host_commands();
+            session.append_lua_host_commands(&mut outputs, 0, commands)?;
+            (outputs, dirty)
+        };
+        #[cfg(not(feature = "scripting"))]
+        let (outputs, dirty) = {
+            let _ = factory;
+            (Vec::new(), false)
+        };
+        session.refresh_values()?;
+        let bootstrap = session.bootstrap.clone();
+        session.creation_bootstrap = bootstrap.clone();
+        let creation = FlowSessionCreation {
+            bootstrap,
+            outputs,
+            dirty,
+            settled: session.is_settled(),
+            wake_after_seconds: None,
+        };
+        validate_creation_value_arena_bounds(&creation)?;
+        Ok((session, creation))
+    }
+
     /// Perform one bounded operation against the live flow.
     pub fn perform(&mut self, operation: FlowOperation) -> Result<FlowResult, FlowSessionError> {
+        let mutates_runtime = !matches!(&operation, FlowOperation::Query(_));
+        let result = self.perform_inner(operation, None)?;
+        if let Err(error) = validate_result_value_arena_bounds(&result) {
+            return if mutates_runtime {
+                Err(self.poison_after_mutation(error))
+            } else {
+                Err(error)
+            };
+        }
+        Ok(result)
+    }
+
+    /// Perform one bounded operation with the session's stable renderer
+    /// factory available to authenticated script lifecycle hooks. Nuxie host
+    /// effects commit only after the whole operation succeeds.
+    pub fn perform_with_factory(
+        &mut self,
+        operation: FlowOperation,
+        factory: &mut dyn Factory,
+    ) -> Result<FlowResult, FlowSessionError> {
+        let mutates_runtime = !matches!(&operation, FlowOperation::Query(_));
+        #[cfg(feature = "scripting")]
+        {
+            if let Some(failure) = self.terminal_failure.as_ref() {
+                return Err(failure.clone());
+            }
+            let checkpoint = self.artboard.begin_flow_host_cycle();
+            let sequence_before = self.next_sequence;
+            let operation_result = self.perform_inner(operation, Some(factory));
+            return match operation_result {
+                Ok(mut result) => {
+                    let commands = self.artboard.drain_flow_host_commands();
+                    if let Err(error) =
+                        self.integrate_lua_host_commands(&mut result, sequence_before, commands)
+                    {
+                        Err(self.poison_after_mutation(error))
+                    } else if let Err(error) = validate_result_value_arena_bounds(&result) {
+                        if mutates_runtime {
+                            Err(self.poison_after_mutation(error))
+                        } else {
+                            Err(error)
+                        }
+                    } else {
+                        Ok(result)
+                    }
+                }
+                Err(error) => {
+                    if let Some(checkpoint) = checkpoint {
+                        self.artboard.rollback_flow_host_cycle(checkpoint);
+                    }
+                    Err(error)
+                }
+            };
+        }
+        #[cfg(not(feature = "scripting"))]
+        {
+            let result = self.perform_inner(operation, Some(factory))?;
+            if let Err(error) = validate_result_value_arena_bounds(&result) {
+                return if mutates_runtime {
+                    Err(self.poison_after_mutation(error))
+                } else {
+                    Err(error)
+                };
+            }
+            Ok(result)
+        }
+    }
+
+    fn perform_inner(
+        &mut self,
+        operation: FlowOperation,
+        factory: Option<&mut dyn Factory>,
+    ) -> Result<FlowResult, FlowSessionError> {
         if let Some(failure) = self.terminal_failure.as_ref() {
             return Err(failure.clone());
         }
@@ -705,8 +903,8 @@ impl FlowSession {
                 Ok(result)
             }
             FlowOperation::StateBatch(batch) => self.perform_state_batch(batch),
-            FlowOperation::PointerBatch(batch) => self.perform_pointer_batch(batch),
-            FlowOperation::Advance(advance) => self.perform_advance(advance),
+            FlowOperation::PointerBatch(batch) => self.perform_pointer_batch(batch, factory),
+            FlowOperation::Advance(advance) => self.perform_advance(advance, factory),
         }
     }
 
@@ -724,9 +922,59 @@ impl FlowSession {
     ) -> Result<(), FlowSessionError> {
         self.artboard
             .draw_with_render_cache(factory, renderer, cache)
-            .map_err(|error| {
-                FlowSessionError::new(FlowSessionErrorKind::Runtime, error.to_string())
-            })
+            .map_err(flow_anyhow_error)
+    }
+
+    /// Draw the render requested by `result` before that operation result is
+    /// exposed to the host. Script calls made while drawing remain in the same
+    /// resource cycle and are inserted into HostWork before Render.
+    pub fn draw_into_result(
+        &mut self,
+        factory: &mut dyn Factory,
+        renderer: &mut dyn Renderer,
+        cache: &mut ArtboardRenderCache,
+        result: &mut FlowResult,
+    ) -> Result<(), FlowSessionError> {
+        if let Some(failure) = self.terminal_failure.as_ref() {
+            return Err(failure.clone());
+        }
+        if !result
+            .outputs
+            .iter()
+            .any(|output| matches!(&output.payload, FlowOutputPayload::RenderRequested { .. }))
+        {
+            return Err(FlowSessionError::new(
+                FlowSessionErrorKind::InvalidArgument,
+                "draw requires the operation result that requested rendering",
+            ));
+        }
+        #[cfg(feature = "scripting")]
+        let sequence_before = result
+            .outputs
+            .first()
+            .map(|output| output.sequence)
+            .unwrap_or(self.next_sequence);
+        let draw_result = self.draw(factory, renderer, cache);
+        #[cfg(feature = "scripting")]
+        {
+            if let Err(error) = draw_result {
+                let _ = self.artboard.drain_flow_host_commands();
+                return Err(self.poison_after_mutation(error));
+            }
+            let commands = self.artboard.drain_flow_host_commands();
+            if let Err(error) = self.integrate_lua_host_commands(result, sequence_before, commands)
+            {
+                return Err(self.poison_after_mutation(error));
+            }
+            if let Err(error) = validate_result_value_arena_bounds(result) {
+                return Err(self.poison_after_mutation(error));
+            }
+            Ok(())
+        }
+        #[cfg(not(feature = "scripting"))]
+        {
+            draw_result
+        }
     }
 
     pub fn artboard_bounds(&self) -> FlowArtboardBounds {
@@ -951,6 +1199,37 @@ impl FlowSession {
             }
         }
 
+        #[cfg(feature = "scripting")]
+        let previous_listener_binding_baseline = self.listener_binding_baseline.clone();
+        #[cfg(feature = "scripting")]
+        let mut staged_listener_binding_baseline = None;
+        if let (FlowPlayer::StateMachine(machine), Some(candidate)) =
+            (&self.player, machine_candidate.as_mut())
+        {
+            candidate
+                .adopt_scripted_listener_action_state_from(machine)
+                .map_err(flow_script_error)?;
+            #[cfg(feature = "scripting")]
+            if let Some(previous_root) = previous_listener_binding_baseline.as_ref() {
+                let candidate_root = self
+                    .root_instance_id
+                    .and_then(|id| candidate_instances.get(&id))
+                    .cloned();
+                // Stage the pre-callback candidate. Hydration callbacks may
+                // write through Context.viewModel; committing this detached
+                // source snapshot leaves those writes pending for the next
+                // cycle instead of silently consuming them.
+                staged_listener_binding_baseline =
+                    detached_view_model_snapshot(candidate_root.as_ref());
+                if let Err(error) = self.artboard.rehydrate_flow_listener_actions(
+                    candidate,
+                    candidate_root.as_ref(),
+                    Some(previous_root),
+                ) {
+                    return Err(self.poison_after_mutation(flow_script_error(error)));
+                }
+            }
+        }
         if let Some(root) = self
             .root_instance_id
             .and_then(|id| candidate_instances.get(&id))
@@ -970,6 +1249,10 @@ impl FlowSession {
         self.next_instance_id = next_instance_id;
         self.next_cycle = next_cycle;
         self.next_sequence = next_sequence;
+        #[cfg(feature = "scripting")]
+        if previous_listener_binding_baseline.is_some() {
+            self.listener_binding_baseline = staged_listener_binding_baseline;
+        }
         result.settled = self.is_settled();
         include_reconciliation_values(&mut result, &self.bootstrap.values);
         Ok(result)
@@ -978,6 +1261,7 @@ impl FlowSession {
     fn perform_pointer_batch(
         &mut self,
         batch: FlowPointerBatch,
+        mut factory: Option<&mut dyn Factory>,
     ) -> Result<FlowResult, FlowSessionError> {
         if batch.events.len() > MAX_POINTERS_PER_BATCH {
             return Err(FlowSessionError::new(
@@ -999,6 +1283,12 @@ impl FlowSession {
                     "pointer coordinates must be finite",
                 ));
             }
+            if !event.timestamp_seconds.is_finite() || event.timestamp_seconds < 0.0 {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::InvalidArgument,
+                    "pointer timestamps must be finite and nonnegative",
+                ));
+            }
             match event.kind {
                 FlowPointerKind::Down | FlowPointerKind::Move => {
                     active_pointer_ids.insert(event.pointer_id);
@@ -1018,20 +1308,47 @@ impl FlowSession {
         let operation_result = (|| {
             let mut result = FlowResult::idle(self.is_settled());
             for event in batch.events {
+                #[cfg(feature = "scripting")]
+                let sequence_before = {
+                    // One pointer batch is an atomic host operation, but each
+                    // event advances the runtime independently. Reset script
+                    // work budgets at that exact cycle boundary while the
+                    // outer operation checkpoint remains responsible for
+                    // rolling every effect back on failure.
+                    let _ = self.artboard.begin_flow_host_cycle();
+                    self.next_sequence
+                };
                 let before = self.bootstrap.values.clone();
                 let changed = self.apply_pointer_event(event)?;
                 result.dirty |= changed;
-                match event.kind {
+                let cycle_result = match event.kind {
                     FlowPointerKind::Down | FlowPointerKind::Up | FlowPointerKind::Cancel => {
-                        let cycle_result = self.run_player_cycle(0.0, false)?;
-                        merge_results(&mut result, cycle_result)?;
+                        self.run_player_cycle(0.0, false, None)?
                     }
                     FlowPointerKind::Move | FlowPointerKind::Exit => {
-                        let cycle_result = self.finish_nonadvance_pointer_cycle(before, changed)?;
-                        merge_results(&mut result, cycle_result)?;
+                        self.finish_nonadvance_pointer_cycle(before, changed)?
                     }
-                }
+                };
+                #[cfg(feature = "scripting")]
+                let cycle_result = {
+                    let mut cycle_result = cycle_result;
+                    let commands = self.artboard.drain_flow_host_commands();
+                    self.integrate_lua_host_commands(&mut cycle_result, sequence_before, commands)?;
+                    cycle_result
+                };
+                merge_results(&mut result, cycle_result)?;
             }
+            #[cfg(feature = "scripting")]
+            if let Some(factory) = factory.take() {
+                result.dirty |= self
+                    .artboard
+                    .prepare_flow_scripts(factory)
+                    .map_err(|error| {
+                        flow_script_error(error.with_context("scripted pointer cycle failed"))
+                    })?;
+            }
+            #[cfg(not(feature = "scripting"))]
+            let _ = factory.take();
             result.settled = self.is_settled();
             include_reconciliation_values(&mut result, &self.bootstrap.values);
             Ok(result)
@@ -1045,7 +1362,11 @@ impl FlowSession {
         }
     }
 
-    fn perform_advance(&mut self, advance: FlowAdvance) -> Result<FlowResult, FlowSessionError> {
+    fn perform_advance(
+        &mut self,
+        advance: FlowAdvance,
+        factory: Option<&mut dyn Factory>,
+    ) -> Result<FlowResult, FlowSessionError> {
         if !advance.timestamp_seconds.is_finite() || !advance.delta_seconds.is_finite() {
             return Err(FlowSessionError::new(
                 FlowSessionErrorKind::InvalidArgument,
@@ -1069,7 +1390,7 @@ impl FlowSession {
         }
         self.last_timestamp_seconds = Some(advance.timestamp_seconds);
         let mut result = self
-            .run_player_cycle(advance.delta_seconds, advance.render)
+            .run_player_cycle(advance.delta_seconds, advance.render, factory)
             .map_err(|error| self.poison_after_mutation(error))?;
         include_reconciliation_values(&mut result, &self.bootstrap.values);
         Ok(result)
@@ -1087,80 +1408,66 @@ impl FlowSession {
         let FlowPlayer::StateMachine(machine) = &mut self.player else {
             return Ok(false);
         };
-        let root = self
-            .root_instance_id
-            .and_then(|id| self.instances.get(&id))
-            .cloned();
-        let changed = if let Some(root) = root {
-            let mut context = root.raw_mut();
-            match event.kind {
-                FlowPointerKind::Down => machine.pointer_down_with_owned_view_model_context(
+        let mut host = NoopScriptHost;
+        // Flow sessions bind the root handle onto the state machine when the
+        // session is created or a StateBatch commits. Let each authored
+        // ViewModelChange borrow that handle only for the individual action.
+        // Holding one outer mutable borrow across the whole listener FIFO
+        // would prevent a following Luau action from reading Context.viewModel.
+        let changed = match event.kind {
+            FlowPointerKind::Down => machine
+                .try_pointer_down_with_timestamp_and_script_host(
                     self.artboard.raw(),
                     event.x,
                     event.y,
                     event.pointer_id,
-                    &mut context,
-                ),
-                FlowPointerKind::Move => machine.pointer_move_with_owned_view_model_context(
+                    event.timestamp_seconds,
+                    &mut host,
+                )
+                .map_err(flow_script_error)?,
+            FlowPointerKind::Move => machine
+                .try_pointer_move_with_timestamp_and_script_host(
                     self.artboard.raw(),
                     event.x,
                     event.y,
-                    0.0,
                     event.pointer_id,
-                    &mut context,
-                ),
-                FlowPointerKind::Up | FlowPointerKind::Cancel => {
-                    let mut changed = machine.pointer_up_with_owned_view_model_context(
+                    event.timestamp_seconds,
+                    &mut host,
+                )
+                .map_err(flow_script_error)?,
+            FlowPointerKind::Up | FlowPointerKind::Cancel => {
+                let mut changed = machine
+                    .try_pointer_up_with_timestamp_and_script_host(
                         self.artboard.raw(),
                         event.x,
                         event.y,
                         event.pointer_id,
-                        &mut context,
-                    );
-                    changed |= machine.pointer_exit_with_owned_view_model_context(
+                        event.timestamp_seconds,
+                        &mut host,
+                    )
+                    .map_err(flow_script_error)?;
+                changed |= machine
+                    .try_pointer_exit_with_timestamp_and_script_host(
                         self.artboard.raw(),
                         event.x,
                         event.y,
                         event.pointer_id,
-                        &mut context,
-                    );
-                    changed
-                }
-                FlowPointerKind::Exit => machine.pointer_exit_with_owned_view_model_context(
-                    self.artboard.raw(),
-                    event.x,
-                    event.y,
-                    event.pointer_id,
-                    &mut context,
-                ),
+                        event.timestamp_seconds,
+                        &mut host,
+                    )
+                    .map_err(flow_script_error)?;
+                changed
             }
-        } else {
-            match event.kind {
-                FlowPointerKind::Down => {
-                    machine.pointer_down(self.artboard.raw(), event.x, event.y, event.pointer_id)
-                }
-                FlowPointerKind::Move => machine.pointer_move(
+            FlowPointerKind::Exit => machine
+                .try_pointer_exit_with_timestamp_and_script_host(
                     self.artboard.raw(),
                     event.x,
                     event.y,
-                    0.0,
                     event.pointer_id,
-                ),
-                FlowPointerKind::Up | FlowPointerKind::Cancel => {
-                    let mut changed =
-                        machine.pointer_up(self.artboard.raw(), event.x, event.y, event.pointer_id);
-                    changed |= machine.pointer_exit(
-                        self.artboard.raw(),
-                        event.x,
-                        event.y,
-                        event.pointer_id,
-                    );
-                    changed
-                }
-                FlowPointerKind::Exit => {
-                    machine.pointer_exit(self.artboard.raw(), event.x, event.y, event.pointer_id)
-                }
-            }
+                    event.timestamp_seconds,
+                    &mut host,
+                )
+                .map_err(flow_script_error)?,
         };
         Ok(changed)
     }
@@ -1169,6 +1476,7 @@ impl FlowSession {
         &mut self,
         delta_seconds: f32,
         render: bool,
+        mut factory: Option<&mut dyn Factory>,
     ) -> Result<FlowResult, FlowSessionError> {
         let before_values = self.bootstrap.values.clone();
         let cycle = self.next_cycle;
@@ -1178,6 +1486,13 @@ impl FlowSession {
                 "cycle counter overflow",
             )
         })?;
+
+        // Pointer callbacks have already completed when they enter this
+        // method. Flush retained listener bindings once at this boundary,
+        // before runtime advance; never interleave a refresh into the authored
+        // FIFO of listener actions and never refresh again after advance.
+        #[cfg(feature = "scripting")]
+        self.flush_flow_listener_bindings()?;
 
         let pending_events = match &mut self.player {
             FlowPlayer::StateMachine(machine) => machine.take_reported_events(),
@@ -1202,9 +1517,20 @@ impl FlowSession {
             reported_payloads.push(self.event_payload(event)?);
         }
         let changed = match &mut self.player {
-            FlowPlayer::StateMachine(machine) => self
-                .artboard
-                .advance_with_state_machine(machine, delta_seconds),
+            FlowPlayer::StateMachine(machine) => {
+                let changed = if let Some(factory) = factory.as_deref_mut() {
+                    self.artboard
+                        .try_advance_with_state_machine_and_factory(machine, delta_seconds, factory)
+                        .map_err(flow_anyhow_error)?
+                } else {
+                    self.artboard
+                        .advance_with_state_machine(machine, delta_seconds)
+                };
+                if let Some(error) = machine.script_error().cloned() {
+                    return Err(flow_script_error(error));
+                }
+                changed
+            }
             FlowPlayer::Animation(animation) => {
                 let mut events = Vec::new();
                 let mut changed = self
@@ -1219,11 +1545,25 @@ impl FlowSession {
                     .artboard
                     .raw_mut()
                     .apply_linear_animation_instance(animation, 1.0);
-                changed |= self.artboard.advance(0.0);
+                changed |= if let Some(factory) = factory.as_deref_mut() {
+                    self.artboard
+                        .try_advance_with_factory(factory, 0.0)
+                        .map_err(flow_anyhow_error)?
+                } else {
+                    self.artboard.advance(0.0)
+                };
                 self.pending_animation_events = events;
                 changed
             }
-            FlowPlayer::Static => self.artboard.advance(delta_seconds),
+            FlowPlayer::Static => {
+                if let Some(factory) = factory.as_deref_mut() {
+                    self.artboard
+                        .try_advance_with_factory(factory, delta_seconds)
+                        .map_err(flow_anyhow_error)?
+                } else {
+                    self.artboard.advance(delta_seconds)
+                }
+            }
         };
 
         let mut result = FlowResult::idle(false);
@@ -1276,6 +1616,31 @@ impl FlowSession {
         result.wake_after_seconds = has_pending_reports.then_some(0.0);
         result.settled = self.is_settled();
         Ok(result)
+    }
+
+    #[cfg(feature = "scripting")]
+    fn flush_flow_listener_bindings(&mut self) -> Result<(), FlowSessionError> {
+        let Some(previous_root) = self.listener_binding_baseline.clone() else {
+            return Ok(());
+        };
+        let FlowPlayer::StateMachine(machine) = &mut self.player else {
+            return Ok(());
+        };
+        let current_root = self
+            .root_instance_id
+            .and_then(|id| self.instances.get(&id))
+            .cloned();
+        // Snapshot before applying hydration: a bound trigger callback may
+        // mutate the live Context.viewModel. Advancing to this pre-callback
+        // source only after success preserves those writes for the next cycle.
+        let next_baseline = detached_view_model_snapshot(current_root.as_ref());
+        self.artboard
+            .rehydrate_flow_listener_actions(machine, current_root.as_ref(), Some(&previous_root))
+            .map_err(|error| {
+                flow_script_error(error.with_context("scripted listener binding flush failed"))
+            })?;
+        self.listener_binding_baseline = next_baseline;
+        Ok(())
     }
 
     fn finish_nonadvance_pointer_cycle(
@@ -1373,6 +1738,101 @@ impl FlowSession {
         append_output(outputs, &mut self.next_sequence, cycle, phase, payload)
     }
 
+    #[cfg(feature = "scripting")]
+    fn append_lua_host_commands(
+        &mut self,
+        outputs: &mut Vec<FlowOutput>,
+        cycle: u64,
+        commands: Vec<LuaHostCommand>,
+    ) -> Result<(), FlowSessionError> {
+        for command in commands {
+            let (name, payload) = match command {
+                LuaHostCommand::Trigger { name, properties } => (
+                    name,
+                    FlowHostValue::Object(
+                        properties
+                            .into_iter()
+                            .map(|(key, value)| (key, flow_host_value(value)))
+                            .collect(),
+                    ),
+                ),
+                LuaHostCommand::ResponseSet { field, value } => (
+                    "$response_set".to_owned(),
+                    FlowHostValue::Object(BTreeMap::from([
+                        ("field".to_owned(), FlowHostValue::String(field)),
+                        ("value".to_owned(), flow_host_value(value)),
+                    ])),
+                ),
+            };
+            self.push_output(
+                outputs,
+                cycle,
+                FlowOutputPhase::HostWork,
+                FlowOutputPayload::HostCommand { name, payload },
+            )?;
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "scripting")]
+    fn integrate_lua_host_commands(
+        &mut self,
+        result: &mut FlowResult,
+        sequence_before: u64,
+        commands: Vec<LuaHostCommand>,
+    ) -> Result<(), FlowSessionError> {
+        if commands.is_empty() {
+            return Ok(());
+        }
+        let cycle = result
+            .outputs
+            .last()
+            .map(|output| output.cycle)
+            .unwrap_or_else(|| self.next_cycle.saturating_sub(1).max(1));
+        let mut host_outputs = Vec::with_capacity(commands.len());
+        self.append_lua_host_commands(&mut host_outputs, cycle, commands)?;
+        let insertion = result
+            .outputs
+            .iter()
+            .position(|output| {
+                output.cycle > cycle
+                    || (output.cycle == cycle && output.phase > FlowOutputPhase::HostWork)
+            })
+            .unwrap_or(result.outputs.len());
+        result.outputs.splice(insertion..insertion, host_outputs);
+        validate_output_batch(&result.outputs)?;
+        let next_sequence = sequence_before
+            .checked_add(u64::try_from(result.outputs.len()).map_err(|_| {
+                FlowSessionError::new(
+                    FlowSessionErrorKind::LimitExceeded,
+                    "output sequence count overflow",
+                )
+            })?)
+            .ok_or_else(|| {
+                FlowSessionError::new(
+                    FlowSessionErrorKind::LimitExceeded,
+                    "output sequence overflow",
+                )
+            })?;
+        for (offset, output) in result.outputs.iter_mut().enumerate() {
+            output.sequence = sequence_before
+                .checked_add(u64::try_from(offset).map_err(|_| {
+                    FlowSessionError::new(
+                        FlowSessionErrorKind::LimitExceeded,
+                        "output sequence offset overflow",
+                    )
+                })?)
+                .ok_or_else(|| {
+                    FlowSessionError::new(
+                        FlowSessionErrorKind::LimitExceeded,
+                        "output sequence overflow",
+                    )
+                })?;
+        }
+        self.next_sequence = next_sequence;
+        Ok(())
+    }
+
     fn refresh_values(&mut self) -> Result<(), FlowSessionError> {
         self.bootstrap.values = prepare_value_snapshot(
             self.artboard.file(),
@@ -1382,6 +1842,24 @@ impl FlowSession {
         )?;
         validate_bootstrap_payload(&self.bootstrap)?;
         Ok(())
+    }
+}
+
+#[cfg(feature = "scripting")]
+fn flow_host_value(value: LuaHostValue) -> FlowHostValue {
+    match value {
+        LuaHostValue::Bool(value) => FlowHostValue::Bool(value),
+        LuaHostValue::Number(value) => FlowHostValue::Number(value),
+        LuaHostValue::String(value) => FlowHostValue::String(value),
+        LuaHostValue::Array(values) => {
+            FlowHostValue::List(values.into_iter().map(flow_host_value).collect())
+        }
+        LuaHostValue::Object(values) => FlowHostValue::Object(
+            values
+                .into_iter()
+                .map(|(key, value)| (key, flow_host_value(value)))
+                .collect(),
+        ),
     }
 }
 
@@ -1933,6 +2411,302 @@ impl<'a> ValueArenaBuilder<'a> {
     }
 }
 
+#[derive(Default)]
+struct ResultValueArenaProjection {
+    nodes: usize,
+    edges: usize,
+    content_bytes: usize,
+}
+
+impl ResultValueArenaProjection {
+    fn add_nodes(&mut self, count: usize) -> Result<(), FlowSessionError> {
+        self.nodes = self.nodes.checked_add(count).ok_or_else(|| {
+            FlowSessionError::new(
+                FlowSessionErrorKind::ResultLimitExceeded,
+                "result value arena node count overflowed",
+            )
+        })?;
+        if self.nodes > MAX_VALUE_NODES {
+            return Err(FlowSessionError::new(
+                FlowSessionErrorKind::ResultLimitExceeded,
+                "result value arena exceeds 4096 nodes",
+            ));
+        }
+        Ok(())
+    }
+
+    fn add_edges(&mut self, count: usize) -> Result<(), FlowSessionError> {
+        self.edges = self.edges.checked_add(count).ok_or_else(|| {
+            FlowSessionError::new(
+                FlowSessionErrorKind::ResultLimitExceeded,
+                "result value arena edge count overflowed",
+            )
+        })?;
+        if self.edges > MAX_VALUE_EDGES {
+            return Err(FlowSessionError::new(
+                FlowSessionErrorKind::ResultLimitExceeded,
+                "result value arena exceeds 16384 edges",
+            ));
+        }
+        Ok(())
+    }
+
+    fn add_content_bytes(&mut self, count: usize) -> Result<(), FlowSessionError> {
+        self.content_bytes = self.content_bytes.checked_add(count).ok_or_else(|| {
+            FlowSessionError::new(
+                FlowSessionErrorKind::ResultLimitExceeded,
+                "result ABI content size overflowed",
+            )
+        })?;
+        if self.content_bytes > MAX_ENCODED_PAYLOAD_BYTES {
+            return Err(FlowSessionError::new(
+                FlowSessionErrorKind::ResultLimitExceeded,
+                "result ABI content exceeds 4 MiB",
+            ));
+        }
+        Ok(())
+    }
+
+    fn add_catalog(&mut self, catalog: &FlowCatalog) -> Result<(), FlowSessionError> {
+        for schema in &catalog.schemas {
+            self.add_content_bytes(schema.name.len().saturating_mul(2))?;
+            for property in &schema.properties {
+                self.add_content_bytes(schema.name.len())?;
+                self.add_content_bytes(property.name.len().saturating_mul(2))?;
+                self.add_content_bytes(
+                    property
+                        .referenced_schema_name
+                        .as_deref()
+                        .map(str::len)
+                        .unwrap_or(0),
+                )?;
+                for label in &property.enum_labels {
+                    self.add_content_bytes(label.len())?;
+                }
+            }
+        }
+        for template in &catalog.templates {
+            self.add_content_bytes(template.schema_name.len())?;
+            self.add_content_bytes(template.authored_name.as_deref().map(str::len).unwrap_or(0))?;
+        }
+        for instance in &catalog.instances {
+            self.add_content_bytes(instance.schema_name.len())?;
+            self.add_content_bytes(instance.authored_name.as_deref().map(str::len).unwrap_or(0))?;
+        }
+        Ok(())
+    }
+
+    fn add_flow_arena(
+        &mut self,
+        arena: &FlowValueArena,
+        catalog: Option<&FlowCatalog>,
+    ) -> Result<(), FlowSessionError> {
+        self.add_nodes(arena.nodes.len())?;
+        for node in &arena.nodes {
+            match &node.value {
+                FlowValue::String(value) => self.add_content_bytes(value.len())?,
+                FlowValue::Object(children) | FlowValue::ViewModel(children) => {
+                    self.add_edges(children.len())?;
+                    for (key, _) in children {
+                        self.add_content_bytes(key.len())?;
+                    }
+                }
+                FlowValue::List(children) => self.add_edges(children.len())?,
+                FlowValue::Null
+                | FlowValue::Number(_)
+                | FlowValue::Bool(_)
+                | FlowValue::Enum(_)
+                | FlowValue::ListIndex(_)
+                | FlowValue::Color(_)
+                | FlowValue::Image(_) => {}
+            }
+        }
+        if let Some(catalog) = catalog {
+            let view_model_nodes = arena
+                .nodes
+                .iter()
+                .filter_map(|node| {
+                    matches!(&node.value, FlowValue::ViewModel(_)).then_some(node.id.get())
+                })
+                .collect::<BTreeSet<_>>();
+            let mut root_schema_lengths = BTreeMap::new();
+            for (instance_id, root_id) in &arena.roots {
+                if !view_model_nodes.contains(&root_id.get()) {
+                    continue;
+                }
+                let schema_length = catalog
+                    .instances
+                    .iter()
+                    .find(|instance| instance.id == *instance_id)
+                    .map(|instance| instance.schema_name.len())
+                    .unwrap_or(0);
+                root_schema_lengths.insert(root_id.get(), schema_length);
+            }
+            for schema_length in root_schema_lengths.into_values() {
+                self.add_content_bytes(schema_length)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn add_host_value(
+        &mut self,
+        value: &FlowHostValue,
+        depth: usize,
+    ) -> Result<(), FlowSessionError> {
+        if depth > MAX_VALUE_DEPTH {
+            return Err(FlowSessionError::new(
+                FlowSessionErrorKind::ResultLimitExceeded,
+                "result host value depth exceeds 32 levels",
+            ));
+        }
+        let child_depth = depth.saturating_add(1);
+        self.add_nodes(1)?;
+        match value {
+            FlowHostValue::List(values) => {
+                self.add_edges(values.len())?;
+                for value in values {
+                    self.add_host_value(value, child_depth)?;
+                }
+            }
+            FlowHostValue::Object(values) => {
+                self.add_edges(values.len())?;
+                for (key, value) in values {
+                    self.add_content_bytes(key.len())?;
+                    self.add_host_value(value, child_depth)?;
+                }
+            }
+            FlowHostValue::String(value) => self.add_content_bytes(value.len())?,
+            FlowHostValue::Bool(_) | FlowHostValue::Number(_) => {}
+        }
+        Ok(())
+    }
+
+    fn add_outputs(&mut self, outputs: &[FlowOutput]) -> Result<(), FlowSessionError> {
+        for output in outputs {
+            validate_output_payload(&output.payload)?;
+            match &output.payload {
+                FlowOutputPayload::ReportedEvent {
+                    name,
+                    url,
+                    target,
+                    properties,
+                    ..
+                } => {
+                    self.add_content_bytes(name.as_deref().map(str::len).unwrap_or(0))?;
+                    self.add_content_bytes(url.as_deref().map(str::len).unwrap_or(0))?;
+                    self.add_content_bytes(target.as_deref().map(str::len).unwrap_or(0))?;
+                    self.add_nodes(
+                        properties
+                            .iter()
+                            .filter(|property| {
+                                !matches!(&property.value, FlowScalarValue::Trigger(_))
+                            })
+                            .count(),
+                    )?;
+                    for property in properties {
+                        self.add_content_bytes(
+                            property.name.as_deref().map(str::len).unwrap_or(0),
+                        )?;
+                        if let FlowScalarValue::String(value) = &property.value {
+                            self.add_content_bytes(value.len())?;
+                        }
+                    }
+                }
+                FlowOutputPayload::StateChanged {
+                    path,
+                    value: Some(value),
+                    ..
+                } => {
+                    self.add_content_bytes(path.len())?;
+                    self.add_nodes(1)?;
+                    match value {
+                        FlowStateChangeValue::Scalar(FlowScalarValue::String(value)) => {
+                            self.add_content_bytes(value.len())?;
+                        }
+                        FlowStateChangeValue::ViewModelReference { schema_name, .. } => {
+                            self.add_content_bytes(schema_name.len())?;
+                        }
+                        FlowStateChangeValue::Scalar(_) => {}
+                    }
+                }
+                FlowOutputPayload::StateChanged {
+                    path, value: None, ..
+                } => self.add_content_bytes(path.len())?,
+                FlowOutputPayload::HostCommand { name, payload } => {
+                    self.add_content_bytes(name.len())?;
+                    self.add_host_value(payload, 1)?;
+                }
+                FlowOutputPayload::RenderRequested { .. }
+                | FlowOutputPayload::RuntimeAdvanced { .. } => {}
+            }
+        }
+        Ok(())
+    }
+}
+
+fn validate_creation_value_arena_bounds(
+    creation: &FlowSessionCreation,
+) -> Result<(), FlowSessionError> {
+    validate_bootstrap_payload(&creation.bootstrap)?;
+    validate_output_batch(&creation.outputs)?;
+    let mut projection = ResultValueArenaProjection::default();
+    projection.add_content_bytes(
+        creation
+            .bootstrap
+            .artboard_name
+            .as_deref()
+            .map(str::len)
+            .unwrap_or(0),
+    )?;
+    projection.add_content_bytes(
+        creation
+            .bootstrap
+            .player
+            .name
+            .as_deref()
+            .map(str::len)
+            .unwrap_or(0),
+    )?;
+    projection.add_catalog(&creation.bootstrap.catalog)?;
+    projection.add_flow_arena(
+        &creation.bootstrap.values,
+        Some(&creation.bootstrap.catalog),
+    )?;
+    projection.add_outputs(&creation.outputs)
+}
+
+fn validate_result_value_arena_bounds(result: &FlowResult) -> Result<(), FlowSessionError> {
+    let mut projection = ResultValueArenaProjection::default();
+    if let Some(snapshot) = result.snapshot.as_ref() {
+        projection
+            .add_content_bytes(snapshot.artboard_name.as_deref().map(str::len).unwrap_or(0))?;
+        projection.add_content_bytes(snapshot.player.name.as_deref().map(str::len).unwrap_or(0))?;
+    }
+    let effective_catalog = result
+        .catalog
+        .as_ref()
+        .or_else(|| result.snapshot.as_ref().map(|snapshot| &snapshot.catalog));
+    if let Some(catalog) = effective_catalog {
+        projection.add_catalog(catalog)?;
+    }
+    if let Some(values) = result.values.as_ref() {
+        projection.add_flow_arena(values, effective_catalog)?;
+    } else if let Some(snapshot) = result.snapshot.as_ref() {
+        projection.add_flow_arena(&snapshot.values, effective_catalog)?;
+    }
+    if let Some(inputs) = result.player_inputs.as_ref() {
+        projection.add_nodes(inputs.len())?;
+        for input in inputs {
+            projection.add_content_bytes(input.name.as_deref().map(str::len).unwrap_or(0))?;
+            if let FlowScalarValue::String(value) = &input.value {
+                projection.add_content_bytes(value.len())?;
+            }
+        }
+    }
+    projection.add_outputs(&result.outputs)
+}
+
 fn merge_results(target: &mut FlowResult, mut source: FlowResult) -> Result<(), FlowSessionError> {
     if target.outputs.len().saturating_add(source.outputs.len()) > MAX_BATCH_ITEMS {
         return Err(FlowSessionError::new(
@@ -2071,6 +2845,32 @@ fn append_output(
     Ok(())
 }
 
+fn validate_output_batch(outputs: &[FlowOutput]) -> Result<(), FlowSessionError> {
+    if outputs.len() > MAX_BATCH_ITEMS {
+        return Err(FlowSessionError::new(
+            FlowSessionErrorKind::LimitExceeded,
+            "output limit exceeded",
+        ));
+    }
+    let encoded_size = outputs.iter().try_fold(0_usize, |size, output| {
+        validate_output_payload(&output.payload)?;
+        size.checked_add(flow_output_payload_bytes(&output.payload))
+            .ok_or_else(|| {
+                FlowSessionError::new(
+                    FlowSessionErrorKind::LimitExceeded,
+                    "encoded output size overflow",
+                )
+            })
+    })?;
+    if encoded_size > MAX_ENCODED_PAYLOAD_BYTES {
+        return Err(FlowSessionError::new(
+            FlowSessionErrorKind::LimitExceeded,
+            "encoded output exceeds 4 MiB",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_scalar_value(value: &FlowScalarValue, label: &str) -> Result<(), FlowSessionError> {
     match value {
         FlowScalarValue::String(value) if value.len() > MAX_STRING_BYTES => {
@@ -2163,12 +2963,15 @@ fn validate_output_payload(payload: &FlowOutputPayload) -> Result<(), FlowSessio
         }
         FlowOutputPayload::HostCommand { name, payload } => {
             validate_required_id_path(name, "host command name")?;
-            if payload.len() > MAX_ENCODED_PAYLOAD_BYTES {
+            if !matches!(payload, FlowHostValue::Object(_)) {
                 return Err(FlowSessionError::new(
-                    FlowSessionErrorKind::LimitExceeded,
-                    "host command payload exceeds 4 MiB",
+                    FlowSessionErrorKind::Runtime,
+                    "host command payload root must be an object",
                 ));
             }
+            let mut nodes = 0_usize;
+            let mut edges = 0_usize;
+            validate_host_value(payload, 1, &mut nodes, &mut edges)?;
         }
         FlowOutputPayload::RuntimeAdvanced { delta_seconds } => {
             if !delta_seconds.is_finite() || *delta_seconds < 0.0 {
@@ -2259,9 +3062,107 @@ fn flow_output_payload_bytes(payload: &FlowOutputPayload) -> usize {
             })
         }
         FlowOutputPayload::HostCommand { name, payload } => {
-            name.len().saturating_add(payload.len())
+            name.len().saturating_add(host_value_payload_bytes(payload))
         }
         FlowOutputPayload::RenderRequested { .. } | FlowOutputPayload::RuntimeAdvanced { .. } => 16,
+    }
+}
+
+fn validate_host_value(
+    value: &FlowHostValue,
+    depth: usize,
+    nodes: &mut usize,
+    edges: &mut usize,
+) -> Result<(), FlowSessionError> {
+    if depth > MAX_VALUE_DEPTH {
+        return Err(FlowSessionError::new(
+            FlowSessionErrorKind::LimitExceeded,
+            "host command value depth limit exceeded",
+        ));
+    }
+    let child_depth = depth.saturating_add(1);
+    *nodes = nodes.checked_add(1).ok_or_else(|| {
+        FlowSessionError::new(
+            FlowSessionErrorKind::LimitExceeded,
+            "host command value node count overflowed",
+        )
+    })?;
+    if *nodes > MAX_VALUE_NODES {
+        return Err(FlowSessionError::new(
+            FlowSessionErrorKind::LimitExceeded,
+            "host command value node limit exceeded",
+        ));
+    }
+    match value {
+        FlowHostValue::Number(value) if !value.is_finite() => Err(FlowSessionError::new(
+            FlowSessionErrorKind::Runtime,
+            "host command number is non-finite",
+        )),
+        FlowHostValue::String(value) if value.len() > MAX_STRING_BYTES => {
+            Err(FlowSessionError::new(
+                FlowSessionErrorKind::LimitExceeded,
+                "host command string exceeds 1 MiB",
+            ))
+        }
+        FlowHostValue::List(values) => {
+            if values.len() > MAX_LIST_ITEMS {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::LimitExceeded,
+                    "host command list item limit exceeded",
+                ));
+            }
+            charge_host_value_edges(edges, values.len())?;
+            for value in values {
+                validate_host_value(value, child_depth, nodes, edges)?;
+            }
+            Ok(())
+        }
+        FlowHostValue::Object(values) => {
+            if values.len() > MAX_LIST_ITEMS {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::LimitExceeded,
+                    "host command object field limit exceeded",
+                ));
+            }
+            charge_host_value_edges(edges, values.len())?;
+            for (key, value) in values {
+                validate_required_id_path(key, "host command object key")?;
+                validate_host_value(value, child_depth, nodes, edges)?;
+            }
+            Ok(())
+        }
+        FlowHostValue::Bool(_) | FlowHostValue::Number(_) | FlowHostValue::String(_) => Ok(()),
+    }
+}
+
+fn charge_host_value_edges(edges: &mut usize, count: usize) -> Result<(), FlowSessionError> {
+    *edges = edges.checked_add(count).ok_or_else(|| {
+        FlowSessionError::new(
+            FlowSessionErrorKind::LimitExceeded,
+            "host command value edge count overflowed",
+        )
+    })?;
+    if *edges > MAX_VALUE_EDGES {
+        return Err(FlowSessionError::new(
+            FlowSessionErrorKind::LimitExceeded,
+            "host command value edge limit exceeded",
+        ));
+    }
+    Ok(())
+}
+
+fn host_value_payload_bytes(value: &FlowHostValue) -> usize {
+    match value {
+        FlowHostValue::Bool(_) | FlowHostValue::Number(_) => 16,
+        FlowHostValue::String(value) => value.len(),
+        FlowHostValue::List(values) => values
+            .iter()
+            .map(host_value_payload_bytes)
+            .fold(0_usize, usize::saturating_add),
+        FlowHostValue::Object(values) => values.iter().fold(0_usize, |size, (key, value)| {
+            size.saturating_add(key.len())
+                .saturating_add(host_value_payload_bytes(value))
+        }),
     }
 }
 
@@ -4275,6 +5176,7 @@ mod tests {
             pointer_id: 1,
             x: 0.0,
             y: 0.0,
+            timestamp_seconds: 0.0,
         };
 
         let error = session
@@ -4284,6 +5186,46 @@ mod tests {
             .expect_err("oversized pointer batch");
 
         assert_eq!(error.kind(), FlowSessionErrorKind::LimitExceeded);
+    }
+
+    #[test]
+    fn pointer_timestamps_are_prevalidated_before_any_event_mutates_the_session() {
+        let file = Arc::new(File::import(FIXTURE).expect("import fixture"));
+        let (mut session, _) =
+            FlowSession::create(file, FlowSessionConfig::default()).expect("create session");
+        let before_cycle = session.next_cycle;
+        let before_sequence = session.next_sequence;
+        let before_active_pointers = session.active_pointer_ids.clone();
+
+        let error = session
+            .perform(FlowOperation::PointerBatch(FlowPointerBatch {
+                events: vec![
+                    FlowPointerEvent {
+                        kind: FlowPointerKind::Down,
+                        pointer_id: 1,
+                        x: 0.0,
+                        y: 0.0,
+                        timestamp_seconds: 1.0,
+                    },
+                    FlowPointerEvent {
+                        kind: FlowPointerKind::Move,
+                        pointer_id: 1,
+                        x: 1.0,
+                        y: 1.0,
+                        timestamp_seconds: f32::INFINITY,
+                    },
+                ],
+            }))
+            .expect_err("invalid timestamp must reject the complete batch");
+
+        assert_eq!(error.kind(), FlowSessionErrorKind::InvalidArgument);
+        assert_eq!(session.next_cycle, before_cycle);
+        assert_eq!(session.next_sequence, before_sequence);
+        assert_eq!(session.active_pointer_ids, before_active_pointers);
+        assert!(session.terminal_failure.is_none());
+        session
+            .perform(FlowOperation::Query(FlowQuery::Values))
+            .expect("prevalidation failure leaves the session usable");
     }
 
     #[test]
@@ -5092,6 +6034,142 @@ mod tests {
     }
 
     #[test]
+    fn creation_projection_reserves_one_shared_arena_for_bootstrap_and_host_work() {
+        let file = Arc::new(File::import(FIXTURE).expect("import fixture"));
+        let (_, bootstrap) =
+            FlowSession::create(file, FlowSessionConfig::default()).expect("create session");
+        let creation_with_nodes = |node_count: usize| {
+            let mut bootstrap = bootstrap.clone();
+            bootstrap.values = FlowValueArena {
+                roots: Vec::new(),
+                nodes: (1..=node_count)
+                    .map(|id| FlowValueNode {
+                        id: FlowValueId(u32::try_from(id).expect("bounded value id")),
+                        value: FlowValue::Null,
+                    })
+                    .collect(),
+            };
+            FlowSessionCreation {
+                bootstrap,
+                outputs: vec![FlowOutput {
+                    sequence: 1,
+                    cycle: 0,
+                    phase: FlowOutputPhase::HostWork,
+                    payload: FlowOutputPayload::HostCommand {
+                        name: "created".to_owned(),
+                        payload: FlowHostValue::Object(BTreeMap::new()),
+                    },
+                }],
+                dirty: false,
+                settled: true,
+                wake_after_seconds: None,
+            }
+        };
+
+        assert!(
+            validate_creation_value_arena_bounds(&creation_with_nodes(MAX_VALUE_NODES - 1)).is_ok(),
+            "bootstrap plus creation HostWork may exactly fill the shared arena"
+        );
+        let error = validate_creation_value_arena_bounds(&creation_with_nodes(MAX_VALUE_NODES))
+            .expect_err("creation HostWork must not overflow the bootstrap arena");
+        assert_eq!(error.kind(), FlowSessionErrorKind::ResultLimitExceeded);
+    }
+
+    #[test]
+    fn result_projection_aggregates_many_individually_valid_host_trees() {
+        let payload = FlowHostValue::Object(BTreeMap::from([(
+            "value".to_owned(),
+            FlowHostValue::List(vec![FlowHostValue::Bool(true); 16]),
+        )]));
+        let result_with_commands = |command_count: usize| FlowResult {
+            outputs: (0..command_count)
+                .map(|index| FlowOutput {
+                    sequence: u64::try_from(index + 1).expect("bounded sequence"),
+                    cycle: 1,
+                    phase: FlowOutputPhase::HostWork,
+                    payload: FlowOutputPayload::HostCommand {
+                        name: "event".to_owned(),
+                        payload: payload.clone(),
+                    },
+                })
+                .collect(),
+            ..FlowResult::idle(true)
+        };
+
+        let exact = result_with_commands(227);
+        assert!(validate_output_batch(&exact.outputs).is_ok());
+        assert!(validate_result_value_arena_bounds(&exact).is_ok());
+
+        let overflow = result_with_commands(256);
+        assert!(
+            validate_output_batch(&overflow.outputs).is_ok(),
+            "each command and the encoded byte aggregate remain independently valid"
+        );
+        let error = validate_result_value_arena_bounds(&overflow)
+            .expect_err("all command trees share one ABI result arena");
+        assert_eq!(error.kind(), FlowSessionErrorKind::ResultLimitExceeded);
+    }
+
+    #[test]
+    fn result_projection_combines_snapshot_and_host_content_into_the_abi_budget() {
+        let file = Arc::new(File::import(FIXTURE).expect("import fixture"));
+        let (_, mut bootstrap) =
+            FlowSession::create(file, FlowSessionConfig::default()).expect("create session");
+        let snapshot_chunk = "s".repeat(MAX_STRING_BYTES);
+        bootstrap.values = FlowValueArena {
+            roots: Vec::new(),
+            nodes: (1..=3)
+                .map(|id| FlowValueNode {
+                    id: FlowValueId(id),
+                    value: FlowValue::String(snapshot_chunk.clone()),
+                })
+                .collect(),
+        };
+        let host_chunk = "h".repeat(600 * 1024);
+        let output = FlowOutput {
+            sequence: 1,
+            cycle: 1,
+            phase: FlowOutputPhase::HostWork,
+            payload: FlowOutputPayload::HostCommand {
+                name: "response".to_owned(),
+                payload: FlowHostValue::Object(BTreeMap::from([
+                    ("a".to_owned(), FlowHostValue::String(host_chunk.clone())),
+                    ("b".to_owned(), FlowHostValue::String(host_chunk)),
+                ])),
+            },
+        };
+
+        assert!(validate_bootstrap_payload(&bootstrap).is_ok());
+        assert!(validate_output_batch(std::slice::from_ref(&output)).is_ok());
+
+        let creation = FlowSessionCreation {
+            bootstrap: bootstrap.clone(),
+            outputs: vec![output.clone()],
+            dirty: false,
+            settled: true,
+            wake_after_seconds: None,
+        };
+        let creation_error = validate_creation_value_arena_bounds(&creation)
+            .expect_err("creation shares one aggregate ABI content budget");
+        assert_eq!(
+            creation_error.kind(),
+            FlowSessionErrorKind::ResultLimitExceeded
+        );
+
+        let result = FlowResult {
+            values: Some(bootstrap.values),
+            outputs: vec![output],
+            ..FlowResult::idle(true)
+        };
+        let result_error = validate_result_value_arena_bounds(&result)
+            .expect_err("operation values and HostWork share one ABI content budget");
+        assert_eq!(
+            result_error.kind(),
+            FlowSessionErrorKind::ResultLimitExceeded
+        );
+    }
+
+    #[test]
     fn post_mutation_advance_failure_terminally_poisoned_session_rejects_every_later_operation() {
         let mut session = smi_session();
         session.next_sequence = u64::MAX;
@@ -5135,6 +6213,7 @@ mod tests {
                     pointer_id,
                     x: -10_000.0,
                     y: -10_000.0,
+                    timestamp_seconds: 0.0,
                 }],
             })
         };

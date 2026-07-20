@@ -2927,6 +2927,108 @@ mod owned_instance_tests {
         assert!(!instance.raw_mut().set_double_property(0, u16::MAX, 1.0));
     }
 
+    #[test]
+    fn file_external_asset_store_validates_ids_and_replaces_deterministically() {
+        let mut image_file =
+            File::import(&external_fixture("hosted_image_file.riv")).expect("import image file");
+        let image_id = first_semantic_asset_id(&image_file, "ImageAsset");
+        assert_eq!(
+            image_file.attach_external_image_asset_bytes(u32::MAX, vec![1]),
+            Err(ExternalAssetError::UnknownAsset { asset_id: u32::MAX })
+        );
+        assert_eq!(
+            image_file.attach_external_font_asset_bytes(image_id, vec![1]),
+            Err(ExternalAssetError::WrongAssetKind {
+                asset_id: image_id,
+                expected: "FontAsset",
+                actual: "ImageAsset",
+            })
+        );
+
+        image_file
+            .attach_external_image_asset_bytes(image_id, vec![1, 2, 3])
+            .expect("attach image bytes");
+        let first_image = Arc::clone(
+            image_file
+                .external_image_assets
+                .get(&image_id)
+                .expect("stored image"),
+        );
+        image_file
+            .attach_external_image_asset_bytes(image_id, vec![1, 2, 3])
+            .expect("repeat identical image bytes");
+        assert!(Arc::ptr_eq(
+            &first_image,
+            image_file
+                .external_image_assets
+                .get(&image_id)
+                .expect("same stored image")
+        ));
+        image_file
+            .attach_external_image_asset_bytes(image_id, vec![4, 5])
+            .expect("replace image bytes");
+        assert_eq!(
+            image_file
+                .external_image_assets
+                .get(&image_id)
+                .map(AsRef::as_ref),
+            Some(&[4, 5][..])
+        );
+
+        let mut font_file =
+            File::import(&external_fixture("hosted_font_file.riv")).expect("import font file");
+        let font_id = first_semantic_asset_id(&font_file, "FontAsset");
+        assert_eq!(
+            font_file.attach_external_font_asset_bytes(font_id, b"not a font".to_vec()),
+            Err(ExternalAssetError::InvalidFont { asset_id: font_id })
+        );
+        assert!(!font_file.external_font_assets.contains_key(&font_id));
+
+        let first_font_bytes = external_fixture("fonts/Inter_18pt-Regular.ttf");
+        font_file
+            .attach_external_font_asset_bytes(font_id, first_font_bytes.clone())
+            .expect("attach valid font");
+        let first_font = Arc::clone(
+            font_file
+                .external_font_assets
+                .get(&font_id)
+                .expect("stored font"),
+        );
+        font_file
+            .attach_external_font_asset_bytes(font_id, first_font_bytes)
+            .expect("repeat identical font bytes");
+        assert!(Arc::ptr_eq(
+            &first_font,
+            font_file
+                .external_font_assets
+                .get(&font_id)
+                .expect("same stored font")
+        ));
+
+        let replacement_font = external_fixture("Montserrat.ttf");
+        font_file
+            .attach_external_font_asset_bytes(font_id, replacement_font.clone())
+            .expect("replace valid font");
+        assert_eq!(
+            font_file
+                .external_font_assets
+                .get(&font_id)
+                .map(AsRef::as_ref),
+            Some(replacement_font.as_slice())
+        );
+        let cloned_file = font_file.clone();
+        assert!(Arc::ptr_eq(
+            font_file
+                .external_font_assets
+                .get(&font_id)
+                .expect("source font"),
+            cloned_file
+                .external_font_assets
+                .get(&font_id)
+                .expect("cloned font")
+        ));
+    }
+
     #[cfg(feature = "scripting")]
     #[test]
     fn file_script_runtime_extracts_scopes_and_nested_library_edges() {
@@ -3043,107 +3145,5 @@ mod owned_instance_tests {
             ))
             .expect("Data constructor probe runs");
         assert!(has_constructor);
-    }
-
-    #[test]
-    fn file_external_asset_store_validates_ids_and_replaces_deterministically() {
-        let mut image_file =
-            File::import(&external_fixture("hosted_image_file.riv")).expect("import image file");
-        let image_id = first_semantic_asset_id(&image_file, "ImageAsset");
-        assert_eq!(
-            image_file.attach_external_image_asset_bytes(u32::MAX, vec![1]),
-            Err(ExternalAssetError::UnknownAsset { asset_id: u32::MAX })
-        );
-        assert_eq!(
-            image_file.attach_external_font_asset_bytes(image_id, vec![1]),
-            Err(ExternalAssetError::WrongAssetKind {
-                asset_id: image_id,
-                expected: "FontAsset",
-                actual: "ImageAsset",
-            })
-        );
-
-        image_file
-            .attach_external_image_asset_bytes(image_id, vec![1, 2, 3])
-            .expect("attach image bytes");
-        let first_image = Arc::clone(
-            image_file
-                .external_image_assets
-                .get(&image_id)
-                .expect("stored image"),
-        );
-        image_file
-            .attach_external_image_asset_bytes(image_id, vec![1, 2, 3])
-            .expect("repeat identical image bytes");
-        assert!(Arc::ptr_eq(
-            &first_image,
-            image_file
-                .external_image_assets
-                .get(&image_id)
-                .expect("same stored image")
-        ));
-        image_file
-            .attach_external_image_asset_bytes(image_id, vec![4, 5])
-            .expect("replace image bytes");
-        assert_eq!(
-            image_file
-                .external_image_assets
-                .get(&image_id)
-                .map(AsRef::as_ref),
-            Some(&[4, 5][..])
-        );
-
-        let mut font_file =
-            File::import(&external_fixture("hosted_font_file.riv")).expect("import font file");
-        let font_id = first_semantic_asset_id(&font_file, "FontAsset");
-        assert_eq!(
-            font_file.attach_external_font_asset_bytes(font_id, b"not a font".to_vec()),
-            Err(ExternalAssetError::InvalidFont { asset_id: font_id })
-        );
-        assert!(!font_file.external_font_assets.contains_key(&font_id));
-
-        let first_font_bytes = external_fixture("fonts/Inter_18pt-Regular.ttf");
-        font_file
-            .attach_external_font_asset_bytes(font_id, first_font_bytes.clone())
-            .expect("attach valid font");
-        let first_font = Arc::clone(
-            font_file
-                .external_font_assets
-                .get(&font_id)
-                .expect("stored font"),
-        );
-        font_file
-            .attach_external_font_asset_bytes(font_id, first_font_bytes)
-            .expect("repeat identical font bytes");
-        assert!(Arc::ptr_eq(
-            &first_font,
-            font_file
-                .external_font_assets
-                .get(&font_id)
-                .expect("same stored font")
-        ));
-
-        let replacement_font = external_fixture("Montserrat.ttf");
-        font_file
-            .attach_external_font_asset_bytes(font_id, replacement_font.clone())
-            .expect("replace valid font");
-        assert_eq!(
-            font_file
-                .external_font_assets
-                .get(&font_id)
-                .map(AsRef::as_ref),
-            Some(replacement_font.as_slice())
-        );
-        let cloned_file = font_file.clone();
-        assert!(Arc::ptr_eq(
-            font_file
-                .external_font_assets
-                .get(&font_id)
-                .expect("source font"),
-            cloned_file
-                .external_font_assets
-                .get(&font_id)
-                .expect("cloned font")
-        ));
     }
 }

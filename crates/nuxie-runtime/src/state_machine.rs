@@ -2,9 +2,11 @@ use crate::ArtboardInstance;
 use crate::animation::{
     AnimationLoop, LinearAnimationInstance, RuntimeInterpolator, RuntimeLinearAnimation,
 };
+use crate::components::TransformProperty;
 use crate::data_bind_graph::data_bind_flags_apply_target_to_source;
+use crate::focus::RuntimeFocusTree;
 use crate::properties::{artboard_index_for_graph, property_key_for_name};
-use crate::scripting::{ScriptError, ScriptListenerActionDefinition};
+use crate::scripting::{RuntimeScriptInstanceHandle, ScriptError, ScriptListenerActionDefinition};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use nuxie_graph::{ArtboardGraph, ParametricPathNode};
 use std::collections::BTreeMap;
@@ -14,8 +16,9 @@ mod bindables;
 mod instance;
 mod transition_conditions;
 pub(crate) use bindables::{
-    RuntimeBindableArtboard, RuntimeBindableAsset, RuntimeBindableBoolean, RuntimeBindableColor,
-    RuntimeBindableEnum, RuntimeBindableInteger, RuntimeBindableList, RuntimeBindableNumber,
+    RuntimeBindableArtboard, RuntimeBindableAsset, RuntimeBindableAssetDefaultViewModelSource,
+    RuntimeBindableAssetValue, RuntimeBindableBoolean, RuntimeBindableColor, RuntimeBindableEnum,
+    RuntimeBindableInteger, RuntimeBindableList, RuntimeBindableNumber,
     RuntimeBindableNumberDefaultViewModelSource, RuntimeBindableString, RuntimeBindableTrigger,
     RuntimeBindableTriggerSource, RuntimeBindableViewModel, RuntimeViewModelTrigger,
     StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
@@ -124,6 +127,17 @@ impl RuntimeStateMachine {
     /// [`StateMachineInstance`] occurrence.
     pub fn scripted_listener_actions(&self) -> &[ScriptListenerActionDefinition] {
         &self.scripted_listener_actions
+    }
+}
+
+impl RuntimeStateMachine {
+    pub(crate) fn requires_post_update_state_probe(&self) -> bool {
+        self.layers
+            .iter()
+            .flat_map(|layer| &layer.states)
+            .flat_map(|state| &state.transitions)
+            .flat_map(|transition| &transition.conditions)
+            .any(RuntimeTransitionCondition::can_change_during_artboard_update)
     }
 }
 
@@ -312,6 +326,18 @@ pub(crate) fn build_state_machines(
                                             let interpolator = transition.interpolator.and_then(
                                                 RuntimeTransitionInterpolator::from_object,
                                             );
+                                            let conditions = transition
+                                                .conditions
+                                                .iter()
+                                                .filter_map(|condition| {
+                                                    RuntimeTransitionCondition::from_object(
+                                                        file, graph, condition,
+                                                    )
+                                                })
+                                                .collect::<Vec<_>>();
+                                            let direct_input_conditions_only = conditions
+                                                .iter()
+                                                .all(RuntimeTransitionCondition::is_direct_input);
                                             RuntimeStateTransition {
                                                 global_id: transition.object.id,
                                                 state_to_index: transition.state_to_index,
@@ -334,15 +360,8 @@ pub(crate) fn build_state_machines(
                                                     .uint_property("randomWeight")
                                                     .unwrap_or(1),
                                                 condition_count: transition.conditions.len(),
-                                                conditions: transition
-                                                    .conditions
-                                                    .iter()
-                                                    .filter_map(|condition| {
-                                                        RuntimeTransitionCondition::from_object(
-                                                            file, graph, condition,
-                                                        )
-                                                    })
-                                                    .collect(),
+                                                conditions,
+                                                direct_input_conditions_only,
                                                 fire_actions: transition
                                                     .fire_actions
                                                     .iter()
@@ -377,9 +396,15 @@ pub(crate) fn build_state_machines(
                         let entry_state_index = states
                             .iter()
                             .position(|state| state.type_name == Some("EntryState"));
-                        let any_state_index = states
-                            .iter()
-                            .position(|state| state.type_name == Some("AnyState"));
+                        // An AnyState with no outgoing transitions can never
+                        // change the layer. Keep it in the imported state list
+                        // for identity/index parity, but omit its steady-state
+                        // probe. This is the retained equivalent of resolving
+                        // an empty C++ StateInstance once instead of walking it
+                        // before the current state on every advance.
+                        let any_state_index = states.iter().position(|state| {
+                            state.type_name == Some("AnyState") && !state.transitions.is_empty()
+                        });
                         RuntimeStateMachineLayer {
                             global_id: layer.object.id,
                             name: layer.object.string_property("name").map(ToOwned::to_owned),
@@ -589,6 +614,18 @@ impl RuntimeListenerType {
                 | Self::DragEnd
                 | Self::Drag
         )
+    }
+
+    pub(crate) fn script_pointer_kind(self) -> Option<crate::ScriptPointerEventKind> {
+        match self {
+            Self::Enter => Some(crate::ScriptPointerEventKind::Enter),
+            Self::Exit => Some(crate::ScriptPointerEventKind::Exit),
+            Self::Down => Some(crate::ScriptPointerEventKind::Down),
+            Self::Up => Some(crate::ScriptPointerEventKind::Up),
+            Self::Move => Some(crate::ScriptPointerEventKind::Move),
+            Self::Click => Some(crate::ScriptPointerEventKind::Click),
+            _ => None,
+        }
     }
 }
 
@@ -966,6 +1003,7 @@ pub(crate) struct RuntimeStateTransition {
     pub(crate) random_weight: u64,
     pub(crate) condition_count: usize,
     conditions: Vec<RuntimeTransitionCondition>,
+    direct_input_conditions_only: bool,
     pub(crate) fire_actions: Vec<RuntimeStateMachineFireAction>,
     pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
     pub(crate) interpolator: Option<RuntimeTransitionInterpolator>,
@@ -976,6 +1014,24 @@ pub(crate) struct RuntimeStateTransition {
 struct RuntimeTransitionAnimationRef<'a> {
     instance: &'a LinearAnimationInstance,
     animation: &'a RuntimeLinearAnimation,
+}
+
+pub(crate) struct TransitionEvaluationContext<'a> {
+    scripted_instances: &'a BTreeMap<u32, RuntimeScriptInstanceHandle>,
+    focus: &'a RuntimeFocusTree,
+    bindable_numbers: &'a [StateMachineBindableNumberInstance],
+    bindable_integers: &'a [StateMachineBindableIntegerInstance],
+    bindable_colors: &'a [StateMachineBindableColorInstance],
+    bindable_strings: &'a [StateMachineBindableStringInstance],
+    bindable_enums: &'a [StateMachineBindableEnumInstance],
+    bindable_assets: &'a [StateMachineBindableAssetInstance],
+    bindable_artboards: &'a [StateMachineBindableArtboardInstance],
+    bindable_triggers: &'a [StateMachineBindableTriggerInstance],
+    bindable_view_models: &'a [StateMachineBindableViewModelInstance],
+    bindable_booleans: &'a [StateMachineBindableBooleanInstance],
+    data_context_present: bool,
+    data_context_view_model_bound: bool,
+    layer_index: usize,
 }
 
 impl RuntimeStateTransition {
@@ -995,47 +1051,43 @@ impl RuntimeStateTransition {
 
     fn allow(
         &self,
+        context: &TransitionEvaluationContext<'_>,
         artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
-        bindable_numbers: &[StateMachineBindableNumberInstance],
-        bindable_integers: &[StateMachineBindableIntegerInstance],
-        bindable_colors: &[StateMachineBindableColorInstance],
-        bindable_strings: &[StateMachineBindableStringInstance],
-        bindable_enums: &[StateMachineBindableEnumInstance],
-        bindable_assets: &[StateMachineBindableAssetInstance],
-        bindable_artboards: &[StateMachineBindableArtboardInstance],
-        bindable_triggers: &[StateMachineBindableTriggerInstance],
-        bindable_view_models: &[StateMachineBindableViewModelInstance],
-        bindable_booleans: &[StateMachineBindableBooleanInstance],
         view_model_triggers: &[StateMachineViewModelTriggerInstance],
-        data_context_present: bool,
-        data_context_view_model_bound: bool,
-        layer_index: usize,
         animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
     ) -> TransitionAllowance {
         for condition in &self.conditions {
-            if !condition.evaluate(
-                artboard,
-                inputs,
-                bindable_numbers,
-                bindable_integers,
-                bindable_colors,
-                bindable_strings,
-                bindable_enums,
-                bindable_assets,
-                bindable_artboards,
-                bindable_triggers,
-                bindable_view_models,
-                bindable_booleans,
-                view_model_triggers,
-                data_context_present,
-                data_context_view_model_bound,
-                layer_index,
-            ) {
+            if !condition.evaluate(context, artboard, inputs, view_model_triggers) {
                 return TransitionAllowance::No;
             }
         }
 
+        self.allow_exit_time(animation_from)
+    }
+
+    fn allow_direct_inputs(
+        &self,
+        context: &TransitionEvaluationContext<'_>,
+        inputs: &[StateMachineInputInstance],
+        animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
+    ) -> TransitionAllowance {
+        debug_assert!(self.direct_input_conditions_only);
+        for condition in &self.conditions {
+            if !condition
+                .evaluate_direct_input(inputs, context.layer_index)
+                .unwrap_or(false)
+            {
+                return TransitionAllowance::No;
+            }
+        }
+        self.allow_exit_time(animation_from)
+    }
+
+    fn allow_exit_time(
+        &self,
+        animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
+    ) -> TransitionAllowance {
         if self.flags & Self::ENABLE_EXIT_TIME == Self::ENABLE_EXIT_TIME
             && let Some(animation_from) = animation_from
         {
@@ -1142,13 +1194,17 @@ impl RuntimeStateTransition {
 
     fn use_inputs(
         &self,
+        context: &TransitionEvaluationContext<'_>,
         inputs: &mut [StateMachineInputInstance],
-        bindable_triggers: &[StateMachineBindableTriggerInstance],
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
-        layer_index: usize,
     ) {
         for condition in &self.conditions {
-            condition.use_input(inputs, bindable_triggers, view_model_triggers, layer_index);
+            condition.use_input(
+                inputs,
+                context.bindable_triggers,
+                view_model_triggers,
+                context.layer_index,
+            );
         }
     }
 }
@@ -1296,7 +1352,9 @@ impl RuntimeBlendState1D {
                     .and_then(|input_id| usize::try_from(input_id).ok()),
             },
             "BlendState1DViewModel" => RuntimeBlendState1DSource::BindableProperty {
-                global_id: file.latest_bindable_property_for_object(object)?.id as u32,
+                global_id: file
+                    .latest_bindable_property_for_object(object)
+                    .map(|property| property.id as u32),
             },
             _ => return None,
         };
@@ -1320,7 +1378,7 @@ impl RuntimeBlendState1D {
 #[derive(Debug, Clone)]
 pub(crate) enum RuntimeBlendState1DSource {
     Input { input_index: Option<usize> },
-    BindableProperty { global_id: u32 },
+    BindableProperty { global_id: Option<u32> },
 }
 
 #[derive(Debug, Clone)]
@@ -1374,7 +1432,7 @@ pub(crate) struct RuntimeBlendAnimationDirect {
 pub(crate) enum RuntimeDirectBlendSource {
     Input { input_index: usize },
     MixValue { value: f32 },
-    BindableProperty { global_id: u32 },
+    BindableProperty { global_id: Option<u32> },
 }
 
 impl RuntimeDirectBlendSource {
@@ -1387,7 +1445,9 @@ impl RuntimeDirectBlendSource {
                 value: object.double_property("mixValue").unwrap_or(100.0),
             }),
             2 => Some(Self::BindableProperty {
-                global_id: file.latest_bindable_property_for_object(object)?.id as u32,
+                global_id: file
+                    .latest_bindable_property_for_object(object)
+                    .map(|property| property.id as u32),
             }),
             _ => None,
         }
@@ -1519,9 +1579,9 @@ impl BlendState1DInstance {
                 .and_then(|input_index| inputs.get(input_index))
                 .and_then(StateMachineInputInstance::number_value)
                 .unwrap_or(0.0),
-            RuntimeBlendState1DSource::BindableProperty { global_id } => {
-                bindable_number_value(bindable_numbers, global_id).unwrap_or(0.0)
-            }
+            RuntimeBlendState1DSource::BindableProperty { global_id } => global_id
+                .and_then(|global_id| bindable_number_value(bindable_numbers, global_id))
+                .unwrap_or(0.0),
         };
 
         let animation_count = self.animations.len();
@@ -1584,6 +1644,15 @@ impl BlendState1DInstance {
             .map(|animation| &animation.animation)
     }
 
+    fn for_each_animation_instance_mut(
+        &mut self,
+        mut callback: impl FnMut(&mut LinearAnimationInstance),
+    ) {
+        for animation in &mut self.animations {
+            callback(&mut animation.animation);
+        }
+    }
+
     pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
         let mut changed = false;
         if let Some(reset) = self.animation_reset.as_ref() {
@@ -1594,8 +1663,7 @@ impl BlendState1DInstance {
             if animation_mix == 0.0 {
                 continue;
             }
-            changed |=
-                artboard.apply_linear_animation_instance(&animation.animation, animation_mix);
+            changed |= animation.animation.apply(artboard, animation_mix);
         }
         changed
     }
@@ -1712,7 +1780,14 @@ impl BlendStateDirectInstance {
                     .unwrap_or(0.0),
                 RuntimeDirectBlendSource::MixValue { value } => value,
                 RuntimeDirectBlendSource::BindableProperty { global_id } => {
-                    bindable_number_value(bindable_numbers, global_id).unwrap_or(0.0)
+                    let Some(value) = global_id
+                        .and_then(|global_id| bindable_number_value(bindable_numbers, global_id))
+                    else {
+                        // C++ leaves the current mix untouched when the authored
+                        // bindable property cannot produce a number instance.
+                        continue;
+                    };
+                    value
                 }
             };
             animation.mix = (value / 100.0).clamp(0.0, 1.0);
@@ -1725,6 +1800,15 @@ impl BlendStateDirectInstance {
             .map(|animation| &animation.animation)
     }
 
+    fn for_each_animation_instance_mut(
+        &mut self,
+        mut callback: impl FnMut(&mut LinearAnimationInstance),
+    ) {
+        for animation in &mut self.animations {
+            callback(&mut animation.animation);
+        }
+    }
+
     pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
         let mut changed = false;
         for animation in &self.animations {
@@ -1732,8 +1816,7 @@ impl BlendStateDirectInstance {
             if animation_mix == 0.0 {
                 continue;
             }
-            changed |=
-                artboard.apply_linear_animation_instance(&animation.animation, animation_mix);
+            changed |= animation.animation.apply(artboard, animation_mix);
         }
         changed
     }
@@ -1827,6 +1910,17 @@ pub(crate) enum RuntimeScheduledListenerAction {
         flags: u64,
         definition: ScriptListenerActionDefinition,
     },
+    FocusTarget {
+        flags: u64,
+        target_local_id: usize,
+    },
+    FocusClear {
+        flags: u64,
+    },
+    FocusTraversal {
+        flags: u64,
+        traversal_kind: u64,
+    },
 }
 
 pub(crate) struct RuntimeScheduledListenerActionTargetsMut<'a> {
@@ -1885,7 +1979,7 @@ pub(crate) enum RuntimeListenerViewModelChangeValue {
     Color(u32),
     String(Vec<u8>),
     Enum(u64),
-    Asset(u64),
+    Asset(RuntimeBindableAssetValue),
     Artboard(u64),
     Trigger(u64),
     Boolean(bool),
@@ -1932,6 +2026,15 @@ impl RuntimeScheduledListenerAction {
             "ScriptedListenerAction" => Some(Self::Scripted {
                 flags,
                 definition: runtime_scripted_listener_action_definition(file, action.object, &[])?,
+            }),
+            "FocusActionTarget" => Some(Self::FocusTarget {
+                flags,
+                target_local_id: usize::try_from(action.object.uint_property("targetId")?).ok()?,
+            }),
+            "FocusActionClear" => Some(Self::FocusClear { flags }),
+            "FocusActionTraversal" => Some(Self::FocusTraversal {
+                flags,
+                traversal_kind: action.object.uint_property("traversalKind").unwrap_or(0),
             }),
             _ => None,
         }
@@ -2023,7 +2126,11 @@ fn runtime_listener_view_model_change_value(
             target.uint_property("propertyValue").unwrap_or(0),
         )),
         "BindablePropertyAsset" => Some(RuntimeListenerViewModelChangeValue::Asset(
-            target.uint_property("propertyValue").unwrap_or(0),
+            RuntimeBindableAssetValue::from_asset_index(
+                target
+                    .uint_property("propertyValue")
+                    .unwrap_or(u64::from(u32::MAX)),
+            ),
         )),
         "BindablePropertyArtboard" => Some(RuntimeListenerViewModelChangeValue::Artboard(
             target.uint_property("propertyValue").unwrap_or(0),
@@ -2065,7 +2172,10 @@ pub(crate) fn perform_scheduled_listener_actions(
             | RuntimeScheduledListenerAction::NumberChange { flags, .. }
             | RuntimeScheduledListenerAction::TriggerChange { flags, .. }
             | RuntimeScheduledListenerAction::ViewModelChange { flags, .. }
-            | RuntimeScheduledListenerAction::Scripted { flags, .. } => *flags,
+            | RuntimeScheduledListenerAction::Scripted { flags, .. }
+            | RuntimeScheduledListenerAction::FocusTarget { flags, .. }
+            | RuntimeScheduledListenerAction::FocusClear { flags }
+            | RuntimeScheduledListenerAction::FocusTraversal { flags, .. } => *flags,
         };
         if flags & 1 != occurrence.value() {
             continue;
@@ -2095,7 +2205,10 @@ pub(crate) fn perform_scheduled_listener_actions(
                 }
             }
             RuntimeScheduledListenerAction::ViewModelChange { .. }
-            | RuntimeScheduledListenerAction::Scripted { .. } => {
+            | RuntimeScheduledListenerAction::Scripted { .. }
+            | RuntimeScheduledListenerAction::FocusTarget { .. }
+            | RuntimeScheduledListenerAction::FocusClear { .. }
+            | RuntimeScheduledListenerAction::FocusTraversal { .. } => {
                 changed |=
                     executor.perform_instance_action(artboard, action, targets.reborrow())?;
             }
@@ -2352,11 +2465,14 @@ enum AnimationResetEntry {
     Double {
         local_id: usize,
         property_key: u16,
+        transform_property: Option<TransformProperty>,
         value: f32,
     },
     Color {
         local_id: usize,
         property_key: u16,
+        solid_color_property: bool,
+        data_bind_observed: bool,
         value: u32,
     },
 }
@@ -2399,6 +2515,7 @@ impl AnimationReset {
                             entries.push(AnimationResetEntry::Double {
                                 local_id: keyed_object.target_local_id,
                                 property_key: keyed_property.property_key,
+                                transform_property: keyed_property.transform_property,
                                 value,
                             });
                         }
@@ -2410,18 +2527,23 @@ impl AnimationReset {
                                 .map(|frame| frame.value)
                         } else {
                             Some(
-                                artboard
-                                    .color_property(
+                                if keyed_property.solid_color_property {
+                                    artboard.solid_color_value(keyed_object.target_local_id)
+                                } else {
+                                    artboard.color_property(
                                         keyed_object.target_local_id,
                                         keyed_property.property_key,
                                     )
-                                    .unwrap_or(keyed_property.color_source_value),
+                                }
+                                .unwrap_or(keyed_property.color_source_value),
                             )
                         };
                         if let Some(value) = value {
                             entries.push(AnimationResetEntry::Color {
                                 local_id: keyed_object.target_local_id,
                                 property_key: keyed_property.property_key,
+                                solid_color_property: keyed_property.solid_color_property,
+                                data_bind_observed: keyed_property.data_bind_observed,
                                 value,
                             });
                         }
@@ -2444,16 +2566,38 @@ impl AnimationReset {
                 AnimationResetEntry::Double {
                     local_id,
                     property_key,
+                    transform_property,
                     value,
                 } => {
-                    changed |= artboard.set_keyed_double_property(*local_id, *property_key, *value);
+                    changed |= match transform_property {
+                        Some(transform_property) => artboard.set_transform_property_with_key(
+                            *local_id,
+                            *transform_property,
+                            *property_key,
+                            *value,
+                        ),
+                        None => {
+                            artboard.set_keyed_double_property(*local_id, *property_key, *value)
+                        }
+                    };
                 }
                 AnimationResetEntry::Color {
                     local_id,
                     property_key,
+                    solid_color_property,
+                    data_bind_observed,
                     value,
                 } => {
-                    changed |= artboard.set_keyed_color_property(*local_id, *property_key, *value);
+                    changed |= if *solid_color_property {
+                        artboard.set_keyed_solid_color_property(
+                            *local_id,
+                            *property_key,
+                            *data_bind_observed,
+                            *value,
+                        )
+                    } else {
+                        artboard.set_keyed_color_property(*local_id, *property_key, *value)
+                    };
                 }
             }
         }
@@ -2475,6 +2619,24 @@ fn current_animation_reset_double_value(
                 .unwrap_or(keyed_property.double_source_value),
         )
     }
+}
+
+type StateAnimationInstances = (
+    Option<LinearAnimationInstance>,
+    Option<BlendState1DInstance>,
+    Option<BlendStateDirectInstance>,
+);
+
+fn take_current_animation_instances(
+    current_animation: &mut Option<LinearAnimationInstance>,
+    current_blend_state_1d: &mut Option<BlendState1DInstance>,
+    current_blend_state_direct: &mut Option<BlendStateDirectInstance>,
+) -> StateAnimationInstances {
+    (
+        current_animation.take(),
+        current_blend_state_1d.take(),
+        current_blend_state_direct.take(),
+    )
 }
 
 impl StateMachineLayerInstance {
@@ -2520,10 +2682,11 @@ impl StateMachineLayerInstance {
 
     pub(crate) fn advance(
         &mut self,
+        context: &TransitionEvaluationContext<'_>,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
+        key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
         elapsed_seconds: f32,
-        layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &mut [StateMachineBindableNumberInstance],
         bindable_integers: &mut [StateMachineBindableIntegerInstance],
@@ -2543,12 +2706,14 @@ impl StateMachineLayerInstance {
         reported_events: &mut Vec<StateMachineReportedEvent>,
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     ) -> Result<StateMachineLayerAdvance, ScriptError> {
+        let key_frame_data_bind_keep_going =
+            self.advance_key_frame_data_binds(key_frame_data_bind_graphs, elapsed_seconds);
         self.advance_current_animation(
             artboard,
             layer,
             elapsed_seconds,
             inputs,
-            bindable_numbers,
+            context.bindable_numbers,
             reported_events,
         );
         let input_changed = self.update_transition_mix(
@@ -2579,17 +2744,17 @@ impl StateMachineLayerInstance {
             layer,
             elapsed_seconds,
             inputs,
-            bindable_numbers,
+            context.bindable_numbers,
             reported_events,
         );
-        self.apply_animations(artboard);
+        self.apply_animations(artboard, key_frame_data_bind_graphs);
 
         let mut changed_state = false;
         for _ in 0..100 {
             if !self.update_state(
+                context,
                 artboard,
                 layer,
-                layer_index,
                 inputs,
                 bindable_numbers,
                 bindable_integers,
@@ -2612,13 +2777,14 @@ impl StateMachineLayerInstance {
                 break;
             }
             changed_state = true;
-            self.apply_animations(artboard);
+            self.apply_animations(artboard, key_frame_data_bind_graphs);
         }
 
         Ok(StateMachineLayerAdvance {
             changed_state,
             keep_going: changed_state
                 || input_changed
+                || key_frame_data_bind_keep_going
                 || self.is_transitioning()
                 || self.waiting_for_exit
                 || self.current_animation_keep_going,
@@ -2627,9 +2793,9 @@ impl StateMachineLayerInstance {
 
     pub(crate) fn update_state(
         &mut self,
+        context: &TransitionEvaluationContext<'_>,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
-        layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &mut [StateMachineBindableNumberInstance],
         bindable_integers: &mut [StateMachineBindableIntegerInstance],
@@ -2654,10 +2820,10 @@ impl StateMachineLayerInstance {
         }
         self.waiting_for_exit = false;
         if self.try_change_state(
+            context,
             artboard,
             layer,
             layer.any_state_index,
-            layer_index,
             inputs,
             bindable_numbers,
             bindable_integers,
@@ -2680,10 +2846,10 @@ impl StateMachineLayerInstance {
             return Ok(true);
         }
         self.try_change_state(
+            context,
             artboard,
             layer,
             self.current_state_index,
-            layer_index,
             inputs,
             bindable_numbers,
             bindable_integers,
@@ -2707,10 +2873,10 @@ impl StateMachineLayerInstance {
 
     fn try_change_state(
         &mut self,
+        context: &TransitionEvaluationContext<'_>,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         state_index: Option<usize>,
-        layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &mut [StateMachineBindableNumberInstance],
         bindable_integers: &mut [StateMachineBindableIntegerInstance],
@@ -2724,7 +2890,7 @@ impl StateMachineLayerInstance {
         bindable_view_models: &mut [StateMachineBindableViewModelInstance],
         bindable_booleans: &mut [StateMachineBindableBooleanInstance],
         transition_durations: &mut [StateMachineTransitionDurationInstance],
-        data_context_present: bool,
+        _data_context_present: bool,
         data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
@@ -2739,29 +2905,17 @@ impl StateMachineLayerInstance {
 
         if state.uses_random_transition_selection() {
             let Some((transition_index, state_to_index)) = self.find_random_transition(
+                context,
                 artboard,
                 state,
                 state_index,
-                layer_index,
                 inputs,
-                bindable_numbers,
-                bindable_integers,
-                bindable_colors,
-                bindable_strings,
-                bindable_enums,
-                bindable_assets,
-                bindable_artboards,
-                bindable_triggers,
-                bindable_view_models,
-                bindable_booleans,
                 view_model_triggers,
-                data_context_present,
-                data_context_view_model_bound,
             ) else {
                 return Ok(false);
             };
             let transition = &state.transitions[transition_index];
-            transition.use_inputs(inputs, bindable_triggers, view_model_triggers, layer_index);
+            transition.use_inputs(context, inputs, view_model_triggers);
             self.change_state(
                 artboard,
                 layer,
@@ -2805,25 +2959,18 @@ impl StateMachineLayerInstance {
                 transition,
                 self.current_state_index == Some(state_index),
             );
-            match transition.allow(
-                artboard,
-                inputs,
-                bindable_numbers,
-                bindable_integers,
-                bindable_colors,
-                bindable_strings,
-                bindable_enums,
-                bindable_assets,
-                bindable_artboards,
-                bindable_triggers,
-                bindable_view_models,
-                bindable_booleans,
-                view_model_triggers,
-                data_context_present,
-                data_context_view_model_bound,
-                layer_index,
-                animation_from,
-            ) {
+            let allowance = if transition.direct_input_conditions_only {
+                transition.allow_direct_inputs(context, inputs, animation_from)
+            } else {
+                transition.allow(
+                    context,
+                    artboard,
+                    inputs,
+                    view_model_triggers,
+                    animation_from,
+                )
+            };
+            match allowance {
                 TransitionAllowance::No => continue,
                 TransitionAllowance::WaitingForExit => {
                     self.waiting_for_exit = true;
@@ -2833,7 +2980,7 @@ impl StateMachineLayerInstance {
                     self.waiting_for_exit = false;
                 }
             }
-            transition.use_inputs(inputs, bindable_triggers, view_model_triggers, layer_index);
+            transition.use_inputs(context, inputs, view_model_triggers);
             self.change_state(
                 artboard,
                 layer,
@@ -2866,24 +3013,12 @@ impl StateMachineLayerInstance {
 
     fn find_random_transition(
         &mut self,
+        context: &TransitionEvaluationContext<'_>,
         artboard: &ArtboardInstance,
         state: &RuntimeLayerState,
         state_index: usize,
-        layer_index: usize,
         inputs: &[StateMachineInputInstance],
-        bindable_numbers: &[StateMachineBindableNumberInstance],
-        bindable_integers: &[StateMachineBindableIntegerInstance],
-        bindable_colors: &[StateMachineBindableColorInstance],
-        bindable_strings: &[StateMachineBindableStringInstance],
-        bindable_enums: &[StateMachineBindableEnumInstance],
-        bindable_assets: &[StateMachineBindableAssetInstance],
-        bindable_artboards: &[StateMachineBindableArtboardInstance],
-        bindable_triggers: &[StateMachineBindableTriggerInstance],
-        bindable_view_models: &[StateMachineBindableViewModelInstance],
-        bindable_booleans: &[StateMachineBindableBooleanInstance],
         view_model_triggers: &[StateMachineViewModelTriggerInstance],
-        data_context_present: bool,
-        data_context_view_model_bound: bool,
     ) -> Option<(usize, usize)> {
         let mut weighted_candidates = Vec::new();
         let mut total_weight = 0_u64;
@@ -2905,25 +3040,18 @@ impl StateMachineLayerInstance {
                 transition,
                 self.current_state_index == Some(state_index),
             );
-            match transition.allow(
-                artboard,
-                inputs,
-                bindable_numbers,
-                bindable_integers,
-                bindable_colors,
-                bindable_strings,
-                bindable_enums,
-                bindable_assets,
-                bindable_artboards,
-                bindable_triggers,
-                bindable_view_models,
-                bindable_booleans,
-                view_model_triggers,
-                data_context_present,
-                data_context_view_model_bound,
-                layer_index,
-                animation_from,
-            ) {
+            let allowance = if transition.direct_input_conditions_only {
+                transition.allow_direct_inputs(context, inputs, animation_from)
+            } else {
+                transition.allow(
+                    context,
+                    artboard,
+                    inputs,
+                    view_model_triggers,
+                    animation_from,
+                )
+            };
+            match allowance {
                 TransitionAllowance::No => {}
                 TransitionAllowance::WaitingForExit => {
                     waiting_for_exit = true;
@@ -3008,9 +3136,12 @@ impl StateMachineLayerInstance {
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     ) -> Result<(), ScriptError> {
         let previous_state_index = self.current_state_index;
-        let mut previous_animation = self.current_animation.clone();
-        let previous_blend_state_1d = self.current_blend_state_1d.clone();
-        let previous_blend_state_direct = self.current_blend_state_direct.clone();
+        let (mut previous_animation, previous_blend_state_1d, previous_blend_state_direct) =
+            take_current_animation_instances(
+                &mut self.current_animation,
+                &mut self.current_blend_state_1d,
+                &mut self.current_blend_state_direct,
+            );
         let previous_spilled_time = previous_animation
             .as_ref()
             .map(LinearAnimationInstance::spilled_time)
@@ -3361,7 +3492,12 @@ impl StateMachineLayerInstance {
         )
     }
 
-    fn apply_animations(&self, artboard: &mut ArtboardInstance) -> bool {
+    fn apply_animations(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
+    ) -> bool {
+        self.prepare_key_frame_data_binds(key_frame_data_bind_graphs);
         let mut changed = false;
         if self.is_transitioning() {
             if let Some(reset) = self.transition_animation_reset.as_ref() {
@@ -3372,7 +3508,7 @@ impl StateMachineLayerInstance {
                 .map(|interpolator| interpolator.transform(self.transition_mix_from))
                 .unwrap_or(self.transition_mix_from);
             if let Some(source_animation) = self.transition_source_animation.as_ref() {
-                changed |= artboard.apply_linear_animation_instance(source_animation, mix_from);
+                changed |= source_animation.apply(artboard, mix_from);
             }
             if let Some(source_blend_state) = self.transition_source_blend_state_1d.as_ref() {
                 changed |= source_blend_state.apply(artboard, mix_from);
@@ -3411,7 +3547,183 @@ impl StateMachineLayerInstance {
         } else {
             1.0
         };
-        changed | artboard.apply_linear_animation_instance(animation_instance, mix)
+        changed | animation_instance.apply(artboard, mix)
+    }
+
+    fn prepare_key_frame_data_binds(&mut self, graphs: &[Option<crate::RuntimeDataBindGraph>]) {
+        if graphs.is_empty() {
+            return;
+        }
+        Self::for_each_animation_instance_mut(self, |instance| {
+            let prototype = graphs
+                .get(instance.animation_index)
+                .and_then(Option::as_ref);
+            instance.prepare_key_frame_data_binds(prototype);
+        });
+    }
+
+    fn advance_key_frame_data_binds(
+        &mut self,
+        graphs: &[Option<crate::RuntimeDataBindGraph>],
+        elapsed_seconds: f32,
+    ) -> bool {
+        if graphs.is_empty() {
+            return false;
+        }
+        let mut keep_going = false;
+        Self::for_each_animation_instance_mut(self, |instance| {
+            let prototype = graphs
+                .get(instance.animation_index)
+                .and_then(Option::as_ref);
+            keep_going |= instance.advance_key_frame_data_binds(prototype, elapsed_seconds);
+        });
+        keep_going
+    }
+
+    fn for_each_animation_instance_mut(
+        &mut self,
+        mut callback: impl FnMut(&mut LinearAnimationInstance),
+    ) {
+        if let Some(animation) = self.current_animation.as_mut() {
+            callback(animation);
+        }
+        if let Some(blend) = self.current_blend_state_1d.as_mut() {
+            blend.for_each_animation_instance_mut(&mut callback);
+        }
+        if let Some(blend) = self.current_blend_state_direct.as_mut() {
+            blend.for_each_animation_instance_mut(&mut callback);
+        }
+        if let Some(animation) = self.transition_source_animation.as_mut() {
+            callback(animation);
+        }
+        if let Some(blend) = self.transition_source_blend_state_1d.as_mut() {
+            blend.for_each_animation_instance_mut(&mut callback);
+        }
+        if let Some(blend) = self.transition_source_blend_state_direct.as_mut() {
+            blend.for_each_animation_instance_mut(&mut callback);
+        }
+    }
+}
+
+#[cfg(test)]
+mod animation_tests {
+    use super::*;
+    use crate::animation::RuntimeKeyFrameValue;
+    use crate::view_model::RuntimeFontAssetValue;
+
+    fn empty_animation() -> RuntimeLinearAnimation {
+        RuntimeLinearAnimation {
+            global_id: 1,
+            name: None,
+            fps: 60,
+            duration: 60,
+            speed: 1.0,
+            loop_value: 1,
+            work_start: 0,
+            work_end: 60,
+            enable_work_area: false,
+            quantize: false,
+            keyed_objects: Arc::new(Vec::new()),
+            key_frame_data_bind_templates: Arc::new(Vec::new()),
+            has_keyed_callbacks: false,
+        }
+    }
+
+    fn animation_instance_with_holder(
+        animation: &RuntimeLinearAnimation,
+        key_frame_global_id: u32,
+        value: f32,
+    ) -> LinearAnimationInstance {
+        let mut instance = LinearAnimationInstance::new(0, animation, 1.0);
+        instance
+            .add_key_frame_value_holder(key_frame_global_id, RuntimeKeyFrameValue::Number(value));
+        instance
+    }
+
+    #[test]
+    fn transition_source_move_preserves_plain_and_blend_animation_holders() {
+        let animation = empty_animation();
+        let mut current_animation = Some(animation_instance_with_holder(&animation, 10, 10.0));
+        let mut current_blend_state_1d = Some(BlendState1DInstance {
+            source: RuntimeBlendState1DSource::Input { input_index: None },
+            animations: vec![BlendAnimation1DInstance {
+                value: 0.0,
+                animation: animation_instance_with_holder(&animation, 20, 20.0),
+                mix: 1.0,
+            }],
+            animation_reset: None,
+        });
+        let mut current_blend_state_direct = Some(BlendStateDirectInstance {
+            animations: vec![BlendAnimationDirectInstance {
+                source: RuntimeDirectBlendSource::MixValue { value: 100.0 },
+                animation: animation_instance_with_holder(&animation, 30, 30.0),
+                mix: 1.0,
+            }],
+        });
+
+        let (previous_animation, previous_blend_state_1d, previous_blend_state_direct) =
+            take_current_animation_instances(
+                &mut current_animation,
+                &mut current_blend_state_1d,
+                &mut current_blend_state_direct,
+            );
+
+        assert!(current_animation.is_none());
+        assert!(current_blend_state_1d.is_none());
+        assert!(current_blend_state_direct.is_none());
+        assert_eq!(
+            previous_animation
+                .as_ref()
+                .and_then(|instance| instance.key_frame_value_holder(10)),
+            Some(&RuntimeKeyFrameValue::Number(10.0))
+        );
+        assert_eq!(
+            previous_blend_state_1d
+                .as_ref()
+                .and_then(|blend| blend.animation_instance(0))
+                .and_then(|instance| instance.key_frame_value_holder(20)),
+            Some(&RuntimeKeyFrameValue::Number(20.0))
+        );
+        assert_eq!(
+            previous_blend_state_direct
+                .as_ref()
+                .and_then(|blend| blend.animation_instance(0))
+                .and_then(|instance| instance.key_frame_value_holder(30)),
+            Some(&RuntimeKeyFrameValue::Number(30.0))
+        );
+    }
+
+    #[test]
+    fn listener_asset_clone_retains_live_font_payload() {
+        let live: Arc<[u8]> = vec![1, 3, 5, 7].into();
+        let mut font = RuntimeFontAssetValue::default();
+        assert!(font.set_live_font_bytes(Some(Arc::clone(&live))));
+        let action = RuntimeScheduledListenerAction::ViewModelChange {
+            flags: 0,
+            data_bind_index: 4,
+            value: RuntimeListenerViewModelChangeValue::Asset(
+                RuntimeBindableAssetValue::from_font_value(font),
+            ),
+        };
+
+        let RuntimeScheduledListenerAction::ViewModelChange {
+            value: RuntimeListenerViewModelChangeValue::Asset(value),
+            ..
+        } = action.clone()
+        else {
+            panic!("listener action lost its asset value");
+        };
+        assert_eq!(
+            value.asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+        );
+        assert!(
+            value
+                .font_value()
+                .and_then(RuntimeFontAssetValue::live_font_bytes_arc)
+                .is_some_and(|value| Arc::ptr_eq(value, &live)),
+            "cloning a scheduled listener must retain the same live font"
+        );
     }
 }
 

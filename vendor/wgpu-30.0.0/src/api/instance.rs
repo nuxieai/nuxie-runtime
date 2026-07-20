@@ -172,6 +172,30 @@ impl Instance {
         async move { future.await.map(|adapter| Adapter { inner: adapter }) }
     }
 
+    /// Retrieves a browser WebGPU [`Adapter`] at the requested feature level.
+    ///
+    /// This is the browser-only counterpart of [`Instance::request_adapter`]
+    /// for WebGPU's `GPURequestAdapterOptions.featureLevel` field. Requesting
+    /// [`FeatureLevel::Compatibility`](wgt::FeatureLevel::Compatibility) lets
+    /// applications fall back to WebGPU Compatibility mode when a Core adapter
+    /// or device cannot be created.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this instance is not using the browser WebGPU backend.
+    #[cfg(webgpu)]
+    pub fn request_adapter_with_feature_level(
+        &self,
+        options: &RequestAdapterOptions<'_, '_>,
+        feature_level: wgt::FeatureLevel,
+    ) -> impl Future<Output = Result<Adapter, RequestAdapterError>> + WasmNotSend {
+        let future = self
+            .inner
+            .as_webgpu()
+            .request_adapter_with_feature_level(options, feature_level);
+        async move { future.await.map(|adapter| Adapter { inner: adapter }) }
+    }
+
     /// Creates a new surface targeting a given window/canvas/surface/etc..
     ///
     /// Internally, this creates surfaces for all backends that are enabled for this instance.

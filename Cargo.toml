@@ -66,7 +66,10 @@ arithmetic_side_effects = "warn"
 [profile.release]
 lto = "fat"
 codegen-units = 1
-panic = "abort"
+# luaur implements Luau's protected-error/longjmp boundary with
+# `panic_any`/`catch_unwind`. An aborting profile turns ordinary script errors
+# (including errors caught by authored `pcall`) into process termination.
+panic = "unwind"
 
 # Dedicated size-optimized profile for the SDK cdylib. Does NOT affect the
 # `release` profile the perf gate depends on. Build with `--profile

@@ -3,7 +3,8 @@
 //! can load and execute them.
 //!
 //! Findings these tests pin down:
-//! - `.riv` files carry Luau **bytecode** (version 6), not source, wrapped
+//! - `.riv` files carry Luau **bytecode** (versions 6 and 7 in the pinned
+//!   corpus), not source, wrapped
 //!   in the 1-byte signed-content envelope (`nuxie_scripting::envelope`) —
 //!   exactly what C++ `ScriptAsset::decode` + `ScriptingVM::loadModule`
 //!   (`luau_load`) consume.
@@ -199,6 +200,49 @@ mod luau {
         }
         assert!(loaded >= 10, "expected scripts across the corpus sample");
         eprintln!("loaded {loaded} corpus scripts as Luau bytecode");
+    }
+
+    /// The Phase S candidate moved its compiler target from bytecode version 6
+    /// to 7. `scope_probe.riv` was authored at that candidate and therefore
+    /// provides a real compatibility witness rather than compiler-generated
+    /// test data from luaur's older pinned revision.
+    #[test]
+    fn luaur_loads_candidate_version_7_bytecode_when_available() {
+        let path = asset_path("scope_probe.riv");
+        if !path.is_file() {
+            eprintln!(
+                "skipping candidate bytecode check; {} is not present in this runtime checkout",
+                path.display()
+            );
+            return;
+        }
+
+        let scripts = extract_scripts(&std::fs::read(&path).expect("scope probe fixture"));
+        assert!(
+            !scripts.is_empty(),
+            "scope probe should contain ScriptAssets"
+        );
+        let vm = ScriptVm::new();
+        let mut loaded_version_7 = 0usize;
+
+        for script in scripts {
+            let envelope = SignedContent::parse(&script.payload).expect("valid envelope");
+            if envelope.content.first() == Some(&7) {
+                vm.load_bytecode(&script.name, envelope.content)
+                    .unwrap_or_else(|error| {
+                        panic!(
+                            "luaur failed to load candidate version-7 script '{}': {error}",
+                            script.name
+                        )
+                    });
+                loaded_version_7 += 1;
+            }
+        }
+
+        assert!(
+            loaded_version_7 > 0,
+            "scope probe should witness candidate Luau bytecode version 7"
+        );
     }
 
     /// script_dependency_test.riv stores its modules *out of dependency

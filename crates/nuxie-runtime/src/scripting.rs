@@ -1,5 +1,5 @@
 use std::cell::{RefCell, RefMut};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::{error::Error, fmt};
 
@@ -266,6 +266,7 @@ pub enum ScriptMethod {
     Advance,
     Update,
     Draw,
+    Evaluate,
     PointerDown,
     PointerMove,
     PointerUp,
@@ -283,6 +284,7 @@ impl ScriptMethod {
             ScriptMethod::Advance => "advance",
             ScriptMethod::Update => "update",
             ScriptMethod::Draw => "draw",
+            ScriptMethod::Evaluate => "evaluate",
             ScriptMethod::PointerDown => "pointerDown",
             ScriptMethod::PointerMove => "pointerMove",
             ScriptMethod::PointerUp => "pointerUp",
@@ -313,28 +315,19 @@ impl ScriptListenerActionMethod {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ScriptPointerEventKind {
-    Enter,
-    Exit,
-    Down,
-    Move,
-    Up,
-    Click,
-    DragStart,
-    DragEnd,
-    Drag,
-}
-
-/// VM-neutral payload describing what invoked a listener action.
+/// The state-machine invocation supplied to a scripted listener action.
+///
+/// Scheduled state/transition actions use [`Self::None`]. Pointer listeners
+/// retain the concrete pointer payload so scripting backends can expose the
+/// same legacy `PointerEvent` shape as the C++ runtime.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScriptListenerInvocation {
     Pointer {
+        pointer_id: i32,
         x: f32,
         y: f32,
         previous_x: f32,
         previous_y: f32,
-        pointer_id: i32,
         event: ScriptPointerEventKind,
         timestamp_seconds: f32,
     },
@@ -343,6 +336,35 @@ pub enum ScriptListenerInvocation {
         seconds_delay: f32,
     },
     None,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptPointerEventKind {
+    Enter,
+    Exit,
+    Down,
+    Up,
+    Move,
+    Click,
+    DragStart,
+    DragEnd,
+    Drag,
+}
+
+impl ScriptPointerEventKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Enter => "pointerEnter",
+            Self::Exit => "pointerExit",
+            Self::Down => "pointerDown",
+            Self::Up => "pointerUp",
+            Self::Move => "pointerMove",
+            Self::Click => "click",
+            Self::DragStart => "pointerDragStart",
+            Self::DragEnd => "pointerDragEnd",
+            Self::Drag => "pointerDrag",
+        }
+    }
 }
 
 /// VM-neutral values crossing the scripting seam.
@@ -490,6 +512,22 @@ pub struct ScriptViewModel {
     ancestors: Rc<Vec<usize>>,
 }
 
+/// An image selected from the runtime file's dense asset registry.
+///
+/// C++ exposes a retained `RenderImage` through Lua. The runtime-neutral seam
+/// retains its registry identity instead; assigning the handle to an image
+/// property resolves to the same decoded file asset during data binding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScriptImage {
+    file_asset_index: u64,
+}
+
+impl ScriptImage {
+    pub fn file_asset_index(self) -> u64 {
+        self.file_asset_index
+    }
+}
+
 impl ScriptViewModel {
     pub fn property(&self, name: &str) -> Option<ScriptViewModelProperty> {
         self.properties.get(name).copied()
@@ -529,8 +567,12 @@ impl ScriptViewModel {
         )
     }
 
-    pub fn owned_instance(&self) -> RuntimeOwnedViewModelContextHandle {
-        self.context.clone()
+    /// Compatibility access to the retained graph root.
+    ///
+    /// Scoped integrations should prefer [`Self::owned_handle`] so a nested
+    /// view model keeps its property path as well as the shared root identity.
+    pub fn owned_instance(&self) -> Rc<RefCell<RuntimeOwnedViewModelInstance>> {
+        self.context.root_handle().shared()
     }
 
     pub fn owned_handle(&self) -> RuntimeOwnedViewModelContextHandle {
@@ -553,6 +595,24 @@ impl ScriptViewModel {
             .root_handle()
             .borrow_mut()
             .set_number_by_property_path(&path, value)
+    }
+
+    pub fn color(&self, name: &str) -> Option<u32> {
+        let path = self.scoped_property_path(name)?;
+        self.context
+            .root_handle()
+            .borrow()
+            .color_value_by_property_path(&path)
+    }
+
+    pub fn set_color(&self, name: &str, value: u32) -> bool {
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
+            .borrow_mut()
+            .set_color_by_property_path(&path, value)
     }
 
     pub fn string(&self, name: &str) -> Option<String> {
@@ -582,6 +642,60 @@ impl ScriptViewModel {
             .boolean_value_by_property_path(&path)
     }
 
+    pub fn image(&self, name: &str) -> Option<ScriptImage> {
+        if self.property(name) != Some(ScriptViewModelProperty::Image) {
+            return None;
+        }
+        let path = self.scoped_property_path(name)?;
+        let file_asset_index = self
+            .context
+            .root_handle()
+            .borrow()
+            .asset_value_by_property_path(&path)?;
+        let asset = self
+            .file
+            .file_asset(usize::try_from(file_asset_index).ok()?)?;
+        (asset.type_name == "ImageAsset").then_some(ScriptImage { file_asset_index })
+    }
+
+    pub fn image_asset_named(&self, name: &str) -> Option<ScriptImage> {
+        self.file
+            .file_assets()
+            .into_iter()
+            .enumerate()
+            .find(|(_, asset)| {
+                asset.type_name == "ImageAsset" && asset.string_property("name") == Some(name)
+            })
+            .and_then(|(file_asset_index, _)| {
+                u64::try_from(file_asset_index)
+                    .ok()
+                    .map(|file_asset_index| ScriptImage { file_asset_index })
+            })
+    }
+
+    pub fn set_image(&self, name: &str, image: Option<ScriptImage>) -> bool {
+        if self.property(name) != Some(ScriptViewModelProperty::Image) {
+            return false;
+        }
+        let file_asset_index = image
+            .map(ScriptImage::file_asset_index)
+            .unwrap_or(u64::from(u32::MAX));
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
+            .borrow_mut()
+            .set_asset_by_property_path(&path, file_asset_index)
+    }
+
+    /// Mirrors C++ `ScriptedViewModel::pushIndex` for component-list rows.
+    pub fn component_list_item_index(&self) -> Option<u64> {
+        self.context
+            .detached_snapshot()
+            .and_then(|instance| instance.component_list_item_index())
+    }
+
     pub fn set_boolean(&self, name: &str, value: bool) -> bool {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
@@ -590,6 +704,71 @@ impl ScriptViewModel {
             .root_handle()
             .borrow_mut()
             .set_boolean_by_property_path(&path, value)
+    }
+
+    pub fn trigger(&self, name: &str) -> Option<u64> {
+        let path = self.scoped_property_path(name)?;
+        self.context
+            .root_handle()
+            .borrow()
+            .trigger_value_by_property_path(&path)
+    }
+
+    /// Fire a trigger the same way C++ `ViewModelInstanceTrigger::trigger()`
+    /// does: increment the backing counter and leave consumption/reset to the
+    /// end-of-frame `advanced()` pass.
+    pub fn fire_trigger(&self, name: &str) -> bool {
+        let Some(value) = self.trigger(name) else {
+            return false;
+        };
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
+            .borrow_mut()
+            .set_trigger_by_property_path(&path, value.wrapping_add(1))
+    }
+
+    /// Consume transient values at the end of a script host frame.
+    ///
+    /// This mirrors C++ `ViewModelInstance::advanced()`: triggers are reset
+    /// without invoking script listeners, embedded view models recurse, and
+    /// shared list instances recurse exactly once even if the graph cycles.
+    pub fn advance_script_frame(&self) -> bool {
+        Self::advance_owned_instance(&self.context.root_handle().shared())
+    }
+
+    /// Advance a shared owned instance without requiring its schema wrapper.
+    /// Scripting backends use this for owner-counted registrations that retain
+    /// precisely the backing instance, matching C++ `rcp<ViewModelInstance>`.
+    pub fn advance_owned_instance(instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>) -> bool {
+        Self::advance_owned_instances(std::slice::from_ref(instance))
+    }
+
+    /// Advance several owned roots with one identity set shared across their
+    /// complete embedded/list graphs. This is the frame-context entry point:
+    /// registry relationships can name an instance that is also reachable
+    /// structurally, and it must still be consumed only once per frame.
+    pub fn advance_owned_instances(
+        instances: &[Rc<RefCell<RuntimeOwnedViewModelInstance>>],
+    ) -> bool {
+        let mut visited = BTreeSet::new();
+        let mut changed = false;
+        for instance in instances {
+            changed |= advance_owned_view_model_instance(instance, &mut visited);
+        }
+        changed
+    }
+
+    /// Snapshot the shared instances currently parented through this
+    /// instance's list properties. The scripting registry refreshes these
+    /// edges at frame end so host/data-binding list mutations cannot leave a
+    /// retained wrapper incorrectly classified as attached or detached.
+    pub fn owned_list_children(
+        instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    ) -> Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
+        instance.borrow().script_list_children()
     }
 
     pub fn view_model(&self, name: &str) -> Option<Self> {
@@ -737,14 +916,32 @@ impl ScriptViewModel {
     }
 }
 
+fn advance_owned_view_model_instance(
+    instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    visited: &mut BTreeSet<usize>,
+) -> bool {
+    let identity = Rc::as_ptr(instance) as usize;
+    if !visited.insert(identity) {
+        return false;
+    }
+    let (mut changed, children) = instance.borrow_mut().advance_script_frame_local();
+    for child in children {
+        changed |= advance_owned_view_model_instance(&child, visited);
+    }
+    changed
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScriptViewModelProperty {
     Number,
+    Color,
     String,
     Boolean,
     Trigger,
+    Image,
     List,
     ViewModel,
+    SymbolListIndex,
 }
 
 pub fn script_view_models(file: &RuntimeFile) -> BTreeMap<String, ScriptViewModel> {
@@ -785,10 +982,10 @@ pub fn script_view_model_from_owned_snapshot(
     instance: &RuntimeOwnedViewModelInstance,
 ) -> Option<ScriptViewModel> {
     let view_model_index = instance.view_model_index();
-    build_script_view_model(
+    build_script_view_model_shared(
         Rc::new(file.clone()),
         view_model_index,
-        instance.clone(),
+        RuntimeOwnedViewModelHandle::new(instance.clone()),
         &[],
     )
 }
@@ -830,11 +1027,14 @@ fn build_script_view_model_scoped(
         .filter_map(|property| {
             let kind = match property.type_name {
                 "ViewModelPropertyNumber" => ScriptViewModelProperty::Number,
+                "ViewModelPropertyColor" => ScriptViewModelProperty::Color,
                 "ViewModelPropertyString" => ScriptViewModelProperty::String,
                 "ViewModelPropertyBoolean" => ScriptViewModelProperty::Boolean,
                 "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,
+                "ViewModelPropertyAssetImage" => ScriptViewModelProperty::Image,
                 "ViewModelPropertyList" => ScriptViewModelProperty::List,
                 "ViewModelPropertyViewModel" => ScriptViewModelProperty::ViewModel,
+                "ViewModelPropertySymbolListIndex" => ScriptViewModelProperty::SymbolListIndex,
                 _ => return None,
             };
             Some((property.string_property("name")?.to_owned(), kind))
@@ -1339,10 +1539,9 @@ pub trait ScriptInstance {
         invocation: &ScriptListenerInvocation,
         host: &mut dyn ScriptHost,
     ) -> Result<(), ScriptError> {
-        let _ = (method, invocation, host);
-        Err(ScriptError::new(
-            "scripted listener actions require backend invocation support",
-        ))
+        let _ = invocation;
+        self.call_method(method.as_script_method(), &[], host)
+            .map(|_| ())
     }
 
     /// Invoke an authored `ScriptInputTrigger` callback by its input name.
@@ -1368,6 +1567,29 @@ pub trait ScriptInstance {
             value,
             ScriptValue::Nil | ScriptValue::Bool(false)
         ))
+    }
+
+    /// Whether this concrete scripted-object occurrence still needs its user
+    /// `init` callback. C++ stores the equivalent state in
+    /// `ScriptedObject::m_userLuaInitDone`.
+    fn user_init_pending(&self) -> Result<bool, ScriptError> {
+        Ok(false)
+    }
+
+    /// Discard the current scripted-object lifetime before the next input
+    /// hydration. VM backends use this when cold-init prerequisites are not
+    /// available, matching C++ `ensureScriptInitialized` retry semantics.
+    fn invalidate_for_init_retry(&mut self) {}
+
+    /// Recreate a lifetime invalidated by a failed/deferred init. Hosts call
+    /// this before hydrating inputs so a new script table observes the bound
+    /// context and receives the complete input set.
+    fn prepare_init_retry_with_factory(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<(), ScriptError> {
+        let _ = factory;
+        Ok(())
     }
 
     fn call_path_effect_update(
@@ -1491,6 +1713,13 @@ pub trait ScriptingVm {
         payload: &[u8],
         host: &mut dyn ScriptHost,
     ) -> Result<Box<dyn ScriptInstance>, ScriptError>;
+
+    /// Consume detached script-created view-model instances once at the end
+    /// of a root host frame. Child/script-driven artboard advances must not
+    /// call this hook.
+    fn advance_detached_view_models(&mut self) -> bool {
+        false
+    }
 
     fn perform_registration(&mut self, modules: &[ScriptModule<'_>]) -> Vec<ScriptModuleFailure> {
         let mut pending: Vec<usize> = (0..modules.len()).collect();

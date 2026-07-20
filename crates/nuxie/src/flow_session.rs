@@ -2636,19 +2636,20 @@ impl ResultValueArenaProjection {
                 "result host value depth exceeds 32 levels",
             ));
         }
+        let child_depth = depth.saturating_add(1);
         self.add_nodes(1)?;
         match value {
             FlowHostValue::List(values) => {
                 self.add_edges(values.len())?;
                 for value in values {
-                    self.add_host_value(value, depth + 1)?;
+                    self.add_host_value(value, child_depth)?;
                 }
             }
             FlowHostValue::Object(values) => {
                 self.add_edges(values.len())?;
                 for (key, value) in values {
                     self.add_content_bytes(key.len())?;
-                    self.add_host_value(value, depth + 1)?;
+                    self.add_host_value(value, child_depth)?;
                 }
             }
             FlowHostValue::String(value) => self.add_content_bytes(value.len())?,
@@ -3155,6 +3156,7 @@ fn validate_host_value(
             "host command value depth limit exceeded",
         ));
     }
+    let child_depth = depth.saturating_add(1);
     *nodes = nodes.checked_add(1).ok_or_else(|| {
         FlowSessionError::new(
             FlowSessionErrorKind::LimitExceeded,
@@ -3187,7 +3189,7 @@ fn validate_host_value(
             }
             charge_host_value_edges(edges, values.len())?;
             for value in values {
-                validate_host_value(value, depth + 1, nodes, edges)?;
+                validate_host_value(value, child_depth, nodes, edges)?;
             }
             Ok(())
         }
@@ -3201,7 +3203,7 @@ fn validate_host_value(
             charge_host_value_edges(edges, values.len())?;
             for (key, value) in values {
                 validate_required_id_path(key, "host command object key")?;
-                validate_host_value(value, depth + 1, nodes, edges)?;
+                validate_host_value(value, child_depth, nodes, edges)?;
             }
             Ok(())
         }

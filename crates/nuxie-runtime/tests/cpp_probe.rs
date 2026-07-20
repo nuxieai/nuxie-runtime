@@ -2014,6 +2014,30 @@ fn synthetic_state_machine_blend_state_1d_view_model(file_id: u64, value: f32) -
     })
 }
 
+fn synthetic_state_machine_blend_state_1d_missing_bindable_instance(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        // A bindable without a DataBind has no state-machine instance. C++
+        // keeps the 1D blend state and evaluates it at the default value zero.
+        push_object_with_properties(bytes, "BindablePropertyNumber", |_| {});
+        push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
+        push_blend_animation_1d(bytes, 0, 0.0);
+        push_blend_animation_1d(bytes, 1, 1.0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_default_viewmodel_number_blend_state(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_default_viewmodel_number_blend_state_with_state_machines(file_id, 1)
 }
@@ -9446,6 +9470,28 @@ fn synthetic_state_machine_direct_bindable_blend_state(file_id: u64, value: f32)
             push_uint_property(bytes, "StateTransition", "stateToId", 2);
         });
         push_bindable_number_data_bind(bytes, value);
+        push_object_with_properties(bytes, "BlendStateDirect", |_| {});
+        push_blend_animation_direct_bindable(bytes, 0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_direct_missing_bindable_instance(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        // With no DataBind there is no number instance. Direct blends retain
+        // their previous mix (initially zero) instead of dropping the animation.
+        push_object_with_properties(bytes, "BindablePropertyNumber", |_| {});
         push_object_with_properties(bytes, "BlendStateDirect", |_| {});
         push_blend_animation_direct_bindable(bytes, 0);
         push_object_with_properties(bytes, "ExitState", |_| {});
@@ -18980,6 +19026,69 @@ fn state_machine_bindable_blend_sources_match_cpp_probe() {
 }
 
 #[test]
+fn state_machine_missing_bindable_blend_instances_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, bytes) in [
+        (
+            "synthetic/runtime_state_machine_blend_state_1d_missing_bindable_instance_cpp.riv",
+            synthetic_state_machine_blend_state_1d_missing_bindable_instance(8998),
+        ),
+        (
+            "synthetic/runtime_state_machine_direct_missing_bindable_instance_cpp.riv",
+            synthetic_state_machine_direct_missing_bindable_instance(8999),
+        ),
+    ] {
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+        ];
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+        let rust_reports = [
+            (
+                rust.advance_state_machine_instance(&mut state_machine, 0.0),
+                state_machine.clone(),
+            ),
+            (
+                rust.advance_state_machine_instance(&mut state_machine, 1.0),
+                state_machine.clone(),
+            ),
+        ];
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
 fn state_machine_default_viewmodel_number_bind_source_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -19250,7 +19359,7 @@ fn artboard_target_to_source_writes_round_trip_through_the_retained_owned_handle
 fn state_machine_retained_owned_handle_observes_mutations_without_rebinding() {
     let label = "synthetic/runtime_state_machine_owned_handle_number_set.riv";
     let bytes = synthetic_state_machine_default_viewmodel_number_blend_state(9615);
-    let (runtime, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -19264,9 +19373,9 @@ fn state_machine_retained_owned_handle_observes_mutations_without_rebinding() {
     // bind an identity-only change. The handle still has to be retained so a
     // later aliased mutation can reach the machine.
     assert!(state_machine.bind_owned_view_model_context(&context.borrow()));
-    assert!(state_machine.advance_data_context());
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
     assert!(state_machine.bind_owned_view_model_handle(&context));
-    state_machine.advance_data_context();
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
     assert_close(
         state_machine
             .bindable_number_value_for_data_bind(0)
@@ -19276,7 +19385,7 @@ fn state_machine_retained_owned_handle_observes_mutations_without_rebinding() {
     );
 
     assert!(context.borrow_mut().set_number_by_property_index(0, 0.75));
-    assert!(state_machine.advance_data_context());
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
     assert_close(
         state_machine
             .bindable_number_value_for_data_bind(0)
@@ -19301,7 +19410,7 @@ fn state_machine_inherits_the_artboards_retained_owned_handle() {
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
-    assert!(state_machine.advance_data_context());
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
     assert_close(
         state_machine
             .bindable_number_value_for_data_bind(0)
@@ -19311,7 +19420,7 @@ fn state_machine_inherits_the_artboards_retained_owned_handle() {
     );
 
     assert!(context.borrow_mut().set_number_by_property_index(0, 0.75));
-    assert!(state_machine.advance_data_context());
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
     assert_close(
         state_machine
             .bindable_number_value_for_data_bind(0)
@@ -19451,7 +19560,7 @@ fn script_input_view_model_hydration_retains_the_selected_child_context() {
 fn nested_script_view_model_context_binds_the_child_schema_not_the_root() {
     let label = "synthetic/runtime_script_nested_child_context_binding.riv";
     let bytes = synthetic_state_machine_child_scoped_viewmodel_number_blend_state(9627);
-    let (runtime, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let root = RuntimeOwnedViewModelHandle::new(
         RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
             .unwrap_or_else(|| panic!("missing imported root view-model context for {label}")),
@@ -19471,7 +19580,7 @@ fn nested_script_view_model_context_binds_the_child_schema_not_the_root() {
         0.25,
         "child-scoped source value",
     );
-    assert!(state_machine.advance_data_context());
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
     assert_close(
         state_machine
             .bindable_number_value_for_data_bind(0)
@@ -22518,7 +22627,7 @@ fn state_machine_default_viewmodel_non_number_formula_random_function_group_publ
     ];
     let random_mode_cases: &[(&str, u64, &[usize])] = &[
         ("default", 0, &[1, 1, 1, 1]),
-        ("always", 1, &[1, 3, 3, 3]),
+        ("always", 1, &[1, 2, 2, 2]),
         ("source_change", 2, &[1, 1, 1, 1]),
     ];
     let seeded_random_values = [0.25_f32, 0.125, 0.75, 0.5];
@@ -22686,9 +22795,8 @@ fn state_machine_default_viewmodel_non_number_formula_random_function_group_targ
             random_mode_cases.iter().copied().enumerate()
         {
             let expected_counts = match (case_label, source_kind) {
-                ("always", _)
-                | (
-                    "source_change",
+                (
+                    "always" | "source_change",
                     FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Trigger),
                 ) => [1, 1, 2, 2],
                 _ => [1, 1, 1, 1],
@@ -23265,7 +23373,7 @@ fn state_machine_symbol_list_index_formula_random_function_group_public_update_c
     ];
     let cases = [
         ("default", 9121, 0, vec![1, 1, 1, 1]),
-        ("always", 9122, 1, vec![1, 3, 3, 3]),
+        ("always", 9122, 1, vec![1, 2, 2, 2]),
         ("source_change", 9123, 2, vec![1, 1, 1, 1]),
     ];
 
@@ -23548,7 +23656,7 @@ fn state_machine_symbol_list_index_formula_random_function_group_target_dirty_ca
     ];
     let cases = [
         ("default", 9124, 0, vec![1, 1, 1, 1]),
-        ("always", 9125, 1, vec![1, 1, 2, 2]),
+        ("always", 9125, 1, vec![1, 1, 1, 1]),
         ("source_change", 9126, 2, vec![1, 1, 1, 1]),
     ];
 
@@ -24890,7 +24998,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_always_public_
     ];
 
     let seeded_random_values = [0.25_f32, 0.75, 0.5];
-    let expected_counts = [1_usize, 3, 3, 3];
+    let expected_counts = [1_usize, 2, 2, 2];
     let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
     let cpp_artboard = cpp
@@ -24933,8 +25041,8 @@ fn state_machine_default_viewmodel_number_formula_random_function_always_public_
     );
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        3,
-        "{label} public update should consume two more always-mode randoms"
+        2,
+        "{label} public update should consume one more always-mode random"
     );
     rust_reports.push((false, state_machine.clone()));
     rust_reports.push((
@@ -24943,7 +25051,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_always_public_
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        3,
+        2,
         "{label} first advance should not consume another always-mode random"
     );
     rust_reports.push((
@@ -24952,7 +25060,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_always_public_
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        3,
+        2,
         "{label} second advance should not consume another always-mode random"
     );
     let report = rust.update_components();
@@ -25028,7 +25136,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_source_change_
     ];
 
     let seeded_random_values = [0.25_f32, 0.75];
-    let expected_counts = [1_usize, 2, 2, 2];
+    let expected_counts = [1_usize, 1, 1, 1];
     let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
     let cpp_artboard = cpp
@@ -25071,8 +25179,8 @@ fn state_machine_default_viewmodel_number_formula_random_function_source_change_
     );
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        2,
-        "{label} public update should consume one refreshed source-change random"
+        1,
+        "{label} public update should preserve the source-change random"
     );
     rust_reports.push((false, state_machine.clone()));
     rust_reports.push((
@@ -25081,7 +25189,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_source_change_
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        2,
+        1,
         "{label} first advance should not consume another source-change random"
     );
     rust_reports.push((
@@ -25090,7 +25198,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_source_change_
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        2,
+        1,
         "{label} second advance should not consume another source-change random"
     );
     let report = rust.update_components();
@@ -25301,7 +25409,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_p
     ];
 
     let seeded_random_values = [0.25_f32, 0.75, 0.5];
-    let expected_counts = [1_usize, 3, 3, 3];
+    let expected_counts = [1_usize, 2, 2, 2];
     let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
     let cpp_artboard = cpp
@@ -25344,8 +25452,8 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_p
     );
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        3,
-        "{label} public update should consume two fresh grouped always randoms"
+        2,
+        "{label} public update should consume one fresh grouped always random"
     );
     rust_reports.push((false, state_machine.clone()));
     rust_reports.push((
@@ -25354,7 +25462,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_p
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        3,
+        2,
         "{label} first later advance should not reschedule the grouped always formula"
     );
     rust_reports.push((
@@ -25363,7 +25471,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_p
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        3,
+        2,
         "{label} second later advance should not reschedule the grouped always formula"
     );
     let report = rust.update_components();
@@ -25438,7 +25546,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_source_c
     ];
 
     let seeded_random_values = [0.25_f32, 0.75];
-    let expected_counts = [1_usize, 2, 2, 2];
+    let expected_counts = [1_usize, 1, 1, 1];
     let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
     let cpp_artboard = cpp
@@ -25481,8 +25589,8 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_source_c
     );
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        2,
-        "{label} public update should consume one refreshed grouped source-change random"
+        1,
+        "{label} public update should preserve the grouped source-change random"
     );
     rust_reports.push((false, state_machine.clone()));
     rust_reports.push((
@@ -25491,7 +25599,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_source_c
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        2,
+        1,
         "{label} first later advance should reuse the grouped source-change random"
     );
     rust_reports.push((
@@ -25500,7 +25608,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_source_c
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        2,
+        1,
         "{label} second later advance should reuse the grouped source-change random"
     );
     let report = rust.update_components();
@@ -25711,7 +25819,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_m
     ];
 
     let seeded_random_values = [0.25_f32, 0.75];
-    let expected_counts = [1_usize, 1, 2, 2];
+    let expected_counts = [1_usize, 1, 1, 1];
     let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
     let cpp_artboard = cpp
@@ -25764,8 +25872,8 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_m
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        2,
-        "{label} first later advance should consume a fresh grouped always random"
+        1,
+        "{label} first later advance should preserve the grouped always random"
     );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 1.0),
@@ -25773,7 +25881,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_m
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        2,
+        1,
         "{label} second later advance should not reschedule the grouped always formula"
     );
     let report = rust.update_components();
@@ -26124,7 +26232,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_always_main_to
     ];
 
     let seeded_random_values = [0.25_f32, 0.75];
-    let expected_counts = [1_usize, 1, 2, 2];
+    let expected_counts = [1_usize, 1, 1, 1];
     let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
     let cpp_artboard = cpp
@@ -26177,8 +26285,8 @@ fn state_machine_default_viewmodel_number_formula_random_function_always_main_to
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        2,
-        "{label} first reapply should consume a fresh always-mode random"
+        1,
+        "{label} first reapply should preserve the always-mode random"
     );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 1.0),
@@ -26186,7 +26294,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_always_main_to
     ));
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
-        2,
+        1,
         "{label} second reapply should not consume another always-mode random"
     );
     let report = rust.update_components();
@@ -28220,7 +28328,7 @@ fn state_machine_symbol_list_index_formula_random_public_update_call_counts_matc
     ];
     let cases = [
         ("default", 9109, 0, vec![1, 1, 1, 1]),
-        ("always", 9110, 1, vec![1, 3, 3, 3]),
+        ("always", 9110, 1, vec![1, 2, 2, 2]),
         ("source_change", 9111, 2, vec![1, 1, 1, 1]),
     ];
 
@@ -28502,7 +28610,7 @@ fn state_machine_symbol_list_index_formula_random_target_dirty_call_counts_match
     ];
     let cases = [
         ("default", 9112, 0, vec![1, 1, 1, 1]),
-        ("always", 9113, 1, vec![1, 1, 2, 2]),
+        ("always", 9113, 1, vec![1, 1, 1, 1]),
         ("source_change", 9114, 2, vec![1, 1, 1, 1]),
     ];
 
@@ -41297,7 +41405,6 @@ fn operation_viewmodel_owned_color_source_mutation_fallback_matches_cpp_probe() 
             false,
         );
     let amount = 0.4_f32;
-    let initial_color = 0xff00_0000_u32;
     let color = 0xff33_6699_u32;
     let args = [
         "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
@@ -41331,10 +41438,6 @@ fn operation_viewmodel_owned_color_source_mutation_fallback_matches_cpp_probe() 
     assert!(
         context.set_number_by_property_index(0, amount),
         "{label} failed to set owned primary number"
-    );
-    assert!(
-        context.set_color_by_property_index(1, initial_color),
-        "{label} failed to set initial owned secondary color"
     );
     assert!(
         state_machine.bind_owned_view_model_context(&context),
@@ -42494,7 +42597,6 @@ fn operation_viewmodel_group_owned_color_source_mutation_fallback_matches_cpp_pr
             true,
         );
     let amount = 0.4_f32;
-    let initial_color = 0xff00_0000_u32;
     let color = 0xff33_6699_u32;
     let args = [
         "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
@@ -42528,10 +42630,6 @@ fn operation_viewmodel_group_owned_color_source_mutation_fallback_matches_cpp_pr
     assert!(
         context.set_number_by_property_index(0, amount),
         "{label} failed to set owned primary number"
-    );
-    assert!(
-        context.set_color_by_property_index(1, initial_color),
-        "{label} failed to set initial owned secondary color"
     );
     assert!(
         state_machine.bind_owned_view_model_context(&context),

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use harfrust::{
-    Direction, Feature, FontRef as HarfFontRef, ShapeOptions, ShaperData, ShaperInstance,
-    Tag as HarfTag, UnicodeBuffer,
+    Direction, Feature, FontRef as HarfFontRef, Script as HarfScript, ShapeOptions, ShaperData,
+    ShaperInstance, Tag as HarfTag, UnicodeBuffer,
 };
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::{
@@ -17,13 +17,16 @@ use skrifa::raw::TableProvider;
 use skrifa::setting::VariationSetting;
 use skrifa::{FontRef as SkrifaFontRef, GlyphId, MetadataProvider, Tag as SkrifaTag};
 use std::collections::BTreeSet;
+use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
+use unicode_script::{Script as UnicodeScript, UnicodeScript as UnicodeScriptProperty};
 
 use crate::data_bind_flags_apply_source_to_target;
 use crate::draw::{
-    RuntimeLayoutBounds, RuntimePathMeasure, runtime_path_geometry_commands,
-    runtime_shape_paint_command,
+    RuntimeLayoutBounds, RuntimePathMeasure, RuntimeTextPaintPoolSpec, RuntimeTextPaintPoolUse,
+    runtime_path_geometry_commands, runtime_shape_paint_command,
 };
 use crate::properties::{joystick_x_property_key, joystick_y_property_key, property_key_for_name};
+use crate::view_model::RuntimeFontAssetValue;
 use crate::{ArtboardInstance, Mat2D, RuntimeDrawCommand, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
 use std::collections::BTreeMap;
@@ -293,20 +296,33 @@ pub(crate) fn runtime_text_shape_paint_commands(
     let style_order = slice.ordered_style_indices(runtime, instance)?;
 
     let mut commands = Vec::new();
+    let mut next_path_bucket_slot = 0usize;
     for style_index in style_order {
         let style = &slice.styles[style_index];
         let path_buckets = render_data.path_buckets_by_style[style_index].clone();
         let Some(container) = style.container else {
             continue;
         };
-        let mut allocated_text_paint_pool = false;
-        for path_bucket in order_opacity_buckets_like_cpp(path_buckets) {
-            commands.extend(container.paints.iter().filter_map(|paint| {
+        let path_buckets = order_opacity_buckets_like_cpp(path_buckets);
+        let paint_pool = RuntimeTextPaintPoolSpec {
+            style_local: style.local_id,
+            // C++ reserves one pooled paint per opacity bucket, including the
+            // opaque bucket even though that bucket uses the authored paint.
+            paint_count: path_buckets.len(),
+        };
+        let path_bucket_slot_start = next_path_bucket_slot;
+        next_path_bucket_slot += path_buckets.len();
+        let opaque_bucket = path_buckets
+            .iter()
+            .enumerate()
+            .find(|(_, path_bucket)| path_bucket.opacity == 1.0);
+        for paint in &container.paints {
+            if let Some((bucket_index, path_bucket)) = opaque_bucket {
                 let mut path_commands = path_bucket.commands.clone();
                 if paint.path_kind == Some(ShapePaintPathKind::World) {
                     transform_path_commands(&mut path_commands, shape_world);
                 }
-                let mut command = runtime_shape_paint_command(
+                if let Some(mut command) = runtime_shape_paint_command(
                     instance,
                     paint,
                     text_blend_mode_value,
@@ -317,18 +333,53 @@ pub(crate) fn runtime_text_shape_paint_commands(
                     true,
                     false,
                     true,
-                )?;
+                ) {
+                    command.shape_world_override = Some(shape_world);
+                    if command.paint_type == RuntimeShapePaintKind::Fill {
+                        command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
+                    }
+                    command.text_path_bucket_slot = Some(path_bucket_slot_start + bucket_index);
+                    command.ensure_text_paint_pool_after_draw = Some(paint_pool);
+                    commands.push(command);
+                }
+            }
+
+            for (paint_index, (bucket_index, path_bucket)) in path_buckets
+                .iter()
+                .enumerate()
+                .filter(|(_, path_bucket)| path_bucket.opacity != 1.0)
+                .enumerate()
+            {
+                let mut path_commands = path_bucket.commands.clone();
+                if paint.path_kind == Some(ShapePaintPathKind::World) {
+                    transform_path_commands(&mut path_commands, shape_world);
+                }
+                let Some(mut command) = runtime_shape_paint_command(
+                    instance,
+                    paint,
+                    text_blend_mode_value,
+                    needs_save_operation,
+                    render_opacity * path_bucket.opacity,
+                    shape_world,
+                    path_commands,
+                    true,
+                    false,
+                    true,
+                ) else {
+                    continue;
+                };
                 command.shape_world_override = Some(shape_world);
                 if command.paint_type == RuntimeShapePaintKind::Fill {
                     command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
                 }
-                command.uses_temporary_paint = path_bucket.opacity != 1.0;
-                if !command.uses_temporary_paint && !allocated_text_paint_pool {
-                    command.allocates_text_paint_pool = true;
-                    allocated_text_paint_pool = true;
-                }
-                Some(command)
-            }));
+                command.uses_temporary_paint = true;
+                command.text_path_bucket_slot = Some(path_bucket_slot_start + bucket_index);
+                command.text_paint_pool = Some(RuntimeTextPaintPoolUse {
+                    spec: paint_pool,
+                    paint_index,
+                });
+                commands.push(command);
+            }
         }
     }
     Ok(commands)
@@ -1363,6 +1414,9 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
         return false;
     };
     match data_bind.target_type_name {
+        Some(
+            target_type @ ("KeyFrameDouble" | "KeyFrameColor" | "KeyFrameBool" | "KeyFrameString"),
+        ) => property_key_for_name(target_type, "value") == Some(property_key),
         Some("TextValueRun") => property_key_for_name("TextValueRun", "text") == Some(property_key),
         Some("SolidColor") => {
             property_key_for_name("SolidColor", "colorValue") == Some(property_key)
@@ -1454,7 +1508,10 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
         }
         Some("Solo") => property_key_for_name("Solo", "activeComponentId") == Some(property_key),
         Some("TextStylePaint") => {
-            property_key_for_name("TextStyle", "fontSize") == Some(property_key)
+            ["fontSize", "fontAssetId"]
+                .into_iter()
+                .any(|name| property_key_for_name("TextStyle", name) == Some(property_key))
+                && data_bind.converter_global.is_none()
         }
         Some("TrimPath") => {
             ["start", "end", "offset"]
@@ -1470,6 +1527,15 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
             property_key_for_name("FollowPathConstraint", "distance") == Some(property_key)
                 && data_bind.converter_type_name == Some("DataConverterRangeMapper")
         }
+        Some("ScrollConstraint") => [
+            "scrollOffsetX",
+            "scrollOffsetY",
+            "scrollPercentX",
+            "scrollPercentY",
+            "scrollIndex",
+        ]
+        .into_iter()
+        .any(|name| property_key_for_name("ScrollConstraint", name) == Some(property_key)),
         Some("Text") => {
             [
                 "alignValue",
@@ -1573,7 +1639,7 @@ impl<'a> StaticTextSlice<'a> {
             .iter()
             .filter(|style| participating_style_locals.remove(&style.local_id))
         {
-            if style.font_bytes(instance).is_none()
+            if style.font_bytes(runtime, instance).is_none()
                 || !self.style_font_size(runtime, instance, style)?.is_finite()
                 || !self
                     .style_line_height(runtime, instance, style)?
@@ -1639,6 +1705,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "CubicMirroredVertex"
                         | "Triangle"
                         | "Ellipse"
+                        | "Polygon"
                         | "Rectangle"
                         | "Star"
                         | "ClippingShape"
@@ -1701,6 +1768,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "CustomPropertyTrigger"
                         | "ViewModel"
                         | "ViewModelInstance"
+                        | "ViewModelInstanceColor"
                         | "ViewModelInstanceNumber"
                         | "ViewModelInstanceString"
                         | "ViewModelInstanceList"
@@ -1708,6 +1776,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "ViewModelInstanceTrigger"
                         | "ViewModelInstanceViewModel"
                         | "ViewModelPropertyList"
+                        | "ViewModelPropertyColor"
                         | "ViewModelPropertyNumber"
                         | "ViewModelPropertyString"
                         | "ViewModelPropertyTrigger"
@@ -1965,7 +2034,7 @@ impl<'a> StaticTextSlice<'a> {
             return Ok(None);
         }
         let letter_spacing = self.letter_spacing(runtime, instance);
-        let Some(font_bytes) = base_style.font_bytes(instance) else {
+        let Some(font_bytes) = base_style.font_bytes(runtime, instance) else {
             // Mirrors src/importers/file_asset_importer.cpp: with no
             // FileAssetLoader and no in-band contents, a hosted FontAsset
             // resolves successfully but has no decoded font.
@@ -2021,10 +2090,12 @@ impl<'a> StaticTextSlice<'a> {
         )?;
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, resolved_runs, font_scale)?;
+        let contextual_glyphs =
+            self.styled_resolved_run_glyphs(runtime, instance, resolved_runs, font_scale)?;
         let line_widths = lines
             .iter()
-            .map(|line| self.styled_line_width(runtime, instance, line, resolved_runs, font_scale))
-            .collect::<Result<Vec<_>>>()?;
+            .map(|line| Self::styled_line_width(line, &contextual_glyphs))
+            .collect::<Vec<_>>();
         let measured_width = line_widths.iter().copied().fold(0.0f32, f32::max);
         let layout_info = self.static_layout_info(
             runtime,
@@ -2103,8 +2174,7 @@ impl<'a> StaticTextSlice<'a> {
                 StaticTextLineIteration::Skip => continue,
                 StaticTextLineIteration::Stop => break,
             }
-            let mut glyphs =
-                self.styled_line_glyphs(runtime, instance, &line, resolved_runs, font_scale)?;
+            let mut glyphs = Self::styled_line_glyphs(&line, &contextual_glyphs);
             if layout_info.ellipsis_line == Some(line.line_index) {
                 let max_width = self.effective_width(runtime, instance, layout_constraint)?;
                 let ellipsis_style = glyphs.last().map(|glyph| glyph.style_index).unwrap_or(0);
@@ -2259,7 +2329,7 @@ impl<'a> StaticTextSlice<'a> {
                 let center_x = positioned.x + glyph.advance * 0.5;
                 let glyph_id = GlyphId::new(glyph.glyph_id);
                 let style = &self.styles[glyph.style_index];
-                if let Some(style_font_bytes) = style.font_bytes(instance) {
+                if let Some(style_font_bytes) = style.font_bytes(runtime, instance) {
                     let style_font = SkrifaFontRef::new(style_font_bytes)
                         .context("failed to parse font for outlines")?;
                     let outlines = style_font.outline_glyphs();
@@ -2328,7 +2398,7 @@ impl<'a> StaticTextSlice<'a> {
         if text.is_empty() || font_size < 0.0 {
             return self.unshaped_local_bounds(runtime, instance, None);
         }
-        let Some(font_bytes) = base_style.font_bytes(instance) else {
+        let Some(font_bytes) = base_style.font_bytes(runtime, instance) else {
             return self.unshaped_local_bounds(runtime, instance, None);
         };
 
@@ -2464,7 +2534,7 @@ impl<'a> StaticTextSlice<'a> {
                 }
             };
         }
-        let Some(font_bytes) = base_style.font_bytes(instance) else {
+        let Some(font_bytes) = base_style.font_bytes(runtime, instance) else {
             return match purpose {
                 StaticTextLayoutBoundsPurpose::Measure => Ok(Some((0.0, 0.0, 0.0, 0.0))),
                 StaticTextLayoutBoundsPurpose::Controlled => {
@@ -2521,11 +2591,11 @@ impl<'a> StaticTextSlice<'a> {
         )?;
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
+        let contextual_glyphs =
+            self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?;
         let measured_width = lines
             .iter()
-            .map(|line| self.styled_line_width(runtime, instance, line, &resolved_runs, font_scale))
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
+            .map(|line| Self::styled_line_width(line, &contextual_glyphs))
             .fold(0.0f32, f32::max);
         let sizing = match purpose {
             StaticTextLayoutBoundsPurpose::Measure => self.authored_sizing(runtime, instance)?,
@@ -2745,7 +2815,7 @@ impl<'a> StaticTextSlice<'a> {
                     .styles
                     .get(style_index)
                     .context("line references a missing TextStylePaint")?;
-                let Some(font_bytes) = style.font_bytes(instance) else {
+                let Some(font_bytes) = style.font_bytes(runtime, instance) else {
                     continue;
                 };
                 let font = SkrifaFontRef::new(font_bytes)
@@ -2919,7 +2989,7 @@ impl<'a> StaticTextSlice<'a> {
         font_scale: f32,
     ) -> Result<f32> {
         let style = &self.styles[style_index];
-        let Some(font_bytes) = style.font_bytes(instance) else {
+        let Some(font_bytes) = style.font_bytes(runtime, instance) else {
             return Ok(0.0);
         };
         let font =
@@ -2961,7 +3031,7 @@ impl<'a> StaticTextSlice<'a> {
         font_scale: f32,
     ) -> Result<f32> {
         let style = &self.styles[style_index];
-        let Some(font_bytes) = style.font_bytes(instance) else {
+        let Some(font_bytes) = style.font_bytes(runtime, instance) else {
             return Ok(0.0);
         };
         let font =
@@ -3022,7 +3092,7 @@ impl<'a> StaticTextSlice<'a> {
             }
             let style_index = self.style_index_for_local(run.style_local)?;
             let style = &self.styles[style_index];
-            if style.font_bytes(instance).is_some() {
+            if style.font_bytes(runtime, instance).is_some() {
                 max_size = max_size.max(self.style_font_size(runtime, instance, style)?);
             }
         }
@@ -3064,11 +3134,11 @@ impl<'a> StaticTextSlice<'a> {
                 scale,
                 letter_spacing,
             )?;
+            let contextual_glyphs =
+                self.styled_resolved_run_glyphs(runtime, instance, runs, font_scale)?;
             let max_width = lines
                 .iter()
-                .map(|line| self.styled_line_width(runtime, instance, line, runs, font_scale))
-                .collect::<Result<Vec<_>>>()?
-                .into_iter()
+                .map(|line| Self::styled_line_width(line, &contextual_glyphs))
                 .fold(0.0f32, f32::max);
             let line_metrics =
                 self.static_line_metrics(runtime, instance, &lines, runs, font_scale)?;
@@ -3100,56 +3170,59 @@ impl<'a> StaticTextSlice<'a> {
         Ok(best as f32 / max_size)
     }
 
-    fn styled_line_glyphs(
+    fn styled_resolved_run_glyphs(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        line: &StaticTextLine<'_>,
         runs: &[StaticResolvedRun],
         font_scale: f32,
     ) -> Result<Vec<StyledTextGlyph>> {
-        let line_start = line.char_start;
-        let line_end = line_start + line.text.chars().count();
         let mut glyphs = Vec::new();
         for run in runs {
-            let run_start = run.char_start;
-            let run_end = run.char_start + run.char_len;
-            let segment_start = line_start.max(run_start);
-            let segment_end = line_end.min(run_end);
-            if segment_start >= segment_end {
-                continue;
-            }
             let style_index = self.style_index_for_local(run.style_local)?;
-            let segment_text = char_slice(
-                line.text,
-                segment_start - line_start,
-                segment_end - line_start,
-            );
-            glyphs.extend(self.styled_text_glyphs_for_style(
-                runtime,
-                instance,
-                segment_text,
-                segment_start,
-                style_index,
-                font_scale,
-            )?);
+            for paragraph in split_static_text_lines(&run.text) {
+                // C++ shapes each paragraph before `BreakLines` and keeps the
+                // resulting advances when a soft wrap slices the glyph run.
+                // In particular, a line-ending glyph retains kerning against
+                // the first glyph on the next visual line.
+                glyphs.extend(self.styled_text_glyphs_for_style(
+                    runtime,
+                    instance,
+                    paragraph.text,
+                    run.char_start + paragraph.char_start,
+                    style_index,
+                    font_scale,
+                )?);
+            }
         }
         Ok(glyphs)
     }
 
-    fn styled_line_width(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
+    fn styled_line_glyphs(
         line: &StaticTextLine<'_>,
-        runs: &[StaticResolvedRun],
-        font_scale: f32,
-    ) -> Result<f32> {
-        Ok(self
-            .styled_line_glyphs(runtime, instance, line, runs, font_scale)?
+        contextual_glyphs: &[StyledTextGlyph],
+    ) -> Vec<StyledTextGlyph> {
+        let range = Self::styled_line_glyph_range(line, contextual_glyphs);
+        contextual_glyphs[range].to_vec()
+    }
+
+    fn styled_line_glyph_range(
+        line: &StaticTextLine<'_>,
+        contextual_glyphs: &[StyledTextGlyph],
+    ) -> std::ops::Range<usize> {
+        let line_start = line.char_start;
+        let line_end = line_start + line.text.chars().count();
+        let start = contextual_glyphs.partition_point(|glyph| glyph.char_index < line_start);
+        let end =
+            start + contextual_glyphs[start..].partition_point(|glyph| glyph.char_index < line_end);
+        start..end
+    }
+
+    fn styled_line_width(line: &StaticTextLine<'_>, contextual_glyphs: &[StyledTextGlyph]) -> f32 {
+        contextual_glyphs[Self::styled_line_glyph_range(line, contextual_glyphs)]
             .iter()
             .map(|glyph| glyph.advance)
-            .sum())
+            .sum()
     }
 
     fn styled_text_glyphs_for_style(
@@ -3165,7 +3238,7 @@ impl<'a> StaticTextSlice<'a> {
             .styles
             .get(style_index)
             .with_context(|| format!("missing TextStylePaint index {style_index}"))?;
-        let Some(font_bytes) = style.font_bytes(instance) else {
+        let Some(font_bytes) = style.font_bytes(runtime, instance) else {
             return Ok(Vec::new());
         };
         let font_size = self.style_font_size(runtime, instance, style)?;
@@ -3305,7 +3378,7 @@ impl<'a> StaticTextSlice<'a> {
         if !text.is_empty()
             && let Ok(base_style) = self.base_style()
             && self.style_font_size(runtime, instance, base_style)? >= 0.0
-            && let Some(font_bytes) = base_style.font_bytes(instance)
+            && let Some(font_bytes) = base_style.font_bytes(runtime, instance)
         {
             let harf_font =
                 HarfFontRef::new(font_bytes).context("failed to parse font for clip layout")?;
@@ -3353,13 +3426,11 @@ impl<'a> StaticTextSlice<'a> {
             )?;
             line_metrics =
                 self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
+            let contextual_glyphs =
+                self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?;
             measured_width = lines
                 .iter()
-                .map(|line| {
-                    self.styled_line_width(runtime, instance, line, &resolved_runs, font_scale)
-                })
-                .collect::<Result<Vec<_>>>()?
-                .into_iter()
+                .map(|line| Self::styled_line_width(line, &contextual_glyphs))
                 .fold(0.0f32, f32::max);
         }
 
@@ -4096,8 +4167,12 @@ impl<'a> StaticTextStyle<'a> {
 
     fn font_bytes<'instance>(
         &'instance self,
+        runtime: &'instance RuntimeFile,
         instance: &'instance ArtboardInstance,
     ) -> Option<&'instance [u8]> {
+        if let Some(value) = instance.text_style_font_override(self.local_id) {
+            return runtime_font_asset_bytes(runtime, instance, value);
+        }
         self.font_bytes.or_else(|| {
             self.font_asset_id
                 .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
@@ -5007,12 +5082,6 @@ fn character_index_for_cluster(text: &str, cluster: u32) -> usize {
         .saturating_sub(1)
 }
 
-fn char_slice(text: &str, start: usize, end: usize) -> &str {
-    let start_byte = char_byte_index(text, start);
-    let end_byte = char_byte_index(text, end);
-    &text[start_byte..end_byte]
-}
-
 fn char_byte_index(text: &str, char_index: usize) -> usize {
     text.char_indices()
         .nth(char_index)
@@ -5079,77 +5148,18 @@ fn transform_path_commands(commands: &mut [RuntimePathCommand], transform: Mat2D
     }
 }
 
-fn order_opacity_buckets_like_cpp(buckets: Vec<StaticTextPathBucket>) -> Vec<StaticTextPathBucket> {
-    if buckets.len() < 2 {
-        return buckets;
-    }
-
-    // C++ TextStylePaint buckets opacity paths in std::unordered_map<float,
-    // ShapePaintPath>. The golden stream observes libc++'s small-map insertion
-    // order: new empty buckets are linked at the front, while collisions are
-    // inserted before the first node in that bucket.
-    let mut bucket_count = 0usize;
-    let mut ordered_indices = Vec::<usize>::new();
-    for index in 0..buckets.len() {
-        let size_after_insert = index + 1;
-        if size_after_insert > bucket_count {
-            bucket_count = next_cpp_unordered_bucket_count(bucket_count, size_after_insert);
-        }
-        let bucket_index = cpp_float_hash_bucket(buckets[index].opacity, bucket_count);
-        let insertion_index = ordered_indices
-            .iter()
-            .position(|existing| {
-                cpp_float_hash_bucket(buckets[*existing].opacity, bucket_count) == bucket_index
-            })
-            .unwrap_or(0);
-        ordered_indices.insert(insertion_index, index);
-    }
-
-    ordered_indices
-        .into_iter()
-        .map(|index| buckets[index].clone())
-        .collect()
-}
-
-fn cpp_float_hash_bucket(value: f32, bucket_count: usize) -> usize {
-    (value.to_bits() as usize) % bucket_count
-}
-
-fn next_cpp_unordered_bucket_count(current: usize, desired: usize) -> usize {
-    if current == 0 {
-        return 2;
-    }
-    // Guard the rehash growth `current * 2` against usize overflow: in debug it
-    // panics, in release it wraps -- a build-dependent divergence. Bucket counts
-    // are bounded by the real element (glyph/run) count, so saturation is
-    // unreachable on any input; saturating_mul just makes debug and release
-    // agree deterministically.
-    next_prime(current.saturating_mul(2).max(desired))
-}
-
-fn next_prime(mut value: usize) -> usize {
-    while !is_prime(value) {
-        value += 1;
-    }
-    value
-}
-
-fn is_prime(value: usize) -> bool {
-    if value < 2 {
-        return false;
-    }
-    let mut divisor = 2usize;
-    // `divisor * divisor` can overflow usize when `value` is near usize::MAX
-    // (divisor climbs toward sqrt(value)); saturating_mul makes the last
-    // comparison `saturated > value` cleanly false and exits the loop, whereas a
-    // wrapping product could wrap below `value` and loop past the real sqrt.
-    while divisor.saturating_mul(divisor) <= value {
-        if value % divisor == 0 {
-            return false;
-        }
-        divisor += 1;
-    }
-    true
+fn order_opacity_buckets_like_cpp(
+    mut buckets: Vec<StaticTextPathBucket>,
+) -> Vec<StaticTextPathBucket> {
+    // rive-runtime 43dfc847 changed TextStylePaint::m_opacityPaths from
+    // std::unordered_map<float, ...> to std::map<float, ...>. Modifier
+    // falloff paths are now drawn in ascending opacity order.
+    buckets.sort_by(|a, b| {
+        a.opacity
+            .partial_cmp(&b.opacity)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    buckets
 }
 
 fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {
@@ -5362,6 +5372,58 @@ struct TextGlyph {
     advance: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CxxScriptRun<'a> {
+    text: &'a str,
+    byte_start: usize,
+    script: HarfScript,
+}
+
+fn cxx_script_runs(text: &str) -> Vec<CxxScriptRun<'_>> {
+    let Some((_, first_character)) = text.char_indices().next() else {
+        return Vec::new();
+    };
+
+    // Exact port of the script-boundary half of
+    // `HBFont::onShapeText`. The first code point starts a run with its raw
+    // Unicode Script value. Common, inherited, and non-spacing characters
+    // after that inherit the preceding run's script.
+    let mut runs = Vec::with_capacity(1);
+    let mut run_byte_start = 0;
+    let mut last_script = harfrust_script_for_unicode_script(first_character.script());
+    for (byte_index, character) in text.char_indices().skip(1) {
+        let unicode_script = if character.general_category() == GeneralCategory::NonspacingMark {
+            UnicodeScript::Inherited
+        } else {
+            character.script()
+        };
+        let mut script = harfrust_script_for_unicode_script(unicode_script);
+        if script == harfrust::script::COMMON || script == harfrust::script::INHERITED {
+            script = last_script;
+        }
+        if script != last_script {
+            runs.push(CxxScriptRun {
+                text: &text[run_byte_start..byte_index],
+                byte_start: run_byte_start,
+                script: last_script,
+            });
+            run_byte_start = byte_index;
+            last_script = script;
+        }
+    }
+    runs.push(CxxScriptRun {
+        text: &text[run_byte_start..],
+        byte_start: run_byte_start,
+        script: last_script,
+    });
+    runs
+}
+
+fn harfrust_script_for_unicode_script(script: UnicodeScript) -> HarfScript {
+    HarfScript::from_iso15924_tag(HarfTag::from_u32(script.as_iso15924_tag()))
+        .unwrap_or(harfrust::script::UNKNOWN)
+}
+
 #[derive(Clone)]
 struct StyledTextGlyph {
     glyph_id: u32,
@@ -5402,9 +5464,29 @@ fn shape_text_glyphs(
     text: &str,
     disable_legacy_kern: bool,
 ) -> Vec<TextGlyph> {
+    let mut glyphs = Vec::new();
+    for run in cxx_script_runs(text) {
+        let cluster_offset = u32::try_from(run.byte_start).unwrap_or(u32::MAX);
+        let mut run_glyphs =
+            shape_cxx_script_run_glyphs(shaper, run.text, run.script, disable_legacy_kern);
+        for glyph in &mut run_glyphs {
+            glyph.cluster = glyph.cluster.saturating_add(cluster_offset);
+        }
+        glyphs.extend(run_glyphs);
+    }
+    glyphs
+}
+
+fn shape_cxx_script_run_glyphs(
+    shaper: &harfrust::Shaper<'_>,
+    text: &str,
+    script: HarfScript,
+    disable_legacy_kern: bool,
+) -> Vec<TextGlyph> {
     let mut buffer = UnicodeBuffer::new();
     buffer.push_str(text);
     buffer.set_direction(Direction::LeftToRight);
+    buffer.set_script(script);
     buffer.guess_segment_properties();
     let kern_off = [Feature::new(HarfTag::new(b"kern"), 0, ..)];
     let shape_options = ShapeOptions::new().scale(Some(TEXT_SHAPE_SCALE));
@@ -5540,6 +5622,8 @@ struct TextOutlinePen {
     transform: Mat2D,
     current: Option<(f32, f32)>,
     contour_start: Option<(f32, f32)>,
+    current_outline: Option<(f32, f32)>,
+    contour_start_outline: Option<(f32, f32)>,
 }
 
 impl TextOutlinePen {
@@ -5554,27 +5638,53 @@ impl TextOutlinePen {
             transform,
             current: None,
             contour_start: None,
+            current_outline: None,
+            contour_start_outline: None,
         }
     }
 
-    fn map(&self, x: f32, y: f32) -> (f32, f32) {
-        let point = (self.x + x * self.scale, self.y - y * self.scale);
+    fn normalize_outline_point(x: f32, y: f32) -> (f32, f32) {
+        let inverse_shape_scale = 1.0 / TEXT_SHAPE_SCALE_F32;
+        (x * inverse_shape_scale, -y * inverse_shape_scale)
+    }
+
+    fn map_normalized(&self, x: f32, y: f32) -> (f32, f32) {
+        let font_size = self.scale * TEXT_SHAPE_SCALE_F32;
+        if self.transform == Mat2D::IDENTITY {
+            // C++ first records HarfBuzz outlines in em units, then maps the
+            // normalized path with the font-size matrix. Preserve its scale-
+            // and-translate operation order here.
+            let glyph_center = self.center_x - self.x;
+            let translation_x = -glyph_center + (self.x + glyph_center);
+            return (
+                font_size.mul_add(x, translation_x),
+                font_size.mul_add(y, self.y),
+            );
+        }
+        let point = (self.x + x * font_size, self.y + y * font_size);
         let transformed = self
             .transform
             .transform_point(point.0 - self.center_x, point.1 - self.center_y);
         (self.center_x + transformed.0, self.center_y + transformed.1)
     }
+
+    fn map(&self, x: f32, y: f32) -> ((f32, f32), (f32, f32)) {
+        let outline = Self::normalize_outline_point(x, y);
+        (self.map_normalized(outline.0, outline.1), outline)
+    }
 }
 
 impl OutlinePen for TextOutlinePen {
     fn move_to(&mut self, x: f32, y: f32) {
-        let point = self.map(x, y);
+        let (point, outline) = self.map(x, y);
         self.commands.push(RuntimePathCommand::Move {
             x: point.0,
             y: point.1,
         });
         self.current = Some(point);
         self.contour_start = Some(point);
+        self.current_outline = Some(outline);
+        self.contour_start_outline = Some(outline);
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
@@ -5582,46 +5692,59 @@ impl OutlinePen for TextOutlinePen {
             // C++ RawPath collapses zero-size glyph contours to move/close pairs.
             return;
         }
-        let point = self.map(x, y);
+        let (point, outline) = self.map(x, y);
         self.commands.push(RuntimePathCommand::Line {
             x: point.0,
             y: point.1,
         });
         self.current = Some(point);
+        self.current_outline = Some(outline);
     }
 
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
         if self.scale == 0.0 {
             return;
         }
-        let Some(current) = self.current else {
+        let Some(current_outline) = self.current_outline else {
             self.move_to(x, y);
             return;
         };
-        let control = self.map(cx0, cy0);
-        let end = self.map(x, y);
-        let x1 = current.0 + (control.0 - current.0) * (2.0 / 3.0);
-        let y1 = current.1 + (control.1 - current.1) * (2.0 / 3.0);
-        let x2 = end.0 + (control.0 - end.0) * (2.0 / 3.0);
-        let y2 = end.1 + (control.1 - end.1) * (2.0 / 3.0);
+        let control_outline = Self::normalize_outline_point(cx0, cy0);
+        let end_outline = Self::normalize_outline_point(x, y);
+        // C++ converts HarfBuzz quadratic contours to cubics before applying
+        // the glyph matrix. Doing the lerps after mapping is algebraically
+        // equivalent but rounds hundreds of text control points differently.
+        let t = 2.0 / 3.0;
+        let control1_outline = (
+            current_outline.0 + (control_outline.0 - current_outline.0) * t,
+            current_outline.1 + (control_outline.1 - current_outline.1) * t,
+        );
+        let control2_outline = (
+            end_outline.0 + (control_outline.0 - end_outline.0) * t,
+            end_outline.1 + (control_outline.1 - end_outline.1) * t,
+        );
+        let control1 = self.map_normalized(control1_outline.0, control1_outline.1);
+        let control2 = self.map_normalized(control2_outline.0, control2_outline.1);
+        let end = self.map_normalized(end_outline.0, end_outline.1);
         self.commands.push(RuntimePathCommand::Cubic {
-            x1,
-            y1,
-            x2,
-            y2,
+            x1: control1.0,
+            y1: control1.1,
+            x2: control2.0,
+            y2: control2.1,
             x3: end.0,
             y3: end.1,
         });
         self.current = Some(end);
+        self.current_outline = Some(end_outline);
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
         if self.scale == 0.0 {
             return;
         }
-        let control0 = self.map(cx0, cy0);
-        let control1 = self.map(cx1, cy1);
-        let end = self.map(x, y);
+        let (control0, _) = self.map(cx0, cy0);
+        let (control1, _) = self.map(cx1, cy1);
+        let (end, end_outline) = self.map(x, y);
         self.commands.push(RuntimePathCommand::Cubic {
             x1: control0.0,
             y1: control0.1,
@@ -5631,6 +5754,7 @@ impl OutlinePen for TextOutlinePen {
             y3: end.1,
         });
         self.current = Some(end);
+        self.current_outline = Some(end_outline);
     }
 
     fn close(&mut self) {
@@ -5645,6 +5769,7 @@ impl OutlinePen for TextOutlinePen {
         }
         self.commands.push(RuntimePathCommand::Close);
         self.current = self.contour_start;
+        self.current_outline = self.contour_start_outline;
     }
 }
 
@@ -5698,11 +5823,6 @@ fn static_text_parent_chain_supported(
 }
 
 fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option<&[u8]> {
-    let file_asset_globals = runtime
-        .file_assets()
-        .into_iter()
-        .map(|asset| asset.id)
-        .collect::<BTreeSet<_>>();
     let mut after_asset = false;
     for object in runtime.objects.iter().flatten() {
         if object.id == asset_global {
@@ -5712,14 +5832,42 @@ fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option
         if !after_asset {
             continue;
         }
-        if file_asset_globals.contains(&object.id) {
-            return None;
-        }
         if object.type_name == "FileAssetContents" {
             return object.bytes_property("bytes");
         }
+        if definition_by_name(object.type_name)
+            .is_some_and(|definition| definition.is_a("FileAsset"))
+        {
+            return None;
+        }
     }
     None
+}
+
+/// Resolve the effective bytes of a data-bound font value with the same
+/// precedence as C++ `DataBindContextValueAssetFont::apply`.
+///
+/// A valid file FontAsset always wins, even when it has no loaded bytes. The
+/// private live font is consulted only when the serialized index is missing,
+/// out of range, or names a non-font asset.
+pub(crate) fn runtime_font_asset_bytes<'a>(
+    runtime: &'a RuntimeFile,
+    instance: &'a ArtboardInstance,
+    value: &'a RuntimeFontAssetValue,
+) -> Option<&'a [u8]> {
+    if let Ok(file_asset_index) = usize::try_from(value.file_asset_index())
+        && let Some(font_asset) = runtime.file_asset(file_asset_index)
+        && font_asset.type_name == "FontAsset"
+    {
+        return embedded_file_asset_bytes(runtime, font_asset.id).or_else(|| {
+            font_asset
+                .uint_property("assetId")
+                .and_then(|asset_id| u32::try_from(asset_id).ok())
+                .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
+        });
+    }
+
+    value.live_font_bytes()
 }
 
 #[cfg(test)]
@@ -5858,6 +6006,146 @@ mod tests {
     }
 
     #[test]
+    fn quadratic_outline_conversion_precedes_glyph_mapping() {
+        let mut pen = TextOutlinePen::new(
+            0.1,
+            0.0,
+            12.3 / TEXT_SHAPE_SCALE_F32,
+            0.1,
+            0.0,
+            Mat2D::IDENTITY,
+        );
+        let start = (-2047.0, 119.0);
+        let control = (-987.0, -37.0);
+        let end = (805.0, -91.0);
+        let start_outline = TextOutlinePen::normalize_outline_point(start.0, start.1);
+        let control_outline = TextOutlinePen::normalize_outline_point(control.0, control.1);
+        let t = 2.0 / 3.0;
+        let expected_outline = (
+            start_outline.0 + (control_outline.0 - start_outline.0) * t,
+            start_outline.1 + (control_outline.1 - start_outline.1) * t,
+        );
+        let expected = pen.map_normalized(expected_outline.0, expected_outline.1);
+        let mapped_start = pen.map(start.0, start.1).0;
+        let mapped_control = pen.map(control.0, control.1).0;
+        let mapped_then_lerped = (
+            mapped_start.0 + (mapped_control.0 - mapped_start.0) * t,
+            mapped_start.1 + (mapped_control.1 - mapped_start.1) * t,
+        );
+        assert_ne!(
+            (expected.0.to_bits(), expected.1.to_bits()),
+            (
+                mapped_then_lerped.0.to_bits(),
+                mapped_then_lerped.1.to_bits()
+            )
+        );
+
+        pen.move_to(start.0, start.1);
+        pen.quad_to(control.0, control.1, end.0, end.1);
+        let RuntimePathCommand::Cubic { x1, y1, .. } = pen.commands[1] else {
+            panic!("quadratic outline did not emit a cubic command");
+        };
+        assert_eq!(
+            (x1.to_bits(), y1.to_bits()),
+            (expected.0.to_bits(), expected.1.to_bits())
+        );
+    }
+
+    #[test]
+    fn cxx_script_itemization_keeps_leading_common_text_separate() {
+        let runs = cxx_script_runs("[RIVE] EULAV LAITINI [END]");
+        assert_eq!(
+            runs,
+            vec![
+                CxxScriptRun {
+                    text: "[",
+                    byte_start: 0,
+                    script: harfrust::script::COMMON,
+                },
+                CxxScriptRun {
+                    text: "RIVE] EULAV LAITINI [END]",
+                    byte_start: 1,
+                    script: harfrust::script::LATIN,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn cxx_script_itemization_propagates_common_and_nonspacing_marks() {
+        let runs = cxx_script_runs("A \u{05b0}\u{05d0}");
+        assert_eq!(
+            runs,
+            vec![
+                CxxScriptRun {
+                    text: "A \u{05b0}",
+                    byte_start: 0,
+                    script: harfrust::script::LATIN,
+                },
+                CxxScriptRun {
+                    text: "\u{05d0}",
+                    byte_start: 4,
+                    script: harfrust::script::HEBREW,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn data_bound_font_resolution_prefers_file_assets_then_private_live_font() {
+        let (runtime, graphs) = baseline_origin_text_runtime();
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let embedded =
+            embedded_file_asset_bytes(&runtime, runtime.file_asset(0).expect("font asset").id)
+                .expect("fixture embeds font bytes");
+        let live: std::sync::Arc<[u8]> = vec![1, 2, 3, 4].into();
+        let mut value = RuntimeFontAssetValue::default();
+
+        assert!(value.set_live_font_bytes(Some(std::sync::Arc::clone(&live))));
+        assert_eq!(
+            runtime_font_asset_bytes(&runtime, &instance, &value),
+            Some(live.as_ref())
+        );
+
+        assert!(value.set_file_asset_index(0));
+        assert_eq!(
+            runtime_font_asset_bytes(&runtime, &instance, &value),
+            Some(embedded),
+            "a valid file FontAsset wins over the retained private live font"
+        );
+
+        assert!(value.set_file_asset_index(u64::from(u32::MAX)));
+        assert_eq!(
+            runtime_font_asset_bytes(&runtime, &instance, &value),
+            Some(live.as_ref())
+        );
+    }
+
+    #[test]
+    fn data_bound_live_font_override_is_used_and_dirties_text_geometry() {
+        let (runtime, graphs) = baseline_origin_text_runtime();
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        let style = slice.base_style().expect("fixture has a base style");
+        let live: std::sync::Arc<[u8]> = fixture_font_bytes().into();
+        let mut value = RuntimeFontAssetValue::default();
+        assert!(value.set_live_font_bytes(Some(std::sync::Arc::clone(&live))));
+        let path_epoch = instance.path_epoch();
+        let layout_epoch = instance.layout_epoch();
+
+        assert!(instance.set_text_style_font_override(style.local_id, value.clone()));
+        assert_eq!(style.font_bytes(&runtime, &instance), Some(live.as_ref()));
+        assert!(instance.path_epoch() > path_epoch);
+        assert!(instance.layout_epoch() > layout_epoch);
+        assert!(
+            !instance.set_text_style_font_override(style.local_id, value),
+            "reapplying the same live font must not re-dirty text"
+        );
+    }
+
+    #[test]
     fn baseline_origin_and_raw_clip_share_authoritative_line_metrics() {
         let (runtime, graphs) = baseline_origin_text_runtime();
         let graph = graphs.artboards.first().expect("fixture has an artboard");
@@ -5931,6 +6219,44 @@ mod tests {
 
         assert_close(measured.2, 80.0);
         assert_close(controlled.2, 200.0);
+    }
+
+    #[test]
+    fn soft_wrap_retains_contextual_advance_from_paragraph_shape() {
+        let contextual_glyphs = vec![
+            StyledTextGlyph {
+                glyph_id: 1,
+                char_index: 0,
+                char_len: 1,
+                style_index: 0,
+                advance: 650.0,
+                scale: 1.0,
+            },
+            StyledTextGlyph {
+                glyph_id: 2,
+                char_index: 1,
+                char_len: 1,
+                style_index: 0,
+                advance: 1_194.0,
+                scale: 1.0,
+            },
+        ];
+        let first_line = StaticTextLine {
+            text: "t",
+            char_start: 0,
+            line_index: 0,
+            soft_wrap_skipped_start: None,
+            terminal_soft_wrap_skipped_end: None,
+        };
+
+        let glyphs = StaticTextSlice::styled_line_glyphs(&first_line, &contextual_glyphs);
+
+        assert_eq!(glyphs.len(), 1);
+        assert_eq!(glyphs[0].advance, 650.0);
+        assert_eq!(
+            StaticTextSlice::styled_line_width(&first_line, &contextual_glyphs),
+            650.0
+        );
     }
 
     #[test]
@@ -6077,5 +6403,86 @@ mod tests {
             context.paragraph_baselines,
             baselines.as_slice()
         ));
+    }
+
+    #[test]
+    fn opacity_buckets_follow_cpp_ordered_map_iteration() {
+        let buckets = [0.8, 0.2, 0.5]
+            .into_iter()
+            .map(|opacity| StaticTextPathBucket {
+                opacity,
+                commands: Vec::new(),
+            })
+            .collect();
+
+        let ordered = order_opacity_buckets_like_cpp(buckets)
+            .into_iter()
+            .map(|bucket| bucket.opacity)
+            .collect::<Vec<_>>();
+
+        assert_eq!(ordered, vec![0.2, 0.5, 0.8]);
+    }
+
+    #[test]
+    fn static_text_preflight_accepts_runtime_scroll_bindings() {
+        for property_name in [
+            "scrollOffsetX",
+            "scrollOffsetY",
+            "scrollPercentX",
+            "scrollPercentY",
+            "scrollIndex",
+        ] {
+            let data_bind = DataBindNode {
+                global_id: 1,
+                type_name: "DataBind",
+                property_key: u64::from(
+                    property_key_for_name("ScrollConstraint", property_name)
+                        .expect("scroll property exists"),
+                ),
+                flags: 0,
+                converter_id: 0,
+                converter_global: None,
+                converter_type_name: None,
+                converter_duration: None,
+                target_global: Some(2),
+                target_type_name: Some("ScrollConstraint"),
+                target_local: Some(2),
+            };
+            assert!(
+                static_text_data_bind_supported(&data_bind),
+                "{property_name} should reach the runtime scroll binding path"
+            );
+        }
+    }
+
+    #[test]
+    fn static_text_preflight_accepts_supported_key_frame_value_bindings() {
+        for target_type_name in [
+            "KeyFrameDouble",
+            "KeyFrameColor",
+            "KeyFrameBool",
+            "KeyFrameString",
+        ] {
+            let data_bind = DataBindNode {
+                global_id: 1,
+                type_name: "DataBind",
+                property_key: u64::from(
+                    property_key_for_name(target_type_name, "value")
+                        .expect("keyframe value property exists"),
+                ),
+                flags: 0,
+                converter_id: 0,
+                converter_global: None,
+                converter_type_name: None,
+                converter_duration: None,
+                target_global: Some(2),
+                target_type_name: Some(target_type_name),
+                target_local: Some(2),
+            };
+            assert!(
+                static_text_data_bind_supported(&data_bind),
+                "{target_type_name}.value should reach the runtime keyframe binding path"
+            );
+        }
     }
 }

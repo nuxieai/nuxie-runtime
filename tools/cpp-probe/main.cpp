@@ -1250,7 +1250,7 @@ collect_default_view_model_trigger_reports(rive::File* file)
         return reports;
     }
 
-    auto viewModel = file->viewModel(0);
+    auto viewModel = file->viewModel(size_t{0});
     if (viewModel == nullptr || viewModel->instanceCount() == 0)
     {
         return reports;
@@ -2465,7 +2465,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     target->as<rive::BindablePropertyViewModel>());
                 auto viewModel =
                     file != nullptr && file->viewModelCount() > 0
-                        ? file->viewModel(0)
+                        ? file->viewModel(size_t{0})
                         : nullptr;
                 auto viewModelInstance =
                     viewModel != nullptr && viewModel->instanceCount() > 0
@@ -2568,7 +2568,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -2595,7 +2595,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -3688,7 +3688,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -3715,7 +3715,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -3772,7 +3772,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -3799,7 +3799,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -3856,7 +3856,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -3883,7 +3883,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -3941,7 +3941,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -3968,7 +3968,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4026,7 +4026,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4053,7 +4053,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4100,7 +4100,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4127,7 +4127,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4173,7 +4173,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4200,7 +4200,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4246,7 +4246,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4273,7 +4273,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4319,7 +4319,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4357,7 +4357,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4429,7 +4429,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4461,7 +4461,7 @@ apply_runtime_state_machine_advances(rive::File* file,
                     : sourceStateMachine->dataBind(action.dataBindIndex);
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4516,7 +4516,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -4662,7 +4662,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             auto viewModel =
                 file != nullptr && file->viewModelCount() > 0
-                    ? file->viewModel(0)
+                    ? file->viewModel(size_t{0})
                     : nullptr;
             auto viewModelInstance =
                 viewModel != nullptr && viewModel->instanceCount() > 0
@@ -11272,7 +11272,7 @@ void write_artboard(std::ostream& out,
     if (options.runtimeBindDefaultViewModelArtboardContext && file != nullptr)
     {
         auto viewModel =
-            file->viewModelCount() > 0 ? file->viewModel(0) : nullptr;
+            file->viewModelCount() > 0 ? file->viewModel(size_t{0}) : nullptr;
         auto viewModelInstance =
             viewModel != nullptr && viewModel->instanceCount() > 0
                 ? viewModel->instance(0)

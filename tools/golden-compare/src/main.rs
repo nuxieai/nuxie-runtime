@@ -20,6 +20,13 @@ fn run() -> Result<(), String> {
     if let Some(milestone) = options.milestone.as_deref() {
         corpus.retain(|entry| entry.milestone.as_deref() == Some(milestone));
     }
+    if let Some(status) = options.status {
+        corpus
+            .retain(|entry| entry.effective_status(options.verify_scripted_diagnostics) == status);
+    }
+    if !options.ids.is_empty() {
+        corpus.retain(|entry| options.ids.iter().any(|id| id == &entry.id));
+    }
     if corpus.is_empty() {
         return Err(format!(
             "corpus {} contains no [[file]] entries",
@@ -35,13 +42,15 @@ fn run() -> Result<(), String> {
 
     let mut counts = BTreeMap::<Status, usize>::new();
     let mut exact_segments = 0usize;
+    let mut not_yet_rust_probed = 0usize;
+    let mut not_yet_rust_exact = 0usize;
     let mut parked_by_milestone = BTreeMap::<String, usize>::new();
     let mut failures = Vec::new();
 
     for entry in &corpus {
         let status = entry.effective_status(options.verify_scripted_diagnostics);
         *counts.entry(status).or_default() += 1;
-        if status == Status::Exact {
+        if status == Status::Exact && entry.verification != VerificationMode::RejectsMalformed {
             exact_segments += entry.samples.len();
         }
         if status == Status::UnsupportedFeature {
@@ -62,7 +71,14 @@ fn run() -> Result<(), String> {
             Status::UnsupportedFeature => {
                 if options.verify_unsupported_cpp {
                     let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
-                    match run_stream(&options.cpp_runner, entry, &file, &corpus_dir) {
+                    match run_stream(
+                        &options.cpp_runner,
+                        entry,
+                        &file,
+                        &corpus_dir,
+                        RunnerKind::Cpp,
+                        options.verify_scripted_diagnostics,
+                    ) {
                         Ok(cpp_stream) => println!(
                             "[unsupported-feature] {}: c++ stream ok ({} bytes)",
                             entry.id,
@@ -92,6 +108,7 @@ fn run() -> Result<(), String> {
                                 &file,
                                 &corpus_dir,
                                 feature,
+                                options.verify_scripted_diagnostics,
                             ) {
                                 Ok(()) => println!(
                                     "[unsupported-feature] {}: rust diagnostic ok ({feature})",
@@ -107,9 +124,60 @@ fn run() -> Result<(), String> {
                     }
                 }
             }
+            Status::Exact if entry.verification == VerificationMode::RejectsMalformed => {
+                let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
+                let expected_rust_error = entry
+                    .import_error_feature()
+                    .expect("rejects-malformed entries are validated before execution");
+
+                match run_malformed_rejection(
+                    &options.cpp_runner,
+                    entry,
+                    &file,
+                    &corpus_dir,
+                    RunnerKind::Cpp,
+                    expected_rust_error,
+                    options.verify_scripted_diagnostics,
+                ) {
+                    Ok(()) => println!(
+                        "[exact] {}: c++ rejected malformed import as expected",
+                        entry.id
+                    ),
+                    Err(error) => failures.push(format!("{}: {error}", entry.id)),
+                }
+
+                match &options.rust_runner {
+                    Some(rust_runner) => match run_malformed_rejection(
+                        rust_runner,
+                        entry,
+                        &file,
+                        &corpus_dir,
+                        RunnerKind::Rust,
+                        expected_rust_error,
+                        options.verify_scripted_diagnostics,
+                    ) {
+                        Ok(()) => println!(
+                            "[exact] {}: rust rejected the same malformed import as expected",
+                            entry.id
+                        ),
+                        Err(error) => failures.push(format!("{}: {error}", entry.id)),
+                    },
+                    None => failures.push(format!(
+                        "{}: rejects-malformed verification requires --rust-runner",
+                        entry.id
+                    )),
+                }
+            }
             Status::NotYet | Status::Diverges | Status::Exact => {
                 let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
-                match run_stream(&options.cpp_runner, entry, &file, &corpus_dir) {
+                match run_stream(
+                    &options.cpp_runner,
+                    entry,
+                    &file,
+                    &corpus_dir,
+                    RunnerKind::Cpp,
+                    options.verify_scripted_diagnostics,
+                ) {
                     Ok(cpp_stream) => {
                         println!(
                             "[{}] {}: c++ stream ok ({} bytes)",
@@ -117,32 +185,68 @@ fn run() -> Result<(), String> {
                             entry.id,
                             cpp_stream.len()
                         );
-                        if status == Status::Exact
+                        let run_rust = status == Status::Exact
                             || (status == Status::Diverges && options.verify_divergent_rust)
-                        {
+                            || (status == Status::NotYet && options.probe_not_yet_rust);
+                        if run_rust {
                             match &options.rust_runner {
                                 Some(rust_runner) => {
-                                    let rust_stream =
-                                        run_stream(rust_runner, entry, &file, &corpus_dir)?;
-                                    if status == Status::Diverges {
-                                        println!(
+                                    match run_stream(
+                                        rust_runner,
+                                        entry,
+                                        &file,
+                                        &corpus_dir,
+                                        RunnerKind::Rust,
+                                        options.verify_scripted_diagnostics,
+                                    ) {
+                                        Ok(rust_stream) if status == Status::Diverges => println!(
                                             "[diverges] {}: rust stream ok ({} bytes)",
                                             entry.id,
                                             rust_stream.len()
-                                        );
-                                    } else if let Some(difference) = entry
-                                        .verification
-                                        .stream_difference(&rust_stream, &cpp_stream)
-                                    {
-                                        failures.push(format!(
-                                            "{}: stream differs from C++ under {} verification: {difference}",
-                                            entry.id, entry.verification
-                                        ));
+                                        ),
+                                        Ok(rust_stream) if status == Status::NotYet => {
+                                            not_yet_rust_probed += 1;
+                                            if let Some(difference) = entry
+                                                .verification
+                                                .stream_difference(&rust_stream, &cpp_stream)
+                                            {
+                                                println!(
+                                                    "[not-yet] {}: rust differs from C++ under {} verification: {difference}",
+                                                    entry.id, entry.verification
+                                                );
+                                            } else {
+                                                not_yet_rust_exact += 1;
+                                                println!(
+                                                    "[not-yet] {}: rust stream is exact ({} bytes)",
+                                                    entry.id,
+                                                    rust_stream.len()
+                                                );
+                                            }
+                                        }
+                                        Ok(rust_stream) => {
+                                            if let Some(difference) = entry
+                                                .verification
+                                                .stream_difference(&rust_stream, &cpp_stream)
+                                            {
+                                                failures.push(format!(
+                                                    "{}: stream differs from C++ under {} verification: {difference}",
+                                                    entry.id, entry.verification
+                                                ));
+                                            }
+                                        }
+                                        Err(error) if status == Status::NotYet => {
+                                            not_yet_rust_probed += 1;
+                                            println!(
+                                                "[not-yet] {}: rust runner failed: {error}",
+                                                entry.id
+                                            );
+                                        }
+                                        Err(error) => failures.push(format!("{}: {error}", entry.id)),
                                     }
                                 }
                                 None => failures.push(format!(
-                                    "{}: status is exact but --rust-runner was not supplied",
-                                    entry.id
+                                    "{}: rust verification was requested but --rust-runner was not supplied",
+                                    entry.id,
                                 )),
                             }
                         }
@@ -166,6 +270,12 @@ fn run() -> Result<(), String> {
             .unwrap_or(0),
         counts.get(&Status::NotYet).copied().unwrap_or(0),
     );
+    if options.probe_not_yet_rust {
+        println!(
+            "golden-compare not-yet probe: rust-exact={} probed={}",
+            not_yet_rust_exact, not_yet_rust_probed
+        );
+    }
     if !parked_by_milestone.is_empty() {
         let breakdown = parked_by_milestone
             .iter()
@@ -192,8 +302,11 @@ struct Options {
     rust_runner: Option<PathBuf>,
     rive_runtime_dir: PathBuf,
     milestone: Option<String>,
+    status: Option<Status>,
+    ids: Vec<String>,
     verify_unsupported_cpp: bool,
     verify_divergent_rust: bool,
+    probe_not_yet_rust: bool,
     verify_scripted_diagnostics: bool,
 }
 
@@ -205,8 +318,11 @@ impl Options {
             .unwrap_or_else(default_cpp_runner);
         let mut rust_runner = None;
         let mut milestone = None;
+        let mut status = None;
+        let mut ids = Vec::new();
         let mut verify_unsupported_cpp = false;
         let mut verify_divergent_rust = false;
+        let mut probe_not_yet_rust = false;
         let mut verify_scripted_diagnostics = false;
         let mut rive_runtime_dir = env::var_os("RIVE_RUNTIME_DIR")
             .map(PathBuf::from)
@@ -228,12 +344,15 @@ impl Options {
                 "--rust-runner" => rust_runner = Some(PathBuf::from(value(arg)?)),
                 "--rive-runtime-dir" => rive_runtime_dir = PathBuf::from(value(arg)?),
                 "--milestone" => milestone = Some(value(arg)?),
+                "--status" => status = Some(Status::parse(&value(arg)?)?),
+                "--id" => ids.push(value(arg)?),
                 "--verify-unsupported-cpp" => verify_unsupported_cpp = true,
                 "--verify-divergent-rust" => verify_divergent_rust = true,
+                "--probe-not-yet-rust" => probe_not_yet_rust = true,
                 "--verify-scripted-diagnostics" => verify_scripted_diagnostics = true,
                 "--help" | "-h" => {
                     println!(
-                        "usage: golden-compare [--corpus corpus.toml] [--milestone name] [--verify-unsupported-cpp] [--verify-divergent-rust] [--verify-scripted-diagnostics] --cpp-runner <path> [--rust-runner <path>]"
+                        "usage: golden-compare [--corpus corpus.toml] [--milestone name] [--status exact|diverges|unsupported-feature|not-yet] [--id corpus-id]... [--verify-unsupported-cpp] [--verify-divergent-rust] [--probe-not-yet-rust] [--verify-scripted-diagnostics] --cpp-runner <path> [--rust-runner <path>]"
                     );
                     std::process::exit(0);
                 }
@@ -248,8 +367,11 @@ impl Options {
             rust_runner,
             rive_runtime_dir,
             milestone,
+            status,
+            ids,
             verify_unsupported_cpp,
             verify_divergent_rust,
+            probe_not_yet_rust,
             verify_scripted_diagnostics,
         })
     }
@@ -273,6 +395,7 @@ struct CorpusEntry {
     artboard: Option<String>,
     state_machine: Option<String>,
     input_script: Option<String>,
+    rust_execute_scripts: bool,
     samples: Vec<f32>,
     status: Status,
     verification: VerificationMode,
@@ -288,6 +411,7 @@ impl CorpusEntry {
             artboard: None,
             state_machine: None,
             input_script: None,
+            rust_execute_scripts: false,
             samples: vec![0.0],
             status: Status::NotYet,
             verification: VerificationMode::Exact,
@@ -314,7 +438,27 @@ impl CorpusEntry {
                 return Err(format!("entry {} samples must be sorted", self.id));
             }
         }
+        if self.verification == VerificationMode::RejectsMalformed {
+            if self.status != Status::Exact {
+                return Err(format!(
+                    "entry {} uses rejects-malformed verification but is not exact",
+                    self.id
+                ));
+            }
+            if self.import_error_feature().is_none_or(str::is_empty) {
+                return Err(format!(
+                    "entry {} uses rejects-malformed verification without an import-error feature",
+                    self.id
+                ));
+            }
+        }
         Ok(())
+    }
+
+    fn import_error_feature(&self) -> Option<&str> {
+        self.features
+            .iter()
+            .find_map(|feature| feature.strip_prefix("import-error:"))
     }
 
     fn rust_runner_unsupported_feature(&self) -> Option<&str> {
@@ -330,6 +474,14 @@ impl CorpusEntry {
     }
 
     fn requires_scripted_runner(&self) -> bool {
+        self.rust_execute_scripts || self.has_scripted_runner_only_feature()
+    }
+
+    fn executes_scripts_in_rust(&self) -> bool {
+        self.rust_execute_scripts || self.has_scripted_runner_only_feature()
+    }
+
+    fn has_scripted_runner_only_feature(&self) -> bool {
         self.features
             .iter()
             .any(|feature| feature == "scripted-runner-only")
@@ -385,6 +537,7 @@ enum VerificationMode {
     Exact,
     Tolerant(f64),
     Structural,
+    RejectsMalformed,
 }
 
 impl VerificationMode {
@@ -392,6 +545,7 @@ impl VerificationMode {
         match value {
             "exact" => Ok(Self::Exact),
             "structural" => Ok(Self::Structural),
+            "rejects-malformed" => Ok(Self::RejectsMalformed),
             _ => {
                 let Some(inner) = value
                     .strip_prefix("tolerant(")
@@ -424,6 +578,9 @@ impl VerificationMode {
             Self::Structural => {
                 stream_difference_with_epsilon(left, right, STRUCTURAL_FLOAT_EPSILON)
             }
+            Self::RejectsMalformed => Some(
+                "rejects-malformed verifies runner failures rather than render streams".to_owned(),
+            ),
         }
     }
 }
@@ -434,6 +591,7 @@ impl Display for VerificationMode {
             Self::Exact => formatter.write_str("exact"),
             Self::Tolerant(epsilon) => write!(formatter, "tolerant({epsilon})"),
             Self::Structural => formatter.write_str("structural"),
+            Self::RejectsMalformed => formatter.write_str("rejects-malformed"),
         }
     }
 }
@@ -474,6 +632,7 @@ fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
             "artboard" => entry.artboard = Some(parse_string(value, line_number)?),
             "state_machine" => entry.state_machine = Some(parse_string(value, line_number)?),
             "input_script" => entry.input_script = Some(parse_string(value, line_number)?),
+            "rust_execute_scripts" => entry.rust_execute_scripts = parse_bool(value, line_number)?,
             "samples" => entry.samples = parse_float_array(value, line_number)?,
             "status" => entry.status = Status::parse(&parse_string(value, line_number)?)?,
             "verification" => {
@@ -547,6 +706,14 @@ fn parse_float_array(value: &str, line: usize) -> Result<Vec<f32>, String> {
                 .map_err(|error| format!("line {line}: invalid sample {}: {error}", part.trim()))
         })
         .collect()
+}
+
+fn parse_bool(value: &str, line: usize) -> Result<bool, String> {
+    match value {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(format!("line {line}: expected true or false")),
+    }
 }
 
 fn array_inner(value: &str, line: usize) -> Result<&str, String> {
@@ -810,6 +977,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn options_can_filter_and_probe_not_yet_entries() {
+        let options = Options::parse(vec![
+            "--cpp-runner".to_owned(),
+            "cpp-runner".to_owned(),
+            "--rust-runner".to_owned(),
+            "rust-runner".to_owned(),
+            "--status".to_owned(),
+            "not-yet".to_owned(),
+            "--id".to_owned(),
+            "one".to_owned(),
+            "--id".to_owned(),
+            "two".to_owned(),
+            "--probe-not-yet-rust".to_owned(),
+        ])
+        .unwrap();
+
+        assert_eq!(options.status, Some(Status::NotYet));
+        assert_eq!(options.ids, ["one", "two"]);
+        assert!(options.probe_not_yet_rust);
+        assert_eq!(options.rust_runner, Some(PathBuf::from("rust-runner")));
+    }
+
+    #[test]
     fn scripted_status_override_only_applies_in_scripted_mode() {
         let mut entry = CorpusEntry::new();
         entry.status = Status::Diverges;
@@ -817,6 +1007,53 @@ mod tests {
 
         assert_eq!(entry.effective_status(false), Status::Diverges);
         assert_eq!(entry.effective_status(true), Status::Exact);
+    }
+
+    #[test]
+    fn scripted_lane_forces_rust_script_execution() {
+        let entry = CorpusEntry::new();
+
+        let scripted_rust = stream_command(
+            Path::new("rust-runner"),
+            &entry,
+            Path::new("fixture.riv"),
+            Path::new("corpus"),
+            RunnerKind::Rust,
+            true,
+        );
+        assert!(
+            scripted_rust
+                .get_args()
+                .any(|argument| argument == "--execute-scripts")
+        );
+
+        let normal_rust = stream_command(
+            Path::new("rust-runner"),
+            &entry,
+            Path::new("fixture.riv"),
+            Path::new("corpus"),
+            RunnerKind::Rust,
+            false,
+        );
+        assert!(
+            normal_rust
+                .get_args()
+                .all(|argument| argument != "--execute-scripts")
+        );
+
+        let scripted_cpp = stream_command(
+            Path::new("cpp-runner"),
+            &entry,
+            Path::new("fixture.riv"),
+            Path::new("corpus"),
+            RunnerKind::Cpp,
+            true,
+        );
+        assert!(
+            scripted_cpp
+                .get_args()
+                .all(|argument| argument != "--execute-scripts")
+        );
     }
 
     #[test]
@@ -892,6 +1129,10 @@ mod tests {
             VerificationMode::parse("tolerant(0.25)").unwrap(),
             VerificationMode::Tolerant(0.25)
         );
+        assert_eq!(
+            VerificationMode::parse("rejects-malformed").unwrap(),
+            VerificationMode::RejectsMalformed
+        );
         assert!(VerificationMode::parse("tolerant(-0.1)").is_err());
         assert!(VerificationMode::parse("tolerant(nan)").is_err());
         assert!(VerificationMode::parse("loose").is_err());
@@ -924,6 +1165,85 @@ mod tests {
     }
 
     #[test]
+    fn malformed_rejection_requires_the_expected_failure_category() {
+        let cpp_error = "golden-runner error: bad riv file; import result=2\n";
+        let rust_error = concat!(
+            "rust-golden-runner error: failed to import runtime file: ",
+            "drawable object 13 (Shape) has invalid blendModeValue 5\n"
+        );
+        let expected = "drawable-object-13-Shape-has-invalid-blendModeValue-5";
+
+        assert!(
+            validate_malformed_rejection(RunnerKind::Cpp, false, Some(1), "", cpp_error, expected)
+                .is_ok()
+        );
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Rust,
+                false,
+                Some(1),
+                "",
+                rust_error,
+                expected,
+            )
+            .is_ok()
+        );
+
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Cpp,
+                false,
+                Some(1),
+                "",
+                "golden-runner error: bad riv file; import result=1\n",
+                expected,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Rust,
+                false,
+                Some(1),
+                "",
+                rust_error,
+                "a-different-import-error",
+            )
+            .is_err()
+        );
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Rust,
+                false,
+                Some(101),
+                "",
+                "thread panicked\n",
+                expected,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_malformed_rejection(RunnerKind::Cpp, false, None, "", cpp_error, expected,)
+                .is_err()
+        );
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Cpp,
+                false,
+                Some(1),
+                "rive-golden-stream-v1\n",
+                cpp_error,
+                expected,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_malformed_rejection(RunnerKind::Cpp, true, Some(0), "", "", expected,)
+                .is_err()
+        );
+    }
+
+    #[test]
     fn corpus_parser_accepts_verification_mode() {
         let path = std::env::temp_dir().join(format!(
             "golden-compare-verification-{}-{}.toml",
@@ -942,7 +1262,23 @@ path = "tests/unit_tests/assets/layoutish.riv"
 samples = [0.0]
 status = "exact"
 verification = "tolerant(0.25)"
+rust_execute_scripts = true
 features = []
+
+[[file]]
+id = "malformed"
+path = "tests/unit_tests/assets/malformed.riv"
+samples = [0.0]
+status = "exact"
+verification = "rejects-malformed"
+features = ["import-error:invalid-object"]
+
+[[file]]
+id = "scripted"
+path = "tests/unit_tests/assets/scripted.riv"
+samples = [0.0]
+status = "exact"
+features = ["scripted-runner-only", "scripted-status:exact"]
 "#,
         )
         .unwrap();
@@ -950,8 +1286,18 @@ features = []
         let entries = parse_corpus(&path).unwrap();
         std::fs::remove_file(&path).ok();
 
-        assert_eq!(entries.len(), 1);
+        assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].verification, VerificationMode::Tolerant(0.25));
+        assert!(entries[0].rust_execute_scripts);
+        assert!(entries[0].requires_scripted_runner());
+        assert!(entries[0].executes_scripts_in_rust());
+        assert!(!entries[1].rust_execute_scripts);
+        assert_eq!(entries[1].verification, VerificationMode::RejectsMalformed);
+        assert!(!entries[1].requires_scripted_runner());
+        assert!(!entries[1].executes_scripts_in_rust());
+        assert!(!entries[2].rust_execute_scripts);
+        assert!(entries[2].requires_scripted_runner());
+        assert!(entries[2].executes_scripts_in_rust());
     }
 
     fn f32_hex(values: &[f32]) -> String {
@@ -970,8 +1316,10 @@ fn run_stream(
     entry: &CorpusEntry,
     file: &Path,
     corpus_dir: &Path,
+    runner_kind: RunnerKind,
+    scripted_lane: bool,
 ) -> Result<String, String> {
-    let mut command = stream_command(runner, entry, file, corpus_dir);
+    let mut command = stream_command(runner, entry, file, corpus_dir, runner_kind, scripted_lane);
     let output = command
         .output()
         .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
@@ -995,14 +1343,121 @@ fn run_stream(
     Ok(stdout[stream_start..].to_owned())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RunnerKind {
+    Cpp,
+    Rust,
+}
+
+fn run_malformed_rejection(
+    runner: &Path,
+    entry: &CorpusEntry,
+    file: &Path,
+    corpus_dir: &Path,
+    runner_kind: RunnerKind,
+    expected_rust_error: &str,
+    scripted_lane: bool,
+) -> Result<(), String> {
+    let mut command = stream_command(runner, entry, file, corpus_dir, runner_kind, scripted_lane);
+    let output = command
+        .output()
+        .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    validate_malformed_rejection(
+        runner_kind,
+        output.status.success(),
+        output.status.code(),
+        &stdout,
+        &stderr,
+        expected_rust_error,
+    )
+    .map_err(|reason| {
+        format!(
+            "{} did not produce the expected malformed-import rejection: {reason}\n{}",
+            runner.display(),
+            stderr
+        )
+    })
+}
+
+fn validate_malformed_rejection(
+    runner_kind: RunnerKind,
+    success: bool,
+    exit_code: Option<i32>,
+    stdout: &str,
+    stderr: &str,
+    expected_rust_error: &str,
+) -> Result<(), String> {
+    if success {
+        return Err("runner succeeded".to_owned());
+    }
+    if exit_code != Some(1) {
+        return Err(match exit_code {
+            Some(code) => format!("runner exited with unexpected code {code}"),
+            None => "runner terminated without an exit code (for example, by signal)".to_owned(),
+        });
+    }
+    if stdout.contains("rive-golden-stream-v1\n") {
+        return Err("runner emitted a golden stream before failing".to_owned());
+    }
+
+    let matches_expected_import_failure = match runner_kind {
+        RunnerKind::Cpp => cpp_malformed_diagnostic_matches(stderr),
+        RunnerKind::Rust => rust_malformed_diagnostic_matches(stderr, expected_rust_error),
+    };
+    if !matches_expected_import_failure {
+        return Err("runner emitted a non-import failure diagnostic".to_owned());
+    }
+    Ok(())
+}
+
+fn cpp_malformed_diagnostic_matches(stderr: &str) -> bool {
+    const MARKER: &str = "bad riv file; import result=";
+    stderr.lines().any(|line| {
+        line.split_once(MARKER)
+            .and_then(|(_, result)| result.split_whitespace().next())
+            .is_some_and(|result| result == "2")
+    })
+}
+
+fn rust_malformed_diagnostic_matches(stderr: &str, expected_error: &str) -> bool {
+    stderr.contains("rust-golden-runner error:")
+        && stderr.contains("failed to import runtime file:")
+        && !expected_error.is_empty()
+        && normalize_import_error(stderr)
+            .to_ascii_lowercase()
+            .contains(&expected_error.to_ascii_lowercase())
+}
+
+fn normalize_import_error(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
 fn run_unsupported_diagnostic(
     runner: &Path,
     entry: &CorpusEntry,
     file: &Path,
     corpus_dir: &Path,
     expected_feature: &str,
+    scripted_lane: bool,
 ) -> Result<(), String> {
-    let mut command = stream_command(runner, entry, file, corpus_dir);
+    let mut command = stream_command(
+        runner,
+        entry,
+        file,
+        corpus_dir,
+        RunnerKind::Rust,
+        scripted_lane,
+    );
     let output = command
         .output()
         .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
@@ -1033,9 +1488,23 @@ fn run_unsupported_diagnostic(
     Ok(())
 }
 
-fn stream_command(runner: &Path, entry: &CorpusEntry, file: &Path, corpus_dir: &Path) -> Command {
+fn stream_command(
+    runner: &Path,
+    entry: &CorpusEntry,
+    file: &Path,
+    corpus_dir: &Path,
+    runner_kind: RunnerKind,
+    scripted_lane: bool,
+) -> Command {
     let mut command = Command::new(runner);
     command.arg("--file").arg(file);
+    // A scripted C++ runner always imports through WITH_RIVE_SCRIPTING, even
+    // for files without ScriptAsset objects. Mirror that build/runtime mode on
+    // the Rust side for the entire scripted lane. Per-entry flags only decide
+    // which files require the scripted lane when running the normal target.
+    if runner_kind == RunnerKind::Rust && (scripted_lane || entry.executes_scripts_in_rust()) {
+        command.arg("--execute-scripts");
+    }
     if let Some(artboard) = &entry.artboard {
         command.arg("--artboard").arg(artboard);
     }

@@ -4136,6 +4136,68 @@ fn cpp_probe_matches_rust_data_bind_context_source_paths_when_available() {
 }
 
 #[test]
+fn rust_imports_view_model_font_assets_as_a_distinct_runtime_type() {
+    let bytes = synthetic_runtime_file(6153, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_object_with_properties(bytes, "FontAsset", |bytes| {
+            push_string_property(bytes, "FontAsset", "name", "authored.ttf");
+            push_uint_property(bytes, "FontAsset", "assetId", 42);
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyAssetFont", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyAssetFont", "name", "font");
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceAssetFont", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceAssetFont",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceAssetFont", "propertyValue", 0);
+        });
+    });
+
+    let file = read_runtime_file(&bytes).expect("font view-model fixture imports");
+    let view_model = file.view_model(0).expect("root view model");
+    assert_eq!(
+        view_model.properties[0].type_name,
+        "ViewModelPropertyAssetFont"
+    );
+    let value = view_model.instances[0].values[0].object;
+    assert_eq!(value.type_name, "ViewModelInstanceAssetFont");
+    assert_eq!(
+        file.view_model_instance_value_data_type_for_object(value),
+        Some(RuntimeDataType::AssetFont)
+    );
+    assert_eq!(RuntimeDataType::AssetFont.as_cpp_u32(), 13);
+    assert_eq!(
+        file.view_model_instance_font_asset_index_for_object(value),
+        Some(0)
+    );
+    assert_eq!(
+        file.view_model_instance_asset_index_for_object(value),
+        None,
+        "font identities must not leak through the image-asset accessor"
+    );
+    assert!(matches!(
+        file.view_model_instance_source_data_value_for_object(value),
+        Some(RuntimeDataValue::AssetFont(0))
+    ));
+    assert_eq!(
+        file.resolved_file_asset_for_view_model_instance_asset_object(value)
+            .map(|asset| asset.type_name),
+        Some("FontAsset")
+    );
+}
+
+#[test]
 fn cpp_probe_matches_rust_view_model_instance_asset_snapshots_when_available() {
     let Some(probe) = probe_path() else {
         eprintln!(
@@ -6430,6 +6492,17 @@ fn compare_view_model_instance_value_runtime_result(
                 ));
             }
         }
+        RuntimeDataType::AssetFont => {
+            let rust_value = rust_file
+                .view_model_instance_font_asset_index_for_object(rust_value)
+                .ok_or_else(|| format!("{label}: Rust did not resolve font asset index"))?;
+            if cpp_runtime.asset_index != Some(rust_value) {
+                return Err(format!(
+                    "{label}: font asset index mismatch, C++ {:?}, Rust {rust_value}",
+                    cpp_runtime.asset_index
+                ));
+            }
+        }
         RuntimeDataType::Artboard => {
             let rust_value = rust_file
                 .view_model_instance_artboard_index_for_object(rust_value)
@@ -6528,6 +6601,7 @@ fn compare_view_model_instance_source_data_value_result(
         RuntimeDataValue::Trigger(rust_value)
         | RuntimeDataValue::SymbolListIndex(rust_value)
         | RuntimeDataValue::AssetImage(rust_value)
+        | RuntimeDataValue::AssetFont(rust_value)
         | RuntimeDataValue::Artboard(rust_value) => {
             if cpp_data_value.integer_value != Some(rust_value) {
                 return Err(format!(
@@ -7962,6 +8036,7 @@ fn compare_converter_output(
         | RuntimeConvertedDataValue::Trigger(value)
         | RuntimeConvertedDataValue::SymbolListIndex(value)
         | RuntimeConvertedDataValue::AssetImage(value)
+        | RuntimeConvertedDataValue::AssetFont(value)
         | RuntimeConvertedDataValue::Artboard(value) => assert_eq!(
             cpp_output.integer_value,
             Some(*value),
@@ -10054,7 +10129,7 @@ fn cpp_data_converter_lifecycle_methods_are_tracked_by_binary_import_model() {
         &mark_dirty,
         &[
             "if(m_parentDataBind!=nullptr){",
-            "m_parentDataBind->addDirt(ComponentDirt::Dependents|ComponentDirt::Bindings,false);",
+            "m_parentDataBind->addDirt(ComponentDirt::Dependents|(m_parentDataBind->targetOrigin()?ComponentDirt::BindingsTarget:ComponentDirt::Bindings),false);",
         ],
         "DataConverter::markConverterDirty changed; audit RuntimeFile::data_converter_mark_dirty_effect",
     );
@@ -10488,7 +10563,7 @@ fn cpp_data_bind_context_binding_methods_are_tracked_by_binary_import_model() {
             "else{",
             "unbind();",
             "else{",
-            "addDirt(ComponentDirt::Bindings,true);",
+            "addDirt(reconcileDirt(),true);",
             "if(m_dataConverter!=nullptr){",
             "m_dataConverter->bindFromContext(dataContext,this);",
         ],
@@ -10503,6 +10578,7 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
     let data_bind_header_path =
         reference_runtime_dir().join("include/rive/data_bind/data_bind.hpp");
     let source_path = reference_runtime_dir().join("src/data_bind/data_bind.cpp");
+    let core_source_path = reference_runtime_dir().join("src/core.cpp");
     let component_source_path = reference_runtime_dir().join("src/component.cpp");
     let artboard_source_path = reference_runtime_dir().join("src/artboard.cpp");
     let state_machine_instance_source_path =
@@ -10511,16 +10587,18 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
         || !component_dirt_path.exists()
         || !data_bind_header_path.exists()
         || !source_path.exists()
+        || !core_source_path.exists()
         || !component_source_path.exists()
         || !artboard_source_path.exists()
         || !state_machine_instance_source_path.exists()
     {
         eprintln!(
-            "skipping C++ data-bind flag audit; reference files not found at {}, {}, {}, {}, {}, {}, and {}; set RIVE_RUNTIME_DIR",
+            "skipping C++ data-bind flag audit; reference files not found at {}, {}, {}, {}, {}, {}, {}, and {}; set RIVE_RUNTIME_DIR",
             include_path.display(),
             component_dirt_path.display(),
             data_bind_header_path.display(),
             source_path.display(),
+            core_source_path.display(),
             component_source_path.display(),
             artboard_source_path.display(),
             state_machine_instance_source_path.display()
@@ -10570,6 +10648,7 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
             "LayoutStyle=1<<11,",
             "Bindings=1<<12,",
             "NSlicer=1<<13,",
+            "BindingsTarget=1<<13,",
             "ScriptUpdate=1<<14,",
             "Clipping=1<<15,",
             "Filthy=0xFFFE",
@@ -10589,6 +10668,7 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
             "InPersistingList=1<<2,",
             "SuppressDirt=1<<3,",
             "Observing=1<<4,",
+            "TargetOrigin=1<<5,",
         ],
         "DataBind internal flag layout changed; audit Rust data-bind runtime-state helpers",
     );
@@ -10783,9 +10863,22 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
             "if(toSource()&&m_target!=nullptr&&targetSupportsPush()){",
             "m_target->addPropertyObserver(this);",
             "setFlag(Flag::Observing,true);",
-            "addDirt(ComponentDirt::Bindings,true);",
+            "addDirt(reconcileDirt(),true);",
         ],
         "DataBind::bind changed; audit RuntimeFile::data_bind_bind_effect",
+    );
+
+    let reconcile_dirt = compact_cpp_function_body(&compact_source, "DataBind::reconcileDirt()")
+        .unwrap_or_else(|| {
+            panic!(
+                "missing DataBind::reconcileDirt in {}",
+                source_path.display()
+            )
+        });
+    assert_eq!(
+        reconcile_dirt,
+        "return(toTarget()?ComponentDirt::Bindings:ComponentDirt::None)|(toSource()?ComponentDirt::BindingsTarget:ComponentDirt::None);",
+        "DataBind::reconcileDirt changed; audit RuntimeFile::data_bind_reconcile_dirt"
     );
 
     let target = compact_cpp_function_body(&compact_source, "DataBind::target(Core*value)")
@@ -10834,6 +10927,14 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
         &[
             "if(hasFlag(Flag::SuppressDirt)||(m_Dirt&value)==value){",
             "return;",
+            "boolhasSource=enums::is_flag_set(value,ComponentDirt::Bindings);",
+            "boolhasTarget=enums::is_flag_set(value,ComponentDirt::BindingsTarget);",
+            "if(hasSource&&hasTarget){",
+            "setFlag(Flag::TargetOrigin,!sourceToTargetRunsFirst());",
+            "elseif(hasTarget){",
+            "setFlag(Flag::TargetOrigin,true);",
+            "elseif(hasSource){",
+            "setFlag(Flag::TargetOrigin,false);",
             "m_Dirt|=value;",
             "if(enums::is_flag_set(m_Dirt,ComponentDirt::Dependents)&&m_ContextValue!=nullptr){",
             "m_ContextValue->invalidate();",
@@ -10841,6 +10942,31 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
             "m_container->addDirtyDataBind(this);",
         ],
         "DataBind::addDirt changed; audit RuntimeFile::data_bind_add_dirt_effect",
+    );
+
+    let core_source = std::fs::read_to_string(&core_source_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", core_source_path.display()));
+    let compact_core_source = compact_cpp_source(&core_source);
+    let notify_property_changed = compact_cpp_function_body(
+        &compact_core_source,
+        "Core::notifyPropertyChanged(uint16_tpropertyKey)",
+    )
+    .unwrap_or_else(|| {
+        panic!(
+            "missing Core::notifyPropertyChanged in {}",
+            core_source_path.display()
+        )
+    });
+    assert_compact_contains_in_order(
+        &notify_property_changed,
+        &[
+            "if(m_firstObserver==nullptr){",
+            "return;",
+            "for(DataBind*o=m_firstObserver;o!=nullptr;o=o->nextObserver()){",
+            "if(o->propertyKey()==propertyKey){",
+            "o->addDirt(ComponentDirt::BindingsTarget,false);",
+        ],
+        "Core::notifyPropertyChanged changed; audit target-origin DataBind dirt modeling",
     );
 
     let initialize = compact_cpp_function_body(&compact_source, "DataBind::initialize()")
@@ -11134,12 +11260,13 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
             "autod=dataBind->dirt();",
             "if((d&ComponentDirt::Dependents)==ComponentDirt::Dependents){",
             "dataBind->updateDependents();",
-            "if(applyTargetToSource&&!dataBind->sourceToTargetRunsFirst()){",
+            "boolwantsTargetToSource=applyTargetToSource&&(dataBind->inPersistingList()||(d&ComponentDirt::BindingsTarget)==ComponentDirt::BindingsTarget);",
+            "if(wantsTargetToSource&&!dataBind->sourceToTargetRunsFirst()){",
             "dataBind->updateSourceBinding();",
             "if(d!=ComponentDirt::None){",
             "dataBind->dirt(ComponentDirt::None);",
             "dataBind->update(d);",
-            "if(applyTargetToSource&&dataBind->sourceToTargetRunsFirst()){",
+            "if(wantsTargetToSource&&dataBind->sourceToTargetRunsFirst()){",
             "dataBind->updateSourceBinding();",
         ],
         "DataBindContainer::updateDataBind order changed; audit RuntimeFile::data_bind_update_effect",
@@ -11872,6 +11999,7 @@ fn cpp_core_field_type_ids_match_runtime_header_contract() {
     let mut ids = BTreeMap::new();
     for (class_name, header_name) in [
         ("CoreUintType", "core_uint_type.hpp"),
+        ("CoreUint64Type", "core_uint64_type.hpp"),
         ("CoreStringType", "core_string_type.hpp"),
         ("CoreBytesType", "core_bytes_type.hpp"),
         ("CoreDoubleType", "core_double_type.hpp"),
@@ -11883,11 +12011,16 @@ fn cpp_core_field_type_ids_match_runtime_header_contract() {
     }
 
     assert_eq!(ids["CoreUintType"], 0);
+    assert_eq!(ids["CoreUint64Type"], 0);
     assert_eq!(ids["CoreStringType"], 1);
     assert_eq!(ids["CoreBytesType"], 1);
     assert_eq!(ids["CoreDoubleType"], 2);
     assert_eq!(ids["CoreColorType"], 3);
     assert_eq!(ids["CoreBoolType"], 4);
+    assert_eq!(
+        ids["CoreUintType"], ids["CoreUint64Type"],
+        "uint32 and uint64 must share the runtime-header field id"
+    );
     assert_eq!(
         ids["CoreStringType"], ids["CoreBytesType"],
         "C++ runtime header only stores one two-bit field id for string/bytes payloads"
@@ -12126,6 +12259,7 @@ fn cpp_file_read_loop_matches_import_stack_model() {
         "StateMachineListenerSingle::typeKey",
         "StateTransition::typeKey",
         "TransitionArtboardCondition::typeKey",
+        "TransitionFocusCondition::typeKey",
         "TransitionViewModelCondition::typeKey",
         "ViewModel::typeKey",
         "ViewModelInstance::typeKey",
@@ -12177,6 +12311,11 @@ fn cpp_core_field_deserializers_match_binary_reader_model() {
             "CoreUintType",
             "core_uint_type.cpp",
             "returnreader.readVarUintAs<unsignedint>();",
+        ),
+        (
+            "CoreUint64Type",
+            "core_uint64_type.cpp",
+            "returnreader.readVarUint64();",
         ),
         (
             "CoreStringType",
@@ -12838,7 +12977,9 @@ fn cpp_read_runtime_object_fallback_switch_matches_skip_model() {
     assert_compact_contains_in_order(
         &body,
         &[
-            "caseCoreUintType::id:CoreUintType::deserialize(reader);break;",
+            "caseCoreUintType::id:",
+            "reader.readVarUint64();",
+            "break;",
             "caseCoreStringType::id:CoreStringType::deserialize(reader);break;",
             "caseCoreDoubleType::id:CoreDoubleType::deserialize(reader);break;",
             "caseCoreColorType::id:CoreColorType::deserialize(reader);break;",

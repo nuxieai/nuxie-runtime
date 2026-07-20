@@ -3,8 +3,10 @@
 use crate::{
     atomic_pipeline::image_sampler,
     gpu::PatchVertex,
-    tessellator::{TessellationFlushResources, UploadSlice},
+    storage_texture::{self, StorageBufferStructure, StorageResource},
+    tessellator::TessellationFlushResources,
     work_metrics::{CountedDeviceExt, CountedRenderPass},
+    RendererCapabilities,
 };
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
 
@@ -90,25 +92,28 @@ pub(crate) struct PreparedPathResources {
 }
 
 pub(crate) struct UploadedPathPaints {
-    paint_buffer: UploadSlice,
-    paint_aux_buffer: UploadSlice,
+    paint: StorageResource,
+    paint_aux: StorageResource,
 }
 
 impl UploadedPathPaints {
-    pub(crate) fn new(paint_buffer: UploadSlice, paint_aux_buffer: UploadSlice) -> Self {
-        Self {
-            paint_buffer,
-            paint_aux_buffer,
-        }
+    pub(crate) fn new(paint: StorageResource, paint_aux: StorageResource) -> Self {
+        Self { paint, paint_aux }
     }
 }
 
 impl PathPipeline {
-    pub(crate) fn new(device: &wgpu::Device) -> Self {
+    pub(crate) fn new(device: &wgpu::Device, capabilities: RendererCapabilities) -> Self {
+        let polyfill = capabilities.polyfill_vertex_storage_buffers;
         let no_clip_vertex = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("nuxie-msaa-path-vertex"),
             source: wgpu::ShaderSource::Wgsl(
-                include_str!("generated/draw_msaa_path.webgpu_noclipdistance_vert.wgsl").into(),
+                if polyfill {
+                    include_str!("generated/draw_msaa_path.webgpu_nossbo_noclipdistance_vert.wgsl")
+                } else {
+                    include_str!("generated/draw_msaa_path.webgpu_noclipdistance_vert.wgsl")
+                }
+                .into(),
             ),
         });
         let clip_rect_vertex = device
@@ -118,7 +123,12 @@ impl PathPipeline {
                 device.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: Some("nuxie-msaa-path-clip-rect-vertex"),
                     source: wgpu::ShaderSource::Wgsl(
-                        include_str!("generated/draw_msaa_path.webgpu_vert.wgsl").into(),
+                        if polyfill {
+                            include_str!("generated/draw_msaa_path.webgpu_nossbo_vert.wgsl")
+                        } else {
+                            include_str!("generated/draw_msaa_path.webgpu_vert.wgsl")
+                        }
+                        .into(),
                     ),
                 })
             });
@@ -134,7 +144,7 @@ impl PathPipeline {
                 include_str!("generated/draw_msaa_path.webgpu_frag.wgsl").into(),
             ),
         });
-        let flush_layout_entries = msaa_flush_layout_entries();
+        let flush_layout_entries = msaa_flush_layout_entries(polyfill);
         let flush_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-msaa-path-flush-layout"),
             entries: &flush_layout_entries,
@@ -725,8 +735,8 @@ impl PathPipeline {
             label: Some("nuxie-msaa-path-dummy-image-group"),
             layout: &image_layout,
             entries: &[
-                binding(12, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(14, wgpu::BindingResource::Sampler(&image_samplers[0])),
+                binding(11, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(13, wgpu::BindingResource::Sampler(&image_samplers[0])),
             ],
         });
         let linear_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -739,8 +749,8 @@ impl PathPipeline {
             label: Some("nuxie-msaa-path-sampler-group"),
             layout: &sampler_layout,
             entries: &[
+                binding(8, wgpu::BindingResource::Sampler(&linear_sampler)),
                 binding(9, wgpu::BindingResource::Sampler(&linear_sampler)),
-                binding(10, wgpu::BindingResource::Sampler(&linear_sampler)),
             ],
         });
         Self {
@@ -833,18 +843,18 @@ impl PathPipeline {
             layout: &self.flush_layout,
             entries: &[
                 binding(0, flush_resources.uniform_binding()),
-                binding(3, flush_resources.path_binding()),
-                binding(4, uploaded_paints.paint_buffer.binding()),
-                binding(5, uploaded_paints.paint_aux_buffer.binding()),
-                binding(6, flush_resources.contour_binding()),
-                binding(8, wgpu::BindingResource::TextureView(tessellation_view)),
+                binding(2, flush_resources.path_binding()),
+                binding(3, uploaded_paints.paint.binding()),
+                binding(4, uploaded_paints.paint_aux.binding()),
+                binding(5, flush_resources.contour_binding()),
+                binding(7, wgpu::BindingResource::TextureView(tessellation_view)),
                 binding(
-                    9,
+                    8,
                     wgpu::BindingResource::TextureView(gradient.unwrap_or(&self.dummy_view)),
                 ),
-                binding(10, wgpu::BindingResource::TextureView(feather_lut)),
+                binding(9, wgpu::BindingResource::TextureView(feather_lut)),
                 binding(
-                    13,
+                    12,
                     wgpu::BindingResource::TextureView(destination.unwrap_or(&self.dummy_view)),
                 ),
             ],
@@ -868,9 +878,9 @@ impl PathPipeline {
                     label: Some("nuxie-msaa-path-image-group"),
                     layout: &self.image_layout,
                     entries: &[
-                        binding(12, wgpu::BindingResource::TextureView(view)),
+                        binding(11, wgpu::BindingResource::TextureView(view)),
                         binding(
-                            14,
+                            13,
                             wgpu::BindingResource::Sampler(
                                 &self.image_samplers[sampler.as_key() as usize],
                             ),
@@ -894,30 +904,30 @@ fn binding(binding: u32, resource: wgpu::BindingResource<'_>) -> wgpu::BindGroup
     wgpu::BindGroupEntry { binding, resource }
 }
 
-fn msaa_flush_layout_entries() -> [wgpu::BindGroupLayoutEntry; 9] {
+fn msaa_flush_layout_entries(polyfill: bool) -> [wgpu::BindGroupLayoutEntry; 9] {
     let vertex = wgpu::ShaderStages::VERTEX;
     let fragment = wgpu::ShaderStages::FRAGMENT;
     let vertex_fragment = wgpu::ShaderStages::VERTEX_FRAGMENT;
 
     [
         uniform_entry(0, vertex_fragment),
-        storage_entry(3, vertex),
-        storage_entry(4, vertex),
-        storage_entry(5, vertex),
-        storage_entry(6, vertex),
-        texture_entry(8, wgpu::TextureSampleType::Uint, vertex),
+        storage_texture::layout_entry(2, StorageBufferStructure::Uint32x4, vertex, polyfill),
+        storage_texture::layout_entry(3, StorageBufferStructure::Uint32x2, vertex, polyfill),
+        storage_texture::layout_entry(4, StorageBufferStructure::Float32x4, vertex, polyfill),
+        storage_texture::layout_entry(5, StorageBufferStructure::Uint32x4, vertex, polyfill),
+        texture_entry(7, wgpu::TextureSampleType::Uint, vertex),
         texture_entry(
-            9,
+            8,
             wgpu::TextureSampleType::Float { filterable: true },
             fragment,
         ),
         texture_entry(
-            10,
+            9,
             wgpu::TextureSampleType::Float { filterable: true },
             vertex_fragment,
         ),
         texture_entry(
-            13,
+            12,
             wgpu::TextureSampleType::Float { filterable: false },
             fragment,
         ),
@@ -927,18 +937,18 @@ fn msaa_flush_layout_entries() -> [wgpu::BindGroupLayoutEntry; 9] {
 fn msaa_image_layout_entries() -> [wgpu::BindGroupLayoutEntry; 2] {
     [
         texture_entry(
-            12,
+            11,
             wgpu::TextureSampleType::Float { filterable: true },
             wgpu::ShaderStages::FRAGMENT,
         ),
-        sampler_entry(14, wgpu::ShaderStages::FRAGMENT),
+        sampler_entry(13, wgpu::ShaderStages::FRAGMENT),
     ]
 }
 
 fn msaa_sampler_layout_entries() -> [wgpu::BindGroupLayoutEntry; 2] {
     [
-        sampler_entry(9, wgpu::ShaderStages::FRAGMENT),
-        sampler_entry(10, wgpu::ShaderStages::VERTEX_FRAGMENT),
+        sampler_entry(8, wgpu::ShaderStages::FRAGMENT),
+        sampler_entry(9, wgpu::ShaderStages::VERTEX_FRAGMENT),
     ]
 }
 
@@ -948,19 +958,6 @@ fn uniform_entry(binding: u32, visibility: wgpu::ShaderStages) -> wgpu::BindGrou
         visibility,
         ty: wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        },
-        count: None,
-    }
-}
-
-fn storage_entry(binding: u32, visibility: wgpu::ShaderStages) -> wgpu::BindGroupLayoutEntry {
-    wgpu::BindGroupLayoutEntry {
-        binding,
-        visibility,
-        ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Storage { read_only: true },
             has_dynamic_offset: false,
             min_binding_size: None,
         },
@@ -1014,31 +1011,66 @@ mod tests {
         use wgpu::ShaderStages as Stages;
 
         assert_binding_stages(
-            &msaa_flush_layout_entries(),
+            &msaa_flush_layout_entries(false),
             &[
                 (0, Stages::VERTEX_FRAGMENT),
+                (2, Stages::VERTEX),
                 (3, Stages::VERTEX),
                 (4, Stages::VERTEX),
                 (5, Stages::VERTEX),
-                (6, Stages::VERTEX),
-                (8, Stages::VERTEX),
-                (9, Stages::FRAGMENT),
-                (10, Stages::VERTEX_FRAGMENT),
-                (13, Stages::FRAGMENT),
+                (7, Stages::VERTEX),
+                (8, Stages::FRAGMENT),
+                (9, Stages::VERTEX_FRAGMENT),
+                (12, Stages::FRAGMENT),
             ],
         );
         assert_binding_stages(
             &msaa_image_layout_entries(),
-            &[(12, Stages::FRAGMENT), (14, Stages::FRAGMENT)],
+            &[(11, Stages::FRAGMENT), (13, Stages::FRAGMENT)],
         );
         assert_binding_stages(
             &msaa_sampler_layout_entries(),
-            &[(9, Stages::FRAGMENT), (10, Stages::VERTEX_FRAGMENT)],
+            &[(8, Stages::FRAGMENT), (9, Stages::VERTEX_FRAGMENT)],
         );
     }
 
     #[test]
     fn fixed_color_paths_enable_cpp_dither_shader_feature() {
         assert_eq!(FIXED_COLOR_FRAGMENT_CONSTANTS, [("2", 0.0), ("7", 1.0)]);
+    }
+
+    #[test]
+    fn compatibility_layout_replaces_all_four_vertex_storage_buffers() {
+        let entries = msaa_flush_layout_entries(true);
+        for entry in &entries[1..=4] {
+            assert!(matches!(entry.ty, wgpu::BindingType::Texture { .. }));
+        }
+        assert!(matches!(
+            entries[1].ty,
+            wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Uint,
+                ..
+            }
+        ));
+        assert!(matches!(
+            entries[3].ty,
+            wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn compatibility_path_variants_have_no_storage_globals() {
+        for source in [
+            include_str!("generated/draw_msaa_path.webgpu_nossbo_vert.wgsl"),
+            include_str!("generated/draw_msaa_path.webgpu_nossbo_noclipdistance_vert.wgsl"),
+        ] {
+            assert!(!source.contains("var<storage>"));
+            for binding in [2, 3, 4, 5] {
+                assert!(source.contains(&format!("@binding({binding})")));
+            }
+        }
     }
 }

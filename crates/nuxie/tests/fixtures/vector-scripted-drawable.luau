@@ -17,6 +17,7 @@ return function(_context)
         end,
         advance = function(self, _seconds)
             self.frames += 1
+            self.offset = protocolBoot * 100 + self.frames * 3
             return true
         end,
         update = function(self)

@@ -268,7 +268,7 @@ fn authored_vector_script_uses_one_file_program_and_fresh_occurrence_tables() ->
         .unwrap_or_default();
     assert!(
         advanced_second.contains("transform matrix=[1,0,0,1,103,2]"),
-        "factory-bearing advance executes advance/update before draw: {advanced_second}"
+        "factory-bearing advance mutates draw state before the invalidated paint is rendered: {advanced_second}"
     );
 
     let mut different_factory = RecordingFactory::new();

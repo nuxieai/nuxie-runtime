@@ -858,6 +858,18 @@ impl WgpuFactory {
         (self.width, self.height)
     }
 
+    /// Returns whether this renderer domain has observed a terminal device-loss
+    /// notification. Device health is shared by every session factory derived
+    /// from the same base factory and remains sticky for that GPU domain.
+    /// Hosts can use this read-only probe to replace rebuildable presentation
+    /// resources without exposing a way to clear or forge device health.
+    pub fn device_is_lost(&self) -> bool {
+        self.context
+            .device_health
+            .current()
+            .is_some_and(|failure| failure.kind == WgpuDeviceFailureKind::DeviceLost)
+    }
+
     pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
         validate_texture_extent(
             "render target",
@@ -13009,6 +13021,24 @@ mod tests {
         second.resize(20, 10).unwrap();
         assert_eq!(first.dimensions(), (8, 8));
         assert_eq!(second.dimensions(), (20, 10));
+    }
+
+    #[test]
+    fn device_loss_probe_is_sticky_across_one_shared_renderer_domain_only() {
+        let first = WgpuFactory::new_with_mode(8, 8, RenderMode::Msaa).unwrap();
+        let second = first.new_session_factory(16, 12, RenderMode::Msaa).unwrap();
+        assert!(!first.device_is_lost());
+        assert!(!second.device_is_lost());
+
+        first.context.device_health.record(WgpuDeviceFailure {
+            kind: WgpuDeviceFailureKind::DeviceLost,
+            message: "injected device loss".to_owned(),
+        });
+        assert!(first.device_is_lost());
+        assert!(second.device_is_lost());
+
+        let replacement = WgpuFactory::new_with_mode(1, 1, RenderMode::Msaa).unwrap();
+        assert!(!replacement.device_is_lost());
     }
 
     #[test]

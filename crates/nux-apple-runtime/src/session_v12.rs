@@ -2557,6 +2557,7 @@ mod configured_session_seam {
             player_name: descriptor.player_name,
         };
         let mut factory = state.make_session_factory()?;
+        let renderer_generation = state.gpu_generation;
         let (session, creation) = core::FlowSession::create_with_factory(
             Arc::clone(&state.file),
             config,
@@ -2579,10 +2580,15 @@ mod configured_session_seam {
                 fatal_diagnostic: None,
                 flow_session: session,
                 factory,
+                renderer_generation,
                 render_cache: None,
                 legacy_timestamp_seconds: 0.0,
                 #[cfg(test)]
                 render_attempts: 0,
+                #[cfg(test)]
+                injected_device_loss: false,
+                #[cfg(test)]
+                panic_on_next_configured_operation: false,
                 attachment: None,
             },
         );
@@ -2623,6 +2629,13 @@ mod configured_session_seam {
         operation: OwnedSessionOperation,
     ) -> Result<FlowSessionResultHandle, RuntimeFailure> {
         state.require_live_session(session_id)?;
+        #[cfg(test)]
+        {
+            let session = state.session_mut(session_id)?;
+            if std::mem::take(&mut session.panic_on_next_configured_operation) {
+                panic!("deliberate configured-session operation panic probe");
+            }
+        }
         if let OwnedSessionOperation::Advance(advance) = operation {
             return perform_advance_on_worker(state, session_id, advance);
         }
@@ -2726,17 +2739,16 @@ mod configured_session_seam {
         };
         let session = state.session_mut(session_id)?;
         let preflight_disposition = if advance.render {
-            let attachment = session
-                .attachment
-                .as_ref()
-                .ok_or_else(|| RuntimeFailure::surface("surface is not attached"))?;
-            attachment
-                .surface
-                .preflight_present(&session.factory, advance.drawable_identity != 0)
-                .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?
+            session.preflight_present(advance.drawable_identity != 0)?
         } else {
             None
         };
+        if matches!(preflight_disposition, Some(SurfaceDisposition::DeviceLost)) {
+            let mut result = FlowSessionResultHandle::empty_success();
+            result.surface_disposition = NUX_SURFACE_DISPOSITION_DEVICE_LOST;
+            result.is_settled = session.flow_session.is_settled();
+            return Ok(result);
+        }
         let mut core_result = session
             .flow_session
             .perform_with_factory(
@@ -6826,6 +6838,247 @@ mod tests {
         result.outputs[1].sequence = 2;
         result.outputs[1].cycle = 1;
         assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn exported_configured_operation_catches_a_worker_panic_and_isolates_its_session() {
+        let worker = match RuntimeWorker::spawn(text_run_apple_seam_artifact()) {
+            Ok(worker) => worker,
+            Err(_) => panic!("import configured-session panic fixture"),
+        };
+        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle {
+            worker: Arc::clone(&worker),
+        }))
+        .cast::<NuxFlowRuntimeContext>();
+        let descriptor = configured_descriptor();
+
+        let create_session = || {
+            let mut session = ptr::null_mut();
+            let mut creation = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_create_configured(
+                        context,
+                        &descriptor,
+                        &mut session,
+                        &mut creation,
+                    )
+                },
+                NuxStatus::Ok
+            );
+            assert!(!session.is_null());
+            assert_eq!(
+                unsafe { nux_flow_session_result_status(creation) },
+                NuxStatus::Ok
+            );
+            unsafe { nux_flow_session_result_free(creation) };
+            session
+        };
+        let affected = create_session();
+        let sibling = create_session();
+        let affected_handle = unsafe { &*affected.cast::<FlowRenderSessionHandle>() };
+        let affected_id = affected_handle.token.id;
+        affected_handle
+            .token
+            .worker
+            .call(Some(affected_id), move |state| {
+                let session = state.session_mut(affected_id)?;
+                session.panic_on_next_configured_operation = true;
+                Ok::<(), RuntimeFailure>(())
+            })
+            .expect("worker accepts the test-only panic seam")
+            .expect("affected session remains live before the panic");
+
+        let advance = NuxFlowAdvanceOperation {
+            struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+            timestamp_seconds: 0.25,
+            delta_seconds: 0.25,
+            render: 0,
+            apple_drawable: ptr::null_mut(),
+            completion_context: ptr::null_mut(),
+            completion_callback: None,
+        };
+        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+        request.advance = &advance;
+
+        let mut panic_result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_flow_render_session_perform(affected, &request, &mut panic_result) },
+            NuxStatus::RuntimeError
+        );
+        assert!(!panic_result.is_null());
+        assert_eq!(
+            unsafe { nux_flow_session_result_surface_disposition(panic_result) },
+            NUX_SURFACE_DISPOSITION_FATAL
+        );
+        assert_eq!(
+            unsafe { nux_flow_session_result_diagnostic_count(panic_result) },
+            1
+        );
+        let mut diagnostic = NuxDiagnosticView::default();
+        assert_eq!(
+            unsafe { nux_flow_session_result_diagnostic_at(panic_result, 0, &mut diagnostic) },
+            NuxStatus::Ok
+        );
+        assert_eq!(diagnostic.severity, NUX_DIAGNOSTIC_SEVERITY_FATAL);
+        assert_eq!(
+            copied_byte_view(diagnostic.code),
+            diagnostic_code_for_status(NuxStatus::RuntimeError)
+        );
+        assert_eq!(
+            copied_byte_view(diagnostic.message),
+            PANIC_DIAGNOSTIC.as_bytes()
+        );
+        unsafe { nux_flow_session_result_free(panic_result) };
+
+        let mut terminal_retry = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_flow_render_session_perform(affected, &request, &mut terminal_retry) },
+            NuxStatus::RuntimeError
+        );
+        let mut terminal_diagnostic = NuxDiagnosticView::default();
+        assert_eq!(
+            unsafe {
+                nux_flow_session_result_diagnostic_at(terminal_retry, 0, &mut terminal_diagnostic)
+            },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            copied_byte_view(terminal_diagnostic.message),
+            PANIC_DIAGNOSTIC.as_bytes()
+        );
+        unsafe { nux_flow_session_result_free(terminal_retry) };
+
+        let mut sibling_result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_flow_render_session_perform(sibling, &request, &mut sibling_result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_flow_session_result_status(sibling_result) },
+            NuxStatus::Ok
+        );
+        assert!(
+            (0..unsafe { nux_flow_session_result_output_count(sibling_result) })
+                .map(|index| public_output_at(sibling_result, index))
+                .any(|output| output.kind == NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED),
+            "the sibling must complete a real configured advance"
+        );
+
+        unsafe {
+            nux_flow_session_result_free(sibling_result);
+            nux_flow_render_session_free(sibling);
+            nux_flow_render_session_free(affected);
+            nux_flow_runtime_context_free(context);
+        }
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn configured_device_loss_preflight_does_not_advance_or_emit_outputs() {
+        let worker = match RuntimeWorker::spawn(text_run_apple_seam_artifact()) {
+            Ok(worker) => worker,
+            Err(_) => panic!("import configured-session device-loss fixture"),
+        };
+        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle {
+            worker: Arc::clone(&worker),
+        }))
+        .cast::<NuxFlowRuntimeContext>();
+        let descriptor = configured_descriptor();
+        let mut session = ptr::null_mut();
+        let mut creation = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_flow_render_session_create_configured(
+                    context,
+                    &descriptor,
+                    &mut session,
+                    &mut creation,
+                )
+            },
+            NuxStatus::Ok
+        );
+        unsafe { nux_flow_session_result_free(creation) };
+
+        let handle = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+        let session_id = handle.token.id;
+        handle
+            .token
+            .worker
+            .call(Some(session_id), move |state| {
+                state.attach_surface(session_id, 8, 8)?;
+                let session = state.session_mut(session_id)?;
+                session.injected_device_loss = true;
+                Ok::<(), RuntimeFailure>(())
+            })
+            .expect("worker accepts the test-only device-loss seam")
+            .expect("configured session remains live before loss");
+
+        let advance = NuxFlowAdvanceOperation {
+            struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+            timestamp_seconds: 0.25,
+            delta_seconds: 0.25,
+            render: 1,
+            apple_drawable: ptr::null_mut(),
+            completion_context: ptr::null_mut(),
+            completion_callback: None,
+        };
+        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+        request.advance = &advance;
+        let mut lost_result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_flow_render_session_perform(session, &request, &mut lost_result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_flow_session_result_surface_disposition(lost_result) },
+            NUX_SURFACE_DISPOSITION_DEVICE_LOST
+        );
+        assert_eq!(
+            unsafe { nux_flow_session_result_output_count(lost_result) },
+            0,
+            "device loss must be reported before the logical advance commits"
+        );
+        assert!(!unsafe { nux_flow_session_result_is_dirty(lost_result) });
+        unsafe { nux_flow_session_result_free(lost_result) };
+
+        handle
+            .token
+            .worker
+            .call(Some(session_id), move |state| {
+                let session = state.session_mut(session_id)?;
+                assert_eq!(session.legacy_timestamp_seconds, 0.0);
+                assert!(session.injected_device_loss);
+                assert!(!session.is_fatal);
+                session.injected_device_loss = false;
+                Ok::<(), RuntimeFailure>(())
+            })
+            .expect("worker inspects configured device-loss preflight")
+            .expect("device loss leaves the configured session retryable");
+
+        let retry = NuxFlowAdvanceOperation {
+            render: 0,
+            ..advance
+        };
+        request.advance = &retry;
+        let mut retry_result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_flow_render_session_perform(session, &request, &mut retry_result) },
+            NuxStatus::Ok
+        );
+        let runtime_advanced = (0..unsafe { nux_flow_session_result_output_count(retry_result) })
+            .map(|index| public_output_at(retry_result, index))
+            .find(|output| output.kind == NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED)
+            .expect("the retry performs the first logical advance");
+        assert_eq!(runtime_advanced.sequence, 1);
+        assert_eq!(runtime_advanced.cycle, 1);
+
+        unsafe {
+            nux_flow_session_result_free(retry_result);
+            nux_flow_render_session_free(session);
+            nux_flow_runtime_context_free(context);
+        }
     }
 
     #[cfg(feature = "apple-product")]

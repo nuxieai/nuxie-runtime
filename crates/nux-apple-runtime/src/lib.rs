@@ -418,6 +418,7 @@ struct WorkerState {
     owner_thread_id: ThreadId,
     file: Arc<File>,
     shared_gpu_factory: Option<WgpuFactory>,
+    gpu_generation: u64,
     sessions: HashMap<SessionId, SessionState>,
     next_session_id: SessionId,
     next_surface_id: SurfaceId,
@@ -431,10 +432,15 @@ struct SessionState {
     // A stable address is part of the script renderer-domain contract. The
     // factory belongs to the logical session, not to its optional surface.
     factory: Box<WgpuFactory>,
+    renderer_generation: u64,
     render_cache: Option<ArtboardRenderCache>,
     legacy_timestamp_seconds: f64,
     #[cfg(test)]
     render_attempts: usize,
+    #[cfg(test)]
+    injected_device_loss: bool,
+    #[cfg(test)]
+    panic_on_next_configured_operation: bool,
     attachment: Option<SurfaceState>,
 }
 
@@ -449,6 +455,32 @@ impl SessionState {
     fn terminalize(&mut self, diagnostic: impl Into<String>) {
         self.is_fatal = true;
         self.fatal_diagnostic = Some(diagnostic.into());
+    }
+
+    fn preflight_present(
+        &self,
+        drawable_available: bool,
+    ) -> Result<Option<SurfaceDisposition>, RuntimeFailure> {
+        let attachment = self
+            .attachment
+            .as_ref()
+            .ok_or_else(|| RuntimeFailure::surface("surface is not attached"))?;
+        #[cfg(test)]
+        if self.injected_device_loss {
+            return Ok(Some(SurfaceDisposition::DeviceLost));
+        }
+        attachment
+            .surface
+            .preflight_present(&self.factory, drawable_available)
+            .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))
+    }
+
+    fn requires_device_recovery(&self) -> bool {
+        #[cfg(test)]
+        if self.injected_device_loss {
+            return true;
+        }
+        self.factory.device_is_lost()
     }
 }
 
@@ -668,6 +700,7 @@ impl WorkerState {
             owner_thread_id: thread::current().id(),
             file: Arc::new(file),
             shared_gpu_factory: None,
+            gpu_generation: 0,
             sessions: HashMap::new(),
             next_session_id: 1,
             next_surface_id: 1,
@@ -698,6 +731,7 @@ impl WorkerState {
         state_machine_name: Option<String>,
     ) -> Result<SessionId, RuntimeFailure> {
         let mut factory = self.make_session_factory()?;
+        let renderer_generation = self.gpu_generation;
         let (flow_session, _) = FlowSession::create_with_factory(
             Arc::clone(&self.file),
             FlowSessionConfig {
@@ -716,10 +750,15 @@ impl WorkerState {
                 fatal_diagnostic: None,
                 flow_session,
                 factory,
+                renderer_generation,
                 render_cache: Some(render_cache),
                 legacy_timestamp_seconds: 0.0,
                 #[cfg(test)]
                 render_attempts: 0,
+                #[cfg(test)]
+                injected_device_loss: false,
+                #[cfg(test)]
+                panic_on_next_configured_operation: false,
                 attachment: None,
             },
         );
@@ -754,10 +793,14 @@ impl WorkerState {
 
     fn make_session_factory(&mut self) -> Result<Box<WgpuFactory>, RuntimeFailure> {
         if self.shared_gpu_factory.is_none() {
-            self.shared_gpu_factory = Some(
-                WgpuFactory::new_with_mode(1, 1, RenderMode::Msaa)
-                    .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?,
-            );
+            let factory = WgpuFactory::new_with_mode(1, 1, RenderMode::Msaa)
+                .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?;
+            let generation = self
+                .gpu_generation
+                .checked_add(1)
+                .ok_or_else(|| RuntimeFailure::surface("GPU generation space is exhausted"))?;
+            self.shared_gpu_factory = Some(factory);
+            self.gpu_generation = generation;
         }
         let Some(factory) = self.shared_gpu_factory.as_ref() else {
             return Err(RuntimeFailure::surface(
@@ -804,6 +847,106 @@ impl WorkerState {
             .filter(|attachment| attachment.id == surface_id)
             .ok_or_else(|| RuntimeFailure::surface("surface is detached"))?;
         Ok((session.factory.as_mut(), attachment))
+    }
+
+    fn reattach_surface(
+        &mut self,
+        session_id: SessionId,
+        surface_id: SurfaceId,
+        width: u32,
+        height: u32,
+    ) -> Result<SurfaceDisposition, RuntimeFailure> {
+        self.require_live_session(session_id)?;
+        let session = self.session(session_id)?;
+        if session
+            .attachment
+            .as_ref()
+            .is_none_or(|attachment| attachment.id != surface_id)
+        {
+            return Err(RuntimeFailure::surface("surface is detached"));
+        }
+        if !session.requires_device_recovery() {
+            let (factory, attachment) = self.session_surface_mut(session_id, surface_id)?;
+            return attachment
+                .surface
+                .reattach(factory, width, height)
+                .map_err(|error| RuntimeFailure::surface(format!("{error:#}")));
+        }
+
+        // A real device-loss notification is shared by the base factory and
+        // all derived session factories. The test-only loss seam is scoped to
+        // one session, but still forces the same base-domain replacement so it
+        // proves the production transaction without exposing a fault control.
+        #[cfg(test)]
+        let force_base_replacement = session.injected_device_loss;
+        #[cfg(not(test))]
+        let force_base_replacement = false;
+        let replace_base = force_base_replacement
+            || self
+                .shared_gpu_factory
+                .as_ref()
+                .is_none_or(WgpuFactory::device_is_lost);
+        let candidate_base = if replace_base {
+            Some(
+                WgpuFactory::new_with_mode(1, 1, RenderMode::Msaa)
+                    .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?,
+            )
+        } else {
+            None
+        };
+        let base = candidate_base
+            .as_ref()
+            .or(self.shared_gpu_factory.as_ref())
+            .ok_or_else(|| {
+                RuntimeFailure::surface("shared GPU factory recovery produced no factory")
+            })?;
+        let mut candidate_factory = base
+            .new_session_factory(width.max(1), height.max(1), RenderMode::Msaa)
+            .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?;
+        let candidate_surface = AppleSurface::attach(&mut candidate_factory, width, height)
+            .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?;
+        let candidate_generation = if candidate_base.is_some() {
+            self.gpu_generation
+                .checked_add(1)
+                .ok_or_else(|| RuntimeFailure::surface("GPU generation space is exhausted"))?
+        } else {
+            self.gpu_generation
+        };
+
+        // Commit only after the complete replacement graph exists. Assigning
+        // through the Box keeps the exact live Factory address that scripts
+        // bind as their renderer domain while dropping every old GPU handle.
+        let WorkerState {
+            shared_gpu_factory,
+            gpu_generation,
+            sessions,
+            ..
+        } = self;
+        let session = sessions
+            .get_mut(&session_id)
+            .ok_or_else(|| RuntimeFailure::runtime("render session is unavailable"))?;
+        let attachment = session
+            .attachment
+            .as_mut()
+            .filter(|attachment| attachment.id == surface_id)
+            .ok_or_else(|| RuntimeFailure::surface("surface is detached"))?;
+        if let Some(candidate_base) = candidate_base {
+            *shared_gpu_factory = Some(candidate_base);
+            *gpu_generation = candidate_generation;
+        }
+        *session.factory = candidate_factory;
+        session.renderer_generation = candidate_generation;
+        session.render_cache = None;
+        attachment.surface = candidate_surface;
+        #[cfg(test)]
+        {
+            session.injected_device_loss = false;
+        }
+        Ok(if width == 0 || height == 0 {
+            SurfaceDisposition::SkippedZeroSize
+        } else {
+            SurfaceDisposition::Recreated
+        })
     }
 
     fn remove_surface(&mut self, session_id: SessionId, surface_id: SurfaceId) {
@@ -1625,7 +1768,10 @@ pub unsafe extern "C" fn nux_apple_surface_detach(
 
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
-/// Reattaches logical presentation state after a detach.
+/// Reattaches logical presentation state after a detach. If the session's GPU
+/// domain reported device loss, this call transactionally replaces the
+/// session's renderer and presentation resources, refreshing the shared base
+/// device when needed while preserving logical flow state and factory address.
 ///
 /// # Safety
 ///
@@ -1663,12 +1809,7 @@ pub unsafe extern "C" fn nux_apple_surface_reattach(
                 .session
                 .worker
                 .call(Some(session_id), move |state| {
-                    let (factory, attachment) =
-                        state.session_surface_mut(session_id, surface_id)?;
-                    attachment
-                        .surface
-                        .reattach(factory, pixel_width, pixel_height)
-                        .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))
+                    state.reattach_surface(session_id, surface_id, pixel_width, pixel_height)
                 }) {
                 Ok(Ok(disposition)) => {
                     write_success(out_result, surface_disposition(disposition), false)
@@ -1776,17 +1917,13 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                     return Err(RuntimeFailure::runtime("legacy timestamp overflowed"));
                 }
                 let preflight_disposition = if render {
-                    let attachment = session
-                        .attachment
-                        .as_ref()
-                        .ok_or_else(|| RuntimeFailure::surface("surface is not attached"))?;
-                    attachment
-                        .surface
-                        .preflight_present(&session.factory, drawable_identity != 0)
-                        .map_err(|error| RuntimeFailure::surface(format!("{error:#}")))?
+                    session.preflight_present(drawable_identity != 0)?
                 } else {
                     None
                 };
+                if matches!(preflight_disposition, Some(SurfaceDisposition::DeviceLost)) {
+                    return Ok((NUX_SURFACE_DISPOSITION_DEVICE_LOST, false));
+                }
                 let mut result = session
                     .flow_session
                     .perform_with_factory(
@@ -3844,6 +3981,299 @@ mod tests {
             .expect("worker must inspect the detached session factory")
             .expect("session factory must survive surface detachment");
         assert_eq!(detached_factory_address, factory_address);
+    }
+
+    #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]
+    #[test]
+    fn device_loss_reattach_transactionally_recovers_one_session_and_refreshes_the_shared_base() {
+        autoreleasepool(|_| {
+            let worker = product_fixture_worker();
+            let create_session =
+                || match worker.call(None, |state| state.create_session(None, None)) {
+                    Ok(Ok(session_id)) => session_id,
+                    _ => panic!("fixture must create a render session"),
+                };
+            let affected_id = create_session();
+            let sibling_id = create_session();
+            let attach_surface = |session_id| match worker.call(Some(session_id), move |state| {
+                state.attach_surface(session_id, 8, 8)
+            }) {
+                Ok(Ok(surface_id)) => surface_id,
+                _ => panic!("fixture must attach logical Apple presentation state"),
+            };
+            let affected_surface_id = attach_surface(affected_id);
+            let sibling_surface_id = attach_surface(sibling_id);
+
+            let affected_token = Arc::new(SessionToken {
+                worker: Arc::clone(&worker),
+                id: affected_id,
+            });
+            let affected_session = Box::into_raw(Box::new(FlowRenderSessionHandle {
+                token: Arc::clone(&affected_token),
+            }))
+            .cast::<NuxFlowRenderSession>();
+            let affected_surface = Box::into_raw(Box::new(AppleSurfaceHandle {
+                token: Arc::new(SurfaceToken {
+                    session: Arc::clone(&affected_token),
+                    id: affected_surface_id,
+                }),
+            }))
+            .cast::<NuxAppleSurface>();
+
+            let sibling_token = Arc::new(SessionToken {
+                worker: Arc::clone(&worker),
+                id: sibling_id,
+            });
+            let sibling_session = Box::into_raw(Box::new(FlowRenderSessionHandle {
+                token: Arc::clone(&sibling_token),
+            }))
+            .cast::<NuxFlowRenderSession>();
+            let sibling_surface = Box::into_raw(Box::new(AppleSurfaceHandle {
+                token: Arc::new(SurfaceToken {
+                    session: Arc::clone(&sibling_token),
+                    id: sibling_surface_id,
+                }),
+            }))
+            .cast::<NuxAppleSurface>();
+
+            let configure_layer = |surface: *const NuxAppleSurface| {
+                let mut metal_device = ptr::null_mut();
+                let mut result = ptr::null_mut();
+                assert_eq!(
+                    unsafe {
+                        nux_apple_surface_copy_metal_device(surface, &mut metal_device, &mut result)
+                    },
+                    NuxStatus::Ok
+                );
+                unsafe { nux_operation_result_free(result) };
+                let metal_device: Retained<ProtocolObject<dyn MTLDevice>> = unsafe {
+                    Retained::from_raw(metal_device.cast())
+                        .expect("copy_metal_device returns a retained device")
+                };
+                let layer = CAMetalLayer::new();
+                layer.setDevice(Some(&metal_device));
+                layer.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+                layer.setFramebufferOnly(true);
+                layer.setAllowsNextDrawableTimeout(true);
+                layer.setDrawableSize(CGSize::new(8.0, 8.0));
+                layer
+            };
+            let sibling_layer = configure_layer(sibling_surface);
+
+            let mut operation = NuxFrameOperation {
+                struct_size: size_u32::<NuxFrameOperation>(),
+                elapsed_seconds: 0.25,
+                render: false,
+                apple_drawable: ptr::null_mut(),
+                completion_context: ptr::null_mut(),
+                completion_callback: None,
+            };
+            let mut result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_advance(affected_session, &operation, &mut result)
+                },
+                NuxStatus::Ok
+            );
+            unsafe { nux_operation_result_free(result) };
+
+            let (
+                factory_address,
+                flow_session_address,
+                original_generation,
+                original_gpu_generation,
+            ) = worker
+                .call(Some(affected_id), move |state| {
+                    let gpu_generation = state.gpu_generation;
+                    let session = state.session_mut(affected_id)?;
+                    session.injected_device_loss = true;
+                    Ok::<_, RuntimeFailure>((
+                        (&mut *session.factory as *mut WgpuFactory).addr(),
+                        std::ptr::addr_of_mut!(session.flow_session).addr(),
+                        session.renderer_generation,
+                        gpu_generation,
+                    ))
+                })
+                .expect("worker accepts the test-only device-loss seam")
+                .expect("affected session remains live before loss");
+            let sibling_generation = worker
+                .call(Some(sibling_id), move |state| {
+                    state
+                        .session(sibling_id)
+                        .map(|session| session.renderer_generation)
+                })
+                .expect("worker inspects sibling generation")
+                .expect("sibling remains live");
+            assert_eq!(sibling_generation, original_generation);
+
+            operation.elapsed_seconds = 0.5;
+            operation.render = true;
+            result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_advance(affected_session, &operation, &mut result)
+                },
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                unsafe { nux_operation_result_surface_disposition(result) },
+                NUX_SURFACE_DISPOSITION_DEVICE_LOST
+            );
+            unsafe { nux_operation_result_free(result) };
+
+            result = ptr::null_mut();
+            assert_eq!(
+                unsafe { nux_apple_surface_detach(affected_surface, &mut result) },
+                NuxStatus::Ok
+            );
+            unsafe { nux_operation_result_free(result) };
+
+            let mut descriptor = NuxAppleSurfaceDescriptor {
+                struct_size: size_u32::<NuxAppleSurfaceDescriptor>(),
+                pixel_width: u32::MAX,
+                pixel_height: 8,
+            };
+            result = ptr::null_mut();
+            assert_eq!(
+                unsafe { nux_apple_surface_reattach(affected_surface, &descriptor, &mut result) },
+                NuxStatus::SurfaceError
+            );
+            unsafe { nux_operation_result_free(result) };
+            worker
+                .call(Some(affected_id), move |state| {
+                    let gpu_generation = state.gpu_generation;
+                    let session = state.session_mut(affected_id)?;
+                    assert_eq!(
+                        (&mut *session.factory as *mut WgpuFactory).addr(),
+                        factory_address
+                    );
+                    assert_eq!(
+                        std::ptr::addr_of_mut!(session.flow_session).addr(),
+                        flow_session_address
+                    );
+                    assert_eq!(session.renderer_generation, original_generation);
+                    assert_eq!(gpu_generation, original_gpu_generation);
+                    assert_eq!(session.legacy_timestamp_seconds, 0.25);
+                    assert!(session.injected_device_loss);
+                    assert!(!session.is_fatal);
+                    assert!(session.render_cache.is_some());
+                    assert!(
+                        session
+                            .attachment
+                            .as_ref()
+                            .is_some_and(|attachment| !attachment.surface.is_attached())
+                    );
+                    Ok::<(), RuntimeFailure>(())
+                })
+                .expect("worker inspects failed recovery")
+                .expect("failed recovery leaves the session retryable");
+
+            descriptor.pixel_width = 8;
+            result = ptr::null_mut();
+            assert_eq!(
+                unsafe { nux_apple_surface_reattach(affected_surface, &descriptor, &mut result) },
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                unsafe { nux_operation_result_surface_disposition(result) },
+                NUX_SURFACE_DISPOSITION_RECREATED
+            );
+            unsafe { nux_operation_result_free(result) };
+            let recovered_generation = original_gpu_generation
+                .checked_add(1)
+                .expect("the fixture has generation capacity");
+            worker
+                .call(Some(affected_id), move |state| {
+                    let gpu_generation = state.gpu_generation;
+                    let session = state.session_mut(affected_id)?;
+                    assert_eq!(
+                        (&mut *session.factory as *mut WgpuFactory).addr(),
+                        factory_address
+                    );
+                    assert_eq!(
+                        std::ptr::addr_of_mut!(session.flow_session).addr(),
+                        flow_session_address
+                    );
+                    assert_eq!(session.legacy_timestamp_seconds, 0.25);
+                    assert_eq!(session.renderer_generation, recovered_generation);
+                    assert_eq!(gpu_generation, recovered_generation);
+                    assert!(!session.injected_device_loss);
+                    assert!(!session.is_fatal);
+                    assert!(session.render_cache.is_none());
+                    Ok::<(), RuntimeFailure>(())
+                })
+                .expect("worker inspects successful recovery")
+                .expect("successful recovery keeps the logical session live");
+
+            let affected_layer = configure_layer(affected_surface);
+            let affected_drawable = affected_layer
+                .nextDrawable()
+                .expect("recovered layer provides a drawable");
+            operation.apple_drawable = Retained::as_ptr(&affected_drawable)
+                .cast_mut()
+                .cast::<c_void>();
+            result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_advance(affected_session, &operation, &mut result)
+                },
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                unsafe { nux_operation_result_surface_disposition(result) },
+                NUX_SURFACE_DISPOSITION_PRESENTED
+            );
+            unsafe { nux_operation_result_free(result) };
+
+            let sibling_drawable = sibling_layer
+                .nextDrawable()
+                .expect("the existing sibling's old domain remains usable");
+            operation.apple_drawable = Retained::as_ptr(&sibling_drawable)
+                .cast_mut()
+                .cast::<c_void>();
+            result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_advance(sibling_session, &operation, &mut result)
+                },
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                unsafe { nux_operation_result_surface_disposition(result) },
+                NUX_SURFACE_DISPOSITION_PRESENTED
+            );
+            unsafe { nux_operation_result_free(result) };
+            let sibling_stayed_on_old_generation = worker
+                .call(Some(sibling_id), move |state| {
+                    state
+                        .session(sibling_id)
+                        .map(|session| session.renderer_generation == original_generation)
+                })
+                .expect("worker inspects the sibling after recovery")
+                .expect("sibling remains live");
+            assert!(sibling_stayed_on_old_generation);
+
+            let new_session_id = create_session();
+            let new_session_uses_refreshed_base = worker
+                .call(Some(new_session_id), move |state| {
+                    state
+                        .session(new_session_id)
+                        .map(|session| session.renderer_generation == recovered_generation)
+                })
+                .expect("worker inspects the post-recovery session")
+                .expect("post-recovery session remains live");
+            assert!(new_session_uses_refreshed_base);
+            worker
+                .call(None, move |state| state.remove_session(new_session_id))
+                .expect("worker removes the post-recovery session");
+
+            unsafe {
+                nux_apple_surface_free(sibling_surface);
+                nux_flow_render_session_free(sibling_session);
+                nux_apple_surface_free(affected_surface);
+                nux_flow_render_session_free(affected_session);
+            }
+        });
     }
 
     #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]

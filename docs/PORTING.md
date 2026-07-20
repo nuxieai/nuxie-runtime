@@ -22,7 +22,11 @@ what is idiomatic Rust.
 - Port *code, not behaviors*: one C++ class/file, translated coarsely in one
   sitting, with a comment naming its C++ source. Goldens judge correctness, not
   you; mark uncertain lines `// TODO(golden):` rather than researching each one.
-- `nuxie-schema` and `nuxie-binary` are frozen — do not touch them.
+- During Phase R's mechanical renderer translation, `nuxie-schema` and
+  `nuxie-binary` are frozen — do not touch them. A Phase S upstream-sync cycle
+  may regenerate schema artifacts and update the binary decoder when the
+  upstream object model changes; those edits require the sync-map inventory,
+  generated-artifact checks, and both normal and forced-scripted goldens.
 - Never add skip/cache logic, widen a tolerance, or restructure float math for
   performance unless it mirrors an audited C++ gate. The golden harness only
   samples corpus timelines; invented invalidation breaks the timelines it does
@@ -319,9 +323,13 @@ setter, grep its siblings and match them exactly.
 
 ## 3. Cross-Language Semantic Traps
 
-Release is `panic = "abort"` (`Cargo.toml:27`), so **every reachable panic is a
-process kill inside an embedder**. The importer accepts many degenerate-but-valid
-files; the runtime must not assume more than the importer guaranteed.
+Release is `panic = "unwind"` (`Cargo.toml:56`) because luaur implements Luau's
+protected-error boundary with `panic_any` / `catch_unwind`; using abort would
+turn ordinary authored `pcall` errors into process termination. That exception
+does **not** make panics an acceptable runtime control-flow mechanism: a panic
+that escapes the protected scripting boundary can still terminate an embedder
+at an FFI boundary. The importer accepts many degenerate-but-valid files; the
+runtime must not assume more than the importer guaranteed.
 
 ### 3.1 Null-tolerant pointer flow → guarded `Option`, never `unwrap`
 
@@ -369,10 +377,12 @@ C++ UB — usually a feature, occasionally a divergence to guard (e.g. add a
 
 Two profiles, one landed and one planned:
 
-- **Production (landed):** `[profile.release] panic = "abort"` with
-  `overflow-checks` at its default (off) → wrapping in release
-  (`Cargo.toml:24`). Intentional wrap for hashing/epochs uses explicit
-  `wrapping_add` (`artboard.rs:1162`).
+- **Production (landed):** `[profile.release] panic = "unwind"`
+  (`Cargo.toml:56`) for luaur's protected scripting errors, with
+  `overflow-checks` at its default (off) → wrapping in release. Intentional
+  wrap for hashing/epochs uses explicit `wrapping_add`; non-scripting runtime
+  code must still avoid reachable panics, and FFI entry points must not allow
+  unwinds to escape.
 - **Tests/fuzz (planned, not yet a committed profile):** a hardened profile with
   `overflow-checks = true` (`docs/v2-status.md` item 20 #7). **TODO:** confirm
   whether this profile has landed before relying on it.
@@ -463,18 +473,15 @@ The C++ Lua binding (`src/lua/math/lua_vec2d.cpp`) evaluates through the
 interpreter with no geometry-path contraction, so the Rust Luau binding must use
 plain `+`/`*`.
 
-The `Mat2D` multiply family encodes the same lore, **selected by transform shape**
-at `draw.rs:3505`:
-
-- `multiply` (`components.rs:279`) — fused rotation columns, unfused translation.
-- `multiply_path_local_fused` (`components.rs:292`) — translation *also* fused.
-- `multiply_path_local_contracted` (`components.rs:305`) — translation unfused.
-
-These three exist because `juice.riv` (axis-aligned) and `rocket.riv`
-(rotated/skewed) needed different contraction to match C++. The
-`mat2d_has_visible_skew_or_rotation` epsilon gate (`draw.rs:10090`) picks the
-variant. `transform_point` (`components.rs:383`) uses plain `*`/`+` while
-`map_point` fuses — intentional and shape-driven.
+`Mat2D::invert` and `Mat2D::multiply` have an important contraction asymmetry.
+Clang contracts the determinant and inverse translation cross-product
+subtractions. Matrix multiplication contracts each two-term dot product, but
+adds the left-hand translation separately. Rust therefore uses `mul_add` for
+the inverse cross products and the first two terms of each multiply column,
+then a separate `+ a[4]`/`+ a[5]` for translation. Local path composition uses
+that same `multiply`; transform-shape heuristics can mask a missing contraction
+in `invert`, but do not reflect any C++ branch. `transform_point` uses plain
+`*`/`+` while `map_point` fuses, matching their distinct C++ call sites.
 
 **Perf caveat (`docs/v2-log-archive.md` item 18):** closing the FMA gap globally
 (bulk `mul_add`) changes float results and can flip exact files. Treat any new

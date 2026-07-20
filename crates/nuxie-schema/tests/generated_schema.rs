@@ -1,5 +1,5 @@
 use nuxie_schema::{
-    CoreRegistryFieldKind, FieldKind, StoredFieldInitializer,
+    CoreRegistryFieldKind, FieldKind, StoredFieldInitializer, UintStorage,
     core_registry_field_kind_by_property_key, core_registry_getter_field_kind_by_property_key,
     core_registry_setter_field_kind_by_property_key, definition_by_name, definition_by_type_key,
     generated::{DEFINITIONS, ObjectKind},
@@ -17,20 +17,20 @@ fn reference_runtime_dir() -> PathBuf {
 
 #[test]
 fn generated_schema_exposes_current_runtime_definition_set() {
-    assert_eq!(DEFINITIONS.len(), 336);
+    assert_eq!(DEFINITIONS.len(), 342);
 
     let runtime_property_count = DEFINITIONS
         .iter()
         .flat_map(|definition| definition.properties)
         .count();
-    assert_eq!(runtime_property_count, 588);
+    assert_eq!(runtime_property_count, 596);
 
     let animatable_property_count = DEFINITIONS
         .iter()
         .flat_map(|definition| definition.properties)
         .filter(|property| property.animates)
         .count();
-    assert_eq!(animatable_property_count, 212);
+    assert_eq!(animatable_property_count, 218);
 
     let grouped_property_count = DEFINITIONS
         .iter()
@@ -51,7 +51,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .flat_map(|definition| definition.properties)
         .filter(|property| property.description.is_some())
         .count();
-    assert_eq!(described_property_count, 438);
+    assert_eq!(described_property_count, 446);
 }
 
 #[test]
@@ -631,7 +631,7 @@ fn stored_field_initializers_match_cpp_member_defaults() {
             .property_by_key(119)
             .expect("DrawTarget.drawableId")
             .stored_field_initializer(),
-        Some(StoredFieldInitializer::Uint(u32::MAX))
+        Some(StoredFieldInitializer::Uint(u64::from(u32::MAX)))
     );
 
     let data_bind = definition_by_name("DataBind").expect("DataBind exists");
@@ -649,7 +649,14 @@ fn stored_field_initializers_match_cpp_member_defaults() {
             .property_by_key(953)
             .expect("FocusData.canFocus")
             .stored_field_initializer(),
-        Some(StoredFieldInitializer::Bool(true))
+        None
+    );
+    assert_eq!(
+        focus_data
+            .property_by_key(1033)
+            .expect("FocusData.focusFlags")
+            .stored_field_initializer(),
+        Some(StoredFieldInitializer::Uint(7))
     );
 
     assert_eq!(
@@ -658,6 +665,49 @@ fn stored_field_initializers_match_cpp_member_defaults() {
             .stored_field_initializer(),
         None
     );
+}
+
+#[test]
+fn uint_storage_width_preserves_alias_and_uint64_semantics() {
+    let file_asset = definition_by_name("FileAsset").expect("FileAsset exists");
+    let asset_id = file_asset
+        .property_by_key(204)
+        .expect("FileAsset.assetId exists");
+    let scope_library_id = file_asset
+        .property_by_key(1037)
+        .expect("FileAsset.scopeLibraryId exists");
+    assert_eq!(asset_id.uint_storage(), Some(UintStorage::Uint32));
+    assert_eq!(scope_library_id.uint_storage(), Some(UintStorage::Uint64));
+    assert_eq!(
+        scope_library_id.stored_field_initializer(),
+        Some(StoredFieldInitializer::Uint(0))
+    );
+
+    let compact_layout_field = definition_by_name("LayoutComponentStyle")
+        .expect("LayoutComponentStyle exists")
+        .property_by_key(596)
+        .expect("LayoutComponentStyle.displayValue exists");
+    assert_eq!(compact_layout_field.declared_type, "uint8");
+    assert_eq!(compact_layout_field.runtime_type, FieldKind::Uint);
+    assert_eq!(
+        compact_layout_field.uint_storage(),
+        Some(UintStorage::Uint8)
+    );
+
+    for key in [596, 1037] {
+        assert_eq!(
+            core_registry_field_kind_by_property_key(key),
+            Some(CoreRegistryFieldKind::Uint)
+        );
+        assert_eq!(
+            core_registry_setter_field_kind_by_property_key(key),
+            Some(FieldKind::Uint)
+        );
+        assert_eq!(
+            core_registry_getter_field_kind_by_property_key(key),
+            Some(FieldKind::Uint)
+        );
+    }
 }
 
 #[test]
@@ -919,7 +969,9 @@ fn json_field_kind(json: &Value) -> FieldKind {
         Some("Color") => FieldKind::Color,
         Some("double") => FieldKind::Double,
         Some("String") => FieldKind::String,
-        Some("uint") | Some("Id") | Some("List<Id>") => FieldKind::Uint,
+        Some("uint") | Some("uint8") | Some("uint64") | Some("Id") | Some("List<Id>") => {
+            FieldKind::Uint
+        }
         other => panic!("unsupported JSON runtime field kind {other:?}"),
     }
 }

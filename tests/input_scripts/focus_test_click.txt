@@ -1,0 +1,5 @@
+# Focus left target, then clear focus from the authored right-side action.
+0.05 pointerDown 55 65
+0.06 pointerUp 55 65
+0.15 pointerDown 442 65
+0.16 pointerUp 442 65

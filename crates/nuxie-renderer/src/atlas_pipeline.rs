@@ -5,7 +5,9 @@ use crate::gpu::{
     MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT, MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT,
     MIDPOINT_FAN_PATCH_INDEX_COUNT,
 };
+use crate::storage_texture::{self, StorageBufferStructure, StorageResource};
 use crate::work_metrics::{CountedCommandEncoderExt, CountedDeviceExt};
+use crate::RendererCapabilities;
 
 pub(crate) struct AtlasPipeline {
     fill: wgpu::RenderPipeline,
@@ -13,14 +15,20 @@ pub(crate) struct AtlasPipeline {
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     sampler_layout: wgpu::BindGroupLayout,
+    polyfill_vertex_storage_buffers: bool,
 }
 
 impl AtlasPipeline {
-    pub(crate) fn new(device: &wgpu::Device) -> Self {
+    pub(crate) fn new(device: &wgpu::Device, capabilities: RendererCapabilities) -> Self {
+        let polyfill = capabilities.polyfill_vertex_storage_buffers;
         let vertex = shader(
             device,
             "nuxie-atlas-vertex",
-            include_str!("generated/render_atlas.webgpu_vert.wgsl"),
+            if polyfill {
+                include_str!("generated/render_atlas.webgpu_nossbo_vert.wgsl")
+            } else {
+                include_str!("generated/render_atlas.webgpu_vert.wgsl")
+            },
         );
         let fill_fragment = shader(
             device,
@@ -36,20 +44,40 @@ impl AtlasPipeline {
             label: Some("nuxie-atlas-flush-layout"),
             entries: &[
                 uniform_entry(0),
-                storage_entry(3),
-                storage_entry(4),
-                storage_entry(5),
-                storage_entry(6),
-                texture_entry(8, wgpu::TextureSampleType::Uint),
+                storage_texture::layout_entry(
+                    2,
+                    StorageBufferStructure::Uint32x4,
+                    wgpu::ShaderStages::VERTEX,
+                    polyfill,
+                ),
+                storage_texture::layout_entry(
+                    3,
+                    StorageBufferStructure::Uint32x2,
+                    wgpu::ShaderStages::VERTEX,
+                    polyfill,
+                ),
+                storage_texture::layout_entry(
+                    4,
+                    StorageBufferStructure::Float32x4,
+                    wgpu::ShaderStages::VERTEX,
+                    polyfill,
+                ),
+                storage_texture::layout_entry(
+                    5,
+                    StorageBufferStructure::Uint32x4,
+                    wgpu::ShaderStages::VERTEX,
+                    polyfill,
+                ),
+                texture_entry(7, wgpu::TextureSampleType::Uint),
+                texture_entry(8, wgpu::TextureSampleType::Float { filterable: true }),
                 texture_entry(9, wgpu::TextureSampleType::Float { filterable: true }),
-                texture_entry(10, wgpu::TextureSampleType::Float { filterable: true }),
             ],
         });
         let image_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atlas-image-layout"),
             entries: &[
-                texture_entry(12, wgpu::TextureSampleType::Float { filterable: true }),
-                sampler_entry(14),
+                texture_entry(11, wgpu::TextureSampleType::Float { filterable: true }),
+                sampler_entry(13),
             ],
         });
         let empty_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -58,7 +86,7 @@ impl AtlasPipeline {
         });
         let sampler_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-atlas-sampler-layout"),
-            entries: &[sampler_entry(9), sampler_entry(10)],
+            entries: &[sampler_entry(8), sampler_entry(9)],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("nuxie-atlas-pipeline-layout"),
@@ -122,6 +150,7 @@ impl AtlasPipeline {
             flush_layout,
             image_layout,
             sampler_layout,
+            polyfill_vertex_storage_buffers: polyfill,
         }
     }
 
@@ -147,15 +176,44 @@ impl AtlasPipeline {
         atlas_content_size: [u32; 2],
         scissor: [u32; 4],
     ) {
-        let uniform = upload(
+        let uniform = upload_uniform(
             device,
             "nuxie-atlas-uniforms",
             std::slice::from_ref(uniforms),
         );
-        let path = upload(device, "nuxie-atlas-path", paths);
-        let paint = upload(device, "nuxie-atlas-paint", paints);
-        let paint_aux = upload(device, "nuxie-atlas-paint-aux", paint_aux);
-        let contours = upload(device, "nuxie-atlas-contours", contours);
+        let polyfill = self.polyfill_vertex_storage_buffers;
+        let path = StorageResource::upload(
+            device,
+            encoder,
+            "nuxie-atlas-path",
+            paths,
+            StorageBufferStructure::Uint32x4,
+            polyfill,
+        );
+        let paint = StorageResource::upload(
+            device,
+            encoder,
+            "nuxie-atlas-paint",
+            paints,
+            StorageBufferStructure::Uint32x2,
+            polyfill,
+        );
+        let paint_aux = StorageResource::upload(
+            device,
+            encoder,
+            "nuxie-atlas-paint-aux",
+            paint_aux,
+            StorageBufferStructure::Float32x4,
+            polyfill,
+        );
+        let contours = StorageResource::upload(
+            device,
+            encoder,
+            "nuxie-atlas-contours",
+            contours,
+            StorageBufferStructure::Uint32x4,
+            polyfill,
+        );
         let dummy = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("nuxie-atlas-dummy-texture"),
             size: wgpu::Extent3d {
@@ -182,29 +240,29 @@ impl AtlasPipeline {
             layout: &self.flush_layout,
             entries: &[
                 binding(0, uniform.as_entire_binding()),
-                binding(3, path.as_entire_binding()),
-                binding(4, paint.as_entire_binding()),
-                binding(5, paint_aux.as_entire_binding()),
-                binding(6, contours.as_entire_binding()),
-                binding(8, wgpu::BindingResource::TextureView(tessellation)),
-                binding(9, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(10, wgpu::BindingResource::TextureView(feather_lut)),
+                binding(2, path.binding()),
+                binding(3, paint.binding()),
+                binding(4, paint_aux.binding()),
+                binding(5, contours.binding()),
+                binding(7, wgpu::BindingResource::TextureView(tessellation)),
+                binding(8, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(9, wgpu::BindingResource::TextureView(feather_lut)),
             ],
         });
         let image = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atlas-image-group"),
             layout: &self.image_layout,
             entries: &[
-                binding(12, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(14, wgpu::BindingResource::Sampler(&sampler)),
+                binding(11, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(13, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
         let samplers = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-atlas-sampler-group"),
             layout: &self.sampler_layout,
             entries: &[
+                binding(8, wgpu::BindingResource::Sampler(&sampler)),
                 binding(9, wgpu::BindingResource::Sampler(&sampler)),
-                binding(10, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
         let attachments = [Some(wgpu::RenderPassColorAttachment {
@@ -272,7 +330,7 @@ fn shader(device: &wgpu::Device, label: &'static str, source: &'static str) -> w
     })
 }
 
-fn upload<T: bytemuck::Pod>(
+fn upload_uniform<T: bytemuck::Pod>(
     device: &wgpu::Device,
     label: &'static str,
     values: &[T],
@@ -280,7 +338,7 @@ fn upload<T: bytemuck::Pod>(
     device.create_counted_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(label),
         contents: bytemuck::cast_slice(values),
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::STORAGE,
+        usage: wgpu::BufferUsages::UNIFORM,
     })
 }
 
@@ -290,13 +348,6 @@ fn binding(binding: u32, resource: wgpu::BindingResource<'_>) -> wgpu::BindGroup
 
 fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     buffer_entry(binding, wgpu::BufferBindingType::Uniform)
-}
-
-fn storage_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
-    buffer_entry(
-        binding,
-        wgpu::BufferBindingType::Storage { read_only: true },
-    )
 }
 
 fn buffer_entry(binding: u32, ty: wgpu::BufferBindingType) -> wgpu::BindGroupLayoutEntry {

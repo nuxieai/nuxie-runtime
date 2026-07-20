@@ -442,22 +442,22 @@ impl ClockwiseAtomicPipeline {
             label: Some("nuxie-cwa-flush-layout"),
             entries: &[
                 uniform_entry(0),
+                storage_entry(2, true),
                 storage_entry(3, true),
                 storage_entry(4, true),
                 storage_entry(5, true),
-                storage_entry(6, true),
-                storage_entry(7, false),
-                texture_entry(8, wgpu::TextureSampleType::Uint),
+                storage_entry(6, false),
+                texture_entry(7, wgpu::TextureSampleType::Uint),
+                texture_entry(8, wgpu::TextureSampleType::Float { filterable: true }),
                 texture_entry(9, wgpu::TextureSampleType::Float { filterable: true }),
                 texture_entry(10, wgpu::TextureSampleType::Float { filterable: true }),
-                texture_entry(11, wgpu::TextureSampleType::Float { filterable: true }),
             ],
         });
         let image_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-cwa-image-layout"),
             entries: &[
-                texture_entry(12, wgpu::TextureSampleType::Float { filterable: true }),
-                sampler_entry(14),
+                texture_entry(11, wgpu::TextureSampleType::Float { filterable: true }),
+                sampler_entry(13),
             ],
         });
         let clip_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -474,7 +474,7 @@ impl ClockwiseAtomicPipeline {
             });
         let sampler_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-cwa-sampler-layout"),
-            entries: &[sampler_entry(9), sampler_entry(10), sampler_entry(11)],
+            entries: &[sampler_entry(8), sampler_entry(9), sampler_entry(10)],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("nuxie-cwa-pipeline-layout"),
@@ -815,8 +815,8 @@ impl ClockwiseAtomicPipeline {
             label: Some("nuxie-cwa-image-group"),
             layout: &image_layout,
             entries: &[
-                binding(12, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(14, wgpu::BindingResource::Sampler(&sampler)),
+                binding(11, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(13, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
         // ENABLE_CLIPPING is specialized false for every pipeline that uses
@@ -845,9 +845,9 @@ impl ClockwiseAtomicPipeline {
             label: Some("nuxie-cwa-sampler-group"),
             layout: &sampler_layout,
             entries: &[
+                binding(8, wgpu::BindingResource::Sampler(&sampler)),
                 binding(9, wgpu::BindingResource::Sampler(&sampler)),
                 binding(10, wgpu::BindingResource::Sampler(&sampler)),
-                binding(11, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
         Self {
@@ -1006,20 +1006,20 @@ impl ClockwiseAtomicPipeline {
                     layout: &self.flush_layout,
                     entries: &[
                         binding(0, flush_resources.uniform_binding()),
-                        binding(3, flush_resources.path_binding()),
-                        binding(4, paints.binding()),
-                        binding(5, paint_aux.binding()),
-                        binding(6, flush_resources.contour_binding()),
-                        binding(7, coverage.binding()),
-                        binding(8, wgpu::BindingResource::TextureView(draw.tessellation)),
+                        binding(2, flush_resources.path_binding()),
+                        binding(3, paints.binding()),
+                        binding(4, paint_aux.binding()),
+                        binding(5, flush_resources.contour_binding()),
+                        binding(6, coverage.binding()),
+                        binding(7, wgpu::BindingResource::TextureView(draw.tessellation)),
                         binding(
-                            9,
+                            8,
                             wgpu::BindingResource::TextureView(
                                 gradient.unwrap_or(&self.dummy_view),
                             ),
                         ),
-                        binding(10, wgpu::BindingResource::TextureView(feather_lut)),
-                        binding(11, wgpu::BindingResource::TextureView(&self.dummy_view)),
+                        binding(9, wgpu::BindingResource::TextureView(feather_lut)),
+                        binding(10, wgpu::BindingResource::TextureView(&self.dummy_view)),
                     ],
                 })
             })

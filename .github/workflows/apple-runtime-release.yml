@@ -15,15 +15,17 @@ concurrency:
 jobs:
   release:
     name: Build and publish the Apple runtime
-    runs-on: macos-14
+    runs-on: [self-hosted, macOS, ARM64, nuxie-signoff]
     environment: apple-runtime-release
     env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
       GH_TOKEN: ${{ github.token }}
-      NUX_APPLE_XCODE_VERSION: "15.4"
-      NUX_APPLE_XCODE_BUILD: "15F31d"
+      NUX_APPLE_XCODE_VERSION: "26.2"
+      NUX_APPLE_XCODE_BUILD: "17C52"
       NUX_APPLE_RUST_TOOLCHAIN: "1.94.1"
       NUX_APPLE_DEPLOYMENT_TARGET: "15.0"
       NUX_APPLE_PROFILE: "release-apple"
+      RUSTUP_TOOLCHAIN: "1.94.1"
     defaults:
       run:
         shell: bash
@@ -87,11 +89,10 @@ jobs:
             exit 1
           fi
 
-      - name: Select the pinned Apple toolchain
+      - name: Verify the pinned Apple toolchain
         run: |
           set -euo pipefail
 
-          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
           test "$(xcodebuild -version | sed -n 's/^Xcode //p')" = "${NUX_APPLE_XCODE_VERSION}"
           test "$(xcodebuild -version | sed -n 's/^Build version //p')" = "${NUX_APPLE_XCODE_BUILD}"
 
@@ -101,7 +102,6 @@ jobs:
 
           rustup toolchain install "${NUX_APPLE_RUST_TOOLCHAIN}" --profile minimal --component clippy --component llvm-tools --no-self-update
           rustup target add --toolchain "${NUX_APPLE_RUST_TOOLCHAIN}" aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
-          rustup default "${NUX_APPLE_RUST_TOOLCHAIN}"
 
       - name: Fetch pinned test assets
         run: make fixtures

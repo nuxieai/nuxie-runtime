@@ -1,7 +1,9 @@
 //! Fixed-function MSAA atlas blit translated from Rive's WebGPU renderer.
 
 use crate::gpu::{ContourData, FlushUniforms, PaintAuxData, PaintData, PathData, TriangleVertex};
+use crate::storage_texture::{self, StorageBufferStructure, StorageResource};
 use crate::work_metrics::CountedDeviceExt;
+use crate::RendererCapabilities;
 
 pub(crate) struct MsaaAtlasPipeline {
     fixed: PipelineSet,
@@ -10,6 +12,7 @@ pub(crate) struct MsaaAtlasPipeline {
     flush_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     sampler_layout: wgpu::BindGroupLayout,
+    polyfill_vertex_storage_buffers: bool,
 }
 
 struct PipelineSet {
@@ -33,11 +36,18 @@ pub(crate) struct PreparedAtlasBlit {
 }
 
 impl MsaaAtlasPipeline {
-    pub(crate) fn new(device: &wgpu::Device) -> Self {
+    pub(crate) fn new(device: &wgpu::Device, capabilities: RendererCapabilities) -> Self {
+        let polyfill = capabilities.polyfill_vertex_storage_buffers;
         let no_clip_vertex = shader(
             device,
             "nuxie-msaa-atlas-blit-vertex",
-            include_str!("generated/draw_msaa_atlas_blit.webgpu_noclipdistance_vert.wgsl"),
+            if polyfill {
+                include_str!(
+                    "generated/draw_msaa_atlas_blit.webgpu_nossbo_noclipdistance_vert.wgsl"
+                )
+            } else {
+                include_str!("generated/draw_msaa_atlas_blit.webgpu_noclipdistance_vert.wgsl")
+            },
         );
         let fixed_fragment = shader(
             device,
@@ -53,22 +63,42 @@ impl MsaaAtlasPipeline {
             label: Some("nuxie-msaa-atlas-flush-layout"),
             entries: &[
                 uniform_entry(0),
-                storage_entry(3),
-                storage_entry(4),
-                storage_entry(5),
-                storage_entry(6),
-                texture_entry(8, wgpu::TextureSampleType::Uint),
+                storage_texture::layout_entry(
+                    2,
+                    StorageBufferStructure::Uint32x4,
+                    wgpu::ShaderStages::VERTEX,
+                    polyfill,
+                ),
+                storage_texture::layout_entry(
+                    3,
+                    StorageBufferStructure::Uint32x2,
+                    wgpu::ShaderStages::VERTEX,
+                    polyfill,
+                ),
+                storage_texture::layout_entry(
+                    4,
+                    StorageBufferStructure::Float32x4,
+                    wgpu::ShaderStages::VERTEX,
+                    polyfill,
+                ),
+                storage_texture::layout_entry(
+                    5,
+                    StorageBufferStructure::Uint32x4,
+                    wgpu::ShaderStages::VERTEX,
+                    polyfill,
+                ),
+                texture_entry(7, wgpu::TextureSampleType::Uint),
+                texture_entry(8, wgpu::TextureSampleType::Float { filterable: true }),
                 texture_entry(9, wgpu::TextureSampleType::Float { filterable: true }),
                 texture_entry(10, wgpu::TextureSampleType::Float { filterable: true }),
-                texture_entry(11, wgpu::TextureSampleType::Float { filterable: true }),
-                texture_entry(13, wgpu::TextureSampleType::Float { filterable: false }),
+                texture_entry(12, wgpu::TextureSampleType::Float { filterable: false }),
             ],
         });
         let image_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-msaa-atlas-image-layout"),
             entries: &[
-                texture_entry(12, wgpu::TextureSampleType::Float { filterable: true }),
-                sampler_entry(14),
+                texture_entry(11, wgpu::TextureSampleType::Float { filterable: true }),
+                sampler_entry(13),
             ],
         });
         let empty_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -77,7 +107,7 @@ impl MsaaAtlasPipeline {
         });
         let sampler_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-msaa-atlas-sampler-layout"),
-            entries: &[sampler_entry(9), sampler_entry(10), sampler_entry(11)],
+            entries: &[sampler_entry(8), sampler_entry(9), sampler_entry(10)],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("nuxie-msaa-atlas-pipeline-layout"),
@@ -180,7 +210,11 @@ impl MsaaAtlasPipeline {
                 shader(
                     device,
                     "nuxie-msaa-atlas-blit-clip-rect-vertex",
-                    include_str!("generated/draw_msaa_atlas_blit.webgpu_vert.wgsl"),
+                    if polyfill {
+                        include_str!("generated/draw_msaa_atlas_blit.webgpu_nossbo_vert.wgsl")
+                    } else {
+                        include_str!("generated/draw_msaa_atlas_blit.webgpu_vert.wgsl")
+                    },
                 )
             });
         let create_set = |prefix: &'static str,
@@ -250,6 +284,7 @@ impl MsaaAtlasPipeline {
             flush_layout,
             image_layout,
             sampler_layout,
+            polyfill_vertex_storage_buffers: polyfill,
         }
     }
 
@@ -295,6 +330,7 @@ impl MsaaAtlasPipeline {
     pub(crate) fn prepare(
         &self,
         device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
         tessellation: &wgpu::TextureView,
         feather_lut: &wgpu::TextureView,
         gradient: Option<&wgpu::TextureView>,
@@ -318,29 +354,38 @@ impl MsaaAtlasPipeline {
             std::slice::from_ref(uniforms),
             wgpu::BufferUsages::UNIFORM,
         );
-        let path = upload(
+        let polyfill = self.polyfill_vertex_storage_buffers;
+        let path = StorageResource::upload(
             device,
+            encoder,
             "nuxie-msaa-atlas-paths",
             paths,
-            wgpu::BufferUsages::STORAGE,
+            StorageBufferStructure::Uint32x4,
+            polyfill,
         );
-        let paint = upload(
+        let paint = StorageResource::upload(
             device,
+            encoder,
             "nuxie-msaa-atlas-paints",
             paints,
-            wgpu::BufferUsages::STORAGE,
+            StorageBufferStructure::Uint32x2,
+            polyfill,
         );
-        let paint_aux = upload(
+        let paint_aux = StorageResource::upload(
             device,
+            encoder,
             "nuxie-msaa-atlas-paint-aux",
             paint_aux,
-            wgpu::BufferUsages::STORAGE,
+            StorageBufferStructure::Float32x4,
+            polyfill,
         );
-        let contours = upload(
+        let contours = StorageResource::upload(
             device,
+            encoder,
             "nuxie-msaa-atlas-contours",
             contours,
-            wgpu::BufferUsages::STORAGE,
+            StorageBufferStructure::Uint32x4,
+            polyfill,
         );
         let vertex_buffer = upload(
             device,
@@ -374,19 +419,19 @@ impl MsaaAtlasPipeline {
             layout: &self.flush_layout,
             entries: &[
                 binding(0, uniform.as_entire_binding()),
-                binding(3, path.as_entire_binding()),
-                binding(4, paint.as_entire_binding()),
-                binding(5, paint_aux.as_entire_binding()),
-                binding(6, contours.as_entire_binding()),
-                binding(8, wgpu::BindingResource::TextureView(tessellation)),
+                binding(2, path.binding()),
+                binding(3, paint.binding()),
+                binding(4, paint_aux.binding()),
+                binding(5, contours.binding()),
+                binding(7, wgpu::BindingResource::TextureView(tessellation)),
                 binding(
-                    9,
+                    8,
                     wgpu::BindingResource::TextureView(gradient.unwrap_or(&dummy_view)),
                 ),
-                binding(10, wgpu::BindingResource::TextureView(feather_lut)),
-                binding(11, wgpu::BindingResource::TextureView(atlas)),
+                binding(9, wgpu::BindingResource::TextureView(feather_lut)),
+                binding(10, wgpu::BindingResource::TextureView(atlas)),
                 binding(
-                    13,
+                    12,
                     wgpu::BindingResource::TextureView(destination.unwrap_or(&dummy_view)),
                 ),
             ],
@@ -395,17 +440,17 @@ impl MsaaAtlasPipeline {
             label: Some("nuxie-msaa-atlas-image-group"),
             layout: &self.image_layout,
             entries: &[
-                binding(12, wgpu::BindingResource::TextureView(&dummy_view)),
-                binding(14, wgpu::BindingResource::Sampler(&sampler)),
+                binding(11, wgpu::BindingResource::TextureView(&dummy_view)),
+                binding(13, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
         let sampler_group = device.create_counted_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nuxie-msaa-atlas-sampler-group"),
             layout: &self.sampler_layout,
             entries: &[
+                binding(8, wgpu::BindingResource::Sampler(&sampler)),
                 binding(9, wgpu::BindingResource::Sampler(&sampler)),
                 binding(10, wgpu::BindingResource::Sampler(&sampler)),
-                binding(11, wgpu::BindingResource::Sampler(&sampler)),
             ],
         });
         PreparedAtlasBlit {
@@ -449,13 +494,6 @@ fn binding(binding: u32, resource: wgpu::BindingResource<'_>) -> wgpu::BindGroup
 
 fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     buffer_entry(binding, wgpu::BufferBindingType::Uniform)
-}
-
-fn storage_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
-    buffer_entry(
-        binding,
-        wgpu::BufferBindingType::Storage { read_only: true },
-    )
 }
 
 fn buffer_entry(binding: u32, ty: wgpu::BufferBindingType) -> wgpu::BindGroupLayoutEntry {

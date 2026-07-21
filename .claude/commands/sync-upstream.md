@@ -14,8 +14,12 @@ Phase S activates only after the migration closes.
 ## Steps
 
 1. **Inventory.** Fetch the reference repo, list
-   `LAST_SYNCED_SHA..upstream/main` (or the tag the user named), bucket
-   every commit per the map's path signatures.
+   `LAST_SYNCED_SHA..upstream/main` (or the tag the user named), then run
+   `RIVE_RUNTIME_DIR=<clean-candidate-worktree> make port-manifest-check`
+   before bucketing every commit per the map's path signatures. A missing or
+   stale non-generated `src/**/*.cpp` row (`src/generated/**` is owned by the
+   schema/codegen gate) is a required triage finding; do not regenerate or
+   reclassify the manifest before the approval gate.
 2. **Probe.** On a throwaway branch, bump the reference pin and run the
    default + scripted golden compares. Attribute every diff to an upstream
    commit. Unattributed diffs mean your triage is incomplete — re-triage

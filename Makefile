@@ -2,6 +2,9 @@
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
+PORT_MANIFEST ?= $(CURDIR)/port-manifest.toml
+PORT_MANIFEST_TOOL ?= $(CURDIR)/tools/port-manifest/port_manifest.py
+PORT_MANIFEST_UPSTREAM_REF ?= $(shell git -C "$(RIVE_RUNTIME_DIR)" rev-parse HEAD 2>/dev/null)
 CPP_CONFIG ?= debug
 RUST_PROFILE ?= debug
 RUST_GOLDEN_RUNNER_FLAGS = $(if $(filter release,$(RUST_PROFILE)),--release,)
@@ -101,6 +104,16 @@ check:
 
 test: fixtures
 	cargo test --workspace
+
+.PHONY: port-manifest-generate port-manifest-test port-manifest-check
+port-manifest-generate:
+	python3 "$(PORT_MANIFEST_TOOL)" generate --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --upstream-ref "$(PORT_MANIFEST_UPSTREAM_REF)" --output "$(PORT_MANIFEST)"
+
+port-manifest-test:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/port-manifest -p 'test_*.py' -v
+
+port-manifest-check: port-manifest-test
+	python3 "$(PORT_MANIFEST_TOOL)" check --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --upstream-ref "$(PORT_MANIFEST_UPSTREAM_REF)" --repo-root "$(CURDIR)" --manifest "$(PORT_MANIFEST)"
 
 # --- Clippy lint gate (panic-freedom discipline, v2-status item 20 #6) -------
 # The runtime crates opt into the panic-freedom clippy lints

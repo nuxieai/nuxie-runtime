@@ -33,6 +33,11 @@ beat giant ones).
 ### 1. Fetch + inventory (agent, automatic)
 
 - `git -C $RIVE_RUNTIME_DIR fetch` and list new commits with stats.
+- Run `RIVE_RUNTIME_DIR=<clean-candidate-worktree> make port-manifest-check`
+  before triage. Any missing or stale non-generated `src/**/*.cpp` row
+  (`src/generated/**` is schema/codegen-owned) is inventory evidence that must
+  appear in the report; do not regenerate or reclassify the manifest before
+  the approval gate.
 - Bucket every commit by path signature:
   - `dev/defs/**` → schema (regenerate `nuxie-schema` via `make schema`;
     usually mechanical, occasionally implies new runtime behavior)

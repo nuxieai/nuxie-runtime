@@ -8,7 +8,8 @@
 //! before accepting a measurement.
 
 use nuxie::{
-    ApplePresentationCompletion, AppleSurface, BlendMode, Factory, FillRule, ImageFilter,
+    ApplePresentationCompletion, AppleSurface, BlendMode, Factory, FillRule, GpuCanvasPlan,
+    GpuCanvasShader, GpuCanvasShaderStage, ImageFilter,
     ImageSampler, ImageWrap, Mat2D, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType,
     RenderImage, RenderMode, RenderPaint, RenderPath, Renderer, WgpuFactory, WgpuFrame,
 };
@@ -151,7 +152,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
         unsafe { std::slice::from_raw_parts(args.stops, args.stop_len) }
     };
 
-    match selector % 42 {
+    match selector % 43 {
         0 => root!("inherent WgpuFactory::validate_image_bytes", {
             black_box(WgpuFactory::validate_image_bytes(bytes).is_ok());
             0
@@ -332,28 +333,56 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             black_box(Factory::decode_image(factory, bytes).is_ok());
             0
         }),
-        23 => root!("trait Renderer::save", {
+        23 => root!("trait Factory::make_gpu_canvas_image", {
+            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
+                return 0;
+            };
+            let stage = GpuCanvasShaderStage {
+                source: String::new(),
+                logical_entry_point: String::new(),
+                physical_entry_point: String::new(),
+            };
+            let shader = GpuCanvasShader {
+                vertex: stage.clone(),
+                fragment: stage,
+            };
+            let plan = GpuCanvasPlan {
+                width: args.width,
+                height: args.height,
+                clear_color: [0.0; 4],
+                vertex_count: args.count,
+                instance_count: 1,
+                first_vertex: 0,
+                first_instance: 0,
+                uniform_buffers: Vec::new(),
+                vertex_layouts: Vec::new(),
+                vertex_buffers: Vec::new(),
+            };
+            black_box(Factory::make_gpu_canvas_image(factory, &shader, &plan).is_ok());
+            0
+        }),
+        24 => root!("trait Renderer::save", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             Renderer::save(frame);
             0
         }),
-        24 => root!("trait Renderer::restore", {
+        25 => root!("trait Renderer::restore", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             Renderer::restore(frame);
             0
         }),
-        25 => root!("trait Renderer::transform", {
+        26 => root!("trait Renderer::transform", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             Renderer::transform(frame, Mat2D([args.scalar; 6]));
             0
         }),
-        26 => root!("trait Renderer::draw_path", {
+        27 => root!("trait Renderer::draw_path", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
@@ -366,7 +395,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             Renderer::draw_path(frame, path, paint);
             0
         }),
-        27 => root!("trait Renderer::clip_path", {
+        28 => root!("trait Renderer::clip_path", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
@@ -376,7 +405,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             Renderer::clip_path(frame, path);
             0
         }),
-        28 => root!("trait Renderer::draw_image", {
+        29 => root!("trait Renderer::draw_image", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
@@ -389,7 +418,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             );
             0
         }),
-        29 => root!("trait Renderer::draw_image_mesh", {
+        30 => root!("trait Renderer::draw_image_mesh", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
@@ -407,46 +436,46 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             );
             0
         }),
-        30 => root!("trait Renderer::modulate_opacity", {
+        31 => root!("trait Renderer::modulate_opacity", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             Renderer::modulate_opacity(frame, args.scalar);
             0
         }),
-        31 => root!("inherent ApplePresentationCompletion::new", {
+        32 => root!("inherent ApplePresentationCompletion::new", {
             black_box(ApplePresentationCompletion::new(|| {}));
             0
         }),
-        32 => root!("inherent AppleSurface::attach_with_factory", {
+        33 => root!("inherent AppleSurface::attach_with_factory", {
             black_box(
                 AppleSurface::attach_with_factory(args.width, args.height, render_mode(selector))
                     .is_ok(),
             );
             0
         }),
-        33 => root!("inherent AppleSurface::attach", {
+        34 => root!("inherent AppleSurface::attach", {
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
             black_box(AppleSurface::attach(factory, args.width, args.height).is_ok());
             0
         }),
-        34 => root!("inherent AppleSurface::dimensions", {
+        35 => root!("inherent AppleSurface::dimensions", {
             let Some(surface) = (unsafe { args.surface.as_ref() }) else {
                 return 0;
             };
             black_box(surface.dimensions());
             0
         }),
-        35 => root!("inherent AppleSurface::is_attached", {
+        36 => root!("inherent AppleSurface::is_attached", {
             let Some(surface) = (unsafe { args.surface.as_ref() }) else {
                 return 0;
             };
             black_box(surface.is_attached());
             0
         }),
-        36 => root!("inherent AppleSurface::resize", {
+        37 => root!("inherent AppleSurface::resize", {
             let Some(surface) = (unsafe { args.surface.as_mut() }) else {
                 return 0;
             };
@@ -456,14 +485,14 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             black_box(surface.resize(factory, args.width, args.height).is_ok());
             0
         }),
-        37 => root!("inherent AppleSurface::detach", {
+        38 => root!("inherent AppleSurface::detach", {
             let Some(surface) = (unsafe { args.surface.as_mut() }) else {
                 return 0;
             };
             surface.detach();
             0
         }),
-        38 => root!("inherent AppleSurface::reattach", {
+        39 => root!("inherent AppleSurface::reattach", {
             let Some(surface) = (unsafe { args.surface.as_mut() }) else {
                 return 0;
             };
@@ -473,7 +502,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             black_box(surface.reattach(factory, args.width, args.height).is_ok());
             0
         }),
-        39 => root!("inherent AppleSurface::copy_metal_device", {
+        40 => root!("inherent AppleSurface::copy_metal_device", {
             let Some(surface) = (unsafe { args.surface.as_ref() }) else {
                 return 0;
             };
@@ -483,7 +512,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             black_box(surface.copy_metal_device(factory).is_ok());
             0
         }),
-        40 => root!("inherent AppleSurface::preflight_present", {
+        41 => root!("inherent AppleSurface::preflight_present", {
             let Some(surface) = (unsafe { args.surface.as_ref() }) else {
                 return 0;
             };

@@ -21,6 +21,7 @@ trait Factory::make_render_path
 trait Factory::make_empty_render_path
 trait Factory::make_render_paint
 trait Factory::decode_image
+trait Factory::make_gpu_canvas_image
 trait Renderer::save
 trait Renderer::restore
 trait Renderer::transform

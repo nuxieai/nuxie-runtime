@@ -134,14 +134,27 @@ upstream-sync-map registry).
    mismatches; `property_path_for_source_path` fails identically in both
    builds for source paths [3,0] and [2,4] (common, not the delta). (4)
    Property ordering is exonerated: both constructors share
-   `from_view_model`'s definition walk; only seeded VALUES differ. NEXT
-   MOVE (mechanical): instrument
-   `runtime_owned_view_model_binding_value_for_property_path` to dump every
-   resolved (property_path, value) pair in both builds on
-   `db_health_tracker --samples 0`, diff the tables — the diverging
-   property identifies the c7d48ca0 hunk mis-consuming instance-0 values
-   (pre-rebase `a159897f` machinery handled the identical context
-   correctly).
+   `from_view_model`'s definition walk; only seeded VALUES differ. (5) The
+   value-table diff is DONE (dump
+   `runtime_owned_view_model_binding_value_for_property_path` behind an env
+   var in both builds, `sort -u`, diff): the instance-0 context resolves
+   real serialized data — notably property_path [4,1] = 4022.0 where the
+   default context resolves 0.0, plus [0,0..6] = 67/55/70/80/67/75/64 and
+   [3,3] ≈ 410–482 vs ≈ 16 — and those values flow into the artboard,
+   shifting the rows. ROOT-CAUSE HYPOTHESIS (one step from a fix): C++
+   ALSO copies instance 0 yet renders 271.49, so C++'s init must seed
+   target→source FIRST (the artboard's serialized state writes into the VM
+   before any source→target read — `DataBind::updateSourceBinding` +
+   TargetOrigin/`sourceToTargetRunsFirst` favored-direction semantics),
+   while c7d48ca0's owned-candidate path in
+   `state_machine/instance.rs::bind_owned_view_model_context_candidates`
+   applies source→target from the live VM values. Note the artboard side
+   (`bind_owned_view_model_artboard_context_candidates`) still calls
+   `bind_owned_view_model_target_to_source_bindings` before value
+   application — compare the state-machine candidate path against it and
+   against pre-rebase `a159897f`, then port the favored-direction ordering
+   from C++ `data_bind.cpp`. This also intersects the #B-5 (c)-row (i):
+   974aab66 stopped target→source seeding for two-way binds.
    The commit's
    OTHER regression — ten trigger probe assertions — is FIXED 2026-07-21:
    `reset_advanced_data_context` had swapped `trigger.reset()` for

@@ -8,6 +8,8 @@ use nuxie_binary::{
     RuntimeViewModelInstanceReference,
 };
 
+use crate::view_model_cell::{RuntimeViewModelCell, RuntimeViewModelCellValue};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeDefaultViewModelNumberSourceHandle {
     pub(crate) path: Vec<u32>,
@@ -2735,40 +2737,249 @@ impl RuntimeOwnedViewModelViewModelSourceHandle {
     }
 }
 
-#[derive(Debug, Clone)]
+// #RB-1 slice (e1): scalar VALUE storage is re-backed onto retained
+// `RuntimeViewModelCell`s (`view_model_cell.rs`). The surrounding per-type
+// vec layout, the mutation clock, lists, nested children, and alias mirrors
+// are unchanged in this step; every write still bumps the clock AND lands in
+// the cell so retained dependents (slices e2+) observe it. `Clone` on these
+// slot structs is a DEEP copy (fresh cell, same value) so
+// `RuntimeOwnedViewModelInstance::clone` keeps its snapshot semantics —
+// sharing stays exclusively via `RuntimeOwnedViewModelHandle`.
+
+#[derive(Debug)]
 struct RuntimeOwnedViewModelNumber {
     property_index: usize,
-    value: f32,
+    cell: RuntimeViewModelCell,
 }
 
-#[derive(Debug, Clone)]
+impl RuntimeOwnedViewModelNumber {
+    fn new(property_index: usize, value: f32) -> Self {
+        Self {
+            property_index,
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(value)),
+        }
+    }
+
+    fn value(&self) -> f32 {
+        match self.cell.value() {
+            RuntimeViewModelCellValue::Number(value) => value,
+            _ => unreachable!("owned number slot holds a non-number cell"),
+        }
+    }
+
+    /// Same change contract as the replaced `value` field comparison: returns
+    /// whether the stored value changed (NaN writes always report a change,
+    /// exactly like the old `!=` guard).
+    fn set_value(&mut self, value: f32) -> bool {
+        if self.value() == value {
+            return false;
+        }
+        self.cell
+            .set_value(RuntimeViewModelCellValue::Number(value));
+        true
+    }
+}
+
+impl Clone for RuntimeOwnedViewModelNumber {
+    fn clone(&self) -> Self {
+        Self::new(self.property_index, self.value())
+    }
+}
+
+#[derive(Debug)]
 struct RuntimeOwnedViewModelBoolean {
     property_index: usize,
-    value: bool,
+    cell: RuntimeViewModelCell,
 }
 
-#[derive(Debug, Clone)]
+impl RuntimeOwnedViewModelBoolean {
+    fn new(property_index: usize, value: bool) -> Self {
+        Self {
+            property_index,
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::Boolean(value)),
+        }
+    }
+
+    fn value(&self) -> bool {
+        match self.cell.value() {
+            RuntimeViewModelCellValue::Boolean(value) => value,
+            _ => unreachable!("owned boolean slot holds a non-boolean cell"),
+        }
+    }
+
+    fn set_value(&mut self, value: bool) -> bool {
+        self.cell
+            .set_value(RuntimeViewModelCellValue::Boolean(value))
+    }
+}
+
+impl Clone for RuntimeOwnedViewModelBoolean {
+    fn clone(&self) -> Self {
+        Self::new(self.property_index, self.value())
+    }
+}
+
+/// String slot: the cell is authoritative for change propagation, while
+/// `bytes` mirrors the cell so the reference-returning public getters
+/// (`Option<&[u8]>`) keep their signatures. Every write lands in both; only
+/// this slot's setter writes either, so the mirror cannot go stale in e1
+/// (cells are not yet shared across instances — that is slice e2).
+#[derive(Debug)]
 struct RuntimeOwnedViewModelString {
     property_index: usize,
-    value: Vec<u8>,
+    bytes: Vec<u8>,
+    cell: RuntimeViewModelCell,
 }
 
-#[derive(Debug, Clone)]
+impl RuntimeOwnedViewModelString {
+    fn new(property_index: usize, value: Vec<u8>) -> Self {
+        Self {
+            property_index,
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::String(value.clone())),
+            bytes: value,
+        }
+    }
+
+    fn value(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    fn set_value(&mut self, value: &[u8]) -> bool {
+        if self.bytes == value {
+            return false;
+        }
+        self.bytes = value.to_vec();
+        self.cell
+            .set_value(RuntimeViewModelCellValue::String(self.bytes.clone()));
+        true
+    }
+}
+
+impl Clone for RuntimeOwnedViewModelString {
+    fn clone(&self) -> Self {
+        Self::new(self.property_index, self.bytes.clone())
+    }
+}
+
+#[derive(Debug)]
 struct RuntimeOwnedViewModelColor {
     property_index: usize,
-    value: u32,
+    cell: RuntimeViewModelCell,
 }
 
-#[derive(Debug, Clone)]
+impl RuntimeOwnedViewModelColor {
+    fn new(property_index: usize, value: u32) -> Self {
+        Self {
+            property_index,
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::Color(value)),
+        }
+    }
+
+    fn value(&self) -> u32 {
+        match self.cell.value() {
+            RuntimeViewModelCellValue::Color(value) => value,
+            _ => unreachable!("owned color slot holds a non-color cell"),
+        }
+    }
+
+    fn set_value(&mut self, value: u32) -> bool {
+        self.cell.set_value(RuntimeViewModelCellValue::Color(value))
+    }
+}
+
+impl Clone for RuntimeOwnedViewModelColor {
+    fn clone(&self) -> Self {
+        Self::new(self.property_index, self.value())
+    }
+}
+
+/// Converts a u64-typed public value into the u32 cell payload the retained
+/// core stores (C++ types these properties `uint32_t`). Values beyond u32
+/// cannot come from a valid file; a hostile/absurd API write saturates to
+/// the C++ `-1` missing sentinel rather than truncating bit patterns.
+fn owned_scalar_u32_payload(value: u64) -> u32 {
+    u32::try_from(value).unwrap_or(u32::MAX)
+}
+
+#[derive(Debug)]
 struct RuntimeOwnedViewModelEnum {
     property_index: usize,
-    value: u64,
+    cell: RuntimeViewModelCell,
 }
 
-#[derive(Debug, Clone)]
+impl RuntimeOwnedViewModelEnum {
+    fn new(property_index: usize, value: u64) -> Self {
+        Self {
+            property_index,
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::Enum(
+                owned_scalar_u32_payload(value),
+            )),
+        }
+    }
+
+    fn value(&self) -> u64 {
+        match self.cell.value() {
+            RuntimeViewModelCellValue::Enum(value) => u64::from(value),
+            _ => unreachable!("owned enum slot holds a non-enum cell"),
+        }
+    }
+
+    fn set_value(&mut self, value: u64) -> bool {
+        if self.value() == value {
+            return false;
+        }
+        self.cell.set_value(RuntimeViewModelCellValue::Enum(
+            owned_scalar_u32_payload(value),
+        ));
+        true
+    }
+}
+
+impl Clone for RuntimeOwnedViewModelEnum {
+    fn clone(&self) -> Self {
+        Self::new(self.property_index, self.value())
+    }
+}
+
+#[derive(Debug)]
 struct RuntimeOwnedViewModelSymbolListIndex {
     property_index: usize,
-    value: u64,
+    cell: RuntimeViewModelCell,
+}
+
+impl RuntimeOwnedViewModelSymbolListIndex {
+    fn new(property_index: usize, value: u64) -> Self {
+        Self {
+            property_index,
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::SymbolListIndex(
+                owned_scalar_u32_payload(value),
+            )),
+        }
+    }
+
+    fn value(&self) -> u64 {
+        match self.cell.value() {
+            RuntimeViewModelCellValue::SymbolListIndex(value) => u64::from(value),
+            _ => unreachable!("owned symbol-list-index slot holds a mismatched cell"),
+        }
+    }
+
+    fn set_value(&mut self, value: u64) -> bool {
+        if self.value() == value {
+            return false;
+        }
+        self.cell
+            .set_value(RuntimeViewModelCellValue::SymbolListIndex(
+                owned_scalar_u32_payload(value),
+            ));
+        true
+    }
+}
+
+impl Clone for RuntimeOwnedViewModelSymbolListIndex {
+    fn clone(&self) -> Self {
+        Self::new(self.property_index, self.value())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -2792,8 +3003,7 @@ struct RuntimeOwnedViewModelListItem {
 fn reset_runtime_owned_triggers(triggers: &mut [RuntimeOwnedViewModelTrigger]) -> bool {
     let mut changed = false;
     for trigger in triggers {
-        if trigger.value != 0 {
-            trigger.value = 0;
+        if trigger.set_value(0) {
             changed = true;
         }
     }
@@ -2826,10 +3036,44 @@ impl RuntimeOwnedViewModelListItem {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct RuntimeOwnedViewModelAsset {
     property_index: usize,
-    value: u64,
+    cell: RuntimeViewModelCell,
+}
+
+impl RuntimeOwnedViewModelAsset {
+    fn new(property_index: usize, value: u64) -> Self {
+        Self {
+            property_index,
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::AssetImage(
+                owned_scalar_u32_payload(value),
+            )),
+        }
+    }
+
+    fn value(&self) -> u64 {
+        match self.cell.value() {
+            RuntimeViewModelCellValue::AssetImage(value) => u64::from(value),
+            _ => unreachable!("owned asset slot holds a non-asset cell"),
+        }
+    }
+
+    fn set_value(&mut self, value: u64) -> bool {
+        if self.value() == value {
+            return false;
+        }
+        self.cell.set_value(RuntimeViewModelCellValue::AssetImage(
+            owned_scalar_u32_payload(value),
+        ));
+        true
+    }
+}
+
+impl Clone for RuntimeOwnedViewModelAsset {
+    fn clone(&self) -> Self {
+        Self::new(self.property_index, self.value())
+    }
 }
 
 /// The two-part value stored by C++ `ViewModelInstanceAssetFont`.
@@ -2924,22 +3168,89 @@ impl Default for RuntimeFontAssetValue {
     }
 }
 
+/// NOT cell-backed in slice e1: the font value is a two-part payload
+/// (file-asset index + retained live Font bytes with `Arc::ptr_eq` change
+/// semantics) that `RuntimeViewModelCellValue::AssetFont(u32)` cannot carry,
+/// and `font_asset_value_by_property_*` returns `&RuntimeFontAssetValue`
+/// borrowed from this storage. Migrates with the font-cell payload decision
+/// in a later slice.
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelFontAsset {
     property_index: usize,
     value: RuntimeFontAssetValue,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct RuntimeOwnedViewModelArtboard {
     property_index: usize,
-    value: u64,
+    cell: RuntimeViewModelCell,
 }
 
-#[derive(Debug, Clone)]
+impl RuntimeOwnedViewModelArtboard {
+    fn new(property_index: usize, value: u64) -> Self {
+        Self {
+            property_index,
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::Artboard(
+                owned_scalar_u32_payload(value),
+            )),
+        }
+    }
+
+    fn value(&self) -> u64 {
+        match self.cell.value() {
+            RuntimeViewModelCellValue::Artboard(value) => u64::from(value),
+            _ => unreachable!("owned artboard slot holds a non-artboard cell"),
+        }
+    }
+
+    fn set_value(&mut self, value: u64) -> bool {
+        if self.value() == value {
+            return false;
+        }
+        self.cell.set_value(RuntimeViewModelCellValue::Artboard(
+            owned_scalar_u32_payload(value),
+        ));
+        true
+    }
+}
+
+impl Clone for RuntimeOwnedViewModelArtboard {
+    fn clone(&self) -> Self {
+        Self::new(self.property_index, self.value())
+    }
+}
+
+#[derive(Debug)]
 struct RuntimeOwnedViewModelTrigger {
     property_index: usize,
-    value: u64,
+    cell: RuntimeViewModelCell,
+}
+
+impl RuntimeOwnedViewModelTrigger {
+    fn new(property_index: usize, value: u64) -> Self {
+        Self {
+            property_index,
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(value)),
+        }
+    }
+
+    fn value(&self) -> u64 {
+        match self.cell.value() {
+            RuntimeViewModelCellValue::Trigger(value) => value,
+            _ => unreachable!("owned trigger slot holds a non-trigger cell"),
+        }
+    }
+
+    fn set_value(&mut self, value: u64) -> bool {
+        self.cell
+            .set_value(RuntimeViewModelCellValue::Trigger(value))
+    }
+}
+
+impl Clone for RuntimeOwnedViewModelTrigger {
+    fn clone(&self) -> Self {
+        Self::new(self.property_index, self.value())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3253,7 +3564,7 @@ impl RuntimeOwnedViewModelViewModel {
         self.numbers
             .iter()
             .find(|number| number.property_index == property_index)
-            .map(|number| number.value)
+            .map(|number| number.value())
     }
 
     fn active_number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
@@ -3269,7 +3580,7 @@ impl RuntimeOwnedViewModelViewModel {
                         .iter()
                         .find(|number| number.property_index == property_index)
                 })
-                .map(|number| number.value),
+                .map(|number| number.value()),
             _ => None,
         }
     }
@@ -3278,7 +3589,7 @@ impl RuntimeOwnedViewModelViewModel {
         self.booleans
             .iter()
             .find(|boolean| boolean.property_index == property_index)
-            .map(|boolean| boolean.value)
+            .map(|boolean| boolean.value())
     }
 
     fn active_boolean_value_by_property_index(&self, property_index: usize) -> Option<bool> {
@@ -3294,7 +3605,7 @@ impl RuntimeOwnedViewModelViewModel {
                         .iter()
                         .find(|boolean| boolean.property_index == property_index)
                 })
-                .map(|boolean| boolean.value),
+                .map(|boolean| boolean.value()),
             _ => None,
         }
     }
@@ -3303,7 +3614,7 @@ impl RuntimeOwnedViewModelViewModel {
         self.strings
             .iter()
             .find(|string| string.property_index == property_index)
-            .map(|string| string.value.as_slice())
+            .map(|string| string.value())
     }
 
     fn active_string_value_by_property_index(&self, property_index: usize) -> Option<&[u8]> {
@@ -3319,7 +3630,7 @@ impl RuntimeOwnedViewModelViewModel {
                         .iter()
                         .find(|string| string.property_index == property_index)
                 })
-                .map(|string| string.value.as_slice()),
+                .map(|string| string.value()),
             _ => None,
         }
     }
@@ -3328,7 +3639,7 @@ impl RuntimeOwnedViewModelViewModel {
         self.colors
             .iter()
             .find(|color| color.property_index == property_index)
-            .map(|color| color.value)
+            .map(|color| color.value())
     }
 
     fn active_color_value_by_property_index(&self, property_index: usize) -> Option<u32> {
@@ -3344,7 +3655,7 @@ impl RuntimeOwnedViewModelViewModel {
                         .iter()
                         .find(|color| color.property_index == property_index)
                 })
-                .map(|color| color.value),
+                .map(|color| color.value()),
             _ => None,
         }
     }
@@ -3353,7 +3664,7 @@ impl RuntimeOwnedViewModelViewModel {
         self.enums
             .iter()
             .find(|enum_value| enum_value.property_index == property_index)
-            .map(|enum_value| enum_value.value)
+            .map(|enum_value| enum_value.value())
     }
 
     fn active_enum_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -3369,7 +3680,7 @@ impl RuntimeOwnedViewModelViewModel {
                         .iter()
                         .find(|enum_value| enum_value.property_index == property_index)
                 })
-                .map(|enum_value| enum_value.value),
+                .map(|enum_value| enum_value.value()),
             _ => None,
         }
     }
@@ -3378,7 +3689,7 @@ impl RuntimeOwnedViewModelViewModel {
         self.symbol_list_indices
             .iter()
             .find(|symbol_list_index| symbol_list_index.property_index == property_index)
-            .map(|symbol_list_index| symbol_list_index.value)
+            .map(|symbol_list_index| symbol_list_index.value())
     }
 
     fn active_symbol_list_index_value_by_property_index(
@@ -3397,7 +3708,7 @@ impl RuntimeOwnedViewModelViewModel {
                         symbol_list_index.property_index == property_index
                     })
                 })
-                .map(|symbol_list_index| symbol_list_index.value),
+                .map(|symbol_list_index| symbol_list_index.value()),
             _ => None,
         }
     }
@@ -3498,7 +3809,7 @@ impl RuntimeOwnedViewModelViewModel {
         self.assets
             .iter()
             .find(|asset| asset.property_index == property_index)
-            .map(|asset| asset.value)
+            .map(|asset| asset.value())
     }
 
     fn active_asset_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -3514,7 +3825,7 @@ impl RuntimeOwnedViewModelViewModel {
                         .iter()
                         .find(|asset| asset.property_index == property_index)
                 })
-                .map(|asset| asset.value),
+                .map(|asset| asset.value()),
             _ => None,
         }
     }
@@ -3554,7 +3865,7 @@ impl RuntimeOwnedViewModelViewModel {
         self.artboards
             .iter()
             .find(|artboard| artboard.property_index == property_index)
-            .map(|artboard| artboard.value)
+            .map(|artboard| artboard.value())
     }
 
     fn active_artboard_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -3570,7 +3881,7 @@ impl RuntimeOwnedViewModelViewModel {
                         .iter()
                         .find(|artboard| artboard.property_index == property_index)
                 })
-                .map(|artboard| artboard.value),
+                .map(|artboard| artboard.value()),
             _ => None,
         }
     }
@@ -3579,7 +3890,7 @@ impl RuntimeOwnedViewModelViewModel {
         self.triggers
             .iter()
             .find(|trigger| trigger.property_index == property_index)
-            .map(|trigger| trigger.value)
+            .map(|trigger| trigger.value())
     }
 
     fn active_trigger_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -3595,7 +3906,7 @@ impl RuntimeOwnedViewModelViewModel {
                         .iter()
                         .find(|trigger| trigger.property_index == property_index)
                 })
-                .map(|trigger| trigger.value),
+                .map(|trigger| trigger.value()),
             _ => None,
         }
     }
@@ -3651,10 +3962,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if number.value == value {
+        if !number.set_value(value) {
             return false;
         }
-        number.value = value;
         true
     }
 
@@ -3673,10 +3983,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if boolean.value == value {
+        if !boolean.set_value(value) {
             return false;
         }
-        boolean.value = value;
         true
     }
 
@@ -3695,10 +4004,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if string.value == value {
+        if !string.set_value(value) {
             return false;
         }
-        string.value = value.to_vec();
         true
     }
 
@@ -3717,10 +4025,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if color.value == value {
+        if !color.set_value(value) {
             return false;
         }
-        color.value = value;
         true
     }
 
@@ -3739,10 +4046,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if enum_value.value == value {
+        if !enum_value.set_value(value) {
             return false;
         }
-        enum_value.value = value;
         true
     }
 
@@ -3765,10 +4071,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if symbol_list_index.value == value {
+        if !symbol_list_index.set_value(value) {
             return false;
         }
-        symbol_list_index.value = value;
         true
     }
 
@@ -3819,10 +4124,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if asset.value == value {
+        if !asset.set_value(value) {
             return false;
         }
-        asset.value = value;
         true
     }
 
@@ -3893,10 +4197,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if artboard.value == value {
+        if !artboard.set_value(value) {
             return false;
         }
-        artboard.value = value;
         true
     }
 
@@ -3915,10 +4218,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if trigger.value == value {
+        if !trigger.set_value(value) {
             return false;
         }
-        trigger.value = value;
         true
     }
 
@@ -3939,10 +4241,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if current.value == value {
+        if !current.set_value(value) {
             return false;
         }
-        current.value = value;
         true
     }
 
@@ -3963,10 +4264,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if current.value == value {
+        if !current.set_value(value) {
             return false;
         }
-        current.value = value;
         true
     }
 
@@ -3987,10 +4287,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if current.value == value {
+        if !current.set_value(value) {
             return false;
         }
-        current.value = value.to_vec();
         true
     }
 
@@ -4011,10 +4310,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if current.value == value {
+        if !current.set_value(value) {
             return false;
         }
-        current.value = value;
         true
     }
 
@@ -4035,10 +4333,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if current.value == value {
+        if !current.set_value(value) {
             return false;
         }
-        current.value = value;
         true
     }
 
@@ -4063,10 +4360,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if current.value == value {
+        if !current.set_value(value) {
             return false;
         }
-        current.value = value;
         true
     }
 
@@ -4087,10 +4383,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if current.value == value {
+        if !current.set_value(value) {
             return false;
         }
-        current.value = value;
         true
     }
 
@@ -4183,10 +4478,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if current.value == value {
+        if !current.set_value(value) {
             return false;
         }
-        current.value = value;
         true
     }
 
@@ -4207,10 +4501,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if current.value == value {
+        if !current.set_value(value) {
             return false;
         }
-        current.value = value;
         true
     }
 }
@@ -4856,10 +5149,7 @@ fn runtime_owned_view_model_numbers(
                 .enumerate()
                 .filter_map(|(property_index, property)| {
                     (property.type_name == "ViewModelPropertyNumber").then_some(
-                        RuntimeOwnedViewModelNumber {
-                            property_index,
-                            value: 0.0,
-                        },
+                        RuntimeOwnedViewModelNumber::new(property_index, 0.0),
                     )
                 })
                 .collect()
@@ -4891,10 +5181,7 @@ fn runtime_owned_view_model_numbers_for_instance(
                         &path,
                     )?;
                     let value = file.view_model_instance_number_value_for_object(source)?;
-                    Some(RuntimeOwnedViewModelNumber {
-                        property_index,
-                        value,
-                    })
+                    Some(RuntimeOwnedViewModelNumber::new(property_index, value))
                 })
                 .collect()
         })
@@ -4937,10 +5224,7 @@ fn runtime_owned_view_model_booleans(
                 .enumerate()
                 .filter_map(|(property_index, property)| {
                     (property.type_name == "ViewModelPropertyBoolean").then_some(
-                        RuntimeOwnedViewModelBoolean {
-                            property_index,
-                            value: false,
-                        },
+                        RuntimeOwnedViewModelBoolean::new(property_index, false),
                     )
                 })
                 .collect()
@@ -4972,10 +5256,7 @@ fn runtime_owned_view_model_booleans_for_instance(
                         &path,
                     )?;
                     let value = file.view_model_instance_boolean_value_for_object(source)?;
-                    Some(RuntimeOwnedViewModelBoolean {
-                        property_index,
-                        value,
-                    })
+                    Some(RuntimeOwnedViewModelBoolean::new(property_index, value))
                 })
                 .collect()
         })
@@ -5018,10 +5299,7 @@ fn runtime_owned_view_model_strings(
                 .enumerate()
                 .filter_map(|(property_index, property)| {
                     (property.type_name == "ViewModelPropertyString").then_some(
-                        RuntimeOwnedViewModelString {
-                            property_index,
-                            value: Vec::new(),
-                        },
+                        RuntimeOwnedViewModelString::new(property_index, Vec::new()),
                     )
                 })
                 .collect()
@@ -5053,10 +5331,7 @@ fn runtime_owned_view_model_strings_for_instance(
                         &path,
                     )?;
                     let value = file.view_model_instance_string_value_for_object(source)?;
-                    Some(RuntimeOwnedViewModelString {
-                        property_index,
-                        value: value.as_bytes().to_vec(),
-                    })
+                    Some(RuntimeOwnedViewModelString::new(property_index, value.as_bytes().to_vec()))
                 })
                 .collect()
         })
@@ -5099,10 +5374,7 @@ fn runtime_owned_view_model_colors(
                 .enumerate()
                 .filter_map(|(property_index, property)| {
                     (property.type_name == "ViewModelPropertyColor").then_some(
-                        RuntimeOwnedViewModelColor {
-                            property_index,
-                            value: 0xFF000000,
-                        },
+                        RuntimeOwnedViewModelColor::new(property_index, 0xFF000000),
                     )
                 })
                 .collect()
@@ -5134,10 +5406,7 @@ fn runtime_owned_view_model_colors_for_instance(
                         &path,
                     )?;
                     let value = file.view_model_instance_color_value_for_object(source)?;
-                    Some(RuntimeOwnedViewModelColor {
-                        property_index,
-                        value,
-                    })
+                    Some(RuntimeOwnedViewModelColor::new(property_index, value))
                 })
                 .collect()
         })
@@ -5185,10 +5454,7 @@ fn runtime_owned_view_model_enums(
                             | "ViewModelPropertyEnumCustom"
                             | "ViewModelPropertyEnumSystem"
                     )
-                    .then_some(RuntimeOwnedViewModelEnum {
-                        property_index,
-                        value: 0,
-                    })
+                    .then_some(RuntimeOwnedViewModelEnum::new(property_index, 0))
                 })
                 .collect()
         })
@@ -5219,10 +5485,7 @@ fn runtime_owned_view_model_enums_for_instance(
                         &path,
                     )?;
                     let value = file.view_model_instance_enum_value_index_for_object(source)?;
-                    Some(RuntimeOwnedViewModelEnum {
-                        property_index,
-                        value: u64::try_from(value).ok()?,
-                    })
+                    Some(RuntimeOwnedViewModelEnum::new(property_index, u64::try_from(value).ok()?))
                 })
                 .collect()
         })
@@ -5265,10 +5528,7 @@ fn runtime_owned_view_model_symbol_list_indices(
                 .enumerate()
                 .filter_map(|(property_index, property)| {
                     (property.type_name == "ViewModelPropertySymbolListIndex").then_some(
-                        RuntimeOwnedViewModelSymbolListIndex {
-                            property_index,
-                            value: 0,
-                        },
+                        RuntimeOwnedViewModelSymbolListIndex::new(property_index, 0),
                     )
                 })
                 .collect()
@@ -5302,10 +5562,7 @@ fn runtime_owned_view_model_symbol_list_indices_for_instance(
                     )?;
                     let value =
                         file.view_model_instance_symbol_list_index_value_for_object(source)?;
-                    Some(RuntimeOwnedViewModelSymbolListIndex {
-                        property_index,
-                        value,
-                    })
+                    Some(RuntimeOwnedViewModelSymbolListIndex::new(property_index, value))
                 })
                 .collect()
         })
@@ -5495,10 +5752,7 @@ fn runtime_owned_view_model_assets(
                         property.type_name,
                         "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage"
                     )
-                    .then_some(RuntimeOwnedViewModelAsset {
-                        property_index,
-                        value: u64::from(u32::MAX),
-                    })
+                    .then_some(RuntimeOwnedViewModelAsset::new(property_index, u64::from(u32::MAX)))
                 })
                 .collect()
         })
@@ -5532,10 +5786,7 @@ fn runtime_owned_view_model_assets_for_instance(
                         &path,
                     )?;
                     let value = file.view_model_instance_asset_index_for_object(source)?;
-                    Some(RuntimeOwnedViewModelAsset {
-                        property_index,
-                        value,
-                    })
+                    Some(RuntimeOwnedViewModelAsset::new(property_index, value))
                 })
                 .collect()
         })
@@ -5660,12 +5911,9 @@ fn runtime_owned_view_model_artboards(
                 .enumerate()
                 .filter_map(|(property_index, property)| {
                     (property.type_name == "ViewModelPropertyArtboard").then_some(
-                        RuntimeOwnedViewModelArtboard {
-                            property_index,
-                            // C++ `ViewModelInstanceArtboardBase` initializes
-                            // an unassigned property to its `-1` sentinel.
-                            value: u64::from(u32::MAX),
-                        },
+                        // C++ `ViewModelInstanceArtboardBase` initializes
+                        // an unassigned property to its `-1` sentinel.
+                        RuntimeOwnedViewModelArtboard::new(property_index, u64::from(u32::MAX)),
                     )
                 })
                 .collect()
@@ -5697,10 +5945,7 @@ fn runtime_owned_view_model_artboards_for_instance(
                         &path,
                     )?;
                     let value = file.view_model_instance_artboard_index_for_object(source)?;
-                    Some(RuntimeOwnedViewModelArtboard {
-                        property_index,
-                        value,
-                    })
+                    Some(RuntimeOwnedViewModelArtboard::new(property_index, value))
                 })
                 .collect()
         })
@@ -5743,10 +5988,7 @@ fn runtime_owned_view_model_triggers(
                 .enumerate()
                 .filter_map(|(property_index, property)| {
                     (property.type_name == "ViewModelPropertyTrigger").then_some(
-                        RuntimeOwnedViewModelTrigger {
-                            property_index,
-                            value: 0,
-                        },
+                        RuntimeOwnedViewModelTrigger::new(property_index, 0),
                     )
                 })
                 .collect()
@@ -5778,10 +6020,7 @@ fn runtime_owned_view_model_triggers_for_instance(
                         &path,
                     )?;
                     let value = file.view_model_instance_trigger_count_for_object(source)?;
-                    Some(RuntimeOwnedViewModelTrigger {
-                        property_index,
-                        value,
-                    })
+                    Some(RuntimeOwnedViewModelTrigger::new(property_index, value))
                 })
                 .collect()
         })
@@ -6240,7 +6479,7 @@ impl RuntimeOwnedViewModelInstance {
 
     /// Read a number through a previously resolved dense numeric-value slot.
     pub fn number_value_by_slot(&self, number_slot: usize) -> Option<f32> {
-        self.numbers.get(number_slot).map(|number| number.value)
+        self.numbers.get(number_slot).map(|number| number.value())
     }
 
     pub fn string_value_by_property_name(&self, property_name: &str) -> Option<&[u8]> {
@@ -6745,10 +6984,9 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if number.value == value {
+        if !number.set_value(value) {
             return false;
         }
-        number.value = value;
         self.mark_mutated();
         true
     }
@@ -6762,10 +7000,9 @@ impl RuntimeOwnedViewModelInstance {
         let Some(number) = self.numbers.get_mut(number_slot) else {
             return false;
         };
-        if number.value == value {
+        if !number.set_value(value) {
             return false;
         }
-        number.value = value;
         self.mark_mutated();
         true
     }
@@ -6907,10 +7144,9 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if boolean.value == value {
+        if !boolean.set_value(value) {
             return false;
         }
-        boolean.value = value;
         self.mark_mutated();
         true
     }
@@ -7052,10 +7288,9 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if string.value == value {
+        if !string.set_value(value) {
             return false;
         }
-        string.value = value.to_vec();
         self.mark_mutated();
         true
     }
@@ -7210,10 +7445,9 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if color.value == value {
+        if !color.set_value(value) {
             return false;
         }
-        color.value = value;
         self.mark_mutated();
         true
     }
@@ -7360,10 +7594,9 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if enum_value.value == value {
+        if !enum_value.set_value(value) {
             return false;
         }
-        enum_value.value = value;
         self.mark_mutated();
         true
     }
@@ -7509,10 +7742,9 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if symbol_list_index.value == value {
+        if !symbol_list_index.set_value(value) {
             return false;
         }
-        symbol_list_index.value = value;
         self.mark_mutated();
         true
     }
@@ -7535,7 +7767,7 @@ impl RuntimeOwnedViewModelInstance {
     pub fn component_list_item_index(&self) -> Option<u64> {
         self.symbol_list_indices
             .last()
-            .map(|symbol_list_index| symbol_list_index.value)
+            .map(|symbol_list_index| symbol_list_index.value())
     }
 
     pub fn symbol_list_index_source_handle_by_property_name(
@@ -8153,10 +8385,9 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if asset.value == value {
+        if !asset.set_value(value) {
             return false;
         }
-        asset.value = value;
         self.mark_mutated();
         true
     }
@@ -8560,10 +8791,9 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if artboard.value == value {
+        if !artboard.set_value(value) {
             return false;
         }
-        artboard.value = value;
         self.mark_mutated();
         true
     }
@@ -8705,10 +8935,9 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if trigger.value == value {
+        if !trigger.set_value(value) {
             return false;
         }
-        trigger.value = value;
         self.mark_mutated();
         true
     }
@@ -9353,7 +9582,7 @@ impl RuntimeOwnedViewModelInstance {
         self.numbers
             .iter()
             .find(|number| number.property_index == property_index)
-            .map(|number| number.value)
+            .map(|number| number.value())
     }
 
     pub(crate) fn number_value_by_property_path(&self, property_path: &[usize]) -> Option<f32> {
@@ -9450,7 +9679,7 @@ impl RuntimeOwnedViewModelInstance {
         self.booleans
             .iter()
             .find(|boolean| boolean.property_index == property_index)
-            .map(|boolean| boolean.value)
+            .map(|boolean| boolean.value())
     }
 
     pub(crate) fn boolean_value_by_property_path(&self, property_path: &[usize]) -> Option<bool> {
@@ -9486,7 +9715,7 @@ impl RuntimeOwnedViewModelInstance {
         self.strings
             .iter()
             .find(|string| string.property_index == property_index)
-            .map(|string| string.value.as_slice())
+            .map(|string| string.value())
     }
 
     pub(crate) fn string_value_by_property_path(&self, property_path: &[usize]) -> Option<&[u8]> {
@@ -9522,7 +9751,7 @@ impl RuntimeOwnedViewModelInstance {
         self.colors
             .iter()
             .find(|color| color.property_index == property_index)
-            .map(|color| color.value)
+            .map(|color| color.value())
     }
 
     pub(crate) fn color_value_by_property_path(&self, property_path: &[usize]) -> Option<u32> {
@@ -9558,7 +9787,7 @@ impl RuntimeOwnedViewModelInstance {
         self.enums
             .iter()
             .find(|enum_value| enum_value.property_index == property_index)
-            .map(|enum_value| enum_value.value)
+            .map(|enum_value| enum_value.value())
     }
 
     pub(crate) fn enum_value_by_property_path(&self, property_path: &[usize]) -> Option<u64> {
@@ -9594,7 +9823,7 @@ impl RuntimeOwnedViewModelInstance {
         self.symbol_list_indices
             .iter()
             .find(|symbol_list_index| symbol_list_index.property_index == property_index)
-            .map(|symbol_list_index| symbol_list_index.value)
+            .map(|symbol_list_index| symbol_list_index.value())
     }
 
     pub(crate) fn symbol_list_index_value_by_property_path(
@@ -9692,7 +9921,7 @@ impl RuntimeOwnedViewModelInstance {
         self.assets
             .iter()
             .find(|asset| asset.property_index == property_index)
-            .map(|asset| asset.value)
+            .map(|asset| asset.value())
     }
 
     pub(crate) fn asset_value_by_property_path(&self, property_path: &[usize]) -> Option<u64> {
@@ -9772,7 +10001,7 @@ impl RuntimeOwnedViewModelInstance {
         self.artboards
             .iter()
             .find(|artboard| artboard.property_index == property_index)
-            .map(|artboard| artboard.value)
+            .map(|artboard| artboard.value())
     }
 
     pub(crate) fn artboard_value_by_property_path(&self, property_path: &[usize]) -> Option<u64> {
@@ -9808,7 +10037,7 @@ impl RuntimeOwnedViewModelInstance {
         self.triggers
             .iter()
             .find(|trigger| trigger.property_index == property_index)
-            .map(|trigger| trigger.value)
+            .map(|trigger| trigger.value())
     }
 
     pub(crate) fn trigger_value_by_property_path(&self, property_path: &[usize]) -> Option<u64> {

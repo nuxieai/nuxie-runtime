@@ -144,6 +144,16 @@ pub struct RuntimeViewModelCell {
     state: Rc<RefCell<RuntimeViewModelCellState>>,
 }
 
+impl std::fmt::Debug for RuntimeViewModelCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let state = self.state.borrow();
+        f.debug_struct("RuntimeViewModelCell")
+            .field("value", &state.value)
+            .field("value_changed", &state.value_changed)
+            .finish_non_exhaustive()
+    }
+}
+
 impl RuntimeViewModelCell {
     pub fn new(value: RuntimeViewModelCellValue) -> Self {
         Self {

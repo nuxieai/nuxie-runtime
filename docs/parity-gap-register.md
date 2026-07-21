@@ -113,13 +113,14 @@ ship this list as documentation; each row needs to stay true under Phase S.
 8. Jellyfish dither-accumulation precision gate.
 9. `solar-system.riv` malformed-blendMode import rejection (`rejects-malformed`).
 10. 108 renderer rows contract-exact under the reviewed 2/32 Metal-vs-WebGPU subpixel budget (not byte-exact).
+11. **Bounded host decoded-image policy (2026-07-21).** The high-level `nuxie::File` import path caps the aggregate decoded RGBA bytes retained by one artboard-tree render cache at 64 MiB by default (`FileImportLimits::max_retained_decoded_image_bytes`); pinned C++ has no aggregate ceiling. The low-level compatibility/golden paths and `FileImportLimits::unbounded()` retain every image exactly like C++, so the exact-corpus floor is unaffected. No C ABI change.
 
 ## H — Drift & housekeeping
 
 | id | item |
 |---|---|
-| H1 | Cycle-3 triage is submitted for the fixed `d788e8ec..b73bc675` cut: TextInput (`1b4df2ad`) and static-link (`b73bc675`) are recommended PORT, profiler (`079305d7`) WATCH; approval is pending. Later `ba2b6434` drift belongs to the next inventory. |
-| H2 | Post-Phase-R size is measured reproducibly at 7.19 MiB scripting OFF / 7.95 MiB ON for the renderer link closure. The historical ≤2.75 MiB budget is retired; the replacement budget and whether one or both variants block remain a USER-GATE. |
+| H1 | Cycle-3 approval granted 2026-07-21 for the fixed `d788e8ec..b73bc675` cut: PORT TextInput (`1b4df2ad`) and static-link (`b73bc675`), profiler (`079305d7`) deferred WATCH, both dependency WATCH rows retained. Later `ba2b6434` drift belongs to the next inventory. |
+| H2 | Post-Phase-R size is measured reproducibly at 7.19 MiB scripting OFF / 7.95 MiB ON for the renderer link closure. Budget decided 2026-07-21: 8 MiB (8,388,608 B) blocking for BOTH variants; any breach reopens the gate with fresh measurements rather than raising the constant. |
 | H3 | Two `TODO(golden)` markers: `state_machine.rs:797` (port `addToHitLookup`), `draw.rs:3555` (unify layout-bounds path). |
 | H4 | `event_report.hpp` equivalence is thin (one trace) — fold into V4's event side-channel work. |
 

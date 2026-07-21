@@ -417,9 +417,10 @@ impl Default for RawPath {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum BlendMode {
+    #[default]
     SrcOver = 3,
     Screen = 14,
     Overlay = 15,
@@ -438,50 +439,29 @@ pub enum BlendMode {
     Luminosity = 28,
 }
 
-impl Default for BlendMode {
-    fn default() -> Self {
-        Self::SrcOver
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum StrokeJoin {
+    #[default]
     Miter = 0,
     Round = 1,
     Bevel = 2,
 }
 
-impl Default for StrokeJoin {
-    fn default() -> Self {
-        Self::Miter
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum StrokeCap {
+    #[default]
     Butt = 0,
     Round = 1,
     Square = 2,
 }
 
-impl Default for StrokeCap {
-    fn default() -> Self {
-        Self::Butt
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum RenderPaintStyle {
     Stroke,
+    #[default]
     Fill,
-}
-
-impl Default for RenderPaintStyle {
-    fn default() -> Self {
-        Self::Fill
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -560,6 +540,96 @@ pub trait RenderImage: Any {
     }
 }
 
+/// One canonical GLSL stage decoded from a Rive `ShaderAsset` RSTB v4 blob.
+///
+/// The renderer API deliberately owns this transport type so scripting and
+/// file-runtime code never depend on a concrete GPU backend. Backends may
+/// translate the stage internally (for example, GLSL through Naga to Metal).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasShaderStage {
+    pub source: String,
+    pub logical_entry_point: String,
+    pub physical_entry_point: String,
+}
+
+/// The vertex and fragment stages selected by `context:shader(name)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasShader {
+    pub vertex: GpuCanvasShaderStage,
+    pub fragment: GpuCanvasShaderStage,
+}
+
+/// One uniform binding produced by an authored GPU-canvas frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasUniformBuffer {
+    pub group: u32,
+    pub binding: u32,
+    pub bytes: Vec<u8>,
+}
+
+/// One vertex attribute in an authored GPU-canvas pipeline layout.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasVertexAttribute {
+    pub shader_location: u32,
+    pub offset: u64,
+    pub format: String,
+}
+
+/// One vertex-buffer layout in an authored GPU-canvas pipeline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasVertexLayout {
+    pub stride: u64,
+    pub attributes: Vec<GpuCanvasVertexAttribute>,
+}
+
+/// One vertex buffer bound by an authored GPU-canvas render pass.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasVertexBuffer {
+    pub slot: u32,
+    pub bytes: Vec<u8>,
+}
+
+/// Backend-neutral result of executing one imported script's `drawCanvas`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasPlan {
+    pub width: u32,
+    pub height: u32,
+    pub clear_color: [f64; 4],
+    pub vertex_count: u32,
+    pub instance_count: u32,
+    pub first_vertex: u32,
+    pub first_instance: u32,
+    pub uniform_buffers: Vec<GpuCanvasUniformBuffer>,
+    pub vertex_layouts: Vec<GpuCanvasVertexLayout>,
+    pub vertex_buffers: Vec<GpuCanvasVertexBuffer>,
+}
+
+/// A render factory cannot turn an authored GPU-canvas plan into an image.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasError {
+    message: String,
+}
+
+impl GpuCanvasError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+
+    pub fn unsupported() -> Self {
+        Self::new("render factory does not support imported GPU-canvas images")
+    }
+}
+
+impl std::fmt::Display for GpuCanvasError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for GpuCanvasError {}
+
 /// A renderer adapter could not decode encoded image bytes into a render image.
 ///
 /// Image codecs and backend limits are adapter-specific, so this error deliberately
@@ -616,6 +686,7 @@ pub trait Renderer {
         blend_mode: BlendMode,
         opacity: f32,
     );
+    #[allow(clippy::too_many_arguments)]
     fn draw_image_mesh(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -659,6 +730,20 @@ pub trait Factory {
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath>;
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint>;
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError>;
+
+    /// Execute one imported GPU-canvas plan and retain its result as a normal
+    /// render image suitable for `Renderer::draw_image`.
+    ///
+    /// The default is intentionally fail-closed. Recording, callback, WebGL2,
+    /// and other factories do not silently claim support merely because the
+    /// scripting surface exists.
+    fn make_gpu_canvas_image(
+        &mut self,
+        _shader: &GpuCanvasShader,
+        _plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        Err(GpuCanvasError::unsupported())
+    }
 }
 
 #[derive(Debug, Default)]
@@ -2116,10 +2201,58 @@ fn hex_bytes(bytes: &[u8]) -> String {
     out
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EncodedImageFormat {
+    Png,
+    Jpeg,
+    WebP,
+}
+
+impl EncodedImageFormat {
+    #[must_use]
+    pub const fn content_type(self) -> &'static str {
+        match self {
+            Self::Png => "image/png",
+            Self::Jpeg => "image/jpeg",
+            Self::WebP => "image/webp",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EncodedImageMetadata {
+    pub format: EncodedImageFormat,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Inspect the encoded raster formats supported by the pure-Rust renderer.
+/// This reads only bounded header/chunk metadata and does not allocate a
+/// decoded pixel buffer.
+#[must_use]
+pub fn encoded_image_metadata(bytes: &[u8]) -> Option<EncodedImageMetadata> {
+    let (format, (width, height)) = if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        (EncodedImageFormat::Png, png_dimensions(bytes)?)
+    } else if bytes.starts_with(&[0xff, 0xd8]) {
+        (EncodedImageFormat::Jpeg, jpeg_dimensions(bytes)?)
+    } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        (EncodedImageFormat::WebP, webp_dimensions(bytes)?)
+    } else {
+        return None;
+    };
+    if width == 0 || height == 0 {
+        return None;
+    }
+    Some(EncodedImageMetadata {
+        format,
+        width,
+        height,
+    })
+}
+
 fn encoded_image_dimensions(bytes: &[u8]) -> (u32, u32) {
-    png_dimensions(bytes)
-        .or_else(|| jpeg_dimensions(bytes))
-        .or_else(|| webp_dimensions(bytes))
+    encoded_image_metadata(bytes)
+        .map(|metadata| (metadata.width, metadata.height))
         .unwrap_or((0, 0))
 }
 
@@ -2184,7 +2317,8 @@ fn webp_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     while offset + 8 <= bytes.len() {
         let chunk_data = offset + 8;
         let chunk_size = usize::try_from(read_le_u32(bytes, offset + 4)?).ok()?;
-        if chunk_data + chunk_size > bytes.len() {
+        let chunk_end = chunk_data.checked_add(chunk_size)?;
+        if chunk_end > bytes.len() {
             break;
         }
 
@@ -2214,7 +2348,7 @@ fn webp_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
             ));
         }
 
-        offset = chunk_data + chunk_size + (chunk_size & 1);
+        offset = chunk_end.checked_add(chunk_size & 1)?;
     }
 
     None
@@ -2342,6 +2476,25 @@ fn write_float(out: &mut String, value: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn encoded_image_metadata_reports_supported_raster_identity() {
+        let mut png = vec![0; 24];
+        png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        png[12..16].copy_from_slice(b"IHDR");
+        png[16..20].copy_from_slice(&3_u32.to_be_bytes());
+        png[20..24].copy_from_slice(&5_u32.to_be_bytes());
+        assert_eq!(
+            encoded_image_metadata(&png),
+            Some(EncodedImageMetadata {
+                format: EncodedImageFormat::Png,
+                width: 3,
+                height: 5,
+            })
+        );
+        assert_eq!(EncodedImageFormat::Png.content_type(), "image/png");
+        assert_eq!(encoded_image_metadata(b"not an encoded image"), None);
+    }
 
     #[test]
     fn raw_path_mutation_ids_track_object_snapshots() {

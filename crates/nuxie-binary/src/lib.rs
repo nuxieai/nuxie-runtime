@@ -422,7 +422,20 @@ pub struct RuntimeFile {
 pub struct RuntimeFileAssetContents<'a> {
     pub ordinal: usize,
     pub asset: &'a RuntimeObject,
+    /// Whether the importer observed at least one `FileAssetContents` record,
+    /// independent of whether the selected record carried a bytes property.
+    pub has_contents_record: bool,
+    /// Payload selected by the last imported contents record for this asset.
     pub contents: Option<&'a [u8]>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ImportedFileAssetRecord<'a> {
+    Asset {
+        asset: &'a RuntimeObject,
+        creates_importer: bool,
+    },
+    Contents(Option<&'a [u8]>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -4759,34 +4772,153 @@ impl RuntimeFile {
     /// imported `FileAssetContents` records to that entry.
     pub fn scripting_file_assets_with_contents(&self) -> Vec<RuntimeFileAssetContents<'_>> {
         let assets = self.file_assets();
+        self.file_assets_with_contents(assets)
+    }
+
+    /// Every imported `FileAsset`, including importer-owning `ManifestAsset`
+    /// records, with in-band contents associated by the scripting-enabled
+    /// importer stack.
+    ///
+    /// Unlike [`Self::scripting_file_assets_with_contents`], this catalog is
+    /// for validation and inspection rather than Rive's dense public asset
+    /// ordinals. Consumers must identify entries by serialized `assetId`.
+    pub fn imported_file_assets_with_contents(&self) -> Vec<RuntimeFileAssetContents<'_>> {
+        self.imported_file_assets_with_contents_bounded(usize::MAX)
+            .expect("usize::MAX cannot be exceeded by a Vec")
+    }
+
+    /// Bounded form of [`Self::imported_file_assets_with_contents`]. The scan
+    /// stops before allocating an entry beyond `max_assets`.
+    pub fn imported_file_assets_with_contents_bounded(
+        &self,
+        max_assets: usize,
+    ) -> Option<Vec<RuntimeFileAssetContents<'_>>> {
+        let mut assets = Vec::<RuntimeFileAssetContents<'_>>::new();
+        let mut latest_ordinal = None;
+        for record in self.imported_file_asset_records() {
+            match record {
+                ImportedFileAssetRecord::Asset {
+                    asset,
+                    creates_importer,
+                } => {
+                    if assets.len() == max_assets {
+                        return None;
+                    }
+                    let ordinal = assets.len();
+                    assets.push(RuntimeFileAssetContents {
+                        ordinal,
+                        asset,
+                        has_contents_record: false,
+                        contents: None,
+                    });
+                    if creates_importer {
+                        latest_ordinal = Some(ordinal);
+                    }
+                }
+                ImportedFileAssetRecord::Contents(contents) => {
+                    if let Some(entry) = latest_ordinal.and_then(|ordinal| assets.get_mut(ordinal))
+                    {
+                        entry.has_contents_record = true;
+                        entry.contents = contents;
+                    }
+                }
+            }
+        }
+        Some(assets)
+    }
+
+    /// Embedded bytes owned by one imported FileAsset under the
+    /// scripting-enabled importer stack. Importer-owning assets excluded from
+    /// the dense public catalog, including ManifestAsset, still delimit
+    /// ownership and can never donate their contents to the preceding asset.
+    pub fn imported_file_asset_contents(&self, asset_global_id: u32) -> Option<&[u8]> {
+        let mut selected_asset_is_latest_importer = false;
+        let mut selected_contents = None;
+        for record in self.imported_file_asset_records() {
+            match record {
+                ImportedFileAssetRecord::Asset {
+                    asset,
+                    creates_importer: true,
+                } => {
+                    selected_asset_is_latest_importer = asset.id == asset_global_id;
+                    if selected_asset_is_latest_importer {
+                        selected_contents = None;
+                    }
+                }
+                ImportedFileAssetRecord::Asset {
+                    creates_importer: false,
+                    ..
+                } => {}
+                ImportedFileAssetRecord::Contents(contents)
+                    if selected_asset_is_latest_importer =>
+                {
+                    selected_contents = contents;
+                }
+                ImportedFileAssetRecord::Contents(_) => {}
+            }
+        }
+        selected_contents
+    }
+
+    fn imported_file_asset_records(&self) -> impl Iterator<Item = ImportedFileAssetRecord<'_>> {
+        self.objects
+            .iter()
+            .enumerate()
+            .filter_map(|(index, object)| {
+                if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
+                    return None;
+                }
+                let object = object.as_ref()?;
+                let definition = definition_by_type_key(object.type_key)?;
+                if definition.is_a("FileAsset") {
+                    return Some(ImportedFileAssetRecord::Asset {
+                        asset: object,
+                        creates_importer: file_asset_creates_importer(object.type_name, true),
+                    });
+                }
+                (object.type_name == "FileAssetContents")
+                    .then(|| ImportedFileAssetRecord::Contents(object.bytes_property("bytes")))
+            })
+    }
+
+    fn file_assets_with_contents<'a>(
+        &'a self,
+        assets: Vec<&'a RuntimeObject>,
+    ) -> Vec<RuntimeFileAssetContents<'a>> {
         let ordinals_by_global = assets
             .iter()
             .enumerate()
             .map(|(ordinal, asset)| (asset.id, ordinal))
             .collect::<BTreeMap<_, _>>();
         let mut contents = vec![None; assets.len()];
+        let mut has_contents_record = vec![false; assets.len()];
         let mut latest_ordinal = None;
 
-        for (index, object) in self.objects.iter().enumerate() {
-            if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
-                continue;
-            }
-            let Some(object) = object.as_ref() else {
-                continue;
-            };
-            if file_asset_creates_importer(object.type_name, true) {
-                // Importer-owning FileAsset kinds such as ManifestAsset are
-                // intentionally absent from the public dense catalog. They
-                // still delimit contents ownership, so reset the candidate
-                // even when there is no ordinal to publish.
-                latest_ordinal = ordinals_by_global.get(&object.id).copied();
-                continue;
-            }
-            if object.type_name == "FileAssetContents"
-                && let Some(ordinal) = latest_ordinal
-                && let Some(slot) = contents.get_mut(ordinal)
-            {
-                *slot = object.bytes_property("bytes");
+        for record in self.imported_file_asset_records() {
+            match record {
+                ImportedFileAssetRecord::Asset {
+                    asset,
+                    creates_importer: true,
+                } => {
+                    // Importer-owning FileAsset kinds such as ManifestAsset are
+                    // intentionally absent from the public dense catalog. They
+                    // still delimit contents ownership, so reset the candidate
+                    // even when there is no ordinal to publish.
+                    latest_ordinal = ordinals_by_global.get(&asset.id).copied();
+                }
+                ImportedFileAssetRecord::Asset {
+                    creates_importer: false,
+                    ..
+                } => {}
+                ImportedFileAssetRecord::Contents(asset_contents) => {
+                    if let Some(ordinal) = latest_ordinal
+                        && let Some(slot) = contents.get_mut(ordinal)
+                        && let Some(has_record) = has_contents_record.get_mut(ordinal)
+                    {
+                        *has_record = true;
+                        *slot = asset_contents;
+                    }
+                }
             }
         }
 
@@ -4796,6 +4928,7 @@ impl RuntimeFile {
             .map(|(ordinal, asset)| RuntimeFileAssetContents {
                 ordinal,
                 asset,
+                has_contents_record: has_contents_record.get(ordinal).copied().unwrap_or(false),
                 contents: contents.get(ordinal).copied().flatten(),
             })
             .collect()
@@ -8376,7 +8509,10 @@ pub struct RuntimeHeader {
 }
 
 impl RuntimeHeader {
-    fn read(reader: &mut BinaryReader<'_>) -> Result<Self> {
+    fn read(
+        reader: &mut BinaryReader<'_>,
+        property_budget: &mut RuntimePropertyBudget,
+    ) -> Result<Self> {
         let fingerprint = reader.read_bytes_exact(4)?;
         if fingerprint != b"RIVE" {
             bail!("bad Rive fingerprint");
@@ -8392,6 +8528,7 @@ impl RuntimeHeader {
             if property_key == 0 {
                 break;
             }
+            property_budget.reserve(1, "header property table entries")?;
             property_keys.push(property_key as u32);
         }
 
@@ -8815,6 +8952,30 @@ pub fn read_runtime_file_with_scripting(bytes: &[u8]) -> Result<RuntimeFile> {
     read_runtime_file_with_profile(bytes, true).map_err(anyhow::Error::new)
 }
 
+/// Reads a runtime file with scripting-enabled FileAsset importers while
+/// applying optional parser allocation limits.
+///
+/// The object limit is checked before decoding the first byte of object N+1.
+/// The aggregate property limit is checked before decoding each serialized
+/// property value and includes header property-table entries plus manifest
+/// name, path-entry, and path-component declarations. It counts skipped,
+/// unknown, duplicate, and ultimately-null object properties as decode work,
+/// rather than counting only the properties retained in the final graph.
+/// Passing `None` explicitly opts that dimension out of parser enforcement.
+pub fn read_runtime_file_with_scripting_with_limits(
+    bytes: &[u8],
+    max_runtime_objects: Option<usize>,
+    max_runtime_properties: Option<usize>,
+) -> Result<RuntimeFile> {
+    read_runtime_file_with_profile_and_limits(
+        bytes,
+        true,
+        max_runtime_objects,
+        max_runtime_properties,
+    )
+    .map_err(anyhow::Error::new)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeReadErrorKind {
     UnsupportedVersion,
@@ -8846,7 +9007,9 @@ impl RuntimeReadError {
     fn malformed(error: anyhow::Error) -> Self {
         Self {
             kind: RuntimeReadErrorKind::Malformed,
-            message: error.to_string(),
+            // Preserve the causal chain so parser-limit failures nested under
+            // an object id remain diagnosable at the facade boundary.
+            message: format!("{error:#}"),
         }
     }
 }
@@ -8869,8 +9032,57 @@ fn read_runtime_file_with_profile(
     bytes: &[u8],
     script_assets_create_importers: bool,
 ) -> std::result::Result<RuntimeFile, RuntimeReadError> {
+    read_runtime_file_with_profile_and_limits(bytes, script_assets_create_importers, None, None)
+}
+
+#[derive(Debug, Default)]
+struct RuntimePropertyBudget {
+    maximum: Option<usize>,
+    consumed: usize,
+}
+
+impl RuntimePropertyBudget {
+    fn new(maximum: Option<usize>) -> Self {
+        Self {
+            maximum,
+            consumed: 0,
+        }
+    }
+
+    fn reserve(&mut self, additional: usize, label: &str) -> Result<()> {
+        let consumed = self
+            .consumed
+            .checked_add(additional)
+            .context("Rive runtime property budget arithmetic overflow")?;
+        if let Some(maximum) = self.maximum
+            && consumed > maximum
+        {
+            bail!(
+                "Rive file contains more than {maximum} aggregate runtime properties and file-level entries while reading {label}"
+            );
+        }
+        self.consumed = consumed;
+        Ok(())
+    }
+
+    fn reserve_declared(&mut self, additional: u64, label: &str) -> Result<usize> {
+        let additional = usize::try_from(additional)
+            .with_context(|| format!("declared {label} count does not fit in usize"))?;
+        self.reserve(additional, label)?;
+        Ok(additional)
+    }
+}
+
+fn read_runtime_file_with_profile_and_limits(
+    bytes: &[u8],
+    script_assets_create_importers: bool,
+    max_runtime_objects: Option<usize>,
+    max_runtime_properties: Option<usize>,
+) -> std::result::Result<RuntimeFile, RuntimeReadError> {
     let mut reader = BinaryReader::new(bytes);
-    let header = RuntimeHeader::read(&mut reader).map_err(RuntimeReadError::malformed)?;
+    let mut property_budget = RuntimePropertyBudget::new(max_runtime_properties);
+    let header = RuntimeHeader::read(&mut reader, &mut property_budget)
+        .map_err(RuntimeReadError::malformed)?;
 
     if header.major_version != SUPPORTED_MAJOR_VERSION {
         return Err(RuntimeReadError::unsupported_version(format!(
@@ -8884,15 +9096,32 @@ fn read_runtime_file_with_profile(
 
     let mut objects = Vec::new();
     while !reader.reached_end() {
-        let id = objects.len() as u32;
-        let object = read_runtime_object(&mut reader, &header, id)
+        if let Some(maximum) = max_runtime_objects
+            && objects.len() >= maximum
+        {
+            return Err(RuntimeReadError::malformed(anyhow::anyhow!(
+                "Rive file contains more than {maximum} runtime objects"
+            )));
+        }
+        let id = u32::try_from(objects.len())
+            .context("runtime object id does not fit in u32")
+            .map_err(RuntimeReadError::malformed)?;
+        let object = read_runtime_object(&mut reader, &header, id, &mut property_budget)
             .with_context(|| format!("reading object {id}"))
             .map_err(RuntimeReadError::malformed)?;
         objects.push(object);
     }
 
-    finalize_runtime_file_with_script_assets(header, objects, script_assets_create_importers)
-        .map_err(RuntimeReadError::malformed)
+    let file =
+        finalize_runtime_file_with_script_assets(header, objects, script_assets_create_importers)
+            .map_err(RuntimeReadError::malformed)?;
+    validate_cpp_manifest_assets_with_budget(
+        &file,
+        script_assets_create_importers,
+        &mut property_budget,
+    )
+    .map_err(RuntimeReadError::malformed)?;
+    Ok(file)
 }
 
 fn authoring_record_to_runtime_object(
@@ -12746,7 +12975,9 @@ fn cpp_artboard_local_slot_is_valid(
         else {
             return false;
         };
-        if !runtime_object_is_container_component(parent) {
+        let component_list_machine_selection =
+            definition.is_a("NestedAnimation") && parent.type_name == "ArtboardListMapRule";
+        if !runtime_object_is_container_component(parent) && !component_list_machine_selection {
             return false;
         }
     }
@@ -12763,7 +12994,8 @@ fn cpp_artboard_local_slot_is_valid(
         else {
             return false;
         };
-        return runtime_object_is_cpp_nested_artboard(parent);
+        return runtime_object_is_cpp_nested_artboard(parent)
+            || parent.type_name == "ArtboardListMapRule";
     }
 
     if definition.is_a("TextStyle") {
@@ -13095,6 +13327,7 @@ fn read_runtime_object(
     reader: &mut BinaryReader<'_>,
     header: &RuntimeHeader,
     id: u32,
+    property_budget: &mut RuntimePropertyBudget,
 ) -> Result<Option<RuntimeObject>> {
     let raw_type_key = read_cpp_int_var_uint(reader, "object type key")?;
     let definition_type_key = u16::try_from(raw_type_key).ok();
@@ -13103,6 +13336,7 @@ fn read_runtime_object(
         .filter(|definition| !definition.abstract_);
 
     let mut properties = Vec::new();
+    let mut property_slots = BTreeMap::new();
     let mut skipped_properties = Vec::new();
 
     loop {
@@ -13110,6 +13344,11 @@ fn read_runtime_object(
         if property_key == 0 {
             break;
         }
+        // Count every serialized occurrence, rather than only retained unique
+        // properties. Unknown, skipped, duplicate, and ultimately-null object
+        // properties all consume decode work and can otherwise amplify a tiny
+        // record into a large temporary allocation.
+        property_budget.reserve(1, "runtime object properties")?;
 
         let Some(definition) = definition else {
             let field = match skip_unknown_property(reader, header, property_key)
@@ -13153,8 +13392,9 @@ fn read_runtime_object(
 
         if property.deserializes {
             let value = read_field_value(reader, property)?;
-            upsert_runtime_property(
+            upsert_decoded_runtime_property(
                 &mut properties,
+                &mut property_slots,
                 RuntimeProperty {
                     key: property_key,
                     name: property.name,
@@ -13194,6 +13434,19 @@ fn read_runtime_object(
         properties,
         skipped_properties,
     }))
+}
+
+fn upsert_decoded_runtime_property(
+    properties: &mut Vec<RuntimeProperty>,
+    property_slots: &mut BTreeMap<u16, usize>,
+    property: RuntimeProperty,
+) {
+    if let Some(index) = property_slots.get(&property.key).copied() {
+        properties[index] = property;
+    } else {
+        property_slots.insert(property.key, properties.len());
+        properties.push(property);
+    }
 }
 
 fn upsert_runtime_property(properties: &mut Vec<RuntimeProperty>, property: RuntimeProperty) {
@@ -13498,6 +13751,111 @@ fn format_cpp_file_asset_cdn_uuid(bytes: &[u8]) -> String {
     uuid
 }
 
+fn validate_cpp_manifest_assets_with_budget(
+    file: &RuntimeFile,
+    script_assets_create_importers: bool,
+    property_budget: &mut RuntimePropertyBudget,
+) -> Result<()> {
+    if property_budget.maximum.is_none() {
+        return Ok(());
+    }
+
+    let mut latest_file_asset_is_manifest = false;
+    for (index, object) in file.objects.iter().enumerate() {
+        if file.import_status(index) != Some(RuntimeImportStatus::Imported) {
+            continue;
+        }
+        let Some(object) = object.as_ref() else {
+            continue;
+        };
+        let Some(definition) = definition_by_type_key(object.type_key) else {
+            continue;
+        };
+
+        if file_asset_creates_importer(definition.name, script_assets_create_importers) {
+            latest_file_asset_is_manifest = definition.name == "ManifestAsset";
+            continue;
+        }
+        if definition.name == "FileAssetContents" && latest_file_asset_is_manifest {
+            validate_cpp_manifest_asset_with_budget(
+                object.bytes_property("bytes").unwrap_or(&[]),
+                property_budget,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Validate every count that the lazy manifest decoder will later use to
+/// allocate map entries or path vectors. Malformed manifests intentionally
+/// remain a soft failure, matching `parse_cpp_manifest_asset`; declared work
+/// above the import budget is the only error promoted to the file boundary.
+fn validate_cpp_manifest_asset_with_budget(
+    bytes: &[u8],
+    property_budget: &mut RuntimePropertyBudget,
+) -> Result<()> {
+    let mut reader = BinaryReader::new(bytes);
+    while !reader.reached_end() {
+        let Ok(section) = reader.read_var_uint() else {
+            return Ok(());
+        };
+        let Some(section_size) = reader
+            .read_var_uint()
+            .ok()
+            .and_then(|value| usize::try_from(value).ok())
+        else {
+            return Ok(());
+        };
+        let Ok(section_bytes) = reader.read_bytes_exact(section_size) else {
+            return Ok(());
+        };
+        let mut section_reader = BinaryReader::new(section_bytes);
+
+        match section {
+            0 => {
+                let Ok(count) = section_reader.read_var_uint() else {
+                    return Ok(());
+                };
+                let count = property_budget.reserve_declared(count, "manifest name entries")?;
+                for _ in 0..count {
+                    if section_reader.read_var_uint().is_err()
+                        || section_reader.read_length_prefixed_bytes().is_err()
+                    {
+                        return Ok(());
+                    }
+                }
+            }
+            1 => {
+                let Ok(count) = section_reader.read_var_uint() else {
+                    return Ok(());
+                };
+                let count = property_budget.reserve_declared(count, "manifest path entries")?;
+                for _ in 0..count {
+                    if section_reader.read_var_uint().is_err() {
+                        return Ok(());
+                    }
+                    let Ok(path_len) = section_reader.read_var_uint() else {
+                        return Ok(());
+                    };
+                    let path_len =
+                        property_budget.reserve_declared(path_len, "manifest path components")?;
+                    for _ in 0..path_len {
+                        if section_reader.read_var_uint().is_err() {
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+            _ => continue,
+        }
+
+        if !section_reader.reached_end() {
+            return Ok(());
+        }
+    }
+    Ok(())
+}
+
 fn parse_cpp_manifest_asset(bytes: &[u8]) -> RuntimeManifest {
     let mut manifest = RuntimeManifest::default();
     if bytes.is_empty() {
@@ -13517,25 +13875,23 @@ fn parse_cpp_manifest_asset(bytes: &[u8]) -> RuntimeManifest {
             Some(value) => value,
             None => return manifest,
         };
-        let section_start = reader.offset;
+        let section_bytes = match reader.read_bytes_exact(section_size) {
+            Ok(bytes) => bytes,
+            Err(_) => return manifest,
+        };
+        let mut section_reader = BinaryReader::new(section_bytes);
 
         let decoded = match section {
-            0 => decode_cpp_manifest_names(&mut reader, &mut manifest),
-            1 => decode_cpp_manifest_paths(&mut reader, &mut manifest),
-            _ => {
-                if reader.read_bytes_exact(section_size).is_err() {
-                    return manifest;
-                }
-                continue;
-            }
+            0 => decode_cpp_manifest_names(&mut section_reader, &mut manifest),
+            1 => decode_cpp_manifest_paths(&mut section_reader, &mut manifest),
+            _ => continue,
         };
 
         if decoded.is_err() {
             return manifest;
         }
 
-        let bytes_read = reader.offset - section_start;
-        if bytes_read != section_size {
+        if !section_reader.reached_end() {
             return manifest;
         }
     }
@@ -13732,9 +14088,10 @@ impl<'a> BinaryReader<'a> {
 #[cfg(test)]
 mod uint_wire_tests {
     use super::{
-        BinaryReader, CoreRegistryFieldKind, HeaderFieldKind, definition_by_name,
-        read_known_uint_field, read_runtime_file_with_error_kind, skip_core_registry_value,
-        skip_header_value,
+        BinaryReader, CoreRegistryFieldKind, HeaderFieldKind, RuntimePropertyBudget,
+        definition_by_name, read_known_uint_field, read_runtime_file_with_error_kind,
+        read_runtime_file_with_scripting_with_limits, skip_core_registry_value, skip_header_value,
+        validate_cpp_manifest_asset_with_budget,
     };
 
     fn encoded_var_uint(mut value: u64) -> Vec<u8> {
@@ -13750,6 +14107,226 @@ mod uint_wire_tests {
                 return bytes;
             }
         }
+    }
+
+    fn compact_runtime_file(object_count: usize) -> Vec<u8> {
+        let mut bytes = b"RIVE".to_vec();
+        bytes.extend_from_slice(&[7, 0, 0, 0]);
+        for index in 0..object_count {
+            let type_key = if index == 0 {
+                definition_by_name("Backboard").expect("Backboard schema")
+            } else {
+                definition_by_name("Artboard").expect("Artboard schema")
+            }
+            .type_key
+            .int;
+            bytes.extend(encoded_var_uint(u64::from(type_key)));
+            bytes.push(0);
+        }
+        bytes
+    }
+
+    #[test]
+    fn bounded_reader_rejects_compact_object_n_plus_one_before_decoding_it() {
+        const OBJECT_COUNT: usize = 64;
+        let bytes = compact_runtime_file(OBJECT_COUNT);
+
+        let exact =
+            read_runtime_file_with_scripting_with_limits(&bytes, Some(OBJECT_COUNT), Some(0))
+                .expect("the exact compact-record boundary imports");
+        assert_eq!(exact.objects.len(), OBJECT_COUNT);
+
+        let error =
+            read_runtime_file_with_scripting_with_limits(&bytes, Some(OBJECT_COUNT - 1), Some(0))
+                .expect_err("object N+1 exceeds the parser allocation boundary");
+        assert!(
+            error.to_string().contains("more than 63 runtime objects"),
+            "{error:#}"
+        );
+
+        let mut malformed_next_record = compact_runtime_file(1);
+        malformed_next_record.push(0x80);
+        let error =
+            read_runtime_file_with_scripting_with_limits(&malformed_next_record, Some(1), Some(0))
+                .expect_err("the limit must fire before decoding malformed object N+1");
+        assert!(
+            error.to_string().contains("more than 1 runtime objects"),
+            "{error:#}"
+        );
+    }
+
+    fn runtime_file_with_repeated_double_property(
+        type_key: u64,
+        property_key: u64,
+        complete_properties: usize,
+        append_incomplete_property: bool,
+    ) -> Vec<u8> {
+        let mut bytes = b"RIVE".to_vec();
+        bytes.extend_from_slice(&[7, 0, 0, 0]);
+        bytes.extend(encoded_var_uint(type_key));
+        for _ in 0..complete_properties {
+            bytes.extend(encoded_var_uint(property_key));
+            bytes.extend_from_slice(&1.0f32.to_le_bytes());
+        }
+        if append_incomplete_property {
+            bytes.extend(encoded_var_uint(property_key));
+        } else {
+            bytes.push(0);
+        }
+        bytes
+    }
+
+    #[test]
+    fn property_budget_counts_retained_skipped_duplicate_and_null_object_work() {
+        const PROPERTY_COUNT: usize = 4;
+        let node_type = u64::from(
+            definition_by_name("Node")
+                .expect("Node schema")
+                .type_key
+                .int,
+        );
+
+        // Alternate Node.x key 9 misses the generated deserialize switch and
+        // is retained in skipped_properties after its global double fallback.
+        let skipped =
+            runtime_file_with_repeated_double_property(node_type, 9, PROPERTY_COUNT, false);
+        let file =
+            read_runtime_file_with_scripting_with_limits(&skipped, Some(1), Some(PROPERTY_COUNT))
+                .expect("the exact skipped-property boundary imports");
+        assert_eq!(
+            file.object(0).expect("known Node").skipped_properties.len(),
+            PROPERTY_COUNT
+        );
+
+        let malformed_next =
+            runtime_file_with_repeated_double_property(node_type, 9, PROPERTY_COUNT, true);
+        let error = read_runtime_file_with_scripting_with_limits(
+            &malformed_next,
+            Some(1),
+            Some(PROPERTY_COUNT),
+        )
+        .expect_err("property N+1 must be rejected before its missing value is decoded");
+        assert!(
+            error.to_string().contains("runtime object properties"),
+            "{error:#}"
+        );
+
+        // Primary Node.x key 13 is stored. Repeated occurrences overwrite one
+        // retained slot, but every serialized occurrence still consumes the
+        // aggregate budget without a linear scan through prior unique keys.
+        let duplicate =
+            runtime_file_with_repeated_double_property(node_type, 13, PROPERTY_COUNT, false);
+        let file =
+            read_runtime_file_with_scripting_with_limits(&duplicate, Some(1), Some(PROPERTY_COUNT))
+                .expect("the exact duplicate-property boundary imports");
+        assert_eq!(file.object(0).expect("known Node").properties.len(), 1);
+
+        // Unknown objects become null slots, so their temporary skipped list
+        // must be charged even though none of it survives in RuntimeFile.
+        let unknown = runtime_file_with_repeated_double_property(70_000, 13, PROPERTY_COUNT, true);
+        let error =
+            read_runtime_file_with_scripting_with_limits(&unknown, Some(1), Some(PROPERTY_COUNT))
+                .expect_err("null-object property N+1 must still hit the aggregate budget");
+        assert!(
+            error.to_string().contains("runtime object properties"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn header_property_budget_precedes_packed_field_allocation_and_decode() {
+        const PROPERTY_COUNT: usize = 5;
+        let mut exact = b"RIVE".to_vec();
+        exact.extend_from_slice(&[7, 0, 0]);
+        for _ in 0..PROPERTY_COUNT {
+            exact.extend(encoded_var_uint(65_000));
+        }
+        exact.push(0);
+        exact.extend(std::iter::repeat_n(0, PROPERTY_COUNT.div_ceil(4) * 4));
+
+        read_runtime_file_with_scripting_with_limits(&exact, Some(0), Some(PROPERTY_COUNT))
+            .expect("the exact header table boundary imports");
+
+        let mut malformed_after_limit = b"RIVE".to_vec();
+        malformed_after_limit.extend_from_slice(&[7, 0, 0]);
+        for _ in 0..PROPERTY_COUNT {
+            malformed_after_limit.extend(encoded_var_uint(65_000));
+        }
+        // No terminator or packed field ids: the fifth entry must hit the
+        // four-entry budget before either missing segment is decoded.
+        let error = read_runtime_file_with_scripting_with_limits(
+            &malformed_after_limit,
+            Some(0),
+            Some(PROPERTY_COUNT - 1),
+        )
+        .expect_err("header property N+1 exceeds the parser allocation boundary");
+        assert!(
+            error.to_string().contains("header property table entries"),
+            "{error:#}"
+        );
+    }
+
+    fn manifest_section(section: u64, body: Vec<u8>) -> Vec<u8> {
+        let mut bytes = encoded_var_uint(section);
+        bytes.extend(encoded_var_uint(body.len() as u64));
+        bytes.extend(body);
+        bytes
+    }
+
+    #[test]
+    fn manifest_declared_entries_and_components_share_the_property_budget() {
+        let mut names = encoded_var_uint(2);
+        for id in [10, 11] {
+            names.extend(encoded_var_uint(id));
+            names.push(1);
+            names.push(b'a');
+        }
+        let mut paths = encoded_var_uint(1);
+        paths.extend(encoded_var_uint(20));
+        paths.extend(encoded_var_uint(2));
+        paths.extend(encoded_var_uint(10));
+        paths.extend(encoded_var_uint(11));
+        let mut manifest = manifest_section(0, names);
+        manifest.extend(manifest_section(1, paths));
+
+        validate_cpp_manifest_asset_with_budget(
+            &manifest,
+            &mut RuntimePropertyBudget::new(Some(5)),
+        )
+        .expect("two names, one path, and two components fit the exact boundary");
+
+        let error = validate_cpp_manifest_asset_with_budget(
+            &manifest,
+            &mut RuntimePropertyBudget::new(Some(4)),
+        )
+        .expect_err("path-component N+1 exceeds the aggregate budget");
+        assert!(
+            error.to_string().contains("manifest path components"),
+            "{error:#}"
+        );
+
+        let declared_only = manifest_section(0, encoded_var_uint(5));
+        let error = validate_cpp_manifest_asset_with_budget(
+            &declared_only,
+            &mut RuntimePropertyBudget::new(Some(4)),
+        )
+        .expect_err("the declared name count is rejected before entry one is decoded");
+        assert!(
+            error.to_string().contains("manifest name entries"),
+            "{error:#}"
+        );
+
+        let mut overflow = RuntimePropertyBudget {
+            maximum: None,
+            consumed: 1,
+        };
+        let error = overflow
+            .reserve(usize::MAX, "adversarial declared count")
+            .expect_err("aggregate arithmetic must be checked");
+        assert!(
+            error.to_string().contains("arithmetic overflow"),
+            "{error:#}"
+        );
     }
 
     #[test]
@@ -13850,7 +14427,10 @@ mod uint_wire_tests {
 
 #[cfg(test)]
 mod manifest_key_tests {
-    use super::{cpp_manifest_key, cpp_manifest_resolver_key};
+    use super::{
+        AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile, cpp_manifest_key,
+        cpp_manifest_resolver_key,
+    };
 
     // Pins the intentional u32->i32 (and u64->i32) manifest-key reinterpret.
     // C++ keys its manifest name/path maps by a signed `int`
@@ -13887,5 +14467,178 @@ mod manifest_key_tests {
         // cpp_manifest_key only inspects the low 32 bits (mirrors C++ truncating
         // the var-uint into an int); the high bits of the u64 do not shift it.
         assert_eq!(cpp_manifest_key(0xFFFF_FFFF_0000_0001), 1);
+    }
+
+    #[test]
+    fn manifest_known_sections_do_not_read_past_their_declared_size() {
+        // A path-section count starts in the one declared section byte but
+        // finishes in the following bytes. Known sections must never consume
+        // those trailing bytes, even though they form one otherwise-valid
+        // path entry when decoded as an unbounded stream.
+        let malformed_manifest = vec![1, 1, 0x81, 0x00, 7, 2, 10, 11];
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: 23,
+                properties: vec![],
+            },
+            AuthoringRecord {
+                type_key: 642,
+                properties: vec![AuthoringProperty {
+                    key: 204,
+                    value: AuthoringValue::Uint(41),
+                }],
+            },
+            AuthoringRecord {
+                type_key: 106,
+                properties: vec![AuthoringProperty {
+                    key: 212,
+                    value: AuthoringValue::Bytes(malformed_manifest),
+                }],
+            },
+        ])
+        .expect("malformed manifest contents remain a soft import failure");
+
+        let manifest = runtime
+            .manifest()
+            .expect("ManifestAsset remains discoverable");
+        assert_eq!(
+            manifest.resolve_path(7),
+            None,
+            "the lazy decoder must not recover a path from bytes outside section_size",
+        );
+        assert!(manifest.paths.is_empty());
+    }
+
+    #[test]
+    fn inspection_catalog_includes_manifest_assets_without_changing_the_dense_catalog() {
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: 23,
+                properties: vec![],
+            },
+            AuthoringRecord {
+                type_key: 105,
+                properties: vec![
+                    AuthoringProperty {
+                        key: 203,
+                        value: AuthoringValue::String("External image".into()),
+                    },
+                    AuthoringProperty {
+                        key: 204,
+                        value: AuthoringValue::Uint(7),
+                    },
+                ],
+            },
+            AuthoringRecord {
+                type_key: 642,
+                properties: vec![
+                    AuthoringProperty {
+                        key: 203,
+                        value: AuthoringValue::String("Manifest".into()),
+                    },
+                    AuthoringProperty {
+                        key: 204,
+                        value: AuthoringValue::Uint(41),
+                    },
+                ],
+            },
+            AuthoringRecord {
+                type_key: 106,
+                properties: vec![AuthoringProperty {
+                    key: 212,
+                    value: AuthoringValue::Bytes(vec![1, 2, 3]),
+                }],
+            },
+        ])
+        .expect("manifest-only authoring records import");
+
+        let dense_catalog = runtime.scripting_file_assets_with_contents();
+        let [external_image] = dense_catalog.as_slice() else {
+            panic!("dense catalog must contain only the ImageAsset");
+        };
+        assert_eq!(external_image.asset.type_name, "ImageAsset");
+        assert!(!external_image.has_contents_record);
+        assert_eq!(external_image.contents, None);
+        let inspection_catalog = runtime.imported_file_assets_with_contents();
+        let [image, manifest] = inspection_catalog.as_slice() else {
+            panic!("inspection catalog must include ImageAsset and ManifestAsset");
+        };
+        assert_eq!(image.ordinal, 0);
+        assert_eq!(image.asset.type_name, "ImageAsset");
+        assert!(!image.has_contents_record);
+        assert_eq!(image.contents, None);
+        assert_eq!(manifest.ordinal, 1);
+        assert_eq!(manifest.asset.type_name, "ManifestAsset");
+        assert_eq!(manifest.asset.uint_property("assetId"), Some(41));
+        assert!(manifest.has_contents_record);
+        assert_eq!(manifest.contents, Some([1, 2, 3].as_slice()));
+        assert_eq!(runtime.imported_file_asset_contents(image.asset.id), None);
+        assert_eq!(
+            runtime.imported_file_asset_contents(manifest.asset.id),
+            Some([1, 2, 3].as_slice())
+        );
+        assert!(
+            runtime
+                .imported_file_assets_with_contents_bounded(1)
+                .is_none(),
+            "the bounded scan stops before allocating its second entry"
+        );
+    }
+
+    #[test]
+    fn repeated_contents_records_fail_closed_consistently_for_catalog_and_direct_lookup() {
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: 23,
+                properties: vec![],
+            },
+            AuthoringRecord {
+                type_key: 105,
+                properties: vec![AuthoringProperty {
+                    key: 204,
+                    value: AuthoringValue::Uint(7),
+                }],
+            },
+            AuthoringRecord {
+                type_key: 106,
+                properties: vec![AuthoringProperty {
+                    key: 212,
+                    value: AuthoringValue::Bytes(vec![1, 2, 3]),
+                }],
+            },
+            AuthoringRecord {
+                type_key: 106,
+                properties: vec![],
+            },
+        ])
+        .expect("repeated FileAssetContents records import");
+
+        let catalog = runtime
+            .imported_file_assets_with_contents_bounded(1)
+            .expect("one imported asset fits the exact bound");
+        let [image] = catalog.as_slice() else {
+            panic!("inspection catalog must contain the ImageAsset");
+        };
+        assert_eq!(image.asset.type_name, "ImageAsset");
+        assert!(
+            image.has_contents_record,
+            "any imported contents record keeps the asset embedded for fail-closed host validation"
+        );
+        assert_eq!(
+            image.contents, None,
+            "the final contents record deterministically replaces the earlier payload"
+        );
+        assert_eq!(
+            runtime.imported_file_asset_contents(image.asset.id),
+            None,
+            "direct renderer lookup must use the same last-record-wins presence rule"
+        );
+
+        let dense_catalog = runtime.scripting_file_assets_with_contents();
+        let [dense_image] = dense_catalog.as_slice() else {
+            panic!("dense catalog must contain the same ImageAsset");
+        };
+        assert!(dense_image.has_contents_record);
+        assert_eq!(dense_image.contents, None);
     }
 }

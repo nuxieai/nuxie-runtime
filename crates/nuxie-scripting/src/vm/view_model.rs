@@ -878,6 +878,7 @@ pub(super) struct ScriptedContext {
     model: Rc<RefCell<Option<ScriptViewModel>>>,
     parents: Vec<ScriptViewModel>,
     missing_requested_data: Rc<Cell<bool>>,
+    gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
 }
 
 impl ScriptedContext {
@@ -885,11 +886,13 @@ impl ScriptedContext {
         model: Rc<RefCell<Option<ScriptViewModel>>>,
         parents: Vec<ScriptViewModel>,
         missing_requested_data: Rc<Cell<bool>>,
+        gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
     ) -> Self {
         Self {
             model,
             parents,
             missing_requested_data,
+            gpu_canvas,
         }
     }
 }
@@ -945,6 +948,20 @@ impl UserData for ScriptedContext {
                 Some(image) => Value::UserData(lua.create_userdata(ScriptedImage(image))?),
                 None => Value::Nil,
             })
+        });
+        methods.add_method("gpuCanvas", |lua, this, ()| {
+            let gpu_canvas = this
+                .gpu_canvas
+                .as_ref()
+                .ok_or_else(|| luaur_rt::Error::runtime("GPU-canvas context is unavailable"))?;
+            gpu_canvas.canvas_userdata(lua)
+        });
+        methods.add_method("shader", |lua, this, name: String| {
+            let gpu_canvas = this
+                .gpu_canvas
+                .as_ref()
+                .ok_or_else(|| luaur_rt::Error::runtime("GPU-canvas context is unavailable"))?;
+            gpu_canvas.shader_userdata(lua, name)
         });
     }
 }
@@ -1061,6 +1078,7 @@ mod tests {
                 Rc::new(RefCell::new(None)),
                 Vec::new(),
                 Rc::clone(&missing_requested_data),
+                None,
             ))
             .expect("scripted context");
         lua.globals()
@@ -1430,6 +1448,7 @@ mod tests {
                 Rc::new(RefCell::new(Some(model.clone()))),
                 Vec::new(),
                 Rc::clone(&missing_requested_data),
+                None,
             ))
             .expect("scripted context");
         lua.globals().set("model", table).unwrap();

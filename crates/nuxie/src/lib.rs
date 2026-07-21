@@ -5,22 +5,26 @@
 
 use std::cell::{Ref, RefMut};
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[cfg(feature = "scripting")]
 use std::{cell::RefCell, collections::VecDeque};
 
-use anyhow::{Context, Result};
-use nuxie_binary::RuntimeFile;
-#[cfg(not(feature = "scripting"))]
-use nuxie_binary::read_runtime_file as read_runtime_file_for_facade;
-#[cfg(feature = "scripting")]
-use nuxie_binary::read_runtime_file_with_scripting as read_runtime_file_for_facade;
+use anyhow::{Context, Result, bail};
+// The facade always retains ScriptAsset contents because pure-Rust ProjectDO
+// converter envelopes use that standard Rive asset carrier. Retention does
+// not grant script execution: arbitrary bytecode remains gated by the
+// `scripting` feature and an explicitly bounded trusted-script import.
+use nuxie_binary::{
+    RuntimeFile, read_runtime_file_with_scripting as read_runtime_file_for_facade,
+    read_runtime_file_with_scripting_with_limits as read_runtime_file_for_facade_with_parser_limits,
+};
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_runtime::{
-    ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache, RuntimeOwnedViewModelHandle,
-    RuntimeOwnedViewModelInstance, RuntimeRenderPaintCache, RuntimeRenderPathCache,
-    embedded_fonts_are_parseable,
+    ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache, RuntimeGeometryHit,
+    RuntimeImageDimensionConflict, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    RuntimeRenderPaintCache, RuntimeRenderPathCache, RuntimeSemanticTextHit,
+    StateMachineEventContext, embedded_fonts_are_parseable,
 };
 
 pub mod flow_session;
@@ -42,10 +46,11 @@ enum ScriptExecutionAuthorization {
 }
 
 pub use nuxie_render_api::{
-    Aabb, BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageFilter, ImageSampler,
-    ImageWrap, Mat2D, PathVerb, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
-    Renderer, StrokeCap, StrokeJoin, Vec2D,
+    Aabb, BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
+    GpuCanvasShaderStage, ImageDecodeError, ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb,
+    RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage,
+    RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
+    Vec2D,
 };
 #[cfg(all(feature = "renderer", any(target_os = "ios", target_os = "macos")))]
 pub use nuxie_renderer::{
@@ -55,22 +60,31 @@ pub use nuxie_renderer::{
 pub use nuxie_renderer::{
     BrowserBackend, BrowserBackendPreference, BrowserFactory,
     BrowserFactory as DefaultRendererFactory, BrowserFrame, BrowserFrame as DefaultRendererFrame,
-    WebGl2Factory, WebGl2Frame,
+    BrowserResizeError, WebGl2Factory, WebGl2Frame, WebGl2GpuCanvasRenderer,
 };
 #[cfg(feature = "renderer")]
 pub use nuxie_renderer::{
-    RenderMode, RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame, WgpuFrameMetrics,
+    GpuCanvasRenderPlan, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer,
+    GpuCanvasVertexLayout, RenderMode, RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame,
+    WgpuFrameMetrics,
 };
 #[cfg(all(feature = "renderer", not(target_arch = "wasm32")))]
 pub use nuxie_renderer::{
     WgpuFactory as DefaultRendererFactory, WgpuFrame as DefaultRendererFrame,
 };
 pub use nuxie_runtime::{
-    ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, RuntimeLayerState,
-    RuntimeOwnedViewModelContext, RuntimeStateMachineInput, ScriptError, ScriptHost,
-    ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm,
-    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
-    StateMachineReportedEvent,
+    ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, ProjectDataConverterCatalog,
+    ProjectDataConverterCompileError, ProjectDataConverterContext, ProjectDataConverterDefinition,
+    ProjectDataConverterEasing, ProjectDataConverterFormat, ProjectDataConverterKind,
+    ProjectDataConverterMathOperation, ProjectDataConverterOutputType, ProjectDataConverterProgram,
+    ProjectDataConverterProgramError, ProjectDataConverterRangeClamp, ProjectDataConverterResolver,
+    ProjectDataConverterReverseResult, ProjectDataConverterRuntimeError, ProjectDataConverterSpec,
+    ProjectDataConverterState, ProjectDataConverterStringPadSide,
+    ProjectDataConverterStringTrimMode, ProjectDataConverterValidationRule, ProjectDataValue,
+    ProjectDataValuePath, RuntimeLayerState, RuntimeOwnedViewModelContext,
+    RuntimeStateMachineInput, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,
+    ScriptModuleFailure, ScriptValue, ScriptingVm, StateMachineInputInstance,
+    StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
 };
 
 #[cfg(feature = "scripting")]
@@ -78,7 +92,26 @@ use nuxie_scripting::vm::{
     HostCommand as LuaHostCommand, HostCycleCheckpoint, HostValue as LuaHostValue, ScriptProgram,
 };
 #[cfg(feature = "scripting")]
-pub use nuxie_scripting::vm::{LuaScriptInstance, ScopeKey, ScriptVm};
+pub use nuxie_scripting::vm::{LuaScriptInstance, ScopeKey, ScriptExecutionLimits, ScriptVm};
+
+#[cfg(feature = "scripting")]
+type FileScriptPolicy = Option<ScriptExecutionLimits>;
+#[cfg(not(feature = "scripting"))]
+type FileScriptPolicy = ();
+
+#[cfg(feature = "scripting")]
+fn inert_script_policy() -> FileScriptPolicy {
+    None
+}
+#[cfg(not(feature = "scripting"))]
+fn inert_script_policy() -> FileScriptPolicy {}
+
+#[cfg(feature = "scripting")]
+fn trusted_script_policy(enabled: bool) -> FileScriptPolicy {
+    enabled.then(ScriptExecutionLimits::new)
+}
+#[cfg(not(feature = "scripting"))]
+fn trusted_script_policy(_enabled: bool) -> FileScriptPolicy {}
 
 #[cfg(feature = "scripting")]
 #[derive(Debug, Clone)]
@@ -90,6 +123,7 @@ struct FileScriptAsset {
     scope: ScopeKey,
     is_module: bool,
     payload: Option<Vec<u8>>,
+    is_project_data_converter: bool,
 }
 
 #[cfg(feature = "scripting")]
@@ -113,6 +147,7 @@ struct FileScriptRuntime {
     assets: Arc<[FileScriptAsset]>,
     imports: Arc<[FileScriptLibraryImport]>,
     authorization: ScriptExecutionAuthorization,
+    execution_limits: Option<ScriptExecutionLimits>,
     ready: Option<ReadyFileScripts>,
 }
 
@@ -124,6 +159,7 @@ impl std::fmt::Debug for FileScriptRuntime {
             .field("assets", &self.assets)
             .field("imports", &self.imports)
             .field("authorization", &self.authorization)
+            .field("execution_limits", &self.execution_limits)
             .field("ready", &self.ready.is_some())
             .finish_non_exhaustive()
     }
@@ -131,7 +167,11 @@ impl std::fmt::Debug for FileScriptRuntime {
 
 #[cfg(feature = "scripting")]
 impl FileScriptRuntime {
-    fn import(runtime: &RuntimeFile, authorization: ScriptExecutionAuthorization) -> Self {
+    fn import(
+        runtime: &RuntimeFile,
+        authorization: ScriptExecutionAuthorization,
+        execution_limits: Option<ScriptExecutionLimits>,
+    ) -> Self {
         let entries = runtime.scripting_file_assets_with_contents();
         let assets = entries
             .iter()
@@ -142,6 +182,7 @@ impl FileScriptRuntime {
                     .asset
                     .string_property("folderPath")
                     .unwrap_or_default();
+                let payload = entry.contents.map(ToOwned::to_owned);
                 FileScriptAsset {
                     ordinal: entry.ordinal,
                     global_id: entry.asset.id,
@@ -159,7 +200,11 @@ impl FileScriptRuntime {
                             .unwrap_or(0),
                     ),
                     is_module: entry.asset.bool_property("isModule").unwrap_or(false),
-                    payload: entry.contents.map(ToOwned::to_owned),
+                    is_project_data_converter: entry.asset.type_name == "ScriptAsset"
+                        && payload
+                            .as_deref()
+                            .is_some_and(ProjectDataConverterProgram::is_envelope),
+                    payload,
                 }
             })
             .collect::<Vec<_>>()
@@ -187,24 +232,33 @@ impl FileScriptRuntime {
             })
             .collect::<Vec<_>>()
             .into();
-        Self::new(assets, imports, authorization)
+        Self::new(assets, imports, authorization, execution_limits)
     }
 
     fn new(
         assets: Arc<[FileScriptAsset]>,
         imports: Arc<[FileScriptLibraryImport]>,
         authorization: ScriptExecutionAuthorization,
+        execution_limits: Option<ScriptExecutionLimits>,
     ) -> Self {
         Self {
             assets,
             imports,
             authorization,
+            execution_limits,
             ready: None,
         }
     }
 
     fn scripts_are_authenticated(&self) -> bool {
         self.authorization == ScriptExecutionAuthorization::Authenticated
+            && self.execution_limits.is_some()
+    }
+
+    fn is_project_data_converter_asset(&self, ordinal: usize) -> bool {
+        self.assets
+            .get(ordinal)
+            .is_some_and(|asset| asset.is_project_data_converter)
     }
 
     fn build_candidate(
@@ -212,7 +266,13 @@ impl FileScriptRuntime {
         runtime: &RuntimeFile,
         factory: &mut dyn Factory,
     ) -> std::result::Result<ReadyFileScripts, nuxie_runtime::ScriptError> {
-        let mut vm = ScriptVm::new();
+        let execution_limits = self.execution_limits.ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(
+                "trusted script execution limits are unavailable for a visual-only File",
+            )
+        })?;
+        let mut vm = ScriptVm::new_with_execution_limits(execution_limits)
+            .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
         vm.set_view_models(nuxie_runtime::script_view_models(runtime));
         // LibraryAsset records are serialized import edges. Seed every pin
         // before executing any module so both eager and lazy requires observe
@@ -220,10 +280,22 @@ impl FileScriptRuntime {
         for import in self.imports.iter() {
             vm.add_import(import.caller, &import.name, import.target);
         }
-        let mut pending = self
-            .assets
+        let assets = self.assets.as_ref();
+        for asset in assets
             .iter()
-            .filter(|asset| asset.type_name == "ScriptAsset" && asset.is_module)
+            .filter(|asset| asset.type_name == "ShaderAsset")
+        {
+            let payload = required_script_payload(asset, "shader registration")?;
+            vm.register_gpu_canvas_shader_asset(&asset.name, payload)
+                .map_err(|error| asset_phase_error(asset, "shader registration", error))?;
+        }
+        let mut pending = assets
+            .iter()
+            .filter(|asset| {
+                asset.type_name == "ScriptAsset"
+                    && asset.is_module
+                    && !asset.is_project_data_converter
+            })
             .collect::<Vec<_>>();
 
         loop {
@@ -253,11 +325,9 @@ impl FileScriptRuntime {
         }
 
         let mut programs = BTreeMap::new();
-        for asset in self
-            .assets
-            .iter()
-            .filter(|asset| asset.type_name == "ScriptAsset" && !asset.is_module)
-        {
+        for asset in assets.iter().filter(|asset| {
+            asset.type_name == "ScriptAsset" && !asset.is_module && !asset.is_project_data_converter
+        }) {
             let payload = required_script_payload(asset, "protocol registration")?;
             let program = vm
                 .register_protocol_script_with_factory_scoped(
@@ -328,9 +398,27 @@ impl FileScriptRuntime {
 }
 
 #[cfg(feature = "scripting")]
+#[derive(Debug, Clone, Copy)]
+enum ScriptMountTargetKind {
+    Drawable,
+    DataConverter,
+}
+
+#[cfg(feature = "scripting")]
+impl ScriptMountTargetKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Drawable => "ScriptedDrawable",
+            Self::DataConverter => "ScriptedDataConverter",
+        }
+    }
+}
+
+#[cfg(feature = "scripting")]
 #[derive(Debug)]
 struct ScriptMountTarget {
-    component_global_id: u32,
+    kind: ScriptMountTargetKind,
+    global_id: u32,
     asset_ordinal: usize,
     asset_name: String,
 }
@@ -346,7 +434,7 @@ struct ScriptMountGroup {
 #[cfg(feature = "scripting")]
 struct PreparedScriptMountGroup {
     graph_global_id: u32,
-    scripts: Vec<(u32, Box<dyn ScriptInstance>)>,
+    scripts: Vec<(ScriptMountTargetKind, u32, Box<dyn ScriptInstance>)>,
 }
 
 #[cfg(feature = "scripting")]
@@ -363,8 +451,8 @@ fn required_script_payload<'a>(
 ) -> std::result::Result<&'a [u8], nuxie_runtime::ScriptError> {
     asset.payload.as_deref().ok_or_else(|| {
         nuxie_runtime::ScriptError::new(format!(
-            "ScriptAsset ordinal {} global {} name '{}' phase {} has no imported FileAssetContents payload",
-            asset.ordinal, asset.global_id, asset.name, phase
+            "{} ordinal {} global {} name '{}' phase {} has no imported FileAssetContents payload",
+            asset.type_name, asset.ordinal, asset.global_id, asset.name, phase
         ))
     })
 }
@@ -376,8 +464,8 @@ fn asset_phase_error(
     error: nuxie_runtime::ScriptError,
 ) -> nuxie_runtime::ScriptError {
     error.with_context(format!(
-        "ScriptAsset ordinal {} global {} name '{}' phase {} failed",
-        asset.ordinal, asset.global_id, asset.name, phase
+        "{} ordinal {} global {} name '{}' phase {} failed",
+        asset.type_name, asset.ordinal, asset.global_id, asset.name, phase
     ))
 }
 
@@ -397,11 +485,12 @@ fn instantiate_script_mounts(
     for group in groups {
         let mut scripts = Vec::with_capacity(group.targets.len());
         for target in &group.targets {
+            let target_label = target.kind.label();
             let program = ready.programs.get(&target.asset_ordinal).ok_or_else(|| {
                 nuxie_runtime::ScriptError::new(format!(
-                    "{} ScriptedDrawable global {} references unregistered protocol ordinal {} name '{}'",
+                    "{} {target_label} global {} references unregistered protocol ordinal {} name '{}'",
                     group.path,
-                    target.component_global_id,
+                    target.global_id,
                     target.asset_ordinal,
                     target.asset_name
                 ))
@@ -412,18 +501,18 @@ fn instantiate_script_mounts(
                 .instantiate_registered_script_with_factory(program, &mut host, factory)
                 .map_err(|error| {
                     error.with_context(format!(
-                        "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase generator failed",
+                        "{} {target_label} global {} asset ordinal {} name '{}' phase generator failed",
                         group.path,
-                        target.component_global_id,
+                        target.global_id,
                         target.asset_ordinal,
                         target.asset_name
                     ))
                 })?;
             if script.has_method(ScriptMethod::Init).map_err(|error| {
                 error.with_context(format!(
-                    "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init lookup failed",
+                    "{} {target_label} global {} asset ordinal {} name '{}' phase init lookup failed",
                     group.path,
-                    target.component_global_id,
+                    target.global_id,
                     target.asset_ordinal,
                     target.asset_name
                 ))
@@ -432,24 +521,24 @@ fn instantiate_script_mounts(
                     .call_init_with_factory(&mut host, factory)
                     .map_err(|error| {
                         error.with_context(format!(
-                            "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init failed",
+                            "{} {target_label} global {} asset ordinal {} name '{}' phase init failed",
                             group.path,
-                            target.component_global_id,
+                            target.global_id,
                             target.asset_ordinal,
                             target.asset_name
                         ))
                     })?;
                 if !initialized {
                     return Err(nuxie_runtime::ScriptError::new(format!(
-                        "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init returned false or nil",
+                        "{} {target_label} global {} asset ordinal {} name '{}' phase init returned false or nil",
                         group.path,
-                        target.component_global_id,
+                        target.global_id,
                         target.asset_ordinal,
                         target.asset_name
                     )));
                 }
             }
-            scripts.push((target.component_global_id, script));
+            scripts.push((target.kind, target.global_id, script));
         }
         prepared.push(PreparedScriptMountGroup {
             graph_global_id: group.graph_global_id,
@@ -837,11 +926,12 @@ impl FileScriptArtboard {
                 "missing scripted artboard index {artboard_index}",
             ))
         })?;
+        let external_font_assets = file.external_font_assets.snapshot();
         let instance = RuntimeArtboardInstance::from_graph_with_artboards_and_external_fonts(
             &file.runtime,
             graph,
             &file.graph.artboards,
-            &file.external_font_assets,
+            &external_font_assets,
         )
         .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
         let state_machine_index = file
@@ -1069,6 +1159,70 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
 }
 
 #[cfg(feature = "scripting")]
+fn script_mount_target(
+    runtime: &RuntimeFile,
+    scripts: &FileScriptRuntime,
+    object: &nuxie_binary::RuntimeObject,
+    kind: ScriptMountTargetKind,
+    path: &str,
+) -> std::result::Result<ScriptMountTarget, nuxie_runtime::ScriptError> {
+    let label = kind.label();
+    if !scripts.scripts_are_authenticated() {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "{path} contains {label} global {}, but this File has no authenticated script authority",
+            object.id
+        )));
+    }
+    let ordinal = object
+        .uint_property("scriptAssetId")
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(format!(
+                "{path} {label} global {} has no valid FileAsset ordinal",
+                object.id
+            ))
+        })?;
+    let resolved = runtime
+        .resolved_file_asset_for_referencer(object)
+        .ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(format!(
+                "{path} {label} global {} cannot resolve FileAsset ordinal {ordinal}",
+                object.id
+            ))
+        })?;
+    let asset = scripts.assets.get(ordinal).ok_or_else(|| {
+        nuxie_runtime::ScriptError::new(format!(
+            "{path} {label} global {} references absent FileAsset ordinal {ordinal}",
+            object.id
+        ))
+    })?;
+    if asset.global_id != resolved.id {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "{path} {label} global {} FileAsset ordinal {ordinal} resolved global {}, but catalog contains global {}",
+            object.id, resolved.id, asset.global_id
+        )));
+    }
+    if asset.type_name != "ScriptAsset" || resolved.type_name != "ScriptAsset" {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "{path} {label} global {} FileAsset ordinal {ordinal} is {}, not ScriptAsset",
+            object.id, resolved.type_name
+        )));
+    }
+    if asset.is_module {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "{path} {label} global {} references module ScriptAsset ordinal {ordinal} name '{}'",
+            object.id, asset.name
+        )));
+    }
+    Ok(ScriptMountTarget {
+        kind,
+        global_id: object.id,
+        asset_ordinal: ordinal,
+        asset_name: asset.name.clone(),
+    })
+}
+
+#[cfg(feature = "scripting")]
 fn script_mount_group(
     runtime: &RuntimeFile,
     scripts: &FileScriptRuntime,
@@ -1076,13 +1230,13 @@ fn script_mount_group(
     instance: &RuntimeArtboardInstance,
     path: String,
 ) -> std::result::Result<(bool, ScriptMountGroup), nuxie_runtime::ScriptError> {
-    let mut has_scripted_drawable = false;
+    let mut has_script_target = false;
     let mut targets = Vec::new();
     for component in &graph.components {
         if component.type_name != "ScriptedDrawable" {
             continue;
         }
-        has_scripted_drawable = true;
+        has_script_target = true;
         let object = runtime
             .object(component.global_id as usize)
             .ok_or_else(|| {
@@ -1091,57 +1245,40 @@ fn script_mount_group(
                     component.global_id
                 ))
             })?;
-        let ordinal = object
+        if !instance.has_script_instance_for_global(component.global_id) {
+            targets.push(script_mount_target(
+                runtime,
+                scripts,
+                object,
+                ScriptMountTargetKind::Drawable,
+                &path,
+            )?);
+        }
+    }
+    for converter in runtime.data_converters() {
+        if converter.type_name != "ScriptedDataConverter" {
+            continue;
+        }
+        let is_project_converter = converter
             .uint_property("scriptAssetId")
             .and_then(|value| usize::try_from(value).ok())
-            .ok_or_else(|| {
-                nuxie_runtime::ScriptError::new(format!(
-                    "{path} ScriptedDrawable global {} has no valid FileAsset ordinal",
-                    component.global_id
-                ))
-            })?;
-        let resolved = runtime
-            .resolved_file_asset_for_referencer(object)
-            .ok_or_else(|| {
-                nuxie_runtime::ScriptError::new(format!(
-                    "{path} ScriptedDrawable global {} cannot resolve FileAsset ordinal {ordinal}",
-                    component.global_id
-                ))
-            })?;
-        let asset = scripts.assets.get(ordinal).ok_or_else(|| {
-            nuxie_runtime::ScriptError::new(format!(
-                "{path} ScriptedDrawable global {} references absent FileAsset ordinal {ordinal}",
-                component.global_id
-            ))
-        })?;
-        if asset.global_id != resolved.id {
-            return Err(nuxie_runtime::ScriptError::new(format!(
-                "{path} ScriptedDrawable global {} FileAsset ordinal {ordinal} resolved global {}, but catalog contains global {}",
-                component.global_id, resolved.id, asset.global_id
-            )));
+            .is_some_and(|ordinal| scripts.is_project_data_converter_asset(ordinal));
+        if is_project_converter {
+            continue;
         }
-        if asset.type_name != "ScriptAsset" || resolved.type_name != "ScriptAsset" {
-            return Err(nuxie_runtime::ScriptError::new(format!(
-                "{path} ScriptedDrawable global {} FileAsset ordinal {ordinal} is {}, not ScriptAsset",
-                component.global_id, resolved.type_name
-            )));
-        }
-        if asset.is_module {
-            return Err(nuxie_runtime::ScriptError::new(format!(
-                "{path} ScriptedDrawable global {} references module ScriptAsset ordinal {ordinal} name '{}'",
-                component.global_id, asset.name
-            )));
-        }
-        if !instance.has_script_instance_for_global(component.global_id) {
-            targets.push(ScriptMountTarget {
-                component_global_id: component.global_id,
-                asset_ordinal: ordinal,
-                asset_name: asset.name.clone(),
-            });
+        has_script_target = true;
+        if !instance.has_scripted_data_converter_instance_for_global(converter.id) {
+            targets.push(script_mount_target(
+                runtime,
+                scripts,
+                converter,
+                ScriptMountTargetKind::DataConverter,
+                &path,
+            )?);
         }
     }
     Ok((
-        has_scripted_drawable,
+        has_script_target,
         ScriptMountGroup {
             path,
             graph_global_id: graph.global_id,
@@ -1160,7 +1297,7 @@ fn collect_script_mount_groups(
     if !scripts.scripts_are_authenticated() {
         return Ok((false, Vec::new()));
     }
-    let (mut has_scripted_drawable, root) = script_mount_group(
+    let (mut has_script_target, root) = script_mount_group(
         &file.runtime,
         &scripts,
         root_graph,
@@ -1186,12 +1323,12 @@ fn collect_script_mount_groups(
         );
         let (has_scripts, group) =
             script_mount_group(&file.runtime, &scripts, graph, nested, path)?;
-        has_scripted_drawable |= has_scripts;
+        has_script_target |= has_scripts;
         groups.push(group);
         Ok::<(), nuxie_runtime::ScriptError>(())
     };
     instance.try_visit_artboard_tree_instances_mut(&mut visitor)?;
-    Ok((has_scripted_drawable, groups))
+    Ok((has_script_target, groups))
 }
 
 #[cfg(feature = "scripting")]
@@ -1231,16 +1368,32 @@ fn attach_prepared_script_mounts(
     instance: &mut RuntimeArtboardInstance,
     prepared: Vec<PreparedScriptMountGroup>,
 ) {
+    fn attach(
+        instance: &mut RuntimeArtboardInstance,
+        kind: ScriptMountTargetKind,
+        global_id: u32,
+        script: Box<dyn ScriptInstance>,
+    ) {
+        match kind {
+            ScriptMountTargetKind::Drawable => {
+                instance.set_script_instance_for_global(global_id, script);
+            }
+            ScriptMountTargetKind::DataConverter => {
+                instance.set_scripted_data_converter_instance_for_global(global_id, script);
+            }
+        }
+    }
+
     let mut groups = VecDeque::from(prepared);
     if let Some(root) = groups.pop_front() {
-        for (global_id, script) in root.scripts {
-            instance.set_script_instance_for_global(global_id, script);
+        for (kind, global_id, script) in root.scripts {
+            attach(instance, kind, global_id, script);
         }
     }
     let mut visitor = |_: usize, _: u32, nested: &mut RuntimeArtboardInstance| {
         if let Some(group) = groups.pop_front() {
-            for (global_id, script) in group.scripts {
-                nested.set_script_instance_for_global(global_id, script);
+            for (kind, global_id, script) in group.scripts {
+                attach(nested, kind, global_id, script);
             }
         }
         Ok::<(), std::convert::Infallible>(())
@@ -1257,7 +1410,22 @@ fn flush_scripted_artboard_tree(
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
-    let mut changed = instance
+    // Converter tables are attached after the caller's ordinary data-bind
+    // pass. Re-run the zero-time bind phase so the first factory-bearing
+    // frame observes scripted conversion instead of the inert pass-through
+    // placeholder used during instance construction.
+    let mut changed = instance.advance_artboard_data_binds();
+    let mut visitor = |_: usize, _: u32, nested: &mut RuntimeArtboardInstance| {
+        changed |= nested.advance_artboard_data_binds();
+        Ok::<(), std::convert::Infallible>(())
+    };
+    let result = instance.try_visit_artboard_tree_instances_mut(&mut visitor);
+    match result {
+        Ok(()) => {}
+        Err(error) => match error {},
+    }
+
+    changed |= instance
         .flush_script_lifecycle_with_factory(factory)
         .map_err(|error| {
             error.with_context(format!(
@@ -1309,7 +1477,7 @@ fn prepare_scripted_artboard_tree(
             return Ok(false);
         }
     }
-    let (has_scripted_drawable, groups) = collect_script_mount_groups(file, root_graph, instance)?;
+    let (has_script_target, groups) = collect_script_mount_groups(file, root_graph, instance)?;
     let mut prepared = file
         .scripts
         .borrow_mut()
@@ -1324,16 +1492,16 @@ fn prepare_scripted_artboard_tree(
     }
     attach_prepared_script_mounts(instance, prepared.groups);
 
-    // Facade execution fails closed: every concrete scripted drawable must
+    // Facade execution fails closed: every concrete scripted target must
     // have an attached table before entering the lower runtime draw path.
     let (_, verified) = collect_script_mount_groups(file, root_graph, instance)?;
     if let Some(group) = verified.iter().find(|group| !group.targets.is_empty()) {
         return Err(nuxie_runtime::ScriptError::new(format!(
-            "{} still has unattached scripted drawable instances",
+            "{} still has unattached scripted runtime instances",
             group.path
         )));
     }
-    let changed = if has_scripted_drawable {
+    let changed = if has_script_target {
         flush_scripted_artboard_tree(instance, factory)?
     } else {
         false
@@ -1348,7 +1516,7 @@ fn prepare_scripted_artboard_tree(
         .find(|group| !group.targets.is_empty())
     {
         return Err(nuxie_runtime::ScriptError::new(format!(
-            "{} materialized an unattached scripted drawable during script lifecycle",
+            "{} materialized an unattached scripted runtime instance during script lifecycle",
             group.path
         )));
     }
@@ -1399,9 +1567,73 @@ pub struct File {
     runtime: Arc<RuntimeFile>,
     graph: Arc<GraphFile>,
     external_image_assets: BTreeMap<u32, Arc<[u8]>>,
-    external_font_assets: BTreeMap<u32, Arc<[u8]>>,
+    external_font_assets: ExternalFontAssetStore,
     #[cfg(feature = "scripting")]
     scripts: RefCell<FileScriptRuntime>,
+}
+
+#[derive(Default)]
+struct ExternalFontAssetStore {
+    assets: RwLock<BTreeMap<u32, Arc<[u8]>>>,
+}
+
+impl ExternalFontAssetStore {
+    fn read(&self) -> RwLockReadGuard<'_, BTreeMap<u32, Arc<[u8]>>> {
+        match self.assets.read() {
+            Ok(assets) => assets,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
+    fn write(&self) -> RwLockWriteGuard<'_, BTreeMap<u32, Arc<[u8]>>> {
+        match self.assets.write() {
+            Ok(assets) => assets,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
+    fn snapshot(&self) -> BTreeMap<u32, Arc<[u8]>> {
+        self.read().clone()
+    }
+
+    fn len(&self) -> usize {
+        self.read().len()
+    }
+
+    fn insert_if_changed(&self, asset_id: u32, bytes: Arc<[u8]>) -> bool {
+        let mut assets = self.write();
+        if assets
+            .get(&asset_id)
+            .is_some_and(|current| current.as_ref() == bytes.as_ref())
+        {
+            return false;
+        }
+        assets.insert(asset_id, bytes);
+        true
+    }
+
+    #[cfg(test)]
+    fn get(&self, asset_id: &u32) -> Option<Arc<[u8]>> {
+        self.read().get(asset_id).cloned()
+    }
+
+    #[cfg(test)]
+    fn contains_key(&self, asset_id: &u32) -> bool {
+        self.read().contains_key(asset_id)
+    }
+
+    #[cfg(test)]
+    fn is_empty(&self) -> bool {
+        self.read().is_empty()
+    }
+}
+
+impl Clone for ExternalFontAssetStore {
+    fn clone(&self) -> Self {
+        Self {
+            assets: RwLock::new(self.snapshot()),
+        }
+    }
 }
 
 /// Rejection from attaching host-provided bytes to a semantic file asset.
@@ -1440,6 +1672,171 @@ impl std::fmt::Display for ExternalAssetError {
 
 impl std::error::Error for ExternalAssetError {}
 
+/// Resource limits applied before and after binary import, but always before
+/// the owned graph and script catalog are constructed.
+///
+/// [`Self::new`] and [`Default::default`] are deliberately bounded. Hosts that
+/// accept larger trusted artifacts can raise individual ceilings explicitly;
+/// [`Self::unbounded`] is reserved for already-authenticated, host-controlled
+/// inputs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileImportLimits {
+    max_input_bytes: Option<usize>,
+    max_runtime_objects: Option<usize>,
+    max_runtime_properties: Option<usize>,
+    max_imported_file_assets: Option<usize>,
+    max_file_asset_content_bytes: Option<usize>,
+    max_total_file_asset_content_bytes: Option<usize>,
+}
+
+impl FileImportLimits {
+    const DEFAULT_MAX_INPUT_BYTES: usize = 128 * 1024 * 1024;
+    const DEFAULT_MAX_RUNTIME_OBJECTS: usize = 1_000_000;
+    const DEFAULT_MAX_RUNTIME_PROPERTIES: usize = 1_000_000;
+    const DEFAULT_MAX_IMPORTED_FILE_ASSETS: usize = 16_384;
+    const DEFAULT_MAX_FILE_ASSET_CONTENT_BYTES: usize = 64 * 1024 * 1024;
+    const DEFAULT_MAX_TOTAL_FILE_ASSET_CONTENT_BYTES: usize = 128 * 1024 * 1024;
+
+    pub const fn new() -> Self {
+        Self {
+            max_input_bytes: Some(Self::DEFAULT_MAX_INPUT_BYTES),
+            max_runtime_objects: Some(Self::DEFAULT_MAX_RUNTIME_OBJECTS),
+            max_runtime_properties: Some(Self::DEFAULT_MAX_RUNTIME_PROPERTIES),
+            max_imported_file_assets: Some(Self::DEFAULT_MAX_IMPORTED_FILE_ASSETS),
+            max_file_asset_content_bytes: Some(Self::DEFAULT_MAX_FILE_ASSET_CONTENT_BYTES),
+            max_total_file_asset_content_bytes: Some(
+                Self::DEFAULT_MAX_TOTAL_FILE_ASSET_CONTENT_BYTES,
+            ),
+        }
+    }
+
+    pub const fn unbounded() -> Self {
+        Self {
+            max_input_bytes: None,
+            max_runtime_objects: None,
+            max_runtime_properties: None,
+            max_imported_file_assets: None,
+            max_file_asset_content_bytes: None,
+            max_total_file_asset_content_bytes: None,
+        }
+    }
+
+    pub const fn with_max_input_bytes(mut self, maximum: usize) -> Self {
+        self.max_input_bytes = Some(maximum);
+        self
+    }
+
+    pub const fn with_max_runtime_objects(mut self, maximum: usize) -> Self {
+        self.max_runtime_objects = Some(maximum);
+        self
+    }
+
+    /// Bound every serialized property occurrence decoded by the binary
+    /// parser, including skipped/unknown/duplicate properties and properties
+    /// on objects that ultimately become null slots. The same aggregate also
+    /// covers header property-table entries and manifest name, path-entry, and
+    /// path-component declarations.
+    pub const fn with_max_runtime_properties(mut self, maximum: usize) -> Self {
+        self.max_runtime_properties = Some(maximum);
+        self
+    }
+
+    pub const fn with_max_imported_file_assets(mut self, maximum: usize) -> Self {
+        self.max_imported_file_assets = Some(maximum);
+        self
+    }
+
+    pub const fn with_max_file_asset_content_bytes(mut self, maximum: usize) -> Self {
+        self.max_file_asset_content_bytes = Some(maximum);
+        self
+    }
+
+    pub const fn with_max_total_file_asset_content_bytes(mut self, maximum: usize) -> Self {
+        self.max_total_file_asset_content_bytes = Some(maximum);
+        self
+    }
+
+    pub const fn max_input_bytes(self) -> Option<usize> {
+        self.max_input_bytes
+    }
+
+    pub const fn max_runtime_objects(self) -> Option<usize> {
+        self.max_runtime_objects
+    }
+
+    pub const fn max_runtime_properties(self) -> Option<usize> {
+        self.max_runtime_properties
+    }
+
+    pub const fn max_imported_file_assets(self) -> Option<usize> {
+        self.max_imported_file_assets
+    }
+
+    pub const fn max_file_asset_content_bytes(self) -> Option<usize> {
+        self.max_file_asset_content_bytes
+    }
+
+    pub const fn max_total_file_asset_content_bytes(self) -> Option<usize> {
+        self.max_total_file_asset_content_bytes
+    }
+
+    fn validate_input(self, bytes: &[u8]) -> Result<()> {
+        if let Some(maximum) = self.max_input_bytes()
+            && bytes.len() > maximum
+        {
+            bail!(
+                "Rive file is {} bytes; the import limit is {maximum} bytes",
+                bytes.len()
+            );
+        }
+        Ok(())
+    }
+}
+
+impl Default for FileImportLimits {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn read_runtime_file_for_facade_with_limits(
+    bytes: &[u8],
+    limits: FileImportLimits,
+) -> Result<RuntimeFile> {
+    if limits.max_runtime_objects().is_none() && limits.max_runtime_properties().is_none() {
+        read_runtime_file_for_facade(bytes)
+    } else {
+        read_runtime_file_for_facade_with_parser_limits(
+            bytes,
+            limits.max_runtime_objects(),
+            limits.max_runtime_properties(),
+        )
+    }
+}
+
+/// Failure to attach host-supplied bytes to an external `ImageAsset`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExternalImageAssetError {
+    UnknownAsset { asset_id: u32 },
+    WrongAssetKind { asset_id: u32, actual: &'static str },
+}
+
+impl std::fmt::Display for ExternalImageAssetError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownAsset { asset_id } => {
+                write!(formatter, "unknown external image asset id {asset_id}")
+            }
+            Self::WrongAssetKind { asset_id, actual } => write!(
+                formatter,
+                "external image asset id {asset_id} resolves to {actual}, not ImageAsset"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ExternalImageAssetError {}
+
 impl std::fmt::Debug for File {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut debug = formatter.debug_struct("File");
@@ -1471,6 +1868,7 @@ impl Clone for File {
                 Arc::clone(&scripts.assets),
                 Arc::clone(&scripts.imports),
                 scripts.authorization,
+                scripts.execution_limits,
             ))
         };
         Self {
@@ -1488,12 +1886,59 @@ impl File {
     /// Import `.riv` bytes and build the runtime graph needed for instancing.
     ///
     /// With scripting enabled, arbitrary imported files remain visual-only by
-    /// default: ordinary visuals render while embedded bytecode stays inert.
+    /// default. Use `File::import_with_trusted_scripts` only after the host has
+    /// authenticated the file bytes and selected explicit execution limits.
     pub fn import(bytes: &[u8]) -> Result<Self> {
-        let runtime = read_runtime_file_for_facade(bytes).context("failed to import Rive file")?;
-        Self::from_runtime_with_script_authorization(
+        Self::import_with_limits(bytes, FileImportLimits::new())
+    }
+
+    /// Import `.riv` bytes while bounding allocations derived from the parsed
+    /// file before constructing the owned runtime graph.
+    pub fn import_with_limits(bytes: &[u8], limits: FileImportLimits) -> Result<Self> {
+        limits.validate_input(bytes)?;
+        let runtime = read_runtime_file_for_facade_with_limits(bytes, limits)
+            .context("failed to import Rive file")?;
+        Self::from_runtime_with_script_policy_and_limits(
             runtime,
             ScriptExecutionAuthorization::VisualOnly,
+            inert_script_policy(),
+            limits,
+        )
+    }
+
+    /// Import host-authenticated `.riv` bytes with explicit, non-zero Luau
+    /// memory and per-callback interrupt ceilings.
+    #[cfg(feature = "scripting")]
+    pub fn import_with_trusted_scripts(
+        bytes: &[u8],
+        execution_limits: ScriptExecutionLimits,
+    ) -> Result<Self> {
+        Self::import_with_trusted_scripts_and_limits(
+            bytes,
+            FileImportLimits::new(),
+            execution_limits,
+        )
+    }
+
+    /// Apply both binary-import allocation limits and trusted Luau execution
+    /// limits before the File can enter its lazy script bootstrap path.
+    #[cfg(feature = "scripting")]
+    pub fn import_with_trusted_scripts_and_limits(
+        bytes: &[u8],
+        import_limits: FileImportLimits,
+        execution_limits: ScriptExecutionLimits,
+    ) -> Result<Self> {
+        execution_limits
+            .validate()
+            .context("invalid trusted script execution limits")?;
+        import_limits.validate_input(bytes)?;
+        let runtime = read_runtime_file_for_facade_with_limits(bytes, import_limits)
+            .context("failed to import Rive file")?;
+        Self::from_runtime_with_script_policy_and_limits(
+            runtime,
+            ScriptExecutionAuthorization::Authenticated,
+            Some(execution_limits),
+            import_limits,
         )
     }
 
@@ -1507,11 +1952,31 @@ impl File {
         bytes: &[u8],
         capability: ScriptImportCapability,
     ) -> Result<Self> {
+        let import_limits = FileImportLimits::new();
+        import_limits.validate_input(bytes)?;
         let authorization = capability
             .execution_authorization_for(bytes)
             .context("script import capability does not match the artifact")?;
-        let runtime = read_runtime_file_for_facade(bytes).context("failed to import Rive file")?;
-        Self::from_runtime_with_script_authorization(runtime, authorization)
+        let runtime = read_runtime_file_for_facade_with_limits(bytes, import_limits)
+            .context("failed to import Rive file")?;
+        Self::from_runtime_with_script_policy_and_limits(
+            runtime,
+            authorization,
+            trusted_script_policy(authorization == ScriptExecutionAuthorization::Authenticated),
+            import_limits,
+        )
+    }
+
+    /// This is an explicit trust boundary for content the host authored or
+    /// authenticated. Arbitrary uploaded or network-provided files should use
+    /// [`Self::import`], which refuses to enter the script draw path.
+    ///
+    /// This compatibility wrapper applies [`ScriptExecutionLimits::new`]. New
+    /// callers should prefer [`Self::import_with_trusted_scripts`] so the trust
+    /// decision and resource policy remain visible at the call site.
+    #[cfg(feature = "scripting")]
+    pub fn import_with_unsigned_scripts(bytes: &[u8]) -> Result<Self> {
+        Self::import_with_trusted_scripts(bytes, ScriptExecutionLimits::new())
     }
 
     pub(crate) fn from_runtime(runtime: RuntimeFile) -> Result<Self> {
@@ -1525,8 +1990,61 @@ impl File {
 
     fn from_runtime_with_script_authorization(
         runtime: RuntimeFile,
-        _authorization: ScriptExecutionAuthorization,
+        authorization: ScriptExecutionAuthorization,
     ) -> Result<Self> {
+        Self::from_runtime_with_script_policy_and_limits(
+            runtime,
+            authorization,
+            trusted_script_policy(authorization == ScriptExecutionAuthorization::Authenticated),
+            FileImportLimits::new(),
+        )
+    }
+
+    fn from_runtime_with_script_policy_and_limits(
+        runtime: RuntimeFile,
+        authorization: ScriptExecutionAuthorization,
+        execution_limits: FileScriptPolicy,
+        limits: FileImportLimits,
+    ) -> Result<Self> {
+        #[cfg(not(feature = "scripting"))]
+        let _ = (authorization, execution_limits);
+        if let Some(maximum) = limits.max_runtime_objects()
+            && runtime.objects.len() > maximum
+        {
+            bail!(
+                "Rive file contains {} runtime objects; the import limit is {maximum}",
+                runtime.objects.len()
+            );
+        }
+        let imported_assets = if let Some(maximum) = limits.max_imported_file_assets() {
+            runtime
+                .imported_file_assets_with_contents_bounded(maximum)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Rive file imports more than {maximum} FileAssets")
+                })?
+        } else {
+            runtime.imported_file_assets_with_contents()
+        };
+        let mut total_content_bytes = 0usize;
+        for asset in imported_assets {
+            let content_bytes = asset.contents.map_or(0, <[u8]>::len);
+            if let Some(maximum) = limits.max_file_asset_content_bytes()
+                && content_bytes > maximum
+            {
+                bail!(
+                    "Rive FileAsset ordinal {} contains {content_bytes} bytes; the per-asset import limit is {maximum} bytes",
+                    asset.ordinal
+                );
+            }
+            total_content_bytes = total_content_bytes
+                .checked_add(content_bytes)
+                .context("Rive FileAsset content byte total overflowed usize")?;
+            if let Some(maximum) = limits.max_total_file_asset_content_bytes()
+                && total_content_bytes > maximum
+            {
+                bail!("Rive FileAssets contain more than {maximum} aggregate content bytes");
+            }
+        }
         anyhow::ensure!(
             embedded_fonts_are_parseable(&runtime),
             "embedded FontAsset bytes are not a valid font"
@@ -1534,11 +2052,15 @@ impl File {
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
         Ok(Self {
             #[cfg(feature = "scripting")]
-            scripts: RefCell::new(FileScriptRuntime::import(&runtime, _authorization)),
+            scripts: RefCell::new(FileScriptRuntime::import(
+                &runtime,
+                authorization,
+                execution_limits,
+            )),
             runtime: Arc::new(runtime),
             graph: Arc::new(graph),
             external_image_assets: BTreeMap::new(),
-            external_font_assets: BTreeMap::new(),
+            external_font_assets: ExternalFontAssetStore::default(),
         })
     }
 
@@ -1577,20 +2099,21 @@ impl File {
         asset_id: u32,
         bytes: Vec<u8>,
     ) -> std::result::Result<(), ExternalAssetError> {
+        self.attach_external_font_asset_bytes_shared(asset_id, bytes)
+            .map(|_| ())
+    }
+
+    fn attach_external_font_asset_bytes_shared(
+        &self,
+        asset_id: u32,
+        bytes: Vec<u8>,
+    ) -> std::result::Result<bool, ExternalAssetError> {
         self.validate_external_asset_kind(asset_id, "FontAsset")?;
         if !RuntimeArtboardInstance::external_font_bytes_are_parseable(&bytes) {
             return Err(ExternalAssetError::InvalidFont { asset_id });
         }
         let bytes = Arc::<[u8]>::from(bytes);
-        if self
-            .external_font_assets
-            .get(&asset_id)
-            .is_some_and(|current| current.as_ref() == bytes.as_ref())
-        {
-            return Ok(());
-        }
-        self.external_font_assets.insert(asset_id, bytes);
-        Ok(())
+        Ok(self.external_font_assets.insert_if_changed(asset_id, bytes))
     }
 
     fn validate_external_asset_kind(
@@ -1615,6 +2138,49 @@ impl File {
             });
         }
         Ok(())
+    }
+
+    /// Compatibility spelling for attaching bytes to an external image asset.
+    pub fn attach_image_asset_bytes(
+        &mut self,
+        asset_id: u32,
+        bytes: Vec<u8>,
+    ) -> std::result::Result<(), ExternalImageAssetError> {
+        self.attach_external_image_asset_bytes(asset_id, bytes)
+            .map_err(|error| match error {
+                ExternalAssetError::UnknownAsset { asset_id } => {
+                    ExternalImageAssetError::UnknownAsset { asset_id }
+                }
+                ExternalAssetError::WrongAssetKind {
+                    asset_id, actual, ..
+                } => ExternalImageAssetError::WrongAssetKind { asset_id, actual },
+                ExternalAssetError::InvalidFont { asset_id } => {
+                    ExternalImageAssetError::WrongAssetKind {
+                        asset_id,
+                        actual: "FontAsset",
+                    }
+                }
+            })
+    }
+
+    /// Compatibility spelling for attaching validated external font bytes.
+    pub fn attach_font_asset_bytes(
+        &mut self,
+        asset_id: u32,
+        bytes: Vec<u8>,
+    ) -> std::result::Result<(), ExternalFontAssetError> {
+        self.attach_external_font_asset_bytes(asset_id, bytes)
+            .map_err(|error| match error {
+                ExternalAssetError::UnknownAsset { asset_id } => {
+                    ExternalFontAssetError::UnknownAsset { asset_id }
+                }
+                ExternalAssetError::WrongAssetKind {
+                    asset_id, actual, ..
+                } => ExternalFontAssetError::WrongAssetKind { asset_id, actual },
+                ExternalAssetError::InvalidFont { asset_id } => {
+                    ExternalFontAssetError::InvalidFont { asset_id }
+                }
+            })
     }
 
     /// Low-level imported file data for advanced integrations.
@@ -1678,6 +2244,15 @@ impl<'a> Artboard<'a> {
         self.graph().name.as_deref()
     }
 
+    /// Authored artboard width and height in artboard coordinates.
+    pub fn dimensions(self) -> Option<(f32, f32)> {
+        let artboard = self.file.runtime.artboard(self.index)?;
+        Some((
+            artboard.double_property("width")?,
+            artboard.double_property("height")?,
+        ))
+    }
+
     pub fn graph(self) -> &'a ArtboardGraph {
         // Safe by construction: every Artboard is created with an index bounds-
         // checked against this same vec (artboards()/artboard()/artboard_named()).
@@ -1708,11 +2283,12 @@ impl<'a> Artboard<'a> {
     }
 
     pub fn instantiate(self) -> Result<ArtboardInstance<'a>> {
+        let external_font_assets = self.file.external_font_assets.snapshot();
         let raw = RuntimeArtboardInstance::from_graph_with_artboards_and_external_fonts(
             &self.file.runtime,
             self.graph(),
             &self.file.graph.artboards,
-            &self.file.external_font_assets,
+            &external_font_assets,
         )
         .with_context(|| {
             format!(
@@ -1867,14 +2443,16 @@ impl<'a> ArtboardInstance<'a> {
         Ok(changed)
     }
 
-    /// Return visible runtime shape locals under `point`, front to back.
+    /// Return visible Shape and Text locals under `point`, front to back,
+    /// including descendants reached through nested artboards and
+    /// component-list items.
     pub fn hit_test(&mut self, point: Vec2D) -> Vec<usize> {
         self.raw.geometry_hit_test(point, &mut self.geometry)
     }
 
-    /// Return visible runtime shape local-id paths under `point`, front to
-    /// back. Direct hits contain one local id; nested hits are prefixed with
-    /// their nested-host local ids.
+    /// Return visible Shape and Text local-id paths under `point`, front to
+    /// back. Direct hits contain one local id; child-artboard hits are prefixed
+    /// with their nested or component-list host local ids.
     pub fn hit_test_paths(&mut self, point: Vec2D) -> Vec<Vec<usize>> {
         self.raw.geometry_hit_test_paths(point, &mut self.geometry)
     }
@@ -1997,6 +2575,24 @@ impl<'a> ArtboardInstance<'a> {
         })
     }
 
+    /// Instantiate a serialized ViewModel default as a fully owned mutable
+    /// tree, preserving nested scalars and lists while allowing hot writes at
+    /// every generated child path.
+    pub fn instantiate_mutable_view_model_instance(
+        &self,
+        instance_index: usize,
+    ) -> Option<ViewModelInstance> {
+        let view_model_index = self.view_model_index()?;
+        let raw = RuntimeOwnedViewModelInstance::from_instance_mutable(
+            &self.file.runtime,
+            view_model_index,
+            instance_index,
+        )?;
+        Some(ViewModelInstance {
+            raw: RuntimeOwnedViewModelHandle::new(raw),
+        })
+    }
+
     /// Bind `view_model` to this artboard's own data binds and its nested
     /// artboard contexts, mirroring `artboard->bindViewModelInstance(...)` in
     /// the C++ runtime.
@@ -2074,6 +2670,43 @@ impl<'a> ArtboardInstance<'a> {
         changed
     }
 
+    /// Advance retained machines while allowing listener actions to mutate
+    /// the same owned ViewModel context bound to this artboard.
+    pub fn advance_with_state_machines_and_view_model(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        view_model: &mut ViewModelInstance,
+    ) -> bool {
+        if state_machines.is_empty() {
+            return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
+        }
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        {
+            changed |= queue_root_script_advance(
+                self.file,
+                self.artboard().graph(),
+                &mut self.raw,
+                elapsed_seconds,
+            );
+        }
+        for state_machine in state_machines.iter_mut() {
+            changed |= state_machine.bind_owned_view_model_handle(view_model.handle());
+        }
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
+        changed |= self
+            .raw
+            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        changed |= self.raw.update_pass();
+        changed
+    }
+
     /// Factory-bearing mirror of [`Self::advance_with_state_machine`].
     pub fn try_advance_with_state_machine_and_factory(
         &mut self,
@@ -2133,6 +2766,59 @@ impl<'a> ArtboardInstance<'a> {
         {
             changed |= self.file.advance_detached_view_models();
         }
+        Ok(changed)
+    }
+
+    /// Factory-bearing mirror of
+    /// [`Self::advance_with_state_machines_and_view_model`].
+    pub fn try_advance_with_state_machines_and_view_model_and_factory(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        view_model: &mut ViewModelInstance,
+        factory: &mut dyn Factory,
+    ) -> Result<bool> {
+        if state_machines.is_empty() {
+            let changed = self.bind_view_model(view_model);
+            return self
+                .try_advance_with_factory(factory, elapsed_seconds)
+                .map(|advanced| changed | advanced);
+        }
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        {
+            changed |= queue_root_script_advance(
+                self.file,
+                self.artboard().graph(),
+                &mut self.raw,
+                elapsed_seconds,
+            );
+        }
+        for state_machine in state_machines.iter_mut() {
+            changed |= state_machine.bind_owned_view_model_handle(view_model.handle());
+        }
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
+        changed |= self
+            .raw
+            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= prepare_scripted_artboard_tree(
+                self.file,
+                self.artboard().graph(),
+                &mut self.raw,
+                factory,
+            )
+            .context("failed to advance scripted drawables")?;
+        }
+        #[cfg(not(feature = "scripting"))]
+        let _ = factory;
+        changed |= self.raw.update_pass();
         Ok(changed)
     }
 
@@ -2218,7 +2904,9 @@ impl<'a> ArtboardInstance<'a> {
                 paint,
                 &mut cache.path,
             )
-            .context("failed to draw Rive artboard")
+            .context("failed to draw Rive artboard")?;
+        self.geometry.observe_presented_images(&self.raw, paint)?;
+        Ok(())
     }
 }
 
@@ -2239,6 +2927,7 @@ pub struct OwnedArtboardInstance {
 impl OwnedArtboardInstance {
     /// Instantiate `artboard_index` of `file` as an owning instance.
     pub fn instantiate(file: Arc<File>, artboard_index: usize) -> Result<Self> {
+        let external_font_assets = file.external_font_assets.snapshot();
         let raw = {
             let artboard = file
                 .artboard(artboard_index)
@@ -2247,7 +2936,7 @@ impl OwnedArtboardInstance {
                 &file.runtime,
                 artboard.graph(),
                 &file.graph.artboards,
-                &file.external_font_assets,
+                &external_font_assets,
             )
             .with_context(|| {
                 format!(
@@ -2303,38 +2992,30 @@ impl OwnedArtboardInstance {
     /// Compatibility attachment path for an already-owned instance.
     ///
     /// New integrations should attach bytes to [`File`] before wrapping it in
-    /// [`Arc`]. This method copy-on-writes the owned file when necessary and
-    /// refreshes the complete current tree plus its future child-build
-    /// contexts, so the attachment is no longer root-instance-local.
+    /// [`Arc`]. This method updates the exact shared File without replacing its
+    /// live script VM, then refreshes the complete current tree plus its future
+    /// child-build contexts.
     pub fn attach_font_asset_bytes(
         &mut self,
         asset_id: u32,
         bytes: Vec<u8>,
     ) -> std::result::Result<(), ExternalFontAssetError> {
-        let (external_font_assets, changed) = {
-            let file = Arc::make_mut(&mut self.file);
-            let changed = file
-                .external_font_assets
-                .get(&asset_id)
-                .is_none_or(|current| current.as_ref() != bytes.as_slice());
-            file.attach_external_font_asset_bytes(asset_id, bytes)
-                .map_err(|error| match error {
-                    ExternalAssetError::UnknownAsset { asset_id } => {
-                        ExternalFontAssetError::UnknownAsset { asset_id }
-                    }
-                    ExternalAssetError::WrongAssetKind {
-                        asset_id, actual, ..
-                    } => ExternalFontAssetError::WrongAssetKind { asset_id, actual },
-                    ExternalAssetError::InvalidFont { asset_id } => {
-                        ExternalFontAssetError::InvalidFont { asset_id }
-                    }
-                })?;
-            (file.external_font_assets.clone(), changed)
-        };
-        if changed {
-            self.raw
-                .replace_external_font_asset_snapshot(&external_font_assets);
-        }
+        self.file
+            .attach_external_font_asset_bytes_shared(asset_id, bytes)
+            .map_err(|error| match error {
+                ExternalAssetError::UnknownAsset { asset_id } => {
+                    ExternalFontAssetError::UnknownAsset { asset_id }
+                }
+                ExternalAssetError::WrongAssetKind {
+                    asset_id, actual, ..
+                } => ExternalFontAssetError::WrongAssetKind { asset_id, actual },
+                ExternalAssetError::InvalidFont { asset_id } => {
+                    ExternalFontAssetError::InvalidFont { asset_id }
+                }
+            })?;
+        let external_font_assets = self.file.external_font_assets.snapshot();
+        self.raw
+            .replace_external_font_asset_snapshot(&external_font_assets);
         Ok(())
     }
 
@@ -2454,21 +3135,72 @@ impl OwnedArtboardInstance {
         self.file.scripts.borrow().drain_host_commands()
     }
 
-    /// Return visible runtime shape locals under `point`, front to back.
+    /// Return visible Shape and Text locals under `point`, front to back,
+    /// including descendants reached through nested artboards and
+    /// component-list items.
     pub fn hit_test(&mut self, point: Vec2D) -> Vec<usize> {
         self.raw.geometry_hit_test(point, &mut self.geometry)
     }
 
-    /// Return visible runtime shape local-id paths under `point`, front to
-    /// back. Direct hits contain one local id; nested hits are prefixed with
-    /// their nested-host local ids.
+    /// Return visible Shape and Text local-id paths under `point`, front to
+    /// back. Direct hits contain one local id; child-artboard hits are prefixed
+    /// with their nested or component-list host local ids.
     pub fn hit_test_paths(&mut self, point: Vec2D) -> Vec<Vec<usize>> {
         self.raw.geometry_hit_test_paths(point, &mut self.geometry)
+    }
+
+    /// Resolve the frontmost concrete geometry occurrence for a native
+    /// pointer dispatch. Pass this value to a state-machine instance's
+    /// `pointer_*_with_event_context` methods so list/component occurrence
+    /// identity survives even when the listener targets implementation-only
+    /// hit geometry.
+    pub fn pointer_event_context(&mut self, point: Vec2D) -> Option<StateMachineEventContext> {
+        self.raw
+            .geometry_hit_test_path_segments_with_bounds(point, &mut self.geometry)
+            .first()
+            .map(StateMachineEventContext::from_geometry_hit)
+    }
+
+    pub(crate) fn hit_test_path_segments_with_bounds(
+        &mut self,
+        point: Vec2D,
+    ) -> Vec<RuntimeGeometryHit> {
+        self.raw
+            .geometry_hit_test_path_segments_with_bounds(point, &mut self.geometry)
+    }
+
+    pub(crate) fn geometry_path_segments_with_bounds(&mut self) -> Vec<RuntimeGeometryHit> {
+        self.raw
+            .geometry_path_segments_with_bounds(&mut self.geometry)
+    }
+
+    pub(crate) fn retained_geometry_path_segments_with_bounds(
+        &mut self,
+    ) -> Vec<RuntimeGeometryHit> {
+        self.raw
+            .retained_geometry_path_segments_with_bounds(&mut self.geometry)
+    }
+
+    pub(crate) fn semantic_text_path_segments_with_bounds(
+        &mut self,
+    ) -> Vec<RuntimeSemanticTextHit> {
+        self.raw
+            .semantic_text_path_segments_with_bounds(&mut self.geometry)
     }
 
     /// Return exact logical world bounds for one runtime-local object.
     pub fn world_bounds(&mut self, local_id: usize) -> Option<Aabb> {
         self.raw.geometry_world_bounds(local_id, &mut self.geometry)
+    }
+
+    pub(crate) fn register_intrinsic_image_dimensions(
+        &mut self,
+        asset_global: u32,
+        width: u32,
+        height: u32,
+    ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
+        self.geometry
+            .register_image_dimensions(&self.raw, asset_global, width, height)
     }
 
     /// Return the settled, layout-aware world transform for one runtime-local object.
@@ -2561,6 +3293,22 @@ impl OwnedArtboardInstance {
         })
     }
 
+    /// See [`ArtboardInstance::instantiate_mutable_view_model_instance`].
+    pub fn instantiate_mutable_view_model_instance(
+        &self,
+        instance_index: usize,
+    ) -> Option<ViewModelInstance> {
+        let view_model_index = self.view_model_index()?;
+        let raw = RuntimeOwnedViewModelInstance::from_instance_mutable(
+            &self.file.runtime,
+            view_model_index,
+            instance_index,
+        )?;
+        Some(ViewModelInstance {
+            raw: RuntimeOwnedViewModelHandle::new(raw),
+        })
+    }
+
     /// See [`ArtboardInstance::bind_view_model`].
     pub fn bind_view_model(&mut self, view_model: &ViewModelInstance) -> bool {
         let mut changed = self
@@ -2614,6 +3362,39 @@ impl OwnedArtboardInstance {
         {
             changed |= self.file.advance_detached_view_models();
         }
+        changed
+    }
+
+    /// Owning mirror of
+    /// [`ArtboardInstance::advance_with_state_machines_and_view_model`].
+    pub fn advance_with_state_machines_and_view_model(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        view_model: &mut ViewModelInstance,
+    ) -> bool {
+        if state_machines.is_empty() {
+            return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
+        }
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        if let Some(artboard) = self.file.graph.artboards.get(self.artboard_index) {
+            changed |=
+                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
+        }
+        for state_machine in state_machines.iter_mut() {
+            changed |= state_machine.bind_owned_view_model_handle(view_model.handle());
+        }
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
+        changed |= self
+            .raw
+            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        changed |= self.raw.update_pass();
         changed
     }
 
@@ -2676,6 +3457,57 @@ impl OwnedArtboardInstance {
         {
             changed |= self.file.advance_detached_view_models();
         }
+        Ok(changed)
+    }
+
+    /// Owning mirror of
+    /// [`ArtboardInstance::try_advance_with_state_machines_and_view_model_and_factory`].
+    pub fn try_advance_with_state_machines_and_view_model_and_factory(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        view_model: &mut ViewModelInstance,
+        factory: &mut dyn Factory,
+    ) -> Result<bool> {
+        if state_machines.is_empty() {
+            let changed = self.bind_view_model(view_model);
+            return self
+                .try_advance_with_factory(factory, elapsed_seconds)
+                .map(|advanced| changed | advanced);
+        }
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        let artboard = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .context("owned artboard instance graph is unavailable")?;
+        #[cfg(feature = "scripting")]
+        {
+            changed |=
+                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
+        }
+        for state_machine in state_machines.iter_mut() {
+            changed |= state_machine.bind_owned_view_model_handle(view_model.handle());
+        }
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
+        changed |= self
+            .raw
+            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)
+                .context("failed to advance scripted drawables")?;
+        }
+        #[cfg(not(feature = "scripting"))]
+        let _ = factory;
+        changed |= self.raw.update_pass();
         Ok(changed)
     }
 
@@ -2751,7 +3583,9 @@ impl OwnedArtboardInstance {
                 paint,
                 &mut cache.path,
             )
-            .context("failed to draw Rive artboard")
+            .context("failed to draw Rive artboard")?;
+        self.geometry.observe_presented_images(&self.raw, paint)?;
+        Ok(())
     }
 }
 
@@ -2820,6 +3654,313 @@ impl ViewModelInstance {
         self.raw
             .borrow_mut()
             .set_enum_by_property_name_path(name_path, value)
+    }
+}
+
+#[cfg(all(test, feature = "scripting"))]
+mod inert_script_import_tests {
+    use super::*;
+    use nuxie_schema::definition_by_name;
+
+    fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            bytes.push(byte);
+            if value == 0 {
+                break;
+            }
+        }
+    }
+
+    fn property_key(type_name: &str, property_name: &str) -> u16 {
+        let definition = definition_by_name(type_name).expect("fixture type exists");
+        definition
+            .properties
+            .iter()
+            .chain(definition.ancestors.iter().flat_map(|ancestor| {
+                definition_by_name(ancestor)
+                    .expect("fixture ancestor exists")
+                    .properties
+                    .iter()
+            }))
+            .find(|property| property.name == property_name)
+            .expect("fixture property exists")
+            .key
+            .int
+    }
+
+    fn push_object(bytes: &mut Vec<u8>, type_name: &str, properties: impl FnOnce(&mut Vec<u8>)) {
+        push_var_uint(
+            bytes,
+            u64::from(
+                definition_by_name(type_name)
+                    .expect("fixture type exists")
+                    .type_key
+                    .int,
+            ),
+        );
+        properties(bytes);
+        push_var_uint(bytes, 0);
+    }
+
+    fn push_uint(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: u64) {
+        push_var_uint(bytes, u64::from(property_key(type_name, name)));
+        push_var_uint(bytes, value);
+    }
+
+    fn push_blob(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &[u8]) {
+        push_var_uint(bytes, u64::from(property_key(type_name, name)));
+        push_var_uint(bytes, value.len() as u64);
+        bytes.extend_from_slice(value);
+    }
+
+    fn imported_script_assets_bytes(payloads: &[&[u8]]) -> Vec<u8> {
+        let mut bytes = b"RIVE".to_vec();
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 991);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        for (ordinal, payload) in payloads.iter().enumerate() {
+            push_object(&mut bytes, "ScriptAsset", |bytes| {
+                push_uint(bytes, "ScriptAsset", "assetId", ordinal as u64);
+            });
+            push_object(&mut bytes, "FileAssetContents", |bytes| {
+                push_blob(bytes, "FileAssetContents", "bytes", payload);
+            });
+        }
+        bytes
+    }
+
+    fn imported_script_asset_bytes() -> Vec<u8> {
+        imported_script_assets_bytes(&[&[0, 1, 2, 3]])
+    }
+
+    fn imported_image_asset_bytes(count: usize) -> Vec<u8> {
+        let mut bytes = b"RIVE".to_vec();
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 992);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        for asset_id in 0..count {
+            push_object(&mut bytes, "ImageAsset", |bytes| {
+                push_uint(bytes, "ImageAsset", "assetId", asset_id as u64);
+            });
+        }
+        bytes
+    }
+
+    fn imported_manifest_asset_bytes() -> Vec<u8> {
+        // One name entry: section=0, section bytes=[count=1, id=7,
+        // string-length=1, 'a']. The parser budget charges the ManifestAsset
+        // and FileAssetContents properties plus this declared entry.
+        let manifest = [0, 4, 1, 7, 1, b'a'];
+        let mut bytes = b"RIVE".to_vec();
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 993);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "ManifestAsset", |bytes| {
+            push_uint(bytes, "ManifestAsset", "assetId", 0);
+        });
+        push_object(&mut bytes, "FileAssetContents", |bytes| {
+            push_blob(bytes, "FileAssetContents", "bytes", &manifest);
+        });
+        bytes
+    }
+
+    #[test]
+    fn bounded_import_rejects_file_assets_before_owned_graph_construction() {
+        let bytes = imported_image_asset_bytes(2);
+        let limits = FileImportLimits::new().with_max_imported_file_assets(1);
+
+        let error = File::import_with_limits(&bytes, limits)
+            .expect_err("the parsed file exceeds its pre-graph asset limit");
+        assert!(
+            error.to_string().contains("imports more than 1 FileAssets"),
+            "{error:#}"
+        );
+        File::import_with_limits(
+            &bytes,
+            FileImportLimits::new().with_max_imported_file_assets(2),
+        )
+        .expect("the exact bound admits graph construction");
+    }
+
+    #[test]
+    fn bounded_import_rejects_input_before_binary_parser_allocation() {
+        let bytes = imported_script_asset_bytes();
+        let error = File::import_with_limits(
+            &bytes,
+            FileImportLimits::new().with_max_input_bytes(bytes.len() - 1),
+        )
+        .expect_err("an oversized input must be rejected before parsing");
+        assert!(error.to_string().contains("import limit"), "{error:#}");
+
+        File::import_with_limits(
+            &bytes,
+            FileImportLimits::new().with_max_input_bytes(bytes.len()),
+        )
+        .expect("the exact input-byte bound admits parsing");
+    }
+
+    #[test]
+    fn bounded_import_rejects_runtime_object_and_asset_content_growth() {
+        let bytes = imported_script_asset_bytes();
+
+        let object_error =
+            File::import_with_limits(&bytes, FileImportLimits::new().with_max_runtime_objects(2))
+                .expect_err("the fixture has three runtime objects");
+        assert!(
+            format!("{object_error:#}").contains("runtime objects"),
+            "{object_error:#}"
+        );
+
+        let per_asset_error = File::import_with_limits(
+            &bytes,
+            FileImportLimits::new().with_max_file_asset_content_bytes(3),
+        )
+        .expect_err("the script payload is four bytes");
+        assert!(
+            per_asset_error
+                .to_string()
+                .contains("per-asset import limit"),
+            "{per_asset_error:#}"
+        );
+
+        let aggregate_error = File::import_with_limits(
+            &bytes,
+            FileImportLimits::new().with_max_total_file_asset_content_bytes(3),
+        )
+        .expect_err("the aggregate payload is four bytes");
+        assert!(
+            aggregate_error
+                .to_string()
+                .contains("aggregate content bytes"),
+            "{aggregate_error:#}"
+        );
+    }
+
+    #[test]
+    fn facade_object_limit_precedes_next_record_decode_and_unbounded_stays_available() {
+        let mut bytes = b"RIVE".to_vec();
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 991);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        bytes.push(0x80);
+
+        let bounded =
+            File::import_with_limits(&bytes, FileImportLimits::new().with_max_runtime_objects(1))
+                .expect_err("the parser must reject before decoding compact object two");
+        assert!(
+            format!("{bounded:#}").contains("more than 1 runtime objects"),
+            "{bounded:#}"
+        );
+
+        let unbounded = File::import_with_limits(&bytes, FileImportLimits::unbounded())
+            .expect_err("the explicit unbounded reader reaches the malformed second record");
+        assert!(
+            !format!("{unbounded:#}").contains("more than 1 runtime objects"),
+            "{unbounded:#}"
+        );
+    }
+
+    #[test]
+    fn facade_property_limit_covers_values_and_manifest_declared_work() {
+        let node_type = definition_by_name("Node")
+            .expect("Node schema")
+            .type_key
+            .int;
+        let x_key = property_key("Node", "x");
+        let mut malformed_value = b"RIVE".to_vec();
+        push_var_uint(&mut malformed_value, 7);
+        push_var_uint(&mut malformed_value, 0);
+        push_var_uint(&mut malformed_value, 994);
+        push_var_uint(&mut malformed_value, 0);
+        push_object(&mut malformed_value, "Backboard", |_| {});
+        push_var_uint(&mut malformed_value, u64::from(node_type));
+        for _ in 0..2 {
+            push_var_uint(&mut malformed_value, u64::from(x_key));
+            malformed_value.extend_from_slice(&1.0f32.to_le_bytes());
+        }
+        push_var_uint(&mut malformed_value, u64::from(x_key));
+
+        let error = File::import_with_limits(
+            &malformed_value,
+            FileImportLimits::new().with_max_runtime_properties(2),
+        )
+        .expect_err("property N+1 must be rejected before its missing value is decoded");
+        assert!(
+            format!("{error:#}").contains("runtime object properties"),
+            "{error:#}"
+        );
+
+        let manifest = imported_manifest_asset_bytes();
+        File::import_with_limits(
+            &manifest,
+            FileImportLimits::new().with_max_runtime_properties(3),
+        )
+        .expect("two object properties plus one manifest name fit the exact boundary");
+        let error = File::import_with_limits(
+            &manifest,
+            FileImportLimits::new().with_max_runtime_properties(2),
+        )
+        .expect_err("manifest declarations share the facade property budget");
+        assert!(
+            format!("{error:#}").contains("manifest name entries"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn ordinary_import_keeps_the_bounded_script_catalog_inert_and_shared() {
+        let bytes = imported_script_asset_bytes();
+
+        let inert = File::import(&bytes).expect("ordinary import remains available");
+        let inert_assets = {
+            let scripts = inert.scripts.borrow();
+            assert_eq!(
+                scripts.authorization,
+                ScriptExecutionAuthorization::VisualOnly
+            );
+            assert!(scripts.execution_limits.is_none());
+            assert!(scripts.ready.is_none());
+            assert_eq!(scripts.assets.len(), 1);
+            Arc::clone(&scripts.assets)
+        };
+        let cloned = inert.clone();
+        assert!(Arc::ptr_eq(&inert_assets, &cloned.scripts.borrow().assets));
+
+        let trusted =
+            File::import_with_unsigned_scripts(&bytes).expect("explicitly trusted import succeeds");
+        let scripts = trusted.scripts.borrow();
+        assert_eq!(
+            scripts.authorization,
+            ScriptExecutionAuthorization::Authenticated
+        );
+        assert!(scripts.execution_limits.is_some());
+        let assets = scripts.assets.as_ref();
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].payload.as_deref(), Some([0, 1, 2, 3].as_slice()));
+    }
+
+    #[test]
+    fn project_converter_classification_is_retained_by_dense_asset_ordinal() {
+        let bytes = imported_script_assets_bytes(&[b"ordinary script", b"NUXPCV1\0{}"]);
+        let file = File::import(&bytes).expect("script asset catalog imports");
+        let scripts = file.scripts.borrow();
+
+        assert!(!scripts.is_project_data_converter_asset(0));
+        assert!(scripts.is_project_data_converter_asset(1));
+        assert!(!scripts.is_project_data_converter_asset(2));
     }
 }
 
@@ -2993,18 +4134,16 @@ mod owned_instance_tests {
         font_file
             .attach_external_font_asset_bytes(font_id, first_font_bytes.clone())
             .expect("attach valid font");
-        let first_font = Arc::clone(
-            font_file
-                .external_font_assets
-                .get(&font_id)
-                .expect("stored font"),
-        );
+        let first_font = font_file
+            .external_font_assets
+            .get(&font_id)
+            .expect("stored font");
         font_file
             .attach_external_font_asset_bytes(font_id, first_font_bytes)
             .expect("repeat identical font bytes");
         assert!(Arc::ptr_eq(
             &first_font,
-            font_file
+            &font_file
                 .external_font_assets
                 .get(&font_id)
                 .expect("same stored font")
@@ -3015,19 +4154,16 @@ mod owned_instance_tests {
             .attach_external_font_asset_bytes(font_id, replacement_font.clone())
             .expect("replace valid font");
         assert_eq!(
-            font_file
-                .external_font_assets
-                .get(&font_id)
-                .map(AsRef::as_ref),
+            font_file.external_font_assets.get(&font_id).as_deref(),
             Some(replacement_font.as_slice())
         );
         let cloned_file = font_file.clone();
         assert!(Arc::ptr_eq(
-            font_file
+            &font_file
                 .external_font_assets
                 .get(&font_id)
                 .expect("source font"),
-            cloned_file
+            &cloned_file
                 .external_font_assets
                 .get(&font_id)
                 .expect("cloned font")
@@ -3066,8 +4202,11 @@ mod owned_instance_tests {
         ])
         .expect("authored scripting asset graph imports");
 
-        let scripts =
-            FileScriptRuntime::import(&runtime, ScriptExecutionAuthorization::Authenticated);
+        let scripts = FileScriptRuntime::import(
+            &runtime,
+            ScriptExecutionAuthorization::Authenticated,
+            Some(ScriptExecutionLimits::new()),
+        );
         let mesh = scripts
             .assets
             .iter()
@@ -3099,8 +4238,11 @@ mod owned_instance_tests {
         let bytes = std::fs::read(&fixture)
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", fixture.display()));
         let runtime = read_runtime_file_for_facade(&bytes).expect("scope probe imports");
-        let scripts =
-            FileScriptRuntime::import(&runtime, ScriptExecutionAuthorization::Authenticated);
+        let scripts = FileScriptRuntime::import(
+            &runtime,
+            ScriptExecutionAuthorization::Authenticated,
+            Some(ScriptExecutionLimits::new()),
+        );
         let mut factory = RecordingFactory::new();
 
         let ready = scripts
@@ -3131,8 +4273,11 @@ mod owned_instance_tests {
         let bytes = std::fs::read(&fixture)
             .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
         let runtime = read_runtime_file_for_facade(&bytes).expect("fixture imports");
-        let scripts =
-            FileScriptRuntime::import(&runtime, ScriptExecutionAuthorization::Authenticated);
+        let scripts = FileScriptRuntime::import(
+            &runtime,
+            ScriptExecutionAuthorization::Authenticated,
+            Some(ScriptExecutionLimits::new()),
+        );
         let model_name = nuxie_runtime::script_view_models(&runtime)
             .keys()
             .next()
@@ -3150,5 +4295,170 @@ mod owned_instance_tests {
             ))
             .expect("Data constructor probe runs");
         assert!(has_constructor);
+    }
+}
+
+#[cfg(test)]
+mod external_image_asset_tests {
+    use super::*;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
+
+    fn file_with_image_and_font_assets() -> File {
+        let image_asset_type = nuxie_schema::definition_by_name("ImageAsset")
+            .expect("ImageAsset schema definition")
+            .type_key
+            .int;
+        let font_asset_type = nuxie_schema::definition_by_name("FontAsset")
+            .expect("FontAsset schema definition")
+            .type_key
+            .int;
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: crate::scene::TYPE_BACKBOARD,
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: image_asset_type,
+                properties: vec![AuthoringProperty {
+                    key: crate::scene::PROPERTY_FILE_ASSET_ID,
+                    value: AuthoringValue::Uint(7),
+                }],
+            },
+            AuthoringRecord {
+                type_key: font_asset_type,
+                properties: vec![AuthoringProperty {
+                    key: crate::scene::PROPERTY_FILE_ASSET_ID,
+                    value: AuthoringValue::Uint(8),
+                }],
+            },
+        ])
+        .expect("asset-only runtime file");
+        File::from_runtime(runtime).expect("asset-only file graph")
+    }
+
+    #[allow(clippy::arithmetic_side_effects)]
+    fn fixture_font_bytes() -> Vec<u8> {
+        let mut accumulator = 0u32;
+        let mut bit_count = 0u8;
+        let mut decoded = Vec::new();
+        for byte in include_bytes!("../tests/fixtures/roboto-a.ttf.base64")
+            .iter()
+            .copied()
+            .filter(|byte| !byte.is_ascii_whitespace())
+        {
+            if byte == b'=' {
+                break;
+            }
+            let value = match byte {
+                b'A'..=b'Z' => byte - b'A',
+                b'a'..=b'z' => byte - b'a' + 26,
+                b'0'..=b'9' => byte - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => panic!("invalid base64 font fixture"),
+            };
+            accumulator = (accumulator << 6) | u32::from(value);
+            bit_count += 6;
+            if bit_count >= 8 {
+                bit_count -= 8;
+                decoded.push((accumulator >> bit_count) as u8);
+                accumulator &= (1u32 << bit_count) - 1;
+            }
+        }
+        decoded
+    }
+
+    #[test]
+    fn image_attachment_validates_semantic_identity_and_asset_kind() {
+        let mut file = file_with_image_and_font_assets();
+
+        assert_eq!(
+            file.attach_image_asset_bytes(99, vec![1, 2, 3]),
+            Err(ExternalImageAssetError::UnknownAsset { asset_id: 99 })
+        );
+        assert_eq!(
+            file.attach_image_asset_bytes(8, vec![1, 2, 3]),
+            Err(ExternalImageAssetError::WrongAssetKind {
+                asset_id: 8,
+                actual: "FontAsset",
+            })
+        );
+
+        file.attach_image_asset_bytes(7, vec![4, 5, 6])
+            .expect("ImageAsset accepts host bytes by FileAsset.assetId");
+        let image_asset_id = file
+            .runtime
+            .file_assets()
+            .into_iter()
+            .find(|asset| asset.type_name == "ImageAsset")
+            .expect("image asset")
+            .uint_property("assetId")
+            .and_then(|value| u32::try_from(value).ok())
+            .expect("semantic image asset id");
+        assert_eq!(
+            file.external_image_assets
+                .get(&image_asset_id)
+                .map(AsRef::as_ref),
+            Some([4, 5, 6].as_slice())
+        );
+        assert_eq!(
+            file.clone()
+                .external_image_assets
+                .get(&image_asset_id)
+                .map(AsRef::as_ref),
+            Some([4, 5, 6].as_slice()),
+            "cloned files retain the exact external asset envelope"
+        );
+    }
+
+    #[test]
+    fn file_font_attachment_rejects_atomically_and_clones_exact_bytes() {
+        let mut file = file_with_image_and_font_assets();
+
+        assert_eq!(
+            file.attach_font_asset_bytes(99, fixture_font_bytes()),
+            Err(ExternalFontAssetError::UnknownAsset { asset_id: 99 })
+        );
+        assert_eq!(
+            file.attach_font_asset_bytes(7, fixture_font_bytes()),
+            Err(ExternalFontAssetError::WrongAssetKind {
+                asset_id: 7,
+                actual: "ImageAsset",
+            })
+        );
+        assert_eq!(
+            file.attach_font_asset_bytes(8, b"not a font".to_vec()),
+            Err(ExternalFontAssetError::InvalidFont { asset_id: 8 })
+        );
+        assert!(
+            file.external_font_assets.is_empty(),
+            "all validation failures happen before the file changes"
+        );
+
+        file.attach_font_asset_bytes(8, fixture_font_bytes())
+            .expect("valid FontAsset bytes attach by FileAsset.assetId");
+        let attached = file
+            .external_font_assets
+            .get(&8)
+            .expect("valid attachment is retained by semantic id");
+        assert_eq!(
+            file.attach_font_asset_bytes(8, b"invalid replacement".to_vec()),
+            Err(ExternalFontAssetError::InvalidFont { asset_id: 8 })
+        );
+        assert!(Arc::ptr_eq(
+            &attached,
+            &file
+                .external_font_assets
+                .get(&8)
+                .expect("rejected replacement preserves the prior bytes")
+        ));
+        assert!(Arc::ptr_eq(
+            &attached,
+            &file
+                .clone()
+                .external_font_assets
+                .get(&8)
+                .expect("File::clone retains the exact attachment")
+        ));
     }
 }

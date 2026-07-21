@@ -18,6 +18,7 @@ mod direct_grid_oracle;
 mod draw;
 mod feather_lut;
 mod gpu;
+mod gpu_canvas;
 mod gr_triangulator;
 mod gradient_pipeline;
 // Kept standalone until a renderer path has a proven grouping integration.
@@ -40,13 +41,19 @@ mod tess_span_oracle;
 mod tessellator;
 #[cfg(target_arch = "wasm32")]
 mod webgl2;
+#[cfg(any(target_arch = "wasm32", test))]
+mod webgl2_limits;
 mod work_metrics;
 
 use bytemuck::{Pod, Zeroable};
+use nuxie_image_codec::{
+    decoded_rgba_len, preflight_encoded_image, MAX_DECODED_IMAGE_BYTES, MAX_IMAGE_DIMENSION,
+};
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, PathVerb,
-    RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
-    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
+    ImageDecodeError, ImageSampler, Mat2D, PathVerb, RawPath, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
+    Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 use std::any::Any;
 #[cfg(test)]
@@ -71,6 +78,7 @@ pub enum RendererError {
         height: u32,
         max_dimension: u32,
     },
+    InvalidGpuCanvas(String),
     Map(String),
     Unsupported(&'static str),
     WebGl2(String),
@@ -91,6 +99,7 @@ impl fmt::Display for RendererError {
                 f,
                 "invalid {label} texture extent {width}x{height}; dimensions must be between 1 and {max_dimension}"
             ),
+            Self::InvalidGpuCanvas(message) => write!(f, "invalid GPU-canvas plan: {message}"),
             Self::Map(message) => write!(f, "wgpu readback error: {message}"),
             Self::Unsupported(feature) => write!(f, "unsupported renderer feature: {feature}"),
             Self::WebGl2(message) => write!(f, "WebGL2 renderer error: {message}"),
@@ -99,7 +108,9 @@ impl fmt::Display for RendererError {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub use browser::{BrowserBackend, BrowserBackendPreference, BrowserFactory, BrowserFrame};
+pub use browser::{
+    BrowserBackend, BrowserBackendPreference, BrowserFactory, BrowserFrame, BrowserResizeError,
+};
 #[cfg(target_arch = "wasm32")]
 pub use webgl2::{WebGl2Factory, WebGl2Frame};
 
@@ -171,11 +182,11 @@ const CPP_WEBGPU_PLATFORM_MAX_TEXTURE_DIMENSION: u32 = 2048;
 // including the fallback family used by iOS 15-era devices. Trusted imports
 // use this floor so accepted encoded images cannot fail a later Apple upload
 // solely because of their dimensions.
-const APPLE_SAFE_IMAGE_MAX_TEXTURE_DIMENSION: u32 = 8192;
+const APPLE_SAFE_IMAGE_MAX_TEXTURE_DIMENSION: u32 = MAX_IMAGE_DIMENSION;
 // Bound the peak product-facing decoded image size to 64 MiB per asset. This
 // admits a 4,096-by-4,096 RGBA image while rejecting compressed pixel bombs
 // before the codec allocates its output buffer.
-const APPLE_SAFE_IMAGE_MAX_DECODED_BYTE_LENGTH: usize = 67_108_864;
+const APPLE_SAFE_IMAGE_MAX_DECODED_BYTE_LENGTH: usize = MAX_DECODED_IMAGE_BYTES;
 // RenderContext::atlasMaxSize applies an additional 4096 cap.
 const CPP_LOGICAL_ATLAS_MAX_DIMENSION: u32 = 4096;
 const FEATHER_ATLAS_PADDING: u32 = 2;
@@ -340,6 +351,8 @@ struct Context {
 }
 
 struct FrameAttachments {
+    width: u32,
+    height: u32,
     target_texture: wgpu::Texture,
     target_view: wgpu::TextureView,
     multisample_view: wgpu::TextureView,
@@ -390,6 +403,8 @@ impl FrameAttachments {
         });
         let stencil_view = stencil_texture.create_view(&wgpu::TextureViewDescriptor::default());
         Self {
+            width,
+            height,
             target_texture,
             target_view,
             multisample_view,
@@ -573,6 +588,8 @@ impl Drop for StrokePreparationScratchLease {
 pub struct WgpuFactory {
     context: Arc<Context>,
     frame_attachments: Arc<FrameAttachmentPool>,
+    imported_gpu_canvas: gpu_canvas::ImportedWgpuGpuCanvasCache,
+    gpu_canvas_targets: Arc<gpu_canvas::RetainedGpuCanvasTargetBudget>,
     width: u32,
     height: u32,
     mode: RenderMode,
@@ -596,6 +613,12 @@ pub struct WgpuFrameMetrics {
     pub backend_work: BackendWorkMetrics,
 }
 
+#[cfg(target_arch = "wasm32")]
+pub use gpu_canvas::WebGl2GpuCanvasRenderer;
+pub use gpu_canvas::{
+    GpuCanvasRenderPlan, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer,
+    GpuCanvasVertexLayout,
+};
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 pub use surface::{ApplePresentationCompletion, AppleSurface, SurfaceDisposition, SurfaceError};
 pub use work_metrics::BackendWorkMetrics;
@@ -1058,6 +1081,8 @@ impl WgpuFactory {
                 feather_lut,
             }),
             frame_attachments: Arc::new(frame_attachments),
+            imported_gpu_canvas: gpu_canvas::ImportedWgpuGpuCanvasCache::default(),
+            gpu_canvas_targets: Arc::new(gpu_canvas::RetainedGpuCanvasTargetBudget::default()),
             width,
             height,
             mode,
@@ -1121,6 +1146,10 @@ impl WgpuFactory {
             .is_some_and(|failure| failure.kind == WgpuDeviceFailureKind::DeviceLost)
     }
 
+    /// Retargets future frames without replacing the renderer device or any
+    /// factory-owned render resources. Frames that were already created keep
+    /// their original extent and cannot recycle their attachments into the
+    /// resized target pool.
     pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
         validate_texture_extent(
             "render target",
@@ -1157,6 +1186,8 @@ impl WgpuFactory {
                 width,
                 height,
             )),
+            imported_gpu_canvas: gpu_canvas::ImportedWgpuGpuCanvasCache::default(),
+            gpu_canvas_targets: Arc::clone(&self.gpu_canvas_targets),
             width,
             height,
             mode,
@@ -1239,14 +1270,20 @@ impl Factory for WgpuFactory {
     }
 
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
-        let Some((width, height, pixels)) = decode_image_rgba(data) else {
+        let Some((encoded_width, encoded_height)) = encoded_image_dimensions(data) else {
             return Err(ImageDecodeError);
         };
         if !texture_extent_supported(
-            width,
-            height,
+            encoded_width,
+            encoded_height,
             self.context.device.limits().max_texture_dimension_2d,
         ) {
+            return Err(ImageDecodeError);
+        }
+        let Some((width, height, pixels)) = decode_image_rgba(data) else {
+            return Err(ImageDecodeError);
+        };
+        if (width, height) != (encoded_width, encoded_height) {
             return Err(ImageDecodeError);
         }
         let mip_level_count = u32::BITS - (width | height).leading_zeros();
@@ -1292,6 +1329,14 @@ impl Factory for WgpuFactory {
             texture: Some(Arc::new(WgpuImageTexture { texture, view })),
             owner: Arc::downgrade(&self.context),
         }))
+    }
+
+    fn make_gpu_canvas_image(
+        &mut self,
+        shader: &GpuCanvasShader,
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        self.make_imported_gpu_canvas_image(shader, plan)
     }
 }
 
@@ -6756,6 +6801,7 @@ impl WgpuFrame {
             }
             #[cfg(not(any(target_os = "ios", target_os = "macos")))]
             wait_for_submitted_work(&self.context, submission).await?;
+            return_uncaptured_device_error(&self.context)?;
             tessellation_texture_frame.borrow_mut().recycle();
             #[cfg(feature = "perf-diagnostics")]
             {
@@ -6846,7 +6892,9 @@ impl WgpuFrame {
             backing.did_submit();
         }
         let slice = readback.slice(..);
-        map_buffer(&self.context, &slice).await?;
+        let map_result = map_buffer(&self.context, &slice).await;
+        return_uncaptured_device_error(&self.context)?;
+        map_result?;
         let mapped = slice
             .get_mapped_range()
             .map_err(|error| RendererError::Map(error.to_string()))?;
@@ -6912,6 +6960,13 @@ impl WgpuFrame {
             backend_work,
             atomic_strategy_partitions,
         ))
+    }
+}
+
+fn return_uncaptured_device_error(context: &Context) -> Result<(), RendererError> {
+    match context.device_health.current() {
+        Some(failure) => Err(RendererError::Device(failure.message)),
+        None => Ok(()),
     }
 }
 
@@ -7670,25 +7725,13 @@ fn multiply(left: Mat2D, right: Mat2D) -> Mat2D {
 }
 
 fn encoded_image_dimensions(data: &[u8]) -> Option<(u32, u32)> {
-    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
-        let reader = png::Decoder::new(Cursor::new(data)).read_info().ok()?;
-        let info = reader.info();
-        Some((info.width, info.height))
-    } else if data.starts_with(&[0xff, 0xd8]) {
-        let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(data));
-        decoder.read_info().ok()?;
-        let info = decoder.info()?;
-        Some((u32::from(info.width), u32::from(info.height)))
-    } else if data.len() >= 12 && &data[..4] == b"RIFF" && &data[8..12] == b"WEBP" {
-        let decoder = image_webp::WebPDecoder::new(Cursor::new(data)).ok()?;
-        Some(decoder.dimensions())
-    } else {
-        None
-    }
+    let dimensions = preflight_encoded_image(data)?;
+    Some((dimensions.width, dimensions.height))
 }
 
 fn decode_image_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
-    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+    let expected = preflight_encoded_image(data)?;
+    let decoded = if data.starts_with(b"\x89PNG\r\n\x1a\n") {
         decode_png_rgba(data)
     } else if data.starts_with(&[0xff, 0xd8]) {
         decode_jpeg_rgba(data)
@@ -7696,7 +7739,41 @@ fn decode_image_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
         decode_webp_rgba(data)
     } else {
         None
+    }?;
+    let (width, height, pixels) = decoded;
+    if (width, height) != (expected.width, expected.height)
+        || pixels.len() != decoded_rgba_len(width, height)?
+    {
+        return None;
     }
+    Some((width, height, pixels))
+}
+
+/// Dimensions proven by a complete decode into the renderer's canonical RGBA
+/// representation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DecodedImageDimensions {
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Fully decode a supported encoded image and validate its canonical RGBA byte
+/// length before returning its dimensions.
+///
+/// Unlike header inspection, this rejects truncated or otherwise malformed
+/// PNG, JPEG, and WebP payloads. The decoded pixel allocation is released
+/// before this function returns.
+#[must_use]
+pub fn validate_encoded_image(data: &[u8]) -> Option<DecodedImageDimensions> {
+    let (width, height, pixels) = decode_image_rgba(data)?;
+    if width == 0 || height == 0 {
+        return None;
+    }
+    let expected_rgba_len = decoded_rgba_len(width, height)?;
+    if pixels.len() != expected_rgba_len {
+        return None;
+    }
+    Some(DecodedImageDimensions { width, height })
 }
 
 #[cfg(target_os = "macos")]
@@ -7794,6 +7871,14 @@ fn decode_macos_image_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
         unsafe { CFRelease(image) };
         return None;
     };
+    let Some(expected_byte_count) = decoded_rgba_len(width, height) else {
+        unsafe { CFRelease(image) };
+        return None;
+    };
+    if byte_count != expected_byte_count {
+        unsafe { CFRelease(image) };
+        return None;
+    }
     let alpha_info = unsafe { CGImageGetAlphaInfo(image) };
     let opaque = matches!(
         alpha_info,
@@ -7865,15 +7950,26 @@ pub fn decode_image_rgba_for_oracle(data: &[u8]) -> Option<DecodedImageRgba> {
 }
 
 fn decode_png_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
-    let mut decoder = png::Decoder::new(Cursor::new(data));
+    let mut decoder = png::Decoder::new_with_limits(
+        Cursor::new(data),
+        png::Limits {
+            bytes: MAX_DECODED_IMAGE_BYTES,
+        },
+    );
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let header = decoder.read_header_info().ok()?;
+    decoded_rgba_len(header.width, header.height)?;
     let mut reader = decoder.read_info().ok()?;
     let icc_profile = reader
         .info()
         .icc_profile
         .as_ref()
         .map(|profile| profile.as_ref().to_vec());
-    let mut decoded = vec![0; reader.output_buffer_size()?];
+    let output_buffer_size = reader.output_buffer_size()?;
+    if output_buffer_size > MAX_DECODED_IMAGE_BYTES {
+        return None;
+    }
+    let mut decoded = zeroed_image_buffer(output_buffer_size)?;
     let info = reader.next_frame(&mut decoded).ok()?;
     decoded.truncate(info.buffer_size());
     let mut pixels = match (info.color_type, info.bit_depth) {
@@ -7901,10 +7997,16 @@ fn decode_png_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
 
 fn decode_webp_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     let mut decoder = image_webp::WebPDecoder::new(Cursor::new(data)).ok()?;
+    decoder.set_memory_limit(MAX_DECODED_IMAGE_BYTES);
     let (width, height) = decoder.dimensions();
+    decoded_rgba_len(width, height)?;
     let has_alpha = decoder.has_alpha();
     let icc_profile = decoder.icc_profile().ok()?;
-    let mut decoded = vec![0; decoder.output_buffer_size()?];
+    let output_buffer_size = decoder.output_buffer_size()?;
+    if output_buffer_size > MAX_DECODED_IMAGE_BYTES {
+        return None;
+    }
+    let mut decoded = zeroed_image_buffer(output_buffer_size)?;
     decoder.read_image(&mut decoded).ok()?;
     let mut pixels = if has_alpha {
         decoded
@@ -7964,7 +8066,16 @@ fn decode_jpeg_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
 
 #[cfg(not(target_os = "macos"))]
 fn decode_jpeg_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    decode_portable_jpeg_rgba(data)
+}
+
+#[cfg(any(not(target_os = "macos"), test))]
+fn decode_portable_jpeg_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(data));
+    decoder.set_max_decoding_buffer_size(MAX_DECODED_IMAGE_BYTES);
+    decoder.read_info().ok()?;
+    let info = decoder.info()?;
+    decoded_rgba_len(u32::from(info.width), u32::from(info.height))?;
     let decoded = decoder.decode().ok()?;
     let info = decoder.info()?;
     let icc_profile = decoder.icc_profile();
@@ -7999,6 +8110,13 @@ fn decode_jpeg_rgba(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     }
     premultiply_rgba(&mut pixels);
     Some((u32::from(info.width), u32::from(info.height), pixels))
+}
+
+fn zeroed_image_buffer(len: usize) -> Option<Vec<u8>> {
+    let mut buffer = Vec::new();
+    buffer.try_reserve_exact(len).ok()?;
+    buffer.resize(len, 0);
+    Some(buffer)
 }
 
 fn premultiply_rgba(pixels: &mut [u8]) {
@@ -10689,6 +10807,11 @@ mod tests {
         assert_eq!((width, height), (278, 278));
         assert_eq!(rgba.len(), 278 * 278 * 4);
         assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
+
+        let (portable_width, portable_height, portable_rgba) =
+            decode_portable_jpeg_rgba(&encoded).expect("portable JPEG decoder must decode");
+        assert_eq!((portable_width, portable_height), (width, height));
+        assert_eq!(portable_rgba.len(), rgba.len());
     }
 
     #[test]
@@ -10703,6 +10826,86 @@ mod tests {
 
         assert_eq!((width, height), (2, 1));
         assert_eq!(rgba, [120, 60, 30, 128, 10, 20, 30, 255]);
+    }
+
+    #[test]
+    fn validates_fully_decoded_encoded_image_dimensions() {
+        let mut encoded = Vec::new();
+        image_webp::WebPEncoder::new(&mut encoded)
+            .encode(
+                &[240, 120, 60, 128, 10, 20, 30, 255],
+                2,
+                1,
+                image_webp::ColorType::Rgba8,
+            )
+            .unwrap();
+
+        assert_eq!(
+            validate_encoded_image(&encoded),
+            Some(DecodedImageDimensions {
+                width: 2,
+                height: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn encoded_image_validation_rejects_truncated_header_only_png() {
+        let mut encoded = vec![0; 24];
+        encoded[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        encoded[12..16].copy_from_slice(b"IHDR");
+        encoded[16..20].copy_from_slice(&3_u32.to_be_bytes());
+        encoded[20..24].copy_from_slice(&5_u32.to_be_bytes());
+
+        assert_eq!(validate_encoded_image(&encoded), None);
+    }
+
+    #[test]
+    fn renderer_decode_rejects_oversized_supported_formats_during_preflight() {
+        const PIXEL_BOMB_DIMENSION: u32 = 4_097;
+        assert!(PIXEL_BOMB_DIMENSION <= MAX_IMAGE_DIMENSION);
+        assert_eq!(
+            decoded_rgba_len(PIXEL_BOMB_DIMENSION, PIXEL_BOMB_DIMENSION),
+            None
+        );
+        let mut png = Vec::new();
+        let writer = png::Encoder::new(&mut png, PIXEL_BOMB_DIMENSION, PIXEL_BOMB_DIMENSION)
+            .write_header()
+            .expect("PNG header encodes");
+        drop(writer);
+
+        let dimension = u16::try_from(PIXEL_BOMB_DIMENSION).unwrap();
+        let [height_hi, height_lo] = dimension.to_be_bytes();
+        let [width_hi, width_lo] = dimension.to_be_bytes();
+        let jpeg = [
+            0xff, 0xd8, // SOI
+            0xff, 0xc0, // baseline SOF
+            0x00, 0x11, // segment length
+            0x08, // precision
+            height_hi, height_lo, // height
+            width_hi, width_lo, // width
+            0x03,     // components
+            0x01, 0x11, 0x00, 0x02, 0x11, 0x00, 0x03, 0x11, 0x00,
+        ];
+
+        let mut webp = Vec::new();
+        image_webp::WebPEncoder::new(&mut webp)
+            .encode(&[1, 2, 3, 255], 1, 1, image_webp::ColorType::Rgba8)
+            .expect("WebP fixture encodes");
+        let header_offset = webp
+            .windows(4)
+            .position(|window| window == b"VP8L")
+            .expect("lossless WebP chunk")
+            + 9;
+        let encoded_dimension = PIXEL_BOMB_DIMENSION - 1;
+        let dimension_bits = (encoded_dimension << 14) | encoded_dimension;
+        webp[header_offset..header_offset + 4].copy_from_slice(&dimension_bits.to_le_bytes());
+
+        for encoded in [&png[..], &jpeg[..], &webp[..]] {
+            assert_eq!(encoded_image_dimensions(encoded), None);
+            assert!(decode_image_rgba(encoded).is_none());
+            assert_eq!(validate_encoded_image(encoded), None);
+        }
     }
 
     #[test]
@@ -13863,6 +14066,55 @@ mod tests {
         drop(scratch);
 
         assert_eq!(pool.cached_len(), 0);
+    }
+
+    #[test]
+    fn wgpu_factory_resize_retargets_future_frames_without_replacing_the_context() {
+        let mut factory = WgpuFactory::new_with_mode(8, 6, RenderMode::Msaa).unwrap();
+        let context = Arc::clone(&factory.context);
+
+        factory.resize(13, 9).unwrap();
+
+        assert!(Arc::ptr_eq(&context, &factory.context));
+        assert_eq!(
+            factory.begin_frame(0xff00_0000).finish().unwrap().len(),
+            13 * 9 * 4
+        );
+    }
+
+    #[test]
+    fn wgpu_factory_resize_does_not_recycle_old_frame_targets_into_the_new_size() {
+        let mut factory = WgpuFactory::new_with_mode(8, 6, RenderMode::Msaa).unwrap();
+        let old_frame = factory.begin_frame(0xff00_0000);
+
+        factory.resize(13, 9).unwrap();
+
+        assert_eq!(old_frame.finish().unwrap().len(), 8 * 6 * 4);
+        assert_eq!(
+            factory.begin_frame(0xff00_0000).finish().unwrap().len(),
+            13 * 9 * 4
+        );
+        let cached = factory.frame_attachments.cached();
+        assert_eq!((cached.width, cached.height), (13, 9));
+    }
+
+    #[test]
+    fn wgpu_factory_rejects_invalid_resize_without_changing_future_frames() {
+        let mut factory = WgpuFactory::new_with_mode(8, 6, RenderMode::Msaa).unwrap();
+
+        assert!(matches!(
+            factory.resize(0, 9),
+            Err(RendererError::InvalidTextureExtent {
+                width: 0,
+                height: 9,
+                ..
+            })
+        ));
+
+        assert_eq!(
+            factory.begin_frame(0xff00_0000).finish().unwrap().len(),
+            8 * 6 * 4
+        );
     }
 
     #[test]

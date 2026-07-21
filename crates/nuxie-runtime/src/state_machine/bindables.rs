@@ -1,7 +1,8 @@
 use crate::data_bind_graph::{
-    runtime_data_bind_graph_converter,
+    RuntimeDataBindGraphConverterBuildCache,
     runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source,
     runtime_data_bind_graph_converter_starts_with_to_string,
+    runtime_data_bind_graph_converter_with_cache,
     runtime_data_bind_graph_group_formula_operation_accepts_non_number_source,
     runtime_data_bind_graph_group_operation_formula_accepts_non_number_source,
 };
@@ -752,10 +753,11 @@ pub(crate) fn bindable_boolean_value(
         .map(|bindable_boolean| bindable_boolean.value)
 }
 
-pub(crate) fn runtime_bindable_numbers(
-    file: &RuntimeFile,
+pub(crate) fn runtime_bindable_numbers<'a>(
+    file: &'a RuntimeFile,
     state_machine: &nuxie_binary::RuntimeStateMachine<'_>,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeBindableNumber> {
     let mut values = BTreeMap::<u32, RuntimeBindableNumber>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -779,6 +781,7 @@ pub(crate) fn runtime_bindable_numbers(
             data_bind_index,
             data_bind,
             default_instance,
+            converter_cache,
         )
         .or_else(|| {
             runtime_bindable_number_unresolved_view_model_source(
@@ -786,6 +789,7 @@ pub(crate) fn runtime_bindable_numbers(
                 data_bind_index,
                 data_bind,
                 target.double_property("propertyValue").unwrap_or(0.0),
+                converter_cache,
             )
         }) {
             values.entry(target.id).and_modify(|bindable_number| {
@@ -797,18 +801,19 @@ pub(crate) fn runtime_bindable_numbers(
     values.into_values().collect()
 }
 
-fn runtime_bindable_number_unresolved_view_model_source(
-    file: &RuntimeFile,
+fn runtime_bindable_number_unresolved_view_model_source<'a>(
+    file: &'a RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
     target_value: f32,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyNumber", "propertyValue") != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let converter = runtime_data_bind_graph_converter(file, data_bind);
+    let converter = runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache);
     let value = if matches!(converter, Some(RuntimeDataBindGraphConverter::ListToLength)) {
         // The source side of ListToLength is still a list even when its
         // parent-relative context is unavailable while the child artboard is
@@ -829,19 +834,21 @@ fn runtime_bindable_number_unresolved_view_model_source(
     })
 }
 
-fn runtime_bindable_number_default_view_model_source(
-    file: &RuntimeFile,
+fn runtime_bindable_number_default_view_model_source<'a>(
+    file: &'a RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
-    runtime_number_default_view_model_source_for_instance(
+    runtime_number_default_view_model_source_for_instance_with_cache(
         file,
         data_bind_index,
         data_bind,
         "BindablePropertyNumber",
         "propertyValue",
         default_instance?,
+        converter_cache,
     )
 }
 
@@ -853,13 +860,34 @@ pub(crate) fn runtime_number_default_view_model_source_for_instance(
     target_property_name: &str,
     default_instance: &RuntimeObject,
 ) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
+    let mut converter_cache = RuntimeDataBindGraphConverterBuildCache::default();
+    runtime_number_default_view_model_source_for_instance_with_cache(
+        file,
+        data_bind_index,
+        data_bind,
+        target_type_name,
+        target_property_name,
+        default_instance,
+        &mut converter_cache,
+    )
+}
+
+fn runtime_number_default_view_model_source_for_instance_with_cache<'a>(
+    file: &'a RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+    target_type_name: &str,
+    target_property_name: &str,
+    default_instance: &RuntimeObject,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
+) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name(target_type_name, target_property_name) != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
     let source = file.data_context_view_model_property_for_instance(default_instance, &path)?;
-    let converter = runtime_data_bind_graph_converter(file, data_bind);
+    let converter = runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache);
     let value = match converter.as_ref() {
         Some(RuntimeDataBindGraphConverter::ToNumber) => {
             if let Some(value) = file.view_model_instance_number_value_for_object(source) {
@@ -1004,10 +1032,11 @@ pub(crate) fn runtime_number_default_view_model_source_for_instance(
     })
 }
 
-pub(crate) fn runtime_bindable_integers(
-    file: &RuntimeFile,
+pub(crate) fn runtime_bindable_integers<'a>(
+    file: &'a RuntimeFile,
     state_machine: &nuxie_binary::RuntimeStateMachine<'_>,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeBindableInteger> {
     let mut values = BTreeMap::<u32, RuntimeBindableInteger>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1031,6 +1060,7 @@ pub(crate) fn runtime_bindable_integers(
             data_bind_index,
             data_bind,
             default_instance,
+            converter_cache,
         ) {
             values.entry(target.id).and_modify(|bindable_integer| {
                 bindable_integer.default_view_model_sources.push(source)
@@ -1041,17 +1071,18 @@ pub(crate) fn runtime_bindable_integers(
     values.into_values().collect()
 }
 
-fn runtime_bindable_integer_default_view_model_source(
-    file: &RuntimeFile,
+fn runtime_bindable_integer_default_view_model_source<'a>(
+    file: &'a RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableIntegerDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyInteger", "propertyValue") != Some(property_key) {
         return None;
     }
-    if runtime_data_bind_graph_converter(file, data_bind).is_some() {
+    if runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache).is_some() {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
@@ -1123,10 +1154,11 @@ fn runtime_bindable_color_default_view_model_source(
     })
 }
 
-pub(crate) fn runtime_bindable_strings(
-    file: &RuntimeFile,
+pub(crate) fn runtime_bindable_strings<'a>(
+    file: &'a RuntimeFile,
     state_machine: &nuxie_binary::RuntimeStateMachine<'_>,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeBindableString> {
     let mut values = BTreeMap::<u32, RuntimeBindableString>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1153,6 +1185,7 @@ pub(crate) fn runtime_bindable_strings(
             data_bind_index,
             data_bind,
             default_instance,
+            converter_cache,
         ) {
             values.entry(target.id).and_modify(|bindable_string| {
                 bindable_string.default_view_model_sources.push(source)
@@ -1163,11 +1196,12 @@ pub(crate) fn runtime_bindable_strings(
     values.into_values().collect()
 }
 
-fn runtime_bindable_string_default_view_model_source(
-    file: &RuntimeFile,
+fn runtime_bindable_string_default_view_model_source<'a>(
+    file: &'a RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableStringDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyString", "propertyValue") != Some(property_key) {
@@ -1175,7 +1209,7 @@ fn runtime_bindable_string_default_view_model_source(
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
     let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
-    let converter = runtime_data_bind_graph_converter(file, data_bind);
+    let converter = runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache);
     let value = if runtime_data_bind_graph_converter_starts_with_to_string(converter.as_ref()) {
         if let Some(value) = file.view_model_instance_number_value_for_object(source) {
             RuntimeDataBindGraphValue::Number(value)
@@ -1424,10 +1458,11 @@ fn runtime_bindable_artboard_default_view_model_source(
     })
 }
 
-pub(crate) fn runtime_bindable_lists(
-    file: &RuntimeFile,
+pub(crate) fn runtime_bindable_lists<'a>(
+    file: &'a RuntimeFile,
     state_machine: &nuxie_binary::RuntimeStateMachine<'_>,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeBindableList> {
     let mut values = BTreeMap::<u32, RuntimeBindableList>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1454,6 +1489,7 @@ pub(crate) fn runtime_bindable_lists(
             data_bind_index,
             data_bind,
             default_instance,
+            converter_cache,
         ) {
             values
                 .entry(target.id)
@@ -1464,11 +1500,12 @@ pub(crate) fn runtime_bindable_lists(
     values.into_values().collect()
 }
 
-fn runtime_bindable_list_default_view_model_source(
-    file: &RuntimeFile,
+fn runtime_bindable_list_default_view_model_source<'a>(
+    file: &'a RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableListDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyList", "propertyValue") != Some(property_key) {
@@ -1476,7 +1513,7 @@ fn runtime_bindable_list_default_view_model_source(
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
     let source = file.data_context_view_model_property_for_instance(default_instance?, &path);
-    let converter = runtime_data_bind_graph_converter(file, data_bind);
+    let converter = runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache);
     let value = match converter.as_ref() {
         Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => {
             RuntimeDataBindGraphValue::Number(
@@ -1531,10 +1568,11 @@ fn runtime_view_model_property_at_path<'a>(
     None
 }
 
-pub(crate) fn runtime_bindable_triggers(
-    file: &RuntimeFile,
+pub(crate) fn runtime_bindable_triggers<'a>(
+    file: &'a RuntimeFile,
     state_machine: &nuxie_binary::RuntimeStateMachine<'_>,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeBindableTrigger> {
     let mut values = BTreeMap::<u32, RuntimeBindableTrigger>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1565,6 +1603,7 @@ pub(crate) fn runtime_bindable_triggers(
             data_bind_index,
             data_bind,
             default_instance,
+            converter_cache,
         ) {
             values.entry(target.id).and_modify(|bindable_trigger| {
                 bindable_trigger
@@ -1577,11 +1616,12 @@ pub(crate) fn runtime_bindable_triggers(
     values.into_values().collect()
 }
 
-fn runtime_bindable_trigger_default_view_model_source(
-    file: &RuntimeFile,
+fn runtime_bindable_trigger_default_view_model_source<'a>(
+    file: &'a RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableTriggerDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyTrigger", "propertyValue") != Some(property_key) {
@@ -1594,7 +1634,7 @@ fn runtime_bindable_trigger_default_view_model_source(
         data_bind_index,
         path: path.to_vec(),
         flags: data_bind.uint_property("flags").unwrap_or(0),
-        converter: runtime_data_bind_graph_converter(file, data_bind),
+        converter: runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache),
         value,
     })
 }
@@ -1626,10 +1666,11 @@ fn runtime_bindable_trigger_source(
     }
 }
 
-pub(crate) fn runtime_bindable_view_models(
-    file: &RuntimeFile,
+pub(crate) fn runtime_bindable_view_models<'a>(
+    file: &'a RuntimeFile,
     state_machine: &nuxie_binary::RuntimeStateMachine<'_>,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeBindableViewModel> {
     let mut values = BTreeMap::<u32, RuntimeBindableViewModel>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1657,6 +1698,7 @@ pub(crate) fn runtime_bindable_view_models(
             data_bind_index,
             data_bind,
             default_instance,
+            converter_cache,
         ) {
             values.entry(target.id).and_modify(|bindable_view_model| {
                 bindable_view_model.default_view_model_sources.push(source)
@@ -1667,11 +1709,12 @@ pub(crate) fn runtime_bindable_view_models(
     values.into_values().collect()
 }
 
-fn runtime_bindable_view_model_default_view_model_source(
-    file: &RuntimeFile,
+fn runtime_bindable_view_model_default_view_model_source<'a>(
+    file: &'a RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableViewModelDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyViewModel", "propertyValue") != Some(property_key) {
@@ -1693,7 +1736,7 @@ fn runtime_bindable_view_model_default_view_model_source(
         data_bind_index,
         path: path.to_vec(),
         flags: data_bind.uint_property("flags").unwrap_or(0),
-        converter: runtime_data_bind_graph_converter(file, data_bind),
+        converter: runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache),
         value: RuntimeViewModelPointer::Imported {
             object_id: reference.object.id,
         },
@@ -1716,10 +1759,11 @@ fn runtime_bindable_view_model_source(
     }
 }
 
-pub(crate) fn runtime_bindable_booleans(
-    file: &RuntimeFile,
+pub(crate) fn runtime_bindable_booleans<'a>(
+    file: &'a RuntimeFile,
     state_machine: &nuxie_binary::RuntimeStateMachine<'_>,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeBindableBoolean> {
     let mut values = BTreeMap::<u32, RuntimeBindableBoolean>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1743,6 +1787,7 @@ pub(crate) fn runtime_bindable_booleans(
             data_bind_index,
             data_bind,
             default_instance,
+            converter_cache,
         ) {
             values.entry(target.id).and_modify(|bindable_boolean| {
                 bindable_boolean.default_view_model_sources.push(source)
@@ -1753,11 +1798,12 @@ pub(crate) fn runtime_bindable_booleans(
     values.into_values().collect()
 }
 
-fn runtime_bindable_boolean_default_view_model_source(
-    file: &RuntimeFile,
+fn runtime_bindable_boolean_default_view_model_source<'a>(
+    file: &'a RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
     default_instance: Option<&RuntimeObject>,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableBooleanDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyBoolean", "propertyValue") != Some(property_key) {
@@ -1770,7 +1816,7 @@ fn runtime_bindable_boolean_default_view_model_source(
         data_bind_index,
         path: path.to_vec(),
         flags: data_bind.uint_property("flags").unwrap_or(0),
-        converter: runtime_data_bind_graph_converter(file, data_bind),
+        converter: runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache),
         value,
     })
 }
@@ -1862,9 +1908,16 @@ mod tests {
             .flatten()
             .find(|object| object.type_name == "DataBindContext")
             .expect("fixture has a data bind");
+        let mut converter_cache = RuntimeDataBindGraphConverterBuildCache::default();
 
-        let source = runtime_bindable_number_unresolved_view_model_source(&file, 3, data_bind, 7.0)
-            .expect("a parent-relative source is retained before a parent context is available");
+        let source = runtime_bindable_number_unresolved_view_model_source(
+            &file,
+            3,
+            data_bind,
+            7.0,
+            &mut converter_cache,
+        )
+        .expect("a parent-relative source is retained before a parent context is available");
 
         assert_eq!(source.data_bind_index, 3);
         assert_eq!(source.path, [1, 0]);
@@ -1909,9 +1962,16 @@ mod tests {
             .flatten()
             .find(|object| object.type_name == "DataBindContext")
             .expect("fixture has a data bind");
+        let mut converter_cache = RuntimeDataBindGraphConverterBuildCache::default();
 
-        let source = runtime_bindable_number_unresolved_view_model_source(&file, 3, data_bind, 7.0)
-            .expect("a parent-relative list source is retained before binding its parent");
+        let source = runtime_bindable_number_unresolved_view_model_source(
+            &file,
+            3,
+            data_bind,
+            7.0,
+            &mut converter_cache,
+        )
+        .expect("a parent-relative list source is retained before binding its parent");
 
         assert!(matches!(
             source.converter,

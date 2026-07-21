@@ -920,6 +920,9 @@ pub struct ComponentListNode {
 pub struct ComponentListMapRuleNode {
     pub view_model_id: i64,
     pub artboard_id: i64,
+    /// Explicit state-machine ordinals authored beneath this mapping rule.
+    /// Empty retains the legacy component-list default-machine behavior.
+    pub state_machine_ids: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -3173,7 +3176,7 @@ fn component_lists(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<Com
                 global_id: local_object.global_id,
                 type_name: object.type_name,
                 name: object_name(object),
-                map_rules: component_list_map_rules(file, object),
+                map_rules: component_list_map_rules(file, local_objects, object),
             })
         })
         .collect()
@@ -3181,22 +3184,49 @@ fn component_lists(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<Com
 
 fn component_list_map_rules(
     file: &RuntimeFile,
+    local_objects: &[LocalObject],
     component_list: &RuntimeObject,
 ) -> Vec<ComponentListMapRuleNode> {
     let mut map_rules = BTreeMap::new();
     for rule in file.artboard_component_list_map_rules_for_object(component_list) {
+        let state_machine_ids = local_objects
+            .iter()
+            .find(|local| local.global_id == rule.object.id)
+            .map(|rule_local| {
+                local_objects
+                    .iter()
+                    .filter_map(|local| {
+                        let object = runtime_object_for_local(file, local_objects, local.local_id)?;
+                        (object.type_name == "NestedStateMachine"
+                            && object.uint_property("parentId") == Some(rule_local.local_id as u64))
+                        .then(|| {
+                            object
+                                .uint_property("animationId")
+                                .and_then(|id| usize::try_from(id).ok())
+                        })
+                        .flatten()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         map_rules.insert(
             cpp_i32_from_runtime_uint(rule.view_model_id),
-            cpp_i32_from_runtime_uint(rule.artboard_id),
+            (
+                cpp_i32_from_runtime_uint(rule.artboard_id),
+                state_machine_ids,
+            ),
         );
     }
 
     map_rules
         .into_iter()
-        .map(|(view_model_id, artboard_id)| ComponentListMapRuleNode {
-            view_model_id,
-            artboard_id,
-        })
+        .map(
+            |(view_model_id, (artboard_id, state_machine_ids))| ComponentListMapRuleNode {
+                view_model_id,
+                artboard_id,
+                state_machine_ids,
+            },
+        )
         .collect()
 }
 
@@ -5423,7 +5453,9 @@ fn local_object_is_valid(file: &RuntimeFile, local_objects: &[LocalObject], inde
         else {
             return false;
         };
-        if !is_container_component(parent) {
+        let component_list_machine_selection =
+            definition.is_a("NestedAnimation") && parent.type_name == "ArtboardListMapRule";
+        if !is_container_component(parent) && !component_list_machine_selection {
             return false;
         }
     }
@@ -5440,7 +5472,7 @@ fn local_object_is_valid(file: &RuntimeFile, local_objects: &[LocalObject], inde
         else {
             return false;
         };
-        return is_nested_artboard(parent);
+        return is_nested_artboard(parent) || parent.type_name == "ArtboardListMapRule";
     }
 
     if definition.name == "TextStyle" {

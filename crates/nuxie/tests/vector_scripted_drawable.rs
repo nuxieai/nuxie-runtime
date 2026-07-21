@@ -6,8 +6,9 @@ use anyhow::Result;
 use ed25519_dalek::{Signer as _, SigningKey};
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
-    ArtboardSpec, DrawError, File, NodeSpec, Parent, RecordingFactory, Scene, SceneEvent,
-    ScriptAssetSpec, ScriptImportCapability, ScriptedDrawableSpec,
+    ArtboardSpec, DrawError, File, NodeSpec, OwnedArtboardInstance, Parent, RecordingFactory,
+    Scene, SceneEvent, ScriptAssetSpec, ScriptExecutionLimits, ScriptImportCapability,
+    ScriptedDrawableSpec,
     flow_session::{
         FlowAdvance, FlowHostValue, FlowOperation, FlowOutputPayload, FlowOutputPhase,
         FlowPointerBatch, FlowPointerEvent, FlowPointerKind, FlowQuery, FlowSession,
@@ -159,6 +160,75 @@ fn imported_scripted_file_with_protocol(protocol_source: &[u8]) -> Vec<u8> {
         push_uint(bytes, "ScriptedDrawable", "scriptAssetId", 0);
     });
     bytes
+}
+
+fn imported_single_scripted_file(source: &[u8]) -> Vec<u8> {
+    imported_single_scripted_file_with_font(source, false)
+}
+
+fn imported_single_scripted_file_with_external_font(source: &[u8]) -> Vec<u8> {
+    imported_single_scripted_file_with_font(source, true)
+}
+
+fn imported_single_scripted_file_with_font(source: &[u8], include_external_font: bool) -> Vec<u8> {
+    let mut script_payload = vec![0];
+    script_payload.extend(compile_luau(source));
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 991);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ScriptAsset", |bytes| {
+        push_uint(bytes, "ScriptAsset", "assetId", 0);
+        push_string(bytes, "ScriptAsset", "name", "BoundedDrawable");
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_blob(bytes, "FileAssetContents", "bytes", &script_payload);
+    });
+    if include_external_font {
+        push_object(&mut bytes, "FontAsset", |bytes| {
+            push_uint(bytes, "FontAsset", "assetId", 77);
+        });
+    }
+    push_object(&mut bytes, "Artboard", |_| {});
+    push_object(&mut bytes, "ScriptedDrawable", |bytes| {
+        push_uint(bytes, "ScriptedDrawable", "parentId", 0);
+        push_uint(bytes, "ScriptedDrawable", "scriptAssetId", 0);
+    });
+    bytes
+}
+
+#[allow(clippy::arithmetic_side_effects)]
+fn fixture_font_bytes() -> Vec<u8> {
+    let mut accumulator = 0u32;
+    let mut bit_count = 0u8;
+    let mut decoded = Vec::new();
+    for byte in include_bytes!("fixtures/roboto-a.ttf.base64")
+        .iter()
+        .copied()
+        .filter(|byte| !byte.is_ascii_whitespace())
+    {
+        if byte == b'=' {
+            break;
+        }
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => panic!("invalid base64 font fixture"),
+        };
+        accumulator = (accumulator << 6) | u32::from(value);
+        bit_count += 6;
+        if bit_count >= 8 {
+            bit_count -= 8;
+            decoded.push((accumulator >> bit_count) as u8);
+            accumulator &= (1u32 << bit_count) - 1;
+        }
+    }
+    decoded
 }
 
 fn imported_scripted_listener_file(protocol_source: &[u8]) -> Vec<u8> {
@@ -721,6 +791,223 @@ fn pointer_subcycles_reset_script_budgets_and_roll_back_overflowing_host_work() 
             .iter()
             .all(|name| !name.starts_with("pointer_3_")),
         "partial HostWork from the poisoned session must not escape to its sibling"
+    );
+    Ok(())
+}
+
+#[test]
+fn trusted_import_interrupts_an_infinite_draw_callback() -> Result<()> {
+    let bytes = imported_single_scripted_file(
+        br#"
+return function(context)
+    return {
+        draw = function(self, renderer)
+            while true do end
+        end,
+    }
+end
+"#,
+    );
+    let limits = ScriptExecutionLimits::new()
+        .with_max_memory_bytes(4 * 1024 * 1024)
+        .with_max_interrupts_per_callback(8);
+    let file = File::import_with_trusted_scripts(&bytes, limits)?;
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()?;
+    let mut factory = RecordingFactory::new();
+    let mut renderer = factory.make_renderer();
+
+    let error = instance
+        .draw(&mut factory, &mut renderer)
+        .expect_err("the imported callback must be interrupted");
+    assert!(
+        format!("{error:#}").contains("exceeded 8 interrupt safepoints"),
+        "{error:#}"
+    );
+    Ok(())
+}
+
+#[test]
+fn owned_font_attachment_keeps_the_retained_trusted_script_vm() -> Result<()> {
+    let bytes = imported_single_scripted_file_with_external_font(
+        br#"
+return function(context)
+    return {
+        init = function(self)
+            return true
+        end,
+        advance = function(self, seconds)
+            return seconds > 0
+        end,
+    }
+end
+"#,
+    );
+    let file = Arc::new(File::import_with_unsigned_scripts(&bytes)?);
+    let retained = Arc::clone(&file);
+    let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))?;
+    let mut sibling = OwnedArtboardInstance::instantiate_default(file)?;
+    let mut factory = RecordingFactory::new();
+
+    instance.try_advance_with_factory(&mut factory, 0.0)?;
+    sibling.try_advance_with_factory(&mut factory, 0.0)?;
+    assert!(
+        instance.raw().has_script_instance_for_global(5),
+        "the trusted script table must be live before the compatibility attachment"
+    );
+
+    let font_bytes = fixture_font_bytes();
+    instance.attach_font_asset_bytes(77, font_bytes.clone())?;
+    assert_eq!(
+        sibling.raw().external_font_asset_bytes(77),
+        None,
+        "an existing sibling retains its own snapshot until explicitly refreshed"
+    );
+    sibling.attach_font_asset_bytes(77, font_bytes.clone())?;
+    assert_eq!(
+        sibling.raw().external_font_asset_bytes(77),
+        Some(font_bytes.as_slice()),
+        "an idempotent File attachment must still refresh a stale sibling instance"
+    );
+    assert!(
+        Arc::ptr_eq(instance.file(), &retained),
+        "font attachment must not COW the File away from its live script VM"
+    );
+    drop(retained);
+
+    assert!(instance.try_advance_with_factory(&mut factory, 1.0 / 60.0)?);
+    assert!(sibling.try_advance_with_factory(&mut factory, 1.0 / 60.0)?);
+    Ok(())
+}
+
+#[test]
+fn default_trusted_import_interrupts_an_infinite_advance_callback() -> Result<()> {
+    let bytes = imported_single_scripted_file(
+        br#"
+return function(context)
+    return {
+        advance = function(self, seconds)
+            while true do end
+        end,
+    }
+end
+"#,
+    );
+    let file = File::import_with_unsigned_scripts(&bytes)?;
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()?;
+    let mut factory = RecordingFactory::new();
+
+    let error = instance
+        .try_advance_with_factory(&mut factory, 1.0 / 60.0)
+        .expect_err("the default trusted-import budget must interrupt advance");
+    assert!(
+        format!("{error:#}").contains("exceeded 50000 interrupt safepoints"),
+        "{error:#}"
+    );
+    Ok(())
+}
+
+#[test]
+fn direct_trusted_callbacks_start_a_fresh_cycle_after_interrupt_exhaustion() -> Result<()> {
+    let bytes = imported_single_scripted_file(
+        br#"
+local advances = 0
+return function(context)
+    return {
+        advance = function(self, seconds)
+            advances += 1
+            if advances == 1 then
+                while true do end
+            end
+            local ok, value = pcall(function()
+                return seconds > 0
+            end)
+            if not ok then
+                error(value)
+            end
+            return value
+        end,
+    }
+end
+"#,
+    );
+    let limits = ScriptExecutionLimits::new()
+        .with_max_memory_bytes(4 * 1024 * 1024)
+        .with_max_interrupts_per_callback(8);
+    let file = File::import_with_trusted_scripts(&bytes, limits)?;
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()?;
+    let mut factory = RecordingFactory::new();
+
+    let error = instance
+        .try_advance_with_factory(&mut factory, 1.0 / 60.0)
+        .expect_err("the first callback must exhaust its interrupt budget");
+    assert!(
+        format!("{error:#}").contains("exceeded 8 interrupt safepoints"),
+        "{error:#}"
+    );
+    assert!(
+        instance.try_advance_with_factory(&mut factory, 1.0 / 60.0)?,
+        "a later direct callback must not inherit the previous callback's terminal limit"
+    );
+    Ok(())
+}
+
+#[test]
+fn trusted_import_rejects_unbounded_zero_limits_before_execution() {
+    let bytes = imported_single_scripted_file(b"return function(context) return {} end");
+    for limits in [
+        ScriptExecutionLimits::new().with_max_memory_bytes(0),
+        ScriptExecutionLimits::new().with_max_interrupts_per_callback(0),
+    ] {
+        let error = File::import_with_trusted_scripts(&bytes, limits)
+            .expect_err("zero must never mean unlimited at the trusted import seam");
+        assert!(
+            format!("{error:#}").contains("must be greater than zero"),
+            "{error:#}"
+        );
+    }
+}
+
+#[test]
+fn trusted_import_rejects_callback_allocations_above_its_vm_limit() -> Result<()> {
+    let bytes = imported_single_scripted_file(
+        br#"
+return function(context)
+    return {
+        draw = function(self, renderer)
+            local oversized = string.rep("x", 8 * 1024 * 1024)
+            if #oversized == 0 then error("unreachable") end
+        end,
+    }
+end
+"#,
+    );
+    let limits = ScriptExecutionLimits::new()
+        .with_max_memory_bytes(2 * 1024 * 1024)
+        .with_max_interrupts_per_callback(100_000);
+    let file = File::import_with_trusted_scripts(&bytes, limits)?;
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()?;
+    let mut factory = RecordingFactory::new();
+    let mut renderer = factory.make_renderer();
+
+    let error = instance
+        .draw(&mut factory, &mut renderer)
+        .expect_err("the imported allocation must remain VM-bounded");
+    let diagnostic = format!("{error:#}");
+    assert!(
+        diagnostic.contains("memory") || diagnostic.contains("allocation"),
+        "{diagnostic}"
     );
     Ok(())
 }

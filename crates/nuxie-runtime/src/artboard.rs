@@ -47,7 +47,10 @@ use crate::constraints::{
     clear_runtime_scroll_intent_for_direct_offset, component_list_virtual_window,
     runtime_scroll_double_property, set_runtime_scroll_double_property,
 };
-use crate::data_bind_graph::{RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphValue};
+use crate::data_bind_graph::{
+    RuntimeDataBindGraphConverterBuildCache, RuntimeDataBindGraphFormulaRandomSource,
+    RuntimeDataBindGraphValue,
+};
 use crate::draw::{
     RuntimeInitialNestedLayoutPaintFrame, RuntimeLayoutBounds,
     runtime_apply_component_list_item_layout_bounds,
@@ -495,11 +498,11 @@ impl std::ops::Index<&usize> for RuntimeNestedArtboards {
 }
 
 /// Ported from C++ `src/artboard_component_list.cpp`: one persistent child
-/// artboard and state machine for an owned view-model list item.
+/// artboard and its selected state machines for an owned view-model list item.
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeComponentListItemInstance {
     pub(crate) child: Box<ArtboardInstance>,
-    pub(crate) state_machine: Option<StateMachineInstance>,
+    pub(crate) state_machines: Vec<StateMachineInstance>,
     pub(crate) context: RuntimeOwnedViewModelHandle,
     pub(crate) occurrence_identity: u64,
     pub(crate) logical_index: usize,
@@ -511,6 +514,25 @@ pub(crate) struct RuntimeComponentListItemInstance {
     pub(crate) settled_layout_size: Cell<Option<(f32, f32)>>,
     pub(crate) transform: Mat2D,
     pub(crate) render_cache_revision: u64,
+}
+
+/// One exact descent edge from a retained root artboard to a nested occurrence.
+///
+/// This is a runtime-internal address primitive. Higher layers should wrap it
+/// in their own epoch-fenced semantic cursor rather than exposing local ids.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeArtboardOccurrenceSegment {
+    NestedArtboard {
+        host_local_id: usize,
+    },
+    ComponentListItem {
+        host_local_id: usize,
+        item_index: usize,
+        /// Stable identity of the mounted list occurrence captured with the
+        /// hit. Indices are only positions in the current mounted window and
+        /// may be reused after a list replacement or reorder.
+        occurrence_identity: u64,
+    },
 }
 
 /// Full logical topology retained independently from the mounted artboards,
@@ -861,19 +883,23 @@ impl ArtboardInstance {
             .into_iter()
             .map(|(_, local_id)| local_id)
             .collect::<Vec<_>>();
+        let mut converter_cache = RuntimeDataBindGraphConverterBuildCache::default();
         let solos = build_runtime_solos(file, graph);
-        let mut linear_animations = build_linear_animations(file, graph, &slots);
+        let mut linear_animations =
+            build_linear_animations(file, graph, &slots, &mut converter_cache);
         let joysticks = build_runtime_joysticks(graph, &linear_animations);
         let follow_path_constraints = build_runtime_follow_path_constraints(file, graph);
         let list_follow_path_constraints = build_runtime_list_follow_path_constraints(file, graph);
         let scroll_constraints = build_runtime_scroll_constraints(file, graph);
         let ik_constraints = build_runtime_ik_constraints(file, graph);
-        let state_machines = build_state_machines(file, graph, &linear_animations);
+        let state_machines =
+            build_state_machines(file, graph, &linear_animations, &mut converter_cache);
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
-        let artboard_property_bindings = build_artboard_property_bindings(file, graph);
+        let artboard_property_bindings =
+            build_artboard_property_bindings(file, graph, &mut converter_cache);
         let artboard_image_asset_bindings = build_artboard_image_asset_bindings(file, graph);
         let artboard_custom_property_bindings =
-            build_artboard_custom_property_bindings(file, graph);
+            build_artboard_custom_property_bindings(file, graph, &mut converter_cache);
         let artboard_shared_data_bind_converter_states =
             build_artboard_shared_data_bind_converter_states(
                 &artboard_property_bindings,
@@ -882,9 +908,10 @@ impl ArtboardInstance {
         let artboard_layout_computed_bindings =
             build_artboard_layout_computed_bindings(file, graph);
         let artboard_numeric_source_bindings = build_artboard_numeric_source_bindings(file, graph);
-        let artboard_formula_token_bindings = build_artboard_formula_token_bindings(file, graph);
+        let artboard_formula_token_bindings =
+            build_artboard_formula_token_bindings(file, graph, &mut converter_cache);
         let artboard_converter_property_bindings =
-            build_artboard_converter_property_bindings(file, graph);
+            build_artboard_converter_property_bindings(file, graph, &mut converter_cache);
         let artboard_data_bind_target_queues = RuntimeArtboardDataBindTargetQueues::new(
             &artboard_property_bindings,
             &artboard_image_asset_bindings,
@@ -893,7 +920,8 @@ impl ArtboardInstance {
         let artboard_solo_bindings = build_artboard_solo_bindings(file, graph);
         let artboard_solo_source_bindings = build_artboard_solo_source_bindings(file, graph);
         let artboard_nested_host_bindings = build_artboard_nested_host_bindings(file, graph);
-        let artboard_list_bindings = build_artboard_list_bindings(file, graph);
+        let artboard_list_bindings =
+            build_artboard_list_bindings(file, graph, &mut converter_cache);
         let artboard_text_list_bindings = build_artboard_text_list_bindings(file, graph);
         let artboard_data_bind_source_queues = RuntimeArtboardDataBindSourceQueues::new(
             &artboard_custom_property_bindings,
@@ -1040,7 +1068,8 @@ impl ArtboardInstance {
         Ok(instance)
     }
 
-    pub(crate) fn external_font_asset_bytes(&self, asset_id: u32) -> Option<&[u8]> {
+    /// Return the external font bytes visible to this concrete runtime tree.
+    pub fn external_font_asset_bytes(&self, asset_id: u32) -> Option<&[u8]> {
         self.external_font_assets.get(&asset_id).map(AsRef::as_ref)
     }
 
@@ -1684,9 +1713,9 @@ impl ArtboardInstance {
             .values()
             .any(RuntimeNestedArtboardInstance::has_ongoing_work)
             || self.component_list_items.values().flatten().any(|item| {
-                item.state_machine
-                    .as_ref()
-                    .is_some_and(StateMachineInstance::needs_advance)
+                item.state_machines
+                    .iter()
+                    .any(StateMachineInstance::needs_advance)
                     || item.child.has_ongoing_nested_work()
             })
     }
@@ -2308,6 +2337,162 @@ impl ArtboardInstance {
         self.artboard_owned_view_model_context.as_ref()
     }
 
+    /// Resolve a named input on the selected state machine attached to one
+    /// exact nested/component-list occurrence.
+    pub fn occurrence_state_machine_input(
+        &self,
+        occurrence: &[RuntimeArtboardOccurrenceSegment],
+        state_machine_index: usize,
+        name: &str,
+    ) -> Option<(usize, StateMachineInputKind)> {
+        let state_machine = self.occurrence_state_machine(occurrence, state_machine_index)?;
+        let input_index = state_machine.input_index_named(name)?;
+        Some((input_index, state_machine.input(input_index)?.kind()))
+    }
+
+    /// Write a boolean to the selected state machine on one exact retained
+    /// nested/component-list occurrence.
+    pub fn set_occurrence_state_machine_bool(
+        &mut self,
+        occurrence: &[RuntimeArtboardOccurrenceSegment],
+        state_machine_index: usize,
+        input_index: usize,
+        value: bool,
+    ) -> Option<bool> {
+        let state_machine = self.occurrence_state_machine_mut(occurrence, state_machine_index)?;
+        if state_machine
+            .input(input_index)
+            .is_none_or(|input| input.kind() != StateMachineInputKind::Bool)
+        {
+            return None;
+        }
+        Some(state_machine.set_bool(input_index, value))
+    }
+
+    fn occurrence_state_machine(
+        &self,
+        occurrence: &[RuntimeArtboardOccurrenceSegment],
+        state_machine_index: usize,
+    ) -> Option<&StateMachineInstance> {
+        let (last, prefix) = occurrence.split_last()?;
+        let mut parent = self;
+        for segment in prefix {
+            parent = match *segment {
+                RuntimeArtboardOccurrenceSegment::NestedArtboard { host_local_id } => {
+                    parent.nested_artboards.get(&host_local_id)?.child.as_ref()
+                }
+                RuntimeArtboardOccurrenceSegment::ComponentListItem {
+                    host_local_id,
+                    item_index,
+                    occurrence_identity,
+                } => {
+                    let item = parent
+                        .component_list_items
+                        .get(&host_local_id)?
+                        .get(item_index)?;
+                    if item.occurrence_identity != occurrence_identity {
+                        return None;
+                    }
+                    item.child.as_ref()
+                }
+            };
+        }
+        match *last {
+            RuntimeArtboardOccurrenceSegment::NestedArtboard { host_local_id } => parent
+                .nested_artboards
+                .get(&host_local_id)?
+                .animations
+                .iter()
+                .find_map(|animation| match animation {
+                    RuntimeNestedAnimationInstance::StateMachine { state_machine, .. }
+                        if state_machine.state_machine_index() == state_machine_index =>
+                    {
+                        Some(state_machine)
+                    }
+                    _ => None,
+                }),
+            RuntimeArtboardOccurrenceSegment::ComponentListItem {
+                host_local_id,
+                item_index,
+                occurrence_identity,
+            } => {
+                let item = parent
+                    .component_list_items
+                    .get(&host_local_id)?
+                    .get(item_index)?;
+                if item.occurrence_identity != occurrence_identity {
+                    return None;
+                }
+                item.state_machines
+                    .iter()
+                    .find(|machine| machine.state_machine_index() == state_machine_index)
+            }
+        }
+    }
+
+    fn occurrence_state_machine_mut(
+        &mut self,
+        occurrence: &[RuntimeArtboardOccurrenceSegment],
+        state_machine_index: usize,
+    ) -> Option<&mut StateMachineInstance> {
+        let (last, prefix) = occurrence.split_last()?;
+        let mut parent = self;
+        for segment in prefix {
+            parent = match *segment {
+                RuntimeArtboardOccurrenceSegment::NestedArtboard { host_local_id } => parent
+                    .nested_artboards
+                    .get_mut(&host_local_id)?
+                    .child
+                    .as_mut(),
+                RuntimeArtboardOccurrenceSegment::ComponentListItem {
+                    host_local_id,
+                    item_index,
+                    occurrence_identity,
+                } => {
+                    let item = parent
+                        .component_list_items
+                        .get_mut(&host_local_id)?
+                        .get_mut(item_index)?;
+                    if item.occurrence_identity != occurrence_identity {
+                        return None;
+                    }
+                    item.child.as_mut()
+                }
+            };
+        }
+        match *last {
+            RuntimeArtboardOccurrenceSegment::NestedArtboard { host_local_id } => parent
+                .nested_artboards
+                .get_mut(&host_local_id)?
+                .animations
+                .iter_mut()
+                .find_map(|animation| match animation {
+                    RuntimeNestedAnimationInstance::StateMachine { state_machine, .. }
+                        if state_machine.state_machine_index() == state_machine_index =>
+                    {
+                        Some(state_machine)
+                    }
+                    _ => None,
+                }),
+            RuntimeArtboardOccurrenceSegment::ComponentListItem {
+                host_local_id,
+                item_index,
+                occurrence_identity,
+            } => {
+                let item = parent
+                    .component_list_items
+                    .get_mut(&host_local_id)?
+                    .get_mut(item_index)?;
+                if item.occurrence_identity != occurrence_identity {
+                    return None;
+                }
+                item.state_machines
+                    .iter_mut()
+                    .find(|machine| machine.state_machine_index() == state_machine_index)
+            }
+        }
+    }
+
     /// Ported from C++ `src/artboard_component_list.cpp::updateList`,
     /// `findArtboard`, and `createArtboardAt`.
     pub(crate) fn sync_component_list_items(
@@ -2353,13 +2538,17 @@ impl ArtboardInstance {
                     })
                     .collect()
             });
-        let resolve_child_graph = |context: &RuntimeOwnedViewModelInstance| {
+        let resolve_map_rule = |context: &RuntimeOwnedViewModelInstance| {
             let view_model_index = context.view_model_index();
-            let mapped_index = component_list
+            component_list
                 .map_rules
                 .iter()
                 .find(|rule| rule.view_model_id == view_model_index as i64)
-                .and_then(|rule| usize::try_from(rule.artboard_id).ok());
+        };
+        let resolve_child_graph = |context: &RuntimeOwnedViewModelInstance| {
+            let view_model_index = context.view_model_index();
+            let mapped_index =
+                resolve_map_rule(context).and_then(|rule| usize::try_from(rule.artboard_id).ok());
             mapped_index
                 .and_then(|index| build_context.artboards.get(index))
                 .or_else(|| {
@@ -2491,9 +2680,10 @@ impl ArtboardInstance {
             let logical = self.component_list_logical_items[&list_local_id][logical_index].clone();
             let context = logical.context;
             if let Some(existing_index) = reusable_items.iter().position(|candidate| {
-                candidate
-                    .as_ref()
-                    .is_some_and(|item| item.occurrence_identity == logical.occurrence_identity)
+                candidate.as_ref().is_some_and(|item| {
+                    item.occurrence_identity == logical.occurrence_identity
+                        && Some(item.child.graph_global_id) == logical.mapped_artboard_global
+                })
             }) {
                 let mut item = reusable_items[existing_index]
                     .take()
@@ -2519,7 +2709,7 @@ impl ArtboardInstance {
                             true,
                             true,
                         );
-                    if let Some(state_machine) = item.state_machine.as_mut() {
+                    for state_machine in &mut item.state_machines {
                         state_machine.bind_owned_view_model_handle(&context);
                         let contexts = child_candidates
                             .iter()
@@ -2575,15 +2765,27 @@ impl ArtboardInstance {
                 true,
                 true,
             );
-            let state_machine_index = file
-                .object(child_graph.global_id as usize)
-                .and_then(|artboard| artboard.uint_property("defaultStateMachineId"));
-            let state_machine_index = component_list_default_state_machine_index(
-                state_machine_index,
-                child.state_machines.len(),
-            );
-            let mut state_machine = child.state_machine_instance(state_machine_index);
-            if let Some(state_machine) = state_machine.as_mut() {
+            let selected_machine_indices = {
+                let context = context.borrow();
+                resolve_map_rule(&context)
+                    .filter(|rule| !rule.state_machine_ids.is_empty())
+                    .map(|rule| rule.state_machine_ids.clone())
+            }
+            .unwrap_or_else(|| {
+                let default_state_machine_index = file
+                    .object(child_graph.global_id as usize)
+                    .and_then(|artboard| artboard.uint_property("defaultStateMachineId"));
+                vec![component_list_default_state_machine_index(
+                    default_state_machine_index,
+                    child.state_machines.len(),
+                )]
+            });
+            let mut state_machines = Vec::with_capacity(selected_machine_indices.len());
+            for state_machine_index in selected_machine_indices {
+                let Some(mut state_machine) = child.state_machine_instance(state_machine_index)
+                else {
+                    continue;
+                };
                 let contexts = child_candidates
                     .iter()
                     .map(|candidate| (candidate.context.clone(), candidate.context_chain.clone()))
@@ -2597,13 +2799,13 @@ impl ArtboardInstance {
                 // same values rather than their authored defaults. The normal
                 // component-list advance owns the first state advance.
                 state_machine.advance_data_context();
+                state_machines.push(state_machine);
             }
             child.advance_artboard_data_binds_with_elapsed(0.0);
             child.update_pass();
-            let render_cache_revision = logical.occurrence_identity;
             items.push(RuntimeComponentListItemInstance {
                 child: Box::new(child),
-                state_machine,
+                state_machines,
                 context,
                 occurrence_identity: logical.occurrence_identity,
                 logical_index,
@@ -2613,10 +2815,9 @@ impl ArtboardInstance {
                 // Render caches outlive list topology changes. Seed each row
                 // with the stable list-item identity so a same-length
                 // replacement cannot reuse the prior occupant's paint cache.
-                render_cache_revision,
+                render_cache_revision: logical.occurrence_identity,
             });
         }
-
         self.component_list_item_transforms.insert(
             list_local_id,
             items.iter().map(|item| item.transform).collect(),
@@ -2721,23 +2922,63 @@ impl ArtboardInstance {
         instance: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
+        self.advance_state_machine_instance_with_context(instance, elapsed_seconds, None)
+    }
+
+    fn advance_state_machine_instance_with_context(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
         let state_machines = Arc::clone(&self.state_machines);
         let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
             return false;
         };
-        instance.advance(self, state_machine, elapsed_seconds)
+        let mut owned_context = owned_context;
+        let mut changed = match owned_context.as_deref_mut() {
+            Some(context) => instance.advance_with_owned_view_model_context(
+                self,
+                state_machine,
+                elapsed_seconds,
+                context,
+            ),
+            None => instance.advance(self, state_machine, elapsed_seconds),
+        };
+        changed |= instance.apply_local_event_listeners(
+            self,
+            state_machine,
+            0,
+            owned_context.as_deref_mut(),
+        );
+        changed
     }
 
     fn advance_state_machine_instance_preserving_events(
         &mut self,
         instance: &mut StateMachineInstance,
         elapsed_seconds: f32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
         let state_machines = Arc::clone(&self.state_machines);
         let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
             return false;
         };
-        instance.advance_preserving_reported_events(self, state_machine, elapsed_seconds)
+        let mut owned_context = owned_context;
+        let next_event_index = instance.reported_event_count();
+        let mut changed = instance.advance_preserving_reported_events(
+            self,
+            state_machine,
+            elapsed_seconds,
+            owned_context.as_deref_mut(),
+        );
+        changed |= instance.apply_local_event_listeners(
+            self,
+            state_machine,
+            next_event_index,
+            owned_context.as_deref_mut(),
+        );
+        changed
     }
 
     fn advance_state_machine_instance_after_state_probe(
@@ -2778,9 +3019,35 @@ impl ArtboardInstance {
         instances: &mut [StateMachineInstance],
         elapsed_seconds: f32,
     ) -> bool {
+        self.advance_state_machine_instances_with_nested_context(instances, elapsed_seconds, None)
+    }
+
+    pub fn advance_state_machine_instances_with_nested_and_owned_view_model_context(
+        &mut self,
+        instances: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        self.advance_state_machine_instances_with_nested_context(
+            instances,
+            elapsed_seconds,
+            Some(context),
+        )
+    }
+
+    fn advance_state_machine_instances_with_nested_context(
+        &mut self,
+        instances: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
         let mut changed = false;
         for instance in instances.iter_mut() {
-            changed |= self.advance_state_machine_instance(instance, elapsed_seconds);
+            changed |= self.advance_state_machine_instance_with_context(
+                instance,
+                elapsed_seconds,
+                owned_context.as_deref_mut(),
+            );
         }
 
         let mut nested_events = Vec::new();
@@ -2789,10 +3056,50 @@ impl ArtboardInstance {
         for instance in instances.iter_mut() {
             let mut notified = false;
             for (host_local, events) in &nested_events {
-                notified |= instance.notify_events(self, Some(*host_local), events);
+                notified |= match owned_context.as_deref_mut() {
+                    Some(context) => instance.notify_events_with_owned_view_model_context(
+                        self,
+                        Some(*host_local),
+                        events,
+                        context,
+                    ),
+                    None => instance.notify_events(self, Some(*host_local), events),
+                };
             }
             if notified {
-                changed |= self.advance_state_machine_instance_preserving_events(instance, 0.0);
+                changed |= self.advance_state_machine_instance_preserving_events(
+                    instance,
+                    0.0,
+                    owned_context.as_deref_mut(),
+                );
+            }
+        }
+        changed
+    }
+
+    /// Rebind machines until ViewModel listener actions reach a fixpoint.
+    ///
+    /// Returns `true` only when a listener action changes machine or context
+    /// state. Snapshotting the same context into a data-bind graph is work, but
+    /// is not itself a frame change.
+    pub fn settle_state_machine_instances_with_owned_view_model_context(
+        &mut self,
+        instances: &mut [StateMachineInstance],
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        const MAX_VIEW_MODEL_ITERATIONS: usize = 100;
+
+        let mut changed = false;
+        for _ in 0..MAX_VIEW_MODEL_ITERATIONS {
+            let mut listener_changed = false;
+            for instance in instances.iter_mut() {
+                let (_instance_changed, instance_listener_changed) =
+                    instance.bind_owned_view_model_context_mut_with_listener_change(context);
+                changed |= instance_listener_changed;
+                listener_changed |= instance_listener_changed;
+            }
+            if !listener_changed {
+                break;
             }
         }
         changed
@@ -3028,14 +3335,24 @@ impl ArtboardInstance {
                 self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
             }
         }
+        let mut component_list_source_changed = false;
         for items in self.component_list_items.values_mut() {
             for item in items {
+                let context_generation = item.context.borrow().mutation_generation();
                 item.child.queue_script_advance(elapsed_seconds);
                 let mut row_changed = false;
-                if let Some(state_machine) = item.state_machine.as_mut() {
+                for state_machine in &mut item.state_machines {
                     row_changed |= item
                         .child
                         .advance_state_machine_instance(state_machine, elapsed_seconds);
+                }
+                if let Some(file) = item.child.runtime_file_arc() {
+                    row_changed |= item
+                        .child
+                        .bind_owned_view_model_artboard_handle(&file, &item.context);
+                }
+                if item.context.borrow().mutation_generation() != context_generation {
+                    component_list_source_changed = true;
                 }
                 row_changed |= item
                     .child
@@ -3050,6 +3367,10 @@ impl ArtboardInstance {
                 }
                 changed |= row_changed;
             }
+        }
+        if component_list_source_changed {
+            self.mark_component_list_source_changed();
+            changed = true;
         }
         changed
     }
@@ -3501,6 +3822,15 @@ impl ArtboardInstance {
         }
     }
 
+    fn mark_component_list_source_changed(&mut self) {
+        // An item-owned write can feed arbitrary bindings on the parent. Until
+        // those dependencies are indexed, conservatively invalidate every
+        // parent rendering cache that can consume the retained list source.
+        self.mark_changed();
+        self.mark_path_changed();
+        self.mark_layout_changed();
+    }
+
     fn mark_draw_order_changed(&mut self) {
         self.draw_order_epoch = self.draw_order_epoch.wrapping_add(1);
         self.mark_prepared_changed();
@@ -3728,10 +4058,24 @@ impl ArtboardInstance {
         if self.joysticks_apply_before_update {
             did_update |= self.apply_joysticks(true);
         }
+        // Updating a nested host's inherited opacity writes the mounted
+        // child's root property. C++ leaves that child work for the next
+        // outer pass, so retain a host marker after this pass instead of
+        // either drawing stale child opacity or eagerly collapsing the
+        // bounded outer-update sequence into this component walk.
+        let mut deferred_nested_opacity_hosts = BTreeSet::new();
         let mut nested_did_update = false;
         if self
             .update_components_with_hook_recording(false, |instance, local_id, dirt| {
                 nested_did_update |= instance.update_nested_artboard_from_host_dirt(local_id, dirt);
+                if dirt.contains(ComponentDirt::RENDER_OPACITY)
+                    && instance
+                        .nested_artboards
+                        .get(&local_id)
+                        .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS))
+                {
+                    deferred_nested_opacity_hosts.insert(local_id);
+                }
             })
             .did_update
         {
@@ -3747,6 +4091,16 @@ impl ArtboardInstance {
                         .update_components_with_hook_recording(false, |instance, local_id, dirt| {
                             nested_did_update |=
                                 instance.update_nested_artboard_from_host_dirt(local_id, dirt);
+                            if dirt.contains(ComponentDirt::RENDER_OPACITY)
+                                && instance
+                                    .nested_artboards
+                                    .get(&local_id)
+                                    .is_some_and(|nested| {
+                                        nested.child.has_dirt(ComponentDirt::COMPONENTS)
+                                    })
+                            {
+                                deferred_nested_opacity_hosts.insert(local_id);
+                            }
                         })
                         .did_update
                 {
@@ -3760,6 +4114,14 @@ impl ArtboardInstance {
                 .update_components_with_hook_recording(false, |instance, local_id, dirt| {
                     nested_did_update |=
                         instance.update_nested_artboard_from_host_dirt(local_id, dirt);
+                    if dirt.contains(ComponentDirt::RENDER_OPACITY)
+                        && instance
+                            .nested_artboards
+                            .get(&local_id)
+                            .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS))
+                    {
+                        deferred_nested_opacity_hosts.insert(local_id);
+                    }
                 })
                 .did_update
             {
@@ -3792,6 +4154,15 @@ impl ArtboardInstance {
                 .any(|item| item.settled_layout_size.get().is_none())
         {
             did_update |= self.settle_component_list_layout_and_virtualization();
+        }
+        for host_local_id in deferred_nested_opacity_hosts {
+            if self
+                .nested_artboards
+                .get(&host_local_id)
+                .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS))
+            {
+                did_update |= self.add_dirt(host_local_id, ComponentDirt::COMPONENTS, false);
+            }
         }
         did_update
     }
@@ -3868,7 +4239,7 @@ impl ArtboardInstance {
         }
         for items in self.component_list_items.values_mut() {
             for item in items {
-                if let Some(state_machine) = item.state_machine.as_mut() {
+                for state_machine in &mut item.state_machines {
                     state_machine.reset_changed_state_count_for_outer_settlement();
                 }
                 item.child
@@ -3907,13 +4278,13 @@ impl ArtboardInstance {
             let mut list_dirty = false;
             for item in items {
                 let mut item_changed = false;
-                if let Some(state_machine) = item.state_machine.as_mut()
-                    && item.child.try_change_state_machine_instance(state_machine)
-                {
-                    item_changed = true;
-                    item_changed |= item
-                        .child
-                        .advance_state_machine_instance_after_state_probe(state_machine, 0.0);
+                for state_machine in &mut item.state_machines {
+                    if item.child.try_change_state_machine_instance(state_machine) {
+                        item_changed = true;
+                        item_changed |= item
+                            .child
+                            .advance_state_machine_instance_after_state_probe(state_machine, 0.0);
+                    }
                 }
                 item_changed |= item.child.advance_outer_update_components();
                 if item.child.has_dirt(ComponentDirt::COMPONENTS) {
@@ -4820,7 +5191,7 @@ impl ArtboardInstance {
         });
         let mut visiting = BTreeSet::new();
         visiting.insert(self.graph_global_id);
-        build_runtime_nested_artboard_instance(
+        let nested = build_runtime_nested_artboard_instance(
             &context.file,
             parent_graph,
             context.artboards.as_slice(),
@@ -4848,7 +5219,8 @@ impl ArtboardInstance {
             )
             .unwrap_or(-1.0),
         )
-        .ok()
+        .ok()?;
+        Some(nested)
     }
 
     fn apply_nested_trigger_property_changed(
@@ -6453,14 +6825,14 @@ mod tests {
 
         let row = RuntimeComponentListItemInstance {
             child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
-            state_machine: None,
+            state_machines: Vec::new(),
             context: retained,
             occurrence_identity: 1,
             logical_index: 0,
             virtualized_position: None,
             settled_layout_size: Cell::new(None),
             transform: Mat2D::IDENTITY,
-            render_cache_revision: 0,
+            render_cache_revision: 1,
         };
 
         assert!(component_list_contexts_retain_same_handles(
@@ -7596,6 +7968,8 @@ mod tests {
                         name: Some("callback".to_owned()),
                         url: None,
                         target: None,
+                        string_properties: Vec::new(),
+                        context: None,
                         seconds_delay: 0.0,
                     }),
                     key_frames: Vec::new(),
@@ -9000,15 +9374,380 @@ mod tests {
     }
 
     fn push_synthetic_object(bytes: &mut Vec<u8>, type_name: &str, properties: &[(&str, u64)]) {
+        push_synthetic_object_with_properties(bytes, type_name, |bytes| {
+            for (property_name, value) in properties {
+                push_synthetic_uint_property(bytes, type_name, property_name, *value);
+            }
+        });
+    }
+
+    fn push_synthetic_object_with_properties(
+        bytes: &mut Vec<u8>,
+        type_name: &str,
+        properties: impl FnOnce(&mut Vec<u8>),
+    ) {
         push_var_uint(bytes, u64::from(schema_type_key(type_name)));
-        for (property_name, value) in properties {
-            push_var_uint(
-                bytes,
-                u64::from(schema_property_key(type_name, property_name)),
-            );
-            push_var_uint(bytes, *value);
-        }
+        properties(bytes);
         push_var_uint(bytes, 0);
+    }
+
+    fn push_synthetic_uint_property(
+        bytes: &mut Vec<u8>,
+        type_name: &str,
+        property_name: &str,
+        value: u64,
+    ) {
+        push_var_uint(
+            bytes,
+            u64::from(schema_property_key(type_name, property_name)),
+        );
+        push_var_uint(bytes, value);
+    }
+
+    fn push_synthetic_f32_property(
+        bytes: &mut Vec<u8>,
+        type_name: &str,
+        property_name: &str,
+        value: f32,
+    ) {
+        push_var_uint(
+            bytes,
+            u64::from(schema_property_key(type_name, property_name)),
+        );
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn push_synthetic_bytes_property(
+        bytes: &mut Vec<u8>,
+        type_name: &str,
+        property_name: &str,
+        value: &[u8],
+    ) {
+        push_var_uint(
+            bytes,
+            u64::from(schema_property_key(type_name, property_name)),
+        );
+        push_var_uint(bytes, value.len() as u64);
+        bytes.extend_from_slice(value);
+    }
+
+    fn synthetic_owned_view_model_action_riv(file_id: u64, listener_action: bool) -> Vec<u8> {
+        synthetic_riv(file_id, |bytes| {
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object_with_properties(bytes, "ViewModelPropertyList", |bytes| {
+                push_synthetic_bytes_property(bytes, "ViewModelPropertyList", "name", b"items");
+            });
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyNumber", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyNumber", &[]);
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 1)]);
+            push_synthetic_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                push_synthetic_uint_property(
+                    bytes,
+                    "ViewModelInstanceNumber",
+                    "viewModelPropertyId",
+                    0,
+                );
+                push_synthetic_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 0.0);
+            });
+            push_synthetic_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                push_synthetic_uint_property(
+                    bytes,
+                    "ViewModelInstanceNumber",
+                    "viewModelPropertyId",
+                    1,
+                );
+                push_synthetic_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 0.0);
+            });
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 1)]);
+            push_synthetic_object_with_properties(bytes, "LinearAnimation", |bytes| {
+                push_synthetic_uint_property(bytes, "LinearAnimation", "duration", 1);
+            });
+            push_synthetic_object(bytes, "StateMachine", &[]);
+
+            if listener_action {
+                push_synthetic_object(bytes, "StateMachineNumber", &[]);
+                let mut listener_path = Vec::new();
+                push_var_uint(&mut listener_path, 1);
+                push_var_uint(&mut listener_path, 0);
+                push_synthetic_object_with_properties(
+                    bytes,
+                    "StateMachineListenerSingle",
+                    |bytes| {
+                        push_synthetic_uint_property(
+                            bytes,
+                            "StateMachineListenerSingle",
+                            "targetId",
+                            0,
+                        );
+                        push_synthetic_uint_property(
+                            bytes,
+                            "StateMachineListenerSingle",
+                            "listenerTypeValue",
+                            11,
+                        );
+                        push_synthetic_bytes_property(
+                            bytes,
+                            "StateMachineListenerSingle",
+                            "viewModelPathIds",
+                            &listener_path,
+                        );
+                    },
+                );
+                push_synthetic_object_with_properties(bytes, "ListenerNumberChange", |bytes| {
+                    push_synthetic_uint_property(bytes, "ListenerNumberChange", "inputId", 0);
+                    push_synthetic_f32_property(bytes, "ListenerNumberChange", "value", 7.0);
+                });
+                push_owned_number_change_action(bytes, 0);
+            }
+
+            push_synthetic_object(bytes, "StateMachineLayer", &[]);
+            push_synthetic_object(bytes, "AnyState", &[]);
+            push_synthetic_object(bytes, "EntryState", &[]);
+            push_synthetic_object(bytes, "StateTransition", &[("stateToId", 2)]);
+            push_synthetic_object(bytes, "AnimationState", &[("animationId", 0)]);
+            if !listener_action {
+                const STATE_AT_START: u64 = 2 << 1;
+                push_owned_number_change_action(bytes, STATE_AT_START);
+            }
+            push_synthetic_object(bytes, "ExitState", &[]);
+        })
+    }
+
+    fn push_owned_number_change_action(bytes: &mut Vec<u8>, flags: u64) {
+        push_synthetic_object_with_properties(bytes, "BindablePropertyNumber", |bytes| {
+            push_synthetic_f32_property(bytes, "BindablePropertyNumber", "propertyValue", 42.0);
+        });
+        let mut output_path = Vec::new();
+        push_var_uint(&mut output_path, 1);
+        push_var_uint(&mut output_path, 1);
+        push_synthetic_object_with_properties(bytes, "DataBindContext", |bytes| {
+            push_synthetic_uint_property(
+                bytes,
+                "DataBindContext",
+                "propertyKey",
+                u64::from(schema_property_key(
+                    "BindablePropertyNumber",
+                    "propertyValue",
+                )),
+            );
+            push_synthetic_uint_property(bytes, "DataBindContext", "flags", 1);
+            push_synthetic_bytes_property(bytes, "DataBindContext", "sourcePathIds", &output_path);
+        });
+        push_synthetic_object(bytes, "ListenerViewModelChange", &[("flags", flags)]);
+    }
+
+    fn owned_view_model_action_fixture(
+        file_id: u64,
+        listener_action: bool,
+    ) -> (RuntimeFile, ArtboardInstance, StateMachineInstance) {
+        let bytes = synthetic_owned_view_model_action_riv(file_id, listener_action);
+        let file = read_runtime_file(&bytes).expect("owned ViewModel action fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
+        let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
+        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+            .expect("fixture artboard instantiates");
+        let runtime_state_machine = artboard.state_machine(0).expect("fixture machine graph");
+        assert_eq!(runtime_state_machine.bindable_numbers.len(), 1);
+        if listener_action {
+            assert_eq!(runtime_state_machine.listeners.len(), 1);
+            assert_eq!(
+                runtime_state_machine.listeners[0].view_model_property_path,
+                Some(vec![0])
+            );
+            assert_eq!(runtime_state_machine.listeners[0].listener_actions.len(), 2);
+        }
+        let state_machine = artboard
+            .state_machine_instance(0)
+            .expect("fixture has a state machine");
+        (file, artboard, state_machine)
+    }
+
+    #[test]
+    fn immutable_owned_view_model_bind_dispatches_without_mutating_the_borrowed_context() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9680, true);
+        let mut context = RuntimeOwnedViewModelInstance::new(&file, 1)
+            .expect("fixture has an owned ViewModel context");
+
+        assert!(state_machine.bind_owned_view_model_context(&context));
+        assert!(context.set_number_by_property_index(0, 1.0));
+        assert!(state_machine.bind_owned_view_model_context(&context));
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(7.0),
+            "the documented immutable low-level bind still dispatches non-context listener actions"
+        );
+        assert_eq!(context.number_value_by_property_path(&[1]), Some(0.0));
+
+        assert!(context.set_number_by_property_index(0, 2.0));
+        assert!(state_machine.bind_owned_view_model_context_mut(&mut context));
+        assert_eq!(context.number_value_by_property_path(&[1]), Some(42.0));
+    }
+
+    #[test]
+    fn settling_owned_view_model_context_reports_changes_then_returns_to_idle() {
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9683, true);
+        let mut context = RuntimeOwnedViewModelInstance::new(&file, 1)
+            .expect("fixture has an owned ViewModel context");
+        assert!(state_machine.bind_owned_view_model_context(&context));
+
+        assert!(
+            !artboard.settle_state_machine_instances_with_owned_view_model_context(
+                std::slice::from_mut(&mut state_machine),
+                &mut context,
+            ),
+            "rebinding an unchanged context is not a runtime change"
+        );
+
+        assert!(context.set_number_by_property_index(0, 1.0));
+        assert!(
+            artboard.settle_state_machine_instances_with_owned_view_model_context(
+                std::slice::from_mut(&mut state_machine),
+                &mut context,
+            )
+        );
+        assert_eq!(context.number_value_by_property_path(&[1]), Some(42.0));
+        assert!(
+            !artboard.settle_state_machine_instances_with_owned_view_model_context(
+                std::slice::from_mut(&mut state_machine),
+                &mut context,
+            ),
+            "the listener fixpoint must become idle after applying its write"
+        );
+    }
+
+    #[test]
+    fn component_list_advance_writes_state_actions_to_the_item_context() {
+        let (file, child, mut state_machine) = owned_view_model_action_fixture(9681, false);
+        let context = RuntimeOwnedViewModelInstance::new(&file, 1)
+            .expect("fixture has an owned ViewModel context");
+
+        let mut root_context = RuntimeOwnedViewModelInstance::new(&file, 0)
+            .expect("fixture has a root owned ViewModel context");
+        let list_source = root_context
+            .list_source_handle_by_property_name("items")
+            .expect("fixture root exposes its item list");
+        assert_eq!(
+            root_context.replace_list_items_by_source_handle(&list_source, vec![context.clone()]),
+            Some(true)
+        );
+        let list = root_context
+            .list_handle_by_property_path(list_source.path())
+            .expect("fixture root retains its item list");
+        let row = list
+            .item_entries()
+            .into_iter()
+            .next()
+            .expect("fixture list has one retained row");
+        state_machine.bind_owned_view_model_handle(&row.instance);
+
+        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        parent.component_list_sources.insert(1, list.clone());
+        parent.component_list_items.insert(
+            1,
+            vec![RuntimeComponentListItemInstance {
+                child: Box::new(child),
+                state_machines: vec![state_machine],
+                context: row.instance,
+                occurrence_identity: row.occurrence_identity,
+                logical_index: 0,
+                virtualized_position: None,
+                settled_layout_size: Cell::new(None),
+                transform: Mat2D::IDENTITY,
+                render_cache_revision: row.occurrence_identity,
+            }],
+        );
+
+        let cache_epoch = parent.cache_epoch();
+        let prepared_epoch = parent.prepared_epoch();
+        let path_epoch = parent.path_epoch();
+        let layout_epoch = parent.layout_epoch();
+        assert!(parent.advance_nested_artboards(0.0));
+        let context = &parent.component_list_items[&1][0].context;
+        assert_eq!(
+            context.borrow().number_value_by_property_path(&[1]),
+            Some(42.0)
+        );
+        assert_eq!(
+            list.items()[0].borrow().number_value_by_property_path(&[1]),
+            Some(42.0),
+            "the retained list source must observe the item-owned write"
+        );
+        assert!(parent.cache_epoch() > cache_epoch);
+        assert!(parent.prepared_epoch() > prepared_epoch);
+        assert!(parent.path_epoch() > path_epoch);
+        assert!(parent.layout_epoch() > layout_epoch);
+    }
+
+    #[test]
+    fn component_list_reverse_writes_target_the_exact_repeated_occurrence() {
+        let (file, child, mut state_machine) = owned_view_model_action_fixture(9682, false);
+        let context = RuntimeOwnedViewModelInstance::new(&file, 1)
+            .expect("fixture has an owned ViewModel context");
+
+        let mut root_context = RuntimeOwnedViewModelInstance::new(&file, 0)
+            .expect("fixture has a root owned ViewModel context");
+        let list_source = root_context
+            .list_source_handle_by_property_name("items")
+            .expect("fixture root exposes its item list");
+        assert_eq!(
+            root_context.replace_list_items_by_source_handle(
+                &list_source,
+                vec![context.clone(), context.clone()],
+            ),
+            Some(true)
+        );
+        let list = root_context
+            .list_handle_by_property_path(list_source.path())
+            .expect("fixture root retains its item list");
+        let rows = list.item_entries();
+        let first = rows[0].clone();
+        let second = rows[1].clone();
+        state_machine.bind_owned_view_model_handle(&second.instance);
+
+        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        parent.component_list_sources.insert(1, list.clone());
+        parent.component_list_items.insert(
+            1,
+            vec![
+                RuntimeComponentListItemInstance {
+                    child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
+                    state_machines: Vec::new(),
+                    context: first.instance,
+                    occurrence_identity: first.occurrence_identity,
+                    logical_index: 0,
+                    virtualized_position: None,
+                    settled_layout_size: Cell::new(None),
+                    transform: Mat2D::IDENTITY,
+                    render_cache_revision: first.occurrence_identity,
+                },
+                RuntimeComponentListItemInstance {
+                    child: Box::new(child),
+                    state_machines: vec![state_machine],
+                    context: second.instance,
+                    occurrence_identity: second.occurrence_identity,
+                    logical_index: 1,
+                    virtualized_position: None,
+                    settled_layout_size: Cell::new(None),
+                    transform: Mat2D::IDENTITY,
+                    render_cache_revision: second.occurrence_identity,
+                },
+            ],
+        );
+
+        assert!(parent.advance_nested_artboards(0.0));
+        let source_items = list.items();
+        assert_eq!(
+            source_items[0].borrow().number_value_by_property_path(&[1]),
+            Some(0.0)
+        );
+        assert_eq!(
+            source_items[1].borrow().number_value_by_property_path(&[1]),
+            Some(42.0)
+        );
     }
 
     fn synthetic_riv(file_id: u64, object_stream: impl FnOnce(&mut Vec<u8>)) -> Vec<u8> {
@@ -9409,8 +10148,8 @@ mod tests {
         assert!(mounted.context.ptr_eq(&row_context));
         assert_eq!(
             mounted
-                .state_machine
-                .as_ref()
+                .state_machines
+                .first()
                 .expect("row default state machine")
                 .changed_state_count(),
             0,
@@ -9419,8 +10158,8 @@ mod tests {
 
         parent.advance_nested_artboards(0.0);
         let advanced = parent.component_list_items[&list_local_id][0]
-            .state_machine
-            .as_ref()
+            .state_machines
+            .first()
             .expect("row default state machine");
         assert_eq!(advanced.changed_state_count(), 1);
     }

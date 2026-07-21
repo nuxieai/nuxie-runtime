@@ -10,8 +10,11 @@ anyhow = "1"
 harfrust = "0.12"
 nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
+nuxie-image-codec = { path = "../nuxie-image-codec" }
 nuxie-render-api = { path = "../nuxie-render-api" }
 nuxie-schema = { path = "../nuxie-schema" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 skrifa = "0.44"
 taffy = "0.12.1"
 unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
@@ -21,8 +24,7 @@ unicode-script = "0.5.8"
 nuxie-schema = { path = "../nuxie-schema" }
 
 [dev-dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+png = "0.18"
 
 # Opt into the workspace panic-freedom clippy lints (root Cargo.toml).
 [lints]

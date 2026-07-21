@@ -2,9 +2,10 @@
 mod wasm {
     use nuxie::{
         BlendMode, BrowserBackend, BrowserBackendPreference, BrowserFactory, BrowserResizeError,
-        Factory, File, FillRule, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderStage, ImageFilter,
-        ImageSampler, ImageWrap, Mat2D, RecordingFactory, RenderBuffer, RenderBufferFlags,
-        RenderBufferType, Renderer,
+        Factory, File, FillRule, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderStage,
+        GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer,
+        GpuCanvasVertexLayout, ImageFilter, ImageSampler, ImageWrap, Mat2D, RecordingFactory,
+        RenderBuffer, RenderBufferFlags, RenderBufferType, Renderer,
     };
     use nuxie_render_stream::RenderStream;
     use pixel_compare::{RgbaImage, Tolerance, compare};
@@ -64,6 +65,29 @@ precision highp float;
 layout(location = 0) in vec3 varying_value;
 layout(location = 0) out vec4 color;
 void main() { color = vec4(varying_value, 1.0); }
+"#;
+
+    const ANIMATED_UNIFORM_VERTEX_GLSL: &str = r#"#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) in vec2 position;
+layout(location = 1) in vec2 offset;
+layout(location = 0) flat out float instance_value;
+void main() {
+    instance_value = float(gl_InstanceID);
+    gl_Position = vec4(position + offset * 0.25, 0.0, 1.0);
+    gl_Position.yz = vec2(-gl_Position.y, gl_Position.z * 2.0 - gl_Position.w);
+}
+"#;
+
+    const ANIMATED_UNIFORM_FRAGMENT_GLSL: &str = r#"#version 300 es
+precision highp float;
+layout(location = 0) flat in float instance_value;
+layout(std140, binding = 0) uniform Tint { vec4 value; } tint;
+layout(location = 0) out vec4 color;
+void main() {
+    color = abs(instance_value - 5.0) < 0.25 ? tint.value : vec4(0.0, 0.0, 1.0, 1.0);
+}
 "#;
 
     fn imported_gpu_canvas_shader(vertex_source: &str) -> GpuCanvasShader {
@@ -755,11 +779,22 @@ void main() { color = vec4(varying_value, 1.0); }
         let mut factory = BrowserFactory::new(canvas, 32, 24, BrowserBackendPreference::WebGl2)
             .await
             .map_err(js_error)?;
-        let shader = imported_gpu_canvas_shader(IMPORTED_VERTEX_GLSL);
+        let shaders = [
+            imported_gpu_canvas_shader(IMPORTED_VERTEX_GLSL),
+            imported_gpu_canvas_shader_stages(
+                IMPORTED_VERTEX_GLSL,
+                r#"#version 300 es
+precision highp float;
+layout(location = 0) out vec4 color;
+void main() { color = vec4(0.0, 1.0, 0.0, 1.0); }
+"#,
+            ),
+        ];
         let plan = imported_gpu_canvas_plan(32, 24, [0.0, 0.0, 1.0, 1.0]);
         for frame_index in 0..FRAME_COUNT {
+            let shader_index = frame_index % shaders.len();
             let image = factory
-                .make_gpu_canvas_image(&shader, &plan)
+                .make_gpu_canvas_image(&shaders[shader_index], &plan)
                 .map_err(js_error)?;
             let mut frame = factory.begin_frame(0xff00_0000).map_err(js_error)?;
             frame.draw_image(
@@ -773,19 +808,118 @@ void main() { color = vec4(varying_value, 1.0); }
                 .chunks_exact(4)
                 .filter(|pixel| *pixel == [0xff, 0x00, 0x00, 0xff])
                 .count();
+            let green = pixels
+                .chunks_exact(4)
+                .filter(|pixel| *pixel == [0x00, 0xff, 0x00, 0xff])
+                .count();
             let blue = pixels
                 .chunks_exact(4)
                 .filter(|pixel| *pixel == [0x00, 0x00, 0xff, 0xff])
                 .count();
-            if red < 300 || blue < 300 {
+            let expected = if shader_index == 0 { red } else { green };
+            if expected < 300 || blue < 300 {
                 return Err(JsValue::from_str(&format!(
-                    "WebGL2 imported GPU-canvas stress frame {frame_index} produced red={red} blue={blue}"
+                    "WebGL2 imported GPU-canvas stress frame {frame_index} produced red={red} green={green} blue={blue}"
                 )));
             }
         }
         Ok(format!(
-            "imported-gpu-canvas-stress=webgl2 frames={FRAME_COUNT}"
+            "imported-gpu-canvas-stress=webgl2 frames={FRAME_COUNT} keys={}",
+            shaders.len()
         ))
+    }
+
+    #[wasm_bindgen]
+    pub async fn assert_webgl2_imported_gpu_canvas_uniform_animation(
+        canvas: HtmlCanvasElement,
+    ) -> Result<String, JsValue> {
+        let mut factory = BrowserFactory::new(canvas, 32, 24, BrowserBackendPreference::WebGl2)
+            .await
+            .map_err(js_error)?;
+        let shader = imported_gpu_canvas_shader_stages(
+            ANIMATED_UNIFORM_VERTEX_GLSL,
+            ANIMATED_UNIFORM_FRAGMENT_GLSL,
+        );
+        let mut plan = imported_gpu_canvas_plan(32, 24, [0.0, 0.0, 1.0, 1.0]);
+        plan.first_instance = 5;
+        plan.uniform_buffers.push(GpuCanvasUniformBuffer {
+            group: 0,
+            binding: 0,
+            bytes: vec![0; 16],
+        });
+        let encode_f32s = |values: &[f32]| {
+            values
+                .iter()
+                .flat_map(|value| value.to_le_bytes())
+                .collect::<Vec<_>>()
+        };
+        plan.vertex_layouts = vec![
+            GpuCanvasVertexLayout {
+                stride: 8,
+                attributes: vec![GpuCanvasVertexAttribute {
+                    shader_location: 0,
+                    offset: 0,
+                    format: "float32x2".into(),
+                }],
+            },
+            GpuCanvasVertexLayout {
+                stride: 8,
+                attributes: vec![GpuCanvasVertexAttribute {
+                    shader_location: 1,
+                    offset: 0,
+                    format: "float32x2".into(),
+                }],
+            },
+        ];
+        plan.vertex_buffers = vec![
+            GpuCanvasVertexBuffer {
+                slot: 1,
+                bytes: encode_f32s(&[0.0; 6]),
+            },
+            GpuCanvasVertexBuffer {
+                slot: 0,
+                bytes: encode_f32s(&[-1.0, -1.0, 3.0, -1.0, -1.0, 3.0]),
+            },
+        ];
+
+        for (frame_index, expected) in [[0xff, 0x00, 0x00, 0xff], [0x00, 0xff, 0x00, 0xff]]
+            .into_iter()
+            .enumerate()
+        {
+            for (offset, component) in expected
+                .into_iter()
+                .map(|component| f32::from(component) / 255.0)
+                .enumerate()
+            {
+                plan.uniform_buffers[0].bytes[offset * 4..offset * 4 + 4]
+                    .copy_from_slice(&component.to_le_bytes());
+            }
+            let image = factory
+                .make_gpu_canvas_image(&shader, &plan)
+                .map_err(js_error)?;
+            let mut frame = factory.begin_frame(0xff00_00ff).map_err(js_error)?;
+            frame.draw_image(
+                Some(image.as_ref()),
+                ImageSampler::default(),
+                BlendMode::SrcOver,
+                1.0,
+            );
+            let pixels = frame.finish().await.map_err(js_error)?;
+            let matching = pixels
+                .chunks_exact(4)
+                .filter(|pixel| *pixel == expected)
+                .count();
+            if matching < 300 {
+                return Err(JsValue::from_str(&format!(
+                    "WebGL2 animated uniform frame {frame_index} produced only {matching} expected pixels"
+                )));
+            }
+        }
+
+        Ok(
+            "imported-gpu-canvas-uniform-animation=webgl2 frames=2 first-instance=5 reversed-slots=applied"
+                .into(),
+        )
     }
 
     #[wasm_bindgen]
@@ -1255,6 +1389,7 @@ void main() { color = vec4(varying_value, 1.0); }
 pub use wasm::{
     assert_direct_gpu_canvas_image, assert_imported_gpu_canvas, assert_imported_gpu_canvas_stress,
     assert_resize, assert_webgl2_fail_closed, assert_webgl2_gpu_canvas_rejects_invalid_interface,
-    assert_webgl2_image_mesh, assert_webgpu_gpu_canvas_rejects_invalid_interface,
-    assert_webgpu_uniform_limit_rejection, recording_float_probe, run_backend, run_stream_case,
+    assert_webgl2_image_mesh, assert_webgl2_imported_gpu_canvas_uniform_animation,
+    assert_webgpu_gpu_canvas_rejects_invalid_interface, assert_webgpu_uniform_limit_rejection,
+    recording_float_probe, run_backend, run_stream_case,
 };

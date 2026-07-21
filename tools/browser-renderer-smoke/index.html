@@ -31,6 +31,7 @@
         assert_webgl2_fail_closed,
         assert_webgl2_image_mesh,
         assert_webgl2_gpu_canvas_rejects_invalid_interface,
+        assert_webgl2_imported_gpu_canvas_uniform_animation,
         assert_webgpu_gpu_canvas_rejects_invalid_interface,
         assert_webgpu_uniform_limit_rejection,
         run_backend,
@@ -38,6 +39,51 @@
       } from "./pkg/browser_renderer_smoke.js";
 
       const status = document.querySelector("#status");
+      const measureImportedWebgl2Allocations = async (callback) => {
+        const originalGetContext = HTMLCanvasElement.prototype.getContext;
+        const originalCreateProgram = WebGL2RenderingContext.prototype.createProgram;
+        const originalCreateVertexArray = WebGL2RenderingContext.prototype.createVertexArray;
+        const originalCreateBuffer = WebGL2RenderingContext.prototype.createBuffer;
+        const webgl2Contexts = new Set();
+        let importedContext;
+        let programs = 0;
+        let vertexArrays = 0;
+        let buffers = 0;
+        HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+          const context = originalGetContext.call(this, type, ...args);
+          if (type === "webgl2" && context && !webgl2Contexts.has(context)) {
+            webgl2Contexts.add(context);
+            if (webgl2Contexts.size === 2) importedContext = context;
+          }
+          return context;
+        };
+        WebGL2RenderingContext.prototype.createProgram = function(...args) {
+          if (this === importedContext) programs += 1;
+          return originalCreateProgram.apply(this, args);
+        };
+        WebGL2RenderingContext.prototype.createVertexArray = function(...args) {
+          if (this === importedContext) vertexArrays += 1;
+          return originalCreateVertexArray.apply(this, args);
+        };
+        WebGL2RenderingContext.prototype.createBuffer = function(...args) {
+          if (this === importedContext) buffers += 1;
+          return originalCreateBuffer.apply(this, args);
+        };
+        try {
+          return {
+            result: await callback(),
+            contexts: webgl2Contexts.size,
+            programs,
+            vertexArrays,
+            buffers,
+          };
+        } finally {
+          HTMLCanvasElement.prototype.getContext = originalGetContext;
+          WebGL2RenderingContext.prototype.createProgram = originalCreateProgram;
+          WebGL2RenderingContext.prototype.createVertexArray = originalCreateVertexArray;
+          WebGL2RenderingContext.prototype.createBuffer = originalCreateBuffer;
+        }
+      };
       try {
         const forceFallback = new URLSearchParams(location.search).has("force-webgl2-fallback");
         if (forceFallback) {
@@ -87,22 +133,21 @@
           results.push(await assert_imported_gpu_canvas(document.createElement("canvas"), "webgl2"));
           results.push(await assert_webgpu_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));
           results.push(await assert_webgl2_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));
-          results.push(await assert_webgpu_uniform_limit_rejection(document.createElement("canvas")));
-          const originalGetContext = HTMLCanvasElement.prototype.getContext;
-          let importedWebgl2Contexts = 0;
-          HTMLCanvasElement.prototype.getContext = function(type, ...args) {
-            if (type === "webgl2") importedWebgl2Contexts += 1;
-            return originalGetContext.call(this, type, ...args);
-          };
-          try {
-            const stress = await assert_imported_gpu_canvas_stress(document.createElement("canvas"));
-            if (importedWebgl2Contexts !== 2) {
-              throw new Error(`WebGL2 stress created ${importedWebgl2Contexts} contexts; expected one primary and one isolated imported context`);
-            }
-            results.push(`${stress} contexts=${importedWebgl2Contexts}`);
-          } finally {
-            HTMLCanvasElement.prototype.getContext = originalGetContext;
+          const uniform = await measureImportedWebgl2Allocations(
+            () => assert_webgl2_imported_gpu_canvas_uniform_animation(document.createElement("canvas")),
+          );
+          if (uniform.contexts !== 2 || uniform.programs !== 1 || uniform.vertexArrays !== 1 || uniform.buffers !== 3) {
+            throw new Error(`WebGL2 uniform animation allocated contexts=${uniform.contexts} programs=${uniform.programs} vaos=${uniform.vertexArrays} buffers=${uniform.buffers}; expected 2/1/1/3`);
           }
+          results.push(`${uniform.result} programs=${uniform.programs} vaos=${uniform.vertexArrays} buffers=${uniform.buffers} contexts=${uniform.contexts}`);
+          results.push(await assert_webgpu_uniform_limit_rejection(document.createElement("canvas")));
+          const stress = await measureImportedWebgl2Allocations(
+            () => assert_imported_gpu_canvas_stress(document.createElement("canvas")),
+          );
+          if (stress.contexts !== 2 || stress.programs !== 2 || stress.vertexArrays !== 2 || stress.buffers !== 0) {
+            throw new Error(`WebGL2 stress allocated contexts=${stress.contexts} programs=${stress.programs} vaos=${stress.vertexArrays} buffers=${stress.buffers}; expected 2/2/2/0`);
+          }
+          results.push(`${stress.result} programs=${stress.programs} vaos=${stress.vertexArrays} buffers=${stress.buffers} contexts=${stress.contexts}`);
           results.push(await assert_resize(document.createElement("canvas"), "webgpu"));
           results.push(await assert_resize(document.createElement("canvas"), "webgl2"));
           for (const testCase of streamCases) {

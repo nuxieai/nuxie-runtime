@@ -448,11 +448,12 @@ impl ScriptVm {
     ) -> std::result::Result<(), ScriptError> {
         let shader = decode_shader_asset(name, payload).map_err(script_error)?;
         let mut shaders = self.gpu_canvas_shaders.borrow_mut();
-        if shaders.insert(name.to_owned(), shader).is_some() {
+        if shaders.contains_key(name) {
             return Err(ScriptError::new(format!(
                 "ShaderAsset name '{name}' is duplicated"
             )));
         }
+        shaders.insert(name.to_owned(), shader);
         Ok(())
     }
 
@@ -1078,4 +1079,62 @@ fn script_value_from_lua(value: Value) -> Result<ScriptValue> {
             )));
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn put_u16(bytes: &mut Vec<u8>, value: u16) {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_u32(bytes: &mut Vec<u8>, value: u32) {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_string(bytes: &mut Vec<u8>, value: &str) {
+        put_u16(bytes, value.len() as u16);
+        bytes.extend_from_slice(value.as_bytes());
+    }
+
+    fn shader_payload(fragment_color: &str) -> Vec<u8> {
+        let vertex = "#version 300 es\nvoid main() { gl_Position = vec4(0.0); }";
+        let fragment = format!(
+            "#version 300 es\nout vec4 color;\nvoid main() {{ color = {fragment_color}; }}"
+        );
+        let mut entries = vec![2];
+        for (stage, logical, source) in [(0, "vs_main", vertex), (1, "fs_main", fragment.as_str())]
+        {
+            entries.push(stage);
+            put_string(&mut entries, logical);
+            put_string(&mut entries, "main");
+            put_u32(&mut entries, source.len() as u32);
+            entries.extend_from_slice(source.as_bytes());
+        }
+
+        let mut payload = vec![0];
+        put_u32(&mut payload, 0x5253_5442);
+        put_u16(&mut payload, 4);
+        payload.extend_from_slice(&[1, 0, 1]);
+        put_u32(&mut payload, 0);
+        put_u32(&mut payload, entries.len() as u32);
+        payload.extend(entries);
+        payload
+    }
+
+    #[test]
+    fn duplicate_shader_registration_preserves_the_first_shader() {
+        let vm = ScriptVm::new();
+        vm.register_gpu_canvas_shader_asset("scene", &shader_payload("vec4(1.0)"))
+            .expect("first shader registers");
+        let first = vm.gpu_canvas_shaders.borrow()["scene"].clone();
+
+        let error = vm
+            .register_gpu_canvas_shader_asset("scene", &shader_payload("vec4(0.0)"))
+            .expect_err("duplicate shader name is rejected");
+
+        assert!(error.to_string().contains("duplicated"));
+        assert_eq!(vm.gpu_canvas_shaders.borrow()["scene"], first);
+    }
 }

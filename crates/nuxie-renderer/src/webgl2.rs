@@ -287,7 +287,6 @@ impl Factory for WebGl2Factory {
         shader: &GpuCanvasShader,
         plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
-        super::gpu_canvas::preflight_imported_gpu_canvas_webgl2(shader, plan)?;
         if self.imported_gpu_canvas.is_none() {
             self.imported_gpu_canvas = Some(
                 super::gpu_canvas::ImportedWebGl2GpuCanvasRenderer::new(&self.element)?,
@@ -295,9 +294,9 @@ impl Factory for WebGl2Factory {
         }
         let pixels = self
             .imported_gpu_canvas
-            .as_ref()
+            .as_mut()
             .expect("imported WebGL2 renderer was initialized")
-            .render_preflighted(shader, plan)?;
+            .render(shader, plan)?;
         self.make_rgba_image(plan.width, plan.height, &pixels)
             .map_err(|error| GpuCanvasError::new(error.to_string()))
     }

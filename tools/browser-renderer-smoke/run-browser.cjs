@@ -29,8 +29,9 @@ const fullCases = [
       "imported-gpu-canvas=webgl2 selected=webgl2",
       "gpu-canvas-interface=sync-rejected unrelated=clean valid=clean",
       "webgl2-gpu-canvas-interface=attributes+uniforms+interstage-rejected valid=clean",
+      "imported-gpu-canvas-uniform-animation=webgl2 frames=2 first-instance=5 reversed-slots=applied programs=1 vaos=1 buffers=3 contexts=2",
       "webgpu-uniform-limit=same-call-rejected unrelated=clean valid=clean",
-      "imported-gpu-canvas-stress=webgl2 frames=32 contexts=2",
+      "imported-gpu-canvas-stress=webgl2 frames=32 keys=2 programs=2 vaos=2 buffers=0 contexts=2",
       "resize=webgpu in-flight=rejected extent=13x9",
       "resize=webgl2 in-flight=rejected extent=13x9",
       "stream=gm-rect backend=webgpu",
@@ -59,8 +60,9 @@ const cases = process.env.BROWSER_RENDERER_GPU_ONLY === "1"
         "imported-gpu-canvas=webgl2 selected=webgl2",
         "gpu-canvas-interface=sync-rejected unrelated=clean valid=clean",
         "webgl2-gpu-canvas-interface=attributes+uniforms+interstage-rejected valid=clean",
+        "imported-gpu-canvas-uniform-animation=webgl2 frames=2 first-instance=5 reversed-slots=applied programs=1 vaos=1 buffers=3 contexts=2",
         "webgpu-uniform-limit=same-call-rejected unrelated=clean valid=clean",
-        "imported-gpu-canvas-stress=webgl2 frames=32 contexts=2",
+        "imported-gpu-canvas-stress=webgl2 frames=32 keys=2 programs=2 vaos=2 buffers=0 contexts=2",
       ],
     }]
   : fullCases;

@@ -322,6 +322,7 @@ impl FrameAttachmentPool {
 
 pub struct WgpuFactory {
     context: Arc<Context>,
+    imported_gpu_canvas: gpu_canvas::ImportedWgpuGpuCanvasCache,
     width: u32,
     height: u32,
     mode: RenderMode,
@@ -592,6 +593,7 @@ impl WgpuFactory {
                 msaa_stencil_pipeline,
                 feather_lut,
             }),
+            imported_gpu_canvas: gpu_canvas::ImportedWgpuGpuCanvasCache::default(),
             width,
             height,
             mode,

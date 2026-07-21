@@ -1208,6 +1208,13 @@ fn file_assets(file: &RuntimeFile) -> Vec<FileAssetNode> {
 }
 
 fn view_models(file: &RuntimeFile) -> Vec<ViewModelGraph> {
+    let first_backboard_id = file
+        .objects
+        .iter()
+        .filter_map(Option::as_ref)
+        .find(|object| object.type_name == "Backboard")
+        .map(|object| object.id);
+
     file.view_models()
         .into_iter()
         .map(|view_model| ViewModelGraph {
@@ -1226,6 +1233,12 @@ fn view_models(file: &RuntimeFile) -> Vec<ViewModelGraph> {
             instances: view_model
                 .instances
                 .into_iter()
+                // RuntimeFile also reads publisher-era instances serialized before
+                // the Backboard. GraphFile is the strict C++ projection, where
+                // ViewModelInstance::import requires a BackboardImporter.
+                .filter(|instance| {
+                    first_backboard_id.is_some_and(|backboard_id| instance.object.id > backboard_id)
+                })
                 .map(|instance| ViewModelInstanceNode {
                     global_id: instance.object.id,
                     name: object_name(instance.object),

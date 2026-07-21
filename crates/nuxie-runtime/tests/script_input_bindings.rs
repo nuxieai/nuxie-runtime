@@ -8,6 +8,7 @@ const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
 enum SourceKind {
     Boolean,
     Number,
+    Trigger,
 }
 
 #[derive(Clone, Copy)]
@@ -108,6 +109,22 @@ fn script_input_file(
     converter: ConverterFixture,
     data_bind_flags: u64,
 ) -> Vec<u8> {
+    script_input_file_with_target(
+        file_id,
+        source_kind,
+        converter,
+        data_bind_flags,
+        "ScriptInputNumber",
+    )
+}
+
+fn script_input_file_with_target(
+    file_id: u64,
+    source_kind: SourceKind,
+    converter: ConverterFixture,
+    data_bind_flags: u64,
+    target_type: &str,
+) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     push_var_uint(&mut bytes, 7);
     push_var_uint(&mut bytes, 0);
@@ -124,6 +141,9 @@ fn script_input_file(
         SourceKind::Number => push_object(&mut bytes, "ViewModelPropertyNumber", |bytes| {
             push_string(bytes, "ViewModelPropertyNumber", "name", "source");
         }),
+        SourceKind::Trigger => push_object(&mut bytes, "ViewModelPropertyTrigger", |bytes| {
+            push_string(bytes, "ViewModelPropertyTrigger", "name", "source");
+        }),
     }
     push_object(&mut bytes, "Backboard", |_| {});
     push_object(&mut bytes, "ViewModelInstance", |bytes| {
@@ -138,6 +158,10 @@ fn script_input_file(
         SourceKind::Number => push_object(&mut bytes, "ViewModelInstanceNumber", |bytes| {
             push_uint(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
             push_f32(bytes, "ViewModelInstanceNumber", "propertyValue", 0.0);
+        }),
+        SourceKind::Trigger => push_object(&mut bytes, "ViewModelInstanceTrigger", |bytes| {
+            push_uint(bytes, "ViewModelInstanceTrigger", "viewModelPropertyId", 0);
+            push_uint(bytes, "ViewModelInstanceTrigger", "propertyValue", 0);
         }),
     }
     match converter {
@@ -196,9 +220,11 @@ fn script_input_file(
     push_object(&mut bytes, "ScriptedListenerAction", |bytes| {
         push_uint(bytes, "ScriptedListenerAction", "scriptAssetId", 0);
     });
-    push_object(&mut bytes, "ScriptInputNumber", |bytes| {
-        push_string(bytes, "ScriptInputNumber", "name", "boundValue");
-        push_f32(bytes, "ScriptInputNumber", "propertyValue", 7.0);
+    push_object(&mut bytes, target_type, |bytes| {
+        push_string(bytes, target_type, "name", "boundValue");
+        if target_type == "ScriptInputNumber" {
+            push_f32(bytes, target_type, "propertyValue", 7.0);
+        }
     });
     let mut source_path = Vec::new();
     push_var_uint(&mut source_path, 0);
@@ -208,7 +234,7 @@ fn script_input_file(
             bytes,
             "DataBindContext",
             "propertyKey",
-            u64::from(property_key("ScriptInputNumber", "propertyValue")),
+            u64::from(property_key(target_type, "propertyValue")),
         );
         push_blob(bytes, "DataBindContext", "sourcePathIds", &source_path);
         if let Some(converter_id) = converter.converter_id() {
@@ -230,6 +256,33 @@ fn number_input(runtime: &RuntimeFile) -> &RuntimeObject {
         .filter_map(|id| runtime.object(id))
         .find(|object| object.type_name == "ScriptInputNumber")
         .expect("fixture contains an imported ScriptInputNumber")
+}
+
+fn trigger_input(runtime: &RuntimeFile) -> &RuntimeObject {
+    (0..runtime.object_count())
+        .filter_map(|id| runtime.object(id))
+        .find(|object| object.type_name == "ScriptInputTrigger")
+        .expect("fixture contains an imported ScriptInputTrigger")
+}
+
+#[test]
+fn trigger_binding_is_not_hydrated_as_an_initial_scalar_value() {
+    let runtime = import_fixture(&script_input_file_with_target(
+        9_507,
+        SourceKind::Trigger,
+        ConverterFixture::None,
+        0,
+        "ScriptInputTrigger",
+    ));
+    let context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .expect("fixture exposes the Root view model");
+
+    let value = bound_script_input_value(&runtime, &context, trigger_input(&runtime))
+        .expect("initial scalar hydration must ignore trigger inputs");
+    assert_eq!(
+        value, None,
+        "initialization must neither fire nor scalar-hydrate a trigger input"
+    );
 }
 
 #[test]

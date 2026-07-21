@@ -1096,6 +1096,12 @@ pub fn bound_script_input_value(
     context: &RuntimeOwnedViewModelInstance,
     input: &RuntimeObject,
 ) -> Result<Option<ScriptValue>, ScriptError> {
+    if !matches!(
+        input.type_name,
+        "ScriptInputBoolean" | "ScriptInputNumber" | "ScriptInputColor" | "ScriptInputString"
+    ) {
+        return Ok(None);
+    }
     let Some(value) = bound_script_input_graph_value(file, context, input, "propertyValue")? else {
         return Ok(None);
     };
@@ -1505,6 +1511,14 @@ pub trait ScriptInstance {
         _view_model: Option<ScriptViewModel>,
     ) -> Result<(), ScriptError> {
         Ok(())
+    }
+
+    /// Clear a context before its first host bind without declaring the
+    /// authored absence to be resolved. A later `init` read of view-model
+    /// data must keep the occurrence cold so the host can recreate it after
+    /// the real data context arrives.
+    fn clear_unresolved_context_view_model(&mut self) -> Result<(), ScriptError> {
+        self.set_context_view_model(None)
     }
 
     fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError>;

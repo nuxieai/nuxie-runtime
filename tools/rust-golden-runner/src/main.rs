@@ -881,6 +881,34 @@ fn bind_selected_artboard_view_model_context(
     instance.bind_owned_view_model_artboard_contexts(runtime, context);
 }
 
+#[cfg(feature = "scripting")]
+fn bind_script_view_model_artboard_context(
+    instance: &mut ArtboardInstance,
+    runtime: &RuntimeFile,
+    artboard_index: usize,
+    state_machine: Option<&mut StateMachineInstance>,
+    view_model: &ScriptViewModel,
+) {
+    let context = view_model.owned_handle();
+    if context.is_root() {
+        let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(context.root_handle());
+        contexts.complete_for_artboard(runtime, artboard_index);
+        if let Some(state_machine) = state_machine {
+            state_machine.bind_owned_view_model_contexts(&contexts);
+            state_machine.advance_data_context();
+        }
+        bind_selected_artboard_view_model_context(instance, runtime, &contexts);
+        return;
+    }
+
+    if let Some(state_machine) = state_machine {
+        state_machine.bind_owned_view_model_context_handle(&context);
+        state_machine.advance_data_context();
+    }
+    instance.bind_owned_view_model_artboard_context_handle(runtime, &context);
+    instance.rebind_nested_script_owned_contexts(runtime);
+}
+
 fn timed_result<T>(
     enabled: bool,
     elapsed: &mut Duration,
@@ -1868,14 +1896,13 @@ impl RunnerScriptArtboard {
         let Some(view_model) = self.view_model.as_ref() else {
             return;
         };
-        let owned = view_model.owned_handle();
-        let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(owned.root_handle());
-        contexts.complete_for_artboard(&self.runtime, self.artboard_index);
-        if let Some(state_machine) = self.state_machine.as_mut() {
-            state_machine.bind_owned_view_model_contexts(&contexts);
-            state_machine.advance_data_context();
-        }
-        bind_selected_artboard_view_model_context(&mut self.instance, &self.runtime, &contexts);
+        bind_script_view_model_artboard_context(
+            &mut self.instance,
+            &self.runtime,
+            self.artboard_index,
+            self.state_machine.as_mut(),
+            view_model,
+        );
     }
 }
 
@@ -2318,7 +2345,7 @@ fn initialize_scripted_drawables_for_artboard(
                 })?;
         if !script_context_is_bound {
             script_instance
-                .set_context_view_model(None)
+                .clear_unresolved_context_view_model()
                 .context("failed to clear cold script context view model")?;
         }
         let defer_cold_hydration = scripted_object_has_view_model_input(
@@ -2404,10 +2431,7 @@ fn initialize_scripted_drawables_for_artboard(
     }
 
     if let Some(model) = bound_context_model {
-        let owned = model.owned_handle();
-        let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(owned.root_handle());
-        contexts.complete_for_artboard(runtime, artboard_index);
-        bind_selected_artboard_view_model_context(instance, runtime, &contexts);
+        bind_script_view_model_artboard_context(instance, runtime, artboard_index, None, &model);
         instance.advance_artboard_data_binds();
         instance.update_pass();
     }
@@ -2617,12 +2641,12 @@ fn initialize_state_machine_scripted_objects(
             let Some(name) = input.string_property("name") else {
                 continue;
             };
-            let value = owned_context
-                .and_then(RuntimeOwnedViewModelContext::main)
-                .and_then(|context| {
-                    nuxie_runtime::bound_script_input_value(runtime, &context, input)
-                })
-                .or_else(|| default_script_input_value(input));
+            let bound_value = match owned_context.and_then(RuntimeOwnedViewModelContext::main) {
+                Some(context) => nuxie_runtime::bound_script_input_value(runtime, &context, input)
+                    .map_err(|error| anyhow!(error))?,
+                None => None,
+            };
+            let value = bound_value.or_else(|| default_script_input_value(input));
             if let Some(value) = value {
                 script_instance.set_input(name, value).with_context(|| {
                     format!(

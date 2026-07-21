@@ -1389,6 +1389,12 @@ impl ScriptInstance for LuaScriptInstance {
         Ok(())
     }
 
+    fn clear_unresolved_context_view_model(&mut self) -> std::result::Result<(), ScriptError> {
+        *self.context_view_model.borrow_mut() = None;
+        self.context_view_model_is_resolved = false;
+        Ok(())
+    }
+
     fn has_method(&self, method: ScriptMethod) -> std::result::Result<bool, ScriptError> {
         let value: Value = self
             .table
@@ -1827,6 +1833,14 @@ mod context_init_tests {
         let mut host = NoopScriptHost;
 
         instance.context_missing_requested_data.set(true);
+        instance
+            .clear_unresolved_context_view_model()
+            .expect("clear unresolved context");
+        assert!(!instance.context_view_model_is_resolved);
+        assert!(
+            instance.context_missing_requested_data.get(),
+            "constructor-time context misses remain sticky until cold init"
+        );
         assert!(
             !instance
                 .call_init_with_factory(&mut host, &mut factory)

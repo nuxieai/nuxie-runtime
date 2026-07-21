@@ -1544,9 +1544,13 @@ struct RuntimeOwnedViewModelMutationClock {
 
 impl RuntimeOwnedViewModelMutationClock {
     fn new() -> Rc<Self> {
+        Self::new_with_generation(0)
+    }
+
+    fn new_with_generation(generation: u64) -> Rc<Self> {
         Rc::new(Self {
             parent: RefCell::new(None),
-            generation: Cell::new(0),
+            generation: Cell::new(generation),
             rank: Cell::new(0),
         })
     }
@@ -2933,11 +2937,14 @@ struct RuntimeOwnedViewModelViewModel {
 
 impl Clone for RuntimeOwnedViewModelInstance {
     fn clone(&self) -> Self {
+        let mutation_generation = self.mutation_generation();
         let mut cloned = Self {
             view_model_index: self.view_model_index,
             instance_identity: self.instance_identity,
-            mutation_generation: 0,
-            mutation_clock: RuntimeOwnedViewModelMutationClock::new(),
+            mutation_generation: self.mutation_generation,
+            mutation_clock: RuntimeOwnedViewModelMutationClock::new_with_generation(
+                mutation_generation,
+            ),
             property_names: self.property_names.clone(),
             numbers: self.numbers.clone(),
             booleans: self.booleans.clone(),
@@ -6279,7 +6286,10 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     fn reroot_mutation_clock(&mut self) {
-        self.replace_mutation_clock(RuntimeOwnedViewModelMutationClock::new());
+        let generation = self.mutation_generation();
+        self.replace_mutation_clock(RuntimeOwnedViewModelMutationClock::new_with_generation(
+            generation,
+        ));
     }
 
     fn replace_mutation_clock(&mut self, clock: Rc<RuntimeOwnedViewModelMutationClock>) {
@@ -10717,6 +10727,24 @@ mod owned_context_tests {
                 .and_then(|main| main.number_value_by_property_name("value")),
             Some(42.0)
         );
+    }
+
+    #[test]
+    fn detached_instance_clone_preserves_its_mutation_generation_baseline() {
+        let file = global_context_fixture();
+        let mut source = RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+            .expect("main default instance");
+        assert!(source.set_number_by_property_name("value", 42.0));
+        let source_generation = source.mutation_generation();
+        assert_ne!(source_generation, 0);
+
+        let mut detached = source.clone();
+        assert_eq!(detached.instance_identity(), source.instance_identity());
+        assert_eq!(detached.mutation_generation(), source_generation);
+
+        assert!(detached.set_number_by_property_name("value", 43.0));
+        assert!(detached.mutation_generation() > source_generation);
+        assert_eq!(source.mutation_generation(), source_generation);
     }
 
     #[test]

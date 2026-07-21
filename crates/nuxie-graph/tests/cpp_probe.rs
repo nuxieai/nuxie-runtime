@@ -189,7 +189,22 @@ fn graph_file_collections_follow_runtime_file_cpp_parity() {
         push_object(bytes, "DataEnumValue", &[]);
     });
 
-    let (_runtime, graph) = read_graph_from_bytes(&bytes, "synthetic/file_collections.riv");
+    if let Some(probe) = probe_path() {
+        let cpp = read_cpp_probe_bytes(&probe, "synthetic/file_collections.riv", &bytes);
+        assert_eq!(cpp.view_models[0].instances.len(), 1);
+    }
+
+    let (runtime, graph) = read_graph_from_bytes(&bytes, "synthetic/file_collections.riv");
+
+    assert_eq!(
+        runtime.view_models()[0]
+            .instances
+            .iter()
+            .map(|instance| instance.object.id)
+            .collect::<Vec<_>>(),
+        vec![1, 3],
+        "RuntimeFile retains the publisher-era compatibility instance"
+    );
 
     assert_eq!(
         graph

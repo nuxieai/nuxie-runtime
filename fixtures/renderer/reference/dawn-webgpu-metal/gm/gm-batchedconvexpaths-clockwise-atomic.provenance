@@ -1,0 +1,16 @@
+provenance_schema=1
+backend=metal
+renderer_implementation=cpp-dawn-webgpu
+capture_tool=renderer-replay-ffi-dawn
+adapter_device=Apple Paravirtual device
+case_id=gm-batchedconvexpaths-clockwise-atomic
+stream_sha256=ac03c58dba7b9e1ee8497989abad2c921a532462b257f8851d4847ef410a1d9f
+runtime_revision=d788e8ec6e8b598526607d6a1e8818e8b637b60c
+dawn_revision=211333b2e3e429c3508f25c81c547f602adf448c
+replay_sha256=6da3ebdd7b0937d52d45b6e3f89ffc172860b6b9fd02820222a3c9449f39598f
+png_sha256=5ae5659a8638009d8c674c4ffb1a6080d49f0832198de2c3238f287d4ef0f6d5
+frame_width=512
+frame_height=512
+frame=0
+mode=clockwise-atomic
+sample_count=1

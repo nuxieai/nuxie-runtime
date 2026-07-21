@@ -1625,9 +1625,15 @@ pub enum RuntimeViewModelLinkError {
 impl RuntimeOwnedViewModelHandle {
     pub fn new(mut instance: RuntimeOwnedViewModelInstance) -> Self {
         instance.reroot_mutation_clock();
-        Self {
+        let handle = Self {
             instance: Rc::new(RefCell::new(instance)),
-        }
+        };
+        // A bare instance (e.g. a fresh deep copy) cannot register itself as
+        // an alias owner on its linked children without an `Rc` identity;
+        // completing the registration here keeps structural forwarding alive
+        // for cloned-then-wrapped graphs. No-op without linked children.
+        register_owned_view_model_link_aliases(&handle.instance);
+        handle
     }
 
     pub fn borrow(&self) -> Ref<'_, RuntimeOwnedViewModelInstance> {
@@ -1640,11 +1646,12 @@ impl RuntimeOwnedViewModelHandle {
         self.instance.borrow_mut()
     }
 
-    /// Refresh copied scalar storage for linked children before exposing this
-    /// instance. A linked child normally pushes changes to every owner from
-    /// `mark_mutated`, but that push can be deferred while an owner is already
-    /// borrowed. Retrying at the next handle borrow makes that deferral
-    /// durable instead of leaving the owner's render-facing mirror stale.
+    /// Re-bind mirror STRUCTURE for linked children before exposing this
+    /// instance. Scalar values need no refresh — mirrors share the linked
+    /// instance's cells by identity (#RB-1 e2b) — but a structural push
+    /// (children/list topology, string/font payload snapshots) from
+    /// `mark_mutated` can be deferred while an owner is already borrowed.
+    /// Retrying at the next handle borrow makes that deferral durable.
     fn refresh_linked_mirrors(&self) {
         let links = {
             let Ok(instance) = self.instance.try_borrow() else {
@@ -1986,7 +1993,11 @@ fn clone_owned_view_model_graph(
     if let Some(cloned) = memo.get(&key) {
         return Rc::clone(cloned);
     }
-    let candidate = Rc::new(RefCell::new(source.borrow().clone()));
+    // The shallow copy still references the SOURCE graph's lists and linked
+    // children; the remap below rewrites those edges through the shared
+    // `memo` so one clone operation dedupes every retained instance exactly
+    // once (C++ copyViewModelInstance's instancesMap).
+    let candidate = Rc::new(RefCell::new(source.borrow().detached_shallow_copy()));
     memo.insert(key, Rc::clone(&candidate));
     {
         let original = source.borrow();
@@ -2075,6 +2086,17 @@ fn remap_owned_view_model_child_lists(
         for (key, cloned_children) in &mut cloned_child.imported_children {
             if let Some(original_children) = original_child.imported_children.get(key) {
                 remap_owned_view_model_child_lists(original_children, cloned_children, memo);
+            }
+        }
+        // Re-bind the alias mirror to the COPY's linked instance so the
+        // sharing topology (mirror cells == linked child's cells) survives
+        // inside the deep copy. A transient borrow conflict leaves the
+        // freshly remapped deep-copied storage in place, which stays
+        // value-correct and rebinds at the next mirror refresh.
+        if let Some(linked) = &cloned_child.linked_instance {
+            let linked = Rc::clone(linked);
+            if let Ok(linked_instance) = linked.try_borrow() {
+                cloned_child.mirror_linked_instance(&linked_instance);
             }
         }
     }
@@ -2737,14 +2759,17 @@ impl RuntimeOwnedViewModelViewModelSourceHandle {
     }
 }
 
-// #RB-1 slice (e1): scalar VALUE storage is re-backed onto retained
-// `RuntimeViewModelCell`s (`view_model_cell.rs`). The surrounding per-type
-// vec layout, the mutation clock, lists, nested children, and alias mirrors
-// are unchanged in this step; every write still bumps the clock AND lands in
-// the cell so retained dependents (slices e2+) observe it. `Clone` on these
-// slot structs is a DEEP copy (fresh cell, same value) so
-// `RuntimeOwnedViewModelInstance::clone` keeps its snapshot semantics —
-// sharing stays exclusively via `RuntimeOwnedViewModelHandle`.
+// #RB-1 slices (e1)+(e2): scalar VALUE storage is backed by retained
+// `RuntimeViewModelCell`s (`view_model_cell.rs`), and nested view-model
+// children are SHARED by identity within a live graph — an alias mirror is a
+// `share()` view holding the same cells as the linked instance, so mirror
+// synchronization is structure-only. The per-type vec layout and the
+// mutation clock survive until slice (f); every write still bumps the clock
+// AND lands in the cell so retained dependents (e3+) observe it. `Clone` on
+// the slot structs is a DEEP copy (fresh cell, same value) and
+// `RuntimeOwnedViewModelInstance::clone` is a whole-subtree deep copy that
+// preserves internal sharing topology via one dedupe map per operation —
+// live sharing stays exclusively via `RuntimeOwnedViewModelHandle`.
 
 #[derive(Debug)]
 struct RuntimeOwnedViewModelNumber {
@@ -2777,6 +2802,18 @@ impl RuntimeOwnedViewModelNumber {
         self.cell
             .set_value(RuntimeViewModelCellValue::Number(value));
         true
+    }
+}
+
+impl RuntimeOwnedViewModelNumber {
+    /// Identity-sharing view of the same retained cell (the Rust analog of
+    /// retaining the same C++ `ViewModelInstanceValue*`). `Clone` stays a
+    /// deep copy.
+    fn share(&self) -> Self {
+        Self {
+            property_index: self.property_index,
+            cell: self.cell.clone(),
+        }
     }
 }
 
@@ -2813,6 +2850,16 @@ impl RuntimeOwnedViewModelBoolean {
     }
 }
 
+impl RuntimeOwnedViewModelBoolean {
+    /// Identity-sharing view of the same retained cell; `Clone` stays deep.
+    fn share(&self) -> Self {
+        Self {
+            property_index: self.property_index,
+            cell: self.cell.clone(),
+        }
+    }
+}
+
 impl Clone for RuntimeOwnedViewModelBoolean {
     fn clone(&self) -> Self {
         Self::new(self.property_index, self.value())
@@ -2821,9 +2868,10 @@ impl Clone for RuntimeOwnedViewModelBoolean {
 
 /// String slot: the cell is authoritative for change propagation, while
 /// `bytes` mirrors the cell so the reference-returning public getters
-/// (`Option<&[u8]>`) keep their signatures. Every write lands in both; only
-/// this slot's setter writes either, so the mirror cannot go stale in e1
-/// (cells are not yet shared across instances — that is slice e2).
+/// (`Option<&[u8]>`) keep their signatures. The owning slot's setter is the
+/// only writer of either half; a `share()` view snapshots `bytes` and is
+/// re-snapshotted at every mirror rebind, so a shared cell and its byte
+/// mirror re-agree exactly where the old copy-based mirrors did.
 #[derive(Debug)]
 struct RuntimeOwnedViewModelString {
     property_index: usize,
@@ -2852,6 +2900,20 @@ impl RuntimeOwnedViewModelString {
         self.cell
             .set_value(RuntimeViewModelCellValue::String(self.bytes.clone()));
         true
+    }
+}
+
+impl RuntimeOwnedViewModelString {
+    /// Identity-sharing view of the same retained cell. The borrowed-getter
+    /// byte mirror is snapshotted from the source slot and re-snapshotted by
+    /// every mirror rebind (link, synchronize, handle-borrow refresh), the
+    /// same points that refreshed it before cells were shared.
+    fn share(&self) -> Self {
+        Self {
+            property_index: self.property_index,
+            bytes: self.bytes.clone(),
+            cell: self.cell.clone(),
+        }
     }
 }
 
@@ -2884,6 +2946,16 @@ impl RuntimeOwnedViewModelColor {
 
     fn set_value(&mut self, value: u32) -> bool {
         self.cell.set_value(RuntimeViewModelCellValue::Color(value))
+    }
+}
+
+impl RuntimeOwnedViewModelColor {
+    /// Identity-sharing view of the same retained cell; `Clone` stays deep.
+    fn share(&self) -> Self {
+        Self {
+            property_index: self.property_index,
+            cell: self.cell.clone(),
+        }
     }
 }
 
@@ -2935,6 +3007,16 @@ impl RuntimeOwnedViewModelEnum {
     }
 }
 
+impl RuntimeOwnedViewModelEnum {
+    /// Identity-sharing view of the same retained cell; `Clone` stays deep.
+    fn share(&self) -> Self {
+        Self {
+            property_index: self.property_index,
+            cell: self.cell.clone(),
+        }
+    }
+}
+
 impl Clone for RuntimeOwnedViewModelEnum {
     fn clone(&self) -> Self {
         Self::new(self.property_index, self.value())
@@ -2976,6 +3058,16 @@ impl RuntimeOwnedViewModelSymbolListIndex {
     }
 }
 
+impl RuntimeOwnedViewModelSymbolListIndex {
+    /// Identity-sharing view of the same retained cell; `Clone` stays deep.
+    fn share(&self) -> Self {
+        Self {
+            property_index: self.property_index,
+            cell: self.cell.clone(),
+        }
+    }
+}
+
 impl Clone for RuntimeOwnedViewModelSymbolListIndex {
     fn clone(&self) -> Self {
         Self::new(self.property_index, self.value())
@@ -2986,6 +3078,14 @@ impl Clone for RuntimeOwnedViewModelSymbolListIndex {
 struct RuntimeOwnedViewModelList {
     property_index: usize,
     value: Rc<RefCell<RuntimeOwnedViewModelListValue>>,
+}
+
+impl RuntimeOwnedViewModelList {
+    /// Identity-sharing view: the wrapper `Clone` already retains the same
+    /// list storage `Rc`; named `share` for symmetry with the scalar slots.
+    fn share(&self) -> Self {
+        self.clone()
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -3067,6 +3167,16 @@ impl RuntimeOwnedViewModelAsset {
             owned_scalar_u32_payload(value),
         ));
         true
+    }
+}
+
+impl RuntimeOwnedViewModelAsset {
+    /// Identity-sharing view of the same retained cell; `Clone` stays deep.
+    fn share(&self) -> Self {
+        Self {
+            property_index: self.property_index,
+            cell: self.cell.clone(),
+        }
     }
 }
 
@@ -3273,6 +3383,19 @@ impl Clone for RuntimeOwnedViewModelFontAsset {
     }
 }
 
+impl RuntimeOwnedViewModelFontAsset {
+    /// Identity-sharing view of the same retained cell; the payload half is
+    /// snapshotted like the string byte mirror and re-snapshotted on every
+    /// mirror rebind.
+    fn share(&self) -> Self {
+        Self {
+            property_index: self.property_index,
+            value: self.value.clone(),
+            cell: self.cell.clone(),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct RuntimeOwnedViewModelArtboard {
     property_index: usize,
@@ -3307,6 +3430,16 @@ impl RuntimeOwnedViewModelArtboard {
     }
 }
 
+impl RuntimeOwnedViewModelArtboard {
+    /// Identity-sharing view of the same retained cell; `Clone` stays deep.
+    fn share(&self) -> Self {
+        Self {
+            property_index: self.property_index,
+            cell: self.cell.clone(),
+        }
+    }
+}
+
 impl Clone for RuntimeOwnedViewModelArtboard {
     fn clone(&self) -> Self {
         Self::new(self.property_index, self.value())
@@ -3337,6 +3470,16 @@ impl RuntimeOwnedViewModelTrigger {
     fn set_value(&mut self, value: u64) -> bool {
         self.cell
             .set_value(RuntimeViewModelCellValue::Trigger(value))
+    }
+}
+
+impl RuntimeOwnedViewModelTrigger {
+    /// Identity-sharing view of the same retained cell; `Clone` stays deep.
+    fn share(&self) -> Self {
+        Self {
+            property_index: self.property_index,
+            cell: self.cell.clone(),
+        }
     }
 }
 
@@ -3387,10 +3530,17 @@ struct RuntimeOwnedViewModelViewModel {
     imported_children: BTreeMap<u32, Vec<RuntimeOwnedViewModelViewModel>>,
 }
 
-impl Clone for RuntimeOwnedViewModelInstance {
-    fn clone(&self) -> Self {
+impl RuntimeOwnedViewModelInstance {
+    /// Field-level deep copy used by every whole-subtree copy path: scalar
+    /// slots deep-copy their cells (fresh cells, same values) while list
+    /// storage and linked child references still point into the SOURCE
+    /// graph. Callers must remap those retained edges through one
+    /// per-operation dedupe map (`remap_owned_view_model_lists` /
+    /// `remap_owned_view_model_child_lists`) — the port of C++
+    /// `File::copyViewModelInstance`'s `instancesMap`.
+    fn detached_shallow_copy(&self) -> Self {
         let mutation_generation = self.mutation_generation();
-        let mut cloned = Self {
+        Self {
             view_model_index: self.view_model_index,
             instance_identity: self.instance_identity,
             mutation_generation: self.mutation_generation,
@@ -3411,21 +3561,28 @@ impl Clone for RuntimeOwnedViewModelInstance {
             triggers: self.triggers.clone(),
             view_models: self.view_models.clone(),
             linked_aliases: Vec::new(),
-        };
-        clear_owned_view_model_child_links(&mut cloned.view_models);
-        cloned.detach_list_storage();
-        cloned.reroot_mutation_clock();
-        cloned
+        }
     }
 }
 
-fn clear_owned_view_model_child_links(children: &mut [RuntimeOwnedViewModelViewModel]) {
-    for child in children {
-        child.linked_instance = None;
-        clear_owned_view_model_child_links(&mut child.children);
-        for imported_children in child.imported_children.values_mut() {
-            clear_owned_view_model_child_links(imported_children);
-        }
+impl Clone for RuntimeOwnedViewModelInstance {
+    /// A DEEP copy of the whole subtree that shares nothing with the source
+    /// graph but preserves the source's internal sharing topology inside the
+    /// copy: one dedupe map per clone operation, keyed by source identity,
+    /// exactly like C++ `File::copyViewModelInstance`'s `instancesMap` (an
+    /// instance referenced by two lists or two child slots is copied once
+    /// and referenced twice in the copy).
+    fn clone(&self) -> Self {
+        let mut cloned = self.detached_shallow_copy();
+        let mut instances_map = BTreeMap::new();
+        remap_owned_view_model_lists(&self.lists, &mut cloned.lists, &mut instances_map);
+        remap_owned_view_model_child_lists(
+            &self.view_models,
+            &mut cloned.view_models,
+            &mut instances_map,
+        );
+        cloned.reroot_mutation_clock();
+        cloned
     }
 }
 
@@ -3580,15 +3737,83 @@ fn owned_view_model_graph_reaches_or_cycles(
 }
 
 impl RuntimeOwnedViewModelViewModel {
+    /// Identity-sharing copy of one child slot: every scalar slot shares its
+    /// retained cell, list wrappers retain the same storage `Rc`, the linked
+    /// instance (if any) is retained rather than cloned, and nested children
+    /// share recursively. This is what an alias mirror IS after #RB-1 e2b —
+    /// a view of the same cells — so mirrors need no value synchronization.
+    fn share(&self) -> Self {
+        macro_rules! share_slots {
+            ($slots:expr) => {
+                $slots.iter().map(|slot| slot.share()).collect()
+            };
+        }
+        macro_rules! share_imported {
+            ($map:expr) => {
+                $map.iter()
+                    .map(|(key, slots)| (*key, slots.iter().map(|slot| slot.share()).collect()))
+                    .collect()
+            };
+        }
+        Self {
+            property_index: self.property_index,
+            property_name: self.property_name.clone(),
+            value: self.value,
+            linked_instance: self.linked_instance.clone(),
+            referenced_view_model_index: self.referenced_view_model_index,
+            property_names: self.property_names.clone(),
+            numbers: share_slots!(self.numbers),
+            imported_numbers: share_imported!(self.imported_numbers),
+            booleans: share_slots!(self.booleans),
+            imported_booleans: share_imported!(self.imported_booleans),
+            strings: share_slots!(self.strings),
+            imported_strings: share_imported!(self.imported_strings),
+            colors: share_slots!(self.colors),
+            imported_colors: share_imported!(self.imported_colors),
+            enums: share_slots!(self.enums),
+            imported_enums: share_imported!(self.imported_enums),
+            symbol_list_indices: share_slots!(self.symbol_list_indices),
+            imported_symbol_list_indices: share_imported!(self.imported_symbol_list_indices),
+            lists: share_slots!(self.lists),
+            imported_lists: share_imported!(self.imported_lists),
+            assets: share_slots!(self.assets),
+            imported_assets: share_imported!(self.imported_assets),
+            font_assets: share_slots!(self.font_assets),
+            imported_font_assets: share_imported!(self.imported_font_assets),
+            artboards: share_slots!(self.artboards),
+            imported_artboards: share_imported!(self.imported_artboards),
+            triggers: share_slots!(self.triggers),
+            imported_triggers: share_imported!(self.imported_triggers),
+            view_model_instance_ids: self.view_model_instance_ids.clone(),
+            children: self.children.iter().map(Self::share).collect(),
+            imported_children: self
+                .imported_children
+                .iter()
+                .map(|(key, children)| (*key, children.iter().map(Self::share).collect()))
+                .collect(),
+        }
+    }
+
+    /// Bind this slot's active storage to the linked instance's retained
+    /// cells BY IDENTITY (C++ `ViewModelInstanceViewModel` holds an
+    /// `rcp<ViewModelInstance>`; two parents referencing one child share it
+    /// live). After this rebind, scalar values never need copying between
+    /// the mirror and the linked instance — writes land in the shared cells.
+    /// Re-running it only forwards *structure* (children/list topology) and
+    /// re-snapshots the string/font payload mirrors that back the
+    /// borrowed-reference getters.
     fn mirror_linked_instance(&mut self, source: &RuntimeOwnedViewModelInstance) {
         macro_rules! replace_active_values {
             ($owned:ident, $imported:ident) => {
                 match self.value {
                     RuntimeViewModelPointer::Imported { object_id } => {
-                        self.$imported.insert(object_id, source.$owned.clone());
+                        self.$imported.insert(
+                            object_id,
+                            source.$owned.iter().map(|slot| slot.share()).collect(),
+                        );
                     }
                     _ => {
-                        self.$owned = source.$owned.clone();
+                        self.$owned = source.$owned.iter().map(|slot| slot.share()).collect();
                     }
                 }
             };
@@ -3615,11 +3840,59 @@ impl RuntimeOwnedViewModelViewModel {
         replace_active_values!(triggers, imported_triggers);
         match self.value {
             RuntimeViewModelPointer::Imported { object_id } => {
-                self.imported_children
-                    .insert(object_id, source.view_models.clone());
+                self.imported_children.insert(
+                    object_id,
+                    source.view_models.iter().map(|child| child.share()).collect(),
+                );
             }
-            _ => self.children = source.view_models.clone(),
+            _ => {
+                self.children = source
+                    .view_models
+                    .iter()
+                    .map(|child| child.share())
+                    .collect();
+            }
         }
+    }
+
+    /// Sharing invariant behind the alias-mirror no-op: every scalar slot in
+    /// the mirror's active storage retains the SAME cell as the linked
+    /// instance, so aliased values agree by identity.
+    #[cfg(debug_assertions)]
+    fn mirror_shares_source_cells(&self, source: &RuntimeOwnedViewModelInstance) -> bool {
+        macro_rules! family_shares {
+            ($owned:ident, $imported:ident) => {{
+                let mirror = match self.value {
+                    RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                        Some(self.$owned.as_slice())
+                    }
+                    RuntimeViewModelPointer::Imported { object_id } => {
+                        self.$imported.get(&object_id).map(Vec::as_slice)
+                    }
+                    _ => None,
+                };
+                let Some(mirror) = mirror else {
+                    return false;
+                };
+                mirror.len() == source.$owned.len()
+                    && mirror
+                        .iter()
+                        .zip(source.$owned.iter())
+                        .all(|(mirrored, retained)| {
+                            mirrored.property_index == retained.property_index
+                                && mirrored.cell.ptr_eq(&retained.cell)
+                        })
+            }};
+        }
+        family_shares!(numbers, imported_numbers)
+            && family_shares!(booleans, imported_booleans)
+            && family_shares!(strings, imported_strings)
+            && family_shares!(colors, imported_colors)
+            && family_shares!(enums, imported_enums)
+            && family_shares!(symbol_list_indices, imported_symbol_list_indices)
+            && family_shares!(assets, imported_assets)
+            && family_shares!(artboards, imported_artboards)
+            && family_shares!(triggers, imported_triggers)
     }
 
     fn active_children(&self) -> Option<&[RuntimeOwnedViewModelViewModel]> {
@@ -6727,6 +7000,13 @@ impl RuntimeOwnedViewModelInstance {
         });
     }
 
+    /// #RB-1 e2b: alias mirrors share this instance's retained cells by
+    /// identity, so aliased VALUES never need synchronizing — a write through
+    /// either side lands in the same cell. This pass is reduced to trivial
+    /// structure forwarding (children/list topology after a structural
+    /// mutation, plus the string/font payload snapshots behind the
+    /// borrowed-reference getters). Slice (f) deletes it together with the
+    /// mutation clock.
     fn synchronize_linked_aliases(&mut self) {
         self.linked_aliases
             .retain(|alias| alias.owner.strong_count() != 0);
@@ -6743,6 +7023,10 @@ impl RuntimeOwnedViewModelInstance {
                 .find(|property| property.property_index == alias.property_index)
             {
                 property.mirror_linked_instance(self);
+                debug_assert!(
+                    property.mirror_shares_source_cells(self),
+                    "alias mirror must retain the linked instance's cells by identity"
+                );
             }
         }
     }
@@ -11655,6 +11939,161 @@ mod owned_context_tests {
         assert!(detached.set_number_by_property_name("value", 43.0));
         assert!(detached.mutation_generation() > source_generation);
         assert_eq!(source.mutation_generation(), source_generation);
+    }
+
+    fn linked_child_fixture() -> RuntimeFile {
+        let mut records = vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Root".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyViewModel",
+                vec![
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "name",
+                        AuthoringValue::String("child".to_owned()),
+                    ),
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "viewModelReferenceId",
+                        AuthoringValue::Uint(1),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelPropertyViewModel",
+                vec![
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "name",
+                        AuthoringValue::String("child2".to_owned()),
+                    ),
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "viewModelReferenceId",
+                        AuthoringValue::Uint(1),
+                    ),
+                ],
+            ),
+        ];
+        records.extend(view_model_records("Child", 0, 1, 5.0));
+        RuntimeFile::from_authoring_records(records).expect("linked child fixture imports")
+    }
+
+    /// #RB-1 e2b: nested children are shared by identity within a live graph
+    /// (C++ rcp children), while `Clone` stays a deep copy that ports C++
+    /// `copyViewModelInstance`'s instancesMap — internal sharing topology
+    /// survives inside the copy without sharing anything with the source.
+    #[test]
+    fn linked_children_share_identity_and_clones_preserve_topology() {
+        let file = linked_child_fixture();
+        let owner_a = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("root instance"),
+        );
+        let owner_b = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("root instance"),
+        );
+        let child = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0).expect("child instance"),
+        );
+
+        assert_eq!(
+            owner_a.link_view_model_by_property_name_path("child", &child),
+            Ok(true)
+        );
+        assert_eq!(
+            owner_a.link_view_model_by_property_name_path("child2", &child),
+            Ok(true)
+        );
+        assert_eq!(
+            owner_b.link_view_model_by_property_name_path("child", &child),
+            Ok(true)
+        );
+
+        // One write through the retained child is visible through every
+        // owner: two references to the same logical child hold the same
+        // underlying cells.
+        assert!(child.borrow_mut().set_number_by_property_name("value", 77.0));
+        assert_eq!(
+            owner_a
+                .borrow()
+                .number_value_by_property_name_path("child/value"),
+            Some(77.0)
+        );
+        assert_eq!(
+            owner_b
+                .borrow()
+                .number_value_by_property_name_path("child/value"),
+            Some(77.0)
+        );
+
+        // Writes through one owner's path land in the shared child, live.
+        assert!(
+            owner_a
+                .borrow_mut()
+                .set_number_by_property_name_path("child/value", 78.0)
+        );
+        assert_eq!(
+            child.borrow().number_value_by_property_name("value"),
+            Some(78.0)
+        );
+        assert_eq!(
+            owner_b
+                .borrow()
+                .number_value_by_property_name_path("child/value"),
+            Some(78.0)
+        );
+        assert_eq!(
+            owner_a
+                .borrow()
+                .number_value_by_property_name_path("child2/value"),
+            Some(78.0),
+            "the second slot on the writing owner shares the same child"
+        );
+
+        // Clone is a DEEP copy: nothing is shared with the source graph...
+        let cloned = RuntimeOwnedViewModelHandle::new(owner_a.borrow().clone());
+        assert!(
+            cloned
+                .borrow_mut()
+                .set_number_by_property_name_path("child/value", 99.0)
+        );
+        assert_eq!(
+            child.borrow().number_value_by_property_name("value"),
+            Some(78.0),
+            "a deep copy must not write through to the source graph"
+        );
+
+        // ...but the copy preserves internal sharing topology: both child
+        // slots reference ONE copied child (one instancesMap per clone).
+        let cloned_child = cloned
+            .linked_view_model_by_property_name_path("child")
+            .expect("the copy retains its linked child");
+        let cloned_child2 = cloned
+            .linked_view_model_by_property_name_path("child2")
+            .expect("the copy retains its second linked child");
+        assert!(
+            cloned_child.ptr_eq(&cloned_child2),
+            "a child referenced twice is copied once and referenced twice"
+        );
+        assert_eq!(
+            cloned_child.borrow().number_value_by_property_name("value"),
+            Some(99.0)
+        );
+        assert_eq!(
+            cloned
+                .borrow()
+                .number_value_by_property_name_path("child2/value"),
+            Some(99.0),
+            "the second slot observes the shared copied child"
+        );
     }
 
     #[test]

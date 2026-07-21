@@ -142,7 +142,13 @@ upstream-sync-map registry).
         layer advance (`state_machine_instance.cpp:2320-2335,2555-2584`).
         `echo_show_demo` is exact; focused C++ probe coverage raises the
         probe floor to 708/708.
-      - [ ] (B) Close or fully localize `list_index_script_access`.
+      - [x] (B) `list_index_script_access` closes exact at 33,432 bytes.
+        Nested scripted drawables now initialize only after component-list
+        mounting, retain each row's occurrence-scoped context, and pull that
+        child's data binds before first draw. This mirrors pinned C++ index-
+        before-create/bind/init ordering (`artboard_component_list.cpp:759-784,
+        1453-1477,1528-1543`; `artboard.cpp:2551-2573`) instead of collapsing
+        same-graph rows through a graph-id snapshot.
       - [ ] (C) Scene facade drops the dirty-rebind bit; triggers read
         through cells.
 - [ ] (f) deletion gate follows e5.
@@ -526,3 +532,9 @@ Decisions log.)
   advance, and the old listener-only zero-time layer advance is gone.
   `echo_show_demo` flipped exact; nuxie-runtime lib 344/344 and the raised
   C++ probe floor 708/708 are green.
+- 2026-07-21 — #RB-1 e5(B) closed `list_index_script_access`: nested scripts
+  no longer consume one-shot init on provisional component-list rows or
+  collapse occurrence identity by graph id. Retained rows initialize with
+  indices 0/1/2 and pull their script mutations before first draw; the focused
+  33,432-byte scripted C++ stream is exact, and the full scripted gate is now
+  317/317 entries with 647/647 exact segments and zero failures.

@@ -360,15 +360,10 @@ fn run() -> Result<String> {
     }
     #[cfg(feature = "scripting")]
     if let Some(state) = script_artboard_render_state.as_ref() {
-        initialize_nested_scripted_drawables(
-            &runtime,
-            artboard_index,
-            &graph.artboards,
-            &mut instance,
-            factory.as_factory(),
-            state,
-            registered_script_file.as_mut(),
-        )?;
+        // Component-list children are still provisional here. Pinned C++
+        // assigns each item index before creating and binding the retained row,
+        // then initializes that row's scripted objects during the bind. Let the
+        // first scene advance mount those retained occurrences before init.
         state
             .borrow_mut()
             .realize_pending(&runtime, &graph.artboards, factory.as_factory())
@@ -2154,7 +2149,6 @@ fn initialize_nested_scripted_drawables(
     let script_assets = extract_script_assets(runtime);
     let root_context_model = selected_script_view_model(runtime, root_artboard_index);
     let mut context_models_by_depth = vec![root_context_model];
-    let mut bound_nested_contexts = Vec::new();
     let mut initialized_any = false;
     instance.try_visit_artboard_tree_instances_mut(
         &mut |depth, graph_global_id, child_instance| {
@@ -2197,9 +2191,11 @@ fn initialize_nested_scripted_drawables(
                 return Ok::<(), anyhow::Error>(());
             }
             initialized_any = true;
-            if let Some(model) = child_context_model.as_ref() {
-                bound_nested_contexts.push((graph_global_id, model.clone()));
-            }
+            // The mounted child already retains its occurrence-scoped context.
+            // Pull script mutations through that exact row before its first
+            // draw, matching C++ ArtboardComponentList::bindArtboard.
+            child_instance.advance_artboard_data_binds_with_elapsed(0.0);
+            child_instance.update_pass();
             context_models_by_depth.push(child_context_model);
             Ok::<(), anyhow::Error>(())
         },
@@ -2207,13 +2203,6 @@ fn initialize_nested_scripted_drawables(
     if !initialized_any {
         return Ok(());
     }
-    for (graph_global_id, model) in bound_nested_contexts {
-        let owned = model.owned_handle();
-        if let Some(snapshot) = owned.detached_snapshot() {
-            instance.set_nested_script_owned_context_for_graph(graph_global_id, snapshot);
-        }
-    }
-    instance.rebind_nested_script_owned_contexts(runtime);
     instance.update_pass();
     Ok(())
 }

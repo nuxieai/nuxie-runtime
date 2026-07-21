@@ -1123,6 +1123,7 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
                     &self.file.graph.artboards,
                     &self.file.external_image_assets,
                     factory,
+                    self.file.max_retained_decoded_image_bytes,
                 );
             if let Some(error) = candidate.image_decode_error() {
                 return Err(nuxie_runtime::ScriptError::new(error.to_string()));
@@ -1569,6 +1570,10 @@ pub struct File {
     graph: Arc<GraphFile>,
     external_image_assets: BTreeMap<u32, Arc<[u8]>>,
     external_font_assets: ExternalFontAssetStore,
+    // The decoded-image admission policy chosen at import time. Unlike the
+    // other `FileImportLimits` knobs this one applies at draw time, when the
+    // artboard-tree render cache decodes retained images.
+    max_retained_decoded_image_bytes: Option<usize>,
     #[cfg(feature = "scripting")]
     scripts: RefCell<FileScriptRuntime>,
 }
@@ -1688,6 +1693,7 @@ pub struct FileImportLimits {
     max_imported_file_assets: Option<usize>,
     max_file_asset_content_bytes: Option<usize>,
     max_total_file_asset_content_bytes: Option<usize>,
+    max_retained_decoded_image_bytes: Option<usize>,
 }
 
 impl FileImportLimits {
@@ -1697,6 +1703,7 @@ impl FileImportLimits {
     const DEFAULT_MAX_IMPORTED_FILE_ASSETS: usize = 16_384;
     const DEFAULT_MAX_FILE_ASSET_CONTENT_BYTES: usize = 64 * 1024 * 1024;
     const DEFAULT_MAX_TOTAL_FILE_ASSET_CONTENT_BYTES: usize = 128 * 1024 * 1024;
+    const DEFAULT_MAX_RETAINED_DECODED_IMAGE_BYTES: usize = 64 * 1024 * 1024;
 
     pub const fn new() -> Self {
         Self {
@@ -1707,6 +1714,9 @@ impl FileImportLimits {
             max_file_asset_content_bytes: Some(Self::DEFAULT_MAX_FILE_ASSET_CONTENT_BYTES),
             max_total_file_asset_content_bytes: Some(
                 Self::DEFAULT_MAX_TOTAL_FILE_ASSET_CONTENT_BYTES,
+            ),
+            max_retained_decoded_image_bytes: Some(
+                Self::DEFAULT_MAX_RETAINED_DECODED_IMAGE_BYTES,
             ),
         }
     }
@@ -1719,6 +1729,7 @@ impl FileImportLimits {
             max_imported_file_assets: None,
             max_file_asset_content_bytes: None,
             max_total_file_asset_content_bytes: None,
+            max_retained_decoded_image_bytes: None,
         }
     }
 
@@ -1760,6 +1771,19 @@ impl FileImportLimits {
         self
     }
 
+    /// Bound the aggregate decoded RGBA bytes retained by one artboard-tree
+    /// render cache. Images past the budget are not decoded and drawing
+    /// reports an image decode error.
+    ///
+    /// Pinned C++ has no aggregate decoded-image ceiling; the bounded default
+    /// here is a deliberate resource-policy divergence of the high-level host
+    /// import path (register D-row). [`Self::unbounded`] restores the C++
+    /// behavior.
+    pub const fn with_max_retained_decoded_image_bytes(mut self, maximum: usize) -> Self {
+        self.max_retained_decoded_image_bytes = Some(maximum);
+        self
+    }
+
     pub const fn max_input_bytes(self) -> Option<usize> {
         self.max_input_bytes
     }
@@ -1782,6 +1806,10 @@ impl FileImportLimits {
 
     pub const fn max_total_file_asset_content_bytes(self) -> Option<usize> {
         self.max_total_file_asset_content_bytes
+    }
+
+    pub const fn max_retained_decoded_image_bytes(self) -> Option<usize> {
+        self.max_retained_decoded_image_bytes
     }
 
     fn validate_input(self, bytes: &[u8]) -> Result<()> {
@@ -1880,6 +1908,7 @@ impl Clone for File {
             graph,
             external_image_assets: self.external_image_assets.clone(),
             external_font_assets: self.external_font_assets.clone(),
+            max_retained_decoded_image_bytes: self.max_retained_decoded_image_bytes,
             #[cfg(feature = "scripting")]
             scripts,
         }
@@ -2071,6 +2100,7 @@ impl File {
             graph: Arc::new(graph),
             external_image_assets: BTreeMap::new(),
             external_font_assets: ExternalFontAssetStore::default(),
+            max_retained_decoded_image_bytes: limits.max_retained_decoded_image_bytes(),
         })
     }
 
@@ -2337,21 +2367,20 @@ pub struct ArtboardRenderCache {
 
 fn ensure_render_paint_cache_for_draw(
     retained: &mut Option<RuntimeRenderPaintCache>,
-    runtime: &RuntimeFile,
+    file: &File,
     artboard: &ArtboardGraph,
-    artboards: &[ArtboardGraph],
-    external_image_assets: &BTreeMap<u32, Arc<[u8]>>,
     factory: &mut dyn Factory,
 ) -> std::result::Result<(), ImageDecodeError> {
     if retained.is_some() {
         return Ok(());
     }
     let candidate = RuntimeRenderPaintCache::preallocate_for_artboard_tree_with_external_images(
-        runtime,
+        &file.runtime,
         artboard,
-        artboards,
-        external_image_assets,
+        &file.graph.artboards,
+        &file.external_image_assets,
         factory,
+        file.max_retained_decoded_image_bytes,
     );
     if let Some(error) = candidate.image_decode_error() {
         return Err(error);
@@ -2870,14 +2899,7 @@ impl<'a> ArtboardInstance<'a> {
             .context("artboard instance graph is unavailable")?;
         #[cfg(feature = "scripting")]
         let had_retained_paint = cache.paint.is_some();
-        ensure_render_paint_cache_for_draw(
-            &mut cache.paint,
-            &self.file.runtime,
-            artboard,
-            &self.file.graph.artboards,
-            &self.file.external_image_assets,
-            factory,
-        )?;
+        ensure_render_paint_cache_for_draw(&mut cache.paint, self.file, artboard, factory)?;
         #[cfg(feature = "scripting")]
         if let Err(error) =
             prepare_scripted_artboard_tree(self.file, artboard, &mut self.raw, factory)
@@ -3549,14 +3571,7 @@ impl OwnedArtboardInstance {
             .context("owned artboard instance graph is unavailable")?;
         #[cfg(feature = "scripting")]
         let had_retained_paint = cache.paint.is_some();
-        ensure_render_paint_cache_for_draw(
-            &mut cache.paint,
-            &self.file.runtime,
-            artboard,
-            &self.file.graph.artboards,
-            &self.file.external_image_assets,
-            factory,
-        )?;
+        ensure_render_paint_cache_for_draw(&mut cache.paint, &self.file, artboard, factory)?;
         #[cfg(feature = "scripting")]
         if let Err(error) =
             prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)

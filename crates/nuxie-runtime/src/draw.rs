@@ -7,7 +7,7 @@ use nuxie_graph::{
     ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
     ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
 };
-use nuxie_image_codec::{MAX_DECODED_IMAGE_BYTES, decoded_rgba_len, preflight_encoded_image};
+use nuxie_image_codec::{decoded_rgba_len, preflight_encoded_image};
 use nuxie_render_api::{
     Aabb as RenderAabb, BlendMode as RenderBlendMode, Factory as RenderFactory,
     FillRule as RenderFillRule, ImageDecodeError, ImageSampler as RenderImageSampler,
@@ -42,17 +42,6 @@ use crate::text::{
     text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D, TransformProperty};
-
-// Bound all decoded image pixels retained by one artboard-tree render cache,
-// not only each individual image. Compressed assets can be tiny while their
-// canonical RGBA textures are large, so the encoded FileAsset budget cannot
-// substitute for this post-header, pre-decode reservation.
-// Keep the aggregate independently bounded while admitting ordinary Rive
-// files containing more than one large image. In particular, the upstream
-// jellyfish corpus retains 23 individually bounded images totaling just over
-// 64 MiB. Two per-image budgets preserve that valid file and still cap every
-// artboard-tree cache at 128 MiB.
-const MAX_RETAINED_DECODED_IMAGE_BYTES: usize = MAX_DECODED_IMAGE_BYTES * 2;
 
 struct RuntimeImageAssetCatalog<'a> {
     globals: Vec<u32>,
@@ -3858,7 +3847,13 @@ impl ArtboardInstance {
         ])
     }
 
-    fn runtime_will_draw(&self, drawable: &SortedDrawableNode, _include_invisible: bool) -> bool {
+    fn runtime_live_render_opacity_is_nonzero(&self, local_id: Option<usize>) -> bool {
+        local_id
+            .and_then(|local_id| self.component(local_id))
+            .is_some_and(|component| component.transform.render_opacity != 0.0)
+    }
+
+    fn runtime_will_draw(&self, drawable: &SortedDrawableNode, include_invisible: bool) -> bool {
         match drawable.kind {
             DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy => true,
             DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
@@ -3884,12 +3879,17 @@ impl ArtboardInstance {
                 }
 
                 if drawable.type_name == "Image" {
+                    // C++ `Image::willDraw` also requires a nonzero render
+                    // opacity; the retained (include_invisible) stream defers
+                    // that check to replay like the opacity types below.
                     return self
                         .resolved_image_asset_global(
                             drawable.local_id,
                             drawable.resolved_image_asset_global,
                         )
-                        .is_some();
+                        .is_some()
+                        && (include_invisible
+                            || self.runtime_live_render_opacity_is_nonzero(drawable.local_id));
                 }
 
                 if sorted_drawable_is_nested_artboard(drawable.type_name) {
@@ -3897,12 +3897,18 @@ impl ArtboardInstance {
                 }
 
                 if sorted_drawable_uses_render_opacity(drawable.type_name) {
-                    // Retain the drawable/paint topology across opacity
-                    // updates. C++ evaluates Drawable::willDraw against the
-                    // live component at replay time; filtering here made the
-                    // first settled frame rebuild every path hidden by the
-                    // instance's pre-update opacity.
-                    return drawable.local_id.is_some();
+                    if include_invisible {
+                        // Retain the drawable/paint topology across opacity
+                        // updates. The prepared-frame replay applies C++'s
+                        // live `willDraw` via
+                        // `runtime_draw_command_will_draw_live`; filtering
+                        // here made the first settled frame rebuild every
+                        // path hidden by the instance's pre-update opacity.
+                        return drawable.local_id.is_some();
+                    }
+                    // C++ `Shape::willDraw`/`TextInputDrawable::willDraw`:
+                    // `Super::willDraw() && renderOpacity() != 0.0f`.
+                    return self.runtime_live_render_opacity_is_nonzero(drawable.local_id);
                 }
 
                 true
@@ -9181,6 +9187,7 @@ impl RuntimeRenderPaintCache {
         artboards: &[ArtboardGraph],
         external_images: &BTreeMap<u32, Arc<[u8]>>,
         factory: &mut dyn RenderFactory,
+        max_retained_decoded_image_bytes: Option<usize>,
     ) -> Self {
         preallocate_render_paint_cache_for_artboard_tree_internal(
             runtime,
@@ -9192,6 +9199,7 @@ impl RuntimeRenderPaintCache {
             true,
             false,
             None,
+            max_retained_decoded_image_bytes,
         )
     }
 
@@ -9212,6 +9220,11 @@ impl RuntimeRenderPaintCache {
 pub struct RuntimeRenderImages {
     images_by_global: Vec<Option<RuntimeRenderImageEntry>>,
     retained_decoded_bytes: usize,
+    // `None` retains every decoded image, matching pinned C++, which has no
+    // aggregate decoded-image ceiling. Bounded admission is a host import
+    // policy chosen per cache by the high-level `nuxie::File` path; the
+    // low-level compatibility/golden paths stay unbounded.
+    max_retained_decoded_bytes: Option<usize>,
 }
 
 struct RuntimeRenderImageEntry {
@@ -9220,6 +9233,17 @@ struct RuntimeRenderImageEntry {
 }
 
 impl RuntimeRenderImages {
+    /// An image cache whose aggregate decoded-byte admission follows the
+    /// caller's import policy. Compressed assets can be tiny while their
+    /// canonical RGBA textures are large, so the encoded FileAsset budget
+    /// cannot substitute for this post-header, pre-decode reservation.
+    pub fn with_max_retained_decoded_bytes(max_retained_decoded_bytes: Option<usize>) -> Self {
+        Self {
+            max_retained_decoded_bytes,
+            ..Self::default()
+        }
+    }
+
     pub fn get(&self, global_id: u32) -> Option<&dyn RenderImage> {
         self.images_by_global
             .get(global_id as usize)
@@ -9254,7 +9278,10 @@ impl RuntimeRenderImages {
             .retained_decoded_bytes
             .checked_sub(replaced_decoded_byte_length)?
             .checked_add(decoded_byte_length)?;
-        if next_retained_decoded_bytes > MAX_RETAINED_DECODED_IMAGE_BYTES {
+        if self
+            .max_retained_decoded_bytes
+            .is_some_and(|budget| next_retained_decoded_bytes > budget)
+        {
             return None;
         }
         let previous_retained_decoded_bytes = self.retained_decoded_bytes;
@@ -10782,12 +10809,14 @@ impl RuntimeRenderPathCache {
             );
             let layout_bounds = layout_frame.bounds.clone();
             let sorted_drawable_order = self.sorted_drawable_order_frame(instance, graph);
+            // Retain invisible drawables so the prepared stream's topology is
+            // stable across opacity writes; replay applies the live willDraw.
             let commands = instance.draw_commands_with_sorted_drawable_order_reusing(
                 graph,
                 layout_bounds.as_ref().as_ref(),
                 sorted_drawable_order.as_slice(),
                 self,
-                false,
+                true,
                 reusable_commands,
             );
             let background =
@@ -11402,7 +11431,7 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     // meshes are cloned. Script-enabled callers use the dedicated helpers and
     // realize script-hosted children at the point the script requests them.
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, None, factory, false, true, false, None,
+        runtime, graph, artboards, None, factory, false, true, false, None, None,
     )
 }
 
@@ -11428,6 +11457,7 @@ pub fn preallocate_render_paint_cache_for_artboard_tree_with_external_images(
         true,
         false,
         None,
+        None,
     )
 }
 
@@ -11438,7 +11468,7 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, None, factory, false, true, true, None,
+        runtime, graph, artboards, None, factory, false, true, true, None, None,
     )
 }
 
@@ -11461,6 +11491,7 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_regis
         true,
         true,
         Some(&mut register_file_scripts),
+        None,
     )
 }
 
@@ -11471,7 +11502,7 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_pa
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, None, factory, false, false, true, None,
+        runtime, graph, artboards, None, factory, false, false, true, None, None,
     )
 }
 
@@ -11485,6 +11516,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     allocate_source_paints: bool,
     scripting_file_assets: bool,
     file_registration: Option<&mut dyn FnMut(&mut dyn RenderFactory)>,
+    max_retained_decoded_image_bytes: Option<usize>,
 ) -> RuntimeRenderPaintCache {
     // Import FileAssetContents once for the whole cache build. Looking up the
     // embedded payload independently for every image rescans the complete
@@ -11497,7 +11529,8 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         &image_assets,
         scripting_file_assets,
     );
-    let mut images = RuntimeRenderImages::default();
+    let mut images =
+        RuntimeRenderImages::with_max_retained_decoded_bytes(max_retained_decoded_image_bytes);
     let mut image_decode_error = None;
     for asset_global in image_assets
         .globals
@@ -25778,6 +25811,10 @@ mod tests {
         encoded
     }
 
+    // The bounded host import policy exercised by these admission tests; the
+    // high-level `nuxie::File` default in `FileImportLimits`.
+    const HOST_BOUNDED_DECODED_IMAGE_BYTES: usize = 64 * 1024 * 1024;
+
     #[test]
     fn retained_images_reserve_one_aggregate_decoded_budget_before_decode() {
         const WIDTH: u32 = 4_096;
@@ -25826,22 +25863,6 @@ mod tests {
                     AuthoringValue::Uint(12),
                 )],
             ),
-            authoring_record(
-                "ImageAsset",
-                vec![authoring_property(
-                    "ImageAsset",
-                    "assetId",
-                    AuthoringValue::Uint(13),
-                )],
-            ),
-            authoring_record(
-                "ImageAsset",
-                vec![authoring_property(
-                    "ImageAsset",
-                    "assetId",
-                    AuthoringValue::Uint(14),
-                )],
-            ),
             authoring_record("Artboard", Vec::new()),
         ])
         .expect("mixed embedded/external image fixture imports");
@@ -25852,12 +25873,10 @@ mod tests {
             .map(|asset| asset.id)
             .collect::<Vec<_>>();
         let image_assets = RuntimeImageAssetCatalog::from_runtime(&file);
-        assert_eq!(image_globals.len(), 5);
+        assert_eq!(image_globals.len(), 3);
         let external_images = BTreeMap::from([
             (11, Arc::<[u8]>::from(encoded.clone())),
-            (12, Arc::<[u8]>::from(encoded.clone())),
-            (13, Arc::<[u8]>::from(encoded.clone())),
-            (14, Arc::<[u8]>::from(encoded)),
+            (12, Arc::<[u8]>::from(encoded)),
         ]);
         let stats = Rc::new(CountingStats::default());
         stats.image_decode_failures_remaining.set(1);
@@ -25865,7 +25884,9 @@ mod tests {
             stats: Rc::clone(&stats),
             next_path_id: 0,
         };
-        let mut images = RuntimeRenderImages::default();
+        let mut images = RuntimeRenderImages::with_max_retained_decoded_bytes(Some(
+            HOST_BOUNDED_DECODED_IMAGE_BYTES,
+        ));
 
         assert_eq!(
             predecode_render_image(
@@ -25897,71 +25918,53 @@ mod tests {
             &mut factory,
             &mut images,
         )
-        .expect("second image fits the aggregate budget");
-        predecode_render_image(
-            &file,
-            &image_assets,
-            image_globals[2],
-            Some(&external_images),
-            &mut factory,
-            &mut images,
-        )
-        .expect("third image fits the aggregate budget");
-        predecode_render_image(
-            &file,
-            &image_assets,
-            image_globals[3],
-            Some(&external_images),
-            &mut factory,
-            &mut images,
-        )
-        .expect("fourth image fills the aggregate budget");
+        .expect("external image fills the remaining budget");
         assert_eq!(
             images.retained_decoded_bytes,
-            MAX_RETAINED_DECODED_IMAGE_BYTES
+            HOST_BOUNDED_DECODED_IMAGE_BYTES
         );
         assert_eq!(
             predecode_render_image(
                 &file,
                 &image_assets,
-                image_globals[4],
+                image_globals[2],
                 Some(&external_images),
                 &mut factory,
                 &mut images,
             ),
             Err(ImageDecodeError),
-            "the fifth individually valid compressed image exceeds the aggregate budget"
+            "the third individually valid compressed image exceeds the aggregate budget"
         );
         assert_eq!(
             stats.image_decode_attempts.get(),
-            5,
+            3,
             "aggregate admission rejects before invoking the decoder"
         );
         assert!(images.get(image_globals[0]).is_some());
         assert!(images.get(image_globals[1]).is_some());
-        assert!(images.get(image_globals[2]).is_some());
-        assert!(images.get(image_globals[3]).is_some());
-        assert!(images.get(image_globals[4]).is_none());
+        assert!(images.get(image_globals[2]).is_none());
     }
 
     #[test]
     fn retained_image_replacement_admits_net_size_and_rejects_atomically() {
-        const QUARTER_BUDGET_WIDTH: u32 = 4_096;
-        const QUARTER_BUDGET_HEIGHT: u32 = 2_048;
+        const HALF_BUDGET_WIDTH: u32 = 4_096;
+        const HALF_BUDGET_HEIGHT: u32 = 2_048;
 
-        let mut images = RuntimeRenderImages::default();
-        for global_id in [7, 8, 9, 10] {
+        let mut images = RuntimeRenderImages::with_max_retained_decoded_bytes(Some(
+            HOST_BOUNDED_DECODED_IMAGE_BYTES,
+        ));
+        for global_id in [7, 8] {
             images.insert(
                 global_id,
                 Box::new(SizedTestRenderImage {
-                    width: QUARTER_BUDGET_WIDTH,
-                    height: QUARTER_BUDGET_HEIGHT,
+                    width: HALF_BUDGET_WIDTH,
+                    height: HALF_BUDGET_HEIGHT,
                 }),
             );
         }
         assert_eq!(
-            images.retained_decoded_bytes, MAX_RETAINED_DECODED_IMAGE_BYTES,
-            "four quarter-budget images fill the aggregate exactly",
+            images.retained_decoded_bytes, HOST_BOUNDED_DECODED_IMAGE_BYTES,
+            "two half-budget images fill the aggregate exactly",
         );
 
         images.insert(
@@ -25973,13 +25976,9 @@ mod tests {
         );
         let replacement = images.get(7).expect("smaller replacement is retained");
         assert_eq!((replacement.width(), replacement.height()), (1, 1));
-        let quarter_budget = decoded_rgba_len(QUARTER_BUDGET_WIDTH, QUARTER_BUDGET_HEIGHT)
-            .expect("quarter-budget dimensions are valid");
-        let retained_after_replacement = quarter_budget
-            .checked_mul(3)
-            .and_then(|retained| {
-                retained.checked_add(decoded_rgba_len(1, 1).expect("one pixel is valid"))
-            })
+        let retained_after_replacement = decoded_rgba_len(HALF_BUDGET_WIDTH, HALF_BUDGET_HEIGHT)
+            .expect("half-budget dimensions are valid")
+            .checked_add(decoded_rgba_len(1, 1).expect("one pixel is valid"))
             .expect("test dimensions fit usize");
         assert_eq!(images.retained_decoded_bytes, retained_after_replacement);
 
@@ -25996,12 +25995,36 @@ mod tests {
         assert_eq!(
             (retained.width(), retained.height()),
             (1, 1),
-            "the other three quarter-budget images plus a 48 MiB replacement exceed the aggregate",
+            "the other half-budget image plus a 48 MiB replacement exceeds the aggregate",
         );
         assert_eq!(
             images.retained_decoded_bytes, retained_after_replacement,
             "a rejected replacement must not mutate aggregate accounting",
         );
+    }
+
+    #[test]
+    fn retained_images_without_budget_admit_past_the_bounded_host_policy() {
+        const HALF_BUDGET_WIDTH: u32 = 4_096;
+        const HALF_BUDGET_HEIGHT: u32 = 2_048;
+
+        let mut images = RuntimeRenderImages::default();
+        for global_id in [7, 8, 9] {
+            images.insert(
+                global_id,
+                Box::new(SizedTestRenderImage {
+                    width: HALF_BUDGET_WIDTH,
+                    height: HALF_BUDGET_HEIGHT,
+                }),
+            );
+        }
+        for global_id in [7, 8, 9] {
+            assert!(
+                images.get(global_id).is_some(),
+                "the unbounded compatibility path retains every image, like C++",
+            );
+        }
+        assert!(images.retained_decoded_bytes > HOST_BOUNDED_DECODED_IMAGE_BYTES);
     }
 
     #[test]

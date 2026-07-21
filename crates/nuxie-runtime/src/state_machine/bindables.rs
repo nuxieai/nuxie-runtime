@@ -784,6 +784,15 @@ pub(crate) fn runtime_bindable_numbers<'a>(
             converter_cache,
         )
         .or_else(|| {
+            // C++ `DataBindContext::bindFromContext` unbinds a name-based
+            // bind whose relative lookup fails: the source stays absent
+            // instead of holding the serialized target value.
+            if file
+                .data_bind_is_name_based_for_object(data_bind)
+                .unwrap_or(false)
+            {
+                return None;
+            }
             runtime_bindable_number_unresolved_view_model_source(
                 file,
                 data_bind_index,

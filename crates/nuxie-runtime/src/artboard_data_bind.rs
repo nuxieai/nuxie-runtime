@@ -5515,8 +5515,11 @@ impl ArtboardInstance {
                 .as_ref()
                 .and_then(RuntimeDataBindGraphConverter::number_to_list_view_model_id)
                 .is_some();
+            // C++ materializes component-list instances during the data-bind
+            // advance pass, never at context-bind time, so a freshly bound
+            // list target always reports size zero until the next advance.
             let target_list_size = match target_value {
-                Some(RuntimeDataBindGraphValue::List { item_count }) => Some(item_count),
+                Some(RuntimeDataBindGraphValue::List { .. }) => Some(0),
                 _ => None,
             };
             binding.default_value = source_value;

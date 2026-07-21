@@ -12,20 +12,18 @@ No new size budget is set in this document. Choosing one is the #B-3
 ## Current measurement
 
 Measured 2026-07-20 from `main` runtime code at `1b6af6e2` plus the #B-3
-measurement-only changes. Both consecutive runs of `make size-report` produced
-the same byte counts and byte-identical artifacts.
+measurement-only consumer harness. The committed evidence snapshot records the
+exact measurement revision, artifact digests, toolchain, public-root inventory,
+and symbol-size breakdown. Two consecutive runs of `make size-report` produced
+the same output and byte-identical artifacts.
 
 | `release-size` link closure | Bytes | MiB | Delta from scripting OFF |
 |---|---:|---:|---:|
-| Renderer ON, scripting OFF — tracked metric | **7,384,552** | **7.04** | — |
-| Renderer ON, scripting ON | **8,202,280** | **7.82** | **+817,728 B (+11.1%)** |
-
-The optional stripped opt-level=3 renderer-on/scripting-off closure is
-9,989,832 B (9.53 MiB). The tracked `release-size` profile is 2,605,280 B
-(26.1%) smaller under the same link-root and strip contract.
+| Renderer ON, scripting OFF — tracked metric | **7,517,400** | **7.17** | — |
+| Renderer ON, scripting ON | **8,318,616** | **7.93** | **+801,216 B (+10.7%)** |
 
 The historical budget was **2.75 MiB = 2,883,584 B** per architecture. The new
-renderer-on, scripting-off measurement is **4,500,968 B (+156.1%) above** that
+renderer-on, scripting-off measurement is **4,633,816 B (+160.7%) above** that
 number. This is informational only: `make size-report` does not enforce the old
 budget or infer a replacement.
 
@@ -33,14 +31,14 @@ The scripting-off section layout reported by Apple's `size -m` is:
 
 | Mach-O region | Bytes |
 |---|---:|
-| `__TEXT` segment | 6,733,824 |
-| `__text` section | 4,596,016 |
-| `__const` section in `__TEXT` | 1,067,644 |
-| `__cstring` | 119,314 |
-| `__unwind_info` | 165,224 |
-| `__eh_frame` | 411,692 |
-| `__DATA_CONST` segment | 507,904 |
-| `__const` section in `__DATA_CONST` | 504,536 |
+| `__TEXT` segment | 6,848,512 |
+| `__text` section | 4,672,800 |
+| `__const` section in `__TEXT` | 1,073,020 |
+| `__cstring` | 119,316 |
+| `__unwind_info` | 169,456 |
+| `__eh_frame` | 419,788 |
+| `__DATA_CONST` segment | 524,288 |
+| `__const` section in `__DATA_CONST` | 508,424 |
 | `__DATA` segment | 16,384 |
 | `__LINKEDIT` segment | 131,072 |
 
@@ -58,16 +56,18 @@ not Cargo's callback-only `libnux_capi.dylib`. The report constructs each
 artifact mechanically:
 
 1. Build `nux-capi` as `staticlib` + `cdylib` under the `release-size` profile,
-   with `--no-default-features --features apple-renderer`; add
-   `nuxie/scripting` for the scripting-on variant.
+   with `--no-default-features --features size-report-roots`; add
+   `nuxie/scripting` for the scripting-on variant. The measurement feature
+   implies `apple-renderer` and is absent from normal SDK builds.
 2. Verify the resolved dependency graph contains `nuxie-renderer` and the
    repository's vendored `wgpu` 30.0.0.
-3. Re-link the staticlib as one Mach-O dylib, retaining every public `_nux_*`
-   C ABI export plus every public `WgpuFactory` / `WgpuFrame` entry point (28
-   renderer roots in this measurement).
+3. Verify the measurement consumer's 31 calls exactly match the public methods
+   found in the renderer source: 16 inherent methods, seven `Factory` methods,
+   and eight `Renderer` methods. Re-link the staticlib as one Mach-O dylib,
+   retaining every public `_nux_*` C ABI export plus that exact consumer root.
 4. Link with `-dead_strip -dead_strip_dylibs`, verify the C ABI export set is
-   unchanged and both `WgpuFactory::new_with_mode` and `wgpu_core` survived,
-   then run `strip -S -x`.
+   unchanged and both the exact consumer root and `wgpu_core` survived, then
+   run `strip -S -x`.
 
 This root set models an application consuming the full portable ABI and public
 `WgpuFactory` / `WgpuFrame` renderer surface. It deliberately avoids two
@@ -118,10 +118,11 @@ make size-report SIZE_BASELINE=1  # additionally measures the stripped opt=3 clo
 ```
 
 The command fails rather than printing a partial number if the renderer or
-vendored wgpu is absent, fewer than 30 C ABI roots or 20 renderer roots are
-found, the linked export set changes, or renderer/wgpu symbols do not survive
-the link. The scripting-on variant must retain `nuxie-scripting` + `luaur-vm`,
-and the scripting-off variant must retain neither. The command restores Cargo's
+vendored wgpu is absent, the committed renderer inventory differs from either
+the public source API or the consumer harness, the compiled consumer root is
+not unique, the C ABI closure is incomplete, or the linked export set changes.
+The scripting-on variant must retain `nuxie-scripting` + `luaur-vm`, and the
+scripting-off variant must retain neither. The command restores Cargo's
 renderer-on/scripting-off `release-size` output after measuring both variants.
 
 ## Budget status — USER-GATE

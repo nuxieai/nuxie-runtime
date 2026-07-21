@@ -11,6 +11,10 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 [features]
 default = []
 apple-renderer = ["nuxie/renderer"]
+# Measurement-only consumer harness used by tools/size-report.sh. This keeps
+# the public renderer call surface alive under fat LTO without changing normal
+# SDK builds or exposing the harness through the shipped C header.
+size-report-roots = ["apple-renderer"]
 
 [dependencies]
 nuxie = { path = "../nuxie", default-features = false }

@@ -1,5 +1,8 @@
 mod render_callbacks;
 
+#[cfg(feature = "size-report-roots")]
+mod size_report_roots;
+
 pub use render_callbacks::{NuxImageSampler, NuxRawPathView, NuxRenderCallbacks};
 
 use nuxie::{ArtboardInstance, ArtboardRenderCache, File, StateMachineInstance, ViewModelInstance};

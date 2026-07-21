@@ -392,6 +392,7 @@ class PortManifestCliTest(unittest.TestCase):
 
     def test_generate_seeds_every_cpp_surface_named_by_the_feature_register(self) -> None:
         expected = {
+            "src/artboard.cpp": ("partial", "F1"),
             "src/assets/audio_asset.cpp": ("partial", "F1"),
             "src/audio/audio_engine.cpp": ("absent", "F1"),
             "src/audio/audio_reader.cpp": ("absent", "F1"),

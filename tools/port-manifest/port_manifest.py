@@ -14,6 +14,11 @@ import tomllib
 
 STATUSES = {"ported", "partial", "absent", "not-applicable"}
 FEATURE_ROWS = {
+    "src/artboard.cpp": (
+        "partial",
+        "crates/nuxie-runtime/src/artboard.rs",
+        "F1: core artboard behavior is ported; Artboard::volume remains absent.",
+    ),
     "src/text/cursor.cpp": (
         "partial",
         "crates/nuxie-runtime/src/text.rs",

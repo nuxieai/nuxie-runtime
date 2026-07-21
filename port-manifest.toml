@@ -565,9 +565,9 @@ note = "Consolidated Rust port for animation."
 
 [[file]]
 upstream = "src/artboard.cpp"
-status = "ported"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
-note = "Consolidated runtime port."
+status = "partial"
+rust_module = "crates/nuxie-runtime/src/artboard.rs"
+note = "F1: core artboard behavior is ported; Artboard::volume remains absent."
 
 [[file]]
 upstream = "src/artboard_component_list.cpp"

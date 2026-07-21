@@ -24,6 +24,8 @@ struct RootArgs {
     factory: *mut WgpuFactory,
     frame: *mut WgpuFrame,
     surface: *mut AppleSurface,
+    completion: *mut ApplePresentationCompletion,
+    drawable: *mut c_void,
     path: *const Box<dyn RenderPath>,
     paint: *const Box<dyn RenderPaint>,
     image: *const Box<dyn RenderImage>,
@@ -505,8 +507,13 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
+            let completion = unsafe {
+                args.completion
+                    .as_mut()
+                    .map(|completion| ptr::read(completion))
+            };
             black_box(
-                unsafe { surface.present(factory, ptr::read(frame), ptr::null_mut(), None) }
+                unsafe { surface.present(factory, ptr::read(frame), args.drawable, completion) }
                     .is_ok(),
             );
             0

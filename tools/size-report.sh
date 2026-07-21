@@ -127,10 +127,14 @@ verify_renderer_root_inventory() {
     diff -u "$ROOT_INVENTORY" "$HARNESS_ROOTS" >&2 || true
     return 1
   fi
+  if ! grep -Fq "match selector % ${PUBLIC_ROOT_COUNT} {" "$ROOT_HARNESS"; then
+    echo "renderer size-report consumer selector does not cover all ${PUBLIC_ROOT_COUNT} audited roots" >&2
+    return 1
+  fi
 }
 
-verify_renderer_root_inventory
 PUBLIC_ROOT_COUNT=$(wc -l <"$ROOT_INVENTORY" | tr -d ' ')
+verify_renderer_root_inventory
 
 fsize() { stat -f%z "$1"; }
 mib()   { awk -v b="$1" 'BEGIN{printf "%.2f", b/1048576}'; }

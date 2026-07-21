@@ -29,3 +29,14 @@ trait Renderer::clip_path
 trait Renderer::draw_image
 trait Renderer::draw_image_mesh
 trait Renderer::modulate_opacity
+inherent ApplePresentationCompletion::new
+inherent AppleSurface::attach_with_factory
+inherent AppleSurface::attach
+inherent AppleSurface::dimensions
+inherent AppleSurface::is_attached
+inherent AppleSurface::resize
+inherent AppleSurface::detach
+inherent AppleSurface::reattach
+inherent AppleSurface::copy_metal_device
+inherent AppleSurface::preflight_present
+inherent AppleSurface::present

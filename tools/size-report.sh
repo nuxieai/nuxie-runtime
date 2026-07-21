@@ -8,9 +8,10 @@
 #
 # This report builds the nux-capi staticlib, then performs the final Darwin
 # link explicitly. It retains every public nux-capi C ABI export plus the
-# public WgpuFactory/WgpuFrame entry points, dead-strips the resulting closure,
-# and applies `strip -S -x`. The result is a consumed-SDK link-closure proxy,
-# not the size of the `.a` archive and not the callback-only Cargo cdylib.
+# public WgpuFactory/WgpuFrame and Darwin presentation entry points,
+# dead-strips the resulting closure, and applies `strip -S -x`. The result is
+# a consumed-SDK link-closure proxy, not the size of the `.a` archive and not
+# the callback-only Cargo cdylib.
 #
 # Usage:
 #   tools/size-report.sh              # release-size, renderer + scripting off/on
@@ -62,10 +63,20 @@ mkdir -p "$REPORT_DIR"
 
 ROOT_INVENTORY="tools/size-report-renderer-roots.txt"
 RENDERER_SOURCE="crates/nuxie-renderer/src/lib.rs"
+RENDERER_SURFACE_SOURCE="crates/nuxie-renderer/src/surface.rs"
 ROOT_HARNESS="crates/nux-capi/src/size_report_roots.rs"
 SOURCE_ROOTS="${REPORT_DIR}/renderer-public-api-from-source.txt"
 HARNESS_ROOTS="${REPORT_DIR}/renderer-public-api-from-harness.txt"
-MEASUREMENT_REVISION="${NUX_RUNTIME_SOURCE_REVISION:-$(git rev-parse --verify HEAD)}"
+ACTUAL_REVISION="$(git rev-parse --verify HEAD)"
+MEASUREMENT_REVISION="${NUX_RUNTIME_SOURCE_REVISION:-$ACTUAL_REVISION}"
+if [[ "$MEASUREMENT_REVISION" != "$ACTUAL_REVISION" ]]; then
+  echo "size-report source revision override does not match HEAD: ${MEASUREMENT_REVISION} != ${ACTUAL_REVISION}" >&2
+  exit 2
+fi
+if ! git diff --quiet HEAD --; then
+  echo "size-report refuses a dirty tracked worktree; commit the measured sources first" >&2
+  exit 2
+fi
 export NUX_RUNTIME_SOURCE_REVISION="$MEASUREMENT_REVISION"
 
 extract_impl_block() { # exact impl header, source file
@@ -97,6 +108,10 @@ verify_renderer_root_inventory() {
       | sed -En 's/^    ((async|const|unsafe)[[:space:]]+)*fn ([a-zA-Z0-9_]+).*/trait Factory::\3/p'
     extract_impl_block 'impl Renderer for WgpuFrame {' "$RENDERER_SOURCE" \
       | sed -En 's/^    ((async|const|unsafe)[[:space:]]+)*fn ([a-zA-Z0-9_]+).*/trait Renderer::\3/p'
+    extract_impl_block 'impl ApplePresentationCompletion {' "$RENDERER_SURFACE_SOURCE" \
+      | sed -En 's/^    pub ([^[:space:]]+[[:space:]]+)*fn ([a-zA-Z0-9_]+).*/inherent ApplePresentationCompletion::\2/p'
+    extract_impl_block 'impl AppleSurface {' "$RENDERER_SURFACE_SOURCE" \
+      | sed -En 's/^    pub ([^[:space:]]+[[:space:]]+)*fn ([a-zA-Z0-9_]+).*/inherent AppleSurface::\2/p'
   } >"$SOURCE_ROOTS"
 
   sed -nE 's/^[[:space:]]*[0-9_]+ => root!\("([^"]+)".*/\1/p' \
@@ -308,7 +323,7 @@ echo "=================================================================="
 echo " Nuxie full SDK link-closure size report"
 echo " Rust target: ${RUST_TARGET} (Mach-O ${HOST_ARCH})"
 echo " Source revision: ${MEASUREMENT_REVISION}"
-echo " closure: all nux-capi exports + public WgpuFactory/WgpuFrame roots"
+echo " closure: all nux-capi exports + complete public Darwin renderer roots"
 echo " link: dead_strip + dead_strip_dylibs; post-link strip -S -x"
 echo "=================================================================="
 echo

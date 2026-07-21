@@ -2,14 +2,15 @@
 //!
 //! Fat LTO removes renderer methods that the portable C ABI does not call.
 //! `tools/size-report.sh` links this one hidden root to model a Rust host that
-//! consumes every public `WgpuFactory` / `WgpuFrame` entry point. The report
-//! verifies the `root!` inventory against both the renderer source and the
-//! committed audited inventory before accepting a measurement.
+//! consumes every public `WgpuFactory` / `WgpuFrame` entry point plus the
+//! Darwin presentation surface. The report verifies the `root!` inventory
+//! against both renderer source files and the committed audited inventory
+//! before accepting a measurement.
 
 use nuxie::{
-    BlendMode, Factory, FillRule, ImageFilter, ImageSampler, ImageWrap, Mat2D, RawPath,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderMode, RenderPaint,
-    RenderPath, Renderer, WgpuFactory, WgpuFrame,
+    ApplePresentationCompletion, AppleSurface, BlendMode, Factory, FillRule, ImageFilter,
+    ImageSampler, ImageWrap, Mat2D, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType,
+    RenderImage, RenderMode, RenderPaint, RenderPath, Renderer, WgpuFactory, WgpuFrame,
 };
 use std::ffi::c_void;
 use std::future::Future;
@@ -22,6 +23,7 @@ use std::task::{Context, Poll, Waker};
 struct RootArgs {
     factory: *mut WgpuFactory,
     frame: *mut WgpuFrame,
+    surface: *mut AppleSurface,
     path: *const Box<dyn RenderPath>,
     paint: *const Box<dyn RenderPaint>,
     image: *const Box<dyn RenderImage>,
@@ -147,7 +149,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
         unsafe { std::slice::from_raw_parts(args.stops, args.stop_len) }
     };
 
-    match selector % 31 {
+    match selector % 42 {
         0 => root!("inherent WgpuFactory::validate_image_bytes", {
             black_box(WgpuFactory::validate_image_bytes(bytes).is_ok());
             0
@@ -403,11 +405,110 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             );
             0
         }),
-        _ => root!("trait Renderer::modulate_opacity", {
+        30 => root!("trait Renderer::modulate_opacity", {
             let Some(frame) = (unsafe { args.frame.as_mut() }) else {
                 return 0;
             };
             Renderer::modulate_opacity(frame, args.scalar);
+            0
+        }),
+        31 => root!("inherent ApplePresentationCompletion::new", {
+            black_box(ApplePresentationCompletion::new(|| {}));
+            0
+        }),
+        32 => root!("inherent AppleSurface::attach_with_factory", {
+            black_box(
+                AppleSurface::attach_with_factory(args.width, args.height, render_mode(selector))
+                    .is_ok(),
+            );
+            0
+        }),
+        33 => root!("inherent AppleSurface::attach", {
+            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
+                return 0;
+            };
+            black_box(AppleSurface::attach(factory, args.width, args.height).is_ok());
+            0
+        }),
+        34 => root!("inherent AppleSurface::dimensions", {
+            let Some(surface) = (unsafe { args.surface.as_ref() }) else {
+                return 0;
+            };
+            black_box(surface.dimensions());
+            0
+        }),
+        35 => root!("inherent AppleSurface::is_attached", {
+            let Some(surface) = (unsafe { args.surface.as_ref() }) else {
+                return 0;
+            };
+            black_box(surface.is_attached());
+            0
+        }),
+        36 => root!("inherent AppleSurface::resize", {
+            let Some(surface) = (unsafe { args.surface.as_mut() }) else {
+                return 0;
+            };
+            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
+                return 0;
+            };
+            black_box(surface.resize(factory, args.width, args.height).is_ok());
+            0
+        }),
+        37 => root!("inherent AppleSurface::detach", {
+            let Some(surface) = (unsafe { args.surface.as_mut() }) else {
+                return 0;
+            };
+            surface.detach();
+            0
+        }),
+        38 => root!("inherent AppleSurface::reattach", {
+            let Some(surface) = (unsafe { args.surface.as_mut() }) else {
+                return 0;
+            };
+            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
+                return 0;
+            };
+            black_box(surface.reattach(factory, args.width, args.height).is_ok());
+            0
+        }),
+        39 => root!("inherent AppleSurface::copy_metal_device", {
+            let Some(surface) = (unsafe { args.surface.as_ref() }) else {
+                return 0;
+            };
+            let Some(factory) = (unsafe { args.factory.as_ref() }) else {
+                return 0;
+            };
+            black_box(surface.copy_metal_device(factory).is_ok());
+            0
+        }),
+        40 => root!("inherent AppleSurface::preflight_present", {
+            let Some(surface) = (unsafe { args.surface.as_ref() }) else {
+                return 0;
+            };
+            let Some(factory) = (unsafe { args.factory.as_ref() }) else {
+                return 0;
+            };
+            black_box(
+                surface
+                    .preflight_present(factory, selector & 1 != 0)
+                    .is_ok(),
+            );
+            0
+        }),
+        _ => root!("inherent AppleSurface::present", {
+            let Some(surface) = (unsafe { args.surface.as_mut() }) else {
+                return 0;
+            };
+            let Some(factory) = (unsafe { args.factory.as_mut() }) else {
+                return 0;
+            };
+            let Some(frame) = (unsafe { args.frame.as_mut() }) else {
+                return 0;
+            };
+            black_box(
+                unsafe { surface.present(factory, ptr::read(frame), ptr::null_mut(), None) }
+                    .is_ok(),
+            );
             0
         }),
     }

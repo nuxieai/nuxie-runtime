@@ -127,6 +127,20 @@ upstream-sync-map registry).
   - [ ] (f) deletion gate: mutation clocks, candidate vectors, listener
     rescans, alias mirrors, Scene-wide rebind bit all removed; floors at
     completed values including the four currently-red scripted entries.
+- [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
+  from Anthropic's migration methodology) — sweep all 447 port-manifest
+  rows comparing each C++ file's ARCHITECTURE against its Rust module:
+  (a) retained identity vs copies, (b) push/dependents vs polling,
+  (c) update-cycle ordering, (d) ownership/lifecycle, (e) mechanisms with
+  no C++ counterpart (compensation smell: generations, rescan loops,
+  mirrors, epochs). Classify ISOMORPHIC / ADAPTED (rule cited) /
+  DIVERGENT (rebuild ticket like RB-1, or explicit D-row). Prereqs:
+  (i) extend docs/PORTING.md with architecture-fidelity rules from RB-1 so
+  reviewers cite rules; (ii) VALIDATE THE JUDGE — the audit brief must
+  flag the known-bad pre-RB-1 data-binding design (calibrate at commit
+  bf051718's ancestors) and pass a known-good subsystem before the
+  447-row fan-out is trusted. Batch fan-out over the #B-2 manifest in
+  dependency order; findings feed the ticket queue mechanically.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive

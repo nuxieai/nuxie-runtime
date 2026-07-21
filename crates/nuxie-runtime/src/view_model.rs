@@ -1,6 +1,6 @@
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet};
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use nuxie_binary::{
@@ -1528,13 +1528,6 @@ pub struct RuntimeOwnedViewModelInstance {
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
     view_models: Vec<RuntimeOwnedViewModelViewModel>,
-    linked_aliases: Vec<RuntimeOwnedViewModelAlias>,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeOwnedViewModelAlias {
-    owner: Weak<RefCell<RuntimeOwnedViewModelInstance>>,
-    property_index: usize,
 }
 
 #[derive(Debug)]
@@ -1628,11 +1621,10 @@ impl RuntimeOwnedViewModelHandle {
         let handle = Self {
             instance: Rc::new(RefCell::new(instance)),
         };
-        // A bare instance (e.g. a fresh deep copy) cannot register itself as
-        // an alias owner on its linked children without an `Rc` identity;
-        // completing the registration here keeps structural forwarding alive
-        // for cloned-then-wrapped graphs. No-op without linked children.
-        register_owned_view_model_link_aliases(&handle.instance);
+        // Structural/list dirt still uses a shared clock until those slots
+        // gain retained dependents later in slice (f). Scalar identity is
+        // already carried directly by the linked child cells.
+        merge_owned_view_model_link_clocks(&handle.instance);
         handle
     }
 
@@ -1725,7 +1717,7 @@ impl RuntimeOwnedViewModelHandle {
         if property_path.contains('/') {
             return Err(RuntimeViewModelLinkError::NestedPathUnsupported);
         }
-        let (property_index, expected_schema, old_linked, already_linked) = {
+        let (property_index, expected_schema, already_linked) = {
             let instance = self
                 .instance
                 .try_borrow()
@@ -1743,7 +1735,6 @@ impl RuntimeOwnedViewModelHandle {
                 property
                     .referenced_view_model_index
                     .ok_or(RuntimeViewModelLinkError::SchemaMismatch)?,
-                property.linked_instance.as_ref().map(Rc::clone),
                 property
                     .linked_instance
                     .as_ref()
@@ -1767,13 +1758,6 @@ impl RuntimeOwnedViewModelHandle {
                 .try_borrow_mut()
                 .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?,
         );
-        if let Some(old_linked) = &old_linked {
-            drop(
-                old_linked
-                    .try_borrow_mut()
-                    .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?,
-            );
-        }
         if owned_view_model_graph_reaches_or_cycles(&value.instance, &self.instance) {
             return Err(RuntimeViewModelLinkError::Cycle);
         }
@@ -1797,17 +1781,6 @@ impl RuntimeOwnedViewModelHandle {
         instance.mark_mutated();
         drop(instance);
         drop(value_instance);
-        if let Some(old_linked) = old_linked {
-            old_linked
-                .try_borrow_mut()
-                .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?
-                .remove_linked_alias(&self.instance, property_index);
-        }
-        value
-            .instance
-            .try_borrow_mut()
-            .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?
-            .add_linked_alias(&self.instance, property_index);
         Ok(true)
     }
 
@@ -2005,26 +1978,23 @@ fn clone_owned_view_model_graph(
         remap_owned_view_model_lists(&original.lists, &mut cloned.lists, memo);
         remap_owned_view_model_child_lists(&original.view_models, &mut cloned.view_models, memo);
     }
-    register_owned_view_model_link_aliases(&candidate);
+    merge_owned_view_model_link_clocks(&candidate);
     candidate
 }
 
-fn register_owned_view_model_link_aliases(owner: &Rc<RefCell<RuntimeOwnedViewModelInstance>>) {
+/// Temporary slice-(f) bridge: linked children already share their retained
+/// cells directly, but structural/list dirt still uses the mutation-clock
+/// union until those properties move onto retained dependents too.
+fn merge_owned_view_model_link_clocks(owner: &Rc<RefCell<RuntimeOwnedViewModelInstance>>) {
     let links = owner
         .borrow()
         .view_models
         .iter()
-        .filter_map(|property| {
-            property
-                .linked_instance
-                .as_ref()
-                .map(|linked| (property.property_index, Rc::clone(linked)))
-        })
+        .filter_map(|property| property.linked_instance.as_ref().map(Rc::clone))
         .collect::<Vec<_>>();
-    for (property_index, linked) in links {
+    for linked in links {
         let linked_clock = Rc::clone(&linked.borrow().mutation_clock);
         owner.borrow_mut().merge_mutation_clock(&linked_clock);
-        linked.borrow_mut().add_linked_alias(owner, property_index);
     }
 }
 
@@ -3570,7 +3540,6 @@ impl RuntimeOwnedViewModelInstance {
             artboards: self.artboards.clone(),
             triggers: self.triggers.clone(),
             view_models: self.view_models.clone(),
-            linked_aliases: Vec::new(),
         }
     }
 }
@@ -3863,46 +3832,6 @@ impl RuntimeOwnedViewModelViewModel {
                     .collect();
             }
         }
-    }
-
-    /// Sharing invariant behind the alias-mirror no-op: every scalar slot in
-    /// the mirror's active storage retains the SAME cell as the linked
-    /// instance, so aliased values agree by identity.
-    #[cfg(debug_assertions)]
-    fn mirror_shares_source_cells(&self, source: &RuntimeOwnedViewModelInstance) -> bool {
-        macro_rules! family_shares {
-            ($owned:ident, $imported:ident) => {{
-                let mirror = match self.value {
-                    RuntimeViewModelPointer::OwnedGenerated { .. } => {
-                        Some(self.$owned.as_slice())
-                    }
-                    RuntimeViewModelPointer::Imported { object_id } => {
-                        self.$imported.get(&object_id).map(Vec::as_slice)
-                    }
-                    _ => None,
-                };
-                let Some(mirror) = mirror else {
-                    return false;
-                };
-                mirror.len() == source.$owned.len()
-                    && mirror
-                        .iter()
-                        .zip(source.$owned.iter())
-                        .all(|(mirrored, retained)| {
-                            mirrored.property_index == retained.property_index
-                                && mirrored.cell.ptr_eq(&retained.cell)
-                        })
-            }};
-        }
-        family_shares!(numbers, imported_numbers)
-            && family_shares!(booleans, imported_booleans)
-            && family_shares!(strings, imported_strings)
-            && family_shares!(colors, imported_colors)
-            && family_shares!(enums, imported_enums)
-            && family_shares!(symbol_list_indices, imported_symbol_list_indices)
-            && family_shares!(assets, imported_assets)
-            && family_shares!(artboards, imported_artboards)
-            && family_shares!(triggers, imported_triggers)
     }
 
     fn active_children(&self) -> Option<&[RuntimeOwnedViewModelViewModel]> {
@@ -4213,7 +4142,6 @@ impl RuntimeOwnedViewModelViewModel {
                     .unwrap_or_default(),
                 _ => Vec::new(),
             },
-            linked_aliases: Vec::new(),
         };
         instance.detach_list_storage();
         instance.reroot_mutation_clock();
@@ -7013,71 +6941,6 @@ impl RuntimeOwnedViewModelInstance {
     fn mark_mutated(&mut self) {
         self.mutation_generation = self.mutation_generation.wrapping_add(1);
         RuntimeOwnedViewModelMutationClock::mark_mutated(&self.mutation_clock);
-        self.synchronize_linked_aliases();
-    }
-
-    fn add_linked_alias(
-        &mut self,
-        owner: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
-        property_index: usize,
-    ) {
-        let weak = Rc::downgrade(owner);
-        if self
-            .linked_aliases
-            .iter()
-            .any(|alias| alias.property_index == property_index && alias.owner.ptr_eq(&weak))
-        {
-            return;
-        }
-        self.linked_aliases.push(RuntimeOwnedViewModelAlias {
-            owner: weak,
-            property_index,
-        });
-    }
-
-    fn remove_linked_alias(
-        &mut self,
-        owner: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
-        property_index: usize,
-    ) {
-        self.linked_aliases.retain(|alias| {
-            alias.property_index != property_index
-                || alias
-                    .owner
-                    .upgrade()
-                    .is_some_and(|candidate| !Rc::ptr_eq(&candidate, owner))
-        });
-    }
-
-    /// #RB-1 e2b: alias mirrors share this instance's retained cells by
-    /// identity, so aliased VALUES never need synchronizing — a write through
-    /// either side lands in the same cell. This pass is reduced to trivial
-    /// structure forwarding (children/list topology after a structural
-    /// mutation, plus the string/font payload snapshots behind the
-    /// borrowed-reference getters). Slice (f) deletes it together with the
-    /// mutation clock.
-    fn synchronize_linked_aliases(&mut self) {
-        self.linked_aliases
-            .retain(|alias| alias.owner.strong_count() != 0);
-        for alias in self.linked_aliases.clone() {
-            let Some(owner) = alias.owner.upgrade() else {
-                continue;
-            };
-            let Ok(mut owner) = owner.try_borrow_mut() else {
-                continue;
-            };
-            if let Some(property) = owner
-                .view_models
-                .iter_mut()
-                .find(|property| property.property_index == alias.property_index)
-            {
-                property.mirror_linked_instance(self);
-                debug_assert!(
-                    property.mirror_shares_source_cells(self),
-                    "alias mirror must retain the linked instance's cells by identity"
-                );
-            }
-        }
     }
 
     fn detach_list_storage(&mut self) {
@@ -7322,7 +7185,6 @@ impl RuntimeOwnedViewModelInstance {
             artboards,
             triggers,
             view_models,
-            linked_aliases: Vec::new(),
         };
         instance.reroot_mutation_clock();
         Some(instance)

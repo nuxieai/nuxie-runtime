@@ -162,6 +162,11 @@ upstream-sync-map registry).
     rescans, alias mirrors, and remaining copied-direction state all removed;
     floors stay at their completed values, including scripted 317/317 with
     zero failures.
+  - [x] (f1) reverse alias registry deleted. Linked child properties retain
+    the child directly and already share scalar cells; no reverse owner list
+    or mutation-time mirror fan-out remains. The temporary shared mutation
+    clock stays only for structural/list dirt until their retained-dependent
+    cut lands. Runtime lib remains 345/345.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -552,3 +557,7 @@ Decisions log.)
   golden corpora 317/317 entries with 647/647 exact segments. The workspace
   push gate is held on the three stale Scene integration expectations recorded
   at the top of this file.
+- 2026-07-21 — #RB-1 f1 deleted the reverse linked-child alias registry and
+  mutation-time mirror fan-out. Linked properties keep their direct retained
+  child and shared scalar cells; the temporary clock union remains only for
+  structural/list dirt. Runtime lib stays 345/345.

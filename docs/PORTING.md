@@ -656,3 +656,46 @@ replace it.
   on file/ABI-reachable values (release aborts). (§3.1–3.2)
 - Verify by golden stream, `exact` unless a swapped engine forces `tolerant`;
   localize divergences in half a day. (§6)
+
+---
+
+## §8 Architecture-Fidelity Rules (added for #B-6, 2026-07-21)
+
+Behavioral gates cannot see design drift: the pre-rebuild data-binding
+layer passed every golden and probe gate for months while being built on
+polling and copies instead of C++'s retained identity and dependents. These
+rules exist so a reviewer can cite the violated rule behind every finding.
+
+- **AF-1 Retained identity.** Where C++ holds a pointer/`rcp` to a shared
+  mutable object, Rust retains a shared handle (`Rc<RefCell<..>>` or arena
+  id) to ONE object. Copying the value into a record and re-syncing later
+  is a violation, regardless of test results.
+- **AF-2 Push, never reconstruct.** Where C++ registers a dependent or
+  property observer, Rust registers a dependent (weak dirt-sink). Polling,
+  generation counters, epoch comparisons, observed-value diffing, and
+  rescan loops that exist to DISCOVER a change C++ would have been TOLD
+  about are violations.
+- **AF-3 Poll only where C++ polls.** The inverse also binds: where C++
+  itself indexes by time/id with no observer (keyed animation binary
+  search, `resolve(objectId())`), a Rust loop/lookup is correct.
+  Introducing an observer C++ doesn't have is also drift.
+- **AF-4 One dirt model.** Direction/ordering state follows C++'s dirt
+  bits + origin flags. Proliferating per-phase boolean latches to encode
+  what C++ encodes in one bitset is a violation of representation even
+  when the phase ORDER is correct.
+- **AF-5 Import-time devirtualization is legitimate.** A field computed
+  once at build (type discriminant, subscription flag, precomputed target
+  kind) that C++ derives per frame via virtual dispatch or registry lookup
+  is an accepted idiom — PROVIDED it is never mutated during the
+  advance/update/bind cycle. The mutation-timing gate is the test.
+- **AF-6 Deep copy is explicit.** `Clone` preserves C++ copy semantics
+  (deep, with `copyViewModelInstance`-style dedupe preserving internal
+  sharing topology). Sharing is only ever introduced through an explicit
+  handle type.
+- **AF-7 Own-by-value for unique ownership.** C++ `unique_ptr` vectors map
+  to Rust `Vec<T>` by value. Reaching for `Rc` where C++ has unique
+  ownership is drift in the other direction.
+- **AF-8 No invented lifecycles.** Bind/unbind/teardown happen at the C++
+  call sites. Adding refresh/rebind passes at points where C++ has none
+  (facade-wide dirty bits, rebind-before-every-advance) is a violation
+  even if idempotent.

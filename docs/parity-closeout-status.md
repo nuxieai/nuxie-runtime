@@ -82,8 +82,17 @@ upstream-sync-map registry).
     hundreds of call sites. (3) The old `view_model::RuntimeDataContext`
     export name collides with the new core's context; the new type stays
     namespaced until the old one deletes. Steps:
-    - [ ] e1 re-back owned-instance scalar storage with cells (writes
-      cascade; mutation clock retained temporarily; deep-copy Clone).
+    - [x] e1 re-back owned-instance scalar storage with cells — landed via
+      lane worktree, orchestrator-verified gates: rt lib 340, nuxie lib
+      132, probe 707/707, golden 317/317 (647), scripted main pass
+      317/317 with only the four pre-existing red entries. All ten scalar
+      kinds on cells (Enum/Symbol/Asset/Artboard as u32 payloads behind
+      u64 APIs with C++ -1 sentinel saturation; String keeps a byte
+      mirror for borrowed getters — slot setter is the only writer).
+      Deep-copy Clone preserved on every slot. EXCEPTION: AssetFont stays
+      on old storage (two-part payload: file-asset index + retained live
+      Font bytes with Arc::ptr_eq change semantics) — needs a font-cell
+      payload decision in e2.
     - [ ] e2 children/lists share cells; alias mirrors become no-ops.
     - [ ] e3 graph sources hold retained binds (`set_source(cell)` +
       `reconcile`) replacing copied values; SM/artboard bind seams build

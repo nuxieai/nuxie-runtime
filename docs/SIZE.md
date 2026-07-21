@@ -9,9 +9,19 @@ enabled.
 **Budget (#B-3 decision, 2026-07-21): 8 MiB = 8,388,608 B, blocking for BOTH
 scripting variants.** `make size-report` fails when either link closure
 exceeds it, and `make parity-scorecard` validates the recorded evidence
-against `size.budget_bytes` in `parity-scorecard.toml`. Scripting ON currently
-has ~52 KiB of headroom; a breach reopens the budget USER-GATE with fresh
-measurements — the constant is never silently raised.
+against `size.budget_bytes` in `parity-scorecard.toml`. A breach reopens the
+budget USER-GATE with fresh measurements — the constant is never silently
+raised.
+
+**Status 2026-07-21: the budget USER-GATE is REOPENED.** The 8 MiB decision
+was made against the 2026-07-20 measurements below, which predate concurrent
+main `974aab66` (editor-cutover runtime support). Re-measurement at
+`2f82f9e7`, including the 43rd audited renderer root
+`Factory::make_gpu_canvas_image` that `974aab66` added to the public
+surface, reports scripting OFF at 8,216,984 B (7.84 MiB, under budget) and
+scripting ON at 9,118,104 B (8.70 MiB, 729,496 B over budget). The gate is
+red locally and its CI evidence recording is held until the user sets the
+replacement budget.
 
 ## Current measurement
 

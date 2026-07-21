@@ -12,7 +12,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 2 Interaction parity | RED | side-channel: gate not built; fuzz-clean-nights: 0 | #OR-1/2/3/7 |
 | 3 SDK parity | RED | A-rows closed 0/8 | register A-table |
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
-| 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.19 MiB OFF / 7.95 MiB ON vs 8 MiB budget (both variants block; wired, first CI recording pending) | #OR-9 |
+| 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs 8 MiB budget — ON breaches; budget USER-GATE reopened, CI recording held | #OR-9, #B-3 reopened USER-GATE |
 
 Regression floor (must stay green): **restored 2026-07-21.** Both runtime
 golden gates are 317/317 exact, 647/647 segments (the decoded-image policy
@@ -37,9 +37,10 @@ upstream-sync-map registry).
 - [ ] #B-2 port-manifest invariant — implementation/local gate complete at
   exact b73bc675 (447/447: 378 ported / 21 partial / 43 absent / 5 N/A);
   first main CI green pending
-- [ ] #B-3 size re-measure — budget decided (8 MiB both variants) and wired:
-  `make size-report` blocks, scorecard validates `size-report.json` evidence
-  against `size.budget_bytes`; first green CI recording pending
+- [ ] #B-3 size re-measure — budget decided (8 MiB both variants) and wired
+  (`make size-report` blocks; scorecard validates `size-report.json`), but
+  the gate REOPENED same-day: post-974aab66 measurement is 7.84/8.70 MiB and
+  ON breaches. CI recording held pending the replacement budget USER-GATE
 - [ ] #B-4 `make parity-scorecard` — implementation/local gate complete;
   canonical five-floor evidence and CI publication wired; first main CI green
   blocked by the decoded-image policy gate and seven freshly exposed d788
@@ -85,8 +86,18 @@ upstream-sync-map registry).
 
 ## Pending USER-GATEs
 
-(none — the three gates submitted 2026-07-20 were all decided 2026-07-21;
-see the Decisions log.)
+- **#B-3 size budget REOPENED (2026-07-21).** The decided 8 MiB dual-variant
+  budget was breached the same day by honest re-measurement: concurrent main
+  `974aab66` (editor cutover) grew the runtime and added
+  `Factory::make_gpu_canvas_image` to the public renderer surface, which the
+  fail-closed root inventory caught; with the 43rd root retained, the
+  closures measure OFF 8,216,984 B (7.84 MiB) and ON 9,118,104 B (8.70 MiB,
+  729,496 B over). Per the decision's terms the constant was not raised: the
+  gate is red locally and the CI evidence-recording step is held. Decide the
+  replacement budget. Recommendation: 9 MiB (9,437,184 B) for both variants
+  (~3.4% headroom over ON); alternatives: 8 MiB scripting-OFF-only blocking
+  (ON unbounded until #FT scope lands), or demand a size reduction from the
+  974aab66 surface before re-budgeting.
 
 ## Decisions log
 
@@ -205,6 +216,14 @@ see the Decisions log.)
   `size-report.json` evidence against `size.budget_bytes`
   (parity-scorecard.toml) with drift and over-budget as errors; CI records
   the gate in the runtime evidence job; scorecard tests 19/19.
+- 2026-07-21 — #B-3 gate fired on its first full run and REOPENED the budget:
+  the fail-closed root inventory caught `974aab66`'s new public
+  `Factory::make_gpu_canvas_image` (43rd root added to the audited inventory
+  and consumer harness), and honest re-measurement reports 7.84 MiB OFF /
+  8.70 MiB ON — ON exceeds the 8 MiB decision by 729,496 B because the
+  decision was made against pre-974aab66 evidence. The constant was NOT
+  raised; the CI recording step is held; the replacement budget is a pending
+  USER-GATE (recommendation 9 MiB both variants).
 - 2026-07-21 — Upstream checkout hygiene: `/Users/levi/dev/oss/rive-runtime`
   was at post-inventory `ba2b6434` with no built libraries, so the first
   probe/runner rebuild of the day silently targeted the wrong revision. The

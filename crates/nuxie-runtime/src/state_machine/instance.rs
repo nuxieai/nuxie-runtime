@@ -6,6 +6,7 @@ use crate::data_bind_graph::data_bind_flags_apply_source_to_target;
 use crate::focus::RuntimeFocusTree;
 use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::RuntimeFontAssetValue;
+use crate::view_model_cell::{RuntimeCellDirtSink, RuntimeViewModelCell};
 use crate::{
     ArtboardInstance, NoopScriptHost, RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase,
     RuntimeDataBindGraphTargetsMut, RuntimeDataBindGraphValue,
@@ -641,12 +642,66 @@ struct RuntimePointerPosition {
     y: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct RuntimeViewModelListenerInstance {
     view_model_index: usize,
     property_path: Vec<usize>,
     actions: Vec<RuntimeScheduledListenerAction>,
+    /// Last-delivered condition value. Migrated (cell-backed) listeners keep
+    /// this as the C++ "consume a value change once" record; unmigrated
+    /// conditions still use it as the polled observed copy. Deletion belongs
+    /// to slice (f).
     observed: Option<RuntimeViewModelListenerValue>,
+    /// #RB-1 e4: the retained scalar cell this listener's condition currently
+    /// reads on the owned-candidates path, with this listener's dirt sink
+    /// registered as a dependent (C++ `ListenerViewModelPropertyBinding`,
+    /// src/animation/state_machine_instance.cpp:1281-1299 at pin d788e8ec:
+    /// `vmProp->addDependent(this)`). `None` while the condition is
+    /// unmigrated: list/view-model conditions, unresolved paths, and every
+    /// non-candidates context bind.
+    cell_binding: Option<RuntimeViewModelListenerCellBinding>,
+}
+
+impl Clone for RuntimeViewModelListenerInstance {
+    /// A cloned machine re-registers a FRESH sink on the same retained cell
+    /// (the `RuntimeRetainedDataBind::clone` contract): the copy observes
+    /// subsequent writes independently; pending dirt stays with the original.
+    fn clone(&self) -> Self {
+        Self {
+            view_model_index: self.view_model_index,
+            property_path: self.property_path.clone(),
+            actions: self.actions.clone(),
+            observed: self.observed.clone(),
+            cell_binding: self
+                .cell_binding
+                .as_ref()
+                .map(|binding| RuntimeViewModelListenerCellBinding::new(binding.cell.clone())),
+        }
+    }
+}
+
+/// One listener condition's dependent registration on its retained cell
+/// (C++ `ListenerViewModelPropertyBindingListener`). Dropping the binding
+/// unregisters implicitly: the cell only holds the sink weakly.
+struct RuntimeViewModelListenerCellBinding {
+    cell: RuntimeViewModelCell,
+    sink: RuntimeCellDirtSink,
+}
+
+impl RuntimeViewModelListenerCellBinding {
+    fn new(cell: RuntimeViewModelCell) -> Self {
+        let sink = RuntimeCellDirtSink::new();
+        cell.add_dependent(&sink);
+        Self { cell, sink }
+    }
+}
+
+impl std::fmt::Debug for RuntimeViewModelListenerCellBinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RuntimeViewModelListenerCellBinding")
+            .field("cell", &self.cell)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -858,6 +913,7 @@ impl StateMachineInstance {
                     property_path: listener.view_model_property_path.clone()?,
                     actions: listener.listener_actions.clone(),
                     observed: None,
+                    cell_binding: None,
                 })
             })
             .collect();
@@ -4930,6 +4986,7 @@ impl StateMachineInstance {
             let mut source_path = Vec::with_capacity(listener.property_path.len() + 1);
             let Ok(view_model_index) = u32::try_from(listener.view_model_index) else {
                 listener.observed = None;
+                listener.cell_binding = None;
                 continue;
             };
             source_path.push(view_model_index);
@@ -4939,9 +4996,58 @@ impl StateMachineInstance {
                     .iter()
                     .filter_map(|property_index| u32::try_from(*property_index).ok()),
             );
-            let current = candidates.iter().find_map(|candidate| {
-                let property_path = candidate.property_path_for_source_path(&source_path)?;
-                runtime_view_model_listener_value(&candidate.context.borrow(), &property_path)
+            // Same first-candidate-wins walk as before; the winning candidate
+            // additionally yields the retained scalar cell when the condition
+            // is migratable (#RB-1 e4). Lists and view-model conditions
+            // resolve no cell and stay on the polled copy below.
+            let resolved = candidates.iter().find_map(|candidate| {
+                candidate
+                    .property_path_for_source_path(&source_path)
+                    .map(|property_path| (candidate, property_path))
+            });
+            let cell = resolved.as_ref().and_then(|(candidate, property_path)| {
+                candidate
+                    .context
+                    .borrow()
+                    .cell_by_property_path(property_path)
+            });
+            if let Some(cell) = cell {
+                let same_cell = listener
+                    .cell_binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.cell.ptr_eq(&cell));
+                if same_cell {
+                    // Dirt-driven change detection (C++ registers the
+                    // listener as a dependent and reports on `addDirt`,
+                    // src/animation/state_machine_instance.cpp:1281-1299,
+                    // :1484-1492): without a cell cascade the value cannot
+                    // have moved — every cell write cascades, including
+                    // suppressed trigger zeroing — so skip the value copy;
+                    // `observed` keeps the last-delivered record.
+                    let binding = listener
+                        .cell_binding
+                        .as_ref()
+                        .expect("same_cell implies a binding");
+                    if binding.sink.take_dirt().is_empty() {
+                        continue;
+                    }
+                } else {
+                    // (Re)bind: register the fresh dependent
+                    // (`ListenerViewModelPropertyBindingListener::relinkDataBind`
+                    // swaps the registration the same way) and fall through
+                    // to the value poll exactly once so bind-time value
+                    // movement keeps dispatching like the rescan did.
+                    listener.cell_binding = Some(RuntimeViewModelListenerCellBinding::new(cell));
+                }
+            } else {
+                listener.cell_binding = None;
+            }
+            // A migrated listener only reaches this point with sink dirt (or
+            // on a rebind); it fires when the resolved value differs from the
+            // last-delivered one — C++ listeners also consume a value change
+            // once.
+            let current = resolved.as_ref().and_then(|(candidate, property_path)| {
+                runtime_view_model_listener_value(&candidate.context.borrow(), property_path)
             });
             let should_dispatch = listener
                 .observed
@@ -5411,6 +5517,12 @@ impl StateMachineInstance {
     fn clear_owned_view_model_handle(&mut self) {
         self.owned_view_model_candidates.clear();
         self.owned_view_model_candidate_generations.clear();
+        // Leaving the candidates path drops every listener's dependent
+        // registration (C++ `ListenerViewModel::clearDataContext`); snapshot
+        // and context-chain binds poll the observed copy instead.
+        for listener in &mut self.view_model_listeners {
+            listener.cell_binding = None;
+        }
     }
 
     pub fn update_data_binds_apply_target_to_source(&mut self) -> bool {
@@ -5500,6 +5612,31 @@ impl StateMachineInstance {
         self.default_view_model_triggers
             .get(index)
             .map(StateMachineViewModelTriggerInstance::value)
+    }
+
+    /// #RB-1 e4 test seam: the retained cell a migrated listener condition is
+    /// registered on, if any.
+    #[cfg(test)]
+    pub(crate) fn view_model_listener_condition_cell(
+        &self,
+        index: usize,
+    ) -> Option<RuntimeViewModelCell> {
+        self.view_model_listeners
+            .get(index)?
+            .cell_binding
+            .as_ref()
+            .map(|binding| binding.cell.clone())
+    }
+
+    /// #RB-1 e4 test seam: whether a migrated listener's sink holds
+    /// unconsumed cell dirt.
+    #[cfg(test)]
+    pub(crate) fn view_model_listener_has_pending_cell_dirt(&self, index: usize) -> Option<bool> {
+        self.view_model_listeners
+            .get(index)?
+            .cell_binding
+            .as_ref()
+            .map(|binding| !binding.sink.peek_dirt().is_empty())
     }
 
     #[cfg(test)]

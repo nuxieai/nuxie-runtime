@@ -10090,6 +10090,69 @@ mod tests {
     }
 
     #[test]
+    fn retained_candidate_listener_is_a_cell_dependent_with_a_diff_gate() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9720, true);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has an owned ViewModel context"),
+        );
+
+        // Binding the candidates path registers the listener condition as a
+        // dependent on the retained cell it reads (#RB-1 e4).
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        let condition_cell = context
+            .borrow()
+            .cell_by_property_path(&[0])
+            .expect("condition property has a retained cell");
+        let bound_cell = state_machine
+            .view_model_listener_condition_cell(0)
+            .expect("candidates bind migrates the scalar condition");
+        assert!(
+            bound_cell.ptr_eq(&condition_cell),
+            "the listener must observe the SAME retained cell the context owns"
+        );
+
+        // A slot write cascades dirt into the listener's sink before any
+        // rescan runs; the next bounded bind consumes it and dispatches.
+        assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
+        assert_eq!(
+            state_machine.view_model_listener_has_pending_cell_dirt(0),
+            Some(true),
+            "the cell cascade must land in the listener's dirt sink"
+        );
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(7.0),
+            "dirt plus a value change must dispatch the listener actions"
+        );
+        assert_eq!(
+            context.borrow().number_value_by_property_path(&[1]),
+            Some(42.0)
+        );
+
+        // A transient write that lands back on the last-delivered value has
+        // dirt but no diff: the listener must consume the dirt WITHOUT
+        // re-dispatching (C++ listeners consume a value change once).
+        assert!(context.borrow_mut().set_number_by_property_path(&[1], 0.0));
+        assert!(context.borrow_mut().set_number_by_property_index(0, 2.0));
+        assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
+        state_machine.bind_owned_view_model_handle(&context);
+        assert_eq!(
+            state_machine.view_model_listener_has_pending_cell_dirt(0),
+            Some(false),
+            "the scan must consume the transient dirt"
+        );
+        assert_eq!(
+            context.borrow().number_value_by_property_path(&[1]),
+            Some(0.0),
+            "a dirt-only transient (no net value change) must not re-dispatch"
+        );
+    }
+
+    #[test]
     fn retained_candidate_listener_cap_leaves_the_unobserved_tail_dirty() {
         const LISTENER_CAP: usize = 100;
         let bytes = synthetic_owned_view_model_listener_chain_riv(9705, LISTENER_CAP + 1, false);

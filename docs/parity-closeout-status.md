@@ -76,25 +76,23 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. Regression repair — ten trigger-flavored d788 C++-probe assertions
-   (`state_machine_default_viewmodel_trigger*`,
-   `*_non_number_formula_random_function_group_*`,
-   `*_remaining_*formula_fallbacks_*`) fail after concurrent main `c7d48ca0`
-   ("close editor cutover runtime gaps"): C++ reports view-model trigger
-   count 0 in target-to-source scenarios, Rust now reports 3. The commit
-   reworked trigger target-to-source propagation (new
-   `fire_owned_view_model_context_trigger_source_*` machinery plus
-   default-context writes into `view_model_triggers`) while
-   `RIVE_RUNTIME_DIR` sat at drifted `ba2b6434` with no exact-pin probe;
-   plain `cargo test --workspace` (as CI runs it) skips the probe suite
-   when `RIVE_CPP_PROBE` is unset, so main went red silently. Same class
-   as the five `974aab66` component-list regressions repaired 2026-07-21.
-   The same commit also breaks FOUR scripted-golden-compare entries
-   (`db_health_tracker`, `echo_show_demo`, `list_index_script_access`,
-   `superbowl` — wild transform/gradient/path divergences under forced
-   scripting). Attribution is proven: a pristine `5927654b` (origin/main)
-   worktree fails the identical probe tests and the identical four entries
-   with byte-identical messages, with no closeout commits present.
+1. Regression repair (remaining half) — FOUR scripted-golden-compare
+   entries broken by concurrent main `c7d48ca0` (`db_health_tracker`,
+   `echo_show_demo`, `list_index_script_access`, `superbowl`: wild
+   transform/gradient/path divergences under forced scripting; the default
+   gate is green). Attribution proven on a pristine `5927654b` worktree.
+   `c7d48ca0` touched no nuxie-scripting code, so the cause is runtime code
+   behaving differently under forced scripting — start from its artboard.rs
+   (+1,350) / data_bind_graph.rs / instance.rs (+901) changes. The commit's
+   OTHER regression — ten trigger probe assertions — is FIXED 2026-07-21:
+   `reset_advanced_data_context` had swapped `trigger.reset()` for
+   value-retaining `advanced()`, but C++
+   `ViewModelInstanceTrigger::advanced()` zeroes `propertyValue` itself;
+   the revert restores 707/707 with every c7d48ca0-added test still green.
+   Context: the commit was validated while `RIVE_RUNTIME_DIR` sat at
+   drifted `ba2b6434`, and CI's `cargo test --workspace` skips the probe
+   suite when `RIVE_CPP_PROBE` is unset, so main went red silently — the
+   same class as the five `974aab66` component-list regressions.
 2. #B-3 reopened USER-GATE — decide the replacement size budget (see
    Pending USER-GATEs).
 3. #B-1 port — execute the approved S3-1 (TextInput) + S3-3 (static linking)
@@ -253,6 +251,13 @@ upstream-sync-map registry).
   is 697/707 — ten NEW trigger-flavored probe regressions traced to
   `c7d48ca0` (top of the Next queue), and the scripted gate's exit status
   needs re-examination.
+- 2026-07-21 — The c7d48ca0 trigger regression is repaired: one-line revert
+  of `advanced()` back to `reset()` in `reset_advanced_data_context`, cited
+  against C++ `ViewModelInstanceTrigger::advanced()` which zeroes
+  `propertyValue` under SuppressDelegation. cpp-probe 707/707; nuxie-runtime
+  lib 324/324 including every test c7d48ca0 added (its retained-value
+  semantics was not load-bearing). The four scripted corpus entries remain
+  red and stay at the top of the queue.
 - 2026-07-21 — Upstream checkout hygiene: `/Users/levi/dev/oss/rive-runtime`
   was at post-inventory `ba2b6434` with no built libraries, so the first
   probe/runner rebuild of the day silently targeted the wrong revision. The

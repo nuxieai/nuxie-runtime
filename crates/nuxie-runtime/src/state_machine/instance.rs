@@ -5360,7 +5360,10 @@ impl StateMachineInstance {
             return;
         }
         for trigger in &mut self.view_model_triggers {
-            trigger.advanced();
+            // C++ `ViewModelInstanceTrigger::advanced()` zeroes the property
+            // value itself (`propertyValue(0)` under SuppressDelegation), so
+            // the post-advance counter always reads zero.
+            trigger.reset();
         }
         self.data_bind_graph.reset_bound_trigger_sources();
         if self

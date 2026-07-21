@@ -149,18 +149,16 @@ worker may act on that category.
   local Luau hardening and closeout at
   `d788e8ec6e8b598526607d6a1e8818e8b637b60c` completed on 2026-07-19; no
   cycle-scoped authorization remains active.
-- Current cycle status: manual cycle 2 is complete. The upstream range was
-  empty, every active pin and `LAST_SYNCED_SHA` remain at `d788e8ec`, and the
-  default and forced-scripted candidate ratchets cover 317 exact files and
-  647 exact segments with zero divergences, unsupported features, or not-yet
-  entries. The approved local private-table hardening fixed the scoped-library
-  luaur stack assertion found by the initial scripted probe. Two non-manifest
-  surfaces remain explicitly deferred for the next inventory:
-  `deferred-2026-07-19-luau-engine` and `deferred-2026-07-19-ore-gpu`, both at
-  staleness 1 (full evidence and exit criteria are in the cycle triage). The
-  write-capable Phase S worker is active after satisfying its trust-count
-  threshold. With Standing approvals at `none`, it remains fail-closed for
-  mutations and may only return a blocker report.
+- Current cycle status: manual cycle 3 triage is submitted for the fixed
+  `d788e8ec..b73bc675` cut and is stopped at its hard approval gate; see
+  `docs/sync/triage-2026-07-20-b73bc675.md`. S3-1 and S3-3 are recommended
+  PORT, S3-2 is recommended WATCH, and the two dependency WATCH rows have
+  advanced to staleness 2. Every active pin and `LAST_SYNCED_SHA` remain at
+  `d788e8ec`; clean manual cycles completed remains 2. Upstream advanced after
+  the completed inventory to `ba2b6434` (`add unset methods`), which is
+  explicitly post-cut drift for the next cycle or a user-requested replacement
+  triage, not part of the pending authorization. With Standing approvals at
+  `none`, the write-capable worker remains fail-closed for mutations.
 - Current-revision pin registry (advance with each completed Phase S cycle):
   - `.github/workflows/ci.yml` top-level `RIVE_RUNTIME_REF`
   - `tools/fetch-test-assets.sh`

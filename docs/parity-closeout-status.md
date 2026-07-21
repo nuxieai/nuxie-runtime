@@ -105,3 +105,6 @@ upstream-sync-map registry).
   source/root/symbol/hash audit clean; budget USER-GATE pending.
 - 2026-07-20 — #B-4 landed the five-tier scorecard and bound each evidence file
   to its canonical command; unbuilt gates remain explicit rather than green.
+- 2026-07-20 — #B-1 pin/candidate probing exposed stale golden-runner objects
+  across `RIVE_RUNTIME_DIR` changes. The runner now rebuilds both translation
+  units for every invocation, preventing upstream-header/library ABI mixing.

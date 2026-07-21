@@ -5391,8 +5391,21 @@ impl StateMachineInstance {
         if self.owned_view_model_candidates.is_empty() {
             return false;
         }
+        // #RB-1 e3: migrated sources refresh from retained-cell dirt — the
+        // direction-engine channel — BEFORE the mutation-clock poll below, so
+        // cell writes that never bump the clock still propagate, and stale
+        // sink dirt cannot flip a fresh reconcile's origin afterwards.
+        // Unmigrated sources still rely entirely on the generation rebind.
+        let mut collected = self.data_bind_graph.collect_retained_owned_source_dirt();
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            collected |= graph.collect_retained_owned_source_dirt();
+        }
         let candidates = self.owned_view_model_candidates.clone();
-        self.bind_owned_view_model_context_candidates(&candidates)
+        let bound = self.bind_owned_view_model_context_candidates(&candidates);
+        if collected {
+            self.needs_advance = true;
+        }
+        collected || bound
     }
 
     fn clear_owned_view_model_handle(&mut self) {

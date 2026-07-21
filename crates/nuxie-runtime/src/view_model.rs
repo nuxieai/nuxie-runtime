@@ -2321,6 +2321,16 @@ impl RuntimeOwnedViewModelContext {
         }
         changed
     }
+
+    /// C++ `DataContext::getViewModelProperty(path)` over this context's
+    /// retained instances (#RB-1 e3): try each instance in canonical order —
+    /// main first, then globals by slot — and return the retained CELL, not
+    /// a copy. Contexts currently have no parent link; the candidate chain's
+    /// scoped entries are covered by the candidate-level lookup.
+    pub fn cell_for_source_path(&self, path: &[u32]) -> Option<RuntimeViewModelCell> {
+        self.handles()
+            .find_map(|handle| handle.borrow().cell_for_source_path(path))
+    }
 }
 
 fn runtime_default_owned_view_model_instance(
@@ -4077,6 +4087,45 @@ impl RuntimeOwnedViewModelViewModel {
                 .map(|symbol_list_index| symbol_list_index.value()),
             _ => None,
         }
+    }
+
+    /// The retained scalar cell backing this child slot's ACTIVE storage at
+    /// one property index (#RB-1 e3). Mirrors the
+    /// `active_*_value_by_property_index` accessors but returns the shared
+    /// cell itself — the C++ analog of a `DataContext` property walk landing
+    /// on the retained `ViewModelInstanceValue*`. Lists and nested view
+    /// models have no scalar cell and return `None`.
+    fn active_scalar_cell_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<RuntimeViewModelCell> {
+        macro_rules! family_cell {
+            ($owned:ident, $imported:ident) => {{
+                let slots = match self.value {
+                    RuntimeViewModelPointer::OwnedGenerated { .. } => Some(self.$owned.as_slice()),
+                    RuntimeViewModelPointer::Imported { object_id } => {
+                        self.$imported.get(&object_id).map(Vec::as_slice)
+                    }
+                    _ => None,
+                };
+                slots.and_then(|slots| {
+                    slots
+                        .iter()
+                        .find(|slot| slot.property_index == property_index)
+                        .map(|slot| slot.cell.clone())
+                })
+            }};
+        }
+        family_cell!(numbers, imported_numbers)
+            .or_else(|| family_cell!(booleans, imported_booleans))
+            .or_else(|| family_cell!(strings, imported_strings))
+            .or_else(|| family_cell!(colors, imported_colors))
+            .or_else(|| family_cell!(enums, imported_enums))
+            .or_else(|| family_cell!(symbol_list_indices, imported_symbol_list_indices))
+            .or_else(|| family_cell!(assets, imported_assets))
+            .or_else(|| family_cell!(font_assets, imported_font_assets))
+            .or_else(|| family_cell!(artboards, imported_artboards))
+            .or_else(|| family_cell!(triggers, imported_triggers))
     }
 
     fn list_item_count_by_property_index(&self, property_index: usize) -> Option<usize> {
@@ -9969,6 +10018,59 @@ impl RuntimeOwnedViewModelInstance {
         let (property_index, view_model_path) = property_path.split_last()?;
         let view_model = self.view_model_by_property_path(view_model_path)?;
         view_model.active_number_value_by_property_index(*property_index)
+    }
+
+    /// The retained scalar cell at one top-level property index (#RB-1 e3).
+    fn scalar_cell_by_property_index(&self, property_index: usize) -> Option<RuntimeViewModelCell> {
+        macro_rules! family_cell {
+            ($owned:ident) => {
+                self.$owned
+                    .iter()
+                    .find(|slot| slot.property_index == property_index)
+                    .map(|slot| slot.cell.clone())
+            };
+        }
+        family_cell!(numbers)
+            .or_else(|| family_cell!(booleans))
+            .or_else(|| family_cell!(strings))
+            .or_else(|| family_cell!(colors))
+            .or_else(|| family_cell!(enums))
+            .or_else(|| family_cell!(symbol_list_indices))
+            .or_else(|| family_cell!(assets))
+            .or_else(|| family_cell!(font_assets))
+            .or_else(|| family_cell!(artboards))
+            .or_else(|| family_cell!(triggers))
+    }
+
+    /// Walk a resolved property path to the retained scalar cell (#RB-1 e3):
+    /// intermediate segments walk the SHARED child slots exactly like the
+    /// `*_value_by_property_path` readers, the final segment must land on a
+    /// scalar slot. This is C++ `DataContext::tryGetViewModelProperty`'s
+    /// loop returning the retained `ViewModelInstanceValue`, not a copy.
+    pub(crate) fn cell_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<RuntimeViewModelCell> {
+        if property_path.len() == 1 {
+            return self.scalar_cell_by_property_index(property_path[0]);
+        }
+        let (property_index, view_model_path) = property_path.split_last()?;
+        let view_model = self.view_model_by_property_path(view_model_path)?;
+        view_model.active_scalar_cell_by_property_index(*property_index)
+    }
+
+    /// C++ `DataContext::tryGetViewModelProperty` against this instance's own
+    /// storage: `path[0]` must name this instance's view model, the tail is
+    /// the property walk. Returns the retained cell by shared identity.
+    pub fn cell_for_source_path(&self, path: &[u32]) -> Option<RuntimeViewModelCell> {
+        if path.len() < 2 || usize::try_from(path[0]).ok()? != self.view_model_index {
+            return None;
+        }
+        let property_path = path[1..]
+            .iter()
+            .map(|&segment| usize::try_from(segment).ok())
+            .collect::<Option<Vec<_>>>()?;
+        self.cell_by_property_path(&property_path)
     }
 
     pub(crate) fn project_relative_number_value_by_context_name_hash_path(

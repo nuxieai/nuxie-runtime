@@ -13,8 +13,10 @@ use crate::draw::color_lerp;
 use crate::project_data_converter::{
     PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS, project_data_converter_bounded_list_length,
 };
+use crate::retained_data_bind::{RuntimeDataBindTarget, RuntimeRetainedDataBind};
 use crate::scripting::{RuntimeScriptInstanceHandle, ScriptDataConverterMethod};
 use crate::view_model::RuntimeFontAssetValue;
+use crate::view_model_cell::{RuntimeCellDirt, RuntimeViewModelCellValue};
 use crate::{
     ProjectDataConverterContext, ProjectDataConverterOutputType, ProjectDataConverterProgram,
     ProjectDataConverterResolver, ProjectDataConverterState, ProjectDataValue,
@@ -219,6 +221,103 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
     pub(crate) default_value: RuntimeDataBindGraphValue,
     pub(crate) value: RuntimeDataBindGraphValue,
     pub(crate) view_model_instance_ids: Vec<u32>,
+    /// #RB-1 e3: on the OWNED bind path a scalar source retains the shared
+    /// view-model cell through the direction engine — `value` refreshes from
+    /// cell dirt instead of the mutation-clock value-copy rescan. `None` for
+    /// unmigrated sources (lists, view-model values, triggers, strings,
+    /// fonts, unresolved paths) and every non-owned context kind.
+    pub(crate) retained_bind: Option<RuntimeRetainedDataBind>,
+}
+
+/// The #RB-1 e3 [`RuntimeDataBindTarget`] adapter: the retained bind's
+/// "target" is the graph source node's `value` slot — the seam the existing
+/// converter stack and per-type apply passes already read — so a direction-
+/// engine apply lands exactly where the old value copies did, and converters
+/// keep applying downstream exactly where they do today. `read_target`
+/// reports the current source-side copy re-encoded as a cell value (used by
+/// `update_source_binding` cell pushes in later slices; keyframe targets and
+/// unmigrated kinds simply return `None`).
+struct RuntimeGraphSourceValueTarget<'a> {
+    value: &'a mut RuntimeDataBindGraphValue,
+    changed: bool,
+}
+
+impl RuntimeDataBindTarget for RuntimeGraphSourceValueTarget<'_> {
+    fn apply_to_target(&mut self, cell_value: &RuntimeViewModelCellValue) {
+        let Some(converted) = runtime_graph_value_from_cell_value(cell_value, self.value) else {
+            return;
+        };
+        if *self.value != converted {
+            *self.value = converted;
+            self.changed = true;
+        }
+    }
+
+    fn read_target(&mut self) -> Option<RuntimeViewModelCellValue> {
+        runtime_cell_value_from_graph_value(self.value)
+    }
+}
+
+/// Cell payload → graph value, mirroring the owned slot getters EXACTLY
+/// (u32 payloads widen via `u64::from`, matching e1's sentinel handling).
+/// `kind` is the source's current value; a kind mismatch returns `None`.
+fn runtime_graph_value_from_cell_value(
+    cell_value: &RuntimeViewModelCellValue,
+    kind: &RuntimeDataBindGraphValue,
+) -> Option<RuntimeDataBindGraphValue> {
+    Some(match (cell_value, kind) {
+        (RuntimeViewModelCellValue::Number(value), RuntimeDataBindGraphValue::Number(_)) => {
+            RuntimeDataBindGraphValue::Number(*value)
+        }
+        (RuntimeViewModelCellValue::Boolean(value), RuntimeDataBindGraphValue::Boolean(_)) => {
+            RuntimeDataBindGraphValue::Boolean(*value)
+        }
+        (RuntimeViewModelCellValue::Color(value), RuntimeDataBindGraphValue::Color(_)) => {
+            RuntimeDataBindGraphValue::Color(*value)
+        }
+        (RuntimeViewModelCellValue::Enum(value), RuntimeDataBindGraphValue::Enum(_)) => {
+            RuntimeDataBindGraphValue::Enum(u64::from(*value))
+        }
+        (
+            RuntimeViewModelCellValue::SymbolListIndex(value),
+            RuntimeDataBindGraphValue::SymbolListIndex(_),
+        ) => RuntimeDataBindGraphValue::SymbolListIndex(u64::from(*value)),
+        (RuntimeViewModelCellValue::AssetImage(value), RuntimeDataBindGraphValue::Asset(_)) => {
+            RuntimeDataBindGraphValue::Asset(u64::from(*value))
+        }
+        (RuntimeViewModelCellValue::Artboard(value), RuntimeDataBindGraphValue::Artboard(_)) => {
+            RuntimeDataBindGraphValue::Artboard(u64::from(*value))
+        }
+        _ => return None,
+    })
+}
+
+/// Graph value → cell payload for the migrated scalar kinds, mirroring the
+/// owned slot setters' u32 saturation.
+fn runtime_cell_value_from_graph_value(
+    value: &RuntimeDataBindGraphValue,
+) -> Option<RuntimeViewModelCellValue> {
+    fn u32_payload(value: u64) -> u32 {
+        u32::try_from(value).unwrap_or(u32::MAX)
+    }
+    Some(match value {
+        RuntimeDataBindGraphValue::Number(value) => RuntimeViewModelCellValue::Number(*value),
+        RuntimeDataBindGraphValue::Boolean(value) => RuntimeViewModelCellValue::Boolean(*value),
+        RuntimeDataBindGraphValue::Color(value) => RuntimeViewModelCellValue::Color(*value),
+        RuntimeDataBindGraphValue::Enum(value) => {
+            RuntimeViewModelCellValue::Enum(u32_payload(*value))
+        }
+        RuntimeDataBindGraphValue::SymbolListIndex(value) => {
+            RuntimeViewModelCellValue::SymbolListIndex(u32_payload(*value))
+        }
+        RuntimeDataBindGraphValue::Asset(value) => {
+            RuntimeViewModelCellValue::AssetImage(u32_payload(*value))
+        }
+        RuntimeDataBindGraphValue::Artboard(value) => {
+            RuntimeViewModelCellValue::Artboard(u32_payload(*value))
+        }
+        _ => return None,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4363,6 +4462,7 @@ impl RuntimeDataBindGraph {
             default_value: value.clone(),
             value,
             view_model_instance_ids: Vec::new(),
+            retained_bind: None,
         });
         let target_handle = RuntimeDataBindGraphTargetHandle(targets.len());
         targets.push(RuntimeDataBindGraphTargetNode { target });
@@ -4411,6 +4511,7 @@ impl RuntimeDataBindGraph {
         if self.data_context_present() {
             return false;
         }
+        self.clear_retained_binds();
         self.reset_converter_states();
         self.context_kind = RuntimeDataBindGraphContextKind::Empty;
         self.imported_view_model_context = None;
@@ -4423,6 +4524,7 @@ impl RuntimeDataBindGraph {
         if self.context_kind == RuntimeDataBindGraphContextKind::DefaultViewModel {
             return false;
         }
+        self.clear_retained_binds();
         for source in &mut self.sources {
             source.value = source.default_value.clone();
             source.bound = true;
@@ -4480,6 +4582,7 @@ impl RuntimeDataBindGraph {
             return false;
         };
 
+        self.clear_retained_binds();
         for source in &mut self.sources {
             if let Some(value) =
                 source
@@ -4593,6 +4696,7 @@ impl RuntimeDataBindGraph {
         context: &RuntimeOwnedViewModelInstance,
     ) -> bool {
         let context_chain: [&[usize]; 1] = [&[]];
+        self.clear_retained_binds();
         for source in &mut self.sources {
             if let Some(value) = source
                 .value
@@ -4625,6 +4729,7 @@ impl RuntimeDataBindGraph {
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &[&[usize]],
     ) -> bool {
+        self.clear_retained_binds();
         for source in &mut self.sources {
             if let Some(value) = context_chain.iter().find_map(|context_path| {
                 source.value.resolve_from_owned_view_model_context_path(
@@ -4660,26 +4765,145 @@ impl RuntimeDataBindGraph {
         candidates: &[RuntimeOwnedViewModelBindingCandidate],
     ) -> bool {
         for source in &mut self.sources {
-            if let Some(value) = candidates.iter().find_map(|candidate| {
-                candidate.resolve_value_for_source_path(&source.value, &source.path)
-            }) {
-                source.value = value;
-                source.bound = true;
-            } else {
-                source.bound = false;
+            // Same walk and kind matrix as before (#RB-1 e3): the first
+            // candidate producing a kind-matched value wins; the resolution
+            // additionally yields the retained cell for migratable scalars.
+            let resolved = candidates.iter().find_map(|candidate| {
+                candidate.resolve_value_and_cell_for_source_path(&source.value, &source.path)
+            });
+            // A source already bound to the SAME retained cell is
+            // dirt-driven: the (re)bind is not a new C++ `DataBind::bind()`,
+            // so it neither re-copies the value nor resets converter state —
+            // cell dirt alone decides whether the value refreshes below.
+            let retained_refresh = matches!(
+                (&resolved, source.retained_bind.as_ref()),
+                (Some((_, Some(cell))), Some(bind))
+                    if source.bound
+                        && bind.source().is_some_and(|current| current.ptr_eq(cell))
+            );
+            if !retained_refresh {
+                match resolved {
+                    Some((value, Some(cell))) => {
+                        // C++ `DataBind::bind()`: retain the source, register
+                        // as dependent, mark the reconcile in favor order.
+                        let mut bind = RuntimeRetainedDataBind::new(source.flags, false);
+                        bind.set_source(cell);
+                        bind.mark_rebind_reconcile();
+                        source.retained_bind = Some(bind);
+                        source.value = value;
+                        source.bound = true;
+                    }
+                    Some((value, None)) => {
+                        source.retained_bind = None;
+                        source.value = value;
+                        source.bound = true;
+                    }
+                    None => {
+                        source.retained_bind = None;
+                        source.bound = false;
+                    }
+                }
             }
             if let Some(converter) = source.converter.as_mut() {
                 runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
                     converter, candidates,
                 );
             }
-            source.reset_converter_state();
-            source.mark_reconcile_dirty();
+            if retained_refresh {
+                Self::refresh_retained_source_from_cell(source);
+            } else {
+                source.reset_converter_state();
+                source.mark_reconcile_dirty();
+            }
         }
         self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
         self.imported_view_model_context = None;
         self.mark_default_view_model_bindings_dirty();
         true
+    }
+
+    /// #RB-1 e3 step 3: fold cell-cascade dirt into migrated sources during
+    /// an advance — the direction-engine replacement for the mutation-clock
+    /// value-copy refresh. Unmigrated sources are untouched (they keep the
+    /// polling rebind).
+    pub(crate) fn collect_retained_owned_source_dirt(&mut self) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::OwnedViewModel {
+            return false;
+        }
+        let mut changed = false;
+        for source in &mut self.sources {
+            changed |= Self::refresh_retained_source_from_cell(source);
+        }
+        if changed {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        changed
+    }
+
+    /// One migrated source's dirt-driven refresh: `collect_source_dirt()`,
+    /// and only when the cell cascaded `BINDINGS` dirt does the direction
+    /// engine's `update` re-read the cell — through the
+    /// [`RuntimeDataBindTarget`] adapter that writes `source.value`, the
+    /// seam the existing converter/target apply passes already consume.
+    fn refresh_retained_source_from_cell(source: &mut RuntimeDataBindGraphSourceNode) -> bool {
+        let Some(bind) = source.retained_bind.as_mut() else {
+            return false;
+        };
+        // Gate on freshly cascaded SINK dirt only: the graph's own
+        // `mark_reconcile_dirty` already encodes the (re)bind reconcile, so
+        // the retained bind's rebind latch must not be double-consumed here
+        // as if it were a source write (it would flip the reconcile's
+        // favored origin on the first advance).
+        if !bind.collect_source_dirt() {
+            return false;
+        }
+        debug_assert!(bind.pending_dirt().contains(RuntimeCellDirt::BINDINGS));
+        let (applied_changed, unapplied_cell_value) = {
+            let mut target = RuntimeGraphSourceValueTarget {
+                value: &mut source.value,
+                changed: false,
+            };
+            bind.update(&mut target);
+            // `update` consumes the dirt but only applies for a bind that
+            // supports source→target. The graph copy is also the READ MODEL
+            // of the retained source (C++ reads `m_Source` directly at
+            // apply/probe time), so a to-source-only bind still refreshes it.
+            let unapplied = (!bind.to_target())
+                .then(|| bind.source().map(|cell| cell.value()))
+                .flatten();
+            (target.changed, unapplied)
+        };
+        let mut value_changed = applied_changed;
+        if let Some(cell_value) = unapplied_cell_value
+            && let Some(converted) = runtime_graph_value_from_cell_value(&cell_value, &source.value)
+            && source.value != converted
+        {
+            source.value = converted;
+            value_changed = true;
+        }
+        // Cells cascade dirt only on GENUINE value changes, so collected
+        // dirt is a source-originated change (C++ `addDirt(Bindings)`) even
+        // when a setter seam pre-synced this graph's copy — the apply mark
+        // must land either way or the target never sees the write. The
+        // random-state reset stays keyed to an actual copy change so a
+        // setter that already reset it does not reset twice.
+        if value_changed {
+            source.reset_formula_random_state_for_source_change();
+        }
+        if source.applies_source_to_target() {
+            source.mark_source_dirty_after_target_to_source();
+            return true;
+        }
+        value_changed
+    }
+
+    /// Migrated sources exist only on the owned candidates path; every other
+    /// context bind drops them so a later owned bind cannot mistake a stale
+    /// cell registration for a live one.
+    fn clear_retained_binds(&mut self) {
+        for source in &mut self.sources {
+            source.retained_bind = None;
+        }
     }
 
     pub(crate) fn reset_converter_states(&mut self) {
@@ -10238,6 +10462,83 @@ mod tests {
             imported_view_model_overrides: BTreeMap::new(),
             key_frame_source_revision: 0,
         }
+    }
+
+    /// #RB-1 e3: a migrated source refreshes its copy from retained-cell
+    /// dirt and schedules a source→target apply — the direction-engine
+    /// replacement for the mutation-clock value-copy rescan.
+    #[test]
+    fn retained_owned_source_refreshes_from_cell_dirt_and_schedules_apply() {
+        use crate::view_model_cell::RuntimeViewModelCell;
+
+        let mut graph = graph_with_number_binding(0);
+        graph.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(3.0));
+        {
+            let source = &mut graph.sources[0];
+            let mut bind = RuntimeRetainedDataBind::new(source.flags, false);
+            bind.set_source(cell.clone());
+            source.retained_bind = Some(bind);
+            source.source_to_target_dirty_after_target_to_source = false;
+            source.source_to_target_dirty_after_immediate = false;
+            source.reconcile_pending = false;
+        }
+
+        // No dirt: nothing refreshes, nothing schedules.
+        assert!(!graph.collect_retained_owned_source_dirt());
+        assert_eq!(
+            graph.sources[0].value,
+            RuntimeDataBindGraphValue::Number(3.0)
+        );
+
+        // A shared-cell write cascades dirt; the collect refreshes the copy
+        // and marks source-originated apply dirt (C++ addDirt(Bindings)).
+        assert!(cell.set_value(RuntimeViewModelCellValue::Number(8.0)));
+        assert!(graph.collect_retained_owned_source_dirt());
+        assert_eq!(
+            graph.sources[0].value,
+            RuntimeDataBindGraphValue::Number(8.0)
+        );
+        assert!(graph.sources[0].source_to_target_dirty_after_target_to_source);
+        assert!(
+            !graph.sources[0].target_origin,
+            "a source write latches source origin"
+        );
+
+        // The dirt was consumed: a second collect is a no-op.
+        assert!(!graph.collect_retained_owned_source_dirt());
+    }
+
+    /// #RB-1 e3: a to-source-only migrated bind never applies source→target,
+    /// but the graph copy is also the READ MODEL of the retained source
+    /// (C++ reads `m_Source` directly), so it still refreshes on cell dirt.
+    #[test]
+    fn retained_to_source_only_bind_still_refreshes_the_read_model() {
+        use crate::view_model_cell::RuntimeViewModelCell;
+
+        let mut graph = graph_with_number_binding(DATA_BIND_FLAG_DIRECTION_TO_SOURCE);
+        graph.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(3.0));
+        {
+            let source = &mut graph.sources[0];
+            let mut bind = RuntimeRetainedDataBind::new(source.flags, false);
+            bind.set_source(cell.clone());
+            source.retained_bind = Some(bind);
+            source.source_to_target_dirty_after_target_to_source = false;
+            source.source_to_target_dirty_after_immediate = false;
+            source.reconcile_pending = false;
+        }
+
+        assert!(cell.set_value(RuntimeViewModelCellValue::Number(42.0)));
+        assert!(graph.collect_retained_owned_source_dirt());
+        assert_eq!(
+            graph.sources[0].value,
+            RuntimeDataBindGraphValue::Number(42.0)
+        );
+        assert!(
+            !graph.sources[0].source_to_target_dirty_after_target_to_source,
+            "a to-source-only bind schedules no source→target apply"
+        );
     }
 
     fn graph_with_trigger_binding(path: &[u32]) -> RuntimeDataBindGraph {

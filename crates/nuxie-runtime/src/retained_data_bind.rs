@@ -53,6 +53,33 @@ pub struct RuntimeRetainedDataBind {
     dirt: RuntimeCellDirt,
 }
 
+impl std::fmt::Debug for RuntimeRetainedDataBind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RuntimeRetainedDataBind")
+            .field("flags", &self.flags)
+            .field("binds_once", &self.binds_once)
+            .field("target_origin", &self.target_origin)
+            .field("dirt", &self.dirt)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Clone for RuntimeRetainedDataBind {
+    /// Duplicating a bind (graph clones for per-animation keyframe
+    /// instances) re-registers a FRESH sink with the same retained cell so
+    /// the copy observes subsequent writes independently; direction state
+    /// carries over, pending sink dirt does not (the original consumes it).
+    fn clone(&self) -> Self {
+        let mut cloned = Self::new(self.flags, self.binds_once);
+        if let Some(source) = &self.source {
+            cloned.set_source(source.clone());
+        }
+        cloned.target_origin = self.target_origin;
+        cloned.dirt = self.dirt;
+        cloned
+    }
+}
+
 impl RuntimeRetainedDataBind {
     pub fn new(flags: u64, binds_once: bool) -> Self {
         Self {
@@ -144,11 +171,15 @@ impl RuntimeRetainedDataBind {
     /// Fold sink dirt (cell cascades) into the latched dirt with the same
     /// origin rules; the update cycle calls this once per pass, mirroring
     /// how C++ receives `addDirt` calls directly from `DependencyHelper`.
-    pub fn collect_source_dirt(&mut self) {
+    /// Returns whether any sink dirt was folded — distinguishing a genuine
+    /// cell cascade from dirt latched earlier (e.g. a rebind reconcile).
+    pub fn collect_source_dirt(&mut self) -> bool {
         let dirt = self.sink.take_dirt();
         if !dirt.is_empty() {
             self.add_dirt(RuntimeCellDirt::BINDINGS);
+            return true;
         }
+        false
     }
 
     pub fn pending_dirt(&self) -> RuntimeCellDirt {

@@ -19,6 +19,7 @@ use crate::properties::{
 };
 use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelListHandle};
+use crate::view_model_cell::{RuntimeViewModelCell, RuntimeViewModelCellValue};
 use crate::{
     ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
     RuntimeDataContext, RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle,
@@ -716,9 +717,61 @@ impl RuntimeOwnedViewModelBindingCandidate {
         value: &RuntimeDataBindGraphValue,
         source_path: &[u32],
     ) -> Option<RuntimeDataBindGraphValue> {
+        self.resolve_value_and_cell_for_source_path(value, source_path)
+            .map(|(value, _)| value)
+    }
+
+    /// The #RB-1 e3 resolution: exactly `resolve_value_for_source_path`'s
+    /// coverage (same candidate path walk, same value-kind matrix), PLUS the
+    /// retained scalar cell backing the resolved value when the source is a
+    /// migratable scalar kind. The cell is `None` for lists, list lengths,
+    /// view-model values, triggers (e5), strings and fonts (payload mirrors
+    /// beside the cell keep the slot setter as the only writer) — those
+    /// sources stay on the copied-value machinery.
+    pub(crate) fn resolve_value_and_cell_for_source_path(
+        &self,
+        value: &RuntimeDataBindGraphValue,
+        source_path: &[u32],
+    ) -> Option<(RuntimeDataBindGraphValue, Option<RuntimeViewModelCell>)> {
         let property_path = self.property_path_for_source_path(source_path)?;
         let context = self.context.borrow();
-        runtime_owned_view_model_binding_value_for_property_path(&context, &property_path).and_then(
+        let resolved = Self::kind_matched_binding_value(&context, &property_path, value)?;
+        let cell = context.cell_by_property_path(&property_path).filter(|cell| {
+            matches!(
+                (&cell.value(), &resolved),
+                (
+                    RuntimeViewModelCellValue::Number(_),
+                    RuntimeDataBindGraphValue::Number(_)
+                ) | (
+                    RuntimeViewModelCellValue::Boolean(_),
+                    RuntimeDataBindGraphValue::Boolean(_)
+                ) | (
+                    RuntimeViewModelCellValue::Color(_),
+                    RuntimeDataBindGraphValue::Color(_)
+                ) | (
+                    RuntimeViewModelCellValue::Enum(_),
+                    RuntimeDataBindGraphValue::Enum(_)
+                ) | (
+                    RuntimeViewModelCellValue::SymbolListIndex(_),
+                    RuntimeDataBindGraphValue::SymbolListIndex(_)
+                ) | (
+                    RuntimeViewModelCellValue::AssetImage(_),
+                    RuntimeDataBindGraphValue::Asset(_)
+                ) | (
+                    RuntimeViewModelCellValue::Artboard(_),
+                    RuntimeDataBindGraphValue::Artboard(_)
+                )
+            )
+        });
+        Some((resolved, cell))
+    }
+
+    fn kind_matched_binding_value(
+        context: &RuntimeOwnedViewModelInstance,
+        property_path: &[usize],
+        value: &RuntimeDataBindGraphValue,
+    ) -> Option<RuntimeDataBindGraphValue> {
+        runtime_owned_view_model_binding_value_for_property_path(context, property_path).and_then(
             |resolved| {
                 matches!(
                     (value, &resolved),

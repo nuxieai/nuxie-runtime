@@ -14,8 +14,10 @@ No new size budget is set in this document. Choosing one is the #B-3
 Measured 2026-07-20 from `main` runtime code at `1b6af6e2` plus the #B-3
 measurement-only consumer harness. The committed evidence snapshot records the
 exact measurement revision, artifact digests, toolchain, public-root inventory,
-and symbol-size breakdown. Two consecutive runs of `make size-report` produced
-the same output and byte-identical artifacts.
+and symbol-size breakdown in
+[`docs/evidence/size-b3-2026-07-20.md`](evidence/size-b3-2026-07-20.md). Two
+consecutive runs of `make size-report` produced the same output and
+byte-identical artifacts.
 
 | `release-size` link closure | Bytes | MiB | Delta from scripting OFF |
 |---|---:|---:|---:|

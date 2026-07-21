@@ -127,7 +127,7 @@ Pinned C++: /Users/levi/dev/oss/rive-runtime @ d788e8ec6e8b598526607d6a1e8818e8b
           "name": "cache/prepared/command epoch fanout",
           "kind": "mutation-time parallel invalidation counters beside ComponentDirt",
           "mutation_gated": true,
-          "cpp_counterpart": "none (the C++ constraint family uses retained ComponentDirt and markConstraintDirty)",
+          "cpp_counterpart": "none",
           "evidence": [
             "crates/nuxie-runtime/src/artboard.rs:2115-2134,3728-3755"
           ]
@@ -211,7 +211,7 @@ Pinned C++: /Users/levi/dev/oss/rive-runtime @ d788e8ec6e8b598526607d6a1e8818e8b
           "name": "cache/prepared/command epoch fanout",
           "kind": "mutation-time parallel invalidation counters beside ComponentDirt",
           "mutation_gated": true,
-          "cpp_counterpart": "none (the C++ constraint family uses retained ComponentDirt and markConstraintDirty)",
+          "cpp_counterpart": "none",
           "evidence": [
             "crates/nuxie-runtime/src/artboard.rs:2115-2134,3728-3755"
           ]
@@ -364,7 +364,7 @@ Pinned C++: /Users/levi/dev/oss/rive-runtime @ d788e8ec6e8b598526607d6a1e8818e8b
           "name": "cache/prepared/command epoch fanout",
           "kind": "mutation-time parallel invalidation counters beside ComponentDirt",
           "mutation_gated": true,
-          "cpp_counterpart": "none (the C++ constraint family uses retained ComponentDirt and markConstraintDirty)",
+          "cpp_counterpart": "none",
           "evidence": [
             "crates/nuxie-runtime/src/artboard.rs:2115-2134,3728-3755"
           ]
@@ -454,7 +454,7 @@ Pinned C++: /Users/levi/dev/oss/rive-runtime @ d788e8ec6e8b598526607d6a1e8818e8b
           "name": "cache/prepared/command epoch fanout",
           "kind": "mutation-time parallel invalidation counters beside ComponentDirt",
           "mutation_gated": true,
-          "cpp_counterpart": "none (the C++ constraint family uses retained ComponentDirt and markConstraintDirty)",
+          "cpp_counterpart": "none",
           "evidence": [
             "crates/nuxie-runtime/src/artboard.rs:2115-2134,3728-3755"
           ]
@@ -616,7 +616,7 @@ Pinned C++: /Users/levi/dev/oss/rive-runtime @ d788e8ec6e8b598526607d6a1e8818e8b
           "name": "cache/prepared/command epoch fanout",
           "kind": "mutation-time parallel invalidation counters beside ComponentDirt",
           "mutation_gated": true,
-          "cpp_counterpart": "none (the C++ constraint family uses retained ComponentDirt and markConstraintDirty)",
+          "cpp_counterpart": "none",
           "evidence": [
             "crates/nuxie-runtime/src/artboard.rs:2115-2134,3728-3755"
           ]
@@ -700,7 +700,7 @@ Pinned C++: /Users/levi/dev/oss/rive-runtime @ d788e8ec6e8b598526607d6a1e8818e8b
           "name": "cache/prepared/command epoch fanout",
           "kind": "mutation-time parallel invalidation counters beside ComponentDirt",
           "mutation_gated": true,
-          "cpp_counterpart": "none (the C++ constraint family uses retained ComponentDirt and markConstraintDirty)",
+          "cpp_counterpart": "none",
           "evidence": [
             "crates/nuxie-runtime/src/artboard.rs:2115-2134,3728-3755"
           ]
@@ -784,7 +784,7 @@ Pinned C++: /Users/levi/dev/oss/rive-runtime @ d788e8ec6e8b598526607d6a1e8818e8b
           "name": "cache/prepared/command epoch fanout",
           "kind": "mutation-time parallel invalidation counters beside ComponentDirt",
           "mutation_gated": true,
-          "cpp_counterpart": "none (the C++ constraint family uses retained ComponentDirt and markConstraintDirty)",
+          "cpp_counterpart": "none",
           "evidence": [
             "crates/nuxie-runtime/src/artboard.rs:2115-2134,3728-3755"
           ]
@@ -946,7 +946,7 @@ Pinned C++: /Users/levi/dev/oss/rive-runtime @ d788e8ec6e8b598526607d6a1e8818e8b
           "name": "cache/prepared/command epoch fanout",
           "kind": "mutation-time parallel invalidation counters beside ComponentDirt",
           "mutation_gated": true,
-          "cpp_counterpart": "none (the C++ constraint family uses retained ComponentDirt and markConstraintDirty)",
+          "cpp_counterpart": "none",
           "evidence": [
             "crates/nuxie-runtime/src/artboard.rs:2115-2134,3728-3755"
           ]
@@ -1352,7 +1352,7 @@ Pinned C++: /Users/levi/dev/oss/rive-runtime @ d788e8ec6e8b598526607d6a1e8818e8b
           "name": "cache/prepared/command epoch fanout",
           "kind": "mutation-time parallel invalidation counters beside ComponentDirt",
           "mutation_gated": true,
-          "cpp_counterpart": "none (the C++ constraint family uses retained ComponentDirt and markConstraintDirty)",
+          "cpp_counterpart": "none",
           "evidence": [
             "crates/nuxie-runtime/src/artboard.rs:2115-2134,3728-3755"
           ]
@@ -1436,7 +1436,7 @@ Pinned C++: /Users/levi/dev/oss/rive-runtime @ d788e8ec6e8b598526607d6a1e8818e8b
           "name": "cache/prepared/command epoch fanout",
           "kind": "mutation-time parallel invalidation counters beside ComponentDirt",
           "mutation_gated": true,
-          "cpp_counterpart": "none (the C++ constraint family uses retained ComponentDirt and markConstraintDirty)",
+          "cpp_counterpart": "none",
           "evidence": [
             "crates/nuxie-runtime/src/artboard.rs:2115-2134,3728-3755"
           ]

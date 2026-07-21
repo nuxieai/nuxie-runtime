@@ -1,5 +1,12 @@
 schema_version = 1
 
+# Completed regression-floor minima. Corpus growth may raise these values in
+# the same ticket that raises its ratchet; neither value may move backward.
+[floor]
+runtime_entries = 317
+runtime_exact_segments = 647
+renderer_entries = 1468
+
 # The A-row checklist remains source-of-truth in docs/parity-gap-register.md.
 # A closure is added here only in the same mechanically-gated ticket that
 # closes the corresponding register row.

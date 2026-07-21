@@ -8,6 +8,23 @@ from pathlib import Path
 
 
 TOOL = Path(__file__).with_name("parity_scorecard.py")
+RUNTIME_ENTRIES = 317
+RUNTIME_SEGMENTS = 647
+RENDERER_ENTRIES = 1468
+
+
+def golden_summary(entries=RUNTIME_ENTRIES, segments=RUNTIME_SEGMENTS):
+    return (
+        f"golden-compare summary: entries={entries} exact={entries} "
+        f"exact-segments={segments} diverges=0 unsupported-feature=0 not-yet=0\n"
+    )
+
+
+def renderer_summary(entries=RENDERER_ENTRIES):
+    return (
+        f"renderer-corpus exact={entries} byte-exact={entries} "
+        f"diverges=0 gated=0 total={entries}\n"
+    )
 
 
 class ParityScorecardCliTests(unittest.TestCase):
@@ -49,8 +66,7 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.write_evidence(
             evidence / "scripted-golden-compare.json",
             "scripted-golden-compare",
-            "golden-compare summary: entries=1 exact=1 exact-segments=1 "
-            "diverges=0 unsupported-feature=0 not-yet=0\n",
+            golden_summary(),
             exit_code=1,
         )
 
@@ -70,13 +86,48 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertIn("required renderer-golden evidence is unavailable", completed.stderr)
         self.assertIn("pixel-exact unavailable/red", completed.stdout)
 
+    def test_check_rejects_a_failed_workspace_floor_gate(self):
+        repo, evidence = self.create_green_repo()
+        self.write_evidence(
+            evidence / "cargo-test-workspace.json",
+            "cargo-test-workspace",
+            "test result: FAILED\n",
+            exit_code=101,
+        )
+
+        completed = self.run_check(repo)
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("cargo-test-workspace gate exited 101", completed.stderr)
+        self.assertIn("cargo-test-workspace RED", completed.stdout)
+
+    def test_check_rejects_a_manifest_that_regresses_below_the_committed_floor(self):
+        repo, evidence = self.create_green_repo()
+        self.write_runtime_manifest(
+            repo / "corpus.toml", entries=316, segments=646
+        )
+        for gate in ("golden-compare", "scripted-golden-compare"):
+            self.write_evidence(
+                evidence / f"{gate}.json",
+                gate,
+                golden_summary(entries=316, segments=646),
+            )
+
+        completed = self.run_check(repo)
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("runtime corpus entry ratchet regressed: 316 < 317", completed.stderr)
+        self.assertIn(
+            "runtime exact-segments ratchet regressed: 646 < 647", completed.stderr
+        )
+        self.assertIn("exact-segments unavailable/red", completed.stdout)
+
     def test_check_rejects_a_summary_below_the_manifest_ratchet(self):
         repo, evidence = self.create_green_repo()
         self.write_evidence(
             evidence / "golden-compare.json",
             "golden-compare",
-            "golden-compare summary: entries=1 exact=1 exact-segments=0 "
-            "diverges=0 unsupported-feature=0 not-yet=0\n",
+            golden_summary(segments=RUNTIME_SEGMENTS - 1),
         )
 
         completed = self.run_check(repo)
@@ -139,6 +190,11 @@ class ParityScorecardCliTests(unittest.TestCase):
         definition = definition.replace("required_adapters = 2", "required_adapters = 1")
         definition = definition.replace("blocking_min_entries = 20", "blocking_min_entries = 1")
         definition = definition.replace("max_ratio = 1.0", "max_ratio = 1.5")
+        definition = definition.replace("runtime_entries = 317", "runtime_entries = 1")
+        definition = definition.replace(
+            "runtime_exact_segments = 647", "runtime_exact_segments = 1"
+        )
+        definition = definition.replace("renderer_entries = 1468", "renderer_entries = 1")
         (repo / "parity-scorecard.toml").write_text(definition)
 
         completed = self.run_check(repo)
@@ -147,136 +203,72 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertIn("platform.required_adapters must be at least 2", completed.stderr)
         self.assertIn("performance.blocking_min_entries must be at least 20", completed.stderr)
         self.assertIn("performance.max_ratio must be at most 1.0", completed.stderr)
+        self.assertIn("floor.runtime_entries must be at least 317", completed.stderr)
+        self.assertIn("floor.runtime_exact_segments must be at least 647", completed.stderr)
+        self.assertIn("floor.renderer_entries must be at least 1468", completed.stderr)
 
     def test_green_floor_evidence_prints_all_five_tiers_and_writes_json(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            repo = Path(temporary_directory)
-            evidence = repo / "target" / "parity-scorecard" / "evidence"
-            evidence.mkdir(parents=True)
-            (repo / "docs").mkdir()
-            (repo / "docs" / "parity-gap-register.md").write_text(
-                "## A — Embedder API surface gaps\n\n"
-                "| id | gap | tier |\n|---|---|---|\n"
-                "| A1 | first | 1 |\n| A2 | second | 1 |\n\n"
-                "## C — Coverage holes\n"
-            )
-            (repo / "parity-scorecard.toml").write_text(
-                textwrap.dedent(
-                    """
-                    schema_version = 1
+        repo, _ = self.create_green_repo(sdk_rows=("A1", "A2"))
+        json_output = repo / "target" / "parity-scorecard.json"
 
-                    [sdk]
-                    rows = ["A1", "A2"]
-                    closed = []
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(TOOL),
+                "check",
+                "--repo-root",
+                str(repo),
+                "--source-sha",
+                "test-sha",
+                "--json",
+                str(json_output),
+            ],
+            text=True,
+            capture_output=True,
+        )
 
-                    [platform]
-                    verified_adapters = ["test-adapter"]
-                    required_adapters = 2
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        for tier_name in (
+            "Frame parity",
+            "Interaction parity",
+            "SDK parity",
+            "Platform parity",
+            "Performance & size",
+        ):
+            self.assertIn(tier_name, completed.stdout)
+        self.assertIn("tiers-green: 0/5", completed.stdout)
+        self.assertIn("exact-segments 647/647", completed.stdout)
+        self.assertIn("pixel-exact 1468/1468", completed.stdout)
+        self.assertIn("cargo-test-workspace GREEN", completed.stdout)
+        self.assertIn("capi-smoke GREEN", completed.stdout)
+        self.assertIn(
+            "r4-timing-gate per-commit scorecard evidence not built",
+            completed.stdout,
+        )
+        for ticket in (
+            "#OR-6",
+            "#OR-1/#OR-2",
+            "#OR-3",
+            "#OR-4",
+            "#OR-5",
+            "#OR-7",
+            "#HD-3",
+            "#OR-9",
+            "#B-3",
+        ):
+            self.assertIn(f"not built ({ticket}", completed.stdout)
+        self.assertIn("A-rows closed 0/2 (open: A1,A2)", completed.stdout)
 
-                    [performance]
-                    blocking_min_entries = 20
-                    max_ratio = 1.0
-                    """
-                ).lstrip()
-            )
-            (repo / "corpus.toml").write_text(
-                textwrap.dedent(
-                    """
-                    [[file]]
-                    id = "normal"
-                    path = "normal.riv"
-                    samples = [0.0, 1.0]
-                    status = "exact"
-
-                    [[file]]
-                    id = "malformed"
-                    path = "malformed.riv"
-                    samples = [0.0]
-                    status = "exact"
-                    verification = "rejects-malformed"
-                    """
-                ).lstrip()
-            )
-            (repo / "corpus-r.toml").write_text(
-                textwrap.dedent(
-                    """
-                    [[entry]]
-                    id = "pixel-a"
-                    status = "exact"
-
-                    [[entry]]
-                    id = "pixel-b"
-                    status = "exact"
-                    """
-                ).lstrip()
-            )
-            self.write_evidence(
-                evidence / "golden-compare.json",
-                "golden-compare",
-                "golden-compare summary: entries=2 exact=2 exact-segments=2 "
-                "diverges=0 unsupported-feature=0 not-yet=0\n",
-            )
-            self.write_evidence(
-                evidence / "scripted-golden-compare.json",
-                "scripted-golden-compare",
-                "golden-compare summary: entries=2 exact=2 exact-segments=2 "
-                "diverges=0 unsupported-feature=0 not-yet=0\n",
-            )
-            self.write_evidence(
-                evidence / "renderer-golden.json",
-                "renderer-golden",
-                "renderer-corpus exact=2 byte-exact=2 diverges=0 gated=0 total=2\n",
-            )
-            json_output = repo / "target" / "parity-scorecard.json"
-
-            completed = subprocess.run(
-                [
-                    sys.executable,
-                    str(TOOL),
-                    "check",
-                    "--repo-root",
-                    str(repo),
-                    "--source-sha",
-                    "test-sha",
-                    "--json",
-                    str(json_output),
-                ],
-                text=True,
-                capture_output=True,
-            )
-
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            for tier_name in (
-                "Frame parity",
-                "Interaction parity",
-                "SDK parity",
-                "Platform parity",
-                "Performance & size",
-            ):
-                self.assertIn(tier_name, completed.stdout)
-            self.assertIn("tiers-green: 0/5", completed.stdout)
-            self.assertIn("exact-segments 2/2", completed.stdout)
-            self.assertIn("pixel-exact 2/2", completed.stdout)
-            for ticket in (
-                "#OR-6",
-                "#OR-1/#OR-2",
-                "#OR-3",
-                "#OR-4",
-                "#OR-5",
-                "#OR-7",
-                "#HD-3",
-                "#OR-9",
-                "#B-3",
-            ):
-                self.assertIn(f"not built ({ticket}", completed.stdout)
-            self.assertIn("A-rows closed 0/2 (open: A1,A2)", completed.stdout)
-
-            report = json.loads(json_output.read_text())
-            self.assertEqual(report["schema"], "nuxie-parity-scorecard-v1")
-            self.assertEqual(report["source_sha"], "test-sha")
-            self.assertEqual(report["tiers_green"], 0)
-            self.assertTrue(report["evidence_valid"])
-            self.assertEqual([tier["id"] for tier in report["tiers"]], [1, 2, 3, 4, 5])
+        report = json.loads(json_output.read_text())
+        self.assertEqual(report["schema"], "nuxie-parity-scorecard-v1")
+        self.assertEqual(report["source_sha"], "test-sha")
+        self.assertEqual(report["tiers_green"], 0)
+        self.assertTrue(report["evidence_valid"])
+        self.assertEqual([tier["id"] for tier in report["tiers"]], [1, 2, 3, 4, 5])
+        self.assertEqual(
+            [gate["state"] for gate in report["regression_floor"]],
+            ["GREEN"] * 5,
+        )
 
     @staticmethod
     def write_evidence(path, gate, output, exit_code=0):
@@ -293,7 +285,7 @@ class ParityScorecardCliTests(unittest.TestCase):
             + "\n"
         )
 
-    def create_green_repo(self):
+    def create_green_repo(self, sdk_rows=("A1",)):
         temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(temporary_directory.cleanup)
         repo = Path(temporary_directory.name)
@@ -303,15 +295,20 @@ class ParityScorecardCliTests(unittest.TestCase):
         (repo / "docs" / "parity-gap-register.md").write_text(
             "## A — Embedder API surface gaps\n\n"
             "| id | gap | tier |\n|---|---|---|\n"
-            "| A1 | first gap | 1 |\n\n"
+            + "".join(f"| {row} | test gap | 1 |\n" for row in sdk_rows)
+            + "\n"
             "## C — Coverage holes\n"
         )
         (repo / "parity-scorecard.toml").write_text(
             textwrap.dedent(
-                """
+                f"""
                 schema_version = 1
+                [floor]
+                runtime_entries = 317
+                runtime_exact_segments = 647
+                renderer_entries = 1468
                 [sdk]
-                rows = ["A1"]
+                rows = {json.dumps(list(sdk_rows))}
                 closed = []
                 [platform]
                 verified_adapters = ["test-adapter"]
@@ -322,44 +319,57 @@ class ParityScorecardCliTests(unittest.TestCase):
                 """
             ).lstrip()
         )
-        (repo / "corpus.toml").write_text(
-            textwrap.dedent(
-                """
-                [[file]]
-                id = "one"
-                path = "one.riv"
-                samples = [0.0]
-                status = "exact"
-                """
-            ).lstrip()
-        )
-        (repo / "corpus-r.toml").write_text(
-            textwrap.dedent(
-                """
-                [[entry]]
-                id = "pixel"
-                status = "exact"
-                """
-            ).lstrip()
-        )
+        self.write_runtime_manifest(repo / "corpus.toml")
+        self.write_renderer_manifest(repo / "corpus-r.toml")
         self.write_evidence(
             evidence / "golden-compare.json",
             "golden-compare",
-            "golden-compare summary: entries=1 exact=1 exact-segments=1 "
-            "diverges=0 unsupported-feature=0 not-yet=0\n",
+            golden_summary(),
         )
         self.write_evidence(
             evidence / "scripted-golden-compare.json",
             "scripted-golden-compare",
-            "golden-compare summary: entries=1 exact=1 exact-segments=1 "
-            "diverges=0 unsupported-feature=0 not-yet=0\n",
+            golden_summary(),
         )
         self.write_evidence(
             evidence / "renderer-golden.json",
             "renderer-golden",
-            "renderer-corpus exact=1 byte-exact=1 diverges=0 gated=0 total=1\n",
+            renderer_summary(),
+        )
+        self.write_evidence(
+            evidence / "cargo-test-workspace.json",
+            "cargo-test-workspace",
+            "test result: ok\n",
+        )
+        self.write_evidence(
+            evidence / "capi-smoke.json", "capi-smoke", "capi smoke: ok\n"
         )
         return repo, evidence
+
+    @staticmethod
+    def write_runtime_manifest(path, entries=RUNTIME_ENTRIES, segments=RUNTIME_SEGMENTS):
+        assert entries > 0 and segments >= entries
+        first_samples = segments - entries + 1
+        rows = []
+        for index in range(entries):
+            sample_count = first_samples if index == 0 else 1
+            samples = ", ".join(str(float(sample)) for sample in range(sample_count))
+            rows.append(
+                "[[file]]\n"
+                f'id = "runtime-{index}"\n'
+                f'path = "runtime-{index}.riv"\n'
+                f"samples = [{samples}]\n"
+                'status = "exact"\n'
+            )
+        path.write_text("\n".join(rows))
+
+    @staticmethod
+    def write_renderer_manifest(path, entries=RENDERER_ENTRIES):
+        rows = [
+            "[[entry]]\n" f'id = "pixel-{index}"\n' 'status = "exact"\n'
+            for index in range(entries)
+        ]
+        path.write_text("\n".join(rows))
 
     @staticmethod
     def run_check(repo):

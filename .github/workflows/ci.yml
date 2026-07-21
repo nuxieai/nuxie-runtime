@@ -109,12 +109,31 @@ jobs:
             -- make golden-compare
 
       - name: Record forced-scripted golden ratchet
+        if: always()
         working-directory: ${{ github.workspace }}/rive-rust
         run: |
           python3 tools/parity-scorecard/parity_scorecard.py record \
             --gate scripted-golden-compare \
             --output target/parity-scorecard/evidence/scripted-golden-compare.json \
             -- make scripted-golden-compare
+
+      - name: Record workspace test floor
+        if: always()
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate cargo-test-workspace \
+            --output target/parity-scorecard/evidence/cargo-test-workspace.json \
+            -- cargo test --workspace
+
+      - name: Record C API smoke floor
+        if: always()
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate capi-smoke \
+            --output target/parity-scorecard/evidence/capi-smoke.json \
+            -- make capi-smoke
 
       - name: Upload runtime scorecard evidence
         if: always()

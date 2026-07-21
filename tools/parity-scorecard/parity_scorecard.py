@@ -18,6 +18,9 @@ from typing import Any
 
 EVIDENCE_SCHEMA = "nuxie-parity-gate-evidence-v1"
 REPORT_SCHEMA = "nuxie-parity-scorecard-v1"
+MIN_RUNTIME_ENTRIES = 317
+MIN_RUNTIME_EXACT_SEGMENTS = 647
+MIN_RENDERER_ENTRIES = 1468
 
 GOLDEN_SUMMARY = re.compile(
     r"^golden-compare summary: entries=(?P<entries>\d+) "
@@ -139,10 +142,17 @@ def check_scorecard(options: argparse.Namespace) -> int:
     corpus = load_toml(repo_root / "corpus.toml", "runtime corpus", errors)
     renderer_corpus = load_toml(repo_root / "corpus-r.toml", "renderer corpus", errors)
 
-    expected_entries, expected_segments = runtime_ratchet(corpus, errors)
-    expected_pixels = renderer_ratchet(renderer_corpus, errors)
+    minimum_entries, minimum_segments, minimum_pixels = floor_requirements(
+        definition, errors
+    )
+    expected_entries, expected_segments, runtime_floor_valid = runtime_ratchet(
+        corpus, minimum_entries, minimum_segments, errors
+    )
+    expected_pixels, renderer_floor_valid = renderer_ratchet(
+        renderer_corpus, minimum_pixels, errors
+    )
 
-    golden = validate_golden_evidence(
+    golden_evidence = validate_golden_evidence(
         evidence_dir / "golden-compare.json",
         "golden-compare",
         source_sha,
@@ -150,7 +160,7 @@ def check_scorecard(options: argparse.Namespace) -> int:
         expected_segments,
         errors,
     )
-    scripted = validate_golden_evidence(
+    scripted_evidence = validate_golden_evidence(
         evidence_dir / "scripted-golden-compare.json",
         "scripted-golden-compare",
         source_sha,
@@ -158,12 +168,34 @@ def check_scorecard(options: argparse.Namespace) -> int:
         expected_segments,
         errors,
     )
-    renderer = validate_renderer_evidence(
+    renderer_evidence = validate_renderer_evidence(
         evidence_dir / "renderer-golden.json",
         source_sha,
         expected_pixels,
         errors,
     )
+    workspace = validate_exit_evidence(
+        evidence_dir / "cargo-test-workspace.json",
+        "cargo-test-workspace",
+        source_sha,
+        errors,
+    )
+    capi = validate_exit_evidence(
+        evidence_dir / "capi-smoke.json",
+        "capi-smoke",
+        source_sha,
+        errors,
+    )
+    golden = golden_evidence and runtime_floor_valid
+    scripted = scripted_evidence and runtime_floor_valid
+    renderer = renderer_evidence and renderer_floor_valid
+    floor_gates = [
+        gate_result("golden-compare", golden),
+        gate_result("scripted-golden-compare", scripted),
+        gate_result("renderer-golden", renderer),
+        gate_result("cargo-test-workspace", workspace),
+        gate_result("capi-smoke", capi),
+    ]
 
     tiers = build_tiers(
         definition,
@@ -183,6 +215,7 @@ def check_scorecard(options: argparse.Namespace) -> int:
         "tiers_green": tiers_green,
         "tiers_total": 5,
         "evidence_valid": not errors,
+        "regression_floor": floor_gates,
         "tiers": tiers,
         "errors": errors,
     }
@@ -226,33 +259,94 @@ def git_source_sha(repo_root: Path, errors: list[str]) -> str:
     return completed.stdout.strip()
 
 
-def runtime_ratchet(corpus: dict[str, Any], errors: list[str]) -> tuple[int, int]:
+def floor_requirements(
+    definition: dict[str, Any], errors: list[str]
+) -> tuple[int, int, int]:
+    floor = definition.get("floor", {})
+    if not isinstance(floor, dict):
+        errors.append("scorecard floor must be a TOML table")
+        floor = {}
+    return (
+        minimum_integer(
+            floor.get("runtime_entries"),
+            "floor.runtime_entries",
+            MIN_RUNTIME_ENTRIES,
+            errors,
+        ),
+        minimum_integer(
+            floor.get("runtime_exact_segments"),
+            "floor.runtime_exact_segments",
+            MIN_RUNTIME_EXACT_SEGMENTS,
+            errors,
+        ),
+        minimum_integer(
+            floor.get("renderer_entries"),
+            "floor.renderer_entries",
+            MIN_RENDERER_ENTRIES,
+            errors,
+        ),
+    )
+
+
+def minimum_integer(value: Any, label: str, minimum: int, errors: list[str]) -> int:
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < minimum
+    ):
+        errors.append(f"{label} must be at least {minimum}")
+        return minimum
+    return value
+
+
+def runtime_ratchet(
+    corpus: dict[str, Any],
+    minimum_entries: int,
+    minimum_segments: int,
+    errors: list[str],
+) -> tuple[int, int, bool]:
+    valid = True
     rows = corpus.get("file")
     if not isinstance(rows, list) or not rows:
         errors.append("runtime corpus must contain at least one [[file]] row")
-        return 0, 0
+        return 0, 0, False
     exact_rows = [row for row in rows if isinstance(row, dict) and row.get("status") == "exact"]
     if len(exact_rows) != len(rows):
         errors.append(
             "runtime corpus contains a non-exact row; "
             "the completed floor requires all rows exact"
         )
+        valid = False
     segments = 0
     for row in exact_rows:
         samples = row.get("samples")
         if not isinstance(samples, list) or not samples:
             errors.append(f"runtime corpus row {row.get('id', '<unknown>')} has no samples")
+            valid = False
             continue
         if row.get("verification") != "rejects-malformed":
             segments += len(samples)
-    return len(rows), segments
+    if len(rows) < minimum_entries:
+        errors.append(
+            f"runtime corpus entry ratchet regressed: {len(rows)} < {minimum_entries}"
+        )
+        valid = False
+    if segments < minimum_segments:
+        errors.append(
+            f"runtime exact-segments ratchet regressed: {segments} < {minimum_segments}"
+        )
+        valid = False
+    return len(rows), segments, valid
 
 
-def renderer_ratchet(corpus: dict[str, Any], errors: list[str]) -> int:
+def renderer_ratchet(
+    corpus: dict[str, Any], minimum_entries: int, errors: list[str]
+) -> tuple[int, bool]:
+    valid = True
     rows = corpus.get("entry")
     if not isinstance(rows, list) or not rows:
         errors.append("renderer corpus must contain at least one [[entry]] row")
-        return 0
+        return 0, False
     exact = sum(
         isinstance(row, dict) and row.get("status") == "exact" for row in rows
     )
@@ -261,7 +355,13 @@ def renderer_ratchet(corpus: dict[str, Any], errors: list[str]) -> int:
             "renderer corpus contains a non-exact row; "
             "the completed floor requires all rows exact"
         )
-    return len(rows)
+        valid = False
+    if len(rows) < minimum_entries:
+        errors.append(
+            f"renderer entry ratchet regressed: {len(rows)} < {minimum_entries}"
+        )
+        valid = False
+    return len(rows), valid
 
 
 def read_evidence(path: Path, expected_gate: str, errors: list[str]) -> Evidence | None:
@@ -373,6 +473,15 @@ def validate_renderer_evidence(
         errors.append(f"renderer-golden ratchet mismatch: expected {expected}, got {summary}")
         valid = False
     return valid
+
+
+def validate_exit_evidence(
+    path: Path, gate: str, source_sha: str, errors: list[str]
+) -> bool:
+    evidence = read_evidence(path, gate, errors)
+    if evidence is None:
+        return False
+    return validate_evidence_identity(evidence, source_sha, errors)
 
 
 def build_tiers(
@@ -520,6 +629,12 @@ def build_tiers(
             "Performance & size",
             [
                 perf,
+                ratchet(
+                    "r4-timing-gate",
+                    "NOT_BUILT",
+                    "r4-timing-gate per-commit scorecard evidence not built "
+                    "(existing Phase R gate)",
+                ),
                 ratchet("size-mib", "NOT_BUILT", "size MiB not built (#B-3)"),
             ],
         ),
@@ -652,6 +767,10 @@ def ratchet(
     return result
 
 
+def gate_result(gate_id: str, valid: bool) -> dict[str, str]:
+    return {"id": gate_id, "state": "GREEN" if valid else "RED"}
+
+
 def tier(tier_id: int, name: str, ratchets: list[dict[str, Any]]) -> dict[str, Any]:
     states = {ratchet["state"] for ratchet in ratchets}
     if states == {"GREEN"}:
@@ -669,6 +788,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         f"source-sha: {report['source_sha']}",
         f"tiers-green: {report['tiers_green']}/{report['tiers_total']}",
+        "regression-floor: "
+        + "; ".join(
+            f"{gate['id']} {gate['state']}" for gate in report["regression_floor"]
+        ),
         "",
         "| tier | state | ratchets |",
         "|---|---|---|",

@@ -10,6 +10,8 @@ The required evidence files are:
 - `target/parity-scorecard/evidence/golden-compare.json`
 - `target/parity-scorecard/evidence/scripted-golden-compare.json`
 - `target/parity-scorecard/evidence/renderer-golden.json`
+- `target/parity-scorecard/evidence/cargo-test-workspace.json`
+- `target/parity-scorecard/evidence/capi-smoke.json`
 
 Produce evidence while running a gate so the report contains both its output
 and real exit status:
@@ -24,6 +26,10 @@ python3 tools/parity-scorecard/parity_scorecard.py record \
 `record` returns the gate's exit status. `check` fails if required evidence is
 missing, stale, malformed, nonzero, or disagrees with the current corpus
 manifests. A successful summary from a failed command is therefore still red.
+The manifest-derived totals must also remain at or above the committed
+317-entry/647-segment runtime and 1,468-entry renderer floors in
+`parity-scorecard.toml`, so deleting coverage cannot lower both sides of a
+comparison and masquerade as green.
 
 Known future gates are different from unavailable evidence: they are printed
 as `not built` with their ticket and keep their tier non-green, but do not make

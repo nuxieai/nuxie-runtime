@@ -335,10 +335,10 @@ apple-runtime-check: apple-runtime-header-smoke apple-runtime-release-panic-smok
 apple-runtime-xcframework:
 	tools/build-apple-xcframework.sh
 
-# SDK binary-size report: builds the `release-size` cdylib (never the perf
-# `release` profile) and prints the tracked sizes. Pass SIZE_BASELINE=1 to
-# also build the unmodified `release` cdylib and show the delta. See
-# docs/SIZE.md.
+# SDK binary-size report: builds the post-Phase-R Darwin link closure with the
+# renderer retained, for scripting off and on. Pass SIZE_BASELINE=1 to also
+# build the opt-level=3 release closure. No budget is enforced until #B-3's
+# USER-GATE is decided. See docs/SIZE.md.
 SIZE_BASELINE ?=
 size-report:
 	tools/size-report.sh $(if $(SIZE_BASELINE),--baseline,)

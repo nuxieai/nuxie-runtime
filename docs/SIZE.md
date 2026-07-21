@@ -1,165 +1,136 @@
 # SDK Binary Size
 
-Tracks the `nux-capi` cdylib size — the artifact embedded in customers' iOS /
-Android apps. Since the Nuxie runtime ships as an SDK, cdylib size is an
-adoption gate, so size is a tracked metric alongside the perf ratio
-(docs/v2-status.md item 26(d)).
+This is the reproducible binary-size evidence for parity-closeout ticket
+**#B-3**. The tracked artifact is now the post-Phase-R Darwin SDK link closure:
+the portable `nux-capi` ABI with the pure-Rust `nuxie-renderer` and vendored
+`wgpu` backend retained. It is measured with scripting both disabled and
+enabled.
 
-Regenerate the live numbers with:
+No new size budget is set in this document. Choosing one is the #B-3
+**USER-GATE**.
 
-```
-make size-report              # release-size cdylib, scripting off + on
-make size-report SIZE_BASELINE=1   # also builds unmodified `release` for the delta
-```
+## Current measurement
 
-All figures below are macOS `aarch64-apple-darwin` cdylib, on-disk uncompressed
-bytes, measured on the branch that introduced this file. Host toolchain: rustc
-1.94.0, Apple `ld-1267`.
+Measured 2026-07-20 from `main` runtime code at `1b6af6e2` plus the #B-3
+measurement-only changes. Both consecutive runs of `make size-report` produced
+the same byte counts and byte-identical artifacts.
 
-## Profiles
-
-`release-size` is a dedicated size profile (root `Cargo.toml`). It does **not**
-touch `[profile.release]`, which the perf gate depends on staying at
-`opt-level=3`, `lto=fat`, `codegen-units=1`, `panic=abort`.
-
-```toml
-[profile.release-size]
-inherits = "release"   # fat LTO + codegen-units=1 + panic=abort
-opt-level = "z"
-strip = "symbols"
-```
-
-Override the opt-level ad hoc without editing the file:
-`CARGO_PROFILE_RELEASE_SIZE_OPT_LEVEL=s cargo build --profile release-size -p nux-capi`.
-
-## Baseline table
-
-| Build | Bytes | MiB | vs release |
+| `release-size` link closure | Bytes | MiB | Delta from scripting OFF |
 |---|---:|---:|---:|
-| `release` (opt=3), unstripped — **baseline** | 4,179,920 | 3.99 | — |
-| `release` (opt=3), `strip -x` | 3,691,640 | 3.52 | −11.7% |
-| **`release-size` (opt=z + strip=symbols), scripting OFF** | **2,735,088** | **2.61** | **−34.6%** |
-| `release-size` (opt=z + strip), scripting ON | 2,918,704 | 2.78 | −30.2% |
+| Renderer ON, scripting OFF — tracked metric | **7,384,552** | **7.04** | — |
+| Renderer ON, scripting ON | **8,202,280** | **7.82** | **+817,728 B (+11.1%)** |
 
-Scripting cost, apples-to-apples on the size profile: **+183,616 B (+6.7%)**.
-On the unoptimized `release` profile the same feature costs +351,712 B (raw
-4,179,920 → 4,531,632), because `opt-level=z` compresses the Luau VM harder
-than `opt=3` does.
+The optional stripped opt-level=3 renderer-on/scripting-off closure is
+9,989,832 B (9.53 MiB). The tracked `release-size` profile is 2,605,280 B
+(26.1%) smaller under the same link-root and strip contract.
 
-## Original per-lever deltas (each measured separately)
+The historical budget was **2.75 MiB = 2,883,584 B** per architecture. The new
+renderer-on, scripting-off measurement is **4,500,968 B (+156.1%) above** that
+number. This is informational only: `make size-report` does not enforce the old
+budget or infer a replacement.
 
-Starting from the unstripped `release` baseline (4,179,920 B):
+The scripting-off section layout reported by Apple's `size -m` is:
 
-| Lever | Result (B) | Δ from previous |
-|---|---:|---:|
-| `strip = "symbols"` (≈ `strip -x`) | 3,691,600 | −488,320 (−11.7%) |
-| + `opt-level = "z"` | 2,617,024 | −1,074,576 (−29.1%) |
-| + `opt-level = "s"` (alt.) | 3,234,608 | (z is −617,584 vs s) |
-| + linker `-Wl,-dead_strip` | 2,617,024 | 0 (LTO already dead-strips) |
-| + linker `-Wl,-icf,all` | n/a | **unsupported** by Apple `ld` |
+| Mach-O region | Bytes |
+|---|---:|
+| `__TEXT` segment | 6,733,824 |
+| `__text` section | 4,596,016 |
+| `__const` section in `__TEXT` | 1,067,644 |
+| `__cstring` | 119,314 |
+| `__unwind_info` | 165,224 |
+| `__eh_frame` | 411,692 |
+| `__DATA_CONST` segment | 507,904 |
+| `__const` section in `__DATA_CONST` | 504,536 |
+| `__DATA` segment | 16,384 |
+| `__LINKEDIT` segment | 131,072 |
 
-Opt-level sweep on the size profile (with strip=symbols): `z` = 2,617,024 ·
-`s` = 3,234,608 · `3` = 3,691,600. `z` wins decisively here and is the
-committed default for the size profile; `s` is the perf-conscious middle
-option (opt-level `z` can slow hot loops — but the perf gate runs the
-untouched `release` profile, so this profile is free to pick `z`).
+## Artifact contract
 
-### Linker notes
+The measured files are:
 
-- **ICF (identical-code folding)** — `-Wl,--icf=all` is an lld/ELF feature.
-  Apple's linker (`ld-1267`, the current `ld-prime`) rejects `-icf` with
-  `ld: unknown options: -icf`. There is no user-facing ICF flag on macOS;
-  ld64/ld-prime does some literal/function dedup on its own at link time.
-  If a future iOS/Android build path uses `lld`, `--icf=all` becomes a real
-  lever there.
-- **`-dead_strip`** yielded **zero** additional bytes: fat LTO plus the cdylib
-  export roots already eliminate unreachable code at the IR level, and rustc
-  passes dead-strip on Apple targets by default.
-- **panic message trimming** — `panic=abort` is already set (inherited).
-  Trimming the remaining panic *formatting/message* machinery needs the
-  nightly `-Z build-std-features=panic_immediate_abort` path (see un-pulled
-  levers); it is not a trivial flag on stable, so it was not applied here.
+```text
+target/size-report/release-size-renderer-on-scripting-off/libnux_capi_full.dylib
+target/size-report/release-size-renderer-on-scripting-on/libnux_capi_full.dylib
+```
 
-## What's in the binary (biggest contributors)
+They are consumed-SDK **link-closure proxies**, not the raw `.a` archive and
+not Cargo's callback-only `libnux_capi.dylib`. The report constructs each
+artifact mechanically:
 
-`.text` breakdown by crate, `release`/opt=3 unstripped, scripting OFF
-(address-delta symbol sizing; `cargo-bloat` can't inspect a `cdylib`+`rlib`
-crate, so this is `nm`-based):
+1. Build `nux-capi` as `staticlib` + `cdylib` under the `release-size` profile,
+   with `--no-default-features --features apple-renderer`; add
+   `nuxie/scripting` for the scripting-on variant.
+2. Verify the resolved dependency graph contains `nuxie-renderer` and the
+   repository's vendored `wgpu` 30.0.0.
+3. Re-link the staticlib as one Mach-O dylib, retaining every public `_nux_*`
+   C ABI export plus every public `WgpuFactory` / `WgpuFrame` entry point (28
+   renderer roots in this measurement).
+4. Link with `-dead_strip -dead_strip_dylibs`, verify the C ABI export set is
+   unchanged and both `WgpuFactory::new_with_mode` and `wgpu_core` survived,
+   then run `strip -S -x`.
 
-| Crate | KiB | Note |
-|---|---:|---|
-| `nuxie_runtime` | 797 | core object/state-machine/draw model |
-| fonts: `skrifa` + `harfrust` + `read-fonts` | 737 | **the text/shaping stack** |
-| `std`/`core`/`alloc` | 501 | fmt + panic formatting + collections |
-| generic trait impls (monomorphization) | 319 | |
-| `taffy` | 190 | layout engine |
-| `nuxie_binary` | 118 | .riv reader |
-| `nuxie_graph` | 98 | |
-| `nuxie_schema` | 58 | generated schema (code; table data lives in `__const`) |
-| `luaur*` (Luau VM) | +194 | only present with scripting ON |
+This root set models an application consuming the full portable ABI and public
+`WgpuFactory` / `WgpuFrame` renderer surface. It deliberately avoids two
+misleading numbers:
 
-Answering the brief's question — the biggest contributors are **not** the
-schema tables (58 KiB of code). They are `nuxie_runtime`, then the **text
-stack** (skrifa/harfrust ≈ 737 KiB), then `std` formatting machinery. The
-Luau VM adds ≈194 KiB of `.text` but compresses to +180 KiB net at opt=z.
-Note also `__DATA_CONST/__const` ≈ 297 KiB of read-only table data (schema
-property tables, vtables) that the `.text` breakdown doesn't capture.
+- The raw static archive contains object code that a consuming linker removes,
+  so its on-disk size is not application footprint.
+- Merely enabling `nux-capi/apple-renderer` on Cargo's callback-only cdylib
+  compiles the renderer but does not reference it. Fat LTO removes almost all
+  renderer code, so that artifact does not measure Phase R.
 
-## Budget recommendation
+Before the tooling correction, the unchanged report produced 3,782,736 B
+(3.61 MiB) scripting-off and 4,684,272 B (4.47 MiB) scripting-on. Enabling
+`apple-renderer` without link roots produced 3,783,168 B, only 432 B larger.
+Those observations are the mechanical proof that the old artifact omitted the
+renderer closure.
 
-**Track the `release-size` scripting-OFF cdylib. Budget: ≤ 2.75 MiB per
-architecture; alert if it exceeds 3.0 MiB.** Current value: **2.50 MiB**.
+Actual application contribution can be smaller or larger depending on which
+public APIs the host references, final-link settings, architecture, and App
+Store thinning/compression. This report intentionally fixes those variables to
+one conservative, reproducible per-architecture contract.
 
-Rationale for a mobile paywall/flow SDK:
-- On-disk uncompressed per-arch is the pessimistic figure. The App Store
-  thins to the device architecture and compresses the binary, so the *download*
-  impact on a customer's app is materially smaller than 2.5 MiB.
-- Third-party iOS SDKs in this category (analytics, paywalls, feature flags)
-  commonly land in the low-single-digit-MB range uncompressed; a self-contained
-  animation + paywall runtime at 2.5 MiB is competitive and well inside the
-  range where SDK size does not by itself block adoption. (Ballpark from
-  general SDK-footprint norms; confirm against specific competitor SDKs before
-  quoting externally.)
-- The budget leaves ~250 KiB of headroom for near-term growth (renderer stubs,
-  more binding surface) before the alert threshold, at which point the
-  un-pulled levers below should be pulled.
-- Scripting is +7% (~180 KiB) — cheap enough to ship on by default if the
-  product needs it, or feature-gate for minimal builds.
+## Toolchain and target
 
-## Levers NOT yet pulled (future work)
+| Input | Value |
+|---|---|
+| Target | Rust host `aarch64-apple-darwin`; Mach-O arm64 |
+| Host | macOS 26.4.1 (25E253), Apple Silicon arm64 |
+| Rust | `rustc 1.94.0 (4a4ef493e 2026-03-02)`, LLVM 21.1.8 |
+| Cargo | 1.94.0 |
+| Xcode | 26.6 (17F113) |
+| macOS SDK | 26.5 |
+| Clang | Apple clang 21.0.0 (`clang-2100.1.1.101`) |
+| Linker | Apple `ld-1267` |
+| Cargo profile | fat LTO, codegen-units=1, panic=unwind; `opt-level=z` |
+| Final link | Darwin `clang -dynamiclib`, dead-strip closure, `strip -S -x` |
 
-Ordered roughly by expected payoff vs. effort:
+`release-size` inherits `[profile.release]`; the workspace's release panic
+strategy is `unwind` because the Luau protected-error boundary requires it.
+The size profile does not change the opt-level=3 release profile used by the
+performance gates.
 
-1. **Feature-gate the text/shaping stack** (~737 KiB, the single biggest
-   removable chunk). Builds that render no text could drop skrifa/harfrust/
-   read-fonts entirely behind a `text` feature. Highest-payoff slimming lever.
-2. **`panic_immediate_abort`** via nightly build-std
-   (`-Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort`).
-   Strips panic message/formatting code out of `std` (overlaps the ~500 KiB
-   std bucket). Requires a nightly toolchain and rebuilding std; changes panics
-   to a bare `abort` with no message. Attractive for an SDK where panics abort
-   into the host app anyway — pairs naturally with the capi `catch_unwind`
-   firewall (item 26(d)).
-3. **Feature-gate `taffy` layout** (~190 KiB) for builds that don't use the
-   layout engine.
-4. **Schema/`__const` table slimming** (~297 KiB of `__DATA_CONST` table data,
-   plus 58 KiB schema code). Investigate whether the generated property/lookup
-   tables can be made denser or partly `const fn`-computed rather than
-   materialized.
-5. **Monomorphization / generic bloat** (~319 KiB trait impls). Reduce over-
-   generic hot paths or apply `-Z polymorphize` (nightly) — high effort, uncertain.
-6. **`lld` + `--icf=all`** on the eventual iOS/Android device build paths
-   (Apple `ld` can't do ICF; see linker notes). Real ICF can fold the many
-   near-identical monomorphized instantiations.
-7. **Phase R renderer choice.** No real renderer is linked yet. When a
-   GPU/CPU rasterizer lands it will add substantial code; the renderer choice
-   (full tessellation pipeline vs. a lighter path) is the largest *future*
-   swing in SDK size and should be evaluated against this budget.
+## Reproduce
 
-## How the metric is produced
+```sh
+make size-report
+make size-report SIZE_BASELINE=1  # additionally measures the stripped opt=3 closure
+```
 
-`make size-report` → `tools/size-report.sh`. It builds `release-size`
-(scripting off and on), optionally the `release` baseline (`SIZE_BASELINE=1`),
-prints the tracked byte counts + deltas, and a `size -m` section breakdown.
-The scripting-OFF `release-size` cdylib byte count is the number to record
-alongside the perf ratio.
+The command fails rather than printing a partial number if the renderer or
+vendored wgpu is absent, fewer than 30 C ABI roots or 20 renderer roots are
+found, the linked export set changes, or renderer/wgpu symbols do not survive
+the link. The scripting-on variant must retain `nuxie-scripting` + `luaur-vm`,
+and the scripting-off variant must retain neither. The command restores Cargo's
+renderer-on/scripting-off `release-size` output after measuring both variants.
+
+## Budget status — USER-GATE
+
+The pre-Phase-R recommendation was **≤2.75 MiB per architecture**, with a
+3.0 MiB alert, and tracked a different artifact that excluded the renderer.
+Both numbers are now historical; neither is silently widened or repurposed.
+
+The user must choose the new renderer-on budget and whether the blocking metric
+tracks the scripting-off closure alone or requires both scripting variants.
+Until that decision is recorded in `docs/parity-closeout-status.md`, #B-3 and
+the size half of scorecard tier 5 remain pending.

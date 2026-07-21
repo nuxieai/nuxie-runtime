@@ -1704,6 +1704,26 @@ impl RuntimeOwnedViewModelListHandle {
             .collect()
     }
 
+    pub(crate) fn replace_item_context_at(
+        &self,
+        source_index: usize,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        let list = self.value.borrow();
+        let Some(item) = list.items.get(source_index) else {
+            return false;
+        };
+        let mut item = item.borrow_mut();
+        if item.instance_identity() != context.instance_identity()
+            || item.view_model_index() != context.view_model_index()
+        {
+            return false;
+        }
+        let changed = item.mutation_generation() != context.mutation_generation();
+        *item = context.clone();
+        changed
+    }
+
     pub(crate) fn text_runs(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
         self.value
             .borrow()

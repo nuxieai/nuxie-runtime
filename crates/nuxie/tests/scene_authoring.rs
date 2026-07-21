@@ -2,27 +2,27 @@ use anyhow::Result;
 use nuxie::{
     Aabb, AnimationId, AnimationStateOptions, AnimationStateSpec, ArtboardComponentListAxis,
     ArtboardComponentListFlow, ArtboardComponentListSpec, ArtboardId, ArtboardListMapRuleSpec,
-    ArtboardSpec, BlendAnimation1DSpec,
-    BlendAnimationDirectSpec, BlendState1DSpec, BlendValueSource, BooleanInputSpec, ChildIndex,
-    ClippingShapeSpec, ColorInt, DashPathSpec, DashSpec, DataBindId, DrawError, EditAbort,
-    EditErrorKind, EditId, EditReason, EventId, EventSpec, EventStringPropertySpec,
-    ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, ExportedRecord, Factory,
-    FeatherSpec, FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec, GradientStopSpec,
-    ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec, KeyInterpolation,
-    LinearAnimationSpec, LinearGradientSpec, MachineId, MachineInputId, MachineLayerSpec,
-    MachineListenerSpec, MachineListenerType, MachineSpec, MachineStateFlags, MachineTransitionId,
-    MachineTransitionSpec, NestedArtboardSpec, NodeKind, NodeSpec, NumberComparator,
-    NumberInputSpec, ObjectId, Parent, PropValueKind, RawPath, RecordingFactory,
-    RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene, SceneClippingFillRule,
-    SceneEvent, SceneEventStringProperty, SceneFeatherSpace, SceneStrokeCap, SceneStrokeJoin,
-    SceneTextAlign, SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
-    ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
-    StructureEpoch, TextSpec, TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D,
-    ViewModelBooleanSpec, ViewModelChildSpec, ViewModelColorSpec, ViewModelEnumSpec, ViewModelId,
-    ViewModelImageSpec, ViewModelInstanceId, ViewModelInstanceSpec, ViewModelListIndexSpec,
-    ViewModelListSource, ViewModelListSpec, ViewModelNumberId, ViewModelNumberSpec, ViewModelSpec,
-    ViewModelStringId, ViewModelStringSpec, ViewModelTriggerSpec, VisibilityCondition, props,
+    ArtboardSpec, BlendAnimation1DSpec, BlendAnimationDirectSpec, BlendState1DSpec,
+    BlendValueSource, BooleanInputSpec, ChildIndex, ClippingShapeSpec, ColorInt, DashPathSpec,
+    DashSpec, DataBindId, DrawError, EditAbort, EditErrorKind, EditId, EditReason, EventId,
+    EventSpec, EventStringPropertySpec, ExportedAnimatableProperty, ExportedObjectKind,
+    ExportedProperty, ExportedRecord, Factory, FeatherSpec, FillRule, FillSpec, FireEventOccurs,
+    FontAssetId, FontAssetSpec, GradientStopSpec, ImageAssetId, ImageAssetSpec, ImageDecodeError,
+    ImageSpec, KeyInterpolation, LinearAnimationSpec, LinearGradientSpec, MachineId,
+    MachineInputId, MachineLayerSpec, MachineListenerSpec, MachineListenerType, MachineSpec,
+    MachineStateFlags, MachineTransitionId, MachineTransitionSpec, NestedArtboardSpec, NodeKind,
+    NodeSpec, NumberComparator, NumberInputSpec, ObjectId, Parent, PropValueKind, RawPath,
+    RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene,
+    SceneClippingFillRule, SceneEvent, SceneEventStringProperty, SceneFeatherSpace, SceneStrokeCap,
+    SceneStrokeJoin, SceneTextAlign, SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx,
+    ScriptAssetSpec, ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor,
+    StrokeSpec, StructureEpoch, TextSpec, TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec,
+    Vec2D, ViewModelBooleanSpec, ViewModelChildSpec, ViewModelColorSpec, ViewModelEnumSpec,
+    ViewModelId, ViewModelImageSpec, ViewModelInstanceId, ViewModelInstanceSpec,
+    ViewModelListIndexSpec, ViewModelListSource, ViewModelListSpec, ViewModelNumberId,
+    ViewModelNumberSpec, ViewModelSpec, ViewModelStringId, ViewModelStringSpec,
+    ViewModelTriggerSpec, VisibilityCondition, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -4071,10 +4071,10 @@ fn typed_vertical_component_list_exports_imports_advances_and_draws_two_view_mod
         .find(|record| record.kind == ExportedObjectKind::LayoutComponent)
         .expect("typed component-list flow exports one native layout wrapper");
     assert!(
-        !layout_component
-            .properties
-            .iter()
-            .any(|property| matches!(property, ExportedProperty::TranslateX(_) | ExportedProperty::TranslateY(_))),
+        !layout_component.properties.iter().any(|property| matches!(
+            property,
+            ExportedProperty::TranslateX(_) | ExportedProperty::TranslateY(_)
+        )),
         "the durable component-list record continues to own controller-visible transforms",
     );
     let style_local_id = layout_component
@@ -6267,6 +6267,110 @@ fn authored_drag_listener_captures_pointer_and_dispatches_start_drag_end_after_e
             .pointer_move(instance, Vec2D::new(90.0, 90.0), 0.016, 9),
         "pointer exit cancels and releases drag capture",
     );
+    Ok(())
+}
+
+#[test]
+fn authored_drag_lifecycle_stays_on_the_captured_target() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, machine), _) = scene.edit(|tx| {
+        let (artboard, first, machine, _, _) = create_authored_trigger_machine(tx)?;
+        tx.create(
+            Parent::Object(first),
+            NodeSpec::Rectangle(RectangleSpec::new("First hit target", 20.0, 20.0)),
+        )?;
+        let second = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Second target".into(),
+                x: 70.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(second),
+            NodeSpec::Rectangle(RectangleSpec::new("Second hit target", 20.0, 20.0)),
+        )?;
+
+        let mut machines = tx.machines();
+        let mut add_lifecycle = |target, prefix: &str, base: f32| {
+            let started = machines.create_number_input(
+                machine,
+                NumberInputSpec {
+                    name: format!("{prefix} started"),
+                    default_value: 0.0,
+                },
+            )?;
+            let dragged = machines.create_number_input(
+                machine,
+                NumberInputSpec {
+                    name: format!("{prefix} dragged"),
+                    default_value: 0.0,
+                },
+            )?;
+            let ended = machines.create_number_input(
+                machine,
+                NumberInputSpec {
+                    name: format!("{prefix} ended"),
+                    default_value: 0.0,
+                },
+            )?;
+            for (listener_type, input, value) in [
+                (MachineListenerType::DragStart, started, base + 1.0),
+                (MachineListenerType::Drag, dragged, base + 2.0),
+                (MachineListenerType::DragEnd, ended, base + 3.0),
+            ] {
+                let listener = machines.create_listener(
+                    machine,
+                    target,
+                    MachineListenerSpec {
+                        name: None,
+                        listener_type,
+                    },
+                )?;
+                machines.add_listener_number_action(listener, input, value)?;
+            }
+            Ok::<_, EditAbort>((started, dragged, ended))
+        };
+        let _ = add_lifecycle(first, "First", 0.0)?;
+        let _ = add_lifecycle(second, "Second", 10.0)?;
+        Ok((artboard, machine))
+    })?;
+
+    let instance = scene.instantiate(artboard)?;
+    let first_started = scene.machine_number_input(instance, machine, "First started")?;
+    let first_dragged = scene.machine_number_input(instance, machine, "First dragged")?;
+    let first_ended = scene.machine_number_input(instance, machine, "First ended")?;
+    let second_started = scene.machine_number_input(instance, machine, "Second started")?;
+    let second_dragged = scene.machine_number_input(instance, machine, "Second dragged")?;
+    let second_ended = scene.machine_number_input(instance, machine, "Second ended")?;
+
+    assert!(
+        scene
+            .frame()
+            .pointer_down(instance, Vec2D::new(0.0, 0.0), 17)
+    );
+    assert!(
+        scene
+            .frame()
+            .pointer_move(instance, Vec2D::new(70.0, 0.0), 0.016, 17)
+    );
+    assert!(
+        scene
+            .frame()
+            .pointer_up(instance, Vec2D::new(70.0, 0.0), 17)
+    );
+
+    assert_eq!(scene.frame().get_number(first_started)?, 1.0);
+    assert_eq!(scene.frame().get_number(first_dragged)?, 2.0);
+    assert_eq!(scene.frame().get_number(first_ended)?, 3.0);
+    assert_eq!(scene.frame().get_number(second_started)?, 0.0);
+    assert_eq!(scene.frame().get_number(second_dragged)?, 0.0);
+    assert_eq!(scene.frame().get_number(second_ended)?, 0.0);
     Ok(())
 }
 

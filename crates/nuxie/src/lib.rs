@@ -1484,9 +1484,11 @@ impl<'a> ArtboardInstance<'a> {
     /// The context is copied into the data-bind graph, so this must be called
     /// again after mutating `view_model` for the change to reach the next
     /// [`ArtboardInstance::advance`]. Returns whether the binding changed
-    /// anything. State-machine-driven binds must additionally be bound through
-    /// [`StateMachineInstance::bind_owned_view_model_context`] using
-    /// [`ViewModelInstance::raw`].
+    /// anything. To drive retained state machines with the same mutable context,
+    /// prefer [`ArtboardInstance::advance_with_state_machines_and_view_model`];
+    /// it settles listener-authored ViewModel writes back into `view_model`.
+    /// [`StateMachineInstance::bind_owned_view_model_context`] is the immutable
+    /// low-level snapshot API and cannot write through its borrowed context.
     ///
     pub fn bind_view_model(&mut self, view_model: &ViewModelInstance) -> bool {
         let mut changed = self
@@ -2385,8 +2387,10 @@ pub struct ViewModelInstance {
 }
 
 impl ViewModelInstance {
-    /// Low-level owned context for advanced integrations (for example binding
-    /// through [`StateMachineInstance::bind_owned_view_model_context`]).
+    /// Low-level immutable owned context for advanced integrations. Binding it
+    /// through [`StateMachineInstance::bind_owned_view_model_context`] snapshots
+    /// values but cannot apply listener-authored ViewModel writes back into this
+    /// context; use an artboard's context-aware state-machine advance for that.
     pub fn raw(&self) -> &RuntimeOwnedViewModelInstance {
         &self.raw
     }

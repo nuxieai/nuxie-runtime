@@ -511,11 +511,10 @@ impl StateMachineInstance {
 
         let mut hit = false;
         if starts_drag {
-            hit |= self.dispatch_pointer_listener_type(
+            hit |= self.dispatch_captured_pointer_listener_type(
                 artboard,
+                pointer_id,
                 RuntimeListenerType::DragStart,
-                x,
-                y,
                 owned_context.as_deref_mut(),
             );
         }
@@ -627,11 +626,10 @@ impl StateMachineInstance {
             capture.pointer_id == pointer_id
                 && capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
         }) {
-            hit |= self.dispatch_pointer_listener_type(
+            hit |= self.dispatch_captured_pointer_listener_type(
                 artboard,
+                pointer_id,
                 RuntimeListenerType::DragEnd,
-                x,
-                y,
                 owned_context.as_deref_mut(),
             );
         }
@@ -728,20 +726,38 @@ impl StateMachineInstance {
         hit
     }
 
-    fn dispatch_pointer_listener_type(
+    fn dispatch_captured_pointer_listener_type(
         &mut self,
         artboard: &ArtboardInstance,
+        pointer_id: i32,
         listener_type: RuntimeListenerType,
-        x: f32,
-        y: f32,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
             return false;
         };
+        let mut captured_target_local_ids = Vec::new();
+        for capture in self.pointer_down_listener_hits.iter().filter(|capture| {
+            capture.pointer_id == pointer_id
+                && capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
+        }) {
+            let Some(target_local_id) = state_machine
+                .listeners
+                .get(capture.listener_index)
+                .map(|listener| listener.target_local_id)
+            else {
+                continue;
+            };
+            if !captured_target_local_ids.contains(&target_local_id) {
+                captured_target_local_ids.push(target_local_id);
+            }
+        }
+
         let mut hit = false;
         for listener in state_machine.listeners.iter() {
-            if !listener.has_listener(listener_type) || !listener.hit_test(artboard, x, y) {
+            if !listener.has_listener(listener_type)
+                || !captured_target_local_ids.contains(&listener.target_local_id)
+            {
                 continue;
             }
             hit = true;
@@ -889,7 +905,12 @@ impl StateMachineInstance {
             }
             self.reported_events
                 .append(&mut self.pending_listener_events);
-            changed |= self.advance_preserving_reported_events(artboard, state_machine, 0.0);
+            changed |= self.advance_preserving_reported_events(
+                artboard,
+                state_machine,
+                0.0,
+                owned_context.as_deref_mut(),
+            );
         }
         changed
     }
@@ -995,6 +1016,7 @@ impl StateMachineInstance {
         &mut self,
         artboard: &mut ArtboardInstance,
         listener_actions: &[RuntimeScheduledListenerAction],
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
         let mut changed = false;
         for action in listener_actions {
@@ -1004,11 +1026,18 @@ impl StateMachineInstance {
                 ..
             } = action
             {
-                changed |= self.perform_scheduled_listener_view_model_change(
-                    artboard,
-                    *data_bind_index,
-                    value,
-                );
+                changed |= match owned_context.as_deref_mut() {
+                    Some(context) => self.perform_listener_view_model_change(
+                        *data_bind_index,
+                        value,
+                        Some(context),
+                    ),
+                    None => self.perform_scheduled_listener_view_model_change(
+                        artboard,
+                        *data_bind_index,
+                        value,
+                    ),
+                };
             }
         }
         if changed {
@@ -3207,6 +3236,12 @@ impl StateMachineInstance {
         true
     }
 
+    /// Snapshot an owned ViewModel context into this machine.
+    ///
+    /// ViewModel listeners dispatch their ordinary input/event actions, but an
+    /// immutable borrow cannot receive listener-authored ViewModel writes. Use
+    /// [`Self::bind_owned_view_model_context_mut`] or the owning artboard's
+    /// context-aware advance API when those writes must update the host context.
     pub fn bind_owned_view_model_context(
         &mut self,
         context: &RuntimeOwnedViewModelInstance,
@@ -3215,8 +3250,8 @@ impl StateMachineInstance {
         if changed {
             self.bind_active_owned_view_model_triggers(context);
         }
-        for actions in self.changed_view_model_listener_actions(context) {
-            changed |= self.perform_listener_actions(&actions, None);
+        for listener_actions in self.changed_view_model_listener_actions(context) {
+            changed |= self.perform_listener_actions(&listener_actions, None);
         }
         if changed {
             self.needs_advance = true;
@@ -3438,7 +3473,26 @@ impl StateMachineInstance {
         self.reported_events.clear();
         self.reported_events
             .append(&mut self.pending_listener_events);
-        self.advance_with_report_mode(artboard, state_machine, elapsed_seconds, false)
+        self.advance_with_report_mode(artboard, state_machine, elapsed_seconds, false, None)
+    }
+
+    pub(crate) fn advance_with_owned_view_model_context(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        state_machine: &RuntimeStateMachine,
+        elapsed_seconds: f32,
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        self.reported_events.clear();
+        self.reported_events
+            .append(&mut self.pending_listener_events);
+        self.advance_with_report_mode(
+            artboard,
+            state_machine,
+            elapsed_seconds,
+            false,
+            Some(context),
+        )
     }
 
     pub(crate) fn advance_preserving_reported_events(
@@ -3446,8 +3500,15 @@ impl StateMachineInstance {
         artboard: &mut ArtboardInstance,
         state_machine: &RuntimeStateMachine,
         elapsed_seconds: f32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        self.advance_with_report_mode(artboard, state_machine, elapsed_seconds, false)
+        self.advance_with_report_mode(
+            artboard,
+            state_machine,
+            elapsed_seconds,
+            false,
+            owned_context,
+        )
     }
 
     fn advance_with_report_mode(
@@ -3456,6 +3517,7 @@ impl StateMachineInstance {
         state_machine: &RuntimeStateMachine,
         elapsed_seconds: f32,
         clear_reported_events: bool,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
         if clear_reported_events {
             self.reported_events.clear();
@@ -3515,7 +3577,11 @@ impl StateMachineInstance {
             keep_going |= layer_result.keep_going;
             if layer_result.has_pending_view_model_actions {
                 let pending_actions = std::mem::take(&mut self.pending_view_model_actions);
-                keep_going |= self.perform_scheduled_view_model_actions(artboard, &pending_actions);
+                keep_going |= self.perform_scheduled_view_model_actions(
+                    artboard,
+                    &pending_actions,
+                    owned_context.as_deref_mut(),
+                );
                 self.pending_view_model_actions = pending_actions;
             }
         }

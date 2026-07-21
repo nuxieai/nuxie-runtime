@@ -46,10 +46,17 @@ upstream-sync-map registry).
     `ValueFlags::valueChanged`/`advanced()` semantics including trigger
     zeroing under `SuppressDelegation`; 7 unit tests mirror the C++
     contracts. Additive — no consumers yet, floors untouched.
-  - [ ] (c) parent-linked `DataContext` (`data_context.cpp` port): one
-    retained context with a parent pointer replacing candidate vectors;
-    `getViewModelProperty(path)` walks instances (path[0]=viewModelId) then
-    parent, returning retained cells.
+  - [x] (c) parent-linked `DataContext` — landed: cell-backed instances
+    (`RuntimeViewModelInstanceCells`, both `createViewModelInstance` forms,
+    full kind lattice, nested recursion cycle-guarded, per-kind instance
+    seeding) + `RuntimeDataContext` with C++ lookup semantics
+    (path[0]=viewModelId, tail walks nested slots, parent fallback);
+    10 unit tests incl. identity-preserving lookup and the
+    instance-0-vs-defaults split. Lists are placeholder slots (items build
+    in slice (d/e) with the list lifecycle). Additive; floors untouched.
+    ALSO: scout inventory landed as docs/rb1-compensation-inventory.md
+    (five public seams, full call-site lists, deletion checklist,
+    test-rewrite counts).
   - [ ] (d) retained `DataBind` lifecycle (`data_bind.cpp`): `source(cell)`
     registers the bind's sink as dependent (skipped for bindsOnce); typed
     ContextValues; C++ favored-direction init ordering

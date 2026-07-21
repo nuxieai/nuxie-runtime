@@ -3356,21 +3356,67 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Mat2D {
+        let mut visiting = BTreeSet::new();
+        self.runtime_layout_component_world_transform_with_bounds_guarded(
+            layout_local,
+            graph,
+            layout_bounds,
+            &mut visiting,
+        )
+    }
+
+    fn runtime_layout_component_world_transform_with_bounds_guarded(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        visiting: &mut BTreeSet<usize>,
+    ) -> Mat2D {
+        let stored_world = self
+            .component(layout_local)
+            .map(|component| component.transform.world_transform)
+            .unwrap_or(Mat2D::IDENTITY);
+        if !visiting.insert(layout_local) {
+            return stored_world;
+        }
         let bounds = layout_bounds
             .and_then(|bounds| bounds.get(&layout_local).copied())
             .or_else(|| self.runtime_supported_layout_component_bounds(layout_local, graph));
         if let Some(bounds) = bounds {
-            // Rust layout bounds are accumulated into artboard space when we
-            // collect them from Taffy/fallback layout passes. C++ stores Yoga's
-            // left/top parent-local and composes through parent world
-            // transforms, so apply the artboard origin exactly once here.
-            let x = bounds.x - self.width * self.origin_x;
-            let y = bounds.y - self.height * self.origin_y;
-            let stored_world = self
-                .component(layout_local)
-                .map(|component| component.transform.world_transform)
-                .unwrap_or(Mat2D::IDENTITY)
-                .0;
+            // Taffy bounds are accumulated in untransformed artboard space. A
+            // nested layout offset therefore has to be made parent-local before
+            // its affine parent is applied, matching Yoga's parent-local
+            // left/top composition in the C++ runtime.
+            let nested_translation =
+                self.component(layout_local)
+                    .and_then(|component| component.parent_local)
+                    .and_then(|parent_local| {
+                        let parent = self.component(parent_local)?;
+                        if parent.type_name != "LayoutComponent" {
+                            return None;
+                        }
+                        let parent_bounds = layout_bounds
+                            .and_then(|bounds| bounds.get(&parent_local).copied())
+                            .or_else(|| {
+                                self.runtime_supported_layout_component_bounds(parent_local, graph)
+                            })?;
+                        let parent_world = self
+                            .runtime_layout_component_world_transform_with_bounds_guarded(
+                                parent_local,
+                                graph,
+                                layout_bounds,
+                                visiting,
+                            );
+                        Some(parent_world.transform_point(
+                            bounds.x - parent_bounds.x,
+                            bounds.y - parent_bounds.y,
+                        ))
+                    });
+            let (x, y) = nested_translation.unwrap_or((
+                bounds.x - self.width * self.origin_x,
+                bounds.y - self.height * self.origin_y,
+            ));
+            let stored_world = stored_world.0;
             return Mat2D([
                 stored_world[0],
                 stored_world[1],
@@ -3380,9 +3426,7 @@ impl ArtboardInstance {
                 y,
             ]);
         }
-        self.component(layout_local)
-            .map(|component| component.transform.world_transform)
-            .unwrap_or(Mat2D::IDENTITY)
+        stored_world
     }
 
     pub(crate) fn runtime_layout_component_bounds(
@@ -19573,6 +19617,58 @@ mod tests {
     }
 
     #[test]
+    fn nested_layout_translation_composes_through_parent_affine_transform() {
+        let bytes = synthetic_nested_affine_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic nested affine layout riv imports");
+        let graphs =
+            GraphFile::from_runtime_file(&file).expect("synthetic nested affine layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let report = instance
+            .debug_taffy_layout_bounds_report(&file, graph)
+            .expect("fixture settles with Taffy");
+        let child_layout = report
+            .iter()
+            .find(|entry| entry.local_id == 5)
+            .expect("nested layout component is reported");
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert_mat2d_near(
+            child_layout.world_transform,
+            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
+        );
+        assert_mat2d_near(
+            instance
+                .runtime_layout_component_world_transform(5, graph)
+                .0,
+            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
+        );
+        assert_mat2d_near(
+            instance
+                .geometry_world_transform_with_context(&file, graph, 7, &mut cache)
+                .expect("nested child shape has a world transform")
+                .0,
+            [0.0, 2.0, -0.5, 0.0, 87.0, 30.0],
+        );
+        assert_aabb_near(
+            instance
+                .geometry_world_bounds_with_context(&file, graph, 7, &mut cache)
+                .expect("nested child shape has geometry"),
+            RenderAabb::new(79.5, -10.0, 94.5, 70.0),
+        );
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(87.0, 30.0),
+                &mut cache,
+            ),
+            vec![7]
+        );
+    }
+
+    #[test]
     fn controlled_auto_text_without_shape_uses_exact_layout_bounds_and_authored_origin() {
         let bytes = synthetic_layout_text_bounds_riv();
         let file = read_runtime_file(&bytes).expect("synthetic layout Text riv imports");
@@ -20923,6 +21019,65 @@ mod tests {
 
     fn synthetic_affine_layout_geometry_riv() -> Vec<u8> {
         synthetic_layout_geometry_riv_with_affine(Some((std::f32::consts::FRAC_PI_2, 2.0, 0.5)))
+    }
+
+    fn synthetic_nested_affine_layout_geometry_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9651);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 300.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 4);
+            push_f32(bytes, "Node", "rotation", std::f32::consts::FRAC_PI_2);
+            push_f32(bytes, "Node", "scaleX", 2.0);
+            push_f32(bytes, "Node", "scaleY", 0.5);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+            push_f32(bytes, "LayoutComponentStyle", "paddingLeft", 10.0);
+            push_f32(bytes, "LayoutComponentStyle", "paddingTop", 20.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+            push_f32(bytes, "LayoutComponent", "width", 40.0);
+            push_f32(bytes, "LayoutComponent", "height", 30.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 6);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 5);
+            push_f32(bytes, "Node", "x", 5.0);
+            push_f32(bytes, "Node", "y", 6.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 7);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 8);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 7);
+            push_f32(bytes, "ParametricPath", "width", 20.0);
+            push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+        bytes
     }
 
     fn synthetic_layout_geometry_riv_with_affine(affine: Option<(f32, f32, f32)>) -> Vec<u8> {

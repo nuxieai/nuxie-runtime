@@ -141,6 +141,13 @@ upstream-sync-map registry).
   bf051718's ancestors) and pass a known-good subsystem before the
   447-row fan-out is trusted. Batch fan-out over the #B-2 manifest in
   dependency order; findings feed the ticket queue mechanically.
+  JUDGE VALIDATED 2026-07-21: caught the known-bad pre-RB1 data binds
+  (independent rediscovery of the in-file compensation family), cleared
+  keyed animation, and produced two binding amendments — the
+  mutation-timing gate on axis (e) and the cross-file coverage clause
+  with subsystem-clustered batching. Spec landed as
+  docs/b6-structural-audit-spec.md; remaining: PORTING.md
+  architecture-fidelity rules section, then the ~40-55 batch fan-out.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive

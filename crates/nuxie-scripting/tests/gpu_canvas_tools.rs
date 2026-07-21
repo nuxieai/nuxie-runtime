@@ -6,7 +6,8 @@
 #![cfg(feature = "luau")]
 
 use nuxie_scripting::gpu_canvas::{
-    GpuCanvasProgram, MAX_CPU_BUFFER_BYTES, MAX_GPU_CANVAS_DIMENSION,
+    GpuCanvasProgram, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer,
+    GpuCanvasVertexLayout, MAX_CPU_BUFFER_BYTES, MAX_GPU_CANVAS_DIMENSION,
     MAX_GPU_CANVAS_DRAW_INVOCATIONS, MAX_UNIFORM_BUFFER_BYTES,
 };
 
@@ -62,6 +63,32 @@ return function(context)
     }
 end
 "#;
+
+#[test]
+fn gpu_canvas_transport_types_remain_public_at_the_scripting_seam() {
+    let attribute = GpuCanvasVertexAttribute {
+        shader_location: 2,
+        offset: 8,
+        format: "float32x2".to_owned(),
+    };
+    let layout = GpuCanvasVertexLayout {
+        stride: 16,
+        attributes: vec![attribute.clone()],
+    };
+    let vertices = GpuCanvasVertexBuffer {
+        slot: 1,
+        bytes: vec![1, 2, 3, 4],
+    };
+    let uniform = GpuCanvasUniformBuffer {
+        group: 0,
+        binding: 3,
+        bytes: vec![5, 6, 7, 8],
+    };
+
+    assert_eq!(layout.attributes, vec![attribute]);
+    assert_eq!(vertices.slot, 1);
+    assert_eq!(uniform.binding, 3);
+}
 
 #[test]
 fn executes_luau_and_returns_renderer_owned_draw_plan() {

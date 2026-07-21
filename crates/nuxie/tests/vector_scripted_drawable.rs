@@ -4,7 +4,7 @@ use anyhow::Result;
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
     ArtboardSpec, DrawError, File, NodeSpec, Parent, RecordingFactory, Scene, SceneEvent,
-    ScriptAssetSpec, ScriptedDrawableSpec,
+    ScriptAssetSpec, ScriptExecutionLimits, ScriptedDrawableSpec,
 };
 use nuxie_schema::definition_by_name;
 
@@ -73,6 +73,16 @@ fn push_uint(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: u64) {
     push_var_uint(bytes, value);
 }
 
+fn push_f32(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: f32) {
+    push_var_uint(bytes, u64::from(property_key(type_name, name)));
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_color(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: u32) {
+    push_var_uint(bytes, u64::from(property_key(type_name, name)));
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
 fn push_blob(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &[u8]) {
     push_var_uint(bytes, u64::from(property_key(type_name, name)));
     push_var_uint(bytes, value.len() as u64);
@@ -111,6 +121,48 @@ fn imported_scripted_file() -> Vec<u8> {
     });
     push_object(&mut bytes, "FileAssetContents", |bytes| {
         push_blob(bytes, "FileAssetContents", "bytes", &module_payload);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "LayoutComponent", "width", 160.0);
+        push_f32(bytes, "LayoutComponent", "height", 100.0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    push_object(&mut bytes, "Fill", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+    });
+    push_object(&mut bytes, "SolidColor", |bytes| {
+        push_uint(bytes, "Component", "parentId", 2);
+        push_color(bytes, "SolidColor", "colorValue", 0xff11_aa22);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 20.0);
+        push_f32(bytes, "ParametricPath", "height", 20.0);
+    });
+    push_object(&mut bytes, "ScriptedDrawable", |bytes| {
+        push_uint(bytes, "ScriptedDrawable", "parentId", 0);
+        push_uint(bytes, "ScriptedDrawable", "scriptAssetId", 0);
+    });
+    bytes
+}
+
+fn imported_single_scripted_file(source: &[u8]) -> Vec<u8> {
+    let mut script_payload = vec![0];
+    script_payload.extend(compile_luau(source));
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 991);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ScriptAsset", |bytes| {
+        push_uint(bytes, "ScriptAsset", "assetId", 0);
+        push_string(bytes, "ScriptAsset", "name", "BoundedDrawable");
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_blob(bytes, "FileAssetContents", "bytes", &script_payload);
     });
     push_object(&mut bytes, "Artboard", |_| {});
     push_object(&mut bytes, "ScriptedDrawable", |bytes| {
@@ -232,11 +284,15 @@ fn imported_file_scripts_require_an_explicit_unsigned_trust_opt_in() -> Result<(
         .instantiate()?;
     let mut inert_factory = RecordingFactory::new();
     let mut inert_renderer = inert_factory.make_renderer();
+    inert_instance.draw(&mut inert_factory, &mut inert_renderer)?;
+    let inert_stream = inert_factory.stream();
     assert!(
-        inert_instance
-            .draw(&mut inert_factory, &mut inert_renderer)
-            .is_err(),
-        "arbitrary File::import bytecode remains inert"
+        inert_stream.contains("color=0xff11aa22"),
+        "ordinary sibling content must still draw: {inert_stream}"
+    );
+    assert!(
+        !inert_stream.contains("color=0xff3366cc"),
+        "arbitrary File::import bytecode must execute nothing: {inert_stream}"
     );
 
     let trusted = File::import_with_unsigned_scripts(&bytes)?;
@@ -248,7 +304,124 @@ fn imported_file_scripts_require_an_explicit_unsigned_trust_opt_in() -> Result<(
     let mut trusted_renderer = trusted_factory.make_renderer();
     trusted_instance.draw(&mut trusted_factory, &mut trusted_renderer)?;
     let stream = trusted_factory.stream();
+    assert!(stream.contains("color=0xff11aa22"), "{stream}");
     assert!(stream.contains("color=0xff3366cc"), "{stream}");
     assert!(stream.contains("drawPath "), "{stream}");
+    Ok(())
+}
+
+#[test]
+fn trusted_import_interrupts_an_infinite_draw_callback() -> Result<()> {
+    let bytes = imported_single_scripted_file(
+        br#"
+return function(context)
+    return {
+        draw = function(self, renderer)
+            while true do end
+        end,
+    }
+end
+"#,
+    );
+    let limits = ScriptExecutionLimits::new()
+        .with_max_memory_bytes(4 * 1024 * 1024)
+        .with_max_interrupts_per_callback(8);
+    let file = File::import_with_trusted_scripts(&bytes, limits)?;
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()?;
+    let mut factory = RecordingFactory::new();
+    let mut renderer = factory.make_renderer();
+
+    let error = instance
+        .draw(&mut factory, &mut renderer)
+        .expect_err("the imported callback must be interrupted");
+    assert!(
+        format!("{error:#}").contains("exceeded 8 interrupt safepoints"),
+        "{error:#}"
+    );
+    Ok(())
+}
+
+#[test]
+fn default_trusted_import_interrupts_an_infinite_advance_callback() -> Result<()> {
+    let bytes = imported_single_scripted_file(
+        br#"
+return function(context)
+    return {
+        advance = function(self, seconds)
+            while true do end
+        end,
+    }
+end
+"#,
+    );
+    let file = File::import_with_unsigned_scripts(&bytes)?;
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()?;
+    let mut factory = RecordingFactory::new();
+
+    let error = instance
+        .try_advance_with_factory(&mut factory, 1.0 / 60.0)
+        .expect_err("the default trusted-import budget must interrupt advance");
+    assert!(
+        format!("{error:#}").contains("exceeded 50000 interrupt safepoints"),
+        "{error:#}"
+    );
+    Ok(())
+}
+
+#[test]
+fn trusted_import_rejects_unbounded_zero_limits_before_execution() {
+    let bytes = imported_single_scripted_file(b"return function(context) return {} end");
+    for limits in [
+        ScriptExecutionLimits::new().with_max_memory_bytes(0),
+        ScriptExecutionLimits::new().with_max_interrupts_per_callback(0),
+    ] {
+        let error = File::import_with_trusted_scripts(&bytes, limits)
+            .expect_err("zero must never mean unlimited at the trusted import seam");
+        assert!(
+            format!("{error:#}").contains("must be greater than zero"),
+            "{error:#}"
+        );
+    }
+}
+
+#[test]
+fn trusted_import_rejects_callback_allocations_above_its_vm_limit() -> Result<()> {
+    let bytes = imported_single_scripted_file(
+        br#"
+return function(context)
+    return {
+        draw = function(self, renderer)
+            local oversized = string.rep("x", 8 * 1024 * 1024)
+            if #oversized == 0 then error("unreachable") end
+        end,
+    }
+end
+"#,
+    );
+    let limits = ScriptExecutionLimits::new()
+        .with_max_memory_bytes(2 * 1024 * 1024)
+        .with_max_interrupts_per_callback(100_000);
+    let file = File::import_with_trusted_scripts(&bytes, limits)?;
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()?;
+    let mut factory = RecordingFactory::new();
+    let mut renderer = factory.make_renderer();
+
+    let error = instance
+        .draw(&mut factory, &mut renderer)
+        .expect_err("the imported allocation must remain VM-bounded");
+    let diagnostic = format!("{error:#}");
+    assert!(
+        diagnostic.contains("memory") || diagnostic.contains("allocation"),
+        "{diagnostic}"
+    );
     Ok(())
 }

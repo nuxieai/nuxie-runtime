@@ -1,22 +1,28 @@
 use anyhow::Result;
 use nuxie::{
-    Aabb, AnimationId, AnimationStateSpec, ArtboardComponentListSpec, ArtboardId,
-    ArtboardListMapRuleSpec, ArtboardSpec, BooleanInputSpec, ChildIndex, ColorInt, DashPathSpec,
-    DashSpec, DataBindId, DrawError, EditAbort, EditErrorKind, EditId, EditReason, EventId,
-    EventSpec, ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, ExportedRecord,
-    Factory, FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec, GradientStopSpec,
+    Aabb, AnimationId, AnimationStateOptions, AnimationStateSpec, ArtboardComponentListAxis,
+    ArtboardComponentListFlow, ArtboardComponentListSpec, ArtboardId, ArtboardListMapRuleSpec,
+    ArtboardSpec, BlendAnimation1DSpec,
+    BlendAnimationDirectSpec, BlendState1DSpec, BlendValueSource, BooleanInputSpec, ChildIndex,
+    ClippingShapeSpec, ColorInt, DashPathSpec, DashSpec, DataBindId, DrawError, EditAbort,
+    EditErrorKind, EditId, EditReason, EventId, EventSpec, EventStringPropertySpec,
+    ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, ExportedRecord, Factory,
+    FeatherSpec, FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec, GradientStopSpec,
     ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec, KeyInterpolation,
     LinearAnimationSpec, LinearGradientSpec, MachineId, MachineInputId, MachineLayerSpec,
-    MachineSpec, MachineTransitionId, NodeKind, NodeSpec, ObjectId, Parent, PropValueKind, RawPath,
-    RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene,
-    SceneEvent, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign, SceneTextOverflow,
-    SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec, ScriptedDrawableSpec,
-    ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec, StructureEpoch, TextSpec,
-    TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D, ViewModelChildSpec, ViewModelId,
-    ViewModelInstanceId, ViewModelInstanceSpec, ViewModelListSource, ViewModelListSpec,
-    ViewModelNumberId, ViewModelNumberSpec, ViewModelSpec, ViewModelStringId, ViewModelStringSpec,
-    props,
+    MachineListenerSpec, MachineListenerType, MachineSpec, MachineStateFlags, MachineTransitionId,
+    MachineTransitionSpec, NestedArtboardSpec, NodeKind, NodeSpec, NumberComparator,
+    NumberInputSpec, ObjectId, Parent, PropValueKind, RawPath, RecordingFactory,
+    RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags, RenderBufferType,
+    RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene, SceneClippingFillRule,
+    SceneEvent, SceneEventStringProperty, SceneFeatherSpace, SceneStrokeCap, SceneStrokeJoin,
+    SceneTextAlign, SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
+    ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
+    StructureEpoch, TextSpec, TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D,
+    ViewModelBooleanSpec, ViewModelChildSpec, ViewModelColorSpec, ViewModelEnumSpec, ViewModelId,
+    ViewModelImageSpec, ViewModelInstanceId, ViewModelInstanceSpec, ViewModelListIndexSpec,
+    ViewModelListSource, ViewModelListSpec, ViewModelNumberId, ViewModelNumberSpec, ViewModelSpec,
+    ViewModelStringId, ViewModelStringSpec, ViewModelTriggerSpec, VisibilityCondition, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -1710,6 +1716,207 @@ fn create_image_node(
     )
 }
 
+#[test]
+fn image_world_bounds_follow_the_successfully_presented_render_image() -> Result<()> {
+    let mut png = vec![0; 24];
+    png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+    png[12..16].copy_from_slice(b"IHDR");
+    png[16..20].copy_from_slice(&40_u32.to_be_bytes());
+    png[20..24].copy_from_slice(&20_u32.to_be_bytes());
+
+    let mut scene = Scene::new();
+    let ((artboard, image), _) = scene.edit(|tx| {
+        let asset = tx.create_image_asset(ImageAssetSpec {
+            name: "Presented image".into(),
+            bytes: png,
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Image bounds".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let image = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Image(ImageSpec {
+                name: "Centered image".into(),
+                x: 100.0,
+                y: 50.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 2.0,
+                scale_y: 3.0,
+                image: asset,
+                origin_x: 0.5,
+                origin_y: 0.5,
+                fit: 0,
+                alignment_x: 0.0,
+                alignment_y: 0.0,
+                crop: None,
+            }),
+        )?;
+        Ok((artboard, image))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+
+    assert_eq!(
+        scene.frame().world_bounds(instance, image),
+        None,
+        "Image bounds fail closed until a renderer has decoded and presented the asset",
+    );
+
+    let mut factory = RecordingFactory::new();
+    let mut renderer = factory.make_renderer();
+    let mut cache = scene.new_render_cache(instance)?;
+    scene
+        .frame()
+        .draw(instance, &mut factory, &mut renderer, &mut cache)?;
+
+    assert_eq!(
+        scene.frame().world_bounds(instance, image),
+        Some(Aabb::new(60.0, 20.0, 140.0, 80.0)),
+        "the public geometry primitive uses the presented image dimensions, origin, and world transform",
+    );
+    Ok(())
+}
+
+#[test]
+fn registered_intrinsic_image_dimensions_expose_world_bounds_before_first_draw() -> Result<()> {
+    let mut png = vec![0; 24];
+    png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+    png[12..16].copy_from_slice(b"IHDR");
+    png[16..20].copy_from_slice(&40_u32.to_be_bytes());
+    png[20..24].copy_from_slice(&20_u32.to_be_bytes());
+
+    let mut scene = Scene::new();
+    let ((artboard, image), _) = scene.edit(|tx| {
+        let asset = tx.create_image_asset_with_intrinsic_dimensions(
+            ImageAssetSpec {
+                name: "Registered image".into(),
+                bytes: png,
+            },
+            40.0,
+            20.0,
+        )?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Image bounds".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let image = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Image(ImageSpec {
+                name: "Centered image".into(),
+                x: 100.0,
+                y: 50.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 2.0,
+                scale_y: 3.0,
+                image: asset,
+                origin_x: 0.5,
+                origin_y: 0.5,
+                fit: 0,
+                alignment_x: 0.0,
+                alignment_y: 0.0,
+                crop: None,
+            }),
+        )?;
+        Ok((artboard, image))
+    })?;
+    let exported = scene.export_records();
+    let instance = scene.instantiate(artboard)?;
+
+    assert_eq!(
+        scene.frame().world_bounds(instance, image),
+        Some(Aabb::new(60.0, 20.0, 140.0, 80.0)),
+        "registered intrinsic facts make logical image geometry independent of presentation order",
+    );
+    assert_eq!(
+        scene.export_records(),
+        exported,
+        "runtime-only intrinsic facts never alter the canonical Rive record stream",
+    );
+    Ok(())
+}
+
+#[test]
+fn decoded_image_dimensions_must_match_registered_intrinsic_dimensions() -> Result<()> {
+    let mut png = vec![0; 24];
+    png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+    png[12..16].copy_from_slice(b"IHDR");
+    png[16..20].copy_from_slice(&40_u32.to_be_bytes());
+    png[20..24].copy_from_slice(&20_u32.to_be_bytes());
+
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        let asset = tx.create_image_asset_with_intrinsic_dimensions(
+            ImageAssetSpec {
+                name: "Mismatched image".into(),
+                bytes: png,
+            },
+            41.0,
+            20.0,
+        )?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Image dimensions".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        create_image_node(tx, artboard, "Mismatched image", asset)?;
+        Ok(artboard)
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let mut factory = RecordingFactory::new();
+    let mut renderer = factory.make_renderer();
+    let mut cache = scene.new_render_cache(instance)?;
+
+    assert_eq!(
+        scene
+            .frame()
+            .draw(instance, &mut factory, &mut renderer, &mut cache),
+        Err(DrawError::ImageDimensionConflict),
+        "a renderer-decoded resource must never silently replace conflicting registered facts",
+    );
+    Ok(())
+}
+
+#[test]
+fn registered_intrinsic_image_dimensions_must_be_finite_and_positive() {
+    for (width, height, expected) in [
+        (
+            f32::NAN,
+            20.0,
+            EditReason::NonFiniteProperty {
+                property: "intrinsic_width",
+            },
+        ),
+        (
+            40.0,
+            0.0,
+            EditReason::NonPositiveProperty {
+                property: "intrinsic_height",
+            },
+        ),
+    ] {
+        let mut scene = Scene::new();
+        let error = scene
+            .edit(|tx| {
+                tx.create_image_asset_with_intrinsic_dimensions(
+                    ImageAssetSpec {
+                        name: "Invalid dimensions".into(),
+                        bytes: vec![1],
+                    },
+                    width,
+                    height,
+                )?;
+                Ok(())
+            })
+            .expect_err("invalid intrinsic dimensions abort the edit");
+        assert_eq!(error.kind(), EditErrorKind::Aborted);
+        assert_eq!(error.diagnostic().reason, expected);
+    }
+}
+
 struct FailFirstImageDecodeFactory {
     inner: RecordingFactory,
     fail_next_image_decode: bool,
@@ -2640,6 +2847,7 @@ fn reparenting_a_referenced_style_reports_the_reparent_operation() -> Result<()>
     );
     assert_eq!(scene.epoch(), epoch_before);
     assert_eq!(scene.export_records(), records_before);
+
     Ok(())
 }
 
@@ -2843,6 +3051,137 @@ fn authored_linear_animation_exports_canonical_records_and_scrubs_the_live_insta
         transparent_draw, opaque_draw,
         "scrubbed state is consumed by draw on the same retained InstanceId"
     );
+    Ok(())
+}
+
+#[test]
+fn authored_subobject_animation_uses_typed_geometry_paint_and_stroke_properties() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, rectangle, color, stroke, animation), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 220.0,
+            height: 120.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Card".into(),
+                x: 110.0,
+                y: 60.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let rectangle = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec {
+                name: "Card Rectangle".into(),
+                width: 96.0,
+                height: 44.0,
+                corner_radii: Some(RectangleCornerRadii {
+                    top_left: 2.0,
+                    top_right: 2.0,
+                    bottom_right: 2.0,
+                    bottom_left: 2.0,
+                    linked: true,
+                }),
+            }),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Card Fill".into(),
+            }),
+        )?;
+        let color = tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Card Color".into(),
+                color: 0xff3b_82f6,
+            }),
+        )?;
+        let stroke = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Stroke(StrokeSpec {
+                name: "Card Stroke".into(),
+                thickness: 1.0,
+                cap: SceneStrokeCap::Butt,
+                join: SceneStrokeJoin::Miter,
+                transform_affects_stroke: true,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(stroke),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Card Stroke Color".into(),
+                color: 0xff11_2233,
+            }),
+        )?;
+
+        let animation = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Restyle".into(),
+                fps: 60,
+                duration: 60,
+            },
+        )?;
+        let mut animations = tx.animations();
+        for (property, from, to) in [
+            (props::PATH_WIDTH, 96.0, 160.0),
+            (props::PATH_HEIGHT, 44.0, 68.0),
+            (props::RECTANGLE_CORNER_RADIUS_TOP_LEFT, 2.0, 24.0),
+            (props::RECTANGLE_CORNER_RADIUS_TOP_RIGHT, 2.0, 24.0),
+            (props::RECTANGLE_CORNER_RADIUS_BOTTOM_RIGHT, 2.0, 24.0),
+            (props::RECTANGLE_CORNER_RADIUS_BOTTOM_LEFT, 2.0, 24.0),
+        ] {
+            animations.set_key(animation, rectangle, property, 0, from)?;
+            animations.set_key(animation, rectangle, property, 60, to)?;
+        }
+        animations.set_key(animation, stroke, props::STROKE_THICKNESS, 0, 0.0)?;
+        animations.set_key(animation, stroke, props::STROKE_THICKNESS, 60, 6.0)?;
+        animations.set_color_key(animation, color, props::COLOR_VALUE, 0, 0xff3b_82f6)?;
+        animations.set_color_key_with_interpolation(
+            animation,
+            color,
+            props::COLOR_VALUE,
+            60,
+            0xffef_4444,
+            KeyInterpolation::Linear,
+        )?;
+        Ok((artboard, rectangle, color, stroke, animation))
+    })?;
+
+    assert!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .any(|record| record.kind == ExportedObjectKind::KeyFrameColor),
+        "typed color keys must export the Rive color-keyframe record kind"
+    );
+
+    let instance = scene.instantiate(artboard)?;
+    let width = scene.cursor(instance, rectangle, props::PATH_WIDTH)?;
+    let height = scene.cursor(instance, rectangle, props::PATH_HEIGHT)?;
+    let top_left = scene.cursor(instance, rectangle, props::RECTANGLE_CORNER_RADIUS_TOP_LEFT)?;
+    let bottom_right = scene.cursor(
+        instance,
+        rectangle,
+        props::RECTANGLE_CORNER_RADIUS_BOTTOM_RIGHT,
+    )?;
+    let thickness = scene.cursor(instance, stroke, props::STROKE_THICKNESS)?;
+    let fill_color = scene.cursor(instance, color, props::COLOR_VALUE)?;
+    scene.frame().scrub(instance, animation, 1.0)?;
+    assert_eq!(scene.frame().get(width)?, 160.0);
+    assert_eq!(scene.frame().get(height)?, 68.0);
+    assert_eq!(scene.frame().get(top_left)?, 24.0);
+    assert_eq!(scene.frame().get(bottom_right)?, 24.0);
+    assert_eq!(scene.frame().get(thickness)?, 6.0);
+    assert_eq!(scene.frame().get(fill_color)?, 0xffef_4444);
     Ok(())
 }
 
@@ -3512,13 +3851,14 @@ fn authored_view_model_number_binds_state_transition_duration_records() -> Resul
 }
 
 #[test]
-fn typed_component_list_exports_imports_advances_and_draws_two_view_model_items() -> Result<()> {
+fn typed_vertical_component_list_exports_imports_advances_and_draws_two_view_model_items()
+-> Result<()> {
     let mut scene = Scene::new();
-    let (root_artboard, _) = scene.edit(|tx| {
+    let ((root_artboard, item_shape, component_list, pressed), _) = scene.edit(|tx| {
         let root_artboard = tx.create_artboard(ArtboardSpec {
             name: "Root".into(),
             width: 120.0,
-            height: 40.0,
+            height: 70.0,
         })?;
         let item_artboard = tx.create_artboard(ArtboardSpec {
             name: "Item".into(),
@@ -3604,7 +3944,7 @@ fn typed_component_list_exports_imports_advances_and_draws_two_view_model_items(
         };
         let _ = (root_model, root_defaults, item_a, item_b);
 
-        tx.create_component_list(
+        let component_list = tx.create_component_list(
             root_artboard,
             ArtboardComponentListSpec {
                 name: "Items".into(),
@@ -3614,14 +3954,65 @@ fn typed_component_list_exports_imports_advances_and_draws_two_view_model_items(
                 rotation: 0.0,
                 scale_x: 1.0,
                 scale_y: 1.0,
+                flow: Some(ArtboardComponentListFlow {
+                    axis: ArtboardComponentListAxis::Vertical,
+                    reverse: false,
+                    gap: 6.0,
+                }),
                 source: ViewModelListSource::direct(root_items),
                 map_rules: vec![ArtboardListMapRuleSpec {
                     view_model: item_model,
                     artboard: item_artboard,
+                    state_machines: Vec::new(),
                 }],
             },
         )?;
-        Ok(root_artboard)
+        // The machine's transparent root-artboard hit target recognizes the
+        // press, while the context must identify the concrete rendered list
+        // item under that press rather than this implementation-only proxy.
+        let listener_target = tx.create(
+            Parent::Artboard(root_artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Second item listener target".into(),
+                x: 10.0,
+                y: 36.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(listener_target),
+            NodeSpec::Rectangle(RectangleSpec::new("Second item hit bounds", 20.0, 20.0)),
+        )?;
+        let mut machines = tx.machines();
+        let pressed = machines.create_event(
+            root_artboard,
+            EventSpec {
+                name: Some("List item pressed".into()),
+            },
+        )?;
+        let machine = machines.create_machine(
+            root_artboard,
+            MachineSpec {
+                name: Some("List interactions".into()),
+            },
+        )?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        machines.create_any_state(layer)?;
+        machines.create_entry_state(layer)?;
+        machines.create_exit_state(layer)?;
+        let listener = machines.create_listener(
+            machine,
+            listener_target,
+            MachineListenerSpec {
+                name: Some("Press second item".into()),
+                listener_type: MachineListenerType::Click,
+            },
+        )?;
+        machines.add_listener_fire_event_action(listener, pressed)?;
+        Ok((root_artboard, item_shape, component_list, pressed))
     })?;
 
     let records = scene.export_records();
@@ -3663,6 +4054,37 @@ fn typed_component_list_exports_imports_advances_and_draws_two_view_model_items(
         .iter()
         .position(|record| record.kind == ExportedObjectKind::ArtboardComponentList)
         .expect("typed component-list host is exported");
+    let list = &records.records()[list_index];
+    assert!(list.properties.contains(&ExportedProperty::ParentId(1)));
+    assert!(list.properties.contains(&ExportedProperty::TranslateX(5.0)));
+    assert!(list.properties.contains(&ExportedProperty::TranslateY(7.0)));
+    assert!(
+        !list
+            .properties
+            .iter()
+            .any(|property| matches!(property, ExportedProperty::LayoutComponentStyleId(_))),
+        "ArtboardComponentList is a Drawable and must not receive LayoutComponent.styleId",
+    );
+    let layout_component = records
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::LayoutComponent)
+        .expect("typed component-list flow exports one native layout wrapper");
+    assert!(
+        !layout_component
+            .properties
+            .iter()
+            .any(|property| matches!(property, ExportedProperty::TranslateX(_) | ExportedProperty::TranslateY(_))),
+        "the durable component-list record continues to own controller-visible transforms",
+    );
+    let style_local_id = layout_component
+        .properties
+        .iter()
+        .find_map(|property| match property {
+            ExportedProperty::LayoutComponentStyleId(local_id) => Some(*local_id),
+            _ => None,
+        })
+        .expect("the native layout wrapper references its style");
     assert_eq!(
         records.records().get(list_index + 1),
         Some(&ExportedRecord {
@@ -3674,6 +4096,23 @@ fn typed_component_list_exports_imports_advances_and_draws_two_view_model_items(
             ],
         }),
         "the typed source bind immediately follows its target without exposing a raw schema key"
+    );
+    let layout = records
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::LayoutComponentStyle)
+        .expect("typed component-list flow exports one native layout style");
+    assert!(layout.properties.contains(&ExportedProperty::ParentId(1)));
+    assert_eq!(style_local_id, 5);
+    assert!(
+        layout
+            .properties
+            .contains(&ExportedProperty::LayoutFlexDirection(0))
+    );
+    assert!(
+        layout
+            .properties
+            .contains(&ExportedProperty::LayoutGapVertical(6.0))
     );
     let map_rule = records
         .records()
@@ -3702,6 +4141,52 @@ fn typed_component_list_exports_imports_advances_and_draws_two_view_model_items(
         2,
         "both list contexts import, instantiate the mapped item artboard, and draw"
     );
+    let occurrences = [
+        (nuxie::Vec2D::new(6.0, 8.0), 0),
+        (nuxie::Vec2D::new(6.0, 34.0), 1),
+    ];
+    for (point, item_index) in occurrences {
+        let hits = scene.frame().hit_test_paths_with_bounds(instance, point);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(
+            hits[0].path().objects(),
+            [component_list.object_id(), item_shape]
+        );
+        assert_eq!(hits[0].occurrence().len(), 1);
+        assert_eq!(hits[0].occurrence()[0].host(), component_list.object_id());
+        assert_eq!(hits[0].occurrence()[0].item_index(), item_index);
+        assert_eq!(scene.frame().hit_test(instance, point), vec![item_shape]);
+    }
+
+    assert!(
+        scene
+            .frame()
+            .hit_test_paths_with_bounds(instance, nuxie::Vec2D::new(26.0, 8.0))
+            .is_empty(),
+        "vertical flow must not leave the second item on the legacy horizontal axis",
+    );
+    let second_item = nuxie::Vec2D::new(6.0, 34.0);
+    assert!(scene.frame().pointer_down(instance, second_item, 42));
+    assert!(scene.frame().pointer_up(instance, second_item, 42));
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    let [
+        SceneEvent::Authored {
+            event,
+            context: Some(context),
+            ..
+        },
+    ] = events.as_slice()
+    else {
+        panic!("list press must report one exact rendered occurrence: {events:?}");
+    };
+    assert_eq!(*event, pressed);
+    assert_eq!(
+        context.path().objects(),
+        [component_list.object_id(), item_shape]
+    );
+    assert_eq!(context.occurrence().len(), 1);
+    assert_eq!(context.occurrence()[0].host(), component_list.object_id());
+    assert_eq!(context.occurrence()[0].item_index(), 1);
     Ok(())
 }
 
@@ -3878,10 +4363,12 @@ fn nested_view_model_list_path_imports_advances_and_draws_the_mapped_item() -> R
                 rotation: 0.0,
                 scale_x: 1.0,
                 scale_y: 1.0,
+                flow: None,
                 source: ViewModelListSource::nested([paywall], products),
                 map_rules: vec![ArtboardListMapRuleSpec {
                     view_model: item_model,
                     artboard: item_artboard,
+                    state_machines: Vec::new(),
                 }],
             },
         )?;
@@ -3939,6 +4426,319 @@ fn nested_view_model_list_path_imports_advances_and_draws_the_mapped_item() -> R
     assert!(
         drawn_move_count(&stream) > 0,
         "the mapped item must draw glyph paths from its bound string: {stream}"
+    );
+    Ok(())
+}
+
+#[test]
+fn typed_list_string_equality_mutates_stable_items_rejects_mismatches_and_replays() -> Result<()> {
+    let mut scene = Scene::new();
+    let (
+        (
+            root_artboard,
+            paywall_defaults,
+            selected_product,
+            paywall,
+            products,
+            product_id,
+            is_selected,
+            selected_badge,
+            product_list,
+        ),
+        _,
+    ) = scene.edit(|tx| {
+        let root_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Root".into(),
+            width: 120.0,
+            height: 40.0,
+        })?;
+        let item_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Product".into(),
+            width: 20.0,
+            height: 20.0,
+        })?;
+        let selected_badge = tx.create(
+            Parent::Artboard(item_artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Selected badge".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(selected_badge),
+            NodeSpec::Rectangle(RectangleSpec::new("Badge bounds", 12.0, 12.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(selected_badge),
+            NodeSpec::Fill(FillSpec {
+                name: "Badge fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Badge color".into(),
+                color: 0xff44_aa66,
+            }),
+        )?;
+
+        let (
+            paywall_model,
+            product_model,
+            root_defaults,
+            paywall_defaults,
+            pro,
+            paywall,
+            selected_product,
+            products,
+            product_id,
+            is_selected,
+        ) = {
+            let mut view_models = tx.view_models();
+            let root_model = view_models.create(ViewModelSpec {
+                name: "Runtime".into(),
+            })?;
+            let paywall_model = view_models.create(ViewModelSpec {
+                name: "Paywall".into(),
+            })?;
+            let product_model = view_models.create(ViewModelSpec {
+                name: "Product".into(),
+            })?;
+            let paywall = view_models.create_child(
+                root_model,
+                ViewModelChildSpec {
+                    name: "paywall".into(),
+                    view_model: paywall_model,
+                },
+            )?;
+            let selected_product = view_models.create_string(
+                paywall_model,
+                ViewModelStringSpec {
+                    name: "selectedProductId".into(),
+                },
+            )?;
+            let products = view_models.create_list(
+                paywall_model,
+                ViewModelListSpec {
+                    name: "products".into(),
+                },
+            )?;
+            let product_id = view_models.create_string(
+                product_model,
+                ViewModelStringSpec {
+                    name: "productId".into(),
+                },
+            )?;
+            let is_selected = view_models.create_boolean(
+                product_model,
+                ViewModelBooleanSpec {
+                    name: "isSelected".into(),
+                },
+            )?;
+            let root_defaults = view_models.create_instance(
+                root_model,
+                ViewModelInstanceSpec {
+                    name: Some("Runtime defaults".into()),
+                },
+            )?;
+            let paywall_defaults = view_models.create_instance(
+                paywall_model,
+                ViewModelInstanceSpec {
+                    name: Some("Paywall defaults".into()),
+                },
+            )?;
+            let pro = view_models.create_instance(
+                product_model,
+                ViewModelInstanceSpec {
+                    name: Some("Pro".into()),
+                },
+            )?;
+            let basic = view_models.create_instance(
+                product_model,
+                ViewModelInstanceSpec {
+                    name: Some("Basic".into()),
+                },
+            )?;
+            view_models.set_child(root_defaults, paywall, paywall_defaults)?;
+            view_models.set_string(paywall_defaults, selected_product, "pro")?;
+            view_models.set_string(pro, product_id, "pro")?;
+            view_models.set_boolean(pro, is_selected, true)?;
+            view_models.set_string(basic, product_id, "basic")?;
+            view_models.set_boolean(basic, is_selected, false)?;
+            view_models.set_list_items(paywall_defaults, products, &[pro, basic])?;
+            view_models.set_artboard_default(root_artboard, root_defaults)?;
+            view_models.set_artboard_default(item_artboard, pro)?;
+            view_models.bind_visibility(
+                selected_badge,
+                is_selected,
+                VisibilityCondition::WhenTrue,
+                1.0,
+            )?;
+            (
+                paywall_model,
+                product_model,
+                root_defaults,
+                paywall_defaults,
+                pro,
+                paywall,
+                selected_product,
+                products,
+                product_id,
+                is_selected,
+            )
+        };
+        let _ = (paywall_model, root_defaults, pro);
+        let product_list = tx.create_component_list(
+            root_artboard,
+            ArtboardComponentListSpec {
+                name: "Products".into(),
+                x: 5.0,
+                y: 7.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                flow: None,
+                source: ViewModelListSource::nested([paywall], products),
+                map_rules: vec![ArtboardListMapRuleSpec {
+                    view_model: product_model,
+                    artboard: item_artboard,
+                    state_machines: Vec::new(),
+                }],
+            },
+        )?;
+        Ok((
+            root_artboard,
+            paywall_defaults,
+            selected_product,
+            paywall,
+            products,
+            product_id,
+            is_selected,
+            selected_badge,
+            product_list,
+        ))
+    })?;
+
+    let instance = scene.instantiate(root_artboard)?;
+    let mut events = Vec::new();
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    let initial = canonical_draw_stream(&mut scene, instance)?;
+    let initial_hits = scene
+        .frame()
+        .hit_test_paths(instance, nuxie::Vec2D::new(6.0, 8.0));
+    assert_eq!(initial_hits.len(), 1);
+    assert_eq!(
+        initial_hits[0].objects(),
+        &[product_list.object_id(), selected_badge],
+        "the visible first list item resolves through its typed host and child artboard",
+    );
+    let source = ViewModelListSource::nested([paywall], products);
+    assert!(
+        matches!(
+            scene.vm_list_string_match_boolean_cursor(
+                instance,
+                paywall_defaults,
+                selected_product,
+                &ViewModelListSource::direct(products),
+                product_id,
+                is_selected,
+            ),
+            Err(ResolveError::UnknownViewModelList)
+        ),
+        "the list must belong to the exact typed child path",
+    );
+    assert!(
+        matches!(
+            scene.vm_list_string_match_boolean_cursor(
+                instance,
+                paywall_defaults,
+                selected_product,
+                &source,
+                selected_product,
+                is_selected,
+            ),
+            Err(ResolveError::UnknownViewModelBoolean)
+        ),
+        "the item string and boolean must belong to the same typed model",
+    );
+    let cursor = scene.vm_list_string_match_boolean_cursor(
+        instance,
+        paywall_defaults,
+        selected_product,
+        &source,
+        product_id,
+        is_selected,
+    )?;
+    assert!(
+        scene
+            .frame()
+            .set_vm_list_string_match_boolean(cursor, "basic")?
+    );
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    let selected = canonical_draw_stream(&mut scene, instance)?;
+    let selected_hits = scene
+        .frame()
+        .hit_test_paths(instance, nuxie::Vec2D::new(26.0, 8.0));
+    assert_eq!(selected_hits.len(), 1);
+    assert_eq!(
+        selected_hits[0].objects(),
+        &[product_list.object_id(), selected_badge],
+        "the selected branch moves semantic hits to the second retained list item",
+    );
+    assert_ne!(
+        selected, initial,
+        "the stable item contexts swap visibility"
+    );
+    assert!(
+        !scene
+            .frame()
+            .set_vm_list_string_match_boolean(cursor, "basic")?,
+        "an identical selection write is a hot-path no-op",
+    );
+
+    scene.edit(|tx| {
+        tx.create(
+            Parent::Artboard(root_artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Non-drawing structural marker".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 0.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        Ok(())
+    })?;
+    assert_eq!(
+        scene
+            .frame()
+            .set_vm_list_string_match_boolean(cursor, "basic"),
+        Err(StaleCursor),
+    );
+    let replay = scene.vm_list_string_match_boolean_cursor(
+        instance,
+        paywall_defaults,
+        selected_product,
+        &source,
+        product_id,
+        is_selected,
+    )?;
+    let _ = scene
+        .frame()
+        .set_vm_list_string_match_boolean(replay, "basic")?;
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    assert_eq!(
+        canonical_draw_stream(&mut scene, instance)?,
+        selected,
+        "re-resolved typed equality replays the selected list-item branch after remount",
     );
     Ok(())
 }
@@ -4032,6 +4832,227 @@ fn typed_view_model_strings_export_and_import_as_runtime_instance_values() -> Re
     let mut events = Vec::new();
     let _ = scene.frame().advance(instance, 0.0, &mut events);
     assert!(events.is_empty());
+    Ok(())
+}
+
+#[test]
+fn typed_view_model_extended_scalars_export_and_import_exact_values() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, defaults, tint, poster, status, submit, list_index, alternate_asset), _) =
+        scene.edit(|tx| {
+            let poster_asset = tx.create_image_asset(ImageAssetSpec {
+                name: "Poster image".into(),
+                bytes: b"view-model-only image bytes".to_vec(),
+            })?;
+            let alternate_asset = tx.create_image_asset(ImageAssetSpec {
+                name: "Alternate poster image".into(),
+                bytes: b"alternate view-model-only image bytes".to_vec(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Extended scalars".into(),
+                width: 120.0,
+                height: 40.0,
+            })?;
+            let mut view_models = tx.view_models();
+            let runtime = view_models.create(ViewModelSpec {
+                name: "Runtime".into(),
+            })?;
+            let tint = view_models.create_color(
+                runtime,
+                ViewModelColorSpec {
+                    name: "tint".into(),
+                },
+            )?;
+            let poster = view_models.create_image(
+                runtime,
+                ViewModelImageSpec {
+                    name: "poster".into(),
+                },
+            )?;
+            let status = view_models.create_enum(
+                runtime,
+                ViewModelEnumSpec {
+                    name: "status".into(),
+                    values: vec!["idle".into(), "ready".into()],
+                },
+            )?;
+            let submit = view_models.create_trigger(
+                runtime,
+                ViewModelTriggerSpec {
+                    name: "submit".into(),
+                },
+            )?;
+            let list_index = view_models.create_list_index(
+                runtime,
+                ViewModelListIndexSpec {
+                    name: "list_index".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                runtime,
+                ViewModelInstanceSpec {
+                    name: Some("Runtime defaults".into()),
+                },
+            )?;
+            view_models.set_color(defaults, tint, 0xff12_3456)?;
+            view_models.set_image(defaults, poster, poster_asset)?;
+            view_models.set_enum(defaults, status, 1)?;
+            view_models.set_trigger(defaults, submit, 3)?;
+            view_models.set_list_index(defaults, list_index, 7)?;
+            let alternate = view_models.create_instance(
+                runtime,
+                ViewModelInstanceSpec {
+                    name: Some("Alternate runtime values".into()),
+                },
+            )?;
+            view_models.set_image(alternate, poster, alternate_asset)?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            Ok((
+                artboard,
+                defaults,
+                tint,
+                poster,
+                status,
+                submit,
+                list_index,
+                alternate_asset,
+            ))
+        })?;
+
+    let records = scene.export_records();
+    let kinds = records
+        .records()
+        .iter()
+        .map(|record| record.kind)
+        .collect::<Vec<_>>();
+    for kind in [
+        ExportedObjectKind::DataEnumCustom,
+        ExportedObjectKind::DataEnumValue,
+        ExportedObjectKind::ViewModelPropertyColor,
+        ExportedObjectKind::ViewModelPropertyImage,
+        ExportedObjectKind::ViewModelPropertyEnum,
+        ExportedObjectKind::ViewModelPropertyTrigger,
+        ExportedObjectKind::ViewModelPropertyListIndex,
+        ExportedObjectKind::ViewModelInstanceColor,
+        ExportedObjectKind::ViewModelInstanceImage,
+        ExportedObjectKind::ViewModelInstanceEnum,
+        ExportedObjectKind::ViewModelInstanceTrigger,
+        ExportedObjectKind::ViewModelInstanceListIndex,
+    ] {
+        assert!(kinds.contains(&kind), "missing exact {kind:?} record");
+    }
+    assert!(records.records().iter().any(|record| {
+        record.kind == ExportedObjectKind::ViewModelInstanceColor
+            && record
+                .properties
+                .contains(&ExportedProperty::ViewModelColorValue(0xff12_3456))
+    }));
+    assert!(records.records().iter().any(|record| {
+        record.kind == ExportedObjectKind::ViewModelInstanceImage
+            && record
+                .properties
+                .contains(&ExportedProperty::ViewModelImageValue(0))
+    }));
+    assert!(records.records().iter().any(|record| {
+        record.kind == ExportedObjectKind::ViewModelInstanceEnum
+            && record
+                .properties
+                .contains(&ExportedProperty::ViewModelEnumValue(1))
+    }));
+    assert!(records.records().iter().any(|record| {
+        record.kind == ExportedObjectKind::ViewModelInstanceTrigger
+            && record
+                .properties
+                .contains(&ExportedProperty::ViewModelTriggerValue(3))
+    }));
+    assert!(records.records().iter().any(|record| {
+        record.kind == ExportedObjectKind::ViewModelInstanceListIndex
+            && record
+                .properties
+                .contains(&ExportedProperty::ViewModelListIndexValue(7))
+    }));
+
+    // Materialization imports the exact authored stream into nuxie-runtime.
+    let records_before_hot_writes = scene.export_records();
+    let instance = scene.instantiate(artboard)?;
+    assert!(scene.set_vm_color(instance, defaults, tint, 0xff65_4321)?);
+    assert!(!scene.set_vm_color(instance, defaults, tint, 0xff65_4321)?);
+    assert!(scene.set_vm_image(instance, defaults, poster, alternate_asset)?);
+    assert!(!scene.set_vm_image(instance, defaults, poster, alternate_asset)?);
+    assert!(scene.set_vm_enum(instance, defaults, status, 0)?);
+    assert!(!scene.set_vm_enum(instance, defaults, status, 0)?);
+    assert!(scene.set_vm_trigger(instance, defaults, submit, 4)?);
+    assert!(!scene.set_vm_trigger(instance, defaults, submit, 4)?);
+    assert!(scene.set_vm_list_index(instance, defaults, list_index, 8)?);
+    assert!(!scene.set_vm_list_index(instance, defaults, list_index, 8)?);
+    assert_eq!(scene.export_records(), records_before_hot_writes);
+    let mut events = Vec::new();
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    Ok(())
+}
+
+#[test]
+fn typed_view_model_enum_validation_rejects_lossy_authoring() -> Result<()> {
+    let mut scene = Scene::new();
+    let error = scene
+        .edit(|tx| {
+            tx.create_artboard(ArtboardSpec {
+                name: "Validation".into(),
+                width: 120.0,
+                height: 40.0,
+            })?;
+            let mut view_models = tx.view_models();
+            let runtime = view_models.create(ViewModelSpec {
+                name: "Runtime".into(),
+            })?;
+            let status = view_models.create_enum(
+                runtime,
+                ViewModelEnumSpec {
+                    name: "status".into(),
+                    values: vec!["idle".into(), "ready".into()],
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                runtime,
+                ViewModelInstanceSpec {
+                    name: Some("Defaults".into()),
+                },
+            )?;
+            view_models.set_enum(defaults, status, 2)?;
+            Ok(())
+        })
+        .expect_err("out-of-range enum ordinals must never be truncated or defaulted");
+    assert_eq!(error.kind(), EditErrorKind::Aborted);
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::OutOfRangeProperty {
+            property: "view_model_enum",
+        }
+    );
+
+    let error = scene
+        .edit(|tx| {
+            tx.create_artboard(ArtboardSpec {
+                name: "Duplicate keys".into(),
+                width: 120.0,
+                height: 40.0,
+            })?;
+            let mut view_models = tx.view_models();
+            let runtime = view_models.create(ViewModelSpec {
+                name: "Runtime".into(),
+            })?;
+            view_models.create_enum(
+                runtime,
+                ViewModelEnumSpec {
+                    name: "status".into(),
+                    values: vec!["idle".into(), "idle".into()],
+                },
+            )?;
+            Ok(())
+        })
+        .expect_err("duplicate enum keys must never collapse in the DataEnum record stream");
+    assert_eq!(error.kind(), EditErrorKind::Aborted);
+    assert_eq!(error.diagnostic().reason, EditReason::IdentityCollision);
     Ok(())
 }
 
@@ -4650,7 +5671,9 @@ fn trigger_machine_changes_visual_state_and_reports_one_semantic_event() -> Resu
         vec![SceneEvent::Authored {
             event,
             name: Some("Reached active".into()),
+            string_properties: Vec::new(),
             seconds_delay: 0.0,
+            context: None,
         }]
     );
 
@@ -4666,6 +5689,1390 @@ fn trigger_machine_changes_visual_state_and_reports_one_semantic_event() -> Resu
         events.is_empty(),
         "machine state is isolated per live instance"
     );
+    Ok(())
+}
+
+#[test]
+fn event_string_properties_survive_exact_export_and_runtime_reporting() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, machine, event), _) = scene.edit(|tx| {
+        let (artboard, _, machine, _, event) = create_authored_trigger_machine(tx)?;
+        let mut machines = tx.machines();
+        machines.create_event_string_property(
+            event,
+            EventStringPropertySpec {
+                name: "nuxieTrigger".into(),
+                value: "press".into(),
+            },
+        )?;
+        machines.create_event_string_property(
+            event,
+            EventStringPropertySpec {
+                name: "componentId".into(),
+                value: "cta".into(),
+            },
+        )?;
+        Ok((artboard, machine, event))
+    })?;
+
+    let records = scene.export_records().into_records();
+    let properties = records
+        .iter()
+        .filter(|record| record.kind == ExportedObjectKind::CustomPropertyString)
+        .collect::<Vec<_>>();
+    assert_eq!(properties.len(), 2);
+    assert_eq!(
+        properties[0].properties,
+        vec![
+            ExportedProperty::ComponentName("nuxieTrigger".into()),
+            ExportedProperty::ParentId(2),
+            ExportedProperty::CustomPropertyStringValue("press".into()),
+        ]
+    );
+    assert_eq!(
+        properties[1].properties,
+        vec![
+            ExportedProperty::ComponentName("componentId".into()),
+            ExportedProperty::ParentId(2),
+            ExportedProperty::CustomPropertyStringValue("cta".into()),
+        ]
+    );
+
+    let instance = scene.instantiate(artboard)?;
+    let go = scene.machine_input(instance, machine, "Go")?;
+    let mut events = Vec::new();
+    scene.frame().advance(instance, 0.0, &mut events);
+    scene.frame().fire(go)?;
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert_eq!(
+        events,
+        vec![SceneEvent::Authored {
+            event,
+            name: Some("Reached active".into()),
+            string_properties: vec![
+                SceneEventStringProperty {
+                    name: "nuxieTrigger".into(),
+                    value: "press".into(),
+                },
+                SceneEventStringProperty {
+                    name: "componentId".into(),
+                    value: "cta".into(),
+                },
+            ],
+            seconds_delay: 0.0,
+            context: None,
+        }]
+    );
+    Ok(())
+}
+
+#[test]
+fn authored_click_listener_hits_the_target_and_drives_its_machine_after_exact_export() -> Result<()>
+{
+    let mut scene = Scene::new();
+    let ((artboard, shape, machine, event), _) = scene.edit(|tx| {
+        let (artboard, shape, machine, trigger, event) = create_authored_trigger_machine(tx)?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Hit target", 80.0, 80.0)),
+        )?;
+        let mut machines = tx.machines();
+        let listener = machines.create_listener(
+            machine,
+            shape,
+            MachineListenerSpec {
+                name: Some("Activate card".into()),
+                listener_type: MachineListenerType::Click,
+            },
+        )?;
+        machines.add_listener_trigger_action(listener, trigger)?;
+        Ok((artboard, shape, machine, event))
+    })?;
+
+    let records = scene.export_records().into_records();
+    assert!(records.iter().any(|record| {
+        record.kind == ExportedObjectKind::StateMachineListener
+            && record
+                .properties
+                .contains(&ExportedProperty::ListenerTargetId(1))
+            && record
+                .properties
+                .contains(&ExportedProperty::ListenerType(MachineListenerType::Click))
+    }));
+    assert!(records.iter().any(|record| {
+        record.kind == ExportedObjectKind::ListenerTriggerChange
+            && record
+                .properties
+                .contains(&ExportedProperty::ListenerInputId(0))
+    }));
+
+    let instance = scene.instantiate(artboard)?;
+    let opacity = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+    let mut events = Vec::new();
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity)?, 0.2);
+
+    assert!(
+        scene
+            .frame()
+            .pointer_down(instance, Vec2D::new(0.0, 0.0), 7)
+    );
+    assert!(scene.frame().pointer_up(instance, Vec2D::new(0.0, 0.0), 7));
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity)?, 0.8);
+    assert_eq!(
+        events,
+        vec![SceneEvent::Authored {
+            event,
+            name: Some("Reached active".into()),
+            string_properties: Vec::new(),
+            seconds_delay: 0.0,
+            context: None,
+        }]
+    );
+    assert!(scene.machine_input(instance, machine, "Go").is_ok());
+
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert!(
+        events.is_empty(),
+        "click-triggered events report for one frame"
+    );
+    Ok(())
+}
+
+#[test]
+fn authored_event_and_view_model_listeners_export_typed_sources_and_view_model_actions_execute()
+-> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, defaults, progress, label), _) = scene.edit(|tx| {
+        let (artboard, shape, machine, trigger, event) = create_authored_trigger_machine(tx)?;
+        let alternate_image = tx.create_image_asset(ImageAssetSpec {
+            name: "Alternate image".into(),
+            bytes: b"listener image bytes".to_vec(),
+        })?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Hit target", 80.0, 80.0)),
+        )?;
+
+        let (defaults, progress, label, enabled, tint, poster, status, submit, selected) = {
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                name: "Interaction".into(),
+            })?;
+            let progress = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "progress".into(),
+                },
+            )?;
+            let label = view_models.create_string(
+                model,
+                ViewModelStringSpec {
+                    name: "label".into(),
+                },
+            )?;
+            let enabled = view_models.create_boolean(
+                model,
+                ViewModelBooleanSpec {
+                    name: "enabled".into(),
+                },
+            )?;
+            let tint = view_models.create_color(
+                model,
+                ViewModelColorSpec {
+                    name: "tint".into(),
+                },
+            )?;
+            let poster = view_models.create_image(
+                model,
+                ViewModelImageSpec {
+                    name: "poster".into(),
+                },
+            )?;
+            let status = view_models.create_enum(
+                model,
+                ViewModelEnumSpec {
+                    name: "status".into(),
+                    values: vec!["idle".into(), "ready".into()],
+                },
+            )?;
+            let submit = view_models.create_trigger(
+                model,
+                ViewModelTriggerSpec {
+                    name: "submit".into(),
+                },
+            )?;
+            let selected = view_models.create_list_index(
+                model,
+                ViewModelListIndexSpec {
+                    name: "selected".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                model,
+                ViewModelInstanceSpec {
+                    name: Some("Defaults".into()),
+                },
+            )?;
+            view_models.set_number(defaults, progress, 0.0)?;
+            view_models.set_string(defaults, label, "idle")?;
+            view_models.set_boolean(defaults, enabled, false)?;
+            view_models.set_color(defaults, tint, 0)?;
+            view_models.set_enum(defaults, status, 0)?;
+            view_models.set_trigger(defaults, submit, 0)?;
+            view_models.set_list_index(defaults, selected, 0)?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            (
+                defaults, progress, label, enabled, tint, poster, status, submit, selected,
+            )
+        };
+
+        let progress_source = nuxie::ViewModelNumberSource::direct(progress);
+        let mut machines = tx.machines();
+        let event_listener = machines.create_event_listener(
+            machine,
+            shape,
+            event,
+            Some("When active is reported".into()),
+        )?;
+        machines.add_listener_view_model_string_action(
+            event_listener,
+            nuxie::ViewModelStringSource::direct(label),
+            "reported",
+        )?;
+        let view_model_listener = machines.create_view_model_listener(
+            machine,
+            shape,
+            nuxie::MachineViewModelSource::Number(progress_source.clone()),
+            Some("When progress changes".into()),
+        )?;
+        machines.add_listener_trigger_action(view_model_listener, trigger)?;
+        let click = machines.create_listener(
+            machine,
+            shape,
+            MachineListenerSpec {
+                name: Some("Set progress".into()),
+                listener_type: MachineListenerType::Click,
+            },
+        )?;
+        machines.add_listener_view_model_number_action(click, progress_source, 0.75)?;
+        machines.add_listener_view_model_boolean_action(
+            click,
+            nuxie::ViewModelBooleanSource::direct(enabled),
+            true,
+        )?;
+        machines.add_listener_view_model_color_action(
+            click,
+            nuxie::ViewModelColorSource::direct(tint),
+            0xff12_3456,
+        )?;
+        machines.add_listener_view_model_image_action(
+            click,
+            nuxie::ViewModelImageSource::direct(poster),
+            alternate_image,
+        )?;
+        machines.add_listener_view_model_enum_action(
+            click,
+            nuxie::ViewModelEnumSource::direct(status),
+            1,
+        )?;
+        machines.add_listener_view_model_trigger_action(
+            click,
+            nuxie::ViewModelTriggerSource::direct(submit),
+        )?;
+        machines.add_listener_view_model_list_index_action(
+            click,
+            nuxie::ViewModelListIndexSource::direct(selected),
+            4,
+        )?;
+        Ok((artboard, shape, defaults, progress, label))
+    })?;
+
+    let records = scene.export_records().into_records();
+    assert!(records.iter().any(|record| {
+        record.kind == ExportedObjectKind::StateMachineListener
+            && record
+                .properties
+                .contains(&ExportedProperty::ListenerType(MachineListenerType::Event))
+            && record
+                .properties
+                .iter()
+                .any(|property| matches!(property, ExportedProperty::ListenerEventId(_)))
+    }));
+    assert!(records.iter().any(|record| {
+        record.kind == ExportedObjectKind::StateMachineListener
+            && record.properties.contains(&ExportedProperty::ListenerType(
+                MachineListenerType::ViewModel,
+            ))
+            && record
+                .properties
+                .contains(&ExportedProperty::ListenerViewModelPath(vec![0, 0]))
+    }));
+    let assert_bindable_triplet = |kind: ExportedObjectKind,
+                                   value: ExportedProperty,
+                                   property_key: u32| {
+        let bindable_index = records
+            .iter()
+            .position(|record| record.kind == kind && record.properties.contains(&value))
+            .expect("typed listener ViewModel write bindable");
+        assert_eq!(
+            records[bindable_index + 1].kind,
+            ExportedObjectKind::DataBindContext
+        );
+        assert!(
+            records[bindable_index + 1]
+                .properties
+                .contains(&ExportedProperty::DataBindPropertyKey(property_key))
+        );
+        assert!(
+            records[bindable_index + 1]
+                .properties
+                .contains(&ExportedProperty::DataBindFlags(1))
+        );
+        assert!(records[bindable_index + 1]
+                .properties
+                .iter()
+                .any(|property| matches!(property, ExportedProperty::DataBindSourcePath(path) if path.len() == 2)));
+        assert_eq!(
+            records[bindable_index + 2].kind,
+            ExportedObjectKind::ListenerViewModelChange
+        );
+    };
+    for (kind, value, property_key) in [
+        (
+            ExportedObjectKind::BindablePropertyNumber,
+            ExportedProperty::BindablePropertyNumberValue(0.75),
+            636,
+        ),
+        (
+            ExportedObjectKind::BindablePropertyString,
+            ExportedProperty::BindablePropertyStringValue("reported".into()),
+            635,
+        ),
+        (
+            ExportedObjectKind::BindablePropertyBoolean,
+            ExportedProperty::BindablePropertyBooleanValue(true),
+            634,
+        ),
+        (
+            ExportedObjectKind::BindablePropertyColor,
+            ExportedProperty::BindablePropertyColorValue(0xff12_3456),
+            638,
+        ),
+        (
+            ExportedObjectKind::BindablePropertyAsset,
+            ExportedProperty::BindablePropertyAssetValue(0),
+            823,
+        ),
+        (
+            ExportedObjectKind::BindablePropertyEnum,
+            ExportedProperty::BindablePropertyEnumValue(1),
+            637,
+        ),
+        (
+            ExportedObjectKind::BindablePropertyTrigger,
+            ExportedProperty::BindablePropertyTriggerValue(1),
+            686,
+        ),
+        (
+            ExportedObjectKind::BindablePropertyInteger,
+            ExportedProperty::BindablePropertyIntegerValue(4),
+            686,
+        ),
+    ] {
+        assert_bindable_triplet(kind, value, property_key);
+    }
+
+    let instance = scene.instantiate(artboard)?;
+    let progress = scene.vm_cursor(instance, defaults, progress)?;
+    let label = scene.vm_string_cursor(instance, defaults, label)?;
+    assert_eq!(scene.frame().get_vm(progress)?, 0.0);
+    assert_eq!(scene.frame().get_vm_string(label)?, "idle");
+    assert!(
+        scene
+            .frame()
+            .pointer_down(instance, Vec2D::new(0.0, 0.0), 11)
+    );
+    assert!(scene.frame().pointer_up(instance, Vec2D::new(0.0, 0.0), 11));
+    assert_eq!(scene.frame().get_vm(progress)?, 0.75);
+    let opacity = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+    let mut events = Vec::new();
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity)?, 0.8);
+    assert_eq!(scene.frame().get_vm_string(label)?, "reported");
+    assert_eq!(
+        events.len(),
+        1,
+        "the source event remains externally visible once"
+    );
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert!(
+        events.is_empty(),
+        "Event-listener delivery does not replay the source"
+    );
+
+    let epoch = scene.epoch();
+    let records_after = scene.export_records().into_records();
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(
+        records_after, records,
+        "listener writes stay on the retained hot path"
+    );
+    assert!(scene.cursor(instance, shape, props::WORLD_OPACITY).is_ok());
+    Ok(())
+}
+
+#[test]
+fn authored_drag_listener_captures_pointer_and_dispatches_start_drag_end_after_exact_export()
+-> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, machine), _) = scene.edit(|tx| {
+        let (artboard, shape, machine, _, _) = create_authored_trigger_machine(tx)?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Hit target", 80.0, 80.0)),
+        )?;
+
+        let mut machines = tx.machines();
+        let started = machines.create_number_input(
+            machine,
+            NumberInputSpec {
+                name: "Started".into(),
+                default_value: 0.0,
+            },
+        )?;
+        let dragged = machines.create_number_input(
+            machine,
+            NumberInputSpec {
+                name: "Dragged".into(),
+                default_value: 0.0,
+            },
+        )?;
+        let ended = machines.create_number_input(
+            machine,
+            NumberInputSpec {
+                name: "Ended".into(),
+                default_value: 0.0,
+            },
+        )?;
+        for (name, listener_type, input, value) in [
+            ("Start drag", MachineListenerType::DragStart, started, 1.0),
+            ("Drag", MachineListenerType::Drag, dragged, 2.0),
+            ("End drag", MachineListenerType::DragEnd, ended, 3.0),
+        ] {
+            let listener = machines.create_listener(
+                machine,
+                shape,
+                MachineListenerSpec {
+                    name: Some(name.into()),
+                    listener_type,
+                },
+            )?;
+            machines.add_listener_number_action(listener, input, value)?;
+        }
+        Ok((artboard, machine))
+    })?;
+
+    let records = scene.export_records().into_records();
+    for listener_type in [
+        MachineListenerType::DragStart,
+        MachineListenerType::Drag,
+        MachineListenerType::DragEnd,
+    ] {
+        assert!(records.iter().any(|record| {
+            record.kind == ExportedObjectKind::StateMachineListener
+                && record
+                    .properties
+                    .contains(&ExportedProperty::ListenerType(listener_type))
+        }));
+    }
+
+    let instance = scene.instantiate(artboard)?;
+    let started = scene.machine_number_input(instance, machine, "Started")?;
+    let dragged = scene.machine_number_input(instance, machine, "Dragged")?;
+    let ended = scene.machine_number_input(instance, machine, "Ended")?;
+    assert!(
+        scene
+            .frame()
+            .pointer_down(instance, Vec2D::new(0.0, 0.0), 7)
+    );
+    assert_eq!(scene.frame().get_number(started)?, 0.0);
+    assert_eq!(scene.frame().get_number(dragged)?, 0.0);
+    assert_eq!(scene.frame().get_number(ended)?, 0.0);
+
+    assert!(
+        !scene
+            .frame()
+            .pointer_move(instance, Vec2D::new(f32::NAN, 0.0), 0.016, 7,)
+    );
+    assert_eq!(scene.frame().get_number(started)?, 0.0);
+    assert_eq!(scene.frame().get_number(dragged)?, 0.0);
+    assert_eq!(scene.frame().get_number(ended)?, 0.0);
+
+    assert!(
+        scene
+            .frame()
+            .pointer_move(instance, Vec2D::new(10.0, 10.0), 0.016, 7)
+    );
+    assert_eq!(scene.frame().get_number(started)?, 1.0);
+    assert_eq!(scene.frame().get_number(dragged)?, 2.0);
+    assert_eq!(scene.frame().get_number(ended)?, 0.0);
+
+    assert!(
+        !scene
+            .frame()
+            .pointer_move(instance, Vec2D::new(90.0, 90.0), 0.016, 8),
+        "a foreign pointer must not inherit another pointer's drag capture",
+    );
+    assert!(
+        scene
+            .frame()
+            .pointer_move(instance, Vec2D::new(90.0, 90.0), 0.016, 7),
+        "the armed pointer keeps driving drag actions outside the hit target",
+    );
+    assert_eq!(scene.frame().get_number(dragged)?, 2.0);
+
+    assert!(
+        scene
+            .frame()
+            .pointer_up(instance, Vec2D::new(10.0, 10.0), 7)
+    );
+    assert_eq!(scene.frame().get_number(ended)?, 3.0);
+    assert!(
+        !scene
+            .frame()
+            .pointer_move(instance, Vec2D::new(90.0, 90.0), 0.016, 7),
+        "pointer up must release drag capture",
+    );
+
+    assert!(
+        scene
+            .frame()
+            .pointer_down(instance, Vec2D::new(0.0, 0.0), 9)
+    );
+    assert!(
+        scene
+            .frame()
+            .pointer_move(instance, Vec2D::new(10.0, 10.0), 0.016, 9)
+    );
+    assert!(
+        !scene
+            .frame()
+            .pointer_exit(instance, Vec2D::new(10.0, 10.0), 9)
+    );
+    assert!(
+        !scene
+            .frame()
+            .pointer_move(instance, Vec2D::new(90.0, 90.0), 0.016, 9),
+        "pointer exit cancels and releases drag capture",
+    );
+    Ok(())
+}
+
+#[test]
+fn authored_listener_fire_event_survives_until_the_next_frame_report() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, machine, event), _) = scene.edit(|tx| {
+        let (artboard, shape, machine, _, event) = create_authored_trigger_machine(tx)?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Hit target", 80.0, 80.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Hit target fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Hit target color".into(),
+                color: 0xff112233,
+            }),
+        )?;
+        let mut machines = tx.machines();
+        let listener = machines.create_listener(
+            machine,
+            shape,
+            MachineListenerSpec {
+                name: Some("Report click".into()),
+                listener_type: MachineListenerType::Click,
+            },
+        )?;
+        machines.add_listener_fire_event_action(listener, event)?;
+        Ok((artboard, shape, machine, event))
+    })?;
+
+    let records = scene.export_records().into_records();
+    assert!(records.iter().any(|record| {
+        record.kind == ExportedObjectKind::ListenerFireEvent
+            && record
+                .properties
+                .iter()
+                .any(|property| matches!(property, ExportedProperty::ListenerFireEventId(_)))
+    }));
+
+    let instance = scene.instantiate(artboard)?;
+    let mut events = Vec::new();
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert!(events.is_empty());
+    assert!(
+        scene
+            .frame()
+            .pointer_down(instance, Vec2D::new(0.0, 0.0), 9)
+    );
+    assert!(scene.frame().pointer_up(instance, Vec2D::new(0.0, 0.0), 9));
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    let [
+        SceneEvent::Authored {
+            event: reported_event,
+            name,
+            string_properties,
+            seconds_delay,
+            context: Some(context),
+        },
+    ] = events.as_slice()
+    else {
+        panic!("listener event must retain its concrete pointer occurrence: {events:?}");
+    };
+    assert_eq!(*reported_event, event);
+    assert_eq!(name.as_deref(), Some("Reached active"));
+    assert!(string_properties.is_empty());
+    assert_eq!(seconds_delay.to_bits(), 0.0f32.to_bits());
+    assert_eq!(context.path().objects(), [shape]);
+    assert!(context.occurrence().is_empty());
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert!(events.is_empty(), "listener events remain frame scoped");
+    assert!(scene.machine_input(instance, machine, "Go").is_ok());
+    Ok(())
+}
+
+#[test]
+fn transition_fire_event_reports_once_when_the_transition_is_taken() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, machine, event), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let idle = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Idle".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        let active = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Active".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+
+        let mut machines = tx.machines();
+        let event = machines.create_event(
+            artboard,
+            EventSpec {
+                name: Some("Transition taken".into()),
+            },
+        )?;
+        let machine = machines.create_machine(
+            artboard,
+            MachineSpec {
+                name: Some("Switcher".into()),
+            },
+        )?;
+        let trigger =
+            machines.create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        let entry = machines.create_entry_state(layer)?;
+        let any = machines.create_any_state(layer)?;
+        machines.create_exit_state(layer)?;
+        let idle_state =
+            machines.create_animation_state(layer, AnimationStateSpec { animation: idle })?;
+        let active_state =
+            machines.create_animation_state(layer, AnimationStateSpec { animation: active })?;
+        machines.create_transition(entry, idle_state)?;
+        let transition = machines.create_transition(any, active_state)?;
+        machines.add_trigger_condition(transition, trigger)?;
+        machines.add_transition_fire_event(transition, event, FireEventOccurs::AtStart)?;
+        Ok((artboard, machine, event))
+    })?;
+
+    let instance = scene.instantiate(artboard)?;
+    let go = scene.machine_input(instance, machine, "Go")?;
+    let mut events = Vec::new();
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert!(events.is_empty());
+
+    scene.frame().fire(go)?;
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert_eq!(
+        events,
+        vec![SceneEvent::Authored {
+            event,
+            name: Some("Transition taken".into()),
+            string_properties: Vec::new(),
+            seconds_delay: 0.0,
+            context: None,
+        }]
+    );
+
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert!(events.is_empty(), "transition events fire only when taken");
+    Ok(())
+}
+
+#[test]
+fn authored_state_and_transition_options_export_typed_rive_properties() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let animation = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Animated".into(),
+                fps: 60,
+                duration: 60,
+            },
+        )?;
+        let mut machines = tx.machines();
+        let machine = machines.create_machine(artboard, MachineSpec { name: None })?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        machines.create_any_state(layer)?;
+        let entry = machines.create_entry_state(layer)?;
+        machines.create_exit_state(layer)?;
+        let animated = machines.create_animation_state_with_options(
+            layer,
+            AnimationStateSpec { animation },
+            AnimationStateOptions {
+                speed: 2.0,
+                flags: MachineStateFlags {
+                    random: true,
+                    reset: true,
+                },
+            },
+        )?;
+        machines.create_transition_with_spec(
+            entry,
+            animated,
+            MachineTransitionSpec {
+                duration: 150,
+                enable_exit_time: true,
+                enable_early_exit: true,
+                ..MachineTransitionSpec::default()
+            },
+        )?;
+        Ok(())
+    })?;
+
+    let records = scene.export_records().into_records();
+    let animation_state = records
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::AnimationState)
+        .expect("typed animation state exports");
+    assert!(
+        animation_state
+            .properties
+            .contains(&ExportedProperty::LayerStateFlags(3))
+    );
+    assert!(
+        animation_state
+            .properties
+            .contains(&ExportedProperty::StateSpeed(2.0))
+    );
+    let transition = records
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::StateTransition)
+        .expect("typed transition exports");
+    assert!(
+        transition
+            .properties
+            .contains(&ExportedProperty::StateTransitionFlags((1 << 2) | (1 << 5)))
+    );
+    assert!(
+        transition
+            .properties
+            .contains(&ExportedProperty::StateTransitionDuration(150))
+    );
+    Ok(())
+}
+
+#[test]
+fn blend_states_author_and_execute_typed_input_and_literal_sources() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, direct_shape, machine), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Fader".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let idle = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Idle".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+        let active = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Active".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+        let direct_shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Direct Fader".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 0.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let direct_animation = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Direct".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(direct_animation, direct_shape, props::WORLD_OPACITY, 0, 0.8)?;
+
+        let mut machines = tx.machines();
+        let machine = machines.create_machine(
+            artboard,
+            MachineSpec {
+                name: Some("Blend".into()),
+            },
+        )?;
+        let amount = machines.create_number_input(
+            machine,
+            NumberInputSpec {
+                name: "Amount".into(),
+                default_value: 0.5,
+            },
+        )?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        let entry = machines.create_entry_state(layer)?;
+        machines.create_any_state(layer)?;
+        machines.create_exit_state(layer)?;
+        let blend = machines.create_blend_1d_state(
+            layer,
+            BlendState1DSpec {
+                value: BlendValueSource::StateMachineInput(amount),
+                flags: MachineStateFlags {
+                    reset: true,
+                    ..MachineStateFlags::default()
+                },
+            },
+        )?;
+        machines.add_blend_animation_1d(
+            blend,
+            BlendAnimation1DSpec {
+                animation: active,
+                value: 1.0,
+            },
+        )?;
+        machines.add_blend_animation_1d(
+            blend,
+            BlendAnimation1DSpec {
+                animation: idle,
+                value: 0.0,
+            },
+        )?;
+        machines.create_transition(entry, blend)?;
+
+        let direct_layer = machines.create_layer(
+            machine,
+            MachineLayerSpec {
+                name: Some("Direct".into()),
+            },
+        )?;
+        let direct_entry = machines.create_entry_state(direct_layer)?;
+        machines.create_any_state(direct_layer)?;
+        machines.create_exit_state(direct_layer)?;
+        let direct =
+            machines.create_blend_direct_state(direct_layer, MachineStateFlags::default())?;
+        machines.add_blend_animation_direct(
+            direct,
+            BlendAnimationDirectSpec {
+                animation: direct_animation,
+                mix: BlendValueSource::Literal(25.0),
+            },
+        )?;
+        machines.create_transition(direct_entry, direct)?;
+        Ok((artboard, shape, direct_shape, machine))
+    })?;
+
+    let records = scene.export_records().into_records();
+    assert!(records.iter().any(|record| {
+        record.kind == ExportedObjectKind::BlendState1DInput
+            && record
+                .properties
+                .contains(&ExportedProperty::BlendState1DInputId(0))
+    }));
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::BlendAnimation1D)
+            .map(|record| record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::BlendAnimation1DValue(value) => Some(*value),
+                    _ => None,
+                })
+                .expect("1D threshold"))
+            .collect::<Vec<_>>(),
+        vec![0.0, 1.0],
+        "1D blend children export in threshold order"
+    );
+    assert!(records.iter().any(|record| {
+        record.kind == ExportedObjectKind::BlendAnimationDirect
+            && record
+                .properties
+                .contains(&ExportedProperty::BlendAnimationDirectSource(1))
+            && record
+                .properties
+                .contains(&ExportedProperty::BlendAnimationDirectMix(25.0))
+    }));
+
+    let instance = scene.instantiate(artboard)?;
+    let opacity = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+    let direct_opacity = scene.cursor(instance, direct_shape, props::WORLD_OPACITY)?;
+    let amount = scene.machine_number_input(instance, machine, "Amount")?;
+    let mut events = Vec::new();
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert_eq!(scene.frame().get(opacity)?, 0.5);
+    assert_eq!(scene.frame().get(direct_opacity)?, 0.2);
+    assert!(scene.frame().set_number(amount, 1.0)?);
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert_eq!(scene.frame().get(opacity)?, 0.8);
+    Ok(())
+}
+
+#[test]
+fn blend_state_authoring_rejects_foreign_and_invalid_sources_atomically() -> Result<()> {
+    let mut scene = Scene::new();
+    let (
+        (
+            artboard,
+            other_artboard,
+            layer,
+            blend_1d,
+            blend_direct,
+            animation,
+            foreign,
+            other_animation,
+        ),
+        _,
+    ) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let animation = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Local".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        let other_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Other".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let other_animation = tx.animations().create_linear(
+            other_artboard,
+            LinearAnimationSpec {
+                name: "Foreign timeline".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+
+        let mut machines = tx.machines();
+        let machine = machines.create_machine(artboard, MachineSpec { name: None })?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        machines.create_any_state(layer)?;
+        machines.create_entry_state(layer)?;
+        machines.create_exit_state(layer)?;
+        let blend_1d = machines.create_blend_1d_state(
+            layer,
+            BlendState1DSpec {
+                value: BlendValueSource::Literal(0.5),
+                flags: MachineStateFlags::default(),
+            },
+        )?;
+        let blend_direct =
+            machines.create_blend_direct_state(layer, MachineStateFlags::default())?;
+
+        let foreign_machine = machines.create_machine(
+            artboard,
+            MachineSpec {
+                name: Some("Foreign".into()),
+            },
+        )?;
+        let foreign = machines.create_number_input(
+            foreign_machine,
+            NumberInputSpec {
+                name: "Foreign amount".into(),
+                default_value: 0.0,
+            },
+        )?;
+        let foreign_layer =
+            machines.create_layer(foreign_machine, MachineLayerSpec { name: None })?;
+        machines.create_any_state(foreign_layer)?;
+        machines.create_entry_state(foreign_layer)?;
+        machines.create_exit_state(foreign_layer)?;
+        Ok((
+            artboard,
+            other_artboard,
+            layer,
+            blend_1d,
+            blend_direct,
+            animation,
+            foreign,
+            other_animation,
+        ))
+    })?;
+    let epoch = scene.epoch();
+    let records = scene.export_records();
+
+    let foreign_input = scene
+        .edit(|tx| {
+            tx.machines().create_blend_1d_state(
+                layer,
+                BlendState1DSpec {
+                    value: BlendValueSource::StateMachineInput(foreign),
+                    flags: MachineStateFlags::default(),
+                },
+            )?;
+            Ok(())
+        })
+        .expect_err("a blend state cannot consume another machine's input");
+    assert_eq!(foreign_input.kind(), EditErrorKind::Aborted);
+    assert_eq!(
+        foreign_input.diagnostic().reason,
+        EditReason::InvalidMachineReference
+    );
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+
+    let cross_artboard_animation = scene
+        .edit(|tx| {
+            tx.machines().add_blend_animation_1d(
+                blend_1d,
+                BlendAnimation1DSpec {
+                    animation: other_animation,
+                    value: 1.0,
+                },
+            )?;
+            Ok(())
+        })
+        .expect_err("a blend child cannot reference another artboard's timeline");
+    assert_eq!(cross_artboard_animation.kind(), EditErrorKind::Aborted);
+    assert_eq!(
+        cross_artboard_animation.diagnostic().reason,
+        EditReason::CrossArtboardReference {
+            source: artboard,
+            target: other_artboard,
+        }
+    );
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+
+    let non_finite_threshold = scene
+        .edit(|tx| {
+            tx.machines().add_blend_animation_1d(
+                blend_1d,
+                BlendAnimation1DSpec {
+                    animation,
+                    value: f32::NAN,
+                },
+            )?;
+            Ok(())
+        })
+        .expect_err("a 1D threshold must be finite");
+    assert_eq!(non_finite_threshold.kind(), EditErrorKind::Aborted);
+    assert_eq!(
+        non_finite_threshold.diagnostic().reason,
+        EditReason::NonFiniteProperty { property: "value" }
+    );
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+
+    let non_finite_mix = scene
+        .edit(|tx| {
+            tx.machines().add_blend_animation_direct(
+                blend_direct,
+                BlendAnimationDirectSpec {
+                    animation,
+                    mix: BlendValueSource::Literal(f32::INFINITY),
+                },
+            )?;
+            Ok(())
+        })
+        .expect_err("a direct mix must be finite");
+    assert_eq!(non_finite_mix.kind(), EditErrorKind::Aborted);
+    assert_eq!(
+        non_finite_mix.diagnostic().reason,
+        EditReason::NonFiniteProperty {
+            property: "blend_value"
+        }
+    );
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+
+    let wrong_state_kind = scene
+        .edit(|tx| {
+            tx.machines().add_blend_animation_direct(
+                blend_1d,
+                BlendAnimationDirectSpec {
+                    animation,
+                    mix: BlendValueSource::Literal(25.0),
+                },
+            )?;
+            Ok(())
+        })
+        .expect_err("direct children require a direct blend state");
+    assert_eq!(wrong_state_kind.kind(), EditErrorKind::Aborted);
+    assert!(matches!(
+        wrong_state_kind.diagnostic().reason,
+        EditReason::RecordPropertyOwnerMismatch {
+            property: "state",
+            ..
+        }
+    ));
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+    Ok(())
+}
+
+#[test]
+fn view_model_numbers_drive_blend_states_without_reauthoring_records() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, shape, direct_shape, defaults, amount, direct_mix), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "One dimensional".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let direct_shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Direct".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 0.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let idle = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Idle".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+        let active = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Active".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+        let direct = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Direct".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(direct, direct_shape, props::WORLD_OPACITY, 0, 0.8)?;
+
+        let (defaults, amount, direct_mix) = {
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                name: "Blend values".into(),
+            })?;
+            let amount = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "Amount".into(),
+                },
+            )?;
+            let direct_mix = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "Direct mix".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                model,
+                ViewModelInstanceSpec {
+                    name: Some("Defaults".into()),
+                },
+            )?;
+            view_models.set_number(defaults, amount, 0.5)?;
+            view_models.set_number(defaults, direct_mix, 25.0)?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            (defaults, amount, direct_mix)
+        };
+
+        let mut machines = tx.machines();
+        let machine = machines.create_machine(
+            artboard,
+            MachineSpec {
+                name: Some("Blend".into()),
+            },
+        )?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        let entry = machines.create_entry_state(layer)?;
+        machines.create_any_state(layer)?;
+        machines.create_exit_state(layer)?;
+        let blend = machines.create_blend_1d_state(
+            layer,
+            BlendState1DSpec {
+                value: BlendValueSource::ViewModelNumber(amount),
+                flags: MachineStateFlags {
+                    reset: true,
+                    ..MachineStateFlags::default()
+                },
+            },
+        )?;
+        machines.add_blend_animation_1d(
+            blend,
+            BlendAnimation1DSpec {
+                animation: idle,
+                value: 0.0,
+            },
+        )?;
+        machines.add_blend_animation_1d(
+            blend,
+            BlendAnimation1DSpec {
+                animation: active,
+                value: 1.0,
+            },
+        )?;
+        machines.create_transition(entry, blend)?;
+
+        let direct_layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        let direct_entry = machines.create_entry_state(direct_layer)?;
+        machines.create_any_state(direct_layer)?;
+        machines.create_exit_state(direct_layer)?;
+        let direct_blend =
+            machines.create_blend_direct_state(direct_layer, MachineStateFlags::default())?;
+        machines.add_blend_animation_direct(
+            direct_blend,
+            BlendAnimationDirectSpec {
+                animation: direct,
+                mix: BlendValueSource::ViewModelNumber(direct_mix),
+            },
+        )?;
+        machines.create_transition(direct_entry, direct_blend)?;
+        Ok((artboard, shape, direct_shape, defaults, amount, direct_mix))
+    })?;
+
+    let records = scene.export_records().into_records();
+    assert!(
+        records
+            .iter()
+            .any(|record| record.kind == ExportedObjectKind::BlendState1DViewModel)
+    );
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::BindablePropertyNumber)
+            .count(),
+        2,
+    );
+
+    let instance = scene.instantiate(artboard)?;
+    let amount = scene.vm_cursor(instance, defaults, amount)?;
+    let direct_mix = scene.vm_cursor(instance, defaults, direct_mix)?;
+    let opacity = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+    let direct_opacity = scene.cursor(instance, direct_shape, props::WORLD_OPACITY)?;
+    let mut events = Vec::new();
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert!((scene.frame().get(opacity)? - 0.5).abs() < 0.000_001);
+    let initial_direct_opacity = scene.frame().get(direct_opacity)?;
+    assert!(
+        (initial_direct_opacity - 0.2).abs() < 0.000_001,
+        "expected the initial 25% ViewModel mix to produce 0.2, got {initial_direct_opacity}",
+    );
+
+    let epoch = scene.epoch();
+    assert!(scene.frame().set_vm(amount, 1.0)?);
+    assert!(scene.frame().set_vm(direct_mix, 50.0)?);
+    scene.frame().advance(instance, 0.0, &mut events);
+    assert!((scene.frame().get(opacity)? - 0.8).abs() < 0.000_001);
+    let updated_direct_opacity = scene.frame().get(direct_opacity)?;
+    assert!(
+        (updated_direct_opacity - 0.5).abs() < 0.000_001,
+        "expected a 50% ViewModel mix from the prior 0.2 frame to produce 0.5, got {updated_direct_opacity}",
+    );
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records().into_records(), records);
     Ok(())
 }
 
@@ -4788,7 +7195,9 @@ fn boolean_machine_input_changes_visual_state_without_rebuilding_the_scene() -> 
         vec![SceneEvent::Authored {
             event,
             name: Some("Reached active".into()),
+            string_properties: Vec::new(),
             seconds_delay: 0.0,
+            context: None,
         }]
     );
 
@@ -4800,6 +7209,471 @@ fn boolean_machine_input_changes_visual_state_without_rebuilding_the_scene() -> 
         })
     })?;
     assert_eq!(scene.frame().set_boolean(armed, false), Err(StaleCursor));
+    Ok(())
+}
+
+#[test]
+fn number_input_and_comparators_export_typed_rive_encodings() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 10.0,
+            height: 10.0,
+        })?;
+        let mut machines = tx.machines();
+        let machine = machines.create_machine(artboard, MachineSpec { name: None })?;
+        let amount = machines.create_number_input(
+            machine,
+            NumberInputSpec {
+                name: "Amount".into(),
+                default_value: 0.25,
+            },
+        )?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        machines.create_any_state(layer)?;
+        let entry = machines.create_entry_state(layer)?;
+        let exit = machines.create_exit_state(layer)?;
+        let transition = machines.create_transition(entry, exit)?;
+        for (comparator, target) in [
+            (NumberComparator::Eq, 1.0),
+            (NumberComparator::Neq, 2.0),
+            (NumberComparator::Lte, 3.0),
+            (NumberComparator::Gte, 4.0),
+            (NumberComparator::Lt, 5.0),
+            (NumberComparator::Gt, 6.0),
+        ] {
+            machines.add_number_condition(transition, amount, comparator, target)?;
+        }
+        Ok(())
+    })?;
+
+    assert!(scene.export_records().records().iter().any(|record| {
+        record.kind == ExportedObjectKind::StateMachineNumber
+            && record.properties
+                == vec![
+                    ExportedProperty::StateMachineComponentName("Amount".into()),
+                    ExportedProperty::StateMachineNumberValue(0.25),
+                ]
+    }));
+    let conditions = scene
+        .export_records()
+        .into_records()
+        .into_iter()
+        .filter(|record| record.kind == ExportedObjectKind::TransitionNumberCondition)
+        .collect::<Vec<_>>();
+    assert_eq!(conditions.len(), 6);
+    for (index, record) in conditions.iter().enumerate() {
+        assert_eq!(
+            record.properties,
+            vec![
+                ExportedProperty::StateMachineInputId(0),
+                ExportedProperty::NumberConditionComparator(
+                    [
+                        NumberComparator::Eq,
+                        NumberComparator::Neq,
+                        NumberComparator::Lte,
+                        NumberComparator::Gte,
+                        NumberComparator::Lt,
+                        NumberComparator::Gt,
+                    ][index],
+                ),
+                ExportedProperty::NumberConditionTarget(index as f32 + 1.0),
+            ]
+        );
+        assert_eq!(
+            u32::from(
+                [
+                    NumberComparator::Eq,
+                    NumberComparator::Neq,
+                    NumberComparator::Lte,
+                    NumberComparator::Gte,
+                    NumberComparator::Lt,
+                    NumberComparator::Gt,
+                ][index]
+            ),
+            index as u32
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn number_input_cursor_reads_and_writes_retained_machine_without_rebuilding() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, other_artboard, shape, machine), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let other_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Other".into(),
+            width: 10.0,
+            height: 10.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Fader".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let idle = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Idle".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+        let active = tx.animations().create_linear(
+            artboard,
+            LinearAnimationSpec {
+                name: "Active".into(),
+                fps: 60,
+                duration: 1,
+            },
+        )?;
+        tx.animations()
+            .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+        let mut machines = tx.machines();
+        let machine = machines.create_machine(artboard, MachineSpec { name: None })?;
+        let amount = machines.create_number_input(
+            machine,
+            NumberInputSpec {
+                name: "Amount".into(),
+                default_value: 0.25,
+            },
+        )?;
+        machines.create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        let entry = machines.create_entry_state(layer)?;
+        let any = machines.create_any_state(layer)?;
+        machines.create_exit_state(layer)?;
+        let idle_state =
+            machines.create_animation_state(layer, AnimationStateSpec { animation: idle })?;
+        let active_state =
+            machines.create_animation_state(layer, AnimationStateSpec { animation: active })?;
+        machines.create_transition(entry, idle_state)?;
+        let transition = machines.create_transition(any, active_state)?;
+        machines.add_number_condition(transition, amount, NumberComparator::Gte, 0.75)?;
+        Ok((artboard, other_artboard, shape, machine))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let other_instance = scene.instantiate(other_artboard)?;
+    let opacity = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+    let amount = scene.machine_number_input(instance, machine, "Amount")?;
+
+    assert_eq!(scene.frame().get_number(amount)?, 0.25);
+    assert!(matches!(
+        scene.machine_number_input(instance, machine, "Go"),
+        Err(ResolveError::UnsupportedInputKind)
+    ));
+    assert!(matches!(
+        scene.machine_number_input(other_instance, machine, "Amount"),
+        Err(ResolveError::DifferentArtboard)
+    ));
+
+    let epoch = scene.epoch();
+    let records = scene.export_records();
+    let mut events = Vec::new();
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity)?, 0.2);
+    assert!(!scene.frame().set_number(amount, f32::NAN)?);
+    assert_eq!(scene.frame().get_number(amount)?, 0.25);
+    assert!(scene.frame().set_number(amount, 0.75)?);
+    assert!(!scene.frame().set_number(amount, 0.75)?);
+    assert_eq!(scene.frame().get_number(amount)?, 0.75);
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity)?, 0.8);
+
+    scene.edit(|tx| {
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Structural edit".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        Ok(())
+    })?;
+    assert_eq!(scene.frame().get_number(amount), Err(StaleCursor));
+    assert_eq!(scene.frame().set_number(amount, 0.5), Err(StaleCursor));
+    Ok(())
+}
+
+#[test]
+fn number_input_authoring_validates_names_values_kinds_and_machine_ownership() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((machine, transition, trigger, foreign_number), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 10.0,
+            height: 10.0,
+        })?;
+        let mut machines = tx.machines();
+        let machine = machines.create_machine(
+            artboard,
+            MachineSpec {
+                name: Some("Main".into()),
+            },
+        )?;
+        machines.create_number_input(
+            machine,
+            NumberInputSpec {
+                name: "Amount".into(),
+                default_value: 0.0,
+            },
+        )?;
+        let trigger =
+            machines.create_trigger_input(machine, TriggerInputSpec { name: "Go".into() })?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        machines.create_any_state(layer)?;
+        let entry = machines.create_entry_state(layer)?;
+        let exit = machines.create_exit_state(layer)?;
+        let transition = machines.create_transition(entry, exit)?;
+
+        let foreign_machine = machines.create_machine(
+            artboard,
+            MachineSpec {
+                name: Some("Foreign".into()),
+            },
+        )?;
+        let foreign_number = machines.create_number_input(
+            foreign_machine,
+            NumberInputSpec {
+                name: "Foreign amount".into(),
+                default_value: 0.0,
+            },
+        )?;
+        let foreign_layer =
+            machines.create_layer(foreign_machine, MachineLayerSpec { name: None })?;
+        machines.create_any_state(foreign_layer)?;
+        machines.create_entry_state(foreign_layer)?;
+        machines.create_exit_state(foreign_layer)?;
+        Ok((machine, transition, trigger, foreign_number))
+    })?;
+    let epoch = scene.epoch();
+    let records = scene.export_records();
+
+    for (case, error, expected) in [
+        (
+            "number reuses trigger name",
+            scene
+                .edit(|tx| {
+                    tx.machines().create_number_input(
+                        machine,
+                        NumberInputSpec {
+                            name: "Go".into(),
+                            default_value: 0.0,
+                        },
+                    )?;
+                    Ok(())
+                })
+                .expect_err("number inputs share the trigger namespace"),
+            EditReason::DuplicateMachineInputName,
+        ),
+        (
+            "trigger reuses number name",
+            scene
+                .edit(|tx| {
+                    tx.machines().create_trigger_input(
+                        machine,
+                        TriggerInputSpec {
+                            name: "Amount".into(),
+                        },
+                    )?;
+                    Ok(())
+                })
+                .expect_err("trigger inputs share the number namespace"),
+            EditReason::DuplicateMachineInputName,
+        ),
+        (
+            "boolean reuses number name",
+            scene
+                .edit(|tx| {
+                    tx.machines().create_boolean_input(
+                        machine,
+                        BooleanInputSpec {
+                            name: "Amount".into(),
+                            default_value: false,
+                        },
+                    )?;
+                    Ok(())
+                })
+                .expect_err("boolean inputs share the number namespace"),
+            EditReason::DuplicateMachineInputName,
+        ),
+        (
+            "blank number name",
+            scene
+                .edit(|tx| {
+                    tx.machines().create_number_input(
+                        machine,
+                        NumberInputSpec {
+                            name: " \n ".into(),
+                            default_value: 0.0,
+                        },
+                    )?;
+                    Ok(())
+                })
+                .expect_err("number input names are runtime resolution keys"),
+            EditReason::EmptyMachineInputName,
+        ),
+        (
+            "nonfinite default",
+            scene
+                .edit(|tx| {
+                    tx.machines().create_number_input(
+                        machine,
+                        NumberInputSpec {
+                            name: "Invalid".into(),
+                            default_value: f32::INFINITY,
+                        },
+                    )?;
+                    Ok(())
+                })
+                .expect_err("number defaults must be finite"),
+            EditReason::NonFiniteProperty {
+                property: "default_value",
+            },
+        ),
+        (
+            "wrong input kind",
+            scene
+                .edit(|tx| {
+                    tx.machines().add_number_condition(
+                        transition,
+                        trigger,
+                        NumberComparator::Eq,
+                        0.0,
+                    )?;
+                    Ok(())
+                })
+                .expect_err("number conditions require number inputs"),
+            EditReason::RecordPropertyOwnerMismatch {
+                property: "input",
+                actual: nuxie::AuthoredObjectKind::MachineTrigger,
+            },
+        ),
+        (
+            "foreign machine input",
+            scene
+                .edit(|tx| {
+                    tx.machines().add_number_condition(
+                        transition,
+                        foreign_number,
+                        NumberComparator::Eq,
+                        0.0,
+                    )?;
+                    Ok(())
+                })
+                .expect_err("number conditions cannot consume another machine's input"),
+            EditReason::InvalidMachineReference,
+        ),
+        (
+            "nonfinite target",
+            scene
+                .edit(|tx| {
+                    tx.machines().add_number_condition(
+                        transition,
+                        foreign_number,
+                        NumberComparator::Eq,
+                        f32::NAN,
+                    )?;
+                    Ok(())
+                })
+                .expect_err("number condition targets must be finite"),
+            EditReason::NonFiniteProperty { property: "target" },
+        ),
+    ] {
+        assert_eq!(error.kind(), EditErrorKind::Aborted, "{case}");
+        assert_eq!(error.diagnostic().reason, expected, "{case}");
+        assert_eq!(scene.epoch(), epoch, "{case}");
+        assert_eq!(scene.export_records(), records, "{case}");
+    }
+    Ok(())
+}
+
+#[test]
+fn number_input_remove_restore_preserves_default_and_rejects_duplicate_name() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, machine, number), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 10.0,
+            height: 10.0,
+        })?;
+        let mut machines = tx.machines();
+        let machine = machines.create_machine(artboard, MachineSpec { name: None })?;
+        let number = machines.create_number_input(
+            machine,
+            NumberInputSpec {
+                name: "Amount".into(),
+                default_value: 0.25,
+            },
+        )?;
+        let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+        machines.create_any_state(layer)?;
+        machines.create_entry_state(layer)?;
+        machines.create_exit_state(layer)?;
+        Ok((artboard, machine, number))
+    })?;
+    let records_before = scene.export_records();
+    let instance = scene.instantiate(artboard)?;
+    let original = scene.machine_number_input(instance, machine, "Amount")?;
+    assert_eq!(scene.frame().get_number(original)?, 0.25);
+
+    let (removed, _) = scene.edit(|tx| tx.remove(number.object_id()))?;
+    assert_eq!(scene.frame().get_number(original), Err(StaleCursor));
+    scene.edit(|tx| tx.restore(removed).map(|_| ()))?;
+    assert_eq!(scene.export_records(), records_before);
+    let restored = scene.machine_number_input(instance, machine, "Amount")?;
+    assert_eq!(scene.frame().get_number(restored)?, 0.25);
+
+    let (removed, _) = scene.edit(|tx| tx.remove(number.object_id()))?;
+    scene.edit(|tx| {
+        tx.machines().create_trigger_input(
+            machine,
+            TriggerInputSpec {
+                name: "Amount".into(),
+            },
+        )?;
+        Ok(())
+    })?;
+    let epoch = scene.epoch();
+    let records = scene.export_records();
+    let error = scene
+        .edit(|tx| tx.restore(removed).map(|_| ()))
+        .expect_err("restoring a number cannot bypass input-name uniqueness");
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::DuplicateMachineInputName
+    );
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), records);
+    assert!(scene.machine_input(instance, machine, "Amount").is_ok());
+    assert!(matches!(
+        scene.machine_number_input(instance, machine, "Amount"),
+        Err(ResolveError::UnsupportedInputKind)
+    ));
     Ok(())
 }
 
@@ -5007,7 +7881,9 @@ fn factory_advance_executes_retained_machine_and_reports_semantic_event() -> Res
         vec![SceneEvent::Authored {
             event,
             name: Some("Reached active".into()),
+            string_properties: Vec::new(),
             seconds_delay: 0.0,
+            context: None,
         }]
     );
 
@@ -5160,6 +8036,35 @@ fn machine_authoring_rejects_cross_machine_and_cross_artboard_references_atomica
     assert_eq!(cross_artboard.kind(), EditErrorKind::Aborted);
     assert_eq!(
         cross_artboard.diagnostic().reason,
+        EditReason::CrossArtboardReference {
+            source: other_artboard,
+            target: artboard,
+        }
+    );
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+
+    let transition_cross_artboard = scene
+        .edit(|tx| {
+            let mut machines = tx.machines();
+            let machine = machines.create_machine(
+                other_artboard,
+                MachineSpec {
+                    name: Some("Transition event owner".into()),
+                },
+            )?;
+            let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+            machines.create_any_state(layer)?;
+            let entry = machines.create_entry_state(layer)?;
+            let exit = machines.create_exit_state(layer)?;
+            let transition = machines.create_transition(entry, exit)?;
+            machines.add_transition_fire_event(transition, event, FireEventOccurs::AtStart)?;
+            Ok(())
+        })
+        .expect_err("a transition cannot fire an event owned by another artboard");
+    assert_eq!(transition_cross_artboard.kind(), EditErrorKind::Aborted);
+    assert_eq!(
+        transition_cross_artboard.diagnostic().reason,
         EditReason::CrossArtboardReference {
             source: other_artboard,
             target: artboard,
@@ -5845,6 +8750,169 @@ fn exported_component_names(scene: &Scene) -> Vec<String> {
                 })
         })
         .collect()
+}
+
+#[test]
+fn nested_artboard_hit_paths_preserve_child_front_to_back_order() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((root_artboard, child_artboard, host, front, back), _) = scene.edit(|tx| {
+        let root_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Root".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let child_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Child".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let front = create_colored_hit_shape(tx, child_artboard, "Front", 50.0, 0xff11_2233)?;
+        let back = create_colored_hit_shape(tx, child_artboard, "Back", 50.0, 0xff44_5566)?;
+        let host = tx.create(
+            Parent::Artboard(root_artboard),
+            NodeSpec::NestedArtboard(NestedArtboardSpec {
+                name: "Child Host".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                artboard: child_artboard,
+                view_model_source: None,
+                view_model_instance: None,
+                state_machines: Vec::new(),
+                state_machine_inputs: Vec::new(),
+            }),
+        )?;
+        Ok((root_artboard, child_artboard, host, front, back))
+    })?;
+    let child_instance = scene.instantiate(child_artboard)?;
+    let root_instance = scene.instantiate(root_artboard)?;
+    let point = Vec2D::new(50.0, 50.0);
+
+    let child_hits = scene
+        .frame()
+        .hit_test_paths(child_instance, point)
+        .into_iter()
+        .map(|path| path.objects().to_vec())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        child_hits,
+        vec![vec![front], vec![back]],
+        "the child artboard establishes the canonical front-to-back order",
+    );
+    let nested_hits = scene
+        .frame()
+        .hit_test_paths(root_instance, point)
+        .into_iter()
+        .map(|path| path.objects().to_vec())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        nested_hits,
+        vec![vec![host, front], vec![host, back]],
+        "prefixing a nested-artboard host must not reverse its child hit order",
+    );
+    Ok(())
+}
+
+#[test]
+fn component_list_hit_paths_preserve_child_front_to_back_order() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((root_artboard, item_artboard, host, front, back), _) = scene.edit(|tx| {
+        let root_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Root".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let item_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Item".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let front = create_colored_hit_shape(tx, item_artboard, "Front", 50.0, 0xff11_2233)?;
+        let back = create_colored_hit_shape(tx, item_artboard, "Back", 50.0, 0xff44_5566)?;
+        let (item_model, items) = {
+            let mut view_models = tx.view_models();
+            let root_model = view_models.create(ViewModelSpec {
+                name: "Root model".into(),
+            })?;
+            let item_model = view_models.create(ViewModelSpec {
+                name: "Item model".into(),
+            })?;
+            let items = view_models.create_list(
+                root_model,
+                ViewModelListSpec {
+                    name: "items".into(),
+                },
+            )?;
+            let root_defaults = view_models.create_instance(
+                root_model,
+                ViewModelInstanceSpec {
+                    name: Some("Root defaults".into()),
+                },
+            )?;
+            let item = view_models.create_instance(
+                item_model,
+                ViewModelInstanceSpec {
+                    name: Some("Item".into()),
+                },
+            )?;
+            view_models.set_list_items(root_defaults, items, &[item])?;
+            view_models.set_artboard_default(root_artboard, root_defaults)?;
+            view_models.set_artboard_default(item_artboard, item)?;
+            (item_model, items)
+        };
+        let host = tx.create_component_list(
+            root_artboard,
+            ArtboardComponentListSpec {
+                name: "Items".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                flow: None,
+                source: ViewModelListSource::direct(items),
+                map_rules: vec![ArtboardListMapRuleSpec {
+                    view_model: item_model,
+                    artboard: item_artboard,
+                    state_machines: Vec::new(),
+                }],
+            },
+        )?;
+        Ok((root_artboard, item_artboard, host, front, back))
+    })?;
+    let item_instance = scene.instantiate(item_artboard)?;
+    let root_instance = scene.instantiate(root_artboard)?;
+    let mut events = Vec::new();
+    scene.frame().advance(root_instance, 0.0, &mut events);
+    let point = Vec2D::new(50.0, 50.0);
+
+    let item_hits = scene
+        .frame()
+        .hit_test_paths(item_instance, point)
+        .into_iter()
+        .map(|path| path.objects().to_vec())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        item_hits,
+        vec![vec![front], vec![back]],
+        "the item artboard establishes the canonical front-to-back order",
+    );
+    let list_hits = scene
+        .frame()
+        .hit_test_paths(root_instance, point)
+        .into_iter()
+        .map(|path| path.objects().to_vec())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        list_hits,
+        vec![vec![host.object_id(), front], vec![host.object_id(), back]],
+        "prefixing a component-list host must not reverse its item hit order",
+    );
+    Ok(())
 }
 
 #[test]
@@ -8325,6 +11393,84 @@ fn sparse_export_omits_only_exact_schema_defaults_across_remounts() -> Result<()
 }
 
 #[test]
+fn typed_feather_materializes_draws_and_exports_without_raw_schema_keys() -> Result<()> {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Shadow".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let shape = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Shadow Shape".into(),
+                x: 25.0,
+                y: 25.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Shadow Rectangle", 40.0, 30.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Shadow Fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Shadow Color".into(),
+                color: 0xff11_2233,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::Feather(FeatherSpec {
+                name: "Shadow Feather".into(),
+                space: SceneFeatherSpace::Local,
+                strength: 7.5,
+                offset_x: 3.0,
+                offset_y: -4.0,
+                inner: false,
+            }),
+        )?;
+        Ok(artboard)
+    })?;
+
+    let records = scene.export_records();
+    let feather = records
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::Feather)
+        .expect("typed scene exports its feather child");
+    assert_eq!(
+        feather.properties,
+        vec![
+            ExportedProperty::ComponentName("Shadow Feather".into()),
+            ExportedProperty::ParentId(3),
+            ExportedProperty::FeatherSpace(SceneFeatherSpace::Local),
+            ExportedProperty::FeatherStrength(7.5),
+            ExportedProperty::FeatherOffsetX(3.0),
+            ExportedProperty::FeatherOffsetY(-4.0),
+            ExportedProperty::FeatherInner(false),
+        ]
+    );
+
+    let instance = scene.instantiate(artboard)?;
+    let stream = draw_stream(&mut scene, instance)?;
+    assert!(stream.contains("feather=7.5"), "{stream}");
+    assert!(stream.contains("color=0xff112233"), "{stream}");
+    Ok(())
+}
+
+#[test]
 fn typed_scene_materializes_rectangle_radii_and_a_dashed_stroke_without_raw_schema_keys()
 -> Result<()> {
     let mut scene = Scene::new();
@@ -9266,5 +12412,396 @@ fn failed_multi_artboard_materialization_publishes_nothing_before_a_valid_commit
         draw_stream(&mut scene, instance_b)?,
         draw_stream(&mut expected, expected_instance_b)?
     );
+    Ok(())
+}
+
+#[test]
+fn typed_clipping_shape_exports_and_draws_the_source_shape_path() -> Result<()> {
+    let mut scene = Scene::new();
+    let (artboard, _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Scroll viewport".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let clip_source = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Viewport clip source".into(),
+                x: 10.0,
+                y: 20.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(clip_source),
+            NodeSpec::Rectangle(RectangleSpec::new("Viewport path", 40.0, 30.0)),
+        )?;
+
+        let content = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Scroll content".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(content),
+            NodeSpec::Rectangle(RectangleSpec::new("Content path", 100.0, 80.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(content),
+            NodeSpec::Fill(FillSpec {
+                name: "Content fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Content color".into(),
+                color: 0xff11_2233,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(content),
+            NodeSpec::ClippingShape(ClippingShapeSpec {
+                name: "Viewport clip".into(),
+                source: clip_source,
+                fill_rule: SceneClippingFillRule::EvenOdd,
+                is_visible: true,
+            }),
+        )?;
+        Ok(artboard)
+    })?;
+
+    let records = scene.export_records();
+    let clipping = records
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::ClippingShape)
+        .expect("typed scene exports its clipping-shape child");
+    assert_eq!(
+        clipping.properties,
+        vec![
+            ExportedProperty::ComponentName("Viewport clip".into()),
+            ExportedProperty::ParentId(3),
+            ExportedProperty::ClippingShapeSourceId(1),
+            ExportedProperty::ClippingShapeFillRule(SceneClippingFillRule::EvenOdd),
+        ],
+        "the exact Rive record keeps stable local source/parent paths and omits isVisible=true"
+    );
+
+    let instance = scene.instantiate(artboard)?;
+    let stream = draw_stream(&mut scene, instance)?;
+    assert!(
+        stream.lines().any(|line| {
+            line.starts_with("clipPath ")
+                && line.contains("fillRule=1")
+                && line.contains("points=[(-10,5),(30,5),(30,35),(-10,35),(-10,5)]")
+        }),
+        "the authored source Shape must become the runtime clipping path: {stream}"
+    );
+    Ok(())
+}
+
+#[test]
+fn clipping_shape_rejects_a_source_that_is_not_a_shape() -> Result<()> {
+    let mut scene = Scene::new();
+    let mut wrong_source = None;
+    let mut clipping = None;
+    let error = scene
+        .edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Invalid clip".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let content = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Content".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let rectangle = tx.create(
+                Parent::Object(content),
+                NodeSpec::Rectangle(RectangleSpec::new("Not a source Shape", 40.0, 30.0)),
+            )?;
+            wrong_source = Some(rectangle);
+            clipping = Some(tx.create(
+                Parent::Object(content),
+                NodeSpec::ClippingShape(ClippingShapeSpec {
+                    name: "Clip".into(),
+                    source: rectangle,
+                    fill_rule: SceneClippingFillRule::NonZero,
+                    is_visible: true,
+                }),
+            )?);
+            Ok(())
+        })
+        .expect_err("a clipping source must be a Shape whose paths can be composed");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![
+            EditId::Object(clipping.expect("the clipping shape was allocated")),
+            EditId::Object(wrong_source.expect("the wrong source was allocated")),
+        ]
+    );
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::InvalidReference {
+            expected: NodeKind::Shape,
+            actual: Some(NodeKind::Rectangle),
+        }
+    );
+    assert_eq!(scene.epoch(), StructureEpoch::INITIAL);
+    assert_eq!(scene.export_records().records().len(), 1);
+    Ok(())
+}
+
+#[test]
+fn clipping_shape_requires_an_existing_node_parent() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, source), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Viewport".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let source = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Clip source".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        Ok((artboard, source))
+    })?;
+    let epoch_before = scene.epoch();
+    let records_before = scene.export_records();
+
+    let error = scene
+        .edit(|tx| {
+            tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::ClippingShape(ClippingShapeSpec {
+                    name: "Unparented clip".into(),
+                    source,
+                    fill_rule: SceneClippingFillRule::NonZero,
+                    is_visible: true,
+                }),
+            )?;
+            Ok(())
+        })
+        .expect_err("a ClippingShape is a component of the node subtree it clips");
+
+    assert_eq!(error.kind(), EditErrorKind::Aborted);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![EditId::Artboard(artboard)]
+    );
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::InvalidParent {
+            parent: None,
+            child: NodeKind::ClippingShape,
+        }
+    );
+    assert_eq!(scene.epoch(), epoch_before);
+    assert_eq!(scene.export_records(), records_before);
+    Ok(())
+}
+
+#[test]
+fn clipping_shape_rejects_a_source_from_another_artboard() -> Result<()> {
+    let mut scene = Scene::new();
+    let mut clipping = None;
+    let mut foreign_source = None;
+    let mut source_artboard = None;
+    let mut target_artboard = None;
+    let error = scene
+        .edit(|tx| {
+            let target = tx.create_artboard(ArtboardSpec {
+                name: "Target".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            target_artboard = Some(target);
+            let source = tx.create_artboard(ArtboardSpec {
+                name: "Source".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            source_artboard = Some(source);
+            let content = tx.create(
+                Parent::Artboard(target),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Content".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let source_shape = tx.create(
+                Parent::Artboard(source),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Foreign source".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            foreign_source = Some(source_shape);
+            clipping = Some(tx.create(
+                Parent::Object(content),
+                NodeSpec::ClippingShape(ClippingShapeSpec {
+                    name: "Clip".into(),
+                    source: source_shape,
+                    fill_rule: SceneClippingFillRule::NonZero,
+                    is_visible: true,
+                }),
+            )?);
+            Ok(())
+        })
+        .expect_err("runtime-local sourceId values cannot cross an artboard boundary");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![
+            EditId::Object(clipping.expect("the clipping shape was allocated")),
+            EditId::Object(foreign_source.expect("the foreign source was allocated")),
+        ]
+    );
+    assert_eq!(
+        error.diagnostic().reason,
+        EditReason::CrossArtboardReference {
+            source: target_artboard.expect("the target artboard was allocated"),
+            target: source_artboard.expect("the source artboard was allocated"),
+        }
+    );
+    assert_eq!(scene.epoch(), StructureEpoch::INITIAL);
+    Ok(())
+}
+
+#[test]
+fn clipping_shape_remove_and_restore_preserves_identity_and_protects_its_source() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((source, clipping), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Scroll viewport".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let source = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Clip source".into(),
+                x: 50.0,
+                y: 50.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(source),
+            NodeSpec::Rectangle(RectangleSpec::new("Clip path", 100.0, 100.0)),
+        )?;
+        let content = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Content".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let clipping = tx.create(
+            Parent::Object(content),
+            NodeSpec::ClippingShape(ClippingShapeSpec {
+                name: "Clip".into(),
+                source,
+                fill_rule: SceneClippingFillRule::EvenOdd,
+                is_visible: false,
+            }),
+        )?;
+        Ok((source, clipping))
+    })?;
+    let records_before = scene.export_records();
+    let clipping_record = records_before
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::ClippingShape)
+        .expect("the clipping shape is exported before removal");
+    assert_eq!(
+        clipping_record.properties,
+        vec![
+            ExportedProperty::ComponentName("Clip".into()),
+            ExportedProperty::ParentId(3),
+            ExportedProperty::ClippingShapeSourceId(1),
+            ExportedProperty::ClippingShapeFillRule(SceneClippingFillRule::EvenOdd),
+            ExportedProperty::ClippingShapeIsVisible(false),
+        ]
+    );
+
+    let (removed, _) = scene.edit(|tx| tx.remove(clipping))?;
+    assert!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .all(|record| record.kind != ExportedObjectKind::ClippingShape)
+    );
+    let (restored, _) = scene.edit(|tx| tx.restore(removed))?;
+
+    assert_eq!(restored, clipping);
+    assert_eq!(scene.export_records(), records_before);
+
+    let epoch_before_rejected_remove = scene.epoch();
+    let error = scene
+        .edit(|tx| {
+            tx.remove(source)?;
+            Ok(())
+        })
+        .expect_err("removing a referenced clip source must reject atomically");
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(
+        error.diagnostic().involved_ids,
+        vec![EditId::Object(clipping), EditId::Object(source)]
+    );
+    assert_eq!(error.diagnostic().reason, EditReason::UnknownObject);
+    assert_eq!(scene.epoch(), epoch_before_rejected_remove);
+    assert_eq!(scene.export_records(), records_before);
     Ok(())
 }

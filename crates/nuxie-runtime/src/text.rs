@@ -79,6 +79,23 @@ pub(crate) fn static_text_constraint_bounds(
     static_fixed_text_constraint_bounds(runtime, graph, instance, text_local, None)
 }
 
+/// Return the exact settled text rendered by one Text object.
+///
+/// This follows the same resolved-run path as shaping, including live string
+/// property writes and dynamically projected list runs. Callers opt into this
+/// allocation only for semantic text observation; ordinary geometry queries
+/// do not materialize text values.
+pub(crate) fn static_text_value(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+) -> Option<String> {
+    let slice = StaticTextSlice::from_graph(runtime, graph, text_local).ok()?;
+    let runs = slice.resolved_runs(runtime, instance).ok()?;
+    Some(runs.into_iter().map(|run| run.text).collect())
+}
+
 pub(crate) fn static_text_layout_measure_bounds(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
@@ -1381,6 +1398,10 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 || (["scaleX", "scaleY"].into_iter().any(|name| {
                     property_key_for_name("TransformComponent", name) == Some(property_key)
                 }) && data_bind.converter_type_name == Some("DataConverterSystemNormalizer"))
+                || (property_key_for_name("WorldTransformComponent", "opacity")
+                    == Some(property_key)
+                    && (data_bind.converter_global.is_none()
+                        || data_bind.converter_type_name == Some("DataConverterGroup")))
         }
         Some("Node") => {
             (["x", "y"]
@@ -1505,6 +1526,31 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
     }
 }
 
+fn static_text_data_bind_targets_subtree(
+    graph: &ArtboardGraph,
+    text_local: usize,
+    data_bind: &DataBindNode,
+) -> bool {
+    let Some(mut target_local) = data_bind.target_local else {
+        return false;
+    };
+    let mut visited = BTreeSet::new();
+    loop {
+        if target_local == text_local {
+            return true;
+        }
+        if !visited.insert(target_local) {
+            return false;
+        }
+        let Some(parent_local) =
+            component_for_local(graph, target_local).and_then(|component| component.parent_local)
+        else {
+            return false;
+        };
+        target_local = parent_local;
+    }
+}
+
 fn static_text_data_bind_property_name(data_bind: &DataBindNode) -> Option<&'static str> {
     let target_type_name = data_bind.target_type_name?;
     let property_key = u16::try_from(data_bind.property_key).ok()?;
@@ -1608,6 +1654,7 @@ impl<'a> StaticTextSlice<'a> {
         if let Some(data_bind) = graph
             .data_binds
             .iter()
+            .filter(|data_bind| static_text_data_bind_targets_subtree(graph, text_local, data_bind))
             .find(|data_bind| !static_text_data_bind_supported(data_bind))
         {
             bail!(
@@ -1665,6 +1712,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "NestedBool"
                         | "NestedNumber"
                         | "ArtboardComponentList"
+                        | "ArtboardListMapRule"
                         | "RootBone"
                         | "Skin"
                         | "Tendon"
@@ -1705,6 +1753,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "ViewModel"
                         | "ViewModelInstance"
                         | "ViewModelInstanceNumber"
+                        | "ViewModelInstanceBoolean"
                         | "ViewModelInstanceString"
                         | "ViewModelInstanceList"
                         | "ViewModelInstanceListItem"
@@ -1712,6 +1761,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "ViewModelInstanceViewModel"
                         | "ViewModelPropertyList"
                         | "ViewModelPropertyNumber"
+                        | "ViewModelPropertyBoolean"
                         | "ViewModelPropertyString"
                         | "ViewModelPropertyTrigger"
                         | "ViewModelPropertyViewModel"
@@ -2024,10 +2074,12 @@ impl<'a> StaticTextSlice<'a> {
         )?;
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, resolved_runs, font_scale)?;
+        let contextual_glyphs =
+            self.styled_resolved_run_glyphs(runtime, instance, resolved_runs, font_scale)?;
         let line_widths = lines
             .iter()
-            .map(|line| self.styled_line_width(runtime, instance, line, resolved_runs, font_scale))
-            .collect::<Result<Vec<_>>>()?;
+            .map(|line| Self::styled_line_width(line, &contextual_glyphs))
+            .collect::<Vec<_>>();
         let measured_width = line_widths.iter().copied().fold(0.0f32, f32::max);
         let layout_info = self.static_layout_info(
             runtime,
@@ -2106,8 +2158,7 @@ impl<'a> StaticTextSlice<'a> {
                 StaticTextLineIteration::Skip => continue,
                 StaticTextLineIteration::Stop => break,
             }
-            let mut glyphs =
-                self.styled_line_glyphs(runtime, instance, &line, resolved_runs, font_scale)?;
+            let mut glyphs = Self::styled_line_glyphs(&line, &contextual_glyphs);
             if layout_info.ellipsis_line == Some(line.line_index) {
                 let max_width = self.effective_width(runtime, instance, layout_constraint)?;
                 let ellipsis_style = glyphs.last().map(|glyph| glyph.style_index).unwrap_or(0);
@@ -2524,11 +2575,11 @@ impl<'a> StaticTextSlice<'a> {
         )?;
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
+        let contextual_glyphs =
+            self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?;
         let measured_width = lines
             .iter()
-            .map(|line| self.styled_line_width(runtime, instance, line, &resolved_runs, font_scale))
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
+            .map(|line| Self::styled_line_width(line, &contextual_glyphs))
             .fold(0.0f32, f32::max);
         let sizing = match purpose {
             StaticTextLayoutBoundsPurpose::Measure => self.authored_sizing(runtime, instance)?,
@@ -2717,10 +2768,13 @@ impl<'a> StaticTextSlice<'a> {
         runs: &[StaticResolvedRun],
         font_scale: f32,
     ) -> Result<Vec<StaticTextLineMetrics>> {
-        // Exact port of `GlyphLine::ComputeLineSpacing`. The C++ implementation
-        // computes adjusted ascent/descent per participating run, but uses the
-        // natural ascent for the very first line's baseline. Custom lineHeight
-        // is an authored absolute value and therefore does not follow the
+        // Port of `GlyphLine::ComputeLineSpacing` with CSS line-box semantics
+        // for an explicit lineHeight. CSS distributes the difference between
+        // the authored line height and the font's natural metrics equally
+        // above and below the glyph box. The first line keeps that half-leading
+        // whenever any participating run has an explicit line height; text
+        // using default font metrics retains Rive's ascent-only first line.
+        // Authored lineHeight is absolute and therefore does not follow the
         // fit-font-size scale; natural font metrics do.
         let mut metrics = Vec::with_capacity(lines.len());
         let mut cursor_y = 0.0f32;
@@ -2743,6 +2797,7 @@ impl<'a> StaticTextSlice<'a> {
             let mut natural_ascent = 0.0f32;
             let mut adjusted_ascent = 0.0f32;
             let mut adjusted_descent = 0.0f32;
+            let mut has_explicit_line_height = false;
             for style_index in style_indices {
                 let style = self
                     .styles
@@ -2770,21 +2825,20 @@ impl<'a> StaticTextSlice<'a> {
                 let (ascent_px, descent_px) = if line_height < 0.0 {
                     (natural_ascent_px, natural_descent_px)
                 } else {
+                    has_explicit_line_height = true;
                     let natural_height = natural_ascent_px + natural_descent_px;
-                    let baseline_factor = if natural_height > 0.0 {
-                        natural_ascent_px / natural_height
-                    } else {
-                        0.0
-                    };
-                    let authored_ascent = baseline_factor * line_height;
-                    (authored_ascent, line_height - authored_ascent)
+                    let half_leading = (line_height - natural_height) * 0.5;
+                    (
+                        natural_ascent_px + half_leading,
+                        natural_descent_px + half_leading,
+                    )
                 };
                 adjusted_ascent = adjusted_ascent.max(ascent_px);
                 adjusted_descent = adjusted_descent.max(descent_px);
             }
 
             let top = cursor_y;
-            let baseline = if line_index == 0 {
+            let baseline = if line_index == 0 && !has_explicit_line_height {
                 natural_ascent
             } else {
                 cursor_y + adjusted_ascent
@@ -3067,11 +3121,11 @@ impl<'a> StaticTextSlice<'a> {
                 scale,
                 letter_spacing,
             )?;
+            let contextual_glyphs =
+                self.styled_resolved_run_glyphs(runtime, instance, runs, font_scale)?;
             let max_width = lines
                 .iter()
-                .map(|line| self.styled_line_width(runtime, instance, line, runs, font_scale))
-                .collect::<Result<Vec<_>>>()?
-                .into_iter()
+                .map(|line| Self::styled_line_width(line, &contextual_glyphs))
                 .fold(0.0f32, f32::max);
             let line_metrics =
                 self.static_line_metrics(runtime, instance, &lines, runs, font_scale)?;
@@ -3103,56 +3157,59 @@ impl<'a> StaticTextSlice<'a> {
         Ok(best as f32 / max_size)
     }
 
-    fn styled_line_glyphs(
+    fn styled_resolved_run_glyphs(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        line: &StaticTextLine<'_>,
         runs: &[StaticResolvedRun],
         font_scale: f32,
     ) -> Result<Vec<StyledTextGlyph>> {
-        let line_start = line.char_start;
-        let line_end = line_start + line.text.chars().count();
         let mut glyphs = Vec::new();
         for run in runs {
-            let run_start = run.char_start;
-            let run_end = run.char_start + run.char_len;
-            let segment_start = line_start.max(run_start);
-            let segment_end = line_end.min(run_end);
-            if segment_start >= segment_end {
-                continue;
-            }
             let style_index = self.style_index_for_local(run.style_local)?;
-            let segment_text = char_slice(
-                line.text,
-                segment_start - line_start,
-                segment_end - line_start,
-            );
-            glyphs.extend(self.styled_text_glyphs_for_style(
-                runtime,
-                instance,
-                segment_text,
-                segment_start,
-                style_index,
-                font_scale,
-            )?);
+            for paragraph in split_static_text_lines(&run.text) {
+                // C++ shapes each paragraph before `BreakLines` and keeps the
+                // resulting advances when a soft wrap slices the glyph run.
+                // In particular, a line-ending glyph retains kerning against
+                // the first glyph on the next visual line.
+                glyphs.extend(self.styled_text_glyphs_for_style(
+                    runtime,
+                    instance,
+                    paragraph.text,
+                    run.char_start + paragraph.char_start,
+                    style_index,
+                    font_scale,
+                )?);
+            }
         }
         Ok(glyphs)
     }
 
-    fn styled_line_width(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
+    fn styled_line_glyphs(
         line: &StaticTextLine<'_>,
-        runs: &[StaticResolvedRun],
-        font_scale: f32,
-    ) -> Result<f32> {
-        Ok(self
-            .styled_line_glyphs(runtime, instance, line, runs, font_scale)?
+        contextual_glyphs: &[StyledTextGlyph],
+    ) -> Vec<StyledTextGlyph> {
+        let range = Self::styled_line_glyph_range(line, contextual_glyphs);
+        contextual_glyphs[range].to_vec()
+    }
+
+    fn styled_line_glyph_range(
+        line: &StaticTextLine<'_>,
+        contextual_glyphs: &[StyledTextGlyph],
+    ) -> std::ops::Range<usize> {
+        let line_start = line.char_start;
+        let line_end = line_start + line.text.chars().count();
+        let start = contextual_glyphs.partition_point(|glyph| glyph.char_index < line_start);
+        let end =
+            start + contextual_glyphs[start..].partition_point(|glyph| glyph.char_index < line_end);
+        start..end
+    }
+
+    fn styled_line_width(line: &StaticTextLine<'_>, contextual_glyphs: &[StyledTextGlyph]) -> f32 {
+        contextual_glyphs[Self::styled_line_glyph_range(line, contextual_glyphs)]
             .iter()
             .map(|glyph| glyph.advance)
-            .sum())
+            .sum()
     }
 
     fn styled_text_glyphs_for_style(
@@ -3356,13 +3413,11 @@ impl<'a> StaticTextSlice<'a> {
             )?;
             line_metrics =
                 self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
+            let contextual_glyphs =
+                self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?;
             measured_width = lines
                 .iter()
-                .map(|line| {
-                    self.styled_line_width(runtime, instance, line, &resolved_runs, font_scale)
-                })
-                .collect::<Result<Vec<_>>>()?
-                .into_iter()
+                .map(|line| Self::styled_line_width(line, &contextual_glyphs))
                 .fold(0.0f32, f32::max);
         }
 
@@ -5010,12 +5065,6 @@ fn character_index_for_cluster(text: &str, cluster: u32) -> usize {
         .saturating_sub(1)
 }
 
-fn char_slice(text: &str, start: usize, end: usize) -> &str {
-    let start_byte = char_byte_index(text, start);
-    let end_byte = char_byte_index(text, end);
-    &text[start_byte..end_byte]
-}
-
 fn char_byte_index(text: &str, char_index: usize) -> usize {
     text.char_indices()
         .nth(char_index)
@@ -5543,6 +5592,8 @@ struct TextOutlinePen {
     transform: Mat2D,
     current: Option<(f32, f32)>,
     contour_start: Option<(f32, f32)>,
+    current_outline: Option<(f32, f32)>,
+    contour_start_outline: Option<(f32, f32)>,
 }
 
 impl TextOutlinePen {
@@ -5557,27 +5608,53 @@ impl TextOutlinePen {
             transform,
             current: None,
             contour_start: None,
+            current_outline: None,
+            contour_start_outline: None,
         }
     }
 
-    fn map(&self, x: f32, y: f32) -> (f32, f32) {
-        let point = (self.x + x * self.scale, self.y - y * self.scale);
+    fn normalize_outline_point(x: f32, y: f32) -> (f32, f32) {
+        let inverse_shape_scale = 1.0 / TEXT_SHAPE_SCALE_F32;
+        (x * inverse_shape_scale, -y * inverse_shape_scale)
+    }
+
+    fn map_normalized(&self, x: f32, y: f32) -> (f32, f32) {
+        let font_size = self.scale * TEXT_SHAPE_SCALE_F32;
+        if self.transform == Mat2D::IDENTITY {
+            // C++ first records HarfBuzz outlines in em units, then maps the
+            // normalized path with the font-size matrix. Preserve its scale-
+            // and-translate operation order here.
+            let glyph_center = self.center_x - self.x;
+            let translation_x = -glyph_center + (self.x + glyph_center);
+            return (
+                font_size.mul_add(x, translation_x),
+                font_size.mul_add(y, self.y),
+            );
+        }
+        let point = (self.x + x * font_size, self.y + y * font_size);
         let transformed = self
             .transform
             .transform_point(point.0 - self.center_x, point.1 - self.center_y);
         (self.center_x + transformed.0, self.center_y + transformed.1)
     }
+
+    fn map(&self, x: f32, y: f32) -> ((f32, f32), (f32, f32)) {
+        let outline = Self::normalize_outline_point(x, y);
+        (self.map_normalized(outline.0, outline.1), outline)
+    }
 }
 
 impl OutlinePen for TextOutlinePen {
     fn move_to(&mut self, x: f32, y: f32) {
-        let point = self.map(x, y);
+        let (point, outline) = self.map(x, y);
         self.commands.push(RuntimePathCommand::Move {
             x: point.0,
             y: point.1,
         });
         self.current = Some(point);
         self.contour_start = Some(point);
+        self.current_outline = Some(outline);
+        self.contour_start_outline = Some(outline);
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
@@ -5585,46 +5662,59 @@ impl OutlinePen for TextOutlinePen {
             // C++ RawPath collapses zero-size glyph contours to move/close pairs.
             return;
         }
-        let point = self.map(x, y);
+        let (point, outline) = self.map(x, y);
         self.commands.push(RuntimePathCommand::Line {
             x: point.0,
             y: point.1,
         });
         self.current = Some(point);
+        self.current_outline = Some(outline);
     }
 
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
         if self.scale == 0.0 {
             return;
         }
-        let Some(current) = self.current else {
+        let Some(current_outline) = self.current_outline else {
             self.move_to(x, y);
             return;
         };
-        let control = self.map(cx0, cy0);
-        let end = self.map(x, y);
-        let x1 = current.0 + (control.0 - current.0) * (2.0 / 3.0);
-        let y1 = current.1 + (control.1 - current.1) * (2.0 / 3.0);
-        let x2 = end.0 + (control.0 - end.0) * (2.0 / 3.0);
-        let y2 = end.1 + (control.1 - end.1) * (2.0 / 3.0);
+        let control_outline = Self::normalize_outline_point(cx0, cy0);
+        let end_outline = Self::normalize_outline_point(x, y);
+        // C++ converts HarfBuzz quadratic contours to cubics before applying
+        // the glyph matrix. Doing the lerps after mapping is algebraically
+        // equivalent but rounds hundreds of text control points differently.
+        let t = 2.0 / 3.0;
+        let control1_outline = (
+            current_outline.0 + (control_outline.0 - current_outline.0) * t,
+            current_outline.1 + (control_outline.1 - current_outline.1) * t,
+        );
+        let control2_outline = (
+            end_outline.0 + (control_outline.0 - end_outline.0) * t,
+            end_outline.1 + (control_outline.1 - end_outline.1) * t,
+        );
+        let control1 = self.map_normalized(control1_outline.0, control1_outline.1);
+        let control2 = self.map_normalized(control2_outline.0, control2_outline.1);
+        let end = self.map_normalized(end_outline.0, end_outline.1);
         self.commands.push(RuntimePathCommand::Cubic {
-            x1,
-            y1,
-            x2,
-            y2,
+            x1: control1.0,
+            y1: control1.1,
+            x2: control2.0,
+            y2: control2.1,
             x3: end.0,
             y3: end.1,
         });
         self.current = Some(end);
+        self.current_outline = Some(end_outline);
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
         if self.scale == 0.0 {
             return;
         }
-        let control0 = self.map(cx0, cy0);
-        let control1 = self.map(cx1, cy1);
-        let end = self.map(x, y);
+        let (control0, _) = self.map(cx0, cy0);
+        let (control1, _) = self.map(cx1, cy1);
+        let (end, end_outline) = self.map(x, y);
         self.commands.push(RuntimePathCommand::Cubic {
             x1: control0.0,
             y1: control0.1,
@@ -5634,6 +5724,7 @@ impl OutlinePen for TextOutlinePen {
             y3: end.1,
         });
         self.current = Some(end);
+        self.current_outline = Some(end_outline);
     }
 
     fn close(&mut self) {
@@ -5648,6 +5739,7 @@ impl OutlinePen for TextOutlinePen {
         }
         self.commands.push(RuntimePathCommand::Close);
         self.current = self.contour_start;
+        self.current_outline = self.contour_start_outline;
     }
 }
 
@@ -5760,7 +5852,22 @@ mod tests {
         decoded
     }
 
-    fn baseline_origin_text_runtime_with_sizing(sizing_value: u64) -> (RuntimeFile, GraphFile) {
+    fn baseline_origin_text_runtime_with_sizing_and_line_height(
+        sizing_value: u64,
+        line_height: Option<f32>,
+    ) -> (RuntimeFile, GraphFile) {
+        let mut style_properties = vec![
+            property("TextStylePaint", "parentId", AuthoringValue::Uint(1)),
+            property("TextStylePaint", "fontSize", AuthoringValue::Double(20.0)),
+            property("TextStylePaint", "fontAssetId", AuthoringValue::Uint(0)),
+        ];
+        if let Some(line_height) = line_height {
+            style_properties.push(property(
+                "TextStylePaint",
+                "lineHeight",
+                AuthoringValue::Double(line_height),
+            ));
+        }
         let records = vec![
             authoring_record("Backboard", Vec::new()),
             authoring_record(
@@ -5799,15 +5906,7 @@ mod tests {
                     property("Text", "originY", AuthoringValue::Double(0.5)),
                 ],
             ),
-            authoring_record(
-                "TextStylePaint",
-                vec![
-                    property("TextStylePaint", "parentId", AuthoringValue::Uint(1)),
-                    property("TextStylePaint", "fontSize", AuthoringValue::Double(20.0)),
-                    property("TextStylePaint", "lineHeight", AuthoringValue::Double(40.0)),
-                    property("TextStylePaint", "fontAssetId", AuthoringValue::Uint(0)),
-                ],
-            ),
+            authoring_record("TextStylePaint", style_properties),
             authoring_record(
                 "TextValueRun",
                 vec![
@@ -5828,8 +5927,33 @@ mod tests {
         (runtime, graph)
     }
 
+    fn baseline_origin_text_runtime_with_sizing(sizing_value: u64) -> (RuntimeFile, GraphFile) {
+        baseline_origin_text_runtime_with_sizing_and_line_height(sizing_value, Some(40.0))
+    }
+
     fn baseline_origin_text_runtime() -> (RuntimeFile, GraphFile) {
         baseline_origin_text_runtime_with_sizing(TEXT_SIZING_FIXED)
+    }
+
+    fn synthetic_data_bind(
+        target_local: usize,
+        target_global: u32,
+        target_type_name: &'static str,
+        property_key: u16,
+    ) -> DataBindNode {
+        DataBindNode {
+            global_id: 10_000,
+            type_name: "DataBind",
+            property_key: u64::from(property_key),
+            flags: 0,
+            converter_id: 0,
+            converter_global: None,
+            converter_type_name: None,
+            converter_duration: None,
+            target_global: Some(target_global),
+            target_type_name: Some(target_type_name),
+            target_local: Some(target_local),
+        }
     }
 
     fn assert_close(actual: f32, expected: f32) {
@@ -5840,7 +5964,59 @@ mod tests {
     }
 
     #[test]
-    fn baseline_origin_and_raw_clip_share_authoritative_line_metrics() {
+    fn static_text_bind_validation_is_scoped_to_the_text_subtree() {
+        let (runtime, mut graphs) = baseline_origin_text_runtime();
+        let graph = graphs
+            .artboards
+            .first_mut()
+            .expect("fixture has an artboard");
+        let mut sibling = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == 1)
+            .expect("fixture Text component")
+            .clone();
+        sibling.local_id = 4;
+        sibling.global_id = 10_004;
+        sibling.type_name = "NestedArtboard";
+        sibling.parent_local = Some(0);
+        sibling.parent_global = Some(graph.global_id);
+        sibling.children.clear();
+        graph.components.push(sibling);
+        graph.data_binds.push(synthetic_data_bind(
+            4,
+            10_004,
+            "NestedArtboard",
+            property_key_for_name("WorldTransformComponent", "opacity").expect("opacity property"),
+        ));
+
+        StaticTextSlice::from_graph(&runtime, graph, 1)
+            .expect("an unrelated sibling bind cannot invalidate the Text subset");
+
+        graph.data_binds.clear();
+        graph.data_binds.push(synthetic_data_bind(
+            1,
+            graph
+                .components
+                .iter()
+                .find(|component| component.local_id == 1)
+                .expect("fixture Text component")
+                .global_id,
+            "Text",
+            property_key_for_name("Text", "sizingValue").expect("sizingValue property"),
+        ));
+
+        let Err(error) = StaticTextSlice::from_graph(&runtime, graph, 1) else {
+            panic!("unsupported Text-owned bindings must remain fail-closed");
+        };
+        assert!(
+            format!("{error:#}").contains("does not support data binding target Text"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn explicit_line_height_uses_css_half_leading_for_every_line() {
         let (runtime, graphs) = baseline_origin_text_runtime();
         let graph = graphs.artboards.first().expect("fixture has an artboard");
         let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
@@ -5855,7 +6031,9 @@ mod tests {
             .expect("half-size line metrics compute");
         let first = half_size_metrics.first().expect("first line metric");
         let second = half_size_metrics.get(1).expect("second line metric");
-        assert_close(first.baseline, 9.277344);
+        assert_close(first.bottom - first.top, 40.0);
+        assert_close(second.bottom - second.top, 40.0);
+        assert_close(first.baseline - first.top, second.baseline - second.top);
         assert_close(second.baseline - first.baseline, 40.0);
 
         let local_bounds = slice
@@ -5864,7 +6042,7 @@ mod tests {
             .expect("Text has bounds");
 
         assert_close(local_bounds.0, -20.0);
-        assert_close(local_bounds.1, -43.554688);
+        assert_close(local_bounds.1, -51.835938);
         assert_close(local_bounds.2, 80.0);
         assert_close(local_bounds.3, 50.0);
 
@@ -5887,6 +6065,74 @@ mod tests {
         assert_close(clip_top_left.1, local_bounds.1);
         assert_close(clip_bottom_right.0, local_bounds.0 + local_bounds.2);
         assert_close(clip_bottom_right.1, local_bounds.1 + local_bounds.3);
+    }
+
+    #[test]
+    fn default_line_metrics_keep_rive_first_line_ascent_behavior() {
+        let (runtime, graphs) =
+            baseline_origin_text_runtime_with_sizing_and_line_height(TEXT_SIZING_FIXED, None);
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        let runs = slice
+            .resolved_runs(&runtime, &instance)
+            .expect("Text runs resolve");
+        let text = runs.iter().map(|run| run.text.as_str()).collect::<String>();
+        let lines = split_static_text_lines(&text);
+        let line_metrics = slice
+            .static_line_metrics(&runtime, &instance, &lines, &runs, 1.0)
+            .expect("default line metrics compute");
+        let first = line_metrics.first().expect("first line metric");
+        let second = line_metrics.get(1).expect("second line metric");
+
+        assert_close(first.baseline, 18.554688);
+        assert_close(second.baseline - first.baseline, first.bottom - first.top);
+    }
+
+    #[test]
+    fn quadratic_outline_conversion_precedes_glyph_mapping() {
+        let mut pen = TextOutlinePen::new(
+            0.1,
+            0.0,
+            12.3 / TEXT_SHAPE_SCALE_F32,
+            0.1,
+            0.0,
+            Mat2D::IDENTITY,
+        );
+        let start = (-2047.0, 119.0);
+        let control = (-987.0, -37.0);
+        let end = (805.0, -91.0);
+        let start_outline = TextOutlinePen::normalize_outline_point(start.0, start.1);
+        let control_outline = TextOutlinePen::normalize_outline_point(control.0, control.1);
+        let t = 2.0 / 3.0;
+        let expected_outline = (
+            start_outline.0 + (control_outline.0 - start_outline.0) * t,
+            start_outline.1 + (control_outline.1 - start_outline.1) * t,
+        );
+        let expected = pen.map_normalized(expected_outline.0, expected_outline.1);
+        let mapped_start = pen.map(start.0, start.1).0;
+        let mapped_control = pen.map(control.0, control.1).0;
+        let mapped_then_lerped = (
+            mapped_start.0 + (mapped_control.0 - mapped_start.0) * t,
+            mapped_start.1 + (mapped_control.1 - mapped_start.1) * t,
+        );
+        assert_ne!(
+            (expected.0.to_bits(), expected.1.to_bits()),
+            (
+                mapped_then_lerped.0.to_bits(),
+                mapped_then_lerped.1.to_bits()
+            )
+        );
+
+        pen.move_to(start.0, start.1);
+        pen.quad_to(control.0, control.1, end.0, end.1);
+        let RuntimePathCommand::Cubic { x1, y1, .. } = pen.commands[1] else {
+            panic!("quadratic outline did not emit a cubic command");
+        };
+        assert_eq!(
+            (x1.to_bits(), y1.to_bits()),
+            (expected.0.to_bits(), expected.1.to_bits())
+        );
     }
 
     #[test]
@@ -5913,6 +6159,44 @@ mod tests {
 
         assert_close(measured.2, 80.0);
         assert_close(controlled.2, 200.0);
+    }
+
+    #[test]
+    fn soft_wrap_retains_contextual_advance_from_paragraph_shape() {
+        let contextual_glyphs = vec![
+            StyledTextGlyph {
+                glyph_id: 1,
+                char_index: 0,
+                char_len: 1,
+                style_index: 0,
+                advance: 650.0,
+                scale: 1.0,
+            },
+            StyledTextGlyph {
+                glyph_id: 2,
+                char_index: 1,
+                char_len: 1,
+                style_index: 0,
+                advance: 1_194.0,
+                scale: 1.0,
+            },
+        ];
+        let first_line = StaticTextLine {
+            text: "t",
+            char_start: 0,
+            line_index: 0,
+            soft_wrap_skipped_start: None,
+            terminal_soft_wrap_skipped_end: None,
+        };
+
+        let glyphs = StaticTextSlice::styled_line_glyphs(&first_line, &contextual_glyphs);
+
+        assert_eq!(glyphs.len(), 1);
+        assert_eq!(glyphs[0].advance, 650.0);
+        assert_eq!(
+            StaticTextSlice::styled_line_width(&first_line, &contextual_glyphs),
+            650.0
+        );
     }
 
     #[test]

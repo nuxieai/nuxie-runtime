@@ -24,8 +24,15 @@
     <pre id="status">running</pre>
     <script type="module">
       import init, {
+        assert_direct_gpu_canvas_image,
+        assert_imported_gpu_canvas,
+        assert_imported_gpu_canvas_stress,
         assert_resize,
         assert_webgl2_fail_closed,
+        assert_webgl2_image_mesh,
+        assert_webgl2_gpu_canvas_rejects_invalid_interface,
+        assert_webgpu_gpu_canvas_rejects_invalid_interface,
+        assert_webgpu_uniform_limit_rejection,
         run_backend,
         run_stream_case,
       } from "./pkg/browser_renderer_smoke.js";
@@ -52,6 +59,7 @@
           { suite: "gm", name: "poly_clockwise", maxDifferent: 3584, maxOffEdge: 0 },
           { suite: "gm", name: "poly_evenOdd", maxDifferent: 5632, maxOffEdge: 0 },
           { suite: "gm", name: "image", maxDifferent: 2048, maxOffEdge: 512 },
+          { suite: "gm", name: "image_filter_options", maxDifferent: 11264, maxOffEdge: 0 },
           { suite: "riv", name: "scripted_color", reference: "riv-scripted_color-frame-0", maxDifferent: 4096, maxOffEdge: 0 },
         ];
         const results = forceFallback
@@ -72,6 +80,29 @@
           }
         }
         if (!forceFallback) {
+          results.push(await assert_direct_gpu_canvas_image(document.createElement("canvas"), "webgpu"));
+          results.push(await assert_direct_gpu_canvas_image(document.createElement("canvas"), "webgl2"));
+          results.push(await assert_webgl2_image_mesh(document.createElement("canvas")));
+          results.push(await assert_imported_gpu_canvas(document.createElement("canvas"), "webgpu"));
+          results.push(await assert_imported_gpu_canvas(document.createElement("canvas"), "webgl2"));
+          results.push(await assert_webgpu_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));
+          results.push(await assert_webgl2_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));
+          results.push(await assert_webgpu_uniform_limit_rejection(document.createElement("canvas")));
+          const originalGetContext = HTMLCanvasElement.prototype.getContext;
+          let importedWebgl2Contexts = 0;
+          HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+            if (type === "webgl2") importedWebgl2Contexts += 1;
+            return originalGetContext.call(this, type, ...args);
+          };
+          try {
+            const stress = await assert_imported_gpu_canvas_stress(document.createElement("canvas"));
+            if (importedWebgl2Contexts !== 2) {
+              throw new Error(`WebGL2 stress created ${importedWebgl2Contexts} contexts; expected one primary and one isolated imported context`);
+            }
+            results.push(`${stress} contexts=${importedWebgl2Contexts}`);
+          } finally {
+            HTMLCanvasElement.prototype.getContext = originalGetContext;
+          }
           results.push(await assert_resize(document.createElement("canvas"), "webgpu"));
           results.push(await assert_resize(document.createElement("canvas"), "webgl2"));
           for (const testCase of streamCases) {

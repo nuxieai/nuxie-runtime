@@ -324,9 +324,10 @@ impl Default for RawPath {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum BlendMode {
+    #[default]
     SrcOver = 3,
     Screen = 14,
     Overlay = 15,
@@ -345,50 +346,29 @@ pub enum BlendMode {
     Luminosity = 28,
 }
 
-impl Default for BlendMode {
-    fn default() -> Self {
-        Self::SrcOver
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum StrokeJoin {
+    #[default]
     Miter = 0,
     Round = 1,
     Bevel = 2,
 }
 
-impl Default for StrokeJoin {
-    fn default() -> Self {
-        Self::Miter
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum StrokeCap {
+    #[default]
     Butt = 0,
     Round = 1,
     Square = 2,
 }
 
-impl Default for StrokeCap {
-    fn default() -> Self {
-        Self::Butt
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum RenderPaintStyle {
     Stroke,
+    #[default]
     Fill,
-}
-
-impl Default for RenderPaintStyle {
-    fn default() -> Self {
-        Self::Fill
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -467,6 +447,96 @@ pub trait RenderImage: Any {
     }
 }
 
+/// One canonical GLSL stage decoded from a Rive `ShaderAsset` RSTB v4 blob.
+///
+/// The renderer API deliberately owns this transport type so scripting and
+/// file-runtime code never depend on a concrete GPU backend. Backends may
+/// translate the stage internally (for example, GLSL through Naga to Metal).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasShaderStage {
+    pub source: String,
+    pub logical_entry_point: String,
+    pub physical_entry_point: String,
+}
+
+/// The vertex and fragment stages selected by `context:shader(name)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasShader {
+    pub vertex: GpuCanvasShaderStage,
+    pub fragment: GpuCanvasShaderStage,
+}
+
+/// One uniform binding produced by an authored GPU-canvas frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasUniformBuffer {
+    pub group: u32,
+    pub binding: u32,
+    pub bytes: Vec<u8>,
+}
+
+/// One vertex attribute in an authored GPU-canvas pipeline layout.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasVertexAttribute {
+    pub shader_location: u32,
+    pub offset: u64,
+    pub format: String,
+}
+
+/// One vertex-buffer layout in an authored GPU-canvas pipeline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasVertexLayout {
+    pub stride: u64,
+    pub attributes: Vec<GpuCanvasVertexAttribute>,
+}
+
+/// One vertex buffer bound by an authored GPU-canvas render pass.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasVertexBuffer {
+    pub slot: u32,
+    pub bytes: Vec<u8>,
+}
+
+/// Backend-neutral result of executing one imported script's `drawCanvas`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasPlan {
+    pub width: u32,
+    pub height: u32,
+    pub clear_color: [f64; 4],
+    pub vertex_count: u32,
+    pub instance_count: u32,
+    pub first_vertex: u32,
+    pub first_instance: u32,
+    pub uniform_buffers: Vec<GpuCanvasUniformBuffer>,
+    pub vertex_layouts: Vec<GpuCanvasVertexLayout>,
+    pub vertex_buffers: Vec<GpuCanvasVertexBuffer>,
+}
+
+/// A render factory cannot turn an authored GPU-canvas plan into an image.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasError {
+    message: String,
+}
+
+impl GpuCanvasError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+
+    pub fn unsupported() -> Self {
+        Self::new("render factory does not support imported GPU-canvas images")
+    }
+}
+
+impl std::fmt::Display for GpuCanvasError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for GpuCanvasError {}
+
 /// A renderer adapter could not decode encoded image bytes into a render image.
 ///
 /// Image codecs and backend limits are adapter-specific, so this error deliberately
@@ -523,6 +593,7 @@ pub trait Renderer {
         blend_mode: BlendMode,
         opacity: f32,
     );
+    #[allow(clippy::too_many_arguments)]
     fn draw_image_mesh(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -566,6 +637,20 @@ pub trait Factory {
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath>;
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint>;
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError>;
+
+    /// Execute one imported GPU-canvas plan and retain its result as a normal
+    /// render image suitable for `Renderer::draw_image`.
+    ///
+    /// The default is intentionally fail-closed. Recording, callback, WebGL2,
+    /// and other factories do not silently claim support merely because the
+    /// scripting surface exists.
+    fn make_gpu_canvas_image(
+        &mut self,
+        _shader: &GpuCanvasShader,
+        _plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        Err(GpuCanvasError::unsupported())
+    }
 }
 
 #[derive(Debug, Default)]

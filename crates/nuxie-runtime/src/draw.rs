@@ -34,7 +34,7 @@ use crate::text::{
     RuntimeTextLayoutConstraint, StaticTextClipBounds, runtime_text_input_shape_paint_commands,
     runtime_text_shape_paint_commands, static_text_caret_geometry, static_text_clip_bounds,
     static_text_constraint_bounds, static_text_controlled_layout_bounds, static_text_hit,
-    static_text_layout_measure_bounds, static_text_selection_rects,
+    static_text_layout_measure_bounds, static_text_selection_rects, static_text_value,
     text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D};
@@ -539,7 +539,8 @@ impl ArtboardInstance {
 
     /// Settle pending writes and return visible Shape and Text locals under
     /// `point`, from front to back, including descendants reached through
-    /// nested artboards and using this instance's retained file/graph context.
+    /// nested artboards and component-list items, using this instance's
+    /// retained file/graph context.
     pub fn geometry_hit_test(
         &mut self,
         point: RenderVec2D,
@@ -557,12 +558,47 @@ impl ArtboardInstance {
 
     /// Settle pending writes and return visible Shape and Text local-id paths
     /// under `point`, from front to back. A direct hit is a one-element path.
-    /// A hit inside a nested artboard is prefixed with each nested host local id.
+    /// A child-artboard hit is prefixed with each nested or component-list host
+    /// local id.
     pub fn geometry_hit_test_paths(
         &mut self,
         point: RenderVec2D,
         cache: &mut RuntimeGeometryCache,
     ) -> Vec<Vec<usize>> {
+        let mut seen = BTreeSet::new();
+        self.geometry_hit_test_path_segments(point, cache)
+            .into_iter()
+            .map(|path| {
+                path.into_iter()
+                    .map(|segment| segment.local_id)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|path| seen.insert(path.clone()))
+            .collect()
+    }
+
+    /// Settle pending writes and return visible Shape and Text hit paths with
+    /// the containing runtime artboard identity attached to every local id.
+    pub fn geometry_hit_test_path_segments(
+        &mut self,
+        point: RenderVec2D,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<Vec<RuntimeGeometryHitPathSegment>> {
+        let mut seen = BTreeSet::new();
+        self.geometry_hit_test_path_segments_with_bounds(point, cache)
+            .into_iter()
+            .map(|hit| hit.path)
+            .filter(|path| seen.insert(path.clone()))
+            .collect()
+    }
+
+    /// Settle pending writes and return exact hit paths together with their
+    /// concrete occurrence bounds in the root artboard's coordinate space.
+    pub fn geometry_hit_test_path_segments_with_bounds(
+        &mut self,
+        point: RenderVec2D,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<RuntimeGeometryHit> {
         self.update_pass();
         let Some(runtime) = self.runtime_file() else {
             return Vec::new();
@@ -570,7 +606,73 @@ impl ArtboardInstance {
         let Some(graph) = self.runtime_graph() else {
             return Vec::new();
         };
-        self.geometry_hit_test_paths_with_context(runtime, graph, point, cache)
+        self.geometry_hit_test_path_segments_with_context(runtime, graph, point, cache)
+    }
+
+    /// Settle pending writes and enumerate every visible Shape and Text
+    /// occurrence with bounds in the root artboard's coordinate space.
+    ///
+    /// Paths and repeated-item occurrences remain runtime-local here. The
+    /// editor application consumes them inside Rust to recover durable
+    /// ProjectDO identities; callers must not persist or expose these ids.
+    pub fn geometry_path_segments_with_bounds(
+        &mut self,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<RuntimeGeometryHit> {
+        self.update_pass();
+        let Some(runtime) = self.runtime_file() else {
+            return Vec::new();
+        };
+        let Some(graph) = self.runtime_graph() else {
+            return Vec::new();
+        };
+        cache.retain_instance(self);
+        self.geometry_path_segments_with_path_cache(
+            runtime,
+            graph,
+            None,
+            &mut cache.paths,
+            Mat2D::IDENTITY,
+            false,
+        )
+    }
+
+    /// Settle pending writes and enumerate every retained Text draw occurrence
+    /// with its exact resolved value and concrete root-artboard bounds.
+    ///
+    /// Runtime-local identities stay at this low-level boundary. The public
+    /// Scene facade resolves them to authored object identities before higher
+    /// application layers can observe them.
+    pub fn semantic_text_path_segments_with_bounds(
+        &mut self,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<RuntimeSemanticTextHit> {
+        self.update_pass();
+        let Some(runtime) = self.runtime_file() else {
+            return Vec::new();
+        };
+        let Some(graph) = self.runtime_graph() else {
+            return Vec::new();
+        };
+        cache.retain_instance(self);
+        self.geometry_path_segments_with_path_cache(
+            runtime,
+            graph,
+            None,
+            &mut cache.paths,
+            Mat2D::IDENTITY,
+            true,
+        )
+        .into_iter()
+        .filter_map(|hit| {
+            Some(RuntimeSemanticTextHit {
+                path: hit.path,
+                occurrence: hit.occurrence,
+                bounds: hit.bounds,
+                value: hit.text_value?,
+            })
+        })
+        .collect()
     }
 
     fn geometry_hit_test_with_context(
@@ -580,9 +682,11 @@ impl ArtboardInstance {
         point: RenderVec2D,
         cache: &mut RuntimeGeometryCache,
     ) -> Vec<usize> {
+        let mut seen = BTreeSet::new();
         self.geometry_hit_test_paths_with_context(runtime, graph, point, cache)
             .into_iter()
             .filter_map(|path| path.into_iter().next())
+            .filter(|local_id| seen.insert(*local_id))
             .collect()
     }
 
@@ -593,6 +697,46 @@ impl ArtboardInstance {
         point: RenderVec2D,
         cache: &mut RuntimeGeometryCache,
     ) -> Vec<Vec<usize>> {
+        let mut seen = BTreeSet::new();
+        self.geometry_hit_test_path_segments_with_context(runtime, graph, point, cache)
+            .into_iter()
+            .map(|hit| {
+                hit.path
+                    .into_iter()
+                    .map(|segment| segment.local_id)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|path| seen.insert(path.clone()))
+            .collect()
+    }
+
+    fn geometry_hit_test_path_segments_with_context(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        point: RenderVec2D,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<RuntimeGeometryHit> {
+        cache.retain_instance(self);
+        self.geometry_path_segments_with_path_cache(
+            runtime,
+            graph,
+            Some(point),
+            &mut cache.paths,
+            Mat2D::IDENTITY,
+            false,
+        )
+    }
+
+    fn geometry_path_segments_with_path_cache(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        point: Option<RenderVec2D>,
+        path_cache: &mut RuntimeRenderPathCache,
+        artboard_to_root: Mat2D,
+        include_text_value: bool,
+    ) -> Vec<RuntimeGeometryHit> {
         // Geometry queries live in the artboard's unshifted world space. This
         // is the same clip rectangle used by drawing when the public origin
         // transform is not applied by the renderer-facing wrapper.
@@ -605,41 +749,40 @@ impl ArtboardInstance {
                 clip_left + self.width,
                 clip_top + self.height,
             );
-            if !clip.contains(point) {
+            if point.is_some_and(|point| !clip.contains(point)) {
                 return Vec::new();
             }
         }
 
-        cache.retain_instance(self);
-        let prepared = cache
-            .paths
-            .prepared_artboard_frame(self, graph, Some(runtime));
+        let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
         let mut active_clips = Vec::new();
         let mut back_to_front_hits = Vec::new();
         for command in prepared.commands.iter() {
             match command.kind {
                 RuntimeDrawCommandKind::ClipStart => {
-                    let contains = command
-                        .clipping_shape_local
-                        .and_then(|local_id| runtime_clipping_shape(graph, local_id))
-                        .map(|clipping_shape| {
-                            if !clipping_shape.is_visible {
-                                return true;
-                            }
-                            let commands = cache.paths.clipping_shape_path_commands(
-                                self,
-                                graph,
-                                clipping_shape,
-                                layout_bounds,
-                            );
-                            runtime_path_contains(
-                                commands.as_slice(),
-                                point,
-                                runtime_geometry_fill_rule(clipping_shape.fill_rule),
-                            )
-                        })
-                        .unwrap_or(true);
+                    let contains = point.is_none_or(|point| {
+                        command
+                            .clipping_shape_local
+                            .and_then(|local_id| runtime_clipping_shape(graph, local_id))
+                            .map(|clipping_shape| {
+                                if !clipping_shape.is_visible {
+                                    return true;
+                                }
+                                let commands = path_cache.clipping_shape_path_commands(
+                                    self,
+                                    graph,
+                                    clipping_shape,
+                                    layout_bounds,
+                                );
+                                runtime_path_contains(
+                                    commands.as_slice(),
+                                    point,
+                                    runtime_geometry_fill_rule(clipping_shape.fill_rule),
+                                )
+                            })
+                            .unwrap_or(true)
+                    });
                     active_clips.push(contains);
                     continue;
                 }
@@ -659,11 +802,9 @@ impl ArtboardInstance {
                     graph,
                     layout_bounds,
                 );
-                active_clips.push(runtime_path_contains(
-                    &path,
-                    point,
-                    RuntimeGeometryFillRule::Clockwise,
-                ));
+                active_clips.push(point.is_none_or(|point| {
+                    runtime_path_contains(&path, point, RuntimeGeometryFillRule::Clockwise)
+                }));
                 continue;
             }
             if command.object_kind == RuntimeDrawCommandObjectKind::LayoutComponent
@@ -690,14 +831,13 @@ impl ArtboardInstance {
                     continue;
                 };
                 let host_world = match command.object_kind {
-                    RuntimeDrawCommandObjectKind::NestedArtboardLayout => {
-                        cache.paths.component_world_transform_with_bounds(
+                    RuntimeDrawCommandObjectKind::NestedArtboardLayout => path_cache
+                        .component_world_transform_with_bounds(
                             self,
                             graph,
                             host_local_id,
                             layout_bounds,
-                        )
-                    }
+                        ),
                     RuntimeDrawCommandObjectKind::NestedArtboardLeaf => {
                         match runtime_nested_artboard_leaf_world_transform(
                             self,
@@ -706,24 +846,42 @@ impl ArtboardInstance {
                             child_graph,
                             Some(nested.child.as_ref()),
                             layout_bounds,
-                            &mut cache.paths,
+                            path_cache,
                         ) {
                             Ok(transform) => transform,
                             Err(_) => continue,
                         }
                     }
-                    _ => cache.paths.component_world_transform_with_bounds(
+                    _ => path_cache.component_world_transform_with_bounds(
                         self,
                         graph,
                         host_local_id,
                         layout_bounds,
                     ),
                 };
-                let Some(inverse_host_world) = runtime_mat2d_invert(host_world) else {
-                    continue;
+                let child_point = match point {
+                    Some(point) => {
+                        let Some(inverse_host_world) = runtime_mat2d_invert(host_world) else {
+                            continue;
+                        };
+                        let (child_x, child_y) =
+                            inverse_host_world.transform_point(point.x, point.y);
+                        Some(RenderVec2D::new(child_x, child_y))
+                    }
+                    None => None,
                 };
-                let (child_x, child_y) = inverse_host_world.transform_point(point.x, point.y);
-                let child_point = RenderVec2D::new(child_x, child_y);
+                let child_to_root = artboard_to_root.multiply(host_world);
+                let cache_key = nested_render_cache_key(
+                    command.global_id,
+                    command.local_id,
+                    child_graph.global_id,
+                    nested.render_cache_revision,
+                );
+                let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
+                // Recursive queries are already normalized front-to-back. This
+                // frame is still accumulating draw commands back-to-front, so
+                // splice the child's hits in reverse before the final boundary
+                // normalization below.
                 if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout {
                     let mut cloned = nested.child.as_ref().clone_for_transient_layout();
                     if runtime_apply_nested_artboard_layout_child_bounds(
@@ -735,24 +893,132 @@ impl ArtboardInstance {
                     {
                         continue;
                     }
-                    for mut path in cloned.geometry_hit_test_paths_with_context(
-                        runtime,
-                        child_graph,
-                        child_point,
-                        cache,
-                    ) {
-                        path.insert(0, host_local_id);
-                        back_to_front_hits.push(path);
+                    for mut hit in cloned
+                        .geometry_path_segments_with_path_cache(
+                            runtime,
+                            child_graph,
+                            child_point,
+                            child_cache,
+                            child_to_root,
+                            include_text_value,
+                        )
+                        .into_iter()
+                        .rev()
+                    {
+                        hit.path.insert(
+                            0,
+                            RuntimeGeometryHitPathSegment {
+                                artboard_global_id: graph.global_id,
+                                local_id: host_local_id,
+                            },
+                        );
+                        back_to_front_hits.push(hit);
                     }
                 } else {
-                    for mut path in nested.child.geometry_hit_test_paths_with_context(
-                        runtime,
-                        child_graph,
-                        child_point,
-                        cache,
-                    ) {
-                        path.insert(0, host_local_id);
-                        back_to_front_hits.push(path);
+                    for mut hit in nested
+                        .child
+                        .geometry_path_segments_with_path_cache(
+                            runtime,
+                            child_graph,
+                            child_point,
+                            child_cache,
+                            child_to_root,
+                            include_text_value,
+                        )
+                        .into_iter()
+                        .rev()
+                    {
+                        hit.path.insert(
+                            0,
+                            RuntimeGeometryHitPathSegment {
+                                artboard_global_id: graph.global_id,
+                                local_id: host_local_id,
+                            },
+                        );
+                        back_to_front_hits.push(hit);
+                    }
+                }
+                continue;
+            }
+            if command.object_kind == RuntimeDrawCommandObjectKind::ArtboardComponentList
+                && !active_clips.iter().any(|contains| !contains)
+            {
+                let Some(host_local_id) = command.local_id else {
+                    continue;
+                };
+                let Some(items) = self.component_list_items.get(&host_local_id) else {
+                    continue;
+                };
+                let host_world = path_cache.component_world_transform_with_bounds(
+                    self,
+                    graph,
+                    host_local_id,
+                    layout_bounds,
+                );
+                let list_layout = runtime_component_list_layout(self, host_local_id);
+                for (item_index, item) in items.iter().enumerate() {
+                    let Some(child_graph) = item.child.runtime_graph() else {
+                        continue;
+                    };
+                    let child_world = host_world.multiply(runtime_component_list_item_transform(
+                        list_layout,
+                        item_index,
+                        items.len(),
+                        item.child.width,
+                        item.child.height,
+                        item.transform,
+                    ));
+                    let child_point = match point {
+                        Some(point) => {
+                            let Some(inverse_child_world) = runtime_mat2d_invert(child_world)
+                            else {
+                                continue;
+                            };
+                            let (child_x, child_y) =
+                                inverse_child_world.transform_point(point.x, point.y);
+                            Some(RenderVec2D::new(child_x, child_y))
+                        }
+                        None => None,
+                    };
+                    let cache_key = component_list_render_cache_key(
+                        command.global_id,
+                        command.local_id,
+                        child_graph.global_id,
+                        item_index,
+                        item.render_cache_generation,
+                    );
+                    let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
+                    // Preserve the item's internal paint order while this frame
+                    // accumulates every list occurrence back-to-front.
+                    for mut hit in item
+                        .child
+                        .geometry_path_segments_with_path_cache(
+                            runtime,
+                            child_graph,
+                            child_point,
+                            child_cache,
+                            artboard_to_root.multiply(child_world),
+                            include_text_value,
+                        )
+                        .into_iter()
+                        .rev()
+                    {
+                        hit.path.insert(
+                            0,
+                            RuntimeGeometryHitPathSegment {
+                                artboard_global_id: graph.global_id,
+                                local_id: host_local_id,
+                            },
+                        );
+                        hit.occurrence.insert(
+                            0,
+                            RuntimeGeometryHitOccurrence {
+                                artboard_global_id: graph.global_id,
+                                host_local_id,
+                                item_index,
+                            },
+                        );
+                        back_to_front_hits.push(hit);
                     }
                 }
                 continue;
@@ -782,19 +1048,39 @@ impl ArtboardInstance {
                     continue;
                 };
                 let text_world = command.world_transform.unwrap_or_else(|| {
-                    cache.paths.component_world_transform_with_bounds(
+                    path_cache.component_world_transform_with_bounds(
                         self,
                         graph,
                         local_id,
                         layout_bounds,
                     )
                 });
-                let Some(inverse_text_world) = runtime_mat2d_invert(text_world) else {
-                    continue;
+                let matches_query = match point {
+                    Some(point) => {
+                        let Some(inverse_text_world) = runtime_mat2d_invert(text_world) else {
+                            continue;
+                        };
+                        let (local_x, local_y) =
+                            inverse_text_world.transform_point(point.x, point.y);
+                        runtime_rect_contains(bounds, RenderVec2D::new(local_x, local_y))
+                    }
+                    None => true,
                 };
-                let (local_x, local_y) = inverse_text_world.transform_point(point.x, point.y);
-                if runtime_rect_contains(bounds, RenderVec2D::new(local_x, local_y)) {
-                    back_to_front_hits.push(vec![local_id]);
+                if matches_query {
+                    back_to_front_hits.push(RuntimeGeometryHit {
+                        path: vec![RuntimeGeometryHitPathSegment {
+                            artboard_global_id: graph.global_id,
+                            local_id,
+                        }],
+                        occurrence: Vec::new(),
+                        bounds: runtime_transformed_rect_bounds(
+                            bounds,
+                            artboard_to_root.multiply(text_world),
+                        ),
+                        text_value: include_text_value
+                            .then(|| static_text_value(runtime, graph, self, local_id))
+                            .flatten(),
+                    });
                 }
                 continue;
             }
@@ -808,26 +1094,44 @@ impl ArtboardInstance {
                 continue;
             };
             let shape_world = command.world_transform.unwrap_or_else(|| {
-                cache.paths.component_world_transform_with_bounds(
+                path_cache.component_world_transform_with_bounds(
                     self,
                     graph,
                     local_id,
                     layout_bounds,
                 )
             });
-            if command.shape_paints.iter().any(|paint| {
-                runtime_geometry_shape_paint_contains(runtime, self, paint, shape_world, point)
-            }) {
-                back_to_front_hits.push(vec![local_id]);
+            let matches_query = match point {
+                Some(point) => command.shape_paints.iter().any(|paint| {
+                    runtime_geometry_shape_paint_contains(runtime, self, paint, shape_world, point)
+                }),
+                None => command
+                    .shape_paints
+                    .iter()
+                    .any(|paint| runtime_geometry_shape_paint_is_effectively_visible(self, paint)),
+            };
+            if matches_query
+                && let Some(bounds) = self.geometry_world_bounds_with_path_cache_and_transform(
+                    runtime,
+                    graph,
+                    local_id,
+                    path_cache,
+                    artboard_to_root,
+                )
+            {
+                back_to_front_hits.push(RuntimeGeometryHit {
+                    path: vec![RuntimeGeometryHitPathSegment {
+                        artboard_global_id: graph.global_id,
+                        local_id,
+                    }],
+                    occurrence: Vec::new(),
+                    bounds,
+                    text_value: None,
+                });
             }
         }
 
-        let mut seen = BTreeSet::new();
-        back_to_front_hits
-            .into_iter()
-            .rev()
-            .filter(|path| seen.insert(path.clone()))
-            .collect()
+        runtime_geometry_hits_front_to_back(back_to_front_hits)
     }
 
     /// Settle pending writes and resolve an object's layout-aware world
@@ -886,11 +1190,163 @@ impl ArtboardInstance {
         cache: &mut RuntimeGeometryCache,
     ) -> Option<RenderAabb> {
         cache.retain_instance(self);
-        let prepared = cache
-            .paths
-            .prepared_artboard_frame(self, graph, Some(runtime));
+        if self.component(local_id)?.type_name == "Image" {
+            let drawable = graph.sorted_drawable_order.iter().find(|drawable| {
+                drawable.local_id == Some(local_id) && drawable.type_name == "Image"
+            })?;
+            let asset_global = self.resolved_image_asset_global(
+                Some(local_id),
+                drawable.resolved_image_asset_global,
+            )?;
+            let (image_width, image_height) = cache.presented_image_dimensions(asset_global)?;
+            return self.geometry_image_world_bounds_with_context(
+                runtime,
+                graph,
+                local_id,
+                drawable.global_id,
+                image_width,
+                image_height,
+                &mut cache.paths,
+            );
+        }
+        self.geometry_world_bounds_with_path_cache_and_transform(
+            runtime,
+            graph,
+            local_id,
+            &mut cache.paths,
+            Mat2D::IDENTITY,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn geometry_image_world_bounds_with_context(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        image_global_id: Option<u32>,
+        image_width: u32,
+        image_height: u32,
+        path_cache: &mut RuntimeRenderPathCache,
+    ) -> Option<RenderAabb> {
+        if image_width == 0
+            || image_height == 0
+            || runtime_image_mesh(runtime, graph, local_id).is_some()
+        {
+            // A mesh can deform the source image independently of its component
+            // transform. Until that geometry is retained explicitly, returning
+            // the undecorated image rectangle would silently lie to callers.
+            return None;
+        }
+        let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
-        if self.component(local_id)?.type_name == "Text" {
+        let image_object = image_global_id.and_then(|global_id| runtime.object(global_id as usize));
+        let origin_x_key = runtime_draw_property_key_for_name("Image", "originX")?;
+        let origin_y_key = runtime_draw_property_key_for_name("Image", "originY")?;
+        let origin_x = self
+            .double_property(local_id, origin_x_key)
+            .or_else(|| {
+                image_object.and_then(|object| {
+                    runtime_object_explicit_double_property_by_key(object, origin_x_key)
+                })
+            })
+            .unwrap_or(0.5);
+        let origin_y = self
+            .double_property(local_id, origin_y_key)
+            .or_else(|| {
+                image_object.and_then(|object| {
+                    runtime_object_explicit_double_property_by_key(object, origin_y_key)
+                })
+            })
+            .unwrap_or(0.5);
+        let image_width = image_width as f32;
+        let image_height = image_height as f32;
+        let world = path_cache
+            .image_world_transform_with_dimensions(
+                self,
+                graph,
+                local_id,
+                image_object,
+                image_width,
+                image_height,
+                layout_bounds,
+                false,
+            )
+            .ok()?
+            .unwrap_or_else(|| {
+                path_cache.component_world_transform_with_bounds(
+                    self,
+                    graph,
+                    local_id,
+                    layout_bounds,
+                )
+            });
+        if ![origin_x, origin_y, image_width, image_height]
+            .into_iter()
+            .chain(world.0)
+            .all(f32::is_finite)
+        {
+            return None;
+        }
+        let bounds = runtime_transformed_rect_bounds(
+            (
+                -image_width * origin_x,
+                -image_height * origin_y,
+                image_width,
+                image_height,
+            ),
+            world,
+        );
+        [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
+            .into_iter()
+            .all(f32::is_finite)
+            .then_some(bounds)
+    }
+
+    fn geometry_world_bounds_with_path_cache_and_transform(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        path_cache: &mut RuntimeRenderPathCache,
+        artboard_to_root: Mat2D,
+    ) -> Option<RenderAabb> {
+        let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        let component = self.component(local_id)?;
+        if matches!(
+            component.type_name,
+            "NestedArtboard" | "NestedArtboardLeaf" | "NestedArtboardLayout"
+        ) {
+            let nested = self.nested_artboards.get(&local_id)?;
+            let child_graph = nested.child.runtime_graph()?;
+            let child_to_artboard = match component.type_name {
+                "NestedArtboardLeaf" => runtime_nested_artboard_leaf_world_transform(
+                    self,
+                    graph,
+                    local_id,
+                    child_graph,
+                    Some(nested.child.as_ref()),
+                    layout_bounds,
+                    path_cache,
+                )
+                .ok()?,
+                "NestedArtboard" | "NestedArtboardLayout" => path_cache
+                    .component_world_transform_with_bounds(self, graph, local_id, layout_bounds),
+                _ => unreachable!("nested-artboard type was preflighted"),
+            };
+            let content = RuntimeAabb::from_artboard_with_layout(&nested.child, child_graph);
+            return Some(runtime_transformed_rect_bounds(
+                (
+                    content.left,
+                    content.top,
+                    content.left + content.width,
+                    content.top + content.height,
+                ),
+                artboard_to_root.multiply(child_to_artboard),
+            ));
+        }
+        if component.type_name == "Text" {
             let layout_constraint = self.runtime_text_layout_constraint(local_id, layout_bounds);
             let bounds = match layout_constraint {
                 Some(constraint) => static_text_controlled_layout_bounds(
@@ -898,20 +1354,23 @@ impl ArtboardInstance {
                 )?,
                 None => static_text_constraint_bounds(runtime, graph, self, local_id)?,
             };
-            let world = cache.paths.component_world_transform_with_bounds(
+            let world = path_cache.component_world_transform_with_bounds(
                 self,
                 graph,
                 local_id,
                 layout_bounds,
             );
-            return Some(runtime_transformed_rect_bounds(bounds, world));
+            return Some(runtime_transformed_rect_bounds(
+                bounds,
+                artboard_to_root.multiply(world),
+            ));
         }
-        let commands = self.runtime_object_world_path_commands(
-            local_id,
-            graph,
-            layout_bounds,
-            &mut cache.paths,
-        )?;
+        let mut commands =
+            self.runtime_object_world_path_commands(local_id, graph, layout_bounds, path_cache)?;
+        if artboard_to_root != Mat2D::IDENTITY {
+            let [a, b, c, d, e, f] = artboard_to_root.0;
+            transform_path_commands_affine(&mut commands, a, b, c, d, e, f);
+        }
         runtime_exact_path_bounds(&commands)
     }
 
@@ -1548,7 +2007,7 @@ impl ArtboardInstance {
                 command.local_id,
                 item.child.graph_global_id,
                 item_index,
-                item.render_cache_revision,
+                item.render_cache_generation,
             );
             let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
             if let Some(caches) = nested_paint_caches.as_deref_mut() {
@@ -6682,10 +7141,17 @@ pub struct RuntimeGradientStop {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct RuntimeComponentListRenderCacheOccurrence {
+    item_index: usize,
+    generation: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct RuntimeNestedRenderCacheKey {
     host: u32,
     referenced_artboard_global: u32,
     instance_revision: u64,
+    component_list_occurrence: Option<RuntimeComponentListRenderCacheOccurrence>,
 }
 
 #[derive(Default)]
@@ -6762,6 +7228,17 @@ impl RuntimeRenderImages {
             self.images_by_global.resize_with(slot + 1, || None);
         }
         self.images_by_global[slot] = Some(image);
+    }
+
+    fn dimensions(&self) -> impl Iterator<Item = (u32, u32, u32)> + '_ {
+        self.images_by_global
+            .iter()
+            .enumerate()
+            .filter_map(|(global_id, image)| {
+                let global_id = u32::try_from(global_id).ok()?;
+                let image = image.as_deref()?;
+                Some((global_id, image.width(), image.height()))
+            })
     }
 }
 
@@ -6936,6 +7413,80 @@ pub struct RuntimeRenderPathCache {
 pub struct RuntimeGeometryCache {
     key: Option<RuntimeGeometryCacheKey>,
     paths: RuntimeRenderPathCache,
+    registered_image_dimensions: BTreeMap<u32, (u32, u32)>,
+    presented_image_dimensions: BTreeMap<u32, (u32, u32)>,
+}
+
+/// A host-registered intrinsic image size disagreed with another exact source
+/// of dimensions for the same file-global image asset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeImageDimensionConflict {
+    asset_global: u32,
+    expected: (u32, u32),
+    actual: (u32, u32),
+}
+
+impl std::fmt::Display for RuntimeImageDimensionConflict {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "image asset {} has registered dimensions {}x{} but decoded dimensions are {}x{}",
+            self.asset_global, self.expected.0, self.expected.1, self.actual.0, self.actual.1,
+        )
+    }
+}
+
+impl std::error::Error for RuntimeImageDimensionConflict {}
+
+/// One exact runtime-local step in a geometry hit path.
+///
+/// Local ids are only unique within an artboard. Carrying the containing
+/// artboard graph identity keeps hits through component-list item artboards
+/// unambiguous even when several mapped artboards reuse the same local ids.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RuntimeGeometryHitPathSegment {
+    pub artboard_global_id: u32,
+    pub local_id: usize,
+}
+
+/// One repeated component-list item on the descent to a concrete hit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RuntimeGeometryHitOccurrence {
+    pub artboard_global_id: u32,
+    pub host_local_id: usize,
+    pub item_index: usize,
+}
+
+/// One concrete geometry hit. Repeated component-list items may share both an
+/// authored path and overlapping bounds, so occurrence identity is explicit.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeGeometryHit {
+    pub path: Vec<RuntimeGeometryHitPathSegment>,
+    pub occurrence: Vec<RuntimeGeometryHitOccurrence>,
+    pub bounds: RenderAabb,
+    /// Present only for opt-in semantic text enumeration. Ordinary geometry
+    /// and hit-test calls leave this empty and do not allocate text values.
+    pub text_value: Option<String>,
+}
+
+/// One exact retained Text draw occurrence with its settled resolved value.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeSemanticTextHit {
+    pub path: Vec<RuntimeGeometryHitPathSegment>,
+    pub occurrence: Vec<RuntimeGeometryHitOccurrence>,
+    pub bounds: RenderAabb,
+    pub value: String,
+}
+
+fn runtime_geometry_hits_front_to_back(
+    back_to_front_hits: Vec<RuntimeGeometryHit>,
+) -> Vec<RuntimeGeometryHit> {
+    let mut seen = BTreeSet::new();
+    back_to_front_hits
+        .into_iter()
+        .rev()
+        .filter(|hit| seen.insert((hit.path.clone(), hit.occurrence.clone())))
+        .collect()
 }
 
 impl std::fmt::Debug for RuntimeGeometryCache {
@@ -6954,7 +7505,78 @@ impl RuntimeGeometryCache {
         if self.key != Some(key) {
             self.key = Some(key);
             self.paths = RuntimeRenderPathCache::default();
+            self.registered_image_dimensions.clear();
+            self.presented_image_dimensions.clear();
         }
+    }
+
+    /// Register exact intrinsic dimensions supplied by the resource owner so
+    /// logical image geometry is available before this instance first draws.
+    #[doc(hidden)]
+    pub fn register_image_dimensions(
+        &mut self,
+        instance: &ArtboardInstance,
+        asset_global: u32,
+        width: u32,
+        height: u32,
+    ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
+        self.retain_instance(instance);
+        let actual = (width, height);
+        if let Some(expected) = self
+            .registered_image_dimensions
+            .insert(asset_global, actual)
+            .filter(|expected| *expected != actual)
+        {
+            self.registered_image_dimensions
+                .insert(asset_global, expected);
+            return Err(RuntimeImageDimensionConflict {
+                asset_global,
+                expected,
+                actual,
+            });
+        }
+        Ok(())
+    }
+
+    /// Correlate future Image geometry reads with the exact successfully
+    /// decoded resources owned by a retained presentation frame.
+    #[doc(hidden)]
+    pub fn observe_presented_images(
+        &mut self,
+        instance: &ArtboardInstance,
+        paint_cache: &RuntimeRenderPaintCache,
+    ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
+        self.retain_instance(instance);
+        for (asset_global, width, height) in paint_cache.images.dimensions() {
+            let actual = (width, height);
+            if let Some(expected) = self
+                .registered_image_dimensions
+                .get(&asset_global)
+                .copied()
+                .filter(|expected| *expected != actual)
+            {
+                return Err(RuntimeImageDimensionConflict {
+                    asset_global,
+                    expected,
+                    actual,
+                });
+            }
+        }
+        self.presented_image_dimensions.clear();
+        self.presented_image_dimensions.extend(
+            paint_cache
+                .images
+                .dimensions()
+                .map(|(global_id, width, height)| (global_id, (width, height))),
+        );
+        Ok(())
+    }
+
+    fn presented_image_dimensions(&self, global_id: u32) -> Option<(u32, u32)> {
+        self.presented_image_dimensions
+            .get(&global_id)
+            .or_else(|| self.registered_image_dimensions.get(&global_id))
+            .copied()
     }
 }
 
@@ -7736,6 +8358,30 @@ impl RuntimeRenderPathCache {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         has_vertex_mesh: bool,
     ) -> Result<Option<Mat2D>> {
+        self.image_world_transform_with_dimensions(
+            instance,
+            graph,
+            local_id,
+            image_object,
+            image.width() as f32,
+            image.height() as f32,
+            layout_bounds,
+            has_vertex_mesh,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn image_world_transform_with_dimensions(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        image_object: Option<&RuntimeObject>,
+        image_width: f32,
+        image_height: f32,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        has_vertex_mesh: bool,
+    ) -> Result<Option<Mat2D>> {
         let Some(layout_bounds) = layout_bounds else {
             return Ok(None);
         };
@@ -7755,8 +8401,6 @@ impl RuntimeRenderPathCache {
             return Ok(None);
         };
 
-        let image_width = image.width() as f32;
-        let image_height = image.height() as f32;
         let key = RuntimeImageLayoutTransformCacheKey {
             cache_epoch: instance.cache_epoch(),
             layout_epoch: instance.layout_epoch(),
@@ -8971,6 +9615,7 @@ fn nested_render_cache_key(
         host,
         referenced_artboard_global,
         instance_revision,
+        component_list_occurrence: None,
     }
 }
 
@@ -8979,15 +9624,13 @@ fn component_list_render_cache_key(
     local_id: Option<usize>,
     referenced_artboard_global: u32,
     item_index: usize,
-    instance_revision: u64,
+    generation: u64,
 ) -> RuntimeNestedRenderCacheKey {
-    let mut key = nested_render_cache_key(
-        global_id,
-        local_id,
-        referenced_artboard_global,
-        instance_revision,
-    );
-    key.instance_revision = (1_u64 << 63) | ((item_index as u64) << 32) | instance_revision;
+    let mut key = nested_render_cache_key(global_id, local_id, referenced_artboard_global, 0);
+    key.component_list_occurrence = Some(RuntimeComponentListRenderCacheOccurrence {
+        item_index,
+        generation,
+    });
     key
 }
 
@@ -10182,6 +10825,108 @@ fn runtime_image_layout_local_transform(
     Ok(Mat2D::compose(components))
 }
 
+#[derive(Clone, Copy)]
+struct RuntimeComponentListLayout {
+    padding_left: f32,
+    padding_top: f32,
+    gap: f32,
+    is_row: bool,
+    is_reverse: bool,
+}
+
+fn runtime_component_list_layout(
+    instance: &ArtboardInstance,
+    list_local_id: usize,
+) -> RuntimeComponentListLayout {
+    let list_style_local = instance
+        .runtime_layout_component_style_local(list_local_id)
+        .or_else(|| {
+            instance
+                .component(list_local_id)
+                .and_then(|component| component.parent_local)
+                .and_then(|parent_local| {
+                    instance.runtime_layout_component_style_local(parent_local)
+                })
+        });
+    list_style_local
+        .map(|style_local| {
+            let flex_direction = instance.runtime_layout_style_uint_default(
+                style_local,
+                RuntimeLayoutStyleProperty::FlexDirectionValue,
+                2,
+            );
+            let is_row = matches!(flex_direction, 2 | 3);
+            RuntimeComponentListLayout {
+                padding_left: instance
+                    .runtime_layout_style_double(
+                        style_local,
+                        RuntimeLayoutStyleProperty::PaddingLeft,
+                    )
+                    .unwrap_or(0.0),
+                padding_top: instance
+                    .runtime_layout_style_double(
+                        style_local,
+                        RuntimeLayoutStyleProperty::PaddingTop,
+                    )
+                    .unwrap_or(0.0),
+                gap: instance
+                    .runtime_layout_style_double(
+                        style_local,
+                        if is_row {
+                            RuntimeLayoutStyleProperty::GapHorizontal
+                        } else {
+                            RuntimeLayoutStyleProperty::GapVertical
+                        },
+                    )
+                    .unwrap_or(0.0),
+                is_row,
+                is_reverse: matches!(flex_direction, 1 | 3),
+            }
+        })
+        .unwrap_or(RuntimeComponentListLayout {
+            padding_left: 0.0,
+            padding_top: 0.0,
+            gap: 0.0,
+            is_row: true,
+            is_reverse: false,
+        })
+}
+
+fn runtime_component_list_item_transform(
+    layout: RuntimeComponentListLayout,
+    item_index: usize,
+    item_count: usize,
+    item_width: f32,
+    item_height: f32,
+    item_transform: Mat2D,
+) -> Mat2D {
+    let item_index = if layout.is_reverse {
+        item_count.saturating_sub(item_index).saturating_sub(1)
+    } else {
+        item_index
+    };
+    let offset = if layout.is_row {
+        Mat2D([
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+            layout.padding_left + item_index as f32 * (item_width + layout.gap),
+            layout.padding_top,
+        ])
+    } else {
+        Mat2D([
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+            layout.padding_left,
+            layout.padding_top + item_index as f32 * (item_height + layout.gap),
+        ])
+    };
+    offset.multiply(item_transform)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn runtime_draw_component_list(
     runtime: &RuntimeFile,
@@ -10210,50 +10955,23 @@ fn runtime_draw_component_list(
     };
     let host_world =
         path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds);
-    if command.needs_save_operation {
+    let host_opacity = instance
+        .component(local_id)
+        .map(|component| component.transform.render_opacity)
+        .unwrap_or(1.0);
+    if !host_opacity.is_finite() || host_opacity <= 0.0 {
+        return Ok(());
+    }
+    let needs_opacity_save = host_opacity != 1.0;
+    if command.needs_save_operation || needs_opacity_save {
         renderer.save();
     }
     renderer.transform(runtime_render_mat(host_world));
+    if needs_opacity_save {
+        renderer.modulate_opacity(host_opacity);
+    }
 
-    let list_style_local = instance
-        .runtime_layout_component_style_local(local_id)
-        .or_else(|| {
-            instance
-                .component(local_id)
-                .and_then(|component| component.parent_local)
-                .and_then(|parent_local| {
-                    instance.runtime_layout_component_style_local(parent_local)
-                })
-        });
-    let (padding_left, padding_top, gap, is_row) = list_style_local
-        .map(|style_local| {
-            (
-                instance
-                    .runtime_layout_style_double(
-                        style_local,
-                        RuntimeLayoutStyleProperty::PaddingLeft,
-                    )
-                    .unwrap_or(0.0),
-                instance
-                    .runtime_layout_style_double(
-                        style_local,
-                        RuntimeLayoutStyleProperty::PaddingTop,
-                    )
-                    .unwrap_or(0.0),
-                instance
-                    .runtime_layout_style_double(
-                        style_local,
-                        RuntimeLayoutStyleProperty::GapHorizontal,
-                    )
-                    .unwrap_or(0.0),
-                instance.runtime_layout_style_uint_default(
-                    style_local,
-                    RuntimeLayoutStyleProperty::FlexDirectionValue,
-                    2,
-                ) == 2,
-            )
-        })
-        .unwrap_or((0.0, 0.0, 0.0, true));
+    let list_layout = runtime_component_list_layout(instance, local_id);
 
     for (item_index, item) in items.iter().enumerate() {
         if nested_ancestors.contains(&item.child.graph_global_id) {
@@ -10272,31 +10990,18 @@ fn runtime_draw_component_list(
             command.local_id,
             item.child.graph_global_id,
             item_index,
-            item.render_cache_revision,
+            item.render_cache_generation,
         );
         let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
-        let item_offset = if is_row {
-            Mat2D([
-                1.0,
-                0.0,
-                0.0,
-                1.0,
-                padding_left + item_index as f32 * (item.child.width + gap),
-                padding_top,
-            ])
-        } else {
-            Mat2D([
-                1.0,
-                0.0,
-                0.0,
-                1.0,
-                padding_left,
-                padding_top + item_index as f32 * (item.child.height + gap),
-            ])
-        };
-
         renderer.save();
-        renderer.transform(runtime_render_mat(item_offset.multiply(item.transform)));
+        renderer.transform(runtime_render_mat(runtime_component_list_item_transform(
+            list_layout,
+            item_index,
+            items.len(),
+            item.child.width,
+            item.child.height,
+            item.transform,
+        )));
         if let Some(caches) = nested_paint_caches.as_deref_mut() {
             if !caches.contains_key(&cache_key) {
                 caches.insert(
@@ -10375,7 +11080,7 @@ fn runtime_draw_component_list(
         renderer.restore();
     }
 
-    if command.needs_save_operation {
+    if command.needs_save_operation || needs_opacity_save {
         renderer.restore();
     }
     Ok(())
@@ -10474,11 +11179,18 @@ fn runtime_draw_nested_artboard(
             .unwrap_or(host_component.transform.world_transform),
     };
     let host_opacity = host_component.transform.render_opacity;
+    if !host_opacity.is_finite() || host_opacity <= 0.0 {
+        return Ok(());
+    }
+    let needs_opacity_save = host_opacity != 1.0;
 
-    if command.needs_save_operation {
+    if command.needs_save_operation || needs_opacity_save {
         renderer.save();
     }
     renderer.transform(runtime_render_mat(host_world));
+    if needs_opacity_save {
+        renderer.modulate_opacity(host_opacity);
+    }
 
     let cache_key = nested_render_cache_key(
         command.global_id,
@@ -10566,7 +11278,7 @@ fn runtime_draw_nested_artboard(
             )?;
         }
 
-        if command.needs_save_operation {
+        if command.needs_save_operation || needs_opacity_save {
             renderer.restore();
         }
         return Ok(());
@@ -10574,9 +11286,6 @@ fn runtime_draw_nested_artboard(
 
     let mut child = ArtboardInstance::from_graph(runtime, child_graph)?;
     runtime_apply_nested_artboard_layout_child_bounds(&mut child, &command, layout_bounds)?;
-    if let Some(opacity_key) = runtime_draw_property_key_for_name("Artboard", "opacity") {
-        child.set_double_property(0, opacity_key, host_opacity);
-    }
     child.update_pass();
     if let Some(caches) = nested_paint_caches {
         let child_paint_cache = caches.entry(cache_key).or_default();
@@ -10641,7 +11350,7 @@ fn runtime_draw_nested_artboard(
         )?;
     }
 
-    if command.needs_save_operation {
+    if command.needs_save_operation || needs_opacity_save {
         renderer.restore();
     }
     Ok(())
@@ -17347,6 +18056,88 @@ fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concrete_hit_dedup_keeps_overlapping_component_list_occurrences() {
+        let hit = |item_index| RuntimeGeometryHit {
+            path: vec![
+                RuntimeGeometryHitPathSegment {
+                    artboard_global_id: 1,
+                    local_id: 4,
+                },
+                RuntimeGeometryHitPathSegment {
+                    artboard_global_id: 8,
+                    local_id: 2,
+                },
+            ],
+            occurrence: vec![RuntimeGeometryHitOccurrence {
+                artboard_global_id: 1,
+                host_local_id: 4,
+                item_index,
+            }],
+            bounds: RenderAabb::new(10.0, 20.0, 30.0, 40.0),
+            text_value: None,
+        };
+
+        let mut separated_paint_duplicate = hit(0);
+        separated_paint_duplicate.bounds = RenderAabb::new(100.0, 20.0, 120.0, 40.0);
+        let hits =
+            runtime_geometry_hits_front_to_back(vec![hit(0), separated_paint_duplicate, hit(1)]);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.occurrence[0].item_index)
+                .collect::<Vec<_>>(),
+            vec![1, 0],
+            "paint duplicates collapse regardless of bounds while equal-path/equal-bounds list items stay distinct",
+        );
+    }
+
+    #[test]
+    fn held_component_list_path_cache_is_disjoint_after_graph_and_empty_cycles() {
+        assert_ne!(
+            component_list_render_cache_key(Some(4), Some(2), 7, 1, 0),
+            component_list_render_cache_key(Some(4), Some(2), 7, 0, 1_u64 << 32),
+            "item index and generation must remain independent cache-key fields",
+        );
+
+        let first_a_generation =
+            crate::artboard::runtime_component_list_next_render_generation(None);
+        let first_a = component_list_render_cache_key(Some(4), Some(2), 7, 0, first_a_generation);
+        let mut cache = RuntimeRenderPathCache::default();
+        cache
+            .nested_artboards
+            .insert(first_a, RuntimeRenderPathCache::default());
+
+        let b_generation = crate::artboard::runtime_component_list_next_render_generation(Some(
+            first_a_generation,
+        ));
+        let returned_a_generation =
+            crate::artboard::runtime_component_list_next_render_generation(Some(b_generation));
+        let returned_a =
+            component_list_render_cache_key(Some(4), Some(2), 7, 0, returned_a_generation);
+        assert!(
+            !cache.nested_artboards.contains_key(&returned_a),
+            "A -> B -> A must not find A's first held path cache",
+        );
+
+        let empty_generation = crate::artboard::runtime_component_list_next_render_generation(
+            Some(first_a_generation),
+        );
+        let returned_after_empty_generation =
+            crate::artboard::runtime_component_list_next_render_generation(Some(empty_generation));
+        let returned_after_empty = component_list_render_cache_key(
+            Some(4),
+            Some(2),
+            7,
+            0,
+            returned_after_empty_generation,
+        );
+        assert!(
+            !cache.nested_artboards.contains_key(&returned_after_empty),
+            "A -> [] -> A must not find the pre-empty held path cache",
+        );
+    }
 
     #[test]
     fn geometry_bounds_use_cubic_extrema_instead_of_the_control_hull() {

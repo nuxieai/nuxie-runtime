@@ -12,6 +12,8 @@ nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-api = { path = "../nuxie-render-api" }
 nuxie-schema = { path = "../nuxie-schema" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 skrifa = "0.44"
 taffy = "0.12.1"
 
@@ -19,8 +21,6 @@ taffy = "0.12.1"
 nuxie-schema = { path = "../nuxie-schema" }
 
 [dev-dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 
 # Opt into the workspace panic-freedom clippy lints (root Cargo.toml).
 [lints]

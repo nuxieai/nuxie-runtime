@@ -6,6 +6,7 @@ mod constraints;
 mod data_bind_graph;
 mod draw;
 mod objects;
+mod project_data_converter;
 mod properties;
 mod scripting;
 mod state_machine;
@@ -17,7 +18,7 @@ pub use animation::{
     RuntimeKeyFrameDouble, RuntimeKeyFrameString, RuntimeKeyFrameUint, RuntimeKeyedObject,
     RuntimeKeyedProperty, RuntimeLinearAnimation,
 };
-pub use artboard::{ArtboardInstance, ExternalFontAssetError};
+pub use artboard::{ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment};
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,
     TransformRuntimeState, UpdateComponentsReport,
@@ -29,11 +30,13 @@ pub(crate) use data_bind_graph::{
 };
 pub use draw::{
     RuntimeContourMeasure, RuntimeDrawCommand, RuntimeDrawCommandKind,
-    RuntimeDrawCommandObjectKind, RuntimeFeatherState, RuntimeGeometryCache, RuntimeGradientStop,
-    RuntimeLayoutBoundsReport, RuntimePathCommand, RuntimePathMeasure, RuntimePathSample,
-    RuntimeRenderImages, RuntimeRenderPaintCache, RuntimeRenderPaints, RuntimeRenderPathCache,
-    RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind,
-    RuntimeShapePaintState, preallocate_render_paint_cache_for_artboard_instance,
+    RuntimeDrawCommandObjectKind, RuntimeFeatherState, RuntimeGeometryCache, RuntimeGeometryHit,
+    RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment, RuntimeGradientStop,
+    RuntimeImageDimensionConflict, RuntimeLayoutBoundsReport, RuntimePathCommand,
+    RuntimePathMeasure, RuntimePathSample, RuntimeRenderImages, RuntimeRenderPaintCache,
+    RuntimeRenderPaints, RuntimeRenderPathCache, RuntimeSemanticTextHit, RuntimeShapePaintCommand,
+    RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
+    preallocate_render_paint_cache_for_artboard_instance,
     preallocate_render_paint_cache_for_artboard_tree,
     preallocate_render_paint_cache_for_artboard_tree_with_external_images,
     preallocate_render_paint_cache_for_scripted_artboard_tree,
@@ -42,6 +45,17 @@ pub use draw::{
     preallocate_source_render_paints, runtime_path_commands_from_raw_path,
 };
 pub use objects::InstanceSlot;
+pub use project_data_converter::{
+    ProjectDataConverterCatalog, ProjectDataConverterCompileError, ProjectDataConverterContext,
+    ProjectDataConverterDefinition, ProjectDataConverterEasing, ProjectDataConverterFormat,
+    ProjectDataConverterKind, ProjectDataConverterMathOperation, ProjectDataConverterOutputType,
+    ProjectDataConverterProgram, ProjectDataConverterProgramError, ProjectDataConverterRangeClamp,
+    ProjectDataConverterResolver, ProjectDataConverterReverseResult,
+    ProjectDataConverterRuntimeError, ProjectDataConverterSpec, ProjectDataConverterState,
+    ProjectDataConverterStringPadSide, ProjectDataConverterStringTrimMode,
+    ProjectDataConverterValidationRule, ProjectDataValue, ProjectDataValuePath,
+    ProjectDataViewModelReference,
+};
 pub use scripting::{
     NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
     ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,
@@ -52,8 +66,8 @@ pub use scripting::{
 };
 pub use state_machine::{
     RuntimeLayerState, RuntimeStateMachine, RuntimeStateMachineInput, RuntimeStateMachineLayer,
-    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
-    StateMachineReportedEvent,
+    StateMachineEventContext, StateMachineInputInstance, StateMachineInputKind,
+    StateMachineInstance, StateMachineReportedEvent,
 };
 pub(crate) use state_machine::{
     RuntimeTransitionInterpolator, StateMachineBindableArtboardInstance,
@@ -83,10 +97,10 @@ pub use view_model::{
     RuntimeOwnedViewModelArtboardSourceHandle, RuntimeOwnedViewModelAssetSourceHandle,
     RuntimeOwnedViewModelBooleanSourceHandle, RuntimeOwnedViewModelColorSourceHandle,
     RuntimeOwnedViewModelEnumSourceHandle, RuntimeOwnedViewModelInstance,
-    RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelNumberSourceHandle,
-    RuntimeOwnedViewModelStringSourceHandle, RuntimeOwnedViewModelSymbolListIndexSourceHandle,
-    RuntimeOwnedViewModelTriggerSourceHandle, RuntimeOwnedViewModelViewModelSourceHandle,
-    runtime_data_context_lookup_reports,
+    RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelListStringMatchBooleanHandle,
+    RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
+    RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTriggerSourceHandle,
+    RuntimeOwnedViewModelViewModelSourceHandle, runtime_data_context_lookup_reports,
 };
 pub(crate) use view_model::{
     RuntimeViewModelPointer, runtime_default_view_model_artboard_property_path_for_name,

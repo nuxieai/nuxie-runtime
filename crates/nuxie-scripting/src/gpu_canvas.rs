@@ -12,6 +12,10 @@ use std::rc::Rc;
 use luaur_rt::{
     AnyUserData, Function, Table, UserData, UserDataFields, UserDataMethods, Value, VmState,
 };
+use nuxie_render_api::{Factory as RenderFactory, GpuCanvasPlan, GpuCanvasShader, RenderImage};
+pub use nuxie_render_api::{
+    GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+};
 
 use crate::vm::{Error, Result, ScriptVm};
 
@@ -54,50 +58,9 @@ impl GpuCanvasResourceBudget {
     }
 }
 
-/// One uniform binding produced by the Luau GPU-canvas program.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GpuCanvasUniformBuffer {
-    pub group: u32,
-    pub binding: u32,
-    pub bytes: Vec<u8>,
-}
-
-/// One vertex attribute in a script-authored pipeline layout.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GpuCanvasVertexAttribute {
-    pub shader_location: u32,
-    pub offset: u64,
-    pub format: String,
-}
-
-/// One script-authored vertex-buffer layout.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GpuCanvasVertexLayout {
-    pub stride: u64,
-    pub attributes: Vec<GpuCanvasVertexAttribute>,
-}
-
-/// One vertex buffer bound by the recorded render pass.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GpuCanvasVertexBuffer {
-    pub slot: u32,
-    pub bytes: Vec<u8>,
-}
-
-/// Backend-neutral GPU draw produced by executing one Luau frame.
-#[derive(Debug, Clone, PartialEq)]
-pub struct GpuCanvasDrawPlan {
-    pub width: u32,
-    pub height: u32,
-    pub clear_color: [f64; 4],
-    pub vertex_count: u32,
-    pub instance_count: u32,
-    pub first_vertex: u32,
-    pub first_instance: u32,
-    pub uniform_buffers: Vec<GpuCanvasUniformBuffer>,
-    pub vertex_layouts: Vec<GpuCanvasVertexLayout>,
-    pub vertex_buffers: Vec<GpuCanvasVertexBuffer>,
-}
+/// Backwards-compatible name for the backend-neutral plan now owned by the
+/// renderer API seam.
+pub type GpuCanvasDrawPlan = GpuCanvasPlan;
 
 #[derive(Debug, Clone)]
 struct CpuBuffer {
@@ -165,6 +128,7 @@ impl UserData for GpuShader {}
 
 #[derive(Debug, Clone)]
 struct GpuPipeline {
+    shader_name: String,
     vertex_layouts: Vec<GpuCanvasVertexLayout>,
 }
 
@@ -191,11 +155,30 @@ struct GpuBindGroup {
 
 impl UserData for GpuBindGroup {}
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug)]
+struct CompletedGpuCanvasPass {
+    shader_name: String,
+    plan: GpuCanvasDrawPlan,
+}
+
+#[derive(Default)]
 struct GpuCanvasState {
     width: u32,
     height: u32,
-    completed: Option<GpuCanvasDrawPlan>,
+    completed: Option<CompletedGpuCanvasPass>,
+    image: Option<Box<dyn RenderImage>>,
+}
+
+impl std::fmt::Debug for GpuCanvasState {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GpuCanvasState")
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .field("completed", &self.completed)
+            .field("has_image", &self.image.is_some())
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -205,7 +188,15 @@ struct GpuCanvas {
 
 impl UserData for GpuCanvas {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("image", |lua, _| lua.create_userdata(GpuCanvasImage));
+        fields.add_field_method_get("image", |lua, this| {
+            if this.state.borrow().image.is_none() {
+                return Ok(Value::Nil);
+            }
+            lua.create_userdata(GpuCanvasImage {
+                state: Rc::clone(&this.state),
+            })
+            .map(Value::UserData)
+        });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
@@ -264,36 +255,115 @@ impl UserData for GpuCanvas {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct GpuCanvasImage;
+#[derive(Debug, Clone)]
+pub(crate) struct GpuCanvasImage {
+    state: Rc<RefCell<GpuCanvasState>>,
+}
 
 impl UserData for GpuCanvasImage {}
 
 #[derive(Debug, Clone, Copy)]
-struct ImageSampler;
+pub(crate) struct ScriptedImageSampler(pub(crate) nuxie_render_api::ImageSampler);
 
-impl UserData for ImageSampler {}
+impl UserData for ScriptedImageSampler {}
 
 #[derive(Debug, Clone)]
-struct GpuCanvasContext {
+pub(crate) struct GpuCanvasContextBindings {
     canvas: GpuCanvas,
-    shader_name: String,
+    shader_names: Rc<BTreeSet<String>>,
 }
 
-impl UserData for GpuCanvasContext {
+impl GpuCanvasContextBindings {
+    pub(crate) fn canvas_userdata(&self, lua: &luaur_rt::Lua) -> Result<AnyUserData> {
+        lua.create_userdata(self.canvas.clone())
+    }
+
+    pub(crate) fn shader_userdata(&self, lua: &luaur_rt::Lua, name: String) -> Result<AnyUserData> {
+        if !self.shader_names.contains(&name) {
+            return Err(Error::runtime(format!(
+                "GPU-canvas shader '{name}' is unavailable"
+            )));
+        }
+        lua.create_userdata(GpuShader { name })
+    }
+}
+
+impl UserData for GpuCanvasContextBindings {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("gpuCanvas", |lua, this, ()| {
-            lua.create_userdata(this.canvas.clone())
-        });
+        methods.add_method("gpuCanvas", |lua, this, ()| this.canvas_userdata(lua));
         methods.add_method("shader", |lua, this, name: String| {
-            if name != this.shader_name {
-                return Err(Error::runtime(format!(
-                    "GPU-canvas shader '{name}' is unavailable"
-                )));
-            }
-            lua.create_userdata(GpuShader { name })
+            this.shader_userdata(lua, name)
         });
     }
+}
+
+/// Per-script retained GPU-canvas state. The Lua context and image userdata
+/// share this state, while canonical shader bytes remain VM-owned.
+pub(crate) struct ImportedGpuCanvasInstance {
+    state: Rc<RefCell<GpuCanvasState>>,
+    shaders: Rc<RefCell<BTreeMap<String, GpuCanvasShader>>>,
+}
+
+impl ImportedGpuCanvasInstance {
+    pub(crate) fn new(
+        shaders: Rc<RefCell<BTreeMap<String, GpuCanvasShader>>>,
+    ) -> (Self, GpuCanvasContextBindings) {
+        let state = Rc::new(RefCell::new(GpuCanvasState::default()));
+        let shader_names = Rc::new(shaders.borrow().keys().cloned().collect());
+        let bindings = GpuCanvasContextBindings {
+            canvas: GpuCanvas {
+                state: Rc::clone(&state),
+            },
+            shader_names,
+        };
+        (Self { state, shaders }, bindings)
+    }
+
+    pub(crate) fn execute_draw_canvas(
+        &self,
+        table: &Table,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<()> {
+        let value: Value = table.get("drawCanvas")?;
+        let Value::Function(function) = value else {
+            return Ok(());
+        };
+        {
+            let mut state = self.state.borrow_mut();
+            state.completed = None;
+            state.image = None;
+        }
+        function.call::<()>((table.clone(),))?;
+        let completed =
+            self.state.borrow_mut().completed.take().ok_or_else(|| {
+                Error::runtime("gpu-canvas drawCanvas did not finish a render pass")
+            })?;
+        let shaders = self.shaders.borrow();
+        let shader = shaders.get(&completed.shader_name).ok_or_else(|| {
+            Error::runtime(format!(
+                "GPU-canvas shader '{}' is unavailable",
+                completed.shader_name
+            ))
+        })?;
+        let image = factory
+            .make_gpu_canvas_image(shader, &completed.plan)
+            .map_err(|error| Error::runtime(format!("GPU-canvas render failed: {error}")))?;
+        drop(shaders);
+        self.state.borrow_mut().image = Some(image);
+        Ok(())
+    }
+}
+
+pub(crate) fn with_gpu_canvas_image<R>(
+    image: &GpuCanvasImage,
+    callback: impl FnOnce(&dyn RenderImage) -> R,
+) -> Result<R> {
+    let state = image.state.borrow();
+    let image = state
+        .image
+        .as_deref()
+        .ok_or_else(|| Error::runtime("GPU-canvas image is unavailable before drawCanvas"))?;
+    Ok(callback(image))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -501,7 +571,10 @@ impl UserData for GpuRenderPass {
                 vertex_buffers,
             };
             drop(state);
-            this.state.borrow_mut().completed = Some(plan);
+            this.state.borrow_mut().completed = Some(CompletedGpuCanvasPass {
+                shader_name: pipeline.shader_name.clone(),
+                plan,
+            });
             this.finished = true;
             Ok(())
         });
@@ -559,14 +632,15 @@ impl GpuCanvasProgram {
             Ok(VmState::Continue)
         });
         let resource_budget = Rc::new(RefCell::new(GpuCanvasResourceBudget::default()));
-        install_gpu_canvas_globals(&vm, resource_budget)?;
+        install_gpu_canvas_globals_with_budget(&vm, resource_budget)?;
         let state = Rc::new(RefCell::new(GpuCanvasState::default()));
-        let context = vm.lua().create_userdata(GpuCanvasContext {
+        let bindings = GpuCanvasContextBindings {
             canvas: GpuCanvas {
                 state: Rc::clone(&state),
             },
-            shader_name: "scene".into(),
-        })?;
+            shader_names: Rc::new(BTreeSet::from(["scene".into()])),
+        };
+        let context = vm.lua().create_userdata(bindings)?;
         let chunk = vm
             .load("editor-gpu-canvas", source)
             .map_err(|error| Error::runtime(format!("gpu-canvas Luau syntax error: {error}")))?;
@@ -615,6 +689,7 @@ impl GpuCanvasProgram {
             .borrow_mut()
             .completed
             .take()
+            .map(|completed| completed.plan)
             .ok_or_else(|| Error::runtime("gpu-canvas drawCanvas did not finish a render pass"))
     }
 
@@ -623,7 +698,14 @@ impl GpuCanvasProgram {
     }
 }
 
-fn install_gpu_canvas_globals(
+pub(crate) fn install_gpu_canvas_globals(vm: &ScriptVm) -> Result<()> {
+    install_gpu_canvas_globals_with_budget(
+        vm,
+        Rc::new(RefCell::new(GpuCanvasResourceBudget::default())),
+    )
+}
+
+fn install_gpu_canvas_globals_with_budget(
     vm: &ScriptVm,
     resource_budget: Rc<RefCell<GpuCanvasResourceBudget>>,
 ) -> Result<()> {
@@ -728,6 +810,7 @@ fn install_gpu_canvas_globals(
             ));
         }
         lua.create_userdata(GpuPipeline {
+            shader_name: vertex.name.clone(),
             vertex_layouts: decode_vertex_layouts(&descriptor)?,
         })
     })?;
@@ -785,7 +868,31 @@ fn install_gpu_canvas_globals(
     })?;
     lua.globals().set(
         "ImageSampler",
-        lua.create_function(|lua, _: Value| lua.create_userdata(ImageSampler))?,
+        lua.create_function(|lua, (wrap_x, wrap_y, filter): (String, String, String)| {
+            use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
+            let parse_wrap = |value: &str| match value {
+                "clamp" => Ok(ImageWrap::Clamp),
+                "repeat" => Ok(ImageWrap::Repeat),
+                "mirror" => Ok(ImageWrap::Mirror),
+                other => Err(Error::runtime(format!(
+                    "unsupported image sampler wrap '{other}'"
+                ))),
+            };
+            let filter = match filter.as_str() {
+                "linear" => ImageFilter::Bilinear,
+                "nearest" => ImageFilter::Nearest,
+                other => {
+                    return Err(Error::runtime(format!(
+                        "unsupported image sampler filter '{other}'"
+                    )));
+                }
+            };
+            lua.create_userdata(ScriptedImageSampler(ImageSampler {
+                wrap_x: parse_wrap(&wrap_x)?,
+                wrap_y: parse_wrap(&wrap_y)?,
+                filter,
+            }))
+        })?,
     )?;
     Ok(())
 }

@@ -42,9 +42,10 @@ mod work_metrics;
 
 use bytemuck::{Pod, Zeroable};
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, PathVerb,
-    RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
-    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
+    ImageDecodeError, ImageSampler, Mat2D, PathVerb, RawPath, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
+    Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 use std::any::Any;
 use std::cell::RefCell;
@@ -152,6 +153,8 @@ fn validate_atomic_path_count(path_count: usize) -> Result<(), RendererError> {
 struct Context {
     device: wgpu::Device,
     queue: wgpu::Queue,
+    #[cfg(target_arch = "wasm32")]
+    uncaptured_errors: Arc<Mutex<Vec<String>>>,
     frame_attachments: FrameAttachmentPool,
     adapter_info: WgpuAdapterInfo,
     non_zero_stencil_pipeline: wgpu::RenderPipeline,
@@ -342,6 +345,8 @@ pub struct WgpuFrameMetrics {
     pub backend_work: BackendWorkMetrics,
 }
 
+#[cfg(target_arch = "wasm32")]
+pub use gpu_canvas::WebGl2GpuCanvasRenderer;
 pub use gpu_canvas::{
     GpuCanvasRenderPlan, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer,
     GpuCanvasVertexLayout,
@@ -421,6 +426,18 @@ impl WgpuFactory {
             })
             .await
             .map_err(|error| RendererError::Device(error.to_string()))?;
+        #[cfg(target_arch = "wasm32")]
+        let uncaptured_errors = {
+            let errors = Arc::new(Mutex::new(Vec::new()));
+            let error_sink = Arc::clone(&errors);
+            device.on_uncaptured_error(Arc::new(move |error| {
+                error_sink
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .push(error.to_string());
+            }));
+            errors
+        };
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("nuxie-solid-shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("solid.wgsl").into()),
@@ -553,6 +570,8 @@ impl WgpuFactory {
             context: Arc::new(Context {
                 device,
                 queue,
+                #[cfg(target_arch = "wasm32")]
+                uncaptured_errors,
                 frame_attachments,
                 adapter_info,
                 non_zero_stencil_pipeline,
@@ -765,6 +784,14 @@ impl Factory for WgpuFactory {
             texture: Some(Arc::new(WgpuImageTexture { texture, view })),
             owner: Arc::downgrade(&self.context),
         }))
+    }
+
+    fn make_gpu_canvas_image(
+        &mut self,
+        shader: &GpuCanvasShader,
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        self.make_imported_gpu_canvas_image(shader, plan)
     }
 }
 
@@ -5031,6 +5058,7 @@ impl WgpuFrame {
             tessellation_uploads.borrow_mut().flush(&self.context.queue);
             self.context.queue.submit_counted(Some(encoder.finish()));
             wait_for_submitted_work(&self.context).await?;
+            return_uncaptured_device_error(&self.context)?;
             tessellation_texture_frame.borrow_mut().recycle();
             #[cfg(feature = "perf-diagnostics")]
             {
@@ -5113,7 +5141,9 @@ impl WgpuFrame {
         tessellation_uploads.borrow_mut().flush(&self.context.queue);
         self.context.queue.submit_counted(Some(encoder.finish()));
         let slice = readback.slice(..);
-        map_buffer(&self.context, &slice).await?;
+        let map_result = map_buffer(&self.context, &slice).await;
+        return_uncaptured_device_error(&self.context)?;
+        map_result?;
         let mapped = slice
             .get_mapped_range()
             .map_err(|error| RendererError::Map(error.to_string()))?;
@@ -5175,6 +5205,30 @@ impl WgpuFrame {
             atomic_color_snapshots,
             backend_work,
         ))
+    }
+}
+
+fn return_uncaptured_device_error(context: &Context) -> Result<(), RendererError> {
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = context;
+    #[cfg(not(target_arch = "wasm32"))]
+    return Ok(());
+
+    #[cfg(target_arch = "wasm32")]
+    let errors = {
+        let mut errors = context
+            .uncaptured_errors
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        std::mem::take(&mut *errors)
+    };
+    #[cfg(target_arch = "wasm32")]
+    {
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(RendererError::Device(errors.join("; ")))
+        }
     }
 }
 

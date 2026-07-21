@@ -1,9 +1,12 @@
-use crate::ArtboardInstance;
 use crate::animation::{
     AnimationLoop, LinearAnimationInstance, RuntimeInterpolator, RuntimeLinearAnimation,
 };
 use crate::data_bind_graph::data_bind_flags_apply_target_to_source;
 use crate::properties::{artboard_index_for_graph, property_key_for_name};
+use crate::{
+    ArtboardInstance, RuntimeGeometryHit, RuntimeGeometryHitOccurrence,
+    RuntimeGeometryHitPathSegment,
+};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use nuxie_graph::{ArtboardGraph, ParametricPathNode};
 use std::collections::BTreeMap;
@@ -447,6 +450,7 @@ pub(crate) struct RuntimeStateMachineListener {
     pub(crate) target_local_id: usize,
     pub(crate) listener_types: Vec<RuntimeListenerType>,
     pub(crate) event_local_indices: Vec<usize>,
+    pub(crate) view_model_property_path: Option<Vec<usize>>,
     pub(crate) hit_paths: Vec<RuntimeListenerHitPath>,
     pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
 }
@@ -588,7 +592,11 @@ fn runtime_state_machine_listener(
     let listener_types = runtime_listener_types(listener)
         .into_iter()
         .filter(|listener_type| {
-            listener_type.is_pointer_hit() || *listener_type == RuntimeListenerType::Event
+            listener_type.is_pointer_hit()
+                || matches!(
+                    listener_type,
+                    RuntimeListenerType::Event | RuntimeListenerType::ViewModel
+                )
         })
         .collect::<Vec<_>>();
     if listener_types.is_empty() {
@@ -608,11 +616,13 @@ fn runtime_state_machine_listener(
         Vec::new()
     };
     let event_local_indices = runtime_listener_event_local_indices(listener);
+    let view_model_property_path = runtime_listener_view_model_property_path(listener);
 
     Some(RuntimeStateMachineListener {
         target_local_id,
         listener_types,
         event_local_indices,
+        view_model_property_path,
         hit_paths,
         listener_actions: listener
             .actions
@@ -626,6 +636,39 @@ fn runtime_state_machine_listener(
             })
             .collect(),
     })
+}
+
+fn runtime_listener_view_model_property_path(
+    listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
+) -> Option<Vec<usize>> {
+    let encoded = if listener.object.type_name == "StateMachineListenerSingle" {
+        (listener
+            .object
+            .uint_property("listenerTypeValue")
+            .and_then(RuntimeListenerType::from_value)
+            == Some(RuntimeListenerType::ViewModel))
+        .then(|| listener.object.id_list_property("viewModelPathIds"))
+        .flatten()
+    } else {
+        listener
+            .listener_input_types
+            .iter()
+            .find(|input_type| {
+                input_type
+                    .uint_property("listenerTypeValue")
+                    .and_then(RuntimeListenerType::from_value)
+                    == Some(RuntimeListenerType::ViewModel)
+            })
+            .and_then(|input_type| input_type.id_list_property("viewModelPathIds"))
+    }?;
+    let path = encoded
+        .iter()
+        .skip(1)
+        .copied()
+        .map(usize::try_from)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    (!path.is_empty()).then_some(path)
 }
 
 fn runtime_listener_types(
@@ -760,12 +803,54 @@ enum StateMachineInputValue {
 }
 
 // Mirrors the runtime event report surface threaded through state-machine advancement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StateMachineEventStringProperty {
+    name: String,
+    value: String,
+}
+
+impl StateMachineEventStringProperty {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StateMachineReportedEvent {
     pub(crate) event_local_index: usize,
     pub(crate) event_core_type: u32,
     pub(crate) name: Option<String>,
+    pub(crate) string_properties: Vec<StateMachineEventStringProperty>,
     pub(crate) seconds_delay: f32,
+    pub(crate) context: Option<StateMachineEventContext>,
+}
+
+/// Exact rendered occurrence that caused a pointer-listener event.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StateMachineEventContext {
+    path: Vec<RuntimeGeometryHitPathSegment>,
+    occurrence: Vec<RuntimeGeometryHitOccurrence>,
+}
+
+impl StateMachineEventContext {
+    pub fn from_geometry_hit(hit: &RuntimeGeometryHit) -> Self {
+        Self {
+            path: hit.path.clone(),
+            occurrence: hit.occurrence.clone(),
+        }
+    }
+
+    pub fn path(&self) -> &[RuntimeGeometryHitPathSegment] {
+        &self.path
+    }
+
+    pub fn occurrence(&self) -> &[RuntimeGeometryHitOccurrence] {
+        &self.occurrence
+    }
 }
 
 impl StateMachineReportedEvent {
@@ -781,8 +866,58 @@ impl StateMachineReportedEvent {
         self.name.as_deref()
     }
 
+    pub fn string_properties(&self) -> &[StateMachineEventStringProperty] {
+        &self.string_properties
+    }
+
     pub fn seconds_delay(&self) -> f32 {
         self.seconds_delay
+    }
+
+    pub fn context(&self) -> Option<&StateMachineEventContext> {
+        self.context.as_ref()
+    }
+}
+
+fn imported_reported_event(
+    file: &RuntimeFile,
+    event: &RuntimeObject,
+    event_local_index: usize,
+) -> StateMachineReportedEvent {
+    let artboard_index = (0..file.artboards().len()).find(|artboard_index| {
+        file.artboard_local_object(*artboard_index, event_local_index)
+            .is_some_and(|candidate| candidate.id == event.id)
+    });
+    let string_properties = artboard_index
+        .and_then(|artboard_index| file.artboard_local_object_slots(artboard_index))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|object| {
+            object.type_name == "CustomPropertyString"
+                && object.uint_property("parentId") == Some(event_local_index as u64)
+        })
+        .filter_map(|object| {
+            let name = object.string_property("name")?.trim();
+            (!name.is_empty()).then(|| StateMachineEventStringProperty {
+                name: name.to_string(),
+                value: object
+                    .string_property("propertyValue")
+                    .unwrap_or_default()
+                    .to_string(),
+            })
+        })
+        .collect();
+    StateMachineReportedEvent {
+        event_local_index,
+        event_core_type: u32::from(event.type_key),
+        name: event
+            .string_property("name")
+            .filter(|name| !name.is_empty())
+            .map(ToOwned::to_owned),
+        string_properties,
+        seconds_delay: 0.0,
+        context: None,
     }
 }
 
@@ -1107,15 +1242,7 @@ impl RuntimeStateMachineFireAction {
                 let event = action.event?;
                 Some(Self::Event {
                     occurs_value,
-                    event: StateMachineReportedEvent {
-                        event_local_index: action.event_local_index?,
-                        event_core_type: u32::from(event.type_key),
-                        name: event
-                            .string_property("name")
-                            .filter(|name| !name.is_empty())
-                            .map(ToOwned::to_owned),
-                        seconds_delay: 0.0,
-                    },
+                    event: imported_reported_event(file, event, action.event_local_index?),
                 })
             }
             "StateMachineFireTrigger" => Some(Self::Trigger {
@@ -1754,15 +1881,7 @@ impl RuntimeScheduledListenerAction {
                 let event = action.event?;
                 Some(Self::FireEvent {
                     flags,
-                    event: StateMachineReportedEvent {
-                        event_local_index: action.event_local_index?,
-                        event_core_type: u32::from(event.type_key),
-                        name: event
-                            .string_property("name")
-                            .filter(|name| !name.is_empty())
-                            .map(ToOwned::to_owned),
-                        seconds_delay: 0.0,
-                    },
+                    event: imported_reported_event(file, event, action.event_local_index?),
                 })
             }
             "ListenerBoolChange" => Some(Self::BoolChange {

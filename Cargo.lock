@@ -93,9 +93,14 @@ dependencies = [
 name = "browser-renderer-smoke"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
+ "luaur-common",
+ "luaur-compiler",
  "nuxie",
  "nuxie-render-stream",
+ "nuxie-schema",
  "pixel-compare",
+ "png",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -715,6 +720,7 @@ dependencies = [
  "naga-types",
  "num-traits",
  "once_cell",
+ "pp-rs",
  "rustc-hash",
  "spirv",
  "thiserror",
@@ -836,6 +842,7 @@ dependencies = [
  "image-webp",
  "imgref",
  "jpeg-decoder",
+ "js-sys",
  "moxcms",
  "naga",
  "nuxie-render-api",
@@ -845,6 +852,7 @@ dependencies = [
  "rgb",
  "sha2",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
  "wgpu",
 ]
@@ -1086,6 +1094,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a106d1259c23fac8e543272398ae0e3c0b8d33c88ed73d0cc71b0f1d902618"
 dependencies = [
  "portable-atomic",
+]
+
+[[package]]
+name = "pp-rs"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb458bb7f6e250e6eb79d5026badc10a3ebb8f9a15d1fff0f13d17c71f4d6dee"
+dependencies = [
+ "unicode-xid",
 ]
 
 [[package]]
@@ -1470,6 +1487,12 @@ name = "unicode-width"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
+
+[[package]]
+name = "unicode-xid"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "version_check"

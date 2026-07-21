@@ -12351,7 +12351,9 @@ fn cpp_artboard_local_slot_is_valid(
         else {
             return false;
         };
-        if !runtime_object_is_container_component(parent) {
+        let component_list_machine_selection =
+            definition.is_a("NestedAnimation") && parent.type_name == "ArtboardListMapRule";
+        if !runtime_object_is_container_component(parent) && !component_list_machine_selection {
             return false;
         }
     }
@@ -12368,7 +12370,8 @@ fn cpp_artboard_local_slot_is_valid(
         else {
             return false;
         };
-        return runtime_object_is_cpp_nested_artboard(parent);
+        return runtime_object_is_cpp_nested_artboard(parent)
+            || parent.type_name == "ArtboardListMapRule";
     }
 
     if definition.is_a("TextStyle") {

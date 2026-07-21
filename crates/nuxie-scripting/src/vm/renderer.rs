@@ -23,6 +23,7 @@ use nuxie_runtime::{
 };
 
 use super::view_model::{create_scripted_view_model, model_from_table};
+use crate::gpu_canvas::{GpuCanvasImage, ScriptedImageSampler, with_gpu_canvas_image};
 
 #[derive(Clone, Default)]
 pub(crate) struct RendererBindings {
@@ -395,6 +396,34 @@ impl UserData for ScriptedRenderer {
                     };
                     Ok(())
                 })
+            },
+        );
+        methods.add_method(
+            "drawImage",
+            |_,
+             this,
+             (image, sampler, blend_mode, opacity): (
+                AnyUserData,
+                AnyUserData,
+                String,
+                Option<f32>,
+            )| {
+                this.validate()?;
+                let image = image.borrow::<GpuCanvasImage>()?;
+                let sampler = sampler.borrow::<ScriptedImageSampler>()?;
+                let blend_mode = parse_blend_mode_name(&blend_mode)?;
+                with_gpu_canvas_image(&image, |image| {
+                    let mut renderer = this.renderer_mut()?;
+                    unsafe {
+                        renderer.as_mut().draw_image(
+                            Some(image),
+                            sampler.0,
+                            blend_mode,
+                            opacity.unwrap_or(1.0),
+                        )
+                    };
+                    Ok(())
+                })?
             },
         );
     }
@@ -1112,7 +1141,11 @@ fn cap_name(cap: StrokeCap) -> &'static str {
 }
 
 fn parse_blend_mode(value: Value) -> Result<BlendMode> {
-    match string_value(value)?.as_str() {
+    parse_blend_mode_name(&string_value(value)?)
+}
+
+fn parse_blend_mode_name(value: &str) -> Result<BlendMode> {
+    match value {
         "srcOver" => Ok(BlendMode::SrcOver),
         "screen" => Ok(BlendMode::Screen),
         "overlay" => Ok(BlendMode::Overlay),

@@ -175,6 +175,7 @@ pub struct ArtboardInstance {
     pub(crate) list_follow_path_constraints: Vec<RuntimeListFollowPathConstraint>,
     pub(crate) scroll_constraints: Vec<RuntimeScrollConstraint>,
     pub(crate) component_list_item_transforms: BTreeMap<usize, Vec<Mat2D>>,
+    component_list_render_generations: BTreeMap<usize, u64>,
     pub(crate) component_list_items: BTreeMap<usize, Vec<RuntimeComponentListItemInstance>>,
     pub(crate) component_list_sources: BTreeMap<usize, RuntimeOwnedViewModelListHandle>,
     pub(crate) ik_constraints: Vec<RuntimeIkConstraint>,
@@ -252,14 +253,51 @@ pub(crate) struct RuntimeNestedArtboardInstance {
 }
 
 /// Ported from C++ `src/artboard_component_list.cpp`: one persistent child
-/// artboard and state machine for an owned view-model list item.
+/// artboard and its selected state machines for an owned view-model list item.
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeComponentListItemInstance {
     pub(crate) child: Box<ArtboardInstance>,
-    pub(crate) state_machine: Option<StateMachineInstance>,
+    pub(crate) state_machines: Vec<StateMachineInstance>,
     pub(crate) context: RuntimeOwnedViewModelInstance,
     pub(crate) transform: Mat2D,
-    pub(crate) render_cache_revision: u64,
+    pub(crate) render_cache_generation: u64,
+}
+
+/// One exact descent edge from a retained root artboard to a nested occurrence.
+///
+/// This is a runtime-internal address primitive. Higher layers should wrap it
+/// in their own epoch-fenced semantic cursor rather than exposing local ids.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeArtboardOccurrenceSegment {
+    NestedArtboard {
+        host_local_id: usize,
+    },
+    ComponentListItem {
+        host_local_id: usize,
+        item_index: usize,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeComponentListItemStructure {
+    context_identity: u64,
+    view_model_index: usize,
+    child_graph_global_id: u32,
+}
+
+fn runtime_component_list_structure_changed(
+    existing: Option<&[RuntimeComponentListItemStructure]>,
+    replacement: &[RuntimeComponentListItemStructure],
+) -> bool {
+    existing != Some(replacement)
+}
+
+pub(crate) fn runtime_component_list_next_render_generation(current: Option<u64>) -> u64 {
+    current.map_or(0, |generation| {
+        generation
+            .checked_add(1)
+            .expect("component-list render generation exhausted")
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -300,6 +338,17 @@ enum RuntimeNestedAnimationInstance {
 }
 
 impl ArtboardInstance {
+    fn advance_component_list_render_generation(&mut self, list_local_id: usize) -> u64 {
+        let generation = runtime_component_list_next_render_generation(
+            self.component_list_render_generations
+                .get(&list_local_id)
+                .copied(),
+        );
+        self.component_list_render_generations
+            .insert(list_local_id, generation);
+        generation
+    }
+
     /// Clone used only by draw/layout evaluation of the same concrete
     /// occurrence. Unlike the public occurrence clone, this explicitly keeps
     /// the VM table handles needed to render scripted drawables. Lifecycle
@@ -503,6 +552,7 @@ impl ArtboardInstance {
             list_follow_path_constraints,
             scroll_constraints,
             component_list_item_transforms: BTreeMap::new(),
+            component_list_render_generations: BTreeMap::new(),
             component_list_items: BTreeMap::new(),
             component_list_sources: BTreeMap::new(),
             ik_constraints,
@@ -1378,6 +1428,140 @@ impl ArtboardInstance {
         Some(StateMachineInstance::new(index, state_machine, self))
     }
 
+    /// Resolve a named input on the selected state machine attached to one
+    /// exact nested/component-list occurrence.
+    pub fn occurrence_state_machine_input(
+        &self,
+        occurrence: &[RuntimeArtboardOccurrenceSegment],
+        state_machine_index: usize,
+        name: &str,
+    ) -> Option<(usize, StateMachineInputKind)> {
+        let state_machine = self.occurrence_state_machine(occurrence, state_machine_index)?;
+        let input_index = state_machine.input_index_named(name)?;
+        Some((input_index, state_machine.input(input_index)?.kind()))
+    }
+
+    /// Write a boolean to the selected state machine on one exact retained
+    /// nested/component-list occurrence.
+    pub fn set_occurrence_state_machine_bool(
+        &mut self,
+        occurrence: &[RuntimeArtboardOccurrenceSegment],
+        state_machine_index: usize,
+        input_index: usize,
+        value: bool,
+    ) -> Option<bool> {
+        let state_machine = self.occurrence_state_machine_mut(occurrence, state_machine_index)?;
+        if state_machine
+            .input(input_index)
+            .is_none_or(|input| input.kind() != StateMachineInputKind::Bool)
+        {
+            return None;
+        }
+        Some(state_machine.set_bool(input_index, value))
+    }
+
+    fn occurrence_state_machine(
+        &self,
+        occurrence: &[RuntimeArtboardOccurrenceSegment],
+        state_machine_index: usize,
+    ) -> Option<&StateMachineInstance> {
+        let (last, prefix) = occurrence.split_last()?;
+        let mut parent = self;
+        for segment in prefix {
+            parent = match *segment {
+                RuntimeArtboardOccurrenceSegment::NestedArtboard { host_local_id } => {
+                    parent.nested_artboards.get(&host_local_id)?.child.as_ref()
+                }
+                RuntimeArtboardOccurrenceSegment::ComponentListItem {
+                    host_local_id,
+                    item_index,
+                } => parent
+                    .component_list_items
+                    .get(&host_local_id)?
+                    .get(item_index)?
+                    .child
+                    .as_ref(),
+            };
+        }
+        match *last {
+            RuntimeArtboardOccurrenceSegment::NestedArtboard { host_local_id } => parent
+                .nested_artboards
+                .get(&host_local_id)?
+                .animations
+                .iter()
+                .find_map(|animation| match animation {
+                    RuntimeNestedAnimationInstance::StateMachine { state_machine, .. }
+                        if state_machine.state_machine_index() == state_machine_index =>
+                    {
+                        Some(state_machine)
+                    }
+                    _ => None,
+                }),
+            RuntimeArtboardOccurrenceSegment::ComponentListItem {
+                host_local_id,
+                item_index,
+            } => parent
+                .component_list_items
+                .get(&host_local_id)?
+                .get(item_index)?
+                .state_machines
+                .iter()
+                .find(|machine| machine.state_machine_index() == state_machine_index),
+        }
+    }
+
+    fn occurrence_state_machine_mut(
+        &mut self,
+        occurrence: &[RuntimeArtboardOccurrenceSegment],
+        state_machine_index: usize,
+    ) -> Option<&mut StateMachineInstance> {
+        let (last, prefix) = occurrence.split_last()?;
+        let mut parent = self;
+        for segment in prefix {
+            parent = match *segment {
+                RuntimeArtboardOccurrenceSegment::NestedArtboard { host_local_id } => parent
+                    .nested_artboards
+                    .get_mut(&host_local_id)?
+                    .child
+                    .as_mut(),
+                RuntimeArtboardOccurrenceSegment::ComponentListItem {
+                    host_local_id,
+                    item_index,
+                } => parent
+                    .component_list_items
+                    .get_mut(&host_local_id)?
+                    .get_mut(item_index)?
+                    .child
+                    .as_mut(),
+            };
+        }
+        match *last {
+            RuntimeArtboardOccurrenceSegment::NestedArtboard { host_local_id } => parent
+                .nested_artboards
+                .get_mut(&host_local_id)?
+                .animations
+                .iter_mut()
+                .find_map(|animation| match animation {
+                    RuntimeNestedAnimationInstance::StateMachine { state_machine, .. }
+                        if state_machine.state_machine_index() == state_machine_index =>
+                    {
+                        Some(state_machine)
+                    }
+                    _ => None,
+                }),
+            RuntimeArtboardOccurrenceSegment::ComponentListItem {
+                host_local_id,
+                item_index,
+            } => parent
+                .component_list_items
+                .get_mut(&host_local_id)?
+                .get_mut(item_index)?
+                .state_machines
+                .iter_mut()
+                .find(|machine| machine.state_machine_index() == state_machine_index),
+        }
+    }
+
     /// Ported from C++ `src/artboard_component_list.cpp::updateList`,
     /// `findArtboard`, and `createArtboardAt`.
     pub(crate) fn sync_component_list_items(
@@ -1386,17 +1570,36 @@ impl ArtboardInstance {
         list_local_id: usize,
         contexts: Vec<RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        if self
-            .component_list_items
-            .get(&list_local_id)
-            .is_some_and(|existing| {
-                existing.len() == contexts.len()
-                    && existing.iter().zip(&contexts).all(|(item, context)| {
-                        item.context.instance_identity() == context.instance_identity()
-                    })
-            })
-        {
-            return false;
+        let stable_identities =
+            self.component_list_items
+                .get(&list_local_id)
+                .is_some_and(|existing| {
+                    existing.len() == contexts.len()
+                        && existing.iter().zip(&contexts).all(|(item, context)| {
+                            item.context.instance_identity() == context.instance_identity()
+                                && item.context.view_model_index() == context.view_model_index()
+                        })
+                });
+        if stable_identities {
+            let mut changed = false;
+            if let Some(existing) = self.component_list_items.get_mut(&list_local_id) {
+                for (item, context) in existing.iter_mut().zip(contexts) {
+                    if item.context.mutation_generation() == context.mutation_generation() {
+                        continue;
+                    }
+                    item.context = context;
+                    changed |= item
+                        .child
+                        .bind_owned_view_model_artboard_context(file, &item.context);
+                    for state_machine in &mut item.state_machines {
+                        changed |= state_machine.bind_owned_view_model_context(&item.context);
+                    }
+                }
+            }
+            if changed {
+                self.mark_prepared_changed();
+            }
+            return changed;
         }
         let Some(build_context) = self.build_context.clone() else {
             return false;
@@ -1418,11 +1621,11 @@ impl ArtboardInstance {
 
         let mut items = Vec::with_capacity(contexts.len());
         for context in contexts {
-            let mapped_index = component_list
+            let mapped_rule = component_list
                 .map_rules
                 .iter()
-                .find(|rule| rule.view_model_id == context.view_model_index() as i64)
-                .and_then(|rule| usize::try_from(rule.artboard_id).ok());
+                .find(|rule| rule.view_model_id == context.view_model_index() as i64);
+            let mapped_index = mapped_rule.and_then(|rule| usize::try_from(rule.artboard_id).ok());
             let child_graph = mapped_index
                 .and_then(|index| build_context.artboards.get(index))
                 .or_else(|| {
@@ -1449,26 +1652,63 @@ impl ArtboardInstance {
             };
             child.inherit_external_font_assets(&self.external_font_assets);
             child.bind_owned_view_model_artboard_context(file, &context);
-            let mut state_machine = child.state_machine_instance(0);
-            if let Some(state_machine) = state_machine.as_mut() {
+            let selected_machine_indices = mapped_rule
+                .filter(|rule| !rule.state_machine_ids.is_empty())
+                .map(|rule| rule.state_machine_ids.clone())
+                .unwrap_or_else(|| vec![0]);
+            let mut state_machines = Vec::with_capacity(selected_machine_indices.len());
+            for machine_index in selected_machine_indices {
+                let Some(mut state_machine) = child.state_machine_instance(machine_index) else {
+                    continue;
+                };
                 state_machine.bind_owned_view_model_context(&context);
-                child.advance_state_machine_instance(state_machine, 0.0);
+                child.advance_state_machine_instance(&mut state_machine, 0.0);
+                state_machines.push(state_machine);
             }
             child.advance_artboard_data_binds_with_elapsed(0.0);
             child.update_pass();
             items.push(RuntimeComponentListItemInstance {
                 child: Box::new(child),
-                state_machine,
+                state_machines,
                 context,
                 transform: Mat2D::IDENTITY,
-                render_cache_revision: 0,
+                render_cache_generation: 0,
             });
         }
 
-        let changed = self
-            .component_list_items
-            .get(&list_local_id)
-            .is_none_or(|existing| existing.len() != items.len());
+        let existing_structure = self.component_list_items.get(&list_local_id).map(|items| {
+            items
+                .iter()
+                .map(|item| RuntimeComponentListItemStructure {
+                    context_identity: item.context.instance_identity(),
+                    view_model_index: item.context.view_model_index(),
+                    child_graph_global_id: item.child.graph_global_id,
+                })
+                .collect::<Vec<_>>()
+        });
+        let replacement_structure = items
+            .iter()
+            .map(|item| RuntimeComponentListItemStructure {
+                context_identity: item.context.instance_identity(),
+                view_model_index: item.context.view_model_index(),
+                child_graph_global_id: item.child.graph_global_id,
+            })
+            .collect::<Vec<_>>();
+        let changed = runtime_component_list_structure_changed(
+            existing_structure.as_deref(),
+            &replacement_structure,
+        );
+        let render_generation = if changed {
+            self.advance_component_list_render_generation(list_local_id)
+        } else {
+            self.component_list_render_generations
+                .get(&list_local_id)
+                .copied()
+                .unwrap_or(0)
+        };
+        for item in &mut items {
+            item.render_cache_generation = render_generation;
+        }
         self.component_list_item_transforms.insert(
             list_local_id,
             items.iter().map(|item| item.transform).collect(),
@@ -1506,23 +1746,51 @@ impl ArtboardInstance {
         instance: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
+        self.advance_state_machine_instance_with_context(instance, elapsed_seconds, None)
+    }
+
+    fn advance_state_machine_instance_with_context(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
         let state_machines = Arc::clone(&self.state_machines);
         let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
             return false;
         };
-        instance.advance(self, state_machine, elapsed_seconds)
+        let mut owned_context = owned_context;
+        let mut changed = instance.advance(self, state_machine, elapsed_seconds);
+        changed |= instance.apply_local_event_listeners(
+            self,
+            state_machine,
+            0,
+            owned_context.as_deref_mut(),
+        );
+        changed
     }
 
     fn advance_state_machine_instance_preserving_events(
         &mut self,
         instance: &mut StateMachineInstance,
         elapsed_seconds: f32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
         let state_machines = Arc::clone(&self.state_machines);
         let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
             return false;
         };
-        instance.advance_preserving_reported_events(self, state_machine, elapsed_seconds)
+        let mut owned_context = owned_context;
+        let next_event_index = instance.reported_event_count();
+        let mut changed =
+            instance.advance_preserving_reported_events(self, state_machine, elapsed_seconds);
+        changed |= instance.apply_local_event_listeners(
+            self,
+            state_machine,
+            next_event_index,
+            owned_context.as_deref_mut(),
+        );
+        changed
     }
 
     /// Advance several state-machine instances on this artboard while
@@ -1537,9 +1805,35 @@ impl ArtboardInstance {
         instances: &mut [StateMachineInstance],
         elapsed_seconds: f32,
     ) -> bool {
+        self.advance_state_machine_instances_with_nested_context(instances, elapsed_seconds, None)
+    }
+
+    pub fn advance_state_machine_instances_with_nested_and_owned_view_model_context(
+        &mut self,
+        instances: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        self.advance_state_machine_instances_with_nested_context(
+            instances,
+            elapsed_seconds,
+            Some(context),
+        )
+    }
+
+    fn advance_state_machine_instances_with_nested_context(
+        &mut self,
+        instances: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
         let mut changed = false;
         for instance in instances.iter_mut() {
-            changed |= self.advance_state_machine_instance(instance, elapsed_seconds);
+            changed |= self.advance_state_machine_instance_with_context(
+                instance,
+                elapsed_seconds,
+                owned_context.as_deref_mut(),
+            );
         }
 
         let mut nested_events = Vec::new();
@@ -1548,10 +1842,45 @@ impl ArtboardInstance {
         for instance in instances.iter_mut() {
             let mut notified = false;
             for (host_local, events) in &nested_events {
-                notified |= instance.notify_events(self, Some(*host_local), events);
+                notified |= match owned_context.as_deref_mut() {
+                    Some(context) => instance.notify_events_with_owned_view_model_context(
+                        self,
+                        Some(*host_local),
+                        events,
+                        context,
+                    ),
+                    None => instance.notify_events(self, Some(*host_local), events),
+                };
             }
             if notified {
-                changed |= self.advance_state_machine_instance_preserving_events(instance, 0.0);
+                changed |= self.advance_state_machine_instance_preserving_events(
+                    instance,
+                    0.0,
+                    owned_context.as_deref_mut(),
+                );
+            }
+        }
+        changed
+    }
+
+    pub fn settle_state_machine_instances_with_owned_view_model_context(
+        &mut self,
+        instances: &mut [StateMachineInstance],
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        const MAX_VIEW_MODEL_ITERATIONS: usize = 100;
+
+        let mut changed = false;
+        for _ in 0..MAX_VIEW_MODEL_ITERATIONS {
+            let mut listener_changed = false;
+            for instance in instances.iter_mut() {
+                let (instance_changed, instance_listener_changed) =
+                    instance.bind_owned_view_model_context_mut_with_listener_change(context);
+                changed |= instance_changed;
+                listener_changed |= instance_listener_changed;
+            }
+            if !listener_changed {
+                break;
             }
         }
         changed
@@ -1727,7 +2056,7 @@ impl ArtboardInstance {
         for items in self.component_list_items.values_mut() {
             for item in items {
                 item.child.queue_script_advance(elapsed_seconds);
-                if let Some(state_machine) = item.state_machine.as_mut() {
+                for state_machine in &mut item.state_machines {
                     changed |= item
                         .child
                         .advance_state_machine_instance(state_machine, elapsed_seconds);
@@ -4132,6 +4461,7 @@ mod tests {
             list_follow_path_constraints: Vec::new(),
             scroll_constraints: Vec::new(),
             component_list_item_transforms: BTreeMap::new(),
+            component_list_render_generations: BTreeMap::new(),
             component_list_items: BTreeMap::new(),
             component_list_sources: BTreeMap::new(),
             ik_constraints: Vec::new(),
@@ -4209,6 +4539,52 @@ mod tests {
             view_model_triggers: Arc::new(Vec::new()),
             transition_duration_bindings: Arc::new(Vec::new()),
         }
+    }
+
+    #[test]
+    fn component_list_replacements_advance_one_generation_across_graph_and_empty_cycles() {
+        let original = [RuntimeComponentListItemStructure {
+            context_identity: 10,
+            view_model_index: 2,
+            child_graph_global_id: 7,
+        }];
+        let replacement = [RuntimeComponentListItemStructure {
+            context_identity: 11,
+            view_model_index: 2,
+            child_graph_global_id: 7,
+        }];
+
+        assert!(runtime_component_list_structure_changed(
+            Some(&original),
+            &replacement,
+        ));
+        assert!(!runtime_component_list_structure_changed(
+            Some(&original),
+            &original,
+        ));
+        let mut graph_cycle = synthetic_instance(Vec::new(), Vec::new());
+        let first_a_generation = graph_cycle.advance_component_list_render_generation(4);
+        let _b_generation = graph_cycle.advance_component_list_render_generation(4);
+        let returned_a_generation = graph_cycle.advance_component_list_render_generation(4);
+        assert!(
+            returned_a_generation > first_a_generation,
+            "A -> B -> A must not return to A's still-retained cache generation",
+        );
+
+        let mut empty_cycle = synthetic_instance(Vec::new(), Vec::new());
+        let first_a_generation = empty_cycle.advance_component_list_render_generation(4);
+        let _empty_generation = empty_cycle.advance_component_list_render_generation(4);
+        assert_eq!(
+            empty_cycle.component_list_render_generations.get(&4),
+            Some(&_empty_generation),
+            "an empty replacement must retain the list-owned generation",
+        );
+        let returned_after_empty_generation =
+            empty_cycle.advance_component_list_render_generation(4);
+        assert!(
+            returned_after_empty_generation > first_a_generation,
+            "A -> [] -> A must not return to A's still-retained cache generation",
+        );
     }
 
     #[test]

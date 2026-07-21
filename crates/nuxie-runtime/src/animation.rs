@@ -294,7 +294,9 @@ fn callback_event_for_keyed_property(
             .string_property("name")
             .filter(|name| !name.is_empty())
             .map(ToOwned::to_owned),
+        string_properties: Vec::new(),
         seconds_delay: 0.0,
+        context: None,
     })
 }
 

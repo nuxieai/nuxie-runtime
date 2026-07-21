@@ -9,15 +9,16 @@ use std::{collections::BTreeMap, sync::Arc};
 use std::{cell::RefCell, collections::VecDeque};
 
 use anyhow::{Context, Result, bail};
-use nuxie_binary::RuntimeFile;
-#[cfg(not(feature = "scripting"))]
-use nuxie_binary::read_runtime_file as read_runtime_file_for_facade;
-#[cfg(feature = "scripting")]
-use nuxie_binary::read_runtime_file_with_scripting as read_runtime_file_for_facade;
+// The facade always retains ScriptAsset contents because pure-Rust ProjectDO
+// converter envelopes use that standard Rive asset carrier. Retention does
+// not grant script execution: arbitrary bytecode remains gated by the
+// `scripting` feature and an explicitly bounded trusted-script import.
+use nuxie_binary::{RuntimeFile, read_runtime_file_with_scripting as read_runtime_file_for_facade};
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_runtime::{
-    ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache,
-    RuntimeOwnedViewModelInstance, RuntimeRenderPaintCache, RuntimeRenderPathCache,
+    ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache, RuntimeGeometryHit,
+    RuntimeImageDimensionConflict, RuntimeOwnedViewModelInstance, RuntimeRenderPaintCache,
+    RuntimeRenderPathCache, RuntimeSemanticTextHit, StateMachineEventContext,
     preallocate_render_paint_cache_for_artboard_tree_with_external_images,
 };
 
@@ -26,16 +27,17 @@ mod scene;
 pub use scene::*;
 
 pub use nuxie_render_api::{
-    Aabb, BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageFilter, ImageSampler,
-    ImageWrap, Mat2D, PathVerb, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
-    Renderer, StrokeCap, StrokeJoin, Vec2D,
+    Aabb, BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
+    GpuCanvasShaderStage, ImageDecodeError, ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb,
+    RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage,
+    RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
+    Vec2D,
 };
 #[cfg(all(feature = "renderer", target_arch = "wasm32"))]
 pub use nuxie_renderer::{
     BrowserBackend, BrowserBackendPreference, BrowserFactory,
     BrowserFactory as DefaultRendererFactory, BrowserFrame, BrowserFrame as DefaultRendererFrame,
-    BrowserResizeError, WebGl2Factory, WebGl2Frame,
+    BrowserResizeError, WebGl2Factory, WebGl2Frame, WebGl2GpuCanvasRenderer,
 };
 #[cfg(feature = "renderer")]
 pub use nuxie_renderer::{
@@ -48,16 +50,43 @@ pub use nuxie_renderer::{
     WgpuFactory as DefaultRendererFactory, WgpuFrame as DefaultRendererFrame,
 };
 pub use nuxie_runtime::{
-    ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, RuntimeLayerState,
-    RuntimeStateMachineInput, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule,
-    ScriptModuleFailure, ScriptValue, ScriptingVm, StateMachineInputInstance,
-    StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
+    ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, ProjectDataConverterCatalog,
+    ProjectDataConverterCompileError, ProjectDataConverterContext, ProjectDataConverterDefinition,
+    ProjectDataConverterEasing, ProjectDataConverterFormat, ProjectDataConverterKind,
+    ProjectDataConverterMathOperation, ProjectDataConverterOutputType, ProjectDataConverterProgram,
+    ProjectDataConverterProgramError, ProjectDataConverterRangeClamp, ProjectDataConverterResolver,
+    ProjectDataConverterReverseResult, ProjectDataConverterRuntimeError, ProjectDataConverterSpec,
+    ProjectDataConverterState, ProjectDataConverterStringPadSide,
+    ProjectDataConverterStringTrimMode, ProjectDataConverterValidationRule, ProjectDataValue,
+    ProjectDataValuePath, RuntimeLayerState, RuntimeStateMachineInput, ScriptError, ScriptHost,
+    ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm,
+    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
+    StateMachineReportedEvent,
 };
 
 #[cfg(feature = "scripting")]
 use nuxie_scripting::vm::ScriptProgram;
 #[cfg(feature = "scripting")]
-pub use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
+pub use nuxie_scripting::vm::{LuaScriptInstance, ScriptExecutionLimits, ScriptVm};
+
+#[cfg(feature = "scripting")]
+type FileScriptPolicy = Option<ScriptExecutionLimits>;
+#[cfg(not(feature = "scripting"))]
+type FileScriptPolicy = ();
+
+#[cfg(feature = "scripting")]
+fn inert_script_policy() -> FileScriptPolicy {
+    None
+}
+#[cfg(not(feature = "scripting"))]
+fn inert_script_policy() -> FileScriptPolicy {}
+
+#[cfg(feature = "scripting")]
+fn trusted_script_policy(enabled: bool) -> FileScriptPolicy {
+    enabled.then(ScriptExecutionLimits::new)
+}
+#[cfg(not(feature = "scripting"))]
+fn trusted_script_policy(_enabled: bool) -> FileScriptPolicy {}
 
 #[cfg(feature = "scripting")]
 #[derive(Debug, Clone)]
@@ -82,6 +111,7 @@ struct ReadyFileScripts {
 struct FileScriptRuntime {
     assets: Option<Vec<FileScriptAsset>>,
     allow_unsigned_execution: bool,
+    execution_limits: Option<ScriptExecutionLimits>,
     ready: Option<ReadyFileScripts>,
 }
 
@@ -92,6 +122,7 @@ impl std::fmt::Debug for FileScriptRuntime {
             .debug_struct("FileScriptRuntime")
             .field("assets", &self.assets)
             .field("allow_unsigned_execution", &self.allow_unsigned_execution)
+            .field("execution_limits", &self.execution_limits)
             .field("ready", &self.ready.is_some())
             .finish_non_exhaustive()
     }
@@ -99,7 +130,8 @@ impl std::fmt::Debug for FileScriptRuntime {
 
 #[cfg(feature = "scripting")]
 impl FileScriptRuntime {
-    fn new(runtime: &RuntimeFile, allow_unsigned_execution: bool) -> Self {
+    fn new(runtime: &RuntimeFile, execution_limits: Option<ScriptExecutionLimits>) -> Self {
+        let allow_unsigned_execution = execution_limits.is_some();
         let assets = allow_unsigned_execution.then(|| {
             runtime
                 .scripting_file_assets_with_contents()
@@ -121,6 +153,7 @@ impl FileScriptRuntime {
         Self {
             assets,
             allow_unsigned_execution,
+            execution_limits,
             ready: None,
         }
     }
@@ -139,11 +172,32 @@ impl FileScriptRuntime {
         &self,
         factory: &mut dyn Factory,
     ) -> std::result::Result<ReadyFileScripts, nuxie_runtime::ScriptError> {
-        let vm = ScriptVm::new();
+        let execution_limits = self.execution_limits.ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(
+                "trusted script execution limits are unavailable for an inert File",
+            )
+        })?;
+        let vm = ScriptVm::new_with_execution_limits(execution_limits)
+            .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
         let assets = self.materialized_assets()?;
+        for asset in assets
+            .iter()
+            .filter(|asset| asset.type_name == "ShaderAsset")
+        {
+            let payload = required_script_payload(asset, "shader registration")?;
+            vm.register_gpu_canvas_shader_asset(&asset.name, payload)
+                .map_err(|error| asset_phase_error(asset, "shader registration", error))?;
+        }
         let mut pending = assets
             .iter()
-            .filter(|asset| asset.type_name == "ScriptAsset" && asset.is_module)
+            .filter(|asset| {
+                asset.type_name == "ScriptAsset"
+                    && asset.is_module
+                    && !asset
+                        .payload
+                        .as_deref()
+                        .is_some_and(nuxie_runtime::ProjectDataConverterProgram::is_envelope)
+            })
             .collect::<Vec<_>>();
 
         loop {
@@ -166,10 +220,14 @@ impl FileScriptRuntime {
         }
 
         let mut programs = BTreeMap::new();
-        for asset in assets
-            .iter()
-            .filter(|asset| asset.type_name == "ScriptAsset" && !asset.is_module)
-        {
+        for asset in assets.iter().filter(|asset| {
+            asset.type_name == "ScriptAsset"
+                && !asset.is_module
+                && !asset
+                    .payload
+                    .as_deref()
+                    .is_some_and(nuxie_runtime::ProjectDataConverterProgram::is_envelope)
+        }) {
             let payload = required_script_payload(asset, "protocol registration")?;
             let program = vm
                 .register_protocol_script_with_factory(&asset.name, payload, factory)
@@ -217,9 +275,27 @@ impl FileScriptRuntime {
 }
 
 #[cfg(feature = "scripting")]
+#[derive(Debug, Clone, Copy)]
+enum ScriptMountTargetKind {
+    Drawable,
+    DataConverter,
+}
+
+#[cfg(feature = "scripting")]
+impl ScriptMountTargetKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Drawable => "ScriptedDrawable",
+            Self::DataConverter => "ScriptedDataConverter",
+        }
+    }
+}
+
+#[cfg(feature = "scripting")]
 #[derive(Debug)]
 struct ScriptMountTarget {
-    component_global_id: u32,
+    kind: ScriptMountTargetKind,
+    global_id: u32,
     asset_ordinal: usize,
     asset_name: String,
 }
@@ -235,7 +311,7 @@ struct ScriptMountGroup {
 #[cfg(feature = "scripting")]
 struct PreparedScriptMountGroup {
     graph_global_id: u32,
-    scripts: Vec<(u32, Box<dyn ScriptInstance>)>,
+    scripts: Vec<(ScriptMountTargetKind, u32, Box<dyn ScriptInstance>)>,
 }
 
 #[cfg(feature = "scripting")]
@@ -252,8 +328,8 @@ fn required_script_payload<'a>(
 ) -> std::result::Result<&'a [u8], nuxie_runtime::ScriptError> {
     asset.payload.as_deref().ok_or_else(|| {
         nuxie_runtime::ScriptError::new(format!(
-            "ScriptAsset ordinal {} global {} name '{}' phase {} has no imported FileAssetContents payload",
-            asset.ordinal, asset.global_id, asset.name, phase
+            "{} ordinal {} global {} name '{}' phase {} has no imported FileAssetContents payload",
+            asset.type_name, asset.ordinal, asset.global_id, asset.name, phase
         ))
     })
 }
@@ -265,8 +341,8 @@ fn asset_phase_error(
     error: impl std::fmt::Display,
 ) -> nuxie_runtime::ScriptError {
     nuxie_runtime::ScriptError::new(format!(
-        "ScriptAsset ordinal {} global {} name '{}' phase {} failed: {}",
-        asset.ordinal, asset.global_id, asset.name, phase, error
+        "{} ordinal {} global {} name '{}' phase {} failed: {}",
+        asset.type_name, asset.ordinal, asset.global_id, asset.name, phase, error
     ))
 }
 
@@ -286,11 +362,12 @@ fn instantiate_script_mounts(
     for group in groups {
         let mut scripts = Vec::with_capacity(group.targets.len());
         for target in &group.targets {
+            let target_label = target.kind.label();
             let program = ready.programs.get(&target.asset_ordinal).ok_or_else(|| {
                 nuxie_runtime::ScriptError::new(format!(
-                    "{} ScriptedDrawable global {} references unregistered protocol ordinal {} name '{}'",
+                    "{} {target_label} global {} references unregistered protocol ordinal {} name '{}'",
                     group.path,
-                    target.component_global_id,
+                    target.global_id,
                     target.asset_ordinal,
                     target.asset_name
                 ))
@@ -301,9 +378,9 @@ fn instantiate_script_mounts(
                 .instantiate_registered_script_with_factory(program, &mut host, factory)
                 .map_err(|error| {
                     nuxie_runtime::ScriptError::new(format!(
-                        "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase generator failed: {}",
+                        "{} {target_label} global {} asset ordinal {} name '{}' phase generator failed: {}",
                         group.path,
-                        target.component_global_id,
+                        target.global_id,
                         target.asset_ordinal,
                         target.asset_name,
                         error
@@ -311,9 +388,9 @@ fn instantiate_script_mounts(
                 })?;
             if script.has_method(ScriptMethod::Init).map_err(|error| {
                 nuxie_runtime::ScriptError::new(format!(
-                    "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init lookup failed: {}",
+                    "{} {target_label} global {} asset ordinal {} name '{}' phase init lookup failed: {}",
                     group.path,
-                    target.component_global_id,
+                    target.global_id,
                     target.asset_ordinal,
                     target.asset_name,
                     error
@@ -323,9 +400,9 @@ fn instantiate_script_mounts(
                     .call_init_with_factory(&mut host, factory)
                     .map_err(|error| {
                         nuxie_runtime::ScriptError::new(format!(
-                            "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init failed: {}",
+                            "{} {target_label} global {} asset ordinal {} name '{}' phase init failed: {}",
                             group.path,
-                            target.component_global_id,
+                            target.global_id,
                             target.asset_ordinal,
                             target.asset_name,
                             error
@@ -333,15 +410,15 @@ fn instantiate_script_mounts(
                     })?;
                 if !initialized {
                     return Err(nuxie_runtime::ScriptError::new(format!(
-                        "{} ScriptedDrawable global {} asset ordinal {} name '{}' phase init returned false or nil",
+                        "{} {target_label} global {} asset ordinal {} name '{}' phase init returned false or nil",
                         group.path,
-                        target.component_global_id,
+                        target.global_id,
                         target.asset_ordinal,
                         target.asset_name
                     )));
                 }
             }
-            scripts.push((target.component_global_id, script));
+            scripts.push((target.kind, target.global_id, script));
         }
         prepared.push(PreparedScriptMountGroup {
             graph_global_id: group.graph_global_id,
@@ -352,6 +429,70 @@ fn instantiate_script_mounts(
 }
 
 #[cfg(feature = "scripting")]
+fn script_mount_target(
+    runtime: &RuntimeFile,
+    scripts: &FileScriptRuntime,
+    object: &nuxie_binary::RuntimeObject,
+    kind: ScriptMountTargetKind,
+    path: &str,
+) -> std::result::Result<ScriptMountTarget, nuxie_runtime::ScriptError> {
+    let label = kind.label();
+    if !scripts.allow_unsigned_execution {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "{path} contains {label} global {}, but arbitrary imported Files do not execute unsigned bytecode; use File::import_with_trusted_scripts only for authenticated content",
+            object.id
+        )));
+    }
+    let ordinal = object
+        .uint_property("scriptAssetId")
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(format!(
+                "{path} {label} global {} has no valid FileAsset ordinal",
+                object.id
+            ))
+        })?;
+    let resolved = runtime
+        .resolved_file_asset_for_referencer(object)
+        .ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(format!(
+                "{path} {label} global {} cannot resolve FileAsset ordinal {ordinal}",
+                object.id
+            ))
+        })?;
+    let asset = scripts.materialized_assets()?.get(ordinal).ok_or_else(|| {
+        nuxie_runtime::ScriptError::new(format!(
+            "{path} {label} global {} references absent FileAsset ordinal {ordinal}",
+            object.id
+        ))
+    })?;
+    if asset.global_id != resolved.id {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "{path} {label} global {} FileAsset ordinal {ordinal} resolved global {}, but catalog contains global {}",
+            object.id, resolved.id, asset.global_id
+        )));
+    }
+    if asset.type_name != "ScriptAsset" || resolved.type_name != "ScriptAsset" {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "{path} {label} global {} FileAsset ordinal {ordinal} is {}, not ScriptAsset",
+            object.id, resolved.type_name
+        )));
+    }
+    if asset.is_module {
+        return Err(nuxie_runtime::ScriptError::new(format!(
+            "{path} {label} global {} references module ScriptAsset ordinal {ordinal} name '{}'",
+            object.id, asset.name
+        )));
+    }
+    Ok(ScriptMountTarget {
+        kind,
+        global_id: object.id,
+        asset_ordinal: ordinal,
+        asset_name: asset.name.clone(),
+    })
+}
+
+#[cfg(feature = "scripting")]
 fn script_mount_group(
     runtime: &RuntimeFile,
     scripts: &FileScriptRuntime,
@@ -359,19 +500,13 @@ fn script_mount_group(
     instance: &RuntimeArtboardInstance,
     path: String,
 ) -> std::result::Result<(bool, ScriptMountGroup), nuxie_runtime::ScriptError> {
-    let mut has_scripted_drawable = false;
+    let mut has_script_target = false;
     let mut targets = Vec::new();
     for component in &graph.components {
         if component.type_name != "ScriptedDrawable" {
             continue;
         }
-        has_scripted_drawable = true;
-        if !scripts.allow_unsigned_execution {
-            return Err(nuxie_runtime::ScriptError::new(format!(
-                "{path} contains ScriptedDrawable global {}, but arbitrary imported Files do not execute unsigned bytecode; use File::import_with_unsigned_scripts only for trusted content",
-                component.global_id
-            )));
-        }
+        has_script_target = true;
         let object = runtime
             .object(component.global_id as usize)
             .ok_or_else(|| {
@@ -380,57 +515,46 @@ fn script_mount_group(
                     component.global_id
                 ))
             })?;
-        let ordinal = object
-            .uint_property("scriptAssetId")
-            .and_then(|value| usize::try_from(value).ok())
-            .ok_or_else(|| {
-                nuxie_runtime::ScriptError::new(format!(
-                    "{path} ScriptedDrawable global {} has no valid FileAsset ordinal",
-                    component.global_id
-                ))
-            })?;
-        let resolved = runtime
-            .resolved_file_asset_for_referencer(object)
-            .ok_or_else(|| {
-                nuxie_runtime::ScriptError::new(format!(
-                    "{path} ScriptedDrawable global {} cannot resolve FileAsset ordinal {ordinal}",
-                    component.global_id
-                ))
-            })?;
-        let asset = scripts.materialized_assets()?.get(ordinal).ok_or_else(|| {
-            nuxie_runtime::ScriptError::new(format!(
-                "{path} ScriptedDrawable global {} references absent FileAsset ordinal {ordinal}",
-                component.global_id
-            ))
-        })?;
-        if asset.global_id != resolved.id {
-            return Err(nuxie_runtime::ScriptError::new(format!(
-                "{path} ScriptedDrawable global {} FileAsset ordinal {ordinal} resolved global {}, but catalog contains global {}",
-                component.global_id, resolved.id, asset.global_id
-            )));
-        }
-        if asset.type_name != "ScriptAsset" || resolved.type_name != "ScriptAsset" {
-            return Err(nuxie_runtime::ScriptError::new(format!(
-                "{path} ScriptedDrawable global {} FileAsset ordinal {ordinal} is {}, not ScriptAsset",
-                component.global_id, resolved.type_name
-            )));
-        }
-        if asset.is_module {
-            return Err(nuxie_runtime::ScriptError::new(format!(
-                "{path} ScriptedDrawable global {} references module ScriptAsset ordinal {ordinal} name '{}'",
-                component.global_id, asset.name
-            )));
-        }
         if !instance.has_script_instance_for_global(component.global_id) {
-            targets.push(ScriptMountTarget {
-                component_global_id: component.global_id,
-                asset_ordinal: ordinal,
-                asset_name: asset.name.clone(),
-            });
+            targets.push(script_mount_target(
+                runtime,
+                scripts,
+                object,
+                ScriptMountTargetKind::Drawable,
+                &path,
+            )?);
+        }
+    }
+    for converter in runtime.data_converters() {
+        if converter.type_name != "ScriptedDataConverter" {
+            continue;
+        }
+        let is_project_converter = runtime
+            .resolved_file_asset_for_referencer(converter)
+            .and_then(|asset| {
+                runtime
+                    .scripting_file_assets_with_contents()
+                    .into_iter()
+                    .find(|entry| entry.asset.id == asset.id)
+                    .and_then(|entry| entry.contents)
+            })
+            .is_some_and(nuxie_runtime::ProjectDataConverterProgram::is_envelope);
+        if is_project_converter {
+            continue;
+        }
+        has_script_target = true;
+        if !instance.has_scripted_data_converter_instance_for_global(converter.id) {
+            targets.push(script_mount_target(
+                runtime,
+                scripts,
+                converter,
+                ScriptMountTargetKind::DataConverter,
+                &path,
+            )?);
         }
     }
     Ok((
-        has_scripted_drawable,
+        has_script_target,
         ScriptMountGroup {
             path,
             graph_global_id: graph.global_id,
@@ -446,7 +570,7 @@ fn collect_script_mount_groups(
     instance: &mut RuntimeArtboardInstance,
 ) -> std::result::Result<(bool, Vec<ScriptMountGroup>), nuxie_runtime::ScriptError> {
     let scripts = file.scripts.borrow();
-    let (mut has_scripted_drawable, root) = script_mount_group(
+    let (mut has_script_target, root) = script_mount_group(
         &file.runtime,
         &scripts,
         root_graph,
@@ -472,12 +596,12 @@ fn collect_script_mount_groups(
         );
         let (has_scripts, group) =
             script_mount_group(&file.runtime, &scripts, graph, nested, path)?;
-        has_scripted_drawable |= has_scripts;
+        has_script_target |= has_scripts;
         groups.push(group);
         Ok::<(), nuxie_runtime::ScriptError>(())
     };
     instance.try_visit_artboard_tree_instances_mut(&mut visitor)?;
-    Ok((has_scripted_drawable, groups))
+    Ok((has_script_target, groups))
 }
 
 #[cfg(feature = "scripting")]
@@ -517,16 +641,32 @@ fn attach_prepared_script_mounts(
     instance: &mut RuntimeArtboardInstance,
     prepared: Vec<PreparedScriptMountGroup>,
 ) {
+    fn attach(
+        instance: &mut RuntimeArtboardInstance,
+        kind: ScriptMountTargetKind,
+        global_id: u32,
+        script: Box<dyn ScriptInstance>,
+    ) {
+        match kind {
+            ScriptMountTargetKind::Drawable => {
+                instance.set_script_instance_for_global(global_id, script);
+            }
+            ScriptMountTargetKind::DataConverter => {
+                instance.set_scripted_data_converter_instance_for_global(global_id, script);
+            }
+        }
+    }
+
     let mut groups = VecDeque::from(prepared);
     if let Some(root) = groups.pop_front() {
-        for (global_id, script) in root.scripts {
-            instance.set_script_instance_for_global(global_id, script);
+        for (kind, global_id, script) in root.scripts {
+            attach(instance, kind, global_id, script);
         }
     }
     let mut visitor = |_: usize, _: u32, nested: &mut RuntimeArtboardInstance| {
         if let Some(group) = groups.pop_front() {
-            for (global_id, script) in group.scripts {
-                nested.set_script_instance_for_global(global_id, script);
+            for (kind, global_id, script) in group.scripts {
+                attach(nested, kind, global_id, script);
             }
         }
         Ok::<(), std::convert::Infallible>(())
@@ -543,7 +683,22 @@ fn flush_scripted_artboard_tree(
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
-    let mut changed = instance
+    // Converter tables are attached after the caller's ordinary data-bind
+    // pass. Re-run the zero-time bind phase so the first factory-bearing
+    // frame observes scripted conversion instead of the inert pass-through
+    // placeholder used during instance construction.
+    let mut changed = instance.advance_artboard_data_binds();
+    let mut visitor = |_: usize, _: u32, nested: &mut RuntimeArtboardInstance| {
+        changed |= nested.advance_artboard_data_binds();
+        Ok::<(), std::convert::Infallible>(())
+    };
+    let result = instance.try_visit_artboard_tree_instances_mut(&mut visitor);
+    match result {
+        Ok(()) => {}
+        Err(error) => match error {},
+    }
+
+    changed |= instance
         .flush_script_lifecycle_with_factory(factory)
         .map_err(|error| {
             nuxie_runtime::ScriptError::new(format!(
@@ -584,8 +739,14 @@ fn prepare_scripted_artboard_tree(
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
-    let (has_scripted_drawable, groups) = collect_script_mount_groups(file, root_graph, instance)?;
-    if !has_scripted_drawable {
+    // File::import is the untrusted boundary. Scripted nodes in an inert file
+    // remain ordinary no-op drawables so they cannot prevent safe sibling
+    // content from rendering (and, critically, never enter VM bootstrap).
+    if !file.scripts.borrow().allow_unsigned_execution {
+        return Ok(false);
+    }
+    let (has_script_target, groups) = collect_script_mount_groups(file, root_graph, instance)?;
+    if !has_script_target {
         return Ok(false);
     }
     let mut prepared = file.scripts.borrow_mut().prepare_mounts(&groups, factory)?;
@@ -599,12 +760,12 @@ fn prepare_scripted_artboard_tree(
     }
     attach_prepared_script_mounts(instance, prepared.groups);
 
-    // Facade execution fails closed: every concrete scripted drawable must
+    // Facade execution fails closed: every concrete scripted target must
     // have an attached table before entering the lower runtime draw path.
     let (_, verified) = collect_script_mount_groups(file, root_graph, instance)?;
     if let Some(group) = verified.iter().find(|group| !group.targets.is_empty()) {
         return Err(nuxie_runtime::ScriptError::new(format!(
-            "{} still has unattached scripted drawable instances",
+            "{} still has unattached scripted runtime instances",
             group.path
         )));
     }
@@ -619,7 +780,7 @@ fn prepare_scripted_artboard_tree(
         .find(|group| !group.targets.is_empty())
     {
         return Err(nuxie_runtime::ScriptError::new(format!(
-            "{} materialized an unattached scripted drawable during script lifecycle",
+            "{} materialized an unattached scripted runtime instance during script lifecycle",
             group.path
         )));
     }
@@ -633,6 +794,9 @@ fn queue_root_script_advance(
     instance: &mut RuntimeArtboardInstance,
     elapsed_seconds: f32,
 ) -> bool {
+    if !file.scripts.borrow().allow_unsigned_execution {
+        return false;
+    }
     let mut has_scripted_drawable = root_graph
         .components
         .iter()
@@ -738,7 +902,7 @@ impl Clone for File {
         #[cfg(feature = "scripting")]
         let scripts = RefCell::new(FileScriptRuntime::new(
             &runtime,
-            self.scripts.borrow().allow_unsigned_execution,
+            self.scripts.borrow().execution_limits,
         ));
         Self {
             runtime,
@@ -755,8 +919,8 @@ impl File {
     /// Import `.riv` bytes and build the runtime graph needed for instancing.
     ///
     /// With scripting enabled, arbitrary imported files remain inert by
-    /// default. Use `File::import_with_unsigned_scripts` only after the host
-    /// has established trust in the file bytes.
+    /// default. Use `File::import_with_trusted_scripts` only after the host has
+    /// authenticated the file bytes and selected explicit execution limits.
     pub fn import(bytes: &[u8]) -> Result<Self> {
         Self::import_with_limits(bytes, FileImportLimits::new())
     }
@@ -765,7 +929,40 @@ impl File {
     /// file before constructing the owned runtime graph.
     pub fn import_with_limits(bytes: &[u8], limits: FileImportLimits) -> Result<Self> {
         let runtime = read_runtime_file_for_facade(bytes).context("failed to import Rive file")?;
-        Self::from_runtime_with_script_policy_and_limits(runtime, false, limits)
+        Self::from_runtime_with_script_policy_and_limits(runtime, inert_script_policy(), limits)
+    }
+
+    /// Import host-authenticated `.riv` bytes with explicit, non-zero Luau
+    /// memory and per-callback interrupt ceilings.
+    #[cfg(feature = "scripting")]
+    pub fn import_with_trusted_scripts(
+        bytes: &[u8],
+        execution_limits: ScriptExecutionLimits,
+    ) -> Result<Self> {
+        Self::import_with_trusted_scripts_and_limits(
+            bytes,
+            FileImportLimits::new(),
+            execution_limits,
+        )
+    }
+
+    /// Apply both binary-import allocation limits and trusted Luau execution
+    /// limits before the File can enter its lazy script bootstrap path.
+    #[cfg(feature = "scripting")]
+    pub fn import_with_trusted_scripts_and_limits(
+        bytes: &[u8],
+        import_limits: FileImportLimits,
+        execution_limits: ScriptExecutionLimits,
+    ) -> Result<Self> {
+        execution_limits
+            .validate()
+            .context("invalid trusted script execution limits")?;
+        let runtime = read_runtime_file_for_facade(bytes).context("failed to import Rive file")?;
+        Self::from_runtime_with_script_policy_and_limits(
+            runtime,
+            Some(execution_limits),
+            import_limits,
+        )
     }
 
     /// Import `.riv` bytes and allow their unsigned ScriptAsset bytecode to
@@ -774,10 +971,13 @@ impl File {
     /// This is an explicit trust boundary for content the host authored or
     /// authenticated. Arbitrary uploaded or network-provided files should use
     /// [`Self::import`], which refuses to enter the script draw path.
+    ///
+    /// This compatibility wrapper applies [`ScriptExecutionLimits::new`]. New
+    /// callers should prefer [`Self::import_with_trusted_scripts`] so the trust
+    /// decision and resource policy remain visible at the call site.
     #[cfg(feature = "scripting")]
     pub fn import_with_unsigned_scripts(bytes: &[u8]) -> Result<Self> {
-        let runtime = read_runtime_file_for_facade(bytes).context("failed to import Rive file")?;
-        Self::from_runtime_with_script_policy(runtime, true)
+        Self::import_with_trusted_scripts(bytes, ScriptExecutionLimits::new())
     }
 
     pub(crate) fn from_runtime(runtime: RuntimeFile) -> Result<Self> {
@@ -788,20 +988,22 @@ impl File {
 
     fn from_runtime_with_script_policy(
         runtime: RuntimeFile,
-        _allow_unsigned_execution: bool,
+        allow_unsigned_execution: bool,
     ) -> Result<Self> {
         Self::from_runtime_with_script_policy_and_limits(
             runtime,
-            _allow_unsigned_execution,
+            trusted_script_policy(allow_unsigned_execution),
             FileImportLimits::new(),
         )
     }
 
     fn from_runtime_with_script_policy_and_limits(
         runtime: RuntimeFile,
-        _allow_unsigned_execution: bool,
+        execution_limits: FileScriptPolicy,
         limits: FileImportLimits,
     ) -> Result<Self> {
+        #[cfg(not(feature = "scripting"))]
+        let _ = execution_limits;
         if let Some(maximum) = limits.max_imported_file_assets()
             && runtime
                 .imported_file_assets_with_contents_bounded(maximum)
@@ -812,7 +1014,7 @@ impl File {
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
         Ok(Self {
             #[cfg(feature = "scripting")]
-            scripts: RefCell::new(FileScriptRuntime::new(&runtime, _allow_unsigned_execution)),
+            scripts: RefCell::new(FileScriptRuntime::new(&runtime, execution_limits)),
             runtime,
             graph,
             external_image_assets: BTreeMap::new(),
@@ -947,6 +1149,15 @@ impl<'a> Artboard<'a> {
 
     pub fn name(self) -> Option<&'a str> {
         self.graph().name.as_deref()
+    }
+
+    /// Authored artboard width and height in artboard coordinates.
+    pub fn dimensions(self) -> Option<(f32, f32)> {
+        let artboard = self.file.runtime.artboard(self.index)?;
+        Some((
+            artboard.double_property("width")?,
+            artboard.double_property("height")?,
+        ))
     }
 
     pub fn graph(self) -> &'a ArtboardGraph {
@@ -1123,14 +1334,15 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     /// Return visible Shape and Text locals under `point`, front to back,
-    /// including descendants reached through nested artboards.
+    /// including descendants reached through nested artboards and
+    /// component-list items.
     pub fn hit_test(&mut self, point: Vec2D) -> Vec<usize> {
         self.raw.geometry_hit_test(point, &mut self.geometry)
     }
 
     /// Return visible Shape and Text local-id paths under `point`, front to
-    /// back. Direct hits contain one local id; nested hits are prefixed with
-    /// their nested-host local ids.
+    /// back. Direct hits contain one local id; child-artboard hits are prefixed
+    /// with their nested or component-list host local ids.
     pub fn hit_test_paths(&mut self, point: Vec2D) -> Vec<Vec<usize>> {
         self.raw.geometry_hit_test_paths(point, &mut self.geometry)
     }
@@ -1249,6 +1461,22 @@ impl<'a> ArtboardInstance<'a> {
         Some(ViewModelInstance { raw })
     }
 
+    /// Instantiate a serialized ViewModel default as a fully owned mutable
+    /// tree, preserving nested scalars and lists while allowing hot writes at
+    /// every generated child path.
+    pub fn instantiate_mutable_view_model_instance(
+        &self,
+        instance_index: usize,
+    ) -> Option<ViewModelInstance> {
+        let view_model_index = self.view_model_index()?;
+        let raw = RuntimeOwnedViewModelInstance::from_instance_mutable(
+            &self.file.runtime,
+            view_model_index,
+            instance_index,
+        )?;
+        Some(ViewModelInstance { raw })
+    }
+
     /// Bind `view_model` to this artboard's own data binds and its nested
     /// artboard contexts, mirroring `artboard->bindViewModelInstance(...)` in
     /// the C++ runtime.
@@ -1314,6 +1542,50 @@ impl<'a> ArtboardInstance<'a> {
         changed
     }
 
+    /// Advance retained machines while allowing listener actions to mutate
+    /// the same owned ViewModel context bound to this artboard.
+    pub fn advance_with_state_machines_and_view_model(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        view_model: &mut ViewModelInstance,
+    ) -> bool {
+        if state_machines.is_empty() {
+            return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
+        }
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        {
+            changed |= queue_root_script_advance(
+                self.file,
+                self.artboard().graph(),
+                &mut self.raw,
+                elapsed_seconds,
+            );
+        }
+        changed |= self
+            .raw
+            .settle_state_machine_instances_with_owned_view_model_context(
+                state_machines,
+                view_model.raw_mut(),
+            );
+        changed |= self
+            .raw
+            .advance_state_machine_instances_with_nested_and_owned_view_model_context(
+                state_machines,
+                elapsed_seconds,
+                view_model.raw_mut(),
+            );
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_context(&self.file.runtime, view_model.raw());
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        changed |= self.raw.update_pass();
+        changed
+    }
+
     /// Factory-bearing mirror of [`Self::advance_with_state_machine`].
     pub fn try_advance_with_state_machine_and_factory(
         &mut self,
@@ -1351,6 +1623,66 @@ impl<'a> ArtboardInstance<'a> {
         changed |= self
             .raw
             .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= prepare_scripted_artboard_tree(
+                self.file,
+                self.artboard().graph(),
+                &mut self.raw,
+                factory,
+            )
+            .context("failed to advance scripted drawables")?;
+        }
+        #[cfg(not(feature = "scripting"))]
+        let _ = factory;
+        changed |= self.raw.update_pass();
+        Ok(changed)
+    }
+
+    /// Factory-bearing mirror of
+    /// [`Self::advance_with_state_machines_and_view_model`].
+    pub fn try_advance_with_state_machines_and_view_model_and_factory(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        view_model: &mut ViewModelInstance,
+        factory: &mut dyn Factory,
+    ) -> Result<bool> {
+        if state_machines.is_empty() {
+            let changed = self.bind_view_model(view_model);
+            return self
+                .try_advance_with_factory(factory, elapsed_seconds)
+                .map(|advanced| changed | advanced);
+        }
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        {
+            changed |= queue_root_script_advance(
+                self.file,
+                self.artboard().graph(),
+                &mut self.raw,
+                elapsed_seconds,
+            );
+        }
+        changed |= self
+            .raw
+            .settle_state_machine_instances_with_owned_view_model_context(
+                state_machines,
+                view_model.raw_mut(),
+            );
+        changed |= self
+            .raw
+            .advance_state_machine_instances_with_nested_and_owned_view_model_context(
+                state_machines,
+                elapsed_seconds,
+                view_model.raw_mut(),
+            );
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_context(&self.file.runtime, view_model.raw());
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
@@ -1450,7 +1782,9 @@ impl<'a> ArtboardInstance<'a> {
                 paint,
                 &mut cache.path,
             )
-            .context("failed to draw Rive artboard")
+            .context("failed to draw Rive artboard")?;
+        self.geometry.observe_presented_images(&self.raw, paint)?;
+        Ok(())
     }
 }
 
@@ -1591,21 +1925,64 @@ impl OwnedArtboardInstance {
     }
 
     /// Return visible Shape and Text locals under `point`, front to back,
-    /// including descendants reached through nested artboards.
+    /// including descendants reached through nested artboards and
+    /// component-list items.
     pub fn hit_test(&mut self, point: Vec2D) -> Vec<usize> {
         self.raw.geometry_hit_test(point, &mut self.geometry)
     }
 
     /// Return visible Shape and Text local-id paths under `point`, front to
-    /// back. Direct hits contain one local id; nested hits are prefixed with
-    /// their nested-host local ids.
+    /// back. Direct hits contain one local id; child-artboard hits are prefixed
+    /// with their nested or component-list host local ids.
     pub fn hit_test_paths(&mut self, point: Vec2D) -> Vec<Vec<usize>> {
         self.raw.geometry_hit_test_paths(point, &mut self.geometry)
+    }
+
+    /// Resolve the frontmost concrete geometry occurrence for a native
+    /// pointer dispatch. Pass this value to a state-machine instance's
+    /// `pointer_*_with_event_context` methods so list/component occurrence
+    /// identity survives even when the listener targets implementation-only
+    /// hit geometry.
+    pub fn pointer_event_context(&mut self, point: Vec2D) -> Option<StateMachineEventContext> {
+        self.raw
+            .geometry_hit_test_path_segments_with_bounds(point, &mut self.geometry)
+            .first()
+            .map(StateMachineEventContext::from_geometry_hit)
+    }
+
+    pub(crate) fn hit_test_path_segments_with_bounds(
+        &mut self,
+        point: Vec2D,
+    ) -> Vec<RuntimeGeometryHit> {
+        self.raw
+            .geometry_hit_test_path_segments_with_bounds(point, &mut self.geometry)
+    }
+
+    pub(crate) fn geometry_path_segments_with_bounds(&mut self) -> Vec<RuntimeGeometryHit> {
+        self.raw
+            .geometry_path_segments_with_bounds(&mut self.geometry)
+    }
+
+    pub(crate) fn semantic_text_path_segments_with_bounds(
+        &mut self,
+    ) -> Vec<RuntimeSemanticTextHit> {
+        self.raw
+            .semantic_text_path_segments_with_bounds(&mut self.geometry)
     }
 
     /// Return exact logical world bounds for one runtime-local object.
     pub fn world_bounds(&mut self, local_id: usize) -> Option<Aabb> {
         self.raw.geometry_world_bounds(local_id, &mut self.geometry)
+    }
+
+    pub(crate) fn register_intrinsic_image_dimensions(
+        &mut self,
+        asset_global: u32,
+        width: u32,
+        height: u32,
+    ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
+        self.geometry
+            .register_image_dimensions(&self.raw, asset_global, width, height)
     }
 
     /// Return the settled, layout-aware world transform for one runtime-local object.
@@ -1694,6 +2071,20 @@ impl OwnedArtboardInstance {
         Some(ViewModelInstance { raw })
     }
 
+    /// See [`ArtboardInstance::instantiate_mutable_view_model_instance`].
+    pub fn instantiate_mutable_view_model_instance(
+        &self,
+        instance_index: usize,
+    ) -> Option<ViewModelInstance> {
+        let view_model_index = self.view_model_index()?;
+        let raw = RuntimeOwnedViewModelInstance::from_instance_mutable(
+            &self.file.runtime,
+            view_model_index,
+            instance_index,
+        )?;
+        Some(ViewModelInstance { raw })
+    }
+
     /// See [`ArtboardInstance::bind_view_model`].
     pub fn bind_view_model(&mut self, view_model: &ViewModelInstance) -> bool {
         let mut changed = self
@@ -1732,6 +2123,46 @@ impl OwnedArtboardInstance {
         changed |= self
             .raw
             .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        changed |= self.raw.update_pass();
+        changed
+    }
+
+    /// Owning mirror of
+    /// [`ArtboardInstance::advance_with_state_machines_and_view_model`].
+    pub fn advance_with_state_machines_and_view_model(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        view_model: &mut ViewModelInstance,
+    ) -> bool {
+        if state_machines.is_empty() {
+            return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
+        }
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        if let Some(artboard) = self.file.graph.artboards.get(self.artboard_index) {
+            changed |=
+                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
+        }
+        changed |= self
+            .raw
+            .settle_state_machine_instances_with_owned_view_model_context(
+                state_machines,
+                view_model.raw_mut(),
+            );
+        changed |= self
+            .raw
+            .advance_state_machine_instances_with_nested_and_owned_view_model_context(
+                state_machines,
+                elapsed_seconds,
+                view_model.raw_mut(),
+            );
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_context(&self.file.runtime, view_model.raw());
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
@@ -1781,6 +2212,64 @@ impl OwnedArtboardInstance {
         changed |= self
             .raw
             .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        #[cfg(feature = "scripting")]
+        {
+            changed |= prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)
+                .context("failed to advance scripted drawables")?;
+        }
+        #[cfg(not(feature = "scripting"))]
+        let _ = factory;
+        changed |= self.raw.update_pass();
+        Ok(changed)
+    }
+
+    /// Owning mirror of
+    /// [`ArtboardInstance::try_advance_with_state_machines_and_view_model_and_factory`].
+    pub fn try_advance_with_state_machines_and_view_model_and_factory(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        view_model: &mut ViewModelInstance,
+        factory: &mut dyn Factory,
+    ) -> Result<bool> {
+        if state_machines.is_empty() {
+            let changed = self.bind_view_model(view_model);
+            return self
+                .try_advance_with_factory(factory, elapsed_seconds)
+                .map(|advanced| changed | advanced);
+        }
+        let mut changed = false;
+        #[cfg(feature = "scripting")]
+        let artboard = self
+            .file
+            .graph
+            .artboards
+            .get(self.artboard_index)
+            .context("owned artboard instance graph is unavailable")?;
+        #[cfg(feature = "scripting")]
+        {
+            changed |=
+                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
+        }
+        changed |= self
+            .raw
+            .settle_state_machine_instances_with_owned_view_model_context(
+                state_machines,
+                view_model.raw_mut(),
+            );
+        changed |= self
+            .raw
+            .advance_state_machine_instances_with_nested_and_owned_view_model_context(
+                state_machines,
+                elapsed_seconds,
+                view_model.raw_mut(),
+            );
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_context(&self.file.runtime, view_model.raw());
         changed |= self
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
@@ -1865,7 +2354,9 @@ impl OwnedArtboardInstance {
                 paint,
                 &mut cache.path,
             )
-            .context("failed to draw Rive artboard")
+            .context("failed to draw Rive artboard")?;
+        self.geometry.observe_presented_images(&self.raw, paint)?;
+        Ok(())
     }
 }
 

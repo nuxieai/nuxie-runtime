@@ -55,18 +55,28 @@ pub struct StateMachineInstance {
     transition_durations: Vec<StateMachineTransitionDurationInstance>,
     layers: Vec<StateMachineLayerInstance>,
     reported_events: Vec<StateMachineReportedEvent>,
+    pending_listener_events: Vec<StateMachineReportedEvent>,
     pending_view_model_actions: Vec<RuntimeScheduledListenerAction>,
     changed_state_count: usize,
     needs_advance: bool,
     data_bind_graph: RuntimeDataBindGraph,
     pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
     pointer_listener_states: Vec<RuntimePointerListenerState>,
+    view_model_listeners: Vec<RuntimeViewModelListenerInstance>,
 }
 
 #[derive(Debug, Clone)]
 struct RuntimePointerDownListenerHit {
     pointer_id: i32,
     listener_index: usize,
+    drag_phase: Option<RuntimePointerDragPhase>,
+    event_context: Option<StateMachineEventContext>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimePointerDragPhase {
+    Armed,
+    Dragging,
 }
 
 #[derive(Debug, Clone)]
@@ -74,6 +84,69 @@ struct RuntimePointerListenerState {
     pointer_id: i32,
     listener_index: usize,
     is_hovered: bool,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeViewModelListenerInstance {
+    property_path: Vec<usize>,
+    actions: Vec<RuntimeScheduledListenerAction>,
+    observed: Option<RuntimeViewModelListenerValue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RuntimeViewModelListenerValue {
+    Number(u32),
+    Boolean(bool),
+    String(Vec<u8>),
+    Color(u32),
+    Enum(u64),
+    SymbolListIndex(u64),
+    Asset(u64),
+    Trigger(u64),
+}
+
+fn runtime_view_model_listener_value(
+    context: &RuntimeOwnedViewModelInstance,
+    property_path: &[usize],
+) -> Option<RuntimeViewModelListenerValue> {
+    context
+        .number_value_by_property_path(property_path)
+        .map(|value| RuntimeViewModelListenerValue::Number(value.to_bits()))
+        .or_else(|| {
+            context
+                .boolean_value_by_property_path(property_path)
+                .map(RuntimeViewModelListenerValue::Boolean)
+        })
+        .or_else(|| {
+            context
+                .string_value_by_property_path(property_path)
+                .map(|value| RuntimeViewModelListenerValue::String(value.to_vec()))
+        })
+        .or_else(|| {
+            context
+                .color_value_by_property_path(property_path)
+                .map(RuntimeViewModelListenerValue::Color)
+        })
+        .or_else(|| {
+            context
+                .enum_value_by_property_path(property_path)
+                .map(RuntimeViewModelListenerValue::Enum)
+        })
+        .or_else(|| {
+            context
+                .symbol_list_index_value_by_property_path(property_path)
+                .map(RuntimeViewModelListenerValue::SymbolListIndex)
+        })
+        .or_else(|| {
+            context
+                .asset_value_by_property_path(property_path)
+                .map(RuntimeViewModelListenerValue::Asset)
+        })
+        .or_else(|| {
+            context
+                .trigger_value_by_property_path(property_path)
+                .map(RuntimeViewModelListenerValue::Trigger)
+        })
 }
 
 impl StateMachineInstance {
@@ -170,6 +243,18 @@ impl StateMachineInstance {
         let mut data_bind_graph = RuntimeDataBindGraph::new(state_machine);
         data_bind_graph
             .attach_scripted_instances(&artboard.scripted_data_converter_instances_by_global);
+        let view_model_listeners = state_machine
+            .listeners
+            .iter()
+            .filter(|listener| listener.has_listener(RuntimeListenerType::ViewModel))
+            .filter_map(|listener| {
+                Some(RuntimeViewModelListenerInstance {
+                    property_path: listener.view_model_property_path.clone()?,
+                    actions: listener.listener_actions.clone(),
+                    observed: None,
+                })
+            })
+            .collect();
         Self {
             state_machine_index,
             inputs,
@@ -189,12 +274,14 @@ impl StateMachineInstance {
             transition_durations,
             layers,
             reported_events: Vec::new(),
+            pending_listener_events: Vec::new(),
             pending_view_model_actions: Vec::new(),
             changed_state_count: 0,
             needs_advance: false,
             data_bind_graph,
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
+            view_model_listeners,
         }
     }
 
@@ -268,7 +355,18 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        self.pointer_down_with_context(artboard, x, y, pointer_id, None)
+        self.pointer_down_with_context(artboard, x, y, pointer_id, None, None)
+    }
+
+    pub fn pointer_down_with_event_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        event_context: &StateMachineEventContext,
+    ) -> bool {
+        self.pointer_down_with_context(artboard, x, y, pointer_id, None, Some(event_context))
     }
 
     pub fn pointer_down_with_owned_view_model_context(
@@ -279,7 +377,26 @@ impl StateMachineInstance {
         pointer_id: i32,
         context: &mut RuntimeOwnedViewModelInstance,
     ) -> bool {
-        self.pointer_down_with_context(artboard, x, y, pointer_id, Some(context))
+        self.pointer_down_with_context(artboard, x, y, pointer_id, Some(context), None)
+    }
+
+    pub fn pointer_down_with_owned_view_model_and_event_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        context: &mut RuntimeOwnedViewModelInstance,
+        event_context: &StateMachineEventContext,
+    ) -> bool {
+        self.pointer_down_with_context(
+            artboard,
+            x,
+            y,
+            pointer_id,
+            Some(context),
+            Some(event_context),
+        )
     }
 
     fn pointer_down_with_context(
@@ -289,7 +406,11 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
     ) -> bool {
+        if !x.is_finite() || !y.is_finite() {
+            return false;
+        }
         self.pointer_down_listener_hits
             .retain(|hit| hit.pointer_id != pointer_id);
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
@@ -306,17 +427,118 @@ impl StateMachineInstance {
                 pointer_id,
             );
             let click_action = listener_hit && listener.has_listener(RuntimeListenerType::Click);
-            if click_action {
+            let drag_action = listener_hit && listener.has_listener(RuntimeListenerType::Drag);
+            if click_action || drag_action {
                 self.pointer_down_listener_hits
                     .push(RuntimePointerDownListenerHit {
                         pointer_id,
                         listener_index,
+                        drag_phase: drag_action.then_some(RuntimePointerDragPhase::Armed),
+                        event_context: event_context.cloned(),
                     });
             }
             let direct_action = listener_hit && listener.has_listener(RuntimeListenerType::Down);
             let action_type =
                 hover_action.or_else(|| direct_action.then_some(RuntimeListenerType::Down));
-            if listener_hit && (click_action || direct_action || hover_action.is_some()) {
+            if listener_hit
+                && (click_action || drag_action || direct_action || hover_action.is_some())
+            {
+                hit = true;
+            }
+            if action_type.is_some()
+                && self.perform_listener_actions_with_event_context(
+                    &listener.listener_actions,
+                    owned_context.as_deref_mut(),
+                    event_context,
+                )
+            {
+                self.needs_advance = true;
+            }
+        }
+        hit
+    }
+
+    pub fn pointer_move(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        seconds: f32,
+        pointer_id: i32,
+    ) -> bool {
+        self.pointer_move_with_context(artboard, x, y, seconds, pointer_id, None)
+    }
+
+    pub fn pointer_move_with_owned_view_model_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        seconds: f32,
+        pointer_id: i32,
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        self.pointer_move_with_context(artboard, x, y, seconds, pointer_id, Some(context))
+    }
+
+    fn pointer_move_with_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        seconds: f32,
+        pointer_id: i32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
+        if !x.is_finite() || !y.is_finite() || !seconds.is_finite() {
+            return false;
+        }
+        let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
+            return false;
+        };
+
+        let mut starts_drag = false;
+        for capture in self
+            .pointer_down_listener_hits
+            .iter_mut()
+            .filter(|capture| capture.pointer_id == pointer_id)
+        {
+            if capture.drag_phase == Some(RuntimePointerDragPhase::Armed) {
+                capture.drag_phase = Some(RuntimePointerDragPhase::Dragging);
+                starts_drag = true;
+            }
+        }
+
+        let mut hit = false;
+        if starts_drag {
+            hit |= self.dispatch_pointer_listener_type(
+                artboard,
+                RuntimeListenerType::DragStart,
+                x,
+                y,
+                owned_context.as_deref_mut(),
+            );
+        }
+
+        for (listener_index, listener) in state_machine.listeners.iter().enumerate() {
+            let listener_hit = listener.hit_test(artboard, x, y);
+            let hover_action = self.update_pointer_listener_hover(
+                listener_index,
+                listener,
+                listener_hit,
+                pointer_id,
+            );
+            let captured_drag = listener.has_listener(RuntimeListenerType::Drag)
+                && self.pointer_down_listener_hits.iter().any(|capture| {
+                    capture.pointer_id == pointer_id
+                        && capture.listener_index == listener_index
+                        && capture.drag_phase.is_some()
+                });
+            let direct_action = listener_hit && listener.has_listener(RuntimeListenerType::Move);
+            let action_type = hover_action
+                .or_else(|| captured_drag.then_some(RuntimeListenerType::Drag))
+                .or_else(|| direct_action.then_some(RuntimeListenerType::Move));
+            if captured_drag || (listener_hit && (direct_action || hover_action.is_some())) {
                 hit = true;
             }
             if action_type.is_some()
@@ -331,37 +553,6 @@ impl StateMachineInstance {
         hit
     }
 
-    pub fn pointer_move(
-        &mut self,
-        artboard: &ArtboardInstance,
-        x: f32,
-        y: f32,
-        _seconds: f32,
-        pointer_id: i32,
-    ) -> bool {
-        self.update_pointer_listeners(artboard, RuntimeListenerType::Move, x, y, pointer_id, None)
-    }
-
-    pub fn pointer_move_with_owned_view_model_context(
-        &mut self,
-        artboard: &ArtboardInstance,
-        x: f32,
-        y: f32,
-        seconds: f32,
-        pointer_id: i32,
-        context: &mut RuntimeOwnedViewModelInstance,
-    ) -> bool {
-        let _ = seconds;
-        self.update_pointer_listeners(
-            artboard,
-            RuntimeListenerType::Move,
-            x,
-            y,
-            pointer_id,
-            Some(context),
-        )
-    }
-
     pub fn pointer_up(
         &mut self,
         artboard: &ArtboardInstance,
@@ -369,7 +560,18 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        self.pointer_up_with_context(artboard, x, y, pointer_id, None)
+        self.pointer_up_with_context(artboard, x, y, pointer_id, None, None)
+    }
+
+    pub fn pointer_up_with_event_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        event_context: &StateMachineEventContext,
+    ) -> bool {
+        self.pointer_up_with_context(artboard, x, y, pointer_id, None, Some(event_context))
     }
 
     pub fn pointer_up_with_owned_view_model_context(
@@ -380,7 +582,26 @@ impl StateMachineInstance {
         pointer_id: i32,
         context: &mut RuntimeOwnedViewModelInstance,
     ) -> bool {
-        self.pointer_up_with_context(artboard, x, y, pointer_id, Some(context))
+        self.pointer_up_with_context(artboard, x, y, pointer_id, Some(context), None)
+    }
+
+    pub fn pointer_up_with_owned_view_model_and_event_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        context: &mut RuntimeOwnedViewModelInstance,
+        event_context: &StateMachineEventContext,
+    ) -> bool {
+        self.pointer_up_with_context(
+            artboard,
+            x,
+            y,
+            pointer_id,
+            Some(context),
+            Some(event_context),
+        )
     }
 
     fn pointer_up_with_context(
@@ -390,7 +611,11 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
     ) -> bool {
+        if !x.is_finite() || !y.is_finite() {
+            return false;
+        }
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
             self.pointer_down_listener_hits
                 .retain(|hit| hit.pointer_id != pointer_id);
@@ -398,6 +623,18 @@ impl StateMachineInstance {
         };
 
         let mut hit = false;
+        if self.pointer_down_listener_hits.iter().any(|capture| {
+            capture.pointer_id == pointer_id
+                && capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
+        }) {
+            hit |= self.dispatch_pointer_listener_type(
+                artboard,
+                RuntimeListenerType::DragEnd,
+                x,
+                y,
+                owned_context.as_deref_mut(),
+            );
+        }
         for (listener_index, listener) in state_machine.listeners.iter().enumerate() {
             let listener_hit = listener.hit_test(artboard, x, y);
             let hover_action = self.update_pointer_listener_hover(
@@ -417,10 +654,23 @@ impl StateMachineInstance {
             if listener_hit && (click_matched || direct_action || hover_action.is_some()) {
                 hit = true;
             }
+            let captured_event_context = (action_type == Some(RuntimeListenerType::Click))
+                .then(|| {
+                    self.pointer_down_listener_hits
+                        .iter()
+                        .find(|capture| {
+                            capture.pointer_id == pointer_id
+                                && capture.listener_index == listener_index
+                        })
+                        .and_then(|capture| capture.event_context.clone())
+                })
+                .flatten();
+            let action_event_context = captured_event_context.as_ref().or(event_context);
             if action_type.is_some()
-                && self.perform_listener_actions(
+                && self.perform_listener_actions_with_event_context(
                     &listener.listener_actions,
                     owned_context.as_deref_mut(),
+                    action_event_context,
                 )
             {
                 self.needs_advance = true;
@@ -438,17 +688,7 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        let hit = self.update_pointer_listeners(
-            artboard,
-            RuntimeListenerType::Exit,
-            x,
-            y,
-            pointer_id,
-            None,
-        );
-        self.pointer_listener_states
-            .retain(|state| state.pointer_id != pointer_id);
-        hit
+        self.pointer_exit_with_context(artboard, x, y, pointer_id, None)
     }
 
     pub fn pointer_exit_with_owned_view_model_context(
@@ -459,16 +699,58 @@ impl StateMachineInstance {
         pointer_id: i32,
         context: &mut RuntimeOwnedViewModelInstance,
     ) -> bool {
+        self.pointer_exit_with_context(artboard, x, y, pointer_id, Some(context))
+    }
+
+    fn pointer_exit_with_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
+        if !x.is_finite() || !y.is_finite() {
+            return false;
+        }
         let hit = self.update_pointer_listeners(
             artboard,
             RuntimeListenerType::Exit,
             x,
             y,
             pointer_id,
-            Some(context),
+            owned_context,
         );
         self.pointer_listener_states
             .retain(|state| state.pointer_id != pointer_id);
+        self.pointer_down_listener_hits
+            .retain(|capture| capture.pointer_id != pointer_id);
+        hit
+    }
+
+    fn dispatch_pointer_listener_type(
+        &mut self,
+        artboard: &ArtboardInstance,
+        listener_type: RuntimeListenerType,
+        x: f32,
+        y: f32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
+        let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
+            return false;
+        };
+        let mut hit = false;
+        for listener in state_machine.listeners.iter() {
+            if !listener.has_listener(listener_type) || !listener.hit_test(artboard, x, y) {
+                continue;
+            }
+            hit = true;
+            if self
+                .perform_listener_actions(&listener.listener_actions, owned_context.as_deref_mut())
+            {
+                self.needs_advance = true;
+            }
+        }
         hit
     }
 
@@ -518,6 +800,26 @@ impl StateMachineInstance {
         source_local_id: Option<usize>,
         events: &[StateMachineReportedEvent],
     ) -> bool {
+        self.notify_events_with_context(artboard, source_local_id, events, None)
+    }
+
+    pub(crate) fn notify_events_with_owned_view_model_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        source_local_id: Option<usize>,
+        events: &[StateMachineReportedEvent],
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        self.notify_events_with_context(artboard, source_local_id, events, Some(context))
+    }
+
+    fn notify_events_with_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        source_local_id: Option<usize>,
+        events: &[StateMachineReportedEvent],
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
         if events.is_empty() {
             return false;
         }
@@ -540,11 +842,54 @@ impl StateMachineInstance {
                     .event_local_indices
                     .contains(&event.event_local_index())
             }) {
-                changed |= self.perform_listener_actions(&listener.listener_actions, None);
+                changed |= self.perform_listener_actions(
+                    &listener.listener_actions,
+                    owned_context.as_deref_mut(),
+                );
             }
         }
         if changed {
             self.needs_advance = true;
+        }
+        changed
+    }
+
+    pub(crate) fn apply_local_event_listeners(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        state_machine: &RuntimeStateMachine,
+        mut next_event_index: usize,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
+        const MAX_EVENT_ITERATIONS: usize = 100;
+
+        let mut changed = false;
+        for _ in 0..MAX_EVENT_ITERATIONS {
+            self.reported_events
+                .append(&mut self.pending_listener_events);
+            if next_event_index >= self.reported_events.len() {
+                break;
+            }
+
+            let events = self.reported_events[next_event_index..].to_vec();
+            next_event_index = self.reported_events.len();
+            let notified = self.notify_events_with_context(
+                artboard,
+                None,
+                &events,
+                owned_context.as_deref_mut(),
+            );
+            changed |= notified;
+            if !notified {
+                continue;
+            }
+
+            if let Some(context) = owned_context.as_deref_mut() {
+                changed |= self.bind_owned_view_model_context_mut(context);
+            }
+            self.reported_events
+                .append(&mut self.pending_listener_events);
+            changed |= self.advance_preserving_reported_events(artboard, state_machine, 0.0);
         }
         changed
     }
@@ -588,13 +933,24 @@ impl StateMachineInstance {
     fn perform_listener_actions(
         &mut self,
         listener_actions: &[RuntimeScheduledListenerAction],
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
+        self.perform_listener_actions_with_event_context(listener_actions, owned_context, None)
+    }
+
+    fn perform_listener_actions_with_event_context(
+        &mut self,
+        listener_actions: &[RuntimeScheduledListenerAction],
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
     ) -> bool {
         let mut changed = false;
         for action in listener_actions {
             match action {
                 RuntimeScheduledListenerAction::FireEvent { event, .. } => {
-                    self.reported_events.push(event.clone());
+                    let mut reported = event.clone();
+                    reported.context = event_context.cloned();
+                    self.pending_listener_events.push(reported);
                     changed = true;
                 }
                 RuntimeScheduledListenerAction::BoolChange {
@@ -2855,12 +3211,67 @@ impl StateMachineInstance {
         &mut self,
         context: &RuntimeOwnedViewModelInstance,
     ) -> bool {
-        if !self.data_bind_graph.bind_owned_view_model_context(context) {
-            return false;
+        let mut changed = self.data_bind_graph.bind_owned_view_model_context(context);
+        if changed {
+            self.bind_active_owned_view_model_triggers(context);
         }
-        self.bind_active_owned_view_model_triggers(context);
-        self.needs_advance = true;
-        true
+        for actions in self.changed_view_model_listener_actions(context) {
+            changed |= self.perform_listener_actions(&actions, None);
+        }
+        if changed {
+            self.needs_advance = true;
+        }
+        changed
+    }
+
+    /// Rebind an owned ViewModel context and dispatch typed ViewModel-change
+    /// listeners into that same retained context.
+    pub fn bind_owned_view_model_context_mut(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        self.bind_owned_view_model_context_mut_with_listener_change(context)
+            .0
+    }
+
+    pub(crate) fn bind_owned_view_model_context_mut_with_listener_change(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> (bool, bool) {
+        let mut changed = self.data_bind_graph.bind_owned_view_model_context(context);
+        if changed {
+            self.bind_active_owned_view_model_triggers(context);
+        }
+        let actions = self.changed_view_model_listener_actions(context);
+        let mut listener_changed = false;
+        for listener_actions in actions {
+            listener_changed |= self.perform_listener_actions(&listener_actions, Some(context));
+        }
+        changed |= listener_changed;
+        if changed {
+            self.needs_advance = true;
+        }
+        (changed, listener_changed)
+    }
+
+    fn changed_view_model_listener_actions(
+        &mut self,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> Vec<Vec<RuntimeScheduledListenerAction>> {
+        let mut changed = Vec::new();
+        for listener in &mut self.view_model_listeners {
+            let current = runtime_view_model_listener_value(context, &listener.property_path);
+            let should_dispatch = listener
+                .observed
+                .as_ref()
+                .zip(current.as_ref())
+                .is_some_and(|(previous, current)| previous != current);
+            listener.observed = current;
+            if should_dispatch {
+                changed.push(listener.actions.clone());
+            }
+        }
+        changed
     }
 
     pub(crate) fn bind_owned_view_model_context_chain(
@@ -3024,7 +3435,10 @@ impl StateMachineInstance {
         state_machine: &RuntimeStateMachine,
         elapsed_seconds: f32,
     ) -> bool {
-        self.advance_with_report_mode(artboard, state_machine, elapsed_seconds, true)
+        self.reported_events.clear();
+        self.reported_events
+            .append(&mut self.pending_listener_events);
+        self.advance_with_report_mode(artboard, state_machine, elapsed_seconds, false)
     }
 
     pub(crate) fn advance_preserving_reported_events(

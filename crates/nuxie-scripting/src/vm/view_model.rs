@@ -340,14 +340,20 @@ impl UserData for ScriptedPropertyList {
 pub(super) struct ScriptedContext {
     model: Rc<RefCell<Option<ScriptViewModel>>>,
     parents: Vec<ScriptViewModel>,
+    gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
 }
 
 impl ScriptedContext {
     pub(super) fn new(
         model: Rc<RefCell<Option<ScriptViewModel>>>,
         parents: Vec<ScriptViewModel>,
+        gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
     ) -> Self {
-        Self { model, parents }
+        Self {
+            model,
+            parents,
+            gpu_canvas,
+        }
     }
 }
 
@@ -381,6 +387,20 @@ impl UserData for ScriptedContext {
                 parents: this.parents.clone(),
             })
             .map(Value::UserData)
+        });
+        methods.add_method("gpuCanvas", |lua, this, ()| {
+            let gpu_canvas = this
+                .gpu_canvas
+                .as_ref()
+                .ok_or_else(|| luaur_rt::Error::runtime("GPU-canvas context is unavailable"))?;
+            gpu_canvas.canvas_userdata(lua)
+        });
+        methods.add_method("shader", |lua, this, name: String| {
+            let gpu_canvas = this
+                .gpu_canvas
+                .as_ref()
+                .ok_or_else(|| luaur_rt::Error::runtime("GPU-canvas context is unavailable"))?;
+            gpu_canvas.shader_userdata(lua, name)
         });
     }
 }

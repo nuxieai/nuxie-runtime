@@ -996,7 +996,7 @@ fn fast_acos(x: f32) -> f32 {
     const B: f32 = 0.9217841528914573;
     const C: f32 = -1.2845906244690837;
     const D: f32 = 0.295624144969963174;
-    const PI_OVER_2: f32 = 1.5707963267948966;
+    const PI_OVER_2: f32 = std::f32::consts::FRAC_PI_2;
 
     let xx = x * x;
     let numer = B * xx + A;

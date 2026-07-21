@@ -340,7 +340,10 @@ impl fmt::Display for AtlasMaskComparisonError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidTolerance { name, value } => {
-                write!(f, "{name} tolerance must be finite and nonnegative, got {value}")
+                write!(
+                    f,
+                    "{name} tolerance must be finite and nonnegative, got {value}"
+                )
             }
             Self::Dimensions { cpp, rust } => write!(
                 f,

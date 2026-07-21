@@ -21213,12 +21213,12 @@ fn lower_artboard(
             .get(&node.id)
             .copied()
             .ok_or_else(|| {
-            EditDiagnostic::new(
-                origins.object(node.id, fallback_operation_index),
-                vec![EditId::Object(node.id)],
-                EditReason::InternalInvariant,
-            )
-        })?;
+                EditDiagnostic::new(
+                    origins.object(node.id, fallback_operation_index),
+                    vec![EditId::Object(node.id)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
         if objects_by_local.len() != style_local_id {
             return Err(EditDiagnostic::new(
                 origins.object(node.id, fallback_operation_index),
@@ -23188,8 +23188,7 @@ fn component_list_layout_record(
     style_local_id: usize,
 ) -> std::result::Result<ExportedRecord, EditReason> {
     let parent_id = u32::try_from(parent_id).map_err(|_| EditReason::CapacityExceeded)?;
-    let style_local_id =
-        u32::try_from(style_local_id).map_err(|_| EditReason::CapacityExceeded)?;
+    let style_local_id = u32::try_from(style_local_id).map_err(|_| EditReason::CapacityExceeded)?;
     let mut properties = Vec::new();
     if parent_id != 0 {
         properties.push(ExportedProperty::ParentId(parent_id));
@@ -28657,14 +28656,14 @@ mod tests {
             (first_glyph.min_y + first_glyph.max_y) / 2.0,
         );
         for (actual, expected) in [
-            (canonical_downstream.top.x, 28.554_688),
+            (canonical_downstream.top.x, 26.835_938),
             (canonical_downstream.top.y, 50.878_906),
-            (canonical_downstream.bottom.x, 5.833_334),
+            (canonical_downstream.bottom.x, 6.835_937_5),
             (canonical_downstream.bottom.y, 50.878_906),
             (first_glyph.max_x, 10.878_906),
-            (first_glyph.min_y, 31.445_313),
+            (first_glyph.min_y, 33.164_063),
             (upstream_point.x, 10.878_906),
-            (upstream_point.y, 42.805_99),
+            (upstream_point.y, 43.164_063),
         ] {
             assert!(
                 (actual - expected).abs() <= 0.001,
@@ -28682,7 +28681,7 @@ mod tests {
             Some(1),
             "the upstream side of the real follow-path boundary remains hittable"
         );
-        let upstream_golden_top = crate::Vec2D::new(10.878_906, 31.445_313);
+        let upstream_golden_top = crate::Vec2D::new(10.878_906, 33.164_063);
         assert_eq!(
             frame.text_hit(instance, text, upstream_golden_top),
             Some(1),

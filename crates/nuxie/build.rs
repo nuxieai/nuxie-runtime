@@ -1090,6 +1090,11 @@ fn render_scene_schema() -> String {
     let bindable_property_asset = concrete_definition("BindablePropertyAsset");
     let state_transition = concrete_definition("StateTransition");
     let transition_trigger_condition = concrete_definition("TransitionTriggerCondition");
+    let transition_view_model_condition = concrete_definition("TransitionViewModelCondition");
+    let transition_property_view_model_comparator =
+        concrete_definition("TransitionPropertyViewModelComparator");
+    let transition_value_trigger_comparator =
+        concrete_definition("TransitionValueTriggerComparator");
     let transition_bool_condition = concrete_definition("TransitionBoolCondition");
     let transition_number_condition = concrete_definition("TransitionNumberCondition");
     let state_machine_fire_event = concrete_definition("StateMachineFireEvent");
@@ -1214,6 +1219,18 @@ fn render_scene_schema() -> String {
         ("BINDABLE_PROPERTY_ASSET", bindable_property_asset),
         ("STATE_TRANSITION", state_transition),
         ("TRANSITION_TRIGGER_CONDITION", transition_trigger_condition),
+        (
+            "TRANSITION_VIEW_MODEL_CONDITION",
+            transition_view_model_condition,
+        ),
+        (
+            "TRANSITION_PROPERTY_VIEW_MODEL_COMPARATOR",
+            transition_property_view_model_comparator,
+        ),
+        (
+            "TRANSITION_VALUE_TRIGGER_COMPARATOR",
+            transition_value_trigger_comparator,
+        ),
         ("TRANSITION_BOOL_CONDITION", transition_bool_condition),
         ("TRANSITION_NUMBER_CONDITION", transition_number_condition),
         ("STATE_MACHINE_FIRE_EVENT", state_machine_fire_event),
@@ -2179,6 +2196,13 @@ fn render_scene_schema() -> String {
         FieldKind::String,
         true,
     );
+    let view_model_type = resolve_named_property(
+        "ViewModel",
+        "viewModelType",
+        "ViewModel",
+        FieldKind::Uint,
+        false,
+    );
     let view_model_instance_view_model_id = resolve_named_property(
         "ViewModelInstance",
         "viewModelId",
@@ -2790,6 +2814,7 @@ fn render_scene_schema() -> String {
         ("LISTENER_NUMBER_VALUE", listener_number_value),
         ("LISTENER_FIRE_EVENT_ID", listener_fire_event_id),
         ("VIEW_MODEL_COMPONENT_NAME", view_model_component_name),
+        ("VIEW_MODEL_TYPE", view_model_type),
         (
             "VIEW_MODEL_INSTANCE_VIEW_MODEL_ID",
             view_model_instance_view_model_id,

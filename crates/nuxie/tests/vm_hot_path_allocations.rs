@@ -4,7 +4,9 @@ use std::{
 };
 
 use anyhow::Result;
-use nuxie::{ArtboardSpec, Scene, ViewModelInstanceSpec, ViewModelNumberSpec, ViewModelSpec};
+use nuxie::{
+    ArtboardSpec, Scene, ViewModelInstanceSpec, ViewModelNumberSpec, ViewModelScope, ViewModelSpec,
+};
 
 struct CountingAllocator;
 
@@ -55,6 +57,7 @@ fn direct_view_model_slot_writes_allocate_nothing() -> Result<()> {
         })?;
         let mut view_models = tx.view_models();
         let model = view_models.create(ViewModelSpec {
+            scope: ViewModelScope::Local,
             name: "Playback".into(),
         })?;
         let number = view_models.create_number(

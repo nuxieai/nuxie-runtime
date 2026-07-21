@@ -2313,18 +2313,10 @@ impl ArtboardInstance {
         let mut instance = StateMachineInstance::new(index, state_machine, self);
         if let Some(context) = self.artboard_owned_view_model_handle.as_ref() {
             instance.bind_owned_view_model_context_handle(context);
-        } else if !self.artboard_owned_view_model_candidates.is_empty()
-            && let Some(file) = self
-                .build_context
-                .as_ref()
-                .map(|context| context.file.as_ref())
-        {
-            let contexts = self
-                .artboard_owned_view_model_candidates
-                .iter()
-                .map(|candidate| (candidate.context.clone(), candidate.context_chain.clone()))
-                .collect::<Vec<_>>();
-            instance.bind_owned_view_model_context_chains(file, &contexts);
+        } else if !self.artboard_owned_view_model_candidates.is_empty() {
+            instance.bind_owned_view_model_context_candidates(
+                &self.artboard_owned_view_model_candidates,
+            );
         } else if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
             instance.bind_owned_view_model_contexts(context);
         }
@@ -2711,13 +2703,8 @@ impl ArtboardInstance {
                         );
                     for state_machine in &mut item.state_machines {
                         state_machine.bind_owned_view_model_handle(&context);
-                        let contexts = child_candidates
-                            .iter()
-                            .map(|candidate| {
-                                (candidate.context.clone(), candidate.context_chain.clone())
-                            })
-                            .collect::<Vec<_>>();
-                        if state_machine.bind_owned_view_model_context_chains(file, &contexts) {
+                        if state_machine.bind_owned_view_model_context_candidates(&child_candidates)
+                        {
                             state_machine.advance_data_context();
                         }
                     }
@@ -2786,11 +2773,7 @@ impl ArtboardInstance {
                 else {
                     continue;
                 };
-                let contexts = child_candidates
-                    .iter()
-                    .map(|candidate| (candidate.context.clone(), candidate.context_chain.clone()))
-                    .collect::<Vec<_>>();
-                state_machine.bind_owned_view_model_context_chains(file, &contexts);
+                state_machine.bind_owned_view_model_context_candidates(&child_candidates);
                 // C++ `ArtboardComponentList::linkStateMachineToArtboard`
                 // installs the row DataContext and immediately runs
                 // `updateDataBinds(false)` before the first state advance.
@@ -5591,20 +5574,15 @@ impl RuntimeNestedArtboardInstance {
 
     pub(crate) fn bind_owned_view_model_animation_context_candidates(
         &mut self,
-        file: &RuntimeFile,
         candidates: &[RuntimeOwnedViewModelBindingCandidate],
     ) -> bool {
-        let contexts = candidates
-            .iter()
-            .map(|candidate| (candidate.context.clone(), candidate.context_chain.clone()))
-            .collect::<Vec<_>>();
         let mut changed = false;
         for animation in &mut self.animations {
             let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } = animation
             else {
                 continue;
             };
-            if state_machine.bind_owned_view_model_context_chains(file, &contexts) {
+            if state_machine.bind_owned_view_model_context_candidates(candidates) {
                 changed = true;
                 changed |= state_machine.advance_data_context();
             }
@@ -6849,6 +6827,7 @@ mod tests {
         RuntimeStateMachine {
             global_id,
             name: None,
+            default_view_model_index: None,
             inputs: Arc::new(Vec::new()),
             listeners: Arc::new(Vec::new()),
             layers: Arc::new(Vec::new()),
@@ -9432,16 +9411,104 @@ mod tests {
     }
 
     fn synthetic_owned_view_model_action_riv(file_id: u64, listener_action: bool) -> Vec<u8> {
+        synthetic_owned_view_model_action_riv_with_options(file_id, listener_action, false, false)
+    }
+
+    fn synthetic_owned_view_model_action_riv_with_options(
+        file_id: u64,
+        listener_action: bool,
+        cross_model_trigger_action: bool,
+        listener_cascade: bool,
+    ) -> Vec<u8> {
         synthetic_riv(file_id, |bytes| {
+            push_synthetic_object(bytes, "FontAsset", &[("assetId", 17)]);
             push_synthetic_object(bytes, "ViewModel", &[]);
             push_synthetic_object_with_properties(bytes, "ViewModelPropertyList", |bytes| {
                 push_synthetic_bytes_property(bytes, "ViewModelPropertyList", "name", b"items");
             });
-            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+                push_synthetic_bytes_property(
+                    bytes,
+                    "ViewModelPropertyViewModel",
+                    "name",
+                    b"child",
+                );
+                push_synthetic_uint_property(
+                    bytes,
+                    "ViewModelPropertyViewModel",
+                    "viewModelReferenceId",
+                    1,
+                );
+            });
+            push_synthetic_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+                push_synthetic_bytes_property(
+                    bytes,
+                    "ViewModelPropertyViewModel",
+                    "name",
+                    b"other_child",
+                );
+                push_synthetic_uint_property(
+                    bytes,
+                    "ViewModelPropertyViewModel",
+                    "viewModelReferenceId",
+                    2,
+                );
+            });
+            push_synthetic_object(bytes, "ViewModel", &[("viewModelType", 2)]);
             push_synthetic_object(bytes, "ViewModelPropertyNumber", &[]);
             push_synthetic_object(bytes, "ViewModelPropertyNumber", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyTrigger", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyAssetFont", &[]);
+            // A same-shaped global model lets listener tests distinguish an
+            // authored slot identity from its compatible cross-model occupant.
+            push_synthetic_object(bytes, "ViewModel", &[("viewModelType", 2)]);
+            push_synthetic_object(bytes, "ViewModelPropertyNumber", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyNumber", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyTrigger", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyAssetFont", &[]);
             push_synthetic_object(bytes, "Backboard", &[]);
             push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 1)]);
+            push_synthetic_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                push_synthetic_uint_property(
+                    bytes,
+                    "ViewModelInstanceNumber",
+                    "viewModelPropertyId",
+                    0,
+                );
+                push_synthetic_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 0.0);
+            });
+            push_synthetic_object_with_properties(bytes, "ViewModelInstanceTrigger", |bytes| {
+                push_synthetic_uint_property(
+                    bytes,
+                    "ViewModelInstanceTrigger",
+                    "viewModelPropertyId",
+                    2,
+                );
+            });
+            push_synthetic_object_with_properties(bytes, "ViewModelInstanceAssetFont", |bytes| {
+                push_synthetic_uint_property(
+                    bytes,
+                    "ViewModelInstanceAssetFont",
+                    "viewModelPropertyId",
+                    3,
+                );
+                push_synthetic_uint_property(
+                    bytes,
+                    "ViewModelInstanceAssetFont",
+                    "propertyValue",
+                    0,
+                );
+            });
+            push_synthetic_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                push_synthetic_uint_property(
+                    bytes,
+                    "ViewModelInstanceNumber",
+                    "viewModelPropertyId",
+                    1,
+                );
+                push_synthetic_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 0.0);
+            });
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 2)]);
             push_synthetic_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
                 push_synthetic_uint_property(
                     bytes,
@@ -9459,6 +9526,22 @@ mod tests {
                     1,
                 );
                 push_synthetic_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 0.0);
+            });
+            push_synthetic_object_with_properties(bytes, "ViewModelInstanceTrigger", |bytes| {
+                push_synthetic_uint_property(
+                    bytes,
+                    "ViewModelInstanceTrigger",
+                    "viewModelPropertyId",
+                    2,
+                );
+            });
+            push_synthetic_object_with_properties(bytes, "ViewModelInstanceAssetFont", |bytes| {
+                push_synthetic_uint_property(
+                    bytes,
+                    "ViewModelInstanceAssetFont",
+                    "viewModelPropertyId",
+                    3,
+                );
             });
             push_synthetic_object(bytes, "Artboard", &[("viewModelId", 1)]);
             push_synthetic_object_with_properties(bytes, "LinearAnimation", |bytes| {
@@ -9500,6 +9583,43 @@ mod tests {
                     push_synthetic_f32_property(bytes, "ListenerNumberChange", "value", 7.0);
                 });
                 push_owned_number_change_action(bytes, 0);
+                if cross_model_trigger_action {
+                    push_owned_trigger_change_action(bytes, 2, 2);
+                    push_owned_number_change_action_for(bytes, 2, 1, 64.0, 0);
+                }
+                if listener_cascade {
+                    let mut cascade_path = Vec::new();
+                    push_var_uint(&mut cascade_path, 1);
+                    push_var_uint(&mut cascade_path, 1);
+                    push_synthetic_object_with_properties(
+                        bytes,
+                        "StateMachineListenerSingle",
+                        |bytes| {
+                            push_synthetic_uint_property(
+                                bytes,
+                                "StateMachineListenerSingle",
+                                "targetId",
+                                0,
+                            );
+                            push_synthetic_uint_property(
+                                bytes,
+                                "StateMachineListenerSingle",
+                                "listenerTypeValue",
+                                11,
+                            );
+                            push_synthetic_bytes_property(
+                                bytes,
+                                "StateMachineListenerSingle",
+                                "viewModelPathIds",
+                                &cascade_path,
+                            );
+                        },
+                    );
+                    push_synthetic_object_with_properties(bytes, "ListenerNumberChange", |bytes| {
+                        push_synthetic_uint_property(bytes, "ListenerNumberChange", "inputId", 0);
+                        push_synthetic_f32_property(bytes, "ListenerNumberChange", "value", 9.0);
+                    });
+                }
             }
 
             push_synthetic_object(bytes, "StateMachineLayer", &[]);
@@ -9510,18 +9630,212 @@ mod tests {
             if !listener_action {
                 const STATE_AT_START: u64 = 2 << 1;
                 push_owned_number_change_action(bytes, STATE_AT_START);
+                if cross_model_trigger_action {
+                    push_owned_trigger_change_action_with_flags(bytes, 2, 2, STATE_AT_START);
+                }
             }
+            push_owned_font_bind(bytes);
             push_synthetic_object(bytes, "ExitState", &[]);
         })
     }
 
+    fn synthetic_owned_view_model_listener_chain_riv(
+        file_id: u64,
+        listener_count: usize,
+        close_cycle: bool,
+    ) -> Vec<u8> {
+        synthetic_riv(file_id, |bytes| {
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            for _ in 0..=listener_count {
+                push_synthetic_object(bytes, "ViewModelPropertyNumber", &[]);
+            }
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 0)]);
+            for property_index in 0..=listener_count {
+                push_synthetic_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                    push_synthetic_uint_property(
+                        bytes,
+                        "ViewModelInstanceNumber",
+                        "viewModelPropertyId",
+                        property_index as u64,
+                    );
+                    push_synthetic_f32_property(
+                        bytes,
+                        "ViewModelInstanceNumber",
+                        "propertyValue",
+                        0.0,
+                    );
+                });
+            }
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
+            push_synthetic_object_with_properties(bytes, "LinearAnimation", |bytes| {
+                push_synthetic_uint_property(bytes, "LinearAnimation", "duration", 1);
+            });
+            push_synthetic_object(bytes, "StateMachine", &[]);
+            for property_index in 0..listener_count {
+                let mut listener_path = Vec::new();
+                push_var_uint(&mut listener_path, 0);
+                push_var_uint(&mut listener_path, property_index as u64);
+                push_synthetic_object_with_properties(
+                    bytes,
+                    "StateMachineListenerSingle",
+                    |bytes| {
+                        push_synthetic_uint_property(
+                            bytes,
+                            "StateMachineListenerSingle",
+                            "targetId",
+                            0,
+                        );
+                        push_synthetic_uint_property(
+                            bytes,
+                            "StateMachineListenerSingle",
+                            "listenerTypeValue",
+                            11,
+                        );
+                        push_synthetic_bytes_property(
+                            bytes,
+                            "StateMachineListenerSingle",
+                            "viewModelPathIds",
+                            &listener_path,
+                        );
+                    },
+                );
+                push_owned_number_change_action_for(
+                    bytes,
+                    0,
+                    property_index.saturating_add(1) as u64,
+                    1.0,
+                    0,
+                );
+            }
+            if close_cycle {
+                let mut listener_path = Vec::new();
+                push_var_uint(&mut listener_path, 0);
+                push_var_uint(&mut listener_path, listener_count as u64);
+                push_synthetic_object_with_properties(
+                    bytes,
+                    "StateMachineListenerSingle",
+                    |bytes| {
+                        push_synthetic_uint_property(
+                            bytes,
+                            "StateMachineListenerSingle",
+                            "targetId",
+                            0,
+                        );
+                        push_synthetic_uint_property(
+                            bytes,
+                            "StateMachineListenerSingle",
+                            "listenerTypeValue",
+                            11,
+                        );
+                        push_synthetic_bytes_property(
+                            bytes,
+                            "StateMachineListenerSingle",
+                            "viewModelPathIds",
+                            &listener_path,
+                        );
+                    },
+                );
+                push_owned_number_change_action_for(bytes, 0, 0, 2.0, 0);
+            }
+            push_synthetic_object(bytes, "StateMachineLayer", &[]);
+            push_synthetic_object(bytes, "AnyState", &[]);
+            push_synthetic_object(bytes, "EntryState", &[]);
+            push_synthetic_object(bytes, "StateTransition", &[("stateToId", 2)]);
+            push_synthetic_object(bytes, "AnimationState", &[("animationId", 0)]);
+            push_synthetic_object(bytes, "ExitState", &[]);
+        })
+    }
+
+    fn synthetic_owned_view_model_listener_live_cycle_riv(file_id: u64) -> Vec<u8> {
+        synthetic_riv(file_id, |bytes| {
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyNumber", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyNumber", &[]);
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 0)]);
+            for property_index in 0..2 {
+                push_synthetic_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                    push_synthetic_uint_property(
+                        bytes,
+                        "ViewModelInstanceNumber",
+                        "viewModelPropertyId",
+                        property_index,
+                    );
+                    push_synthetic_f32_property(
+                        bytes,
+                        "ViewModelInstanceNumber",
+                        "propertyValue",
+                        0.0,
+                    );
+                });
+            }
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
+            push_synthetic_object_with_properties(bytes, "LinearAnimation", |bytes| {
+                push_synthetic_uint_property(bytes, "LinearAnimation", "duration", 1);
+            });
+            push_synthetic_object(bytes, "StateMachine", &[]);
+
+            // This listener order forms a permanent three-phase cycle:
+            // (A=1, B=1) -> (A=0, B=0) -> (A=1, B=0).
+            push_owned_number_listener_change(bytes, 0, 1, 1.0);
+            push_owned_number_listener_change(bytes, 1, 0, 0.0);
+            push_owned_number_listener_change(bytes, 0, 0, 1.0);
+            push_owned_number_listener_change(bytes, 1, 1, 0.0);
+
+            push_synthetic_object(bytes, "StateMachineLayer", &[]);
+            push_synthetic_object(bytes, "AnyState", &[]);
+            push_synthetic_object(bytes, "EntryState", &[]);
+            push_synthetic_object(bytes, "StateTransition", &[("stateToId", 2)]);
+            push_synthetic_object(bytes, "AnimationState", &[("animationId", 0)]);
+            push_synthetic_object(bytes, "ExitState", &[]);
+        })
+    }
+
+    fn push_owned_number_listener_change(
+        bytes: &mut Vec<u8>,
+        source_property_index: u64,
+        target_property_index: u64,
+        value: f32,
+    ) {
+        let mut listener_path = Vec::new();
+        push_var_uint(&mut listener_path, 0);
+        push_var_uint(&mut listener_path, source_property_index);
+        push_synthetic_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_synthetic_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_synthetic_uint_property(
+                bytes,
+                "StateMachineListenerSingle",
+                "listenerTypeValue",
+                11,
+            );
+            push_synthetic_bytes_property(
+                bytes,
+                "StateMachineListenerSingle",
+                "viewModelPathIds",
+                &listener_path,
+            );
+        });
+        push_owned_number_change_action_for(bytes, 0, target_property_index, value, 0);
+    }
+
     fn push_owned_number_change_action(bytes: &mut Vec<u8>, flags: u64) {
+        push_owned_number_change_action_for(bytes, 1, 1, 42.0, flags);
+    }
+
+    fn push_owned_number_change_action_for(
+        bytes: &mut Vec<u8>,
+        view_model_index: u64,
+        property_index: u64,
+        value: f32,
+        flags: u64,
+    ) {
         push_synthetic_object_with_properties(bytes, "BindablePropertyNumber", |bytes| {
-            push_synthetic_f32_property(bytes, "BindablePropertyNumber", "propertyValue", 42.0);
+            push_synthetic_f32_property(bytes, "BindablePropertyNumber", "propertyValue", value);
         });
         let mut output_path = Vec::new();
-        push_var_uint(&mut output_path, 1);
-        push_var_uint(&mut output_path, 1);
+        push_var_uint(&mut output_path, view_model_index);
+        push_var_uint(&mut output_path, property_index);
         push_synthetic_object_with_properties(bytes, "DataBindContext", |bytes| {
             push_synthetic_uint_property(
                 bytes,
@@ -9538,6 +9852,63 @@ mod tests {
         push_synthetic_object(bytes, "ListenerViewModelChange", &[("flags", flags)]);
     }
 
+    fn push_owned_trigger_change_action(
+        bytes: &mut Vec<u8>,
+        view_model_index: u64,
+        property_index: u64,
+    ) {
+        push_owned_trigger_change_action_with_flags(bytes, view_model_index, property_index, 0);
+    }
+
+    fn push_owned_trigger_change_action_with_flags(
+        bytes: &mut Vec<u8>,
+        view_model_index: u64,
+        property_index: u64,
+        flags: u64,
+    ) {
+        push_synthetic_object(bytes, "BindablePropertyTrigger", &[("propertyValue", 1)]);
+        let mut output_path = Vec::new();
+        push_var_uint(&mut output_path, view_model_index);
+        push_var_uint(&mut output_path, property_index);
+        push_synthetic_object_with_properties(bytes, "DataBindContext", |bytes| {
+            push_synthetic_uint_property(
+                bytes,
+                "DataBindContext",
+                "propertyKey",
+                u64::from(schema_property_key(
+                    "BindablePropertyTrigger",
+                    "propertyValue",
+                )),
+            );
+            push_synthetic_uint_property(bytes, "DataBindContext", "flags", 1);
+            push_synthetic_bytes_property(bytes, "DataBindContext", "sourcePathIds", &output_path);
+        });
+        push_synthetic_object(bytes, "ListenerViewModelChange", &[("flags", flags)]);
+    }
+
+    fn push_owned_font_bind(bytes: &mut Vec<u8>) {
+        push_synthetic_object(
+            bytes,
+            "BindablePropertyAsset",
+            &[("propertyValue", u64::from(u32::MAX))],
+        );
+        let mut source_path = Vec::new();
+        push_var_uint(&mut source_path, 1);
+        push_var_uint(&mut source_path, 3);
+        push_synthetic_object_with_properties(bytes, "DataBindContext", |bytes| {
+            push_synthetic_uint_property(
+                bytes,
+                "DataBindContext",
+                "propertyKey",
+                u64::from(schema_property_key(
+                    "BindablePropertyAsset",
+                    "propertyValue",
+                )),
+            );
+            push_synthetic_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path);
+        });
+    }
+
     fn owned_view_model_action_fixture(
         file_id: u64,
         listener_action: bool,
@@ -9552,12 +9923,46 @@ mod tests {
         assert_eq!(runtime_state_machine.bindable_numbers.len(), 1);
         if listener_action {
             assert_eq!(runtime_state_machine.listeners.len(), 1);
+            assert_eq!(runtime_state_machine.listeners[0].view_model_index, Some(1));
             assert_eq!(
                 runtime_state_machine.listeners[0].view_model_property_path,
                 Some(vec![0])
             );
             assert_eq!(runtime_state_machine.listeners[0].listener_actions.len(), 2);
         }
+        let state_machine = artboard
+            .state_machine_instance(0)
+            .expect("fixture has a state machine");
+        (file, artboard, state_machine)
+    }
+
+    fn owned_view_model_action_fixture_with_cross_model_trigger(
+        file_id: u64,
+    ) -> (RuntimeFile, ArtboardInstance, StateMachineInstance) {
+        let bytes = synthetic_owned_view_model_action_riv_with_options(file_id, true, true, false);
+        let file = read_runtime_file(&bytes).expect("owned ViewModel action fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
+        let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
+        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+            .expect("fixture artboard instantiates");
+        let runtime_state_machine = artboard.state_machine(0).expect("fixture machine graph");
+        assert_eq!(runtime_state_machine.listeners.len(), 1);
+        assert_eq!(runtime_state_machine.listeners[0].listener_actions.len(), 4);
+        let state_machine = artboard
+            .state_machine_instance(0)
+            .expect("fixture has a state machine");
+        (file, artboard, state_machine)
+    }
+
+    fn owned_view_model_listener_cascade_fixture(
+        file_id: u64,
+    ) -> (RuntimeFile, ArtboardInstance, StateMachineInstance) {
+        let bytes = synthetic_owned_view_model_action_riv_with_options(file_id, true, false, true);
+        let file = read_runtime_file(&bytes).expect("listener cascade fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
+        let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
+        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+            .expect("fixture artboard instantiates");
         let state_machine = artboard
             .state_machine_instance(0)
             .expect("fixture has a state machine");
@@ -9585,6 +9990,801 @@ mod tests {
         assert!(context.set_number_by_property_index(0, 2.0));
         assert!(state_machine.bind_owned_view_model_context_mut(&mut context));
         assert_eq!(context.number_value_by_property_path(&[1]), Some(42.0));
+    }
+
+    #[test]
+    fn composite_owned_view_model_bind_dispatches_view_model_listeners() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9684, true);
+        let main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has an owned ViewModel context"),
+        );
+        let context = RuntimeOwnedViewModelContext::from_main_handle(main.clone());
+
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert!(main.borrow_mut().set_number_by_property_index(0, 1.0));
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(7.0),
+            "the composite artboard context must dispatch its ViewModel listener"
+        );
+        assert_eq!(
+            main.borrow().number_value_by_property_path(&[1]),
+            Some(42.0),
+            "listener ViewModel writes must reach the retained composite main context"
+        );
+    }
+
+    #[test]
+    fn composite_listener_cascade_reaches_a_bounded_fixpoint() {
+        let (file, _artboard, mut state_machine) = owned_view_model_listener_cascade_fixture(9700);
+        let main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has an owned ViewModel context"),
+        );
+        let context = RuntimeOwnedViewModelContext::from_main_handle(main.clone());
+
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert!(main.borrow_mut().set_number_by_property_index(0, 1.0));
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(9.0),
+            "listener B must observe listener A's write in the same bounded bind fixpoint",
+        );
+    }
+
+    #[test]
+    fn retained_handle_listener_cascade_reaches_a_bounded_fixpoint() {
+        let (file, _artboard, mut state_machine) = owned_view_model_listener_cascade_fixture(9701);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has an owned ViewModel context"),
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(9.0),
+            "retained handle refresh must rescan listener B after listener A writes",
+        );
+    }
+
+    #[test]
+    fn retained_candidate_listener_cascade_reaches_a_bounded_fixpoint() {
+        let (file, _artboard, mut state_machine) = owned_view_model_listener_cascade_fixture(9702);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has an owned ViewModel context"),
+        );
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
+        assert!(state_machine.advance_data_context());
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(9.0),
+            "first-class retained candidates must run the same listener fixpoint",
+        );
+    }
+
+    #[test]
+    fn retained_candidate_listener_cap_leaves_the_unobserved_tail_dirty() {
+        const LISTENER_CAP: usize = 100;
+        let bytes = synthetic_owned_view_model_listener_chain_riv(9705, LISTENER_CAP + 1, false);
+        let file = read_runtime_file(&bytes).expect("listener boundary fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
+        let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
+        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+            .expect("fixture artboard instantiates");
+        let mut state_machine = artboard
+            .state_machine_instance(0)
+            .expect("fixture has a state machine");
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has an owned ViewModel context"),
+        );
+        let candidates = [RuntimeOwnedViewModelBindingCandidate::root_handle(&context)];
+
+        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
+        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        assert_eq!(
+            context
+                .borrow()
+                .number_value_by_property_index(LISTENER_CAP),
+            Some(1.0),
+        );
+        assert_eq!(
+            context
+                .borrow()
+                .number_value_by_property_index(LISTENER_CAP + 1),
+            Some(0.0),
+            "the per-bind cap must stop before listener 101",
+        );
+
+        assert!(
+            state_machine.bind_owned_view_model_handle(&context),
+            "the mutation produced at the cap must remain pending for the next bounded bind",
+        );
+        assert_eq!(
+            context
+                .borrow()
+                .number_value_by_property_index(LISTENER_CAP + 1),
+            Some(1.0),
+        );
+        assert!(
+            !state_machine.bind_owned_view_model_handle(&context),
+            "the completed chain must settle instead of remaining spuriously dirty",
+        );
+    }
+
+    #[test]
+    fn retained_candidate_listener_cycle_settles_without_replaying() {
+        let bytes = synthetic_owned_view_model_listener_chain_riv(9706, 2, true);
+        let file = read_runtime_file(&bytes).expect("listener cycle fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
+        let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
+        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+            .expect("fixture artboard instantiates");
+        let mut state_machine = artboard
+            .state_machine_instance(0)
+            .expect("fixture has a state machine");
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has an owned ViewModel context"),
+        );
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert_eq!(
+            context.borrow().number_value_by_property_index(0),
+            Some(2.0)
+        );
+        assert_eq!(
+            context.borrow().number_value_by_property_index(1),
+            Some(1.0)
+        );
+        assert_eq!(
+            context.borrow().number_value_by_property_index(2),
+            Some(1.0)
+        );
+        assert!(
+            !state_machine.bind_owned_view_model_handle(&context),
+            "a listener dependency cycle that reaches an idempotent value must settle and stay idle",
+        );
+    }
+
+    #[test]
+    fn retained_candidate_listener_live_cycle_stays_bounded_and_pending_at_cap() {
+        let bytes = synthetic_owned_view_model_listener_live_cycle_riv(9707);
+        let file = read_runtime_file(&bytes).expect("listener live-cycle fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
+        let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
+        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+            .expect("fixture artboard instantiates");
+        let mut state_machine = artboard
+            .state_machine_instance(0)
+            .expect("fixture has a state machine");
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has an owned ViewModel context"),
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert_eq!(
+            context.borrow().number_value_by_property_index(0),
+            Some(1.0)
+        );
+        assert_eq!(
+            context.borrow().number_value_by_property_index(1),
+            Some(1.0)
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert_eq!(
+            context.borrow().number_value_by_property_index(0),
+            Some(0.0)
+        );
+        assert_eq!(
+            context.borrow().number_value_by_property_index(1),
+            Some(0.0)
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert_eq!(
+            context.borrow().number_value_by_property_index(0),
+            Some(1.0)
+        );
+        assert_eq!(
+            context.borrow().number_value_by_property_index(1),
+            Some(0.0)
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert_eq!(
+            context.borrow().number_value_by_property_index(0),
+            Some(1.0)
+        );
+        assert_eq!(
+            context.borrow().number_value_by_property_index(1),
+            Some(1.0)
+        );
+    }
+
+    #[test]
+    fn retained_scoped_context_refresh_dispatches_listener_actions_to_the_scope() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9688, true);
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has a nested owned ViewModel context"),
+        );
+        let scoped = RuntimeOwnedViewModelContextHandle::root(&file, root.clone())
+            .scoped(vec![1])
+            .expect("fixture child scope resolves");
+
+        assert!(state_machine.bind_owned_view_model_context_handle(&scoped));
+        assert!(root.borrow_mut().set_number_by_property_path(&[1, 0], 1.0));
+        assert!(state_machine.advance_data_context());
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(7.0),
+            "automatic retained-handle refresh must observe the scoped listener source"
+        );
+        assert_eq!(
+            root.borrow().number_value_by_property_path(&[1, 1]),
+            Some(42.0),
+            "automatic retained-handle refresh must route listener writes back into the scope"
+        );
+    }
+
+    #[test]
+    fn composite_listener_preserves_authored_view_model_identity() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9689, true);
+        let same_shaped_main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2)
+                .expect("fixture has a same-shaped non-global ViewModel"),
+        );
+        let authored_global = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has the listener's authored global ViewModel"),
+        );
+        let mut context = RuntimeOwnedViewModelContext::from_main_handle(same_shaped_main.clone());
+        assert!(context.set_global_slot_handle(&file, 1, authored_global.clone()));
+        assert!(
+            same_shaped_main
+                .borrow_mut()
+                .set_trigger_by_property_index(2, 9)
+        );
+        assert!(
+            authored_global
+                .borrow_mut()
+                .set_trigger_by_property_index(2, 3)
+        );
+
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert_eq!(
+            state_machine.active_view_model_trigger_count(0),
+            Some(3),
+            "the default trigger must bind from declared slot 1, not a same-shaped main model"
+        );
+        assert!(
+            authored_global
+                .borrow_mut()
+                .set_number_by_property_index(0, 1.0)
+        );
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(7.0),
+            "a same-shaped main model must not mask a listener authored against global slot 1"
+        );
+        assert_eq!(
+            authored_global.borrow().number_value_by_property_path(&[1]),
+            Some(42.0)
+        );
+        assert_eq!(
+            same_shaped_main
+                .borrow()
+                .number_value_by_property_path(&[1]),
+            Some(0.0),
+            "listener observation and writes must retain their authored ViewModel identity"
+        );
+    }
+
+    #[test]
+    fn listener_write_addresses_declared_global_slot_with_cross_model_override() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9690, true);
+        let main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has a main ViewModel context"),
+        );
+        let override_instance = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2)
+                .expect("fixture has a compatible cross-model override"),
+        );
+        let mut context = RuntimeOwnedViewModelContext::from_main_handle(main);
+        assert!(context.set_global_slot_handle(&file, 1, override_instance.clone()));
+        assert!(
+            override_instance
+                .borrow_mut()
+                .set_trigger_by_property_index(2, 3)
+        );
+        assert!(
+            override_instance
+                .borrow_mut()
+                .set_font_asset_index_by_property_index(3, 7)
+        );
+
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert_eq!(
+            state_machine.active_view_model_trigger_count(0),
+            Some(3),
+            "declared slot 1 may be occupied by a compatible cross-model override"
+        );
+        assert_eq!(
+            state_machine.bindable_asset_value_for_data_bind(1),
+            Some(7),
+            "font synchronization must use the same declared-slot semantics as the data-bind graph"
+        );
+        assert!(
+            override_instance
+                .borrow_mut()
+                .set_number_by_property_index(0, 1.0)
+        );
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(7.0)
+        );
+        assert_eq!(
+            state_machine.default_view_model_number_source_value_for_data_bind(0),
+            Some(42.0),
+            "the bound graph source must resolve through declared slot 1, not the occupant's ViewModel identity"
+        );
+        assert_eq!(
+            override_instance
+                .borrow()
+                .number_value_by_property_path(&[1]),
+            Some(42.0),
+            "writes to global slot 1 must reach its occupant even when that instance has another ViewModel type"
+        );
+    }
+
+    #[test]
+    fn candidate_context_trigger_binding_skips_same_shaped_wrong_view_model() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9692, true);
+        let wrong_model = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2)
+                .expect("fixture has a same-shaped wrong ViewModel"),
+        );
+        let default_model = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has the default ViewModel"),
+        );
+        assert!(wrong_model.borrow_mut().set_trigger_by_property_index(2, 9));
+        assert!(
+            default_model
+                .borrow_mut()
+                .set_trigger_by_property_index(2, 4)
+        );
+        let candidates = vec![
+            RuntimeOwnedViewModelBindingCandidate::root_handle(&wrong_model),
+            RuntimeOwnedViewModelBindingCandidate::root_handle(&default_model),
+        ];
+
+        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        assert_eq!(
+            state_machine.active_view_model_trigger_count(0),
+            Some(4),
+            "candidate selection must continue past a compatible property path owned by another ViewModel"
+        );
+    }
+
+    #[test]
+    fn retained_scoped_trigger_binding_and_refresh_reject_wrong_view_model() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9693, true);
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has a nested owned ViewModel context"),
+        );
+        assert!(root.borrow_mut().set_trigger_by_property_path(&[2, 2], 9));
+        let scoped = RuntimeOwnedViewModelContextHandle::root(&file, root.clone())
+            .scoped(vec![2])
+            .expect("fixture's same-shaped wrong-model child resolves");
+
+        assert!(state_machine.bind_owned_view_model_context_handle(&scoped));
+        assert_eq!(state_machine.active_view_model_trigger_count(0), Some(0));
+        assert_eq!(
+            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
+            Some(false)
+        );
+
+        assert!(root.borrow_mut().set_trigger_by_property_path(&[2, 2], 10));
+        assert!(state_machine.advance_data_context());
+        assert_eq!(
+            state_machine.active_view_model_trigger_count(0),
+            Some(0),
+            "retained refresh must not adopt a same-shaped trigger from the wrong scoped ViewModel"
+        );
+        assert_eq!(
+            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn cross_model_listener_trigger_does_not_fire_default_view_model_transition_trigger() {
+        let (file, _artboard, mut state_machine) =
+            owned_view_model_action_fixture_with_cross_model_trigger(9694);
+        let main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has the listener's default ViewModel"),
+        );
+        let cross_model = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2)
+                .expect("fixture has the compatible cross-model trigger target"),
+        );
+        let mut context = RuntimeOwnedViewModelContext::from_main_handle(main.clone());
+        assert!(context.set_global_slot_handle(&file, 2, cross_model.clone()));
+
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert_eq!(
+            state_machine.default_view_model_trigger_source_value_for_data_bind(1),
+            Some(0),
+            "cross-model trigger source must be represented in the bound graph"
+        );
+        assert_eq!(
+            state_machine.bindable_trigger_value_for_data_bind(1),
+            Some(1),
+            "listener trigger bindable retains its authored action value"
+        );
+        assert!(main.borrow_mut().set_number_by_property_index(0, 1.0));
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert_eq!(
+            cross_model.borrow().trigger_value_by_property_path(&[2]),
+            Some(1),
+            "the listener action must still fire its declared cross-model trigger target"
+        );
+        assert_eq!(
+            cross_model.borrow().number_value_by_property_path(&[1]),
+            Some(64.0),
+            "a non-default global number action must retain its schema-backed source and reach the declared slot"
+        );
+        assert_eq!(
+            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
+            Some(false),
+            "a colliding property id in another ViewModel must not fire the default ViewModel transition trigger"
+        );
+    }
+
+    #[test]
+    fn rebinding_same_retained_handle_preserves_new_trigger_as_fireable() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9695, false);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has the default ViewModel"),
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert!(context.borrow_mut().set_trigger_by_property_index(2, 1));
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert_eq!(state_machine.active_view_model_trigger_count(0), Some(1));
+        assert_eq!(
+            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
+            Some(true),
+            "a frame-level rebind of the same retained identity must refresh, not baseline, a host-fired trigger"
+        );
+    }
+
+    #[test]
+    fn switching_from_retained_handle_to_composite_clears_stale_refresh_source() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9696, false);
+        let stale = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has the original retained ViewModel"),
+        );
+        let replacement = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has the replacement composite ViewModel"),
+        );
+        assert!(stale.borrow_mut().set_number_by_property_index(1, 5.0));
+        assert!(
+            replacement
+                .borrow_mut()
+                .set_number_by_property_index(1, 8.0)
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&stale));
+        let contexts = RuntimeOwnedViewModelContext::from_main_handle(replacement);
+        assert!(state_machine.bind_owned_view_model_contexts(&contexts));
+        assert_eq!(
+            state_machine.default_view_model_number_source_value_for_data_bind(0),
+            Some(8.0)
+        );
+
+        assert!(stale.borrow_mut().set_number_by_property_index(1, 9.0));
+        let _ = state_machine.advance_data_context();
+        assert_eq!(
+            state_machine.default_view_model_number_source_value_for_data_bind(0),
+            Some(8.0),
+            "advance_data_context must not resurrect the previously retained single handle after a composite bind"
+        );
+    }
+
+    #[test]
+    fn retained_composite_routes_state_action_and_refreshes_alias_on_next_advance() {
+        let (file, mut artboard, state_machine) = owned_view_model_action_fixture(9697, false);
+        let main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has a distinct main ViewModel"),
+        );
+        let global_override = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2)
+                .expect("fixture has a compatible cross-model global override"),
+        );
+        let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(main);
+        assert!(contexts.set_global_slot_handle(&file, 1, global_override.clone()));
+        let mut state_machines = vec![state_machine];
+
+        assert!(state_machines[0].bind_owned_view_model_contexts(&contexts));
+        assert!(artboard.advance_state_machine_instances_with_nested(&mut state_machines, 0.0));
+        assert_eq!(
+            global_override.borrow().number_value_by_property_path(&[1]),
+            Some(42.0),
+            "the state-entry listener action must write through the retained declared global slot"
+        );
+
+        assert!(
+            global_override
+                .borrow_mut()
+                .set_number_by_property_index(1, 17.0)
+        );
+        let _ = artboard.advance_state_machine_instances_with_nested(&mut state_machines, 0.0);
+        assert_eq!(
+            state_machines[0].default_view_model_number_source_value_for_data_bind(0),
+            Some(17.0),
+            "a mutation through a retained composite alias must refresh before the clean-frame fast path"
+        );
+        assert_eq!(
+            global_override.borrow().number_value_by_property_path(&[1]),
+            Some(17.0),
+            "the one-shot state action must not replay on the unchanged second advance"
+        );
+    }
+
+    #[test]
+    fn retained_state_action_preserves_declared_trigger_slot_identity() {
+        let bytes = synthetic_owned_view_model_action_riv_with_options(9704, false, true, false);
+        let file = read_runtime_file(&bytes).expect("state trigger action fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
+        let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+            .expect("fixture artboard instantiates");
+        let state_machine = artboard
+            .state_machine_instance(0)
+            .expect("fixture has a state machine");
+        let main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has the default ViewModel"),
+        );
+        let slot_two_occupant = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has a same-type global-slot occupant"),
+        );
+        let mut context = RuntimeOwnedViewModelContext::from_main_handle(main.clone());
+        assert!(context.set_global_slot_handle(&file, 2, slot_two_occupant.clone()));
+        let mut state_machines = vec![state_machine];
+
+        assert!(state_machines[0].bind_owned_view_model_contexts(&context));
+        assert!(artboard.advance_state_machine_instances_with_nested(&mut state_machines, 0.0));
+        assert_eq!(
+            slot_two_occupant
+                .borrow()
+                .trigger_value_by_property_path(&[2]),
+            Some(1),
+            "the state action must write the declared global slot even when its occupant has the default model type",
+        );
+        assert_eq!(main.borrow().trigger_value_by_property_path(&[2]), Some(0));
+        assert_eq!(
+            state_machines[0].active_view_model_trigger_is_fireable_for_layer(0, 0),
+            Some(false),
+            "a global trigger action with a colliding property ordinal must not fire the local transition trigger",
+        );
+    }
+
+    #[test]
+    fn artboard_created_machine_retains_declared_global_slot_and_alias_refresh() {
+        let (file, mut artboard, _) = owned_view_model_action_fixture(9698, false);
+        let main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has a distinct main ViewModel"),
+        );
+        let global_override = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2)
+                .expect("fixture has a compatible cross-model global override"),
+        );
+        let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(main);
+        assert!(contexts.set_global_slot_handle(&file, 1, global_override.clone()));
+        let _ = artboard.bind_owned_view_model_artboard_contexts(&file, &contexts);
+        let mut state_machine = artboard
+            .state_machine_instance(0)
+            .expect("bound artboard creates its state machine");
+
+        assert!(artboard.advance_state_machine_instance(&mut state_machine, 0.0));
+        assert_eq!(
+            global_override.borrow().number_value_by_property_path(&[1]),
+            Some(42.0),
+            "state-entry action must retain the authored global slot through artboard-created machine binding",
+        );
+
+        assert!(
+            global_override
+                .borrow_mut()
+                .set_number_by_property_index(1, 17.0)
+        );
+        let _ = artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+        assert_eq!(
+            state_machine.default_view_model_number_source_value_for_data_bind(0),
+            Some(17.0),
+            "the machine must refresh the retained global occupant through its alias",
+        );
+        assert_eq!(
+            global_override.borrow().number_value_by_property_path(&[1]),
+            Some(17.0),
+            "the one-shot state action must not replay during alias refresh",
+        );
+    }
+
+    #[test]
+    fn retained_scoped_context_routes_state_entry_action_into_scope() {
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9699, false);
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has a nested owned ViewModel context"),
+        );
+        let scoped = RuntimeOwnedViewModelContextHandle::root(&file, root.clone())
+            .scoped(vec![1])
+            .expect("fixture child scope resolves");
+
+        assert!(state_machine.bind_owned_view_model_context_handle(&scoped));
+        assert!(artboard.advance_state_machine_instance(&mut state_machine, 0.0));
+        assert_eq!(
+            root.borrow().number_value_by_property_path(&[1, 1]),
+            Some(42.0),
+            "scheduled state actions must resolve through the retained scope path",
+        );
+        assert_eq!(
+            root.borrow().number_value_by_property_path(&[1]),
+            None,
+            "the scoped write must not be redirected to the root object",
+        );
+    }
+
+    #[test]
+    fn nested_candidate_context_chain_bind_dispatches_view_model_listeners() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9685, true);
+        let main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has a nested owned ViewModel context"),
+        );
+        let scoped = RuntimeOwnedViewModelContextHandle::root(&file, main.clone())
+            .scoped(vec![1])
+            .expect("fixture child scope resolves");
+        let candidates = vec![RuntimeOwnedViewModelBindingCandidate::context_handle(
+            &scoped,
+        )];
+
+        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        assert!(main.borrow_mut().set_number_by_property_path(&[1, 0], 1.0));
+        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(7.0),
+            "candidate artboard contexts must dispatch their ViewModel listener"
+        );
+        assert_eq!(
+            main.borrow().number_value_by_property_path(&[1, 1]),
+            Some(42.0),
+            "listener ViewModel writes must reach the retained nested candidate path"
+        );
+    }
+
+    #[test]
+    fn later_candidate_context_chain_owns_listener_observation_and_writes() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9686, true);
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has nested candidate contexts"),
+        );
+        let invalid_first = RuntimeOwnedViewModelContextHandle::root(&file, root.clone())
+            .scoped(vec![2])
+            .expect("fixture has a same-shaped wrong-model child");
+        let resolved_later = RuntimeOwnedViewModelContextHandle::root(&file, root.clone())
+            .scoped(vec![1])
+            .expect("fixture has the matching child");
+        let candidates = vec![
+            RuntimeOwnedViewModelBindingCandidate::context_handle(&invalid_first),
+            RuntimeOwnedViewModelBindingCandidate::context_handle(&resolved_later),
+        ];
+
+        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        assert!(root.borrow_mut().set_number_by_property_path(&[1, 0], 1.0));
+        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(7.0),
+            "listener observation must fall through an invalid first candidate"
+        );
+        assert_eq!(
+            root.borrow().number_value_by_property_path(&[1, 1]),
+            Some(42.0),
+            "listener writes must follow the data-bind source into the later candidate"
+        );
+        assert_eq!(
+            root.borrow().number_value_by_property_path(&[2, 1]),
+            Some(0.0),
+            "the unresolved first candidate must remain untouched"
+        );
+    }
+
+    #[test]
+    fn composite_context_listener_falls_through_main_to_global_slot() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9687, true);
+        let main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has a main ViewModel context"),
+        );
+        let global = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has a global ViewModel context"),
+        );
+        let mut context = RuntimeOwnedViewModelContext::from_main_handle(main.clone());
+        assert!(context.set_global_slot_handle(&file, 1, global.clone()));
+
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert!(global.borrow_mut().set_number_by_property_index(0, 1.0));
+        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(7.0),
+            "listener observation must follow composite main-to-global ordering"
+        );
+        assert_eq!(
+            global.borrow().number_value_by_property_path(&[1]),
+            Some(42.0),
+            "listener writes must reach the global slot that resolved the source"
+        );
+        assert_eq!(
+            main.borrow().number_value_by_property_path(&[1, 1]),
+            Some(0.0),
+            "the composite main context must not receive the global source write"
+        );
     }
 
     #[test]
@@ -9680,6 +10880,66 @@ mod tests {
         assert!(parent.prepared_epoch() > prepared_epoch);
         assert!(parent.path_epoch() > path_epoch);
         assert!(parent.layout_epoch() > layout_epoch);
+    }
+
+    #[test]
+    fn component_list_machine_retains_inherited_declared_global_slot() {
+        let (file, child, state_machine) = owned_view_model_action_fixture(9703, false);
+        let row = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2)
+                .expect("fixture has a row that does not occupy declared slot 1"),
+        );
+        let main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0)
+                .expect("fixture has the parent main ViewModel"),
+        );
+        let global_override = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2)
+                .expect("fixture has a compatible cross-model global override"),
+        );
+        let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(main);
+        assert!(contexts.set_global_slot_handle(&file, 1, global_override.clone()));
+
+        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        parent.component_list_items.insert(
+            1,
+            vec![RuntimeComponentListItemInstance {
+                child: Box::new(child),
+                state_machines: vec![state_machine],
+                context: row.clone(),
+                occurrence_identity: 1,
+                logical_index: 0,
+                virtualized_position: None,
+                settled_layout_size: Cell::new(None),
+                transform: Mat2D::IDENTITY,
+                render_cache_revision: 1,
+            }],
+        );
+        let _ = parent.bind_owned_view_model_artboard_contexts(&file, &contexts);
+
+        assert!(parent.advance_nested_artboards(0.0));
+        assert_eq!(
+            global_override.borrow().number_value_by_property_path(&[1]),
+            Some(42.0),
+            "the row machine must route its state action through inherited declared global slot 1",
+        );
+        assert_eq!(
+            row.borrow().number_value_by_property_path(&[1]),
+            Some(0.0),
+            "a same-shaped row of another ViewModel type must not steal the declared global action",
+        );
+
+        assert!(
+            global_override
+                .borrow_mut()
+                .set_number_by_property_index(1, 17.0)
+        );
+        let _ = parent.advance_nested_artboards(0.0);
+        assert_eq!(
+            global_override.borrow().number_value_by_property_path(&[1]),
+            Some(17.0),
+            "the retained inherited alias must refresh without replaying the one-shot state action",
+        );
     }
 
     #[test]

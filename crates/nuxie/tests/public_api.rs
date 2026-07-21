@@ -12,8 +12,8 @@ use nuxie::{
     ImageDecodeError, LinearAnimationSpec, NodeSpec, ObjectId, Parent, RawPath, RecordingFactory,
     RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
     RenderPath, RenderShader, Renderer, Scene, ShapeSpec, StateMachineInputKind, StrokeCap,
-    StrokeJoin, ViewModelBooleanSpec, ViewModelInstanceSpec, ViewModelSpec, VisibilityCondition,
-    props,
+    StrokeJoin, ViewModelBooleanSpec, ViewModelInstanceSpec, ViewModelScope, ViewModelSpec,
+    VisibilityCondition, props,
 };
 use std::cell::Cell;
 use std::path::PathBuf;
@@ -102,6 +102,7 @@ fn scene_visibility_authoring_surface_is_typed_key_free_and_preserves_local_opac
             )?;
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Visibility".into(),
             })?;
             let shown = view_models.create_boolean(

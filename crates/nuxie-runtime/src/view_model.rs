@@ -2179,6 +2179,14 @@ impl RuntimeOwnedViewModelContext {
         self.global_slots.get(&view_model_index)
     }
 
+    pub(crate) fn global_slot_handles(
+        &self,
+    ) -> impl Iterator<Item = (usize, &RuntimeOwnedViewModelHandle)> {
+        self.global_slots
+            .iter()
+            .map(|(&slot, handle)| (slot, handle))
+    }
+
     pub fn global_named(
         &self,
         file: &RuntimeFile,
@@ -9341,7 +9349,7 @@ impl RuntimeOwnedViewModelInstance {
         Some((path, view_model))
     }
 
-    fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
+    pub fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
         self.numbers
             .iter()
             .find(|number| number.property_index == property_index)

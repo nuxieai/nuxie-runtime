@@ -116,7 +116,7 @@ impl WebGl2Factory {
             clear_color,
             width: self.width,
             height: self.height,
-            unsupported: None,
+            failure: None,
             finished: false,
         })
     }
@@ -323,7 +323,7 @@ pub struct WebGl2Frame {
     clear_color: ColorInt,
     width: u32,
     height: u32,
-    unsupported: Option<&'static str>,
+    failure: Option<RendererError>,
     finished: bool,
 }
 
@@ -358,19 +358,19 @@ struct WebGl2ClipLayer {
 impl WebGl2Frame {
     /// Flushes WebGL2 work and returns the canvas contents as RGBA pixels.
     ///
-    /// If replay requested an unsupported capability, this clears the queued
-    /// frame and returns a named [`RendererError::Unsupported`] error.
+    /// If replay requested an unsupported capability or a WebGL operation
+    /// failed, this clears the queued frame and returns the original error.
     pub fn finish(mut self) -> Result<Vec<u8>, RendererError> {
         self.finished = true;
         self.frame_active.set(false);
         self.close_clip_layers_to(0);
         self.unwind_state_stack();
         let mut canvas = self.canvas.borrow_mut();
-        if let Some(feature) = self.unsupported {
+        if let Some(error) = self.failure.take() {
             canvas.reset();
             canvas.clear_rect(0, 0, self.width, self.height, color(self.clear_color));
             canvas.flush();
-            return Err(RendererError::Unsupported(feature));
+            return Err(error);
         }
         canvas.flush();
         let screenshot = canvas
@@ -387,7 +387,12 @@ impl WebGl2Frame {
     }
 
     fn reject(&mut self, feature: &'static str) {
-        self.unsupported.get_or_insert(feature);
+        self.failure
+            .get_or_insert(RendererError::Unsupported(feature));
+    }
+
+    fn fail(&mut self, error: RendererError) {
+        self.failure.get_or_insert(error);
     }
 
     fn draw_feathered_path(
@@ -841,12 +846,14 @@ impl Renderer for WebGl2Frame {
         self.canvas.borrow_mut().flush();
         let mut slot = self.mesh_renderer.borrow_mut();
         if slot.is_none() {
-            let Ok(renderer) = WebGl2MeshRenderer::new(&self.element) else {
-                drop(slot);
-                self.reject("WebGL2 image pipeline allocation");
-                return;
-            };
-            *slot = Some(renderer);
+            match WebGl2MeshRenderer::new(&self.element) {
+                Ok(renderer) => *slot = Some(renderer),
+                Err(error) => {
+                    drop(slot);
+                    self.fail(error);
+                    return;
+                }
+            }
         }
         let renderer = slot
             .as_ref()
@@ -854,9 +861,9 @@ impl Renderer for WebGl2Frame {
         delete_pending_mesh_textures(renderer, &self.pending_mesh_texture_deletes);
         let texture = match renderer.texture_for(image, sampler) {
             Ok(texture) => texture,
-            Err(()) => {
+            Err(error) => {
                 drop(slot);
-                self.reject("WebGL2 image texture allocation");
+                self.fail(error);
                 return;
             }
         };
@@ -871,9 +878,9 @@ impl Renderer for WebGl2Frame {
             width: self.width,
             height: self.height,
         };
-        if renderer.draw(draw).is_err() {
+        if let Err(error) = renderer.draw(draw) {
             drop(slot);
-            self.reject("WebGL2 image draw submission");
+            self.fail(error);
         }
     }
 
@@ -990,12 +997,14 @@ impl Renderer for WebGl2Frame {
         self.canvas.borrow_mut().flush();
         let mut slot = self.mesh_renderer.borrow_mut();
         if slot.is_none() {
-            let Ok(renderer) = WebGl2MeshRenderer::new(&self.element) else {
-                drop(slot);
-                self.reject("WebGL2 image mesh pipeline allocation");
-                return;
-            };
-            *slot = Some(renderer);
+            match WebGl2MeshRenderer::new(&self.element) {
+                Ok(renderer) => *slot = Some(renderer),
+                Err(error) => {
+                    drop(slot);
+                    self.fail(error);
+                    return;
+                }
+            }
         }
         let renderer = slot
             .as_ref()
@@ -1003,9 +1012,9 @@ impl Renderer for WebGl2Frame {
         delete_pending_mesh_textures(renderer, &self.pending_mesh_texture_deletes);
         let texture = match renderer.texture_for(image, sampler) {
             Ok(texture) => texture,
-            Err(()) => {
+            Err(error) => {
                 drop(slot);
-                self.reject("WebGL2 image mesh texture allocation");
+                self.fail(error);
                 return;
             }
         };
@@ -1019,9 +1028,9 @@ impl Renderer for WebGl2Frame {
             width: self.width,
             height: self.height,
         };
-        if renderer.draw(draw).is_err() {
+        if let Err(error) = renderer.draw(draw) {
             drop(slot);
-            self.reject("WebGL2 image mesh draw submission");
+            self.fail(error);
         }
     }
 
@@ -1363,8 +1372,15 @@ impl WebGl2MeshRenderer {
         use wasm_bindgen::JsCast as _;
         use web_sys::WebGl2RenderingContext as Gl;
 
+        // Femtovg creates the owning context with these exact attributes.
+        // Repeating getContext with browser defaults is not portable: strict
+        // implementations may reject the second request instead of returning
+        // the already-created context.
+        let attributes = web_sys::WebGlContextAttributes::new();
+        attributes.set_stencil(true);
+        attributes.set_antialias(false);
         let context = element
-            .get_context("webgl2")
+            .get_context_with_context_options("webgl2", &attributes)
             .map_err(|error| webgl2_js_error("image mesh context", error))?
             .ok_or_else(|| RendererError::WebGl2("WebGL2 is unavailable".into()))?;
         let gl = context
@@ -1486,18 +1502,22 @@ void main() {
         &self,
         image: &WebGl2Image,
         sampler: ImageSampler,
-    ) -> Result<web_sys::WebGlTexture, ()> {
+    ) -> Result<web_sys::WebGlTexture, RendererError> {
         use web_sys::WebGl2RenderingContext as Gl;
 
         let wrap_x = match sampler.wrap_x {
             ImageWrap::Clamp => Gl::CLAMP_TO_EDGE,
             ImageWrap::Repeat => Gl::REPEAT,
-            ImageWrap::Mirror => return Err(()),
+            ImageWrap::Mirror => {
+                return Err(RendererError::Unsupported("WebGL2 mirrored image wrapping"));
+            }
         };
         let wrap_y = match sampler.wrap_y {
             ImageWrap::Clamp => Gl::CLAMP_TO_EDGE,
             ImageWrap::Repeat => Gl::REPEAT,
-            ImageWrap::Mirror => return Err(()),
+            ImageWrap::Mirror => {
+                return Err(RendererError::Unsupported("WebGL2 mirrored image wrapping"));
+            }
         };
         let filter = match sampler.filter {
             ImageFilter::Bilinear => Gl::LINEAR,
@@ -1508,7 +1528,9 @@ void main() {
         let is_new = existing.is_none();
         let texture = match existing {
             Some(texture) => texture,
-            None => self.gl.create_texture().ok_or(())?,
+            None => self.gl.create_texture().ok_or_else(|| {
+                RendererError::WebGl2("failed to allocate image mesh texture".into())
+            })?,
         };
         self.gl.active_texture(Gl::TEXTURE0);
         self.gl.bind_texture(Gl::TEXTURE_2D, Some(&texture));
@@ -1520,17 +1542,17 @@ void main() {
             .tex_parameteri(Gl::TEXTURE_2D, Gl::TEXTURE_MIN_FILTER, filter as i32);
         self.gl
             .tex_parameteri(Gl::TEXTURE_2D, Gl::TEXTURE_MAG_FILTER, filter as i32);
-        if check_mesh_gl_error(&self.gl).is_err() {
+        if let Err(error) = check_mesh_gl_error(&self.gl) {
             if is_new {
                 self.gl.delete_texture(Some(&texture));
             }
-            return Err(());
+            return Err(error);
         }
 
         if is_new {
             self.gl.pixel_storei(Gl::UNPACK_ALIGNMENT, 1);
             let bytes: &[u8] = bytemuck::cast_slice(&image.pixels);
-            if self
+            if let Err(error) = self
                 .gl
                 .tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
                     Gl::TEXTURE_2D,
@@ -1543,11 +1565,14 @@ void main() {
                     Gl::UNSIGNED_BYTE,
                     Some(bytes),
                 )
-                .is_err()
-                || check_mesh_gl_error(&self.gl).is_err()
+                .map_err(|error| webgl2_js_error("image mesh texture upload", error))
             {
                 self.gl.delete_texture(Some(&texture));
-                return Err(());
+                return Err(error);
+            }
+            if let Err(error) = check_mesh_gl_error(&self.gl) {
+                self.gl.delete_texture(Some(&texture));
+                return Err(error);
             }
             *image.mesh_texture.borrow_mut() = Some(texture.clone());
         }

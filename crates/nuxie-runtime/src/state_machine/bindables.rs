@@ -814,15 +814,35 @@ fn runtime_bindable_number_unresolved_view_model_source<'a>(
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
     let converter = runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache);
-    let value = if matches!(converter, Some(RuntimeDataBindGraphConverter::ListToLength)) {
-        // The source side of ListToLength is still a list even when its
-        // parent-relative context is unavailable while the child artboard is
-        // constructed. Preserve that source kind so the later parent-context
-        // bind resolves the live item count instead of trying to read a
-        // number from the list property.
-        RuntimeDataBindGraphValue::ListLength(0)
-    } else {
-        RuntimeDataBindGraphValue::Number(target_value)
+    let unresolved = runtime_unresolved_view_model_value_at_path(file, &path);
+    let value = match (converter.as_ref(), unresolved) {
+        (Some(RuntimeDataBindGraphConverter::ListToLength), Some(unresolved)) => {
+            if !matches!(unresolved, RuntimeDataBindGraphValue::List { .. }) {
+                return None;
+            }
+            // The source side of ListToLength is still a list even when its
+            // parent-relative context is unavailable while the child artboard
+            // is constructed.
+            RuntimeDataBindGraphValue::ListLength(0)
+        }
+        (Some(RuntimeDataBindGraphConverter::ListToLength), None) => {
+            // Parent-relative child binds do not necessarily have a locally
+            // resolvable ViewModel schema while the child is constructed.
+            // Preserve the source kind until its parent context is attached.
+            RuntimeDataBindGraphValue::ListLength(0)
+        }
+        (None, Some(unresolved)) => {
+            if !matches!(unresolved, RuntimeDataBindGraphValue::Number(_)) {
+                return None;
+            }
+            RuntimeDataBindGraphValue::Number(target_value)
+        }
+        (None, None) => RuntimeDataBindGraphValue::Number(target_value),
+        (Some(_), Some(unresolved)) => match unresolved {
+            RuntimeDataBindGraphValue::Number(_) => RuntimeDataBindGraphValue::Number(target_value),
+            value => value,
+        },
+        (Some(_), None) => RuntimeDataBindGraphValue::Number(target_value),
     };
     Some(RuntimeBindableNumberDefaultViewModelSource {
         data_bind_index,
@@ -1086,8 +1106,21 @@ fn runtime_bindable_integer_default_view_model_source<'a>(
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
-    let value = file.view_model_instance_symbol_list_index_value_for_object(source)?;
+    let value = if let Some(source) = default_instance.and_then(|default_instance| {
+        file.data_context_view_model_property_for_instance(default_instance, &path)
+    }) {
+        file.view_model_instance_symbol_list_index_value_for_object(source)?
+    } else {
+        if !matches!(
+            runtime_unresolved_view_model_value_at_path(file, &path)?,
+            RuntimeDataBindGraphValue::SymbolListIndex(_)
+        ) {
+            return None;
+        }
+        file.data_bind_target_for_object(data_bind)?
+            .uint_property("propertyValue")
+            .unwrap_or(0)
+    };
     Some(RuntimeBindableIntegerDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
@@ -1144,8 +1177,21 @@ fn runtime_bindable_color_default_view_model_source(
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
-    let value = file.view_model_instance_color_value_for_object(source)?;
+    let value = if let Some(source) = default_instance.and_then(|default_instance| {
+        file.data_context_view_model_property_for_instance(default_instance, &path)
+    }) {
+        file.view_model_instance_color_value_for_object(source)?
+    } else {
+        if !matches!(
+            runtime_unresolved_view_model_value_at_path(file, &path)?,
+            RuntimeDataBindGraphValue::Color(_)
+        ) {
+            return None;
+        }
+        file.data_bind_target_for_object(data_bind)?
+            .color_property("propertyValue")
+            .unwrap_or(0)
+    };
     Some(RuntimeBindableColorDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
@@ -1208,33 +1254,63 @@ fn runtime_bindable_string_default_view_model_source<'a>(
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
     let converter = runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache);
-    let value = if runtime_data_bind_graph_converter_starts_with_to_string(converter.as_ref()) {
-        if let Some(value) = file.view_model_instance_number_value_for_object(source) {
-            RuntimeDataBindGraphValue::Number(value)
-        } else if let Some(value) = file.view_model_instance_boolean_value_for_object(source) {
-            RuntimeDataBindGraphValue::Boolean(value)
-        } else if let Some(value) = file.view_model_instance_string_value_bytes_for_object(source) {
-            RuntimeDataBindGraphValue::String(value.to_vec())
-        } else if let Some(value) = file.view_model_instance_trigger_count_for_object(source) {
-            RuntimeDataBindGraphValue::Trigger(value)
-        } else if let Some(value) =
-            file.view_model_instance_symbol_list_index_value_for_object(source)
-        {
-            RuntimeDataBindGraphValue::SymbolListIndex(value)
-        } else if let Some(value) = file.view_model_instance_color_value_for_object(source) {
-            RuntimeDataBindGraphValue::Color(value)
-        } else if source.type_name == "ViewModelInstanceEnum" {
-            RuntimeDataBindGraphValue::Enum(source.uint_property("propertyValue")?)
+    let source = default_instance.and_then(|default_instance| {
+        file.data_context_view_model_property_for_instance(default_instance, &path)
+    });
+    let value = if let Some(source) = source {
+        if runtime_data_bind_graph_converter_starts_with_to_string(converter.as_ref()) {
+            if let Some(value) = file.view_model_instance_number_value_for_object(source) {
+                RuntimeDataBindGraphValue::Number(value)
+            } else if let Some(value) = file.view_model_instance_boolean_value_for_object(source) {
+                RuntimeDataBindGraphValue::Boolean(value)
+            } else if let Some(value) =
+                file.view_model_instance_string_value_bytes_for_object(source)
+            {
+                RuntimeDataBindGraphValue::String(value.to_vec())
+            } else if let Some(value) = file.view_model_instance_trigger_count_for_object(source) {
+                RuntimeDataBindGraphValue::Trigger(value)
+            } else if let Some(value) =
+                file.view_model_instance_symbol_list_index_value_for_object(source)
+            {
+                RuntimeDataBindGraphValue::SymbolListIndex(value)
+            } else if let Some(value) = file.view_model_instance_color_value_for_object(source) {
+                RuntimeDataBindGraphValue::Color(value)
+            } else if source.type_name == "ViewModelInstanceEnum" {
+                RuntimeDataBindGraphValue::Enum(source.uint_property("propertyValue")?)
+            } else {
+                return None;
+            }
         } else {
-            return None;
+            RuntimeDataBindGraphValue::String(
+                file.view_model_instance_string_value_bytes_for_object(source)?
+                    .to_vec(),
+            )
         }
     } else {
-        RuntimeDataBindGraphValue::String(
-            file.view_model_instance_string_value_bytes_for_object(source)?
-                .to_vec(),
-        )
+        let unresolved = runtime_unresolved_view_model_value_at_path(file, &path)?;
+        if runtime_data_bind_graph_converter_starts_with_to_string(converter.as_ref()) {
+            match unresolved {
+                RuntimeDataBindGraphValue::Number(_)
+                | RuntimeDataBindGraphValue::Boolean(_)
+                | RuntimeDataBindGraphValue::String(_)
+                | RuntimeDataBindGraphValue::Trigger(_)
+                | RuntimeDataBindGraphValue::SymbolListIndex(_)
+                | RuntimeDataBindGraphValue::Color(_)
+                | RuntimeDataBindGraphValue::Enum(_) => unresolved,
+                _ => return None,
+            }
+        } else {
+            if !matches!(unresolved, RuntimeDataBindGraphValue::String(_)) {
+                return None;
+            }
+            RuntimeDataBindGraphValue::String(
+                file.data_bind_target_for_object(data_bind)?
+                    .string_property_bytes("propertyValue")
+                    .unwrap_or_default()
+                    .to_vec(),
+            )
+        }
     };
     Some(RuntimeBindableStringDefaultViewModelSource {
         data_bind_index,
@@ -1310,7 +1386,9 @@ fn runtime_bindable_enum_default_view_model_source(
         ) {
             return None;
         }
-        0
+        file.data_bind_target_for_object(data_bind)?
+            .uint_property("propertyValue")
+            .unwrap_or(u64::from(u32::MAX))
     };
     Some(RuntimeBindableEnumDefaultViewModelSource {
         data_bind_index,
@@ -1376,14 +1454,34 @@ fn runtime_bindable_asset_default_view_model_source(
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
-    let asset_index = source.uint_property("propertyValue")?;
-    let value = match source.type_name {
-        "ViewModelInstanceAssetImage" => RuntimeBindableAssetValue::from_asset_index(asset_index),
-        "ViewModelInstanceAssetFont" => RuntimeBindableAssetValue::from_font_value(
-            RuntimeFontAssetValue::from_file_asset_index(asset_index),
-        ),
-        _ => return None,
+    let value = if let Some(source) = default_instance.and_then(|default_instance| {
+        file.data_context_view_model_property_for_instance(default_instance, &path)
+    }) {
+        let asset_index = source.uint_property("propertyValue")?;
+        match source.type_name {
+            "ViewModelInstanceAssetImage" => {
+                RuntimeBindableAssetValue::from_asset_index(asset_index)
+            }
+            "ViewModelInstanceAssetFont" => RuntimeBindableAssetValue::from_font_value(
+                RuntimeFontAssetValue::from_file_asset_index(asset_index),
+            ),
+            _ => return None,
+        }
+    } else {
+        let property = runtime_view_model_property_at_path(file, &path)?;
+        let asset_index = file
+            .data_bind_target_for_object(data_bind)?
+            .uint_property("propertyValue")
+            .unwrap_or(u64::from(u32::MAX));
+        match property.type_name {
+            "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => {
+                RuntimeBindableAssetValue::from_asset_index(asset_index)
+            }
+            "ViewModelPropertyAssetFont" => RuntimeBindableAssetValue::from_font_value(
+                RuntimeFontAssetValue::from_file_asset_index(asset_index),
+            ),
+            _ => return None,
+        }
     };
     Some(RuntimeBindableAssetDefaultViewModelSource {
         data_bind_index,
@@ -1445,11 +1543,23 @@ fn runtime_bindable_artboard_default_view_model_source(
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
-    if source.type_name != "ViewModelInstanceArtboard" {
-        return None;
-    }
-    let value = source.uint_property("propertyValue")?;
+    let value = if let Some(source) = default_instance.and_then(|default_instance| {
+        file.data_context_view_model_property_for_instance(default_instance, &path)
+    }) {
+        if source.type_name != "ViewModelInstanceArtboard" {
+            return None;
+        }
+        source.uint_property("propertyValue")?
+    } else {
+        if runtime_view_model_property_at_path(file, &path)?.type_name
+            != "ViewModelPropertyArtboard"
+        {
+            return None;
+        }
+        file.data_bind_target_for_object(data_bind)?
+            .uint_property("propertyValue")
+            .unwrap_or(u64::from(u32::MAX))
+    };
     Some(RuntimeBindableArtboardDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
@@ -1568,6 +1678,35 @@ fn runtime_view_model_property_at_path<'a>(
     None
 }
 
+fn runtime_unresolved_view_model_value_at_path(
+    file: &RuntimeFile,
+    path: &[u32],
+) -> Option<RuntimeDataBindGraphValue> {
+    let property = runtime_view_model_property_at_path(file, path)?;
+    match property.type_name {
+        "ViewModelPropertyNumber" => Some(RuntimeDataBindGraphValue::Number(0.0)),
+        "ViewModelPropertyBoolean" => Some(RuntimeDataBindGraphValue::Boolean(false)),
+        "ViewModelPropertyString" => Some(RuntimeDataBindGraphValue::String(Vec::new())),
+        "ViewModelPropertyColor" => Some(RuntimeDataBindGraphValue::Color(0)),
+        "ViewModelPropertyEnum" | "ViewModelPropertyEnumCustom" | "ViewModelPropertyEnumSystem" => {
+            Some(RuntimeDataBindGraphValue::Enum(0))
+        }
+        "ViewModelPropertySymbolListIndex" => Some(RuntimeDataBindGraphValue::SymbolListIndex(0)),
+        "ViewModelPropertyList" => Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
+        "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" | "ViewModelPropertyAssetFont" => {
+            Some(RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX)))
+        }
+        "ViewModelPropertyArtboard" => {
+            Some(RuntimeDataBindGraphValue::Artboard(u64::from(u32::MAX)))
+        }
+        "ViewModelPropertyTrigger" => Some(RuntimeDataBindGraphValue::Trigger(0)),
+        "ViewModelPropertyViewModel" => Some(RuntimeDataBindGraphValue::ViewModel(
+            RuntimeViewModelPointer::Null,
+        )),
+        _ => None,
+    }
+}
+
 pub(crate) fn runtime_bindable_triggers<'a>(
     file: &'a RuntimeFile,
     state_machine: &nuxie_binary::RuntimeStateMachine<'_>,
@@ -1604,7 +1743,16 @@ pub(crate) fn runtime_bindable_triggers<'a>(
             data_bind,
             default_instance,
             converter_cache,
-        ) {
+        )
+        .or_else(|| {
+            runtime_bindable_trigger_unresolved_view_model_source(
+                file,
+                data_bind_index,
+                data_bind,
+                value,
+                converter_cache,
+            )
+        }) {
             values.entry(target.id).and_modify(|bindable_trigger| {
                 bindable_trigger
                     .default_view_model_sources
@@ -1614,6 +1762,32 @@ pub(crate) fn runtime_bindable_triggers<'a>(
     }
 
     values.into_values().collect()
+}
+
+fn runtime_bindable_trigger_unresolved_view_model_source<'a>(
+    file: &'a RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+    target_value: u64,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
+) -> Option<RuntimeBindableTriggerDefaultViewModelSource> {
+    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
+    if property_key_for_name("BindablePropertyTrigger", "propertyValue") != Some(property_key) {
+        return None;
+    }
+    let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+    (runtime_view_model_property_at_path(file, &path)?.type_name == "ViewModelPropertyTrigger")
+        .then(|| RuntimeBindableTriggerDefaultViewModelSource {
+            data_bind_index,
+            path: path.to_vec(),
+            flags: data_bind.uint_property("flags").unwrap_or(0),
+            converter: runtime_data_bind_graph_converter_with_cache(
+                file,
+                data_bind,
+                converter_cache,
+            ),
+            value: target_value,
+        })
 }
 
 fn runtime_bindable_trigger_default_view_model_source<'a>(
@@ -1810,8 +1984,21 @@ fn runtime_bindable_boolean_default_view_model_source<'a>(
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
-    let value = file.view_model_instance_boolean_value_for_object(source)?;
+    let value = if let Some(source) = default_instance.and_then(|default_instance| {
+        file.data_context_view_model_property_for_instance(default_instance, &path)
+    }) {
+        file.view_model_instance_boolean_value_for_object(source)?
+    } else {
+        if !matches!(
+            runtime_unresolved_view_model_value_at_path(file, &path)?,
+            RuntimeDataBindGraphValue::Boolean(_)
+        ) {
+            return None;
+        }
+        file.data_bind_target_for_object(data_bind)?
+            .bool_property("propertyValue")
+            .unwrap_or(false)
+    };
     Some(RuntimeBindableBooleanDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),

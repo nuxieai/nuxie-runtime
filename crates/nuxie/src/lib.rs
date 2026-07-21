@@ -16,7 +16,8 @@ use anyhow::{Context, Result, bail};
 // not grant script execution: arbitrary bytecode remains gated by the
 // `scripting` feature and an explicitly bounded trusted-script import.
 use nuxie_binary::{
-    RuntimeFile, read_runtime_file_with_scripting as read_runtime_file_for_facade,
+    RuntimeFile, RuntimeImportStatus,
+    read_runtime_file_with_scripting as read_runtime_file_for_facade,
     read_runtime_file_with_scripting_with_limits as read_runtime_file_for_facade_with_parser_limits,
 };
 use nuxie_graph::{ArtboardGraph, GraphFile};
@@ -1746,6 +1747,9 @@ impl FileImportLimits {
         self
     }
 
+    /// Bound each retained `FileAssetContents` payload occurrence. Repeated
+    /// records are validated independently even though the runtime selects the
+    /// final record as the asset's active contents.
     pub const fn with_max_file_asset_content_bytes(mut self, maximum: usize) -> Self {
         self.max_file_asset_content_bytes = Some(maximum);
         self
@@ -2016,24 +2020,30 @@ impl File {
                 runtime.objects.len()
             );
         }
-        let imported_assets = if let Some(maximum) = limits.max_imported_file_assets() {
+        if let Some(maximum) = limits.max_imported_file_assets() {
             runtime
                 .imported_file_assets_with_contents_bounded(maximum)
                 .ok_or_else(|| {
                     anyhow::anyhow!("Rive file imports more than {maximum} FileAssets")
-                })?
-        } else {
-            runtime.imported_file_assets_with_contents()
-        };
+                })?;
+        }
         let mut total_content_bytes = 0usize;
-        for asset in imported_assets {
-            let content_bytes = asset.contents.map_or(0, <[u8]>::len);
+        for (object_id, object) in runtime.objects.iter().enumerate() {
+            if runtime.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
+                continue;
+            }
+            let Some(object) = object.as_ref() else {
+                continue;
+            };
+            if object.type_name != "FileAssetContents" {
+                continue;
+            }
+            let content_bytes = object.bytes_property("bytes").map_or(0, <[u8]>::len);
             if let Some(maximum) = limits.max_file_asset_content_bytes()
                 && content_bytes > maximum
             {
                 bail!(
-                    "Rive FileAsset ordinal {} contains {content_bytes} bytes; the per-asset import limit is {maximum} bytes",
-                    asset.ordinal
+                    "Rive FileAssetContents object {object_id} contains {content_bytes} bytes; the per-content import limit is {maximum} bytes"
                 );
             }
             total_content_bytes = total_content_bytes
@@ -3740,6 +3750,24 @@ mod inert_script_import_tests {
         imported_script_assets_bytes(&[&[0, 1, 2, 3]])
     }
 
+    fn imported_script_asset_with_repeated_contents_bytes(payloads: &[&[u8]]) -> Vec<u8> {
+        let mut bytes = b"RIVE".to_vec();
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 991);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "ScriptAsset", |bytes| {
+            push_uint(bytes, "ScriptAsset", "assetId", 0);
+        });
+        for payload in payloads {
+            push_object(&mut bytes, "FileAssetContents", |bytes| {
+                push_blob(bytes, "FileAssetContents", "bytes", payload);
+            });
+        }
+        bytes
+    }
+
     fn imported_image_asset_bytes(count: usize) -> Vec<u8> {
         let mut bytes = b"RIVE".to_vec();
         push_var_uint(&mut bytes, 7);
@@ -3822,16 +3850,16 @@ mod inert_script_import_tests {
             "{object_error:#}"
         );
 
-        let per_asset_error = File::import_with_limits(
+        let per_content_error = File::import_with_limits(
             &bytes,
             FileImportLimits::new().with_max_file_asset_content_bytes(3),
         )
         .expect_err("the script payload is four bytes");
         assert!(
-            per_asset_error
+            per_content_error
                 .to_string()
-                .contains("per-asset import limit"),
-            "{per_asset_error:#}"
+                .contains("per-content import limit"),
+            "{per_content_error:#}"
         );
 
         let aggregate_error = File::import_with_limits(
@@ -3845,6 +3873,43 @@ mod inert_script_import_tests {
                 .contains("aggregate content bytes"),
             "{aggregate_error:#}"
         );
+    }
+
+    #[test]
+    fn bounded_import_counts_every_retained_file_asset_contents_payload() {
+        let bytes = imported_script_asset_with_repeated_contents_bytes(&[&[0, 1, 2, 3], &[4, 5]]);
+
+        let per_content_error = File::import_with_limits(
+            &bytes,
+            FileImportLimits::new().with_max_file_asset_content_bytes(3),
+        )
+        .expect_err("an earlier four-byte contents record must not be hidden by its replacement");
+        assert!(
+            per_content_error
+                .to_string()
+                .contains("per-content import limit"),
+            "{per_content_error:#}"
+        );
+
+        let aggregate_error = File::import_with_limits(
+            &bytes,
+            FileImportLimits::new().with_max_total_file_asset_content_bytes(5),
+        )
+        .expect_err("both retained contents payloads must contribute to the aggregate limit");
+        assert!(
+            aggregate_error
+                .to_string()
+                .contains("aggregate content bytes"),
+            "{aggregate_error:#}"
+        );
+
+        File::import_with_limits(
+            &bytes,
+            FileImportLimits::new()
+                .with_max_file_asset_content_bytes(4)
+                .with_max_total_file_asset_content_bytes(6),
+        )
+        .expect("the exact per-content and aggregate bounds admit the repeated contents records");
     }
 
     #[test]

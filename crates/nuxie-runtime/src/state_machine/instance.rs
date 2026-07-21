@@ -1,6 +1,7 @@
 // Runtime instance orchestration for the C++ state machine path.
 // Mirrors /Users/levi/dev/oss/rive-runtime/src/animation/state_machine_instance.cpp.
 use super::*;
+use crate::artboard_data_bind::RuntimeOwnedViewModelBindingCandidate;
 use crate::data_bind_graph::data_bind_flags_apply_source_to_target;
 use crate::focus::RuntimeFocusTree;
 use crate::scripting::RuntimeScriptInstanceHandle;
@@ -46,6 +47,7 @@ use nuxie_binary::RuntimeFile;
 #[derive(Debug)]
 pub struct StateMachineInstance {
     state_machine_index: usize,
+    default_view_model_index: Option<usize>,
     requires_post_update_state_probe: bool,
     inputs: Vec<StateMachineInputInstance>,
     bindable_numbers: Vec<StateMachineBindableNumberInstance>,
@@ -74,8 +76,8 @@ pub struct StateMachineInstance {
     post_update_probe_pending: bool,
     data_bind_graph: RuntimeDataBindGraph,
     key_frame_data_bind_graphs: Vec<Option<RuntimeDataBindGraph>>,
-    owned_view_model_handle: Option<RuntimeOwnedViewModelContextHandle>,
-    owned_view_model_generation: Option<u64>,
+    owned_view_model_candidates: Vec<RuntimeOwnedViewModelBindingCandidate>,
+    owned_view_model_candidate_generations: Vec<u64>,
     pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
     pointer_listener_states: Vec<RuntimePointerListenerState>,
     pointer_positions: Vec<RuntimePointerPosition>,
@@ -122,8 +124,9 @@ struct RuntimePointerInput {
 
 struct RuntimeStateMachineListenerActionExecutor<'a> {
     data_bind_graph: &'a mut RuntimeDataBindGraph,
+    default_view_model_index: Option<usize>,
     owned_view_model_context: Option<&'a mut RuntimeOwnedViewModelInstance>,
-    owned_view_model_handle: Option<RuntimeOwnedViewModelContextHandle>,
+    owned_view_model_candidates: Vec<RuntimeOwnedViewModelBindingCandidate>,
     scripted_listener_action_instances: &'a BTreeMap<u32, RuntimeScriptInstanceHandle>,
     script_error: &'a mut Option<ScriptError>,
     focus: &'a mut RuntimeFocusTree,
@@ -131,6 +134,21 @@ struct RuntimeStateMachineListenerActionExecutor<'a> {
 }
 
 impl RuntimeStateMachineListenerActionExecutor<'_> {
+    fn default_view_model_trigger_source_property_id(&self, data_bind_index: usize) -> Option<u32> {
+        let source_view_model_index = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index)?
+            .first()
+            .copied()
+            .and_then(|index| usize::try_from(index).ok());
+        (source_view_model_index == self.default_view_model_index)
+            .then(|| {
+                self.data_bind_graph
+                    .default_view_model_trigger_source_property_id_for_data_bind(data_bind_index)
+            })
+            .flatten()
+    }
+
     fn perform_scripted_listener_action(
         &mut self,
         definition: &ScriptListenerActionDefinition,
@@ -223,10 +241,8 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
             );
             self.owned_view_model_context = Some(context);
             changed
-        } else if let Some(handle) = self.owned_view_model_handle.clone() {
-            let root = handle.root_handle();
-            let mut context = root.borrow_mut();
-            self.perform_owned_view_model_change(&mut context, data_bind_index, value, &mut targets)
+        } else if !self.owned_view_model_candidates.is_empty() {
+            self.perform_owned_view_model_candidates_change(data_bind_index, value, &mut targets)
         } else {
             self.data_bind_graph
                 .set_active_view_model_source_for_data_bind(data_bind_index, artboard_value.clone())
@@ -256,6 +272,129 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
             RuntimeDataBindGraphApplyPhase::Immediate,
         );
         true
+    }
+
+    fn perform_owned_view_model_candidates_change(
+        &mut self,
+        data_bind_index: usize,
+        value: &RuntimeListenerViewModelChangeValue,
+        targets: &mut RuntimeScheduledListenerActionTargetsMut<'_>,
+    ) -> bool {
+        let Some(source_path) = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index)
+        else {
+            return false;
+        };
+        let Some((candidate, property_path)) =
+            self.owned_view_model_candidates
+                .iter()
+                .find_map(|candidate| {
+                    candidate
+                        .property_path_for_source_path(&source_path)
+                        .map(|property_path| (candidate.clone(), property_path))
+                })
+        else {
+            return false;
+        };
+
+        if let RuntimeListenerViewModelChangeValue::Trigger(value) = value {
+            let Some(bindable_trigger) = targets
+                .bindable_triggers
+                .iter_mut()
+                .find(|trigger| trigger.has_data_bind_index(data_bind_index))
+            else {
+                return false;
+            };
+            bindable_trigger.set_value(*value);
+            let mut context = candidate.context.borrow_mut();
+            if !self
+                .data_bind_graph
+                .fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+                    &mut context,
+                    data_bind_index,
+                    *value,
+                    &property_path,
+                )
+            {
+                return false;
+            }
+            if let Some(trigger_property_id) =
+                self.default_view_model_trigger_source_property_id(data_bind_index)
+                && let Some(value) = context.trigger_value_by_property_path(&property_path)
+                && let Some(trigger) = targets
+                    .view_model_triggers
+                    .iter_mut()
+                    .find(|trigger| trigger.view_model_property_id() == trigger_property_id)
+            {
+                trigger.set_value(value);
+            }
+            return true;
+        }
+
+        let asset_value = match value {
+            RuntimeListenerViewModelChangeValue::Asset(fallback) => Some(
+                targets
+                    .bindable_assets
+                    .iter()
+                    .find(|asset| asset.has_data_bind_index(data_bind_index))
+                    .map(|asset| asset.value.clone())
+                    .unwrap_or_else(|| fallback.clone()),
+            ),
+            _ => None,
+        };
+        let graph_value = match value {
+            RuntimeListenerViewModelChangeValue::Number(value) => {
+                RuntimeDataBindGraphValue::Number(*value)
+            }
+            RuntimeListenerViewModelChangeValue::Integer(value) => {
+                RuntimeDataBindGraphValue::SymbolListIndex(*value)
+            }
+            RuntimeListenerViewModelChangeValue::Color(value) => {
+                RuntimeDataBindGraphValue::Color(*value)
+            }
+            RuntimeListenerViewModelChangeValue::String(value) => {
+                RuntimeDataBindGraphValue::String(value.clone())
+            }
+            RuntimeListenerViewModelChangeValue::Enum(value) => {
+                RuntimeDataBindGraphValue::Enum(*value)
+            }
+            RuntimeListenerViewModelChangeValue::Asset(_) => RuntimeDataBindGraphValue::Asset(
+                asset_value
+                    .as_ref()
+                    .map(RuntimeBindableAssetValue::data_bind_asset_index)
+                    .unwrap_or_default(),
+            ),
+            RuntimeListenerViewModelChangeValue::Artboard(value) => {
+                RuntimeDataBindGraphValue::Artboard(*value)
+            }
+            RuntimeListenerViewModelChangeValue::Boolean(value) => {
+                RuntimeDataBindGraphValue::Boolean(*value)
+            }
+            RuntimeListenerViewModelChangeValue::Trigger(_) => unreachable!(),
+        };
+        let mut context = candidate.context.borrow_mut();
+        let Some(context_changed) =
+            StateMachineInstance::apply_listener_view_model_change_at_property_path(
+                &mut context,
+                &property_path,
+                value,
+                asset_value.as_ref(),
+            )
+        else {
+            return false;
+        };
+        let graph_changed = self
+            .data_bind_graph
+            .set_active_view_model_source_for_data_bind(data_bind_index, graph_value);
+        if let RuntimeListenerViewModelChangeValue::Number(value) = value {
+            self.data_bind_graph
+                .refresh_operation_view_model_number_dependents_for_owned_context_path(
+                    &source_path,
+                    *value,
+                );
+        }
+        context_changed || graph_changed
     }
 
     fn perform_owned_view_model_change(
@@ -331,9 +470,8 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
                     return false;
                 };
                 bindable_trigger.set_value(*value);
-                let trigger_property_id = self
-                    .data_bind_graph
-                    .default_view_model_trigger_source_property_id_for_data_bind(data_bind_index);
+                let trigger_property_id =
+                    self.default_view_model_trigger_source_property_id(data_bind_index);
                 if !self
                     .data_bind_graph
                     .fire_owned_view_model_context_trigger_source_for_data_bind(
@@ -405,6 +543,7 @@ impl Clone for StateMachineInstance {
     fn clone(&self) -> Self {
         Self {
             state_machine_index: self.state_machine_index,
+            default_view_model_index: self.default_view_model_index,
             requires_post_update_state_probe: self.requires_post_update_state_probe,
             inputs: self.inputs.clone(),
             bindable_numbers: self.bindable_numbers.clone(),
@@ -430,8 +569,10 @@ impl Clone for StateMachineInstance {
             post_update_probe_pending: self.post_update_probe_pending,
             data_bind_graph: self.data_bind_graph.clone(),
             key_frame_data_bind_graphs: self.key_frame_data_bind_graphs.clone(),
-            owned_view_model_handle: self.owned_view_model_handle.clone(),
-            owned_view_model_generation: self.owned_view_model_generation,
+            owned_view_model_candidates: self.owned_view_model_candidates.clone(),
+            owned_view_model_candidate_generations: self
+                .owned_view_model_candidate_generations
+                .clone(),
             pointer_down_listener_hits: self.pointer_down_listener_hits.clone(),
             pointer_listener_states: self.pointer_listener_states.clone(),
             pointer_positions: self.pointer_positions.clone(),
@@ -502,6 +643,7 @@ struct RuntimePointerPosition {
 
 #[derive(Debug, Clone)]
 struct RuntimeViewModelListenerInstance {
+    view_model_index: usize,
     property_path: Vec<usize>,
     actions: Vec<RuntimeScheduledListenerAction>,
     observed: Option<RuntimeViewModelListenerValue>,
@@ -561,6 +703,37 @@ fn runtime_view_model_listener_value(
                 .trigger_value_by_property_path(property_path)
                 .map(RuntimeViewModelListenerValue::Trigger)
         })
+}
+
+fn runtime_view_model_listener_value_for_context_path(
+    context: &RuntimeOwnedViewModelInstance,
+    context_path: &[usize],
+    view_model_index: usize,
+    property_path: &[usize],
+) -> Option<RuntimeViewModelListenerValue> {
+    let context_view_model_index = context.view_model_index_by_property_path(context_path)?;
+    if context_view_model_index != view_model_index {
+        return None;
+    }
+    let mut resolved_path =
+        Vec::with_capacity(context_path.len().saturating_add(property_path.len()));
+    resolved_path.extend_from_slice(context_path);
+    resolved_path.extend_from_slice(property_path);
+    runtime_view_model_listener_value(context, &resolved_path)
+}
+
+fn runtime_owned_view_model_trigger_value_for_context_path(
+    context: &RuntimeOwnedViewModelInstance,
+    context_path: &[usize],
+    view_model_index: usize,
+    property_index: usize,
+) -> Option<u64> {
+    if context.view_model_index_by_property_path(context_path)? != view_model_index {
+        return None;
+    }
+    let mut property_path = context_path.to_vec();
+    property_path.push(property_index);
+    context.trigger_value_by_property_path(&property_path)
 }
 
 impl StateMachineInstance {
@@ -681,6 +854,7 @@ impl StateMachineInstance {
             .filter(|listener| listener.has_listener(RuntimeListenerType::ViewModel))
             .filter_map(|listener| {
                 Some(RuntimeViewModelListenerInstance {
+                    view_model_index: listener.view_model_index?,
                     property_path: listener.view_model_property_path.clone()?,
                     actions: listener.listener_actions.clone(),
                     observed: None,
@@ -689,6 +863,7 @@ impl StateMachineInstance {
             .collect();
         Self {
             state_machine_index,
+            default_view_model_index: state_machine.default_view_model_index,
             requires_post_update_state_probe: state_machine.requires_post_update_state_probe(),
             inputs,
             bindable_numbers,
@@ -714,8 +889,8 @@ impl StateMachineInstance {
             post_update_probe_pending: false,
             data_bind_graph,
             key_frame_data_bind_graphs,
-            owned_view_model_handle: None,
-            owned_view_model_generation: None,
+            owned_view_model_candidates: Vec::new(),
+            owned_view_model_candidate_generations: Vec::new(),
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
             pointer_positions: Vec::new(),
@@ -1933,6 +2108,11 @@ impl StateMachineInstance {
     ) -> bool {
         const MAX_EVENT_ITERATIONS: usize = 100;
 
+        if self.pending_listener_events.is_empty() && next_event_index >= self.reported_events.len()
+        {
+            return false;
+        }
+
         let mut changed = false;
         for _ in 0..MAX_EVENT_ITERATIONS {
             self.reported_events
@@ -2065,14 +2245,18 @@ impl StateMachineInstance {
                             value,
                             Some(context),
                         )
-                    } else if let Some(handle) = self.owned_view_model_handle.clone() {
-                        let root = handle.root_handle();
-                        let mut context = root.borrow_mut();
-                        self.perform_listener_view_model_change(
-                            *data_bind_index,
-                            value,
-                            Some(&mut context),
-                        )
+                    } else if !self.owned_view_model_candidates.is_empty() {
+                        let candidates = self.owned_view_model_candidates.clone();
+                        let context_changed = self
+                            .perform_listener_view_model_change_for_candidates(
+                                &candidates,
+                                *data_bind_index,
+                                value,
+                            );
+                        if context_changed {
+                            self.rebind_owned_view_model_context_candidates(&candidates, false);
+                        }
+                        context_changed
                     } else {
                         self.perform_listener_view_model_change(*data_bind_index, value, None)
                     };
@@ -4084,6 +4268,45 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: u64,
     ) -> bool {
+        let Some(source_path) = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index)
+        else {
+            return false;
+        };
+        let Some((&view_model_index, source_tail)) = source_path.split_first() else {
+            return false;
+        };
+        if usize::try_from(view_model_index).ok() != Some(context.view_model_index) {
+            return false;
+        }
+        let property_path = source_tail
+            .iter()
+            .map(|property_index| usize::try_from(*property_index).ok())
+            .collect::<Option<Vec<_>>>();
+        let Some(property_path) = property_path.filter(|path| !path.is_empty()) else {
+            return false;
+        };
+        self.fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+            context,
+            data_bind_index,
+            value,
+            &property_path,
+        )
+    }
+
+    fn fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        value: u64,
+        property_path: &[usize],
+    ) -> bool {
+        let source_view_model_index = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index)
+            .and_then(|source_path| source_path.first().copied())
+            .and_then(|view_model_index| usize::try_from(view_model_index).ok());
         let Some(bindable_trigger) = self
             .bindable_triggers
             .iter_mut()
@@ -4093,23 +4316,27 @@ impl StateMachineInstance {
         };
 
         bindable_trigger.set_value(value);
-        let trigger_property_id = self
-            .data_bind_graph
-            .default_view_model_trigger_source_property_id_for_data_bind(data_bind_index);
+        let trigger_property_id = source_view_model_index
+            .is_some_and(|view_model_index| Some(view_model_index) == self.default_view_model_index)
+            .then(|| {
+                self.data_bind_graph
+                    .default_view_model_trigger_source_property_id_for_data_bind(data_bind_index)
+            })
+            .flatten();
         if !self
             .data_bind_graph
-            .fire_owned_view_model_context_trigger_source_for_data_bind(
+            .fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
                 context,
                 data_bind_index,
                 value,
+                property_path,
             )
         {
             return false;
         }
         if let Some((trigger_property_id, value)) =
             trigger_property_id.and_then(|trigger_property_id| {
-                let property_index = usize::try_from(trigger_property_id).ok()?;
-                let value = context.trigger_value_by_property_index(property_index)?;
+                let value = context.trigger_value_by_property_path(property_path)?;
                 Some((trigger_property_id, value))
             })
             && let Some(trigger) = self
@@ -4591,59 +4818,9 @@ impl StateMachineInstance {
         &mut self,
         context: &RuntimeOwnedViewModelContextHandle,
     ) -> bool {
-        let identity_changed = self
-            .owned_view_model_handle
-            .as_ref()
-            .is_none_or(|bound| !bound.ptr_eq(context));
-        let handle = context.clone();
-        let root = context.root_handle();
-        let (mut values_changed, listener_actions) = {
-            let root = root.borrow();
-            let values_changed = if let Some(file) = context.file() {
-                let context_chain = [context.scope_path()];
-                let mut changed = self.data_bind_graph.bind_owned_view_model_context_chain(
-                    file,
-                    &root,
-                    &context_chain,
-                );
-                for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-                    changed |=
-                        graph.bind_owned_view_model_context_chain(file, &root, &context_chain);
-                }
-                self.sync_bindable_font_assets_from_owned_context_chain(
-                    file,
-                    &root,
-                    &context_chain,
-                );
-                changed
-            } else {
-                let mut changed = self.data_bind_graph.bind_owned_view_model_context(&root);
-                for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-                    changed |= graph.bind_owned_view_model_context(&root);
-                }
-                self.sync_bindable_font_assets_from_owned_context(&root);
-                changed
-            };
-            self.bind_active_owned_view_model_triggers_for_context(&root, context.scope_path());
-            let listener_actions = self.changed_view_model_listener_actions(&root);
-            (values_changed, listener_actions)
-        };
-        self.owned_view_model_handle = Some(handle);
-        for listener_actions in listener_actions {
-            values_changed |= self
-                .perform_listener_actions(
-                    &listener_actions,
-                    None,
-                    &ScriptListenerInvocation::None,
-                    &mut NoopScriptHost,
-                )
-                .unwrap_or(false);
-        }
-        self.owned_view_model_generation = Some(root.borrow().mutation_generation());
-        if values_changed || identity_changed {
-            self.needs_advance = true;
-        }
-        values_changed || identity_changed
+        self.bind_owned_view_model_context_candidates(&[
+            RuntimeOwnedViewModelBindingCandidate::context_handle(context),
+        ])
     }
 
     fn bind_owned_view_model_snapshot(&mut self, context: &RuntimeOwnedViewModelInstance) -> bool {
@@ -4713,9 +4890,24 @@ impl StateMachineInstance {
         &mut self,
         context: &RuntimeOwnedViewModelInstance,
     ) -> Vec<Vec<RuntimeScheduledListenerAction>> {
+        self.changed_view_model_listener_actions_for_context_chain(context, &[&[]])
+    }
+
+    fn changed_view_model_listener_actions_for_context_chain(
+        &mut self,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[&[usize]],
+    ) -> Vec<Vec<RuntimeScheduledListenerAction>> {
         let mut changed = Vec::new();
         for listener in &mut self.view_model_listeners {
-            let current = runtime_view_model_listener_value(context, &listener.property_path);
+            let current = context_chain.iter().find_map(|context_path| {
+                runtime_view_model_listener_value_for_context_path(
+                    context,
+                    context_path,
+                    listener.view_model_index,
+                    &listener.property_path,
+                )
+            });
             let should_dispatch = listener
                 .observed
                 .as_ref()
@@ -4729,24 +4921,215 @@ impl StateMachineInstance {
         changed
     }
 
+    fn changed_view_model_listener_actions_for_candidates(
+        &mut self,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    ) -> Vec<Vec<RuntimeScheduledListenerAction>> {
+        let mut changed = Vec::new();
+        for listener in &mut self.view_model_listeners {
+            let mut source_path = Vec::with_capacity(listener.property_path.len() + 1);
+            let Ok(view_model_index) = u32::try_from(listener.view_model_index) else {
+                listener.observed = None;
+                continue;
+            };
+            source_path.push(view_model_index);
+            source_path.extend(
+                listener
+                    .property_path
+                    .iter()
+                    .filter_map(|property_index| u32::try_from(*property_index).ok()),
+            );
+            let current = candidates.iter().find_map(|candidate| {
+                let property_path = candidate.property_path_for_source_path(&source_path)?;
+                runtime_view_model_listener_value(&candidate.context.borrow(), &property_path)
+            });
+            let should_dispatch = listener
+                .observed
+                .as_ref()
+                .zip(current.as_ref())
+                .is_some_and(|(previous, current)| previous != current);
+            listener.observed = current;
+            if should_dispatch {
+                changed.push(listener.actions.clone());
+            }
+        }
+        changed
+    }
+
+    fn apply_listener_view_model_change_at_property_path(
+        context: &mut RuntimeOwnedViewModelInstance,
+        property_path: &[usize],
+        value: &RuntimeListenerViewModelChangeValue,
+        asset_value: Option<&RuntimeBindableAssetValue>,
+    ) -> Option<bool> {
+        match value {
+            RuntimeListenerViewModelChangeValue::Number(value) => {
+                context.number_value_by_property_path(property_path)?;
+                Some(context.set_number_by_property_path(property_path, *value))
+            }
+            RuntimeListenerViewModelChangeValue::Integer(value) => {
+                context.symbol_list_index_value_by_property_path(property_path)?;
+                Some(context.set_symbol_list_index_by_property_path(property_path, *value))
+            }
+            RuntimeListenerViewModelChangeValue::Color(value) => {
+                context.color_value_by_property_path(property_path)?;
+                Some(context.set_color_by_property_path(property_path, *value))
+            }
+            RuntimeListenerViewModelChangeValue::String(value) => {
+                context.string_value_by_property_path(property_path)?;
+                Some(context.set_string_by_property_path(property_path, value))
+            }
+            RuntimeListenerViewModelChangeValue::Enum(value) => {
+                context.enum_value_by_property_path(property_path)?;
+                Some(context.set_enum_by_property_path(property_path, *value))
+            }
+            RuntimeListenerViewModelChangeValue::Asset(_) => {
+                let asset_value = asset_value?;
+                if context
+                    .font_asset_value_by_property_path(property_path)
+                    .is_some()
+                {
+                    let font_value = asset_value.font_data_bind_value().unwrap_or_else(|| {
+                        RuntimeFontAssetValue::from_file_asset_index(asset_value.asset_index())
+                    });
+                    return Some(context.apply_font_asset_data_bind_value_by_property_path(
+                        property_path,
+                        &font_value,
+                    ));
+                }
+                context.asset_value_by_property_path(property_path)?;
+                Some(
+                    context.set_asset_by_property_path(
+                        property_path,
+                        asset_value.data_bind_asset_index(),
+                    ),
+                )
+            }
+            RuntimeListenerViewModelChangeValue::Artboard(value) => {
+                context.artboard_value_by_property_path(property_path)?;
+                Some(context.set_artboard_by_property_path(property_path, *value))
+            }
+            RuntimeListenerViewModelChangeValue::Trigger(_) => None,
+            RuntimeListenerViewModelChangeValue::Boolean(value) => {
+                context.boolean_value_by_property_path(property_path)?;
+                Some(context.set_boolean_by_property_path(property_path, *value))
+            }
+        }
+    }
+
+    fn perform_listener_view_model_change_for_candidates(
+        &mut self,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        data_bind_index: usize,
+        value: &RuntimeListenerViewModelChangeValue,
+    ) -> bool {
+        let Some(source_path) = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index)
+        else {
+            return false;
+        };
+        let asset_value =
+            matches!(value, RuntimeListenerViewModelChangeValue::Asset(_)).then(|| {
+                let RuntimeListenerViewModelChangeValue::Asset(fallback) = value else {
+                    unreachable!("asset listener value was checked above")
+                };
+                self.listener_asset_value_for_data_bind(data_bind_index, fallback)
+                    .clone()
+            });
+
+        for candidate in candidates {
+            let Some(property_path) = candidate.property_path_for_source_path(&source_path) else {
+                continue;
+            };
+            let mut context = candidate.context.borrow_mut();
+            let changed = match value {
+                RuntimeListenerViewModelChangeValue::Trigger(value) => Some(
+                    self.fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+                        &mut context,
+                        data_bind_index,
+                        *value,
+                        &property_path,
+                    ),
+                ),
+                _ => Self::apply_listener_view_model_change_at_property_path(
+                    &mut context,
+                    &property_path,
+                    value,
+                    asset_value.as_ref(),
+                ),
+            };
+            if let Some(changed) = changed {
+                return changed;
+            }
+        }
+        false
+    }
+
+    fn rebind_owned_view_model_context_candidates(
+        &mut self,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        sync_active_triggers: bool,
+    ) -> bool {
+        let mut changed = self
+            .data_bind_graph
+            .bind_owned_view_model_context_candidates(candidates);
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            changed |= graph.bind_owned_view_model_context_candidates(candidates);
+        }
+        self.sync_bindable_font_assets_from_owned_candidates(candidates);
+        if sync_active_triggers {
+            self.bind_active_owned_view_model_triggers_for_candidates(candidates);
+        }
+        changed
+    }
+
+    fn perform_listener_actions_for_candidates(
+        &mut self,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        listener_actions: &[RuntimeScheduledListenerAction],
+    ) -> Result<bool, ScriptError> {
+        let mut changed = false;
+        for action in listener_actions {
+            if let RuntimeScheduledListenerAction::ViewModelChange {
+                data_bind_index,
+                value,
+                ..
+            } = action
+            {
+                let context_changed = self.perform_listener_view_model_change_for_candidates(
+                    candidates,
+                    *data_bind_index,
+                    value,
+                );
+                changed |= context_changed;
+                if context_changed {
+                    changed |= self.rebind_owned_view_model_context_candidates(candidates, false);
+                }
+                continue;
+            }
+            changed |= self.perform_listener_actions(
+                std::slice::from_ref(action),
+                None,
+                &ScriptListenerInvocation::None,
+                &mut NoopScriptHost,
+            )?;
+        }
+        Ok(changed)
+    }
+
     pub fn bind_owned_view_model_contexts(
         &mut self,
         context: &RuntimeOwnedViewModelContext,
     ) -> bool {
-        if !self.data_bind_graph.bind_owned_view_model_contexts(context) {
-            return false;
+        let mut candidates = Vec::new();
+        if let Some(main) = context.main_handle() {
+            candidates.push(RuntimeOwnedViewModelBindingCandidate::root_handle(main));
         }
-        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            graph.bind_owned_view_model_contexts(context);
-        }
-        self.sync_bindable_font_assets_from_owned_contexts(context);
-        if let Some(main) = context.main() {
-            self.bind_active_owned_view_model_triggers(&main);
-        } else {
-            self.reset_active_view_model_triggers();
-        }
-        self.needs_advance = true;
-        true
+        candidates.extend(context.global_slot_handles().map(|(slot, handle)| {
+            RuntimeOwnedViewModelBindingCandidate::declared_global_slot(handle, slot)
+        }));
+        self.bind_owned_view_model_context_candidates(&candidates)
     }
 
     pub(crate) fn bind_owned_view_model_context_chain(
@@ -4756,43 +5139,89 @@ impl StateMachineInstance {
         context_chain: &[&[usize]],
     ) -> bool {
         self.clear_owned_view_model_handle();
-        if !self
-            .data_bind_graph
-            .bind_owned_view_model_context_chain(file, context, context_chain)
-        {
-            return false;
-        }
+        let mut changed =
+            self.data_bind_graph
+                .bind_owned_view_model_context_chain(file, context, context_chain);
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            graph.bind_owned_view_model_context_chain(file, context, context_chain);
+            changed |= graph.bind_owned_view_model_context_chain(file, context, context_chain);
         }
         self.sync_bindable_font_assets_from_owned_context_chain(file, context, context_chain);
-        self.bind_active_owned_view_model_triggers(context);
-        self.needs_advance = true;
-        true
+        self.bind_active_owned_view_model_triggers_for_context_chain(context, context_chain);
+        for listener_actions in
+            self.changed_view_model_listener_actions_for_context_chain(context, context_chain)
+        {
+            changed |= self
+                .perform_listener_actions(
+                    &listener_actions,
+                    None,
+                    &ScriptListenerInvocation::None,
+                    &mut NoopScriptHost,
+                )
+                .unwrap_or(false);
+        }
+        if changed {
+            self.needs_advance = true;
+        }
+        changed
     }
 
-    pub(crate) fn bind_owned_view_model_context_chains(
+    pub(crate) fn bind_owned_view_model_context_candidates(
         &mut self,
-        file: &RuntimeFile,
-        contexts: &[(RuntimeOwnedViewModelHandle, Vec<Vec<usize>>)],
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
     ) -> bool {
-        if !self
-            .data_bind_graph
-            .bind_owned_view_model_context_chains(file, contexts)
-        {
+        const MAX_VIEW_MODEL_LISTENER_ITERATIONS: usize = 100;
+
+        let identity_changed = self.owned_view_model_candidates.len() != candidates.len()
+            || self
+                .owned_view_model_candidates
+                .iter()
+                .zip(candidates)
+                .any(|(bound, candidate)| !bound.same_binding(candidate));
+        let generations = candidates
+            .iter()
+            .map(RuntimeOwnedViewModelBindingCandidate::mutation_generation)
+            .collect::<Vec<_>>();
+        if !identity_changed && self.owned_view_model_candidate_generations == generations {
             return false;
         }
-        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            graph.bind_owned_view_model_context_chains(file, contexts);
-        }
-        self.sync_bindable_font_assets_from_owned_context_chains(file, contexts);
-        if let Some((main, _)) = contexts.first() {
-            self.bind_active_owned_view_model_triggers(&main.borrow());
+
+        let mut changed = self.rebind_owned_view_model_context_candidates(candidates, false);
+        if identity_changed {
+            self.bind_active_owned_view_model_triggers_for_candidates(candidates);
         } else {
+            self.refresh_active_owned_view_model_triggers_for_candidates(candidates);
+        }
+        self.owned_view_model_candidates = candidates.to_vec();
+
+        // A listener scan has observed only the generations that existed
+        // before its actions ran. Retain that exact frontier so an action on
+        // the final bounded iteration remains visible to the next bind rather
+        // than being acknowledged without a listener ever seeing it.
+        let mut observed_generations = generations;
+        for _ in 0..MAX_VIEW_MODEL_LISTENER_ITERATIONS {
+            let listener_actions =
+                self.changed_view_model_listener_actions_for_candidates(candidates);
+            observed_generations = candidates
+                .iter()
+                .map(RuntimeOwnedViewModelBindingCandidate::mutation_generation)
+                .collect();
+            if listener_actions.is_empty() {
+                break;
+            }
+            for listener_actions in listener_actions {
+                changed |= self
+                    .perform_listener_actions_for_candidates(candidates, &listener_actions)
+                    .unwrap_or(false);
+            }
+        }
+        if candidates.is_empty() {
             self.reset_active_view_model_triggers();
         }
-        self.needs_advance = true;
-        true
+        self.owned_view_model_candidate_generations = observed_generations;
+        if changed || identity_changed {
+            self.needs_advance = true;
+        }
+        changed || identity_changed
     }
 
     fn sync_bindable_font_assets<F>(&mut self, mut resolve: F)
@@ -4848,18 +5277,6 @@ impl StateMachineInstance {
         });
     }
 
-    fn sync_bindable_font_assets_from_owned_contexts(
-        &mut self,
-        context: &RuntimeOwnedViewModelContext,
-    ) {
-        self.sync_bindable_font_assets(|source| {
-            context.instances().find_map(|instance| {
-                runtime_owned_font_asset_value_for_state_machine_source(&instance, &source.path)
-                    .cloned()
-            })
-        });
-    }
-
     fn sync_bindable_font_assets_from_owned_context_chain(
         &mut self,
         file: &RuntimeFile,
@@ -4880,24 +5297,18 @@ impl StateMachineInstance {
         });
     }
 
-    fn sync_bindable_font_assets_from_owned_context_chains(
+    fn sync_bindable_font_assets_from_owned_candidates(
         &mut self,
-        file: &RuntimeFile,
-        contexts: &[(RuntimeOwnedViewModelHandle, Vec<Vec<usize>>)],
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
     ) {
         self.sync_bindable_font_assets(|source| {
-            contexts.iter().find_map(|(context, context_chain)| {
-                let context = context.borrow();
-                context_chain.iter().find_map(|context_path| {
-                    context
-                        .font_asset_value_by_context_source_path(
-                            file,
-                            context_path,
-                            &source.path,
-                            false,
-                        )
-                        .cloned()
-                })
+            candidates.iter().find_map(|candidate| {
+                let property_path = candidate.property_path_for_source_path(&source.path)?;
+                candidate
+                    .context
+                    .borrow()
+                    .font_asset_value_by_property_path(&property_path)
+                    .cloned()
             })
         });
     }
@@ -4907,7 +5318,7 @@ impl StateMachineInstance {
     }
 
     fn advance_data_context_with_trigger_reset(&mut self, reset_triggers: bool) -> bool {
-        self.refresh_owned_view_model_handle();
+        self.refresh_owned_view_model_candidates();
         if !self.data_bind_graph.data_context_present() {
             return false;
         }
@@ -4949,7 +5360,7 @@ impl StateMachineInstance {
             return;
         }
         for trigger in &mut self.view_model_triggers {
-            trigger.reset();
+            trigger.advanced();
         }
         self.data_bind_graph.reset_bound_trigger_sources();
         if self
@@ -4973,67 +5384,17 @@ impl StateMachineInstance {
         }
     }
 
-    fn refresh_owned_view_model_handle(&mut self) -> bool {
-        let Some(context) = self.owned_view_model_handle.clone() else {
-            return false;
-        };
-        let root = context.root_handle();
-        let observed_generation = root.borrow().mutation_generation();
-        let generation_changed = self.owned_view_model_generation != Some(observed_generation);
-        if !generation_changed {
+    fn refresh_owned_view_model_candidates(&mut self) -> bool {
+        if self.owned_view_model_candidates.is_empty() {
             return false;
         }
-        let context_value = root.borrow();
-        let mut changed = false;
-        if let Some(file) = context.file() {
-            let context_chain = [context.scope_path()];
-            changed |= self.data_bind_graph.bind_owned_view_model_context_chain(
-                file,
-                &context_value,
-                &context_chain,
-            );
-            for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-                changed |=
-                    graph.bind_owned_view_model_context_chain(file, &context_value, &context_chain);
-            }
-            self.sync_bindable_font_assets_from_owned_context_chain(
-                file,
-                &context_value,
-                &context_chain,
-            );
-        } else {
-            changed |= self
-                .data_bind_graph
-                .bind_owned_view_model_context(&context_value);
-            for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-                changed |= graph.bind_owned_view_model_context(&context_value);
-            }
-            self.sync_bindable_font_assets_from_owned_context(&context_value);
-        }
-        self.refresh_active_owned_view_model_triggers_for_context(
-            &context_value,
-            context.scope_path(),
-        );
-        let listener_actions = self.changed_view_model_listener_actions(&context_value);
-        drop(context_value);
-        for listener_actions in listener_actions {
-            changed |= self
-                .perform_listener_actions(
-                    &listener_actions,
-                    None,
-                    &ScriptListenerInvocation::None,
-                    &mut NoopScriptHost,
-                )
-                .unwrap_or(false);
-        }
-        self.owned_view_model_generation = Some(root.borrow().mutation_generation());
-        self.needs_advance = true;
-        changed || generation_changed
+        let candidates = self.owned_view_model_candidates.clone();
+        self.bind_owned_view_model_context_candidates(&candidates)
     }
 
     fn clear_owned_view_model_handle(&mut self) {
-        self.owned_view_model_handle = None;
-        self.owned_view_model_generation = None;
+        self.owned_view_model_candidates.clear();
+        self.owned_view_model_candidate_generations.clear();
     }
 
     pub fn update_data_binds_apply_target_to_source(&mut self) -> bool {
@@ -5123,6 +5484,24 @@ impl StateMachineInstance {
         self.default_view_model_triggers
             .get(index)
             .map(StateMachineViewModelTriggerInstance::value)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn active_view_model_trigger_count(&self, index: usize) -> Option<u64> {
+        self.view_model_triggers
+            .get(index)
+            .map(StateMachineViewModelTriggerInstance::value)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn active_view_model_trigger_is_fireable_for_layer(
+        &self,
+        index: usize,
+        layer_index: usize,
+    ) -> Option<bool> {
+        self.view_model_triggers
+            .get(index)
+            .map(|trigger| trigger.is_fireable_for_layer(layer_index))
     }
 
     pub fn view_model_trigger_value_count(&self) -> usize {
@@ -5248,7 +5627,7 @@ impl StateMachineInstance {
         if !self.focus.is_inert() {
             self.focus.sync(artboard);
         }
-        self.refresh_owned_view_model_handle();
+        self.refresh_owned_view_model_candidates();
         self.update_data_binds_for_state_probe();
 
         let data_context_present = self.data_bind_graph.data_context_present();
@@ -5291,8 +5670,9 @@ impl StateMachineInstance {
             };
             let mut executor = RuntimeStateMachineListenerActionExecutor {
                 data_bind_graph: &mut self.data_bind_graph,
+                default_view_model_index: self.default_view_model_index,
                 owned_view_model_context: None,
-                owned_view_model_handle: self.owned_view_model_handle.clone(),
+                owned_view_model_candidates: self.owned_view_model_candidates.clone(),
                 scripted_listener_action_instances: &self.scripted_listener_action_instances,
                 script_error: &mut self.script_error,
                 focus: &mut self.focus,
@@ -5361,7 +5741,7 @@ impl StateMachineInstance {
         // A retained context can be mutated through any alias between
         // frames. Refresh it before the clean-frame fast path so the new
         // generation schedules the ordinary updateDataBinds(false) work.
-        self.refresh_owned_view_model_handle();
+        self.refresh_owned_view_model_candidates();
         if clear_reported_events {
             self.reported_events.clear();
         }
@@ -5440,8 +5820,9 @@ impl StateMachineInstance {
             };
             let mut executor = RuntimeStateMachineListenerActionExecutor {
                 data_bind_graph: &mut self.data_bind_graph,
+                default_view_model_index: self.default_view_model_index,
                 owned_view_model_context: owned_context.as_deref_mut(),
-                owned_view_model_handle: self.owned_view_model_handle.clone(),
+                owned_view_model_candidates: self.owned_view_model_candidates.clone(),
                 scripted_listener_action_instances: &self.scripted_listener_action_instances,
                 script_error: &mut self.script_error,
                 focus: &mut self.focus,
@@ -5566,20 +5947,28 @@ impl StateMachineInstance {
         self.bind_active_owned_view_model_triggers_for_context(context, &[]);
     }
 
-    fn bind_active_owned_view_model_triggers_for_context(
+    fn bind_active_owned_view_model_triggers_for_context_chain(
         &mut self,
         context: &RuntimeOwnedViewModelInstance,
-        context_path: &[usize],
+        context_chain: &[&[usize]],
     ) {
+        let default_view_model_index = self.default_view_model_index;
         let mut active = self.default_view_model_triggers.clone();
         for trigger in &mut active {
-            let value = usize::try_from(trigger.view_model_property_id())
-                .ok()
-                .and_then(|property_index| {
-                    let mut path = context_path.to_vec();
-                    path.push(property_index);
-                    context.trigger_value_by_property_path(&path)
-                });
+            let value = default_view_model_index.and_then(|view_model_index| {
+                usize::try_from(trigger.view_model_property_id())
+                    .ok()
+                    .and_then(|property_index| {
+                        context_chain.iter().find_map(|context_path| {
+                            runtime_owned_view_model_trigger_value_for_context_path(
+                                context,
+                                context_path,
+                                view_model_index,
+                                property_index,
+                            )
+                        })
+                    })
+            });
             if let Some(value) = value {
                 trigger.replace_value(value);
             } else {
@@ -5589,25 +5978,85 @@ impl StateMachineInstance {
         self.view_model_triggers = active;
     }
 
-    fn refresh_active_owned_view_model_triggers_for_context(
+    fn bind_active_owned_view_model_triggers_for_candidates(
         &mut self,
-        context: &RuntimeOwnedViewModelInstance,
-        context_path: &[usize],
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
     ) {
+        let default_view_model_index = self.default_view_model_index;
+        let mut active = self.default_view_model_triggers.clone();
+        for trigger in &mut active {
+            let value = default_view_model_index.and_then(|view_model_index| {
+                let view_model_index = u32::try_from(view_model_index).ok()?;
+                let source_path = [view_model_index, trigger.view_model_property_id()];
+                candidates.iter().find_map(|candidate| {
+                    let property_path = candidate.property_path_for_source_path(&source_path)?;
+                    candidate
+                        .context
+                        .borrow()
+                        .trigger_value_by_property_path(&property_path)
+                })
+            });
+            if let Some(value) = value {
+                trigger.replace_value(value);
+            } else {
+                trigger.reset();
+            }
+        }
+        self.view_model_triggers = active;
+    }
+
+    fn refresh_active_owned_view_model_triggers_for_candidates(
+        &mut self,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    ) {
+        let default_view_model_index = self.default_view_model_index;
         for trigger in &mut self.view_model_triggers {
-            let value = usize::try_from(trigger.view_model_property_id())
-                .ok()
-                .and_then(|property_index| {
-                    let mut path = context_path.to_vec();
-                    path.push(property_index);
-                    context.trigger_value_by_property_path(&path)
-                });
+            let value = default_view_model_index.and_then(|view_model_index| {
+                let view_model_index = u32::try_from(view_model_index).ok()?;
+                let source_path = [view_model_index, trigger.view_model_property_id()];
+                candidates.iter().find_map(|candidate| {
+                    let property_path = candidate.property_path_for_source_path(&source_path)?;
+                    candidate
+                        .context
+                        .borrow()
+                        .trigger_value_by_property_path(&property_path)
+                })
+            });
             if let Some(value) = value {
                 trigger.set_value(value);
             } else {
                 trigger.reset();
             }
         }
+    }
+
+    fn bind_active_owned_view_model_triggers_for_context(
+        &mut self,
+        context: &RuntimeOwnedViewModelInstance,
+        context_path: &[usize],
+    ) {
+        let default_view_model_index = self.default_view_model_index;
+        let mut active = self.default_view_model_triggers.clone();
+        for trigger in &mut active {
+            let value = default_view_model_index.and_then(|view_model_index| {
+                usize::try_from(trigger.view_model_property_id())
+                    .ok()
+                    .and_then(|property_index| {
+                        runtime_owned_view_model_trigger_value_for_context_path(
+                            context,
+                            context_path,
+                            view_model_index,
+                            property_index,
+                        )
+                    })
+            });
+            if let Some(value) = value {
+                trigger.replace_value(value);
+            } else {
+                trigger.reset();
+            }
+        }
+        self.view_model_triggers = active;
     }
 
     fn reset_active_view_model_triggers(&mut self) {

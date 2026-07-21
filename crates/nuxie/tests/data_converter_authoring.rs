@@ -6,7 +6,7 @@ use nuxie::{
     DataConverterStringTrimMode, ExportedObjectKind, ExportedProperty, NodeSpec, Parent, Scene,
     ScriptAssetSpec, ShapeSpec, ViewModelBooleanSource, ViewModelBooleanSpec,
     ViewModelDataBindingDirection, ViewModelInstanceSpec, ViewModelNumberSource,
-    ViewModelNumberSpec, ViewModelSpec, ViewModelValueSource,
+    ViewModelNumberSpec, ViewModelScope, ViewModelSpec, ViewModelValueSource,
 };
 
 #[test]
@@ -193,6 +193,7 @@ fn converter_references_lower_to_exact_catalog_ordinals_and_paths() -> Result<()
         let (model, operand) = {
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Runtime".into(),
             })?;
             let operand = view_models.create_number(
@@ -429,6 +430,7 @@ fn converter_aware_bind_uses_typed_source_and_stable_converter_identity() -> Res
             })?;
         let mut view_models = tx.view_models();
         let model = view_models.create(ViewModelSpec {
+            scope: ViewModelScope::Local,
             name: "State".into(),
         })?;
         let hidden = view_models.create_boolean(

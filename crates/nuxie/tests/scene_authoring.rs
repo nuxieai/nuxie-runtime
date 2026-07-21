@@ -21,8 +21,9 @@ use nuxie::{
     StructureEpoch, TextSpec, TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D,
     ViewModelBooleanSpec, ViewModelChildSpec, ViewModelColorSpec, ViewModelEnumSpec, ViewModelId,
     ViewModelImageSpec, ViewModelInstanceId, ViewModelInstanceSpec, ViewModelListIndexSpec,
-    ViewModelListSource, ViewModelListSpec, ViewModelNumberId, ViewModelNumberSpec, ViewModelSpec,
-    ViewModelStringId, ViewModelStringSpec, ViewModelTriggerSpec, VisibilityCondition, props,
+    ViewModelListSource, ViewModelListSpec, ViewModelNumberId, ViewModelNumberSpec, ViewModelScope,
+    ViewModelSpec, ViewModelStringId, ViewModelStringSpec, ViewModelTriggerSpec,
+    VisibilityCondition, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -3752,6 +3753,7 @@ fn authored_view_model_number_binds_state_transition_duration_records() -> Resul
         {
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Playback".into(),
             })?;
             let duration = view_models.create_number(
@@ -3900,12 +3902,15 @@ fn typed_vertical_component_list_exports_imports_advances_and_draws_two_view_mod
         let (root_model, item_model, root_defaults, item_a, item_b, root_items) = {
             let mut view_models = tx.view_models();
             view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Decoy".into(),
             })?;
             let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Root model".into(),
             })?;
             let item_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Item model".into(),
             })?;
             let root_items = view_models.create_list(
@@ -4263,15 +4268,19 @@ fn nested_view_model_list_path_imports_advances_and_draws_the_mapped_item() -> R
         let (item_model, paywall, products) = {
             let mut view_models = tx.view_models();
             view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Seed model".into(),
             })?;
             let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Root model".into(),
             })?;
             let paywall_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Paywall model".into(),
             })?;
             let item_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Product model".into(),
             })?;
             view_models.create_number(
@@ -4503,12 +4512,15 @@ fn typed_list_string_equality_mutates_stable_items_rejects_mismatches_and_replay
         ) = {
             let mut view_models = tx.view_models();
             let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Runtime".into(),
             })?;
             let paywall_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Paywall".into(),
             })?;
             let product_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Product".into(),
             })?;
             let paywall = view_models.create_child(
@@ -4755,9 +4767,11 @@ fn unset_child_view_model_values_reject_the_authoring_transaction() -> Result<()
         .edit(|tx| {
             let mut view_models = tx.view_models();
             let root = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Root".into(),
             })?;
             let paywall = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Paywall".into(),
             })?;
             view_models.create_child(
@@ -4795,6 +4809,7 @@ fn typed_view_model_strings_export_and_import_as_runtime_instance_values() -> Re
         })?;
         let mut view_models = tx.view_models();
         let product = view_models.create(ViewModelSpec {
+            scope: ViewModelScope::Local,
             name: "Product".into(),
         })?;
         let name = view_models.create_string(
@@ -4857,6 +4872,7 @@ fn typed_view_model_extended_scalars_export_and_import_exact_values() -> Result<
             })?;
             let mut view_models = tx.view_models();
             let runtime = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Runtime".into(),
             })?;
             let tint = view_models.create_color(
@@ -5005,6 +5021,7 @@ fn typed_view_model_enum_validation_rejects_lossy_authoring() -> Result<()> {
             })?;
             let mut view_models = tx.view_models();
             let runtime = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Runtime".into(),
             })?;
             let status = view_models.create_enum(
@@ -5041,6 +5058,7 @@ fn typed_view_model_enum_validation_rejects_lossy_authoring() -> Result<()> {
             })?;
             let mut view_models = tx.view_models();
             let runtime = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Runtime".into(),
             })?;
             view_models.create_enum(
@@ -5088,6 +5106,7 @@ fn create_view_model_string_fixture(
     )?;
     let mut view_models = tx.view_models();
     let model = view_models.create(ViewModelSpec {
+        scope: ViewModelScope::Local,
         name: "Copy".into(),
     })?;
     let label = view_models.create_string(
@@ -5148,6 +5167,7 @@ fn unnamed_view_model_instance_omits_the_optional_component_name_record() -> Res
     scene.edit(|tx| {
         let mut view_models = tx.view_models();
         let model = view_models.create(ViewModelSpec {
+            scope: ViewModelScope::Local,
             name: "Playback".into(),
         })?;
         let duration = view_models.create_number(
@@ -5270,6 +5290,7 @@ fn create_view_model_duration_machine(
     let (model, duration, defaults, bind) = {
         let mut view_models = tx.view_models();
         let model = view_models.create(ViewModelSpec {
+            scope: ViewModelScope::Local,
             name: "Playback".into(),
         })?;
         let duration = view_models.create_number(
@@ -5518,6 +5539,7 @@ fn view_model_catalog_replacement_is_atomic_and_burns_runtime_identities() -> Re
         view_models.clear_artboard_default(fixture.artboard)?;
         view_models.clear_catalog()?;
         let model = view_models.create(ViewModelSpec {
+            scope: ViewModelScope::Local,
             name: "Replacement playback".into(),
         })?;
         let duration = view_models.create_number(
@@ -5860,6 +5882,7 @@ fn authored_event_and_view_model_listeners_export_typed_sources_and_view_model_a
         let (defaults, progress, label, enabled, tint, poster, status, submit, selected) = {
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Interaction".into(),
             })?;
             let progress = view_models.create_number(
@@ -7059,6 +7082,7 @@ fn view_model_numbers_drive_blend_states_without_reauthoring_records() -> Result
         let (defaults, amount, direct_mix) = {
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Blend values".into(),
             })?;
             let amount = view_models.create_number(
@@ -8941,9 +8965,11 @@ fn component_list_hit_paths_preserve_child_front_to_back_order() -> Result<()> {
         let (item_model, items) = {
             let mut view_models = tx.view_models();
             let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Root model".into(),
             })?;
             let item_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Item model".into(),
             })?;
             let items = view_models.create_list(

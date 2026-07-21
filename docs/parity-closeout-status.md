@@ -39,7 +39,27 @@ upstream-sync-map registry).
 - [ ] #RB-1 data-binding foundation rebuild (map Phase RB; user-directed
   2026-07-21, P0) — port C++'s retained-identity view-model/data-bind core
   and delete the compensation family; floors are the harness; exit gate
-  includes the deletion list. See the map's Phase RB for slices (a)-(f).
+  includes the deletion list. Mini-queue:
+  - [x] (a)+(b) retained cell core — `view_model_cell.rs` landed: shared
+    typed cells (`Rc<RefCell>` ≈ `rcp`), weak dirt-sink dependents
+    (`DependencyHelper` analog; cascade sets bits only, no callbacks),
+    `ValueFlags::valueChanged`/`advanced()` semantics including trigger
+    zeroing under `SuppressDelegation`; 7 unit tests mirror the C++
+    contracts. Additive — no consumers yet, floors untouched.
+  - [ ] (c) parent-linked `DataContext` (`data_context.cpp` port): one
+    retained context with a parent pointer replacing candidate vectors;
+    `getViewModelProperty(path)` walks instances (path[0]=viewModelId) then
+    parent, returning retained cells.
+  - [ ] (d) retained `DataBind` lifecycle (`data_bind.cpp`): `source(cell)`
+    registers the bind's sink as dependent (skipped for bindsOnce); typed
+    ContextValues; C++ favored-direction init ordering
+    (`updateSourceBinding`, TargetOrigin, `sourceToTargetRunsFirst`).
+  - [ ] (e) migrate consumers (state machine, artboard, facade, listeners,
+    converters) — sequenced by the compensation-family call-site inventory
+    (scout dispatched 2026-07-21); floors green after every migration step.
+  - [ ] (f) deletion gate: mutation clocks, candidate vectors, listener
+    rescans, alias mirrors, Scene-wide rebind bit all removed; floors at
+    completed values including the four currently-red scripted entries.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive

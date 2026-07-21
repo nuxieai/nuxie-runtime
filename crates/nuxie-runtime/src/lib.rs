@@ -13,6 +13,9 @@ mod scripting;
 mod state_machine;
 mod text;
 mod view_model;
+// #RB-1: retained-identity view-model core (map Phase RB). Additive while
+// consumers migrate; the compensation family deletes when migration ends.
+pub mod view_model_cell;
 
 pub use animation::{
     LinearAnimationInstance, RuntimeKeyFrameBool, RuntimeKeyFrameCallback, RuntimeKeyFrameColor,

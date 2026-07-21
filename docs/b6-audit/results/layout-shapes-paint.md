@@ -18,7 +18,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/layout/artboard_component_list_override.cpp:8-19,29-76", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "mounted child revision/epoch hash family", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:5111-5117; crates/nuxie-runtime/src/draw.rs:6777-6828"]}]
+    mechanisms: [{name: "mounted child revision/epoch hash family", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:5111-5117; crates/nuxie-runtime/src/draw.rs:6777-6828"]}]
     import_time_constants: []
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -39,7 +39,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/layout/axis.cpp:23-29", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "slice-mesh input snapshot", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/draw.rs:9418-9447,13524-13558"]}]
+    mechanisms: [{name: "slice-mesh input snapshot", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/draw.rs:9418-9447,13524-13558"]}]
     import_time_constants: []
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -102,7 +102,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/layout/layout_component_style.cpp:208-221,289-452", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "layout epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3783-3785,3948-3966; crates/nuxie-runtime/src/draw.rs:10892-10910"]}]
+    mechanisms: [{name: "layout epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3783-3785,3948-3966; crates/nuxie-runtime/src/draw.rs:10892-10910"]}]
     import_time_constants: []
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -144,7 +144,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/layout/n_sliced_node.cpp:8-25,38-48,160-168", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path/layout epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3783-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path/layout epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3783-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -165,7 +165,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/layout/n_slicer.cpp:9-10,37-55", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "slice-mesh input snapshot", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/draw.rs:9418-9447,13524-13558"]}]
+    mechanisms: [{name: "slice-mesh input snapshot", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/draw.rs:9418-9447,13524-13558"]}]
     import_time_constants: []
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -228,7 +228,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/clipping_shape.cpp:91-117,140-177", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "clipping path epoch cache", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:11139-11147"]}]
+    mechanisms: [{name: "clipping path epoch cache", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:11139-11147"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -249,7 +249,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/cubic_asymmetric_vertex.cpp:24-48", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -270,7 +270,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/cubic_detached_vertex.cpp:24-52", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -291,7 +291,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/cubic_mirrored_vertex.cpp:18-36", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -312,7 +312,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/cubic_vertex.cpp:29-69,72-90", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -354,7 +354,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/ellipse.cpp:7-46", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -375,7 +375,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/image.cpp:114-155,222-247,249-367", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "image cache/prepared epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755; crates/nuxie-runtime/src/draw.rs:10059-10124"]}]
+    mechanisms: [{name: "image cache/prepared epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755; crates/nuxie-runtime/src/draw.rs:10059-10124"]}]
     import_time_constants: []
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -417,7 +417,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/mesh.cpp:14-25,152-194", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "mesh vertex byte snapshot", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/draw.rs:9408-9416,14282-14295"]}]
+    mechanisms: [{name: "mesh vertex byte snapshot", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/draw.rs:9408-9416,14282-14295"]}]
     import_time_constants: []
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -438,7 +438,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/mesh_vertex.cpp:5-22", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "mesh vertex byte snapshot", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/draw.rs:9408-9416,14282-14310"]}]
+    mechanisms: [{name: "mesh vertex byte snapshot", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/draw.rs:9408-9416,14282-14310"]}]
     import_time_constants: []
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -480,7 +480,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/dash.cpp:14-48", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:2120-2131,3788-3790,6175-6185; crates/nuxie-runtime/src/draw.rs:19153-19299"]}]
+    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:2120-2131,3788-3790,6175-6185; crates/nuxie-runtime/src/draw.rs:19153-19299"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -501,7 +501,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/dash_path.cpp:9-31,103-166", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:2120-2131,3788-3790,6175-6185; crates/nuxie-runtime/src/draw.rs:19153-19299"]}]
+    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:2120-2131,3788-3790,6175-6185; crates/nuxie-runtime/src/draw.rs:19153-19299"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -522,7 +522,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/effects_container.cpp:10-70", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,6175-6189; crates/nuxie-runtime/src/draw.rs:19080-19149"]}]
+    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,6175-6189; crates/nuxie-runtime/src/draw.rs:19080-19149"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -543,7 +543,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/feather.cpp:23-65,86-110", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "paint/path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,3788-3790,6175-6188; crates/nuxie-runtime/src/draw.rs:15731-15770"]}]
+    mechanisms: [{name: "paint/path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,3788-3790,6175-6188; crates/nuxie-runtime/src/draw.rs:15731-15770"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -564,7 +564,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/fill.cpp:6-45", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "shape-paint path epoch cache", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:9871-9918"]}]
+    mechanisms: [{name: "shape-paint path epoch cache", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:9871-9918"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -585,7 +585,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/gradient_stop.cpp:6-28", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "paint configuration epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,4652-4664,5004-5025; crates/nuxie-runtime/src/draw.rs:15731-15770"]}]
+    mechanisms: [{name: "paint configuration epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,4652-4664,5004-5025; crates/nuxie-runtime/src/draw.rs:15731-15770"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -606,7 +606,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/group_effect.cpp:6-72", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,6175-6189; crates/nuxie-runtime/src/draw.rs:19080-19149"]}]
+    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,6175-6189; crates/nuxie-runtime/src/draw.rs:19080-19149"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -627,7 +627,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/linear_gradient.cpp:28-79,86-127,203-215", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "paint configuration epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,4820-4925; crates/nuxie-runtime/src/draw.rs:9482-9513,15731-15770"]}]
+    mechanisms: [{name: "paint configuration epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,4820-4925; crates/nuxie-runtime/src/draw.rs:9482-9513,15731-15770"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -669,7 +669,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/shape_paint.cpp:12-57,74-205", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "paint/path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,3788-3790; crates/nuxie-runtime/src/draw.rs:9871-9918,15731-15770"]}]
+    mechanisms: [{name: "paint/path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,3788-3790; crates/nuxie-runtime/src/draw.rs:9871-9918,15731-15770"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -690,7 +690,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/shape_paint_mutator.cpp:7-47", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "paint configuration epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755; crates/nuxie-runtime/src/draw.rs:15731-15770"]}]
+    mechanisms: [{name: "paint configuration epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755; crates/nuxie-runtime/src/draw.rs:15731-15770"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -711,7 +711,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/shape_paint_path.cpp:8-75", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "retained render-path epoch cache", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790; crates/nuxie-runtime/src/draw.rs:10227-10270,11105-11129"]}]
+    mechanisms: [{name: "retained render-path epoch cache", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790; crates/nuxie-runtime/src/draw.rs:10227-10270,11105-11129"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -732,7 +732,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/solid_color.cpp:9-54", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "solid-color revision handoff", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:313-316,1788-1799,1815-1824; crates/nuxie-runtime/src/draw.rs:15747-15758"]}]
+    mechanisms: [{name: "solid-color revision handoff", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:313-316,1788-1799,1815-1824; crates/nuxie-runtime/src/draw.rs:15747-15758"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -753,7 +753,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/stroke.cpp:8-29,37-77", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "paint/path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,3788-3790; crates/nuxie-runtime/src/draw.rs:15671-15728,15731-15770"]}]
+    mechanisms: [{name: "paint/path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,3788-3790; crates/nuxie-runtime/src/draw.rs:15671-15728,15731-15770"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -774,7 +774,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/stroke_effect.cpp:13-65", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,6175-6189; crates/nuxie-runtime/src/draw.rs:19080-19149"]}]
+    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,6175-6189; crates/nuxie-runtime/src/draw.rs:19080-19149"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -795,7 +795,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/target_effect.cpp:8-31,34-120", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,6175-6189; crates/nuxie-runtime/src/draw.rs:19106-19149"]}]
+    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,6175-6189; crates/nuxie-runtime/src/draw.rs:19106-19149"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -816,7 +816,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/paint/trim_path.cpp:6-21,182-225", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:2120-2131,3788-3790,6175-6179; crates/nuxie-runtime/src/draw.rs:19306-19375"]}]
+    mechanisms: [{name: "effect path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:2120-2131,3788-3790,6175-6179; crates/nuxie-runtime/src/draw.rs:19306-19375"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -837,7 +837,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/parametric_path.cpp:9-66", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path/layout epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3783-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path/layout epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3783-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -858,7 +858,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/path.cpp:76-105,327-392", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:9835-9868,10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:9835-9868,10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -879,7 +879,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/path_composer.cpp:11-49,51-132", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path-composer epoch reconstruction", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3994; crates/nuxie-runtime/src/draw.rs:9794-9832,10920-10955"]}]
+    mechanisms: [{name: "path-composer epoch reconstruction", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3994; crates/nuxie-runtime/src/draw.rs:9794-9832,10920-10955"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -900,7 +900,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/path_vertex.cpp:6-29", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -942,7 +942,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/points_path.cpp:12-52", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3985; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3985; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -963,7 +963,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/polygon.cpp:13-54", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -984,7 +984,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/rectangle.cpp:5-45", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -1005,7 +1005,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/shape.cpp:20-62,74-108,262-330", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "shape/path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3994; crates/nuxie-runtime/src/draw.rs:9871-9918,11105-11129"]}]
+    mechanisms: [{name: "shape/path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3994; crates/nuxie-runtime/src/draw.rs:9871-9918,11105-11129"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -1026,7 +1026,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/shape_paint_container.cpp:17-75", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "paint/path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,3788-3790; crates/nuxie-runtime/src/draw.rs:9482-9513,9871-9918"]}]
+    mechanisms: [{name: "paint/path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3728-3755,3788-3790; crates/nuxie-runtime/src/draw.rs:9482-9513,9871-9918"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -1047,7 +1047,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/slice_mesh.cpp:23-54,56-147,316-400", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "slice-mesh input snapshot", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/draw.rs:9418-9447,13524-13558"]}]
+    mechanisms: [{name: "slice-mesh input snapshot", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/draw.rs:9418-9447,13524-13558"]}]
     import_time_constants: []
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -1068,7 +1068,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/star.cpp:9-47", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -1089,7 +1089,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/straight_vertex.cpp:5", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -1110,7 +1110,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/triangle.cpp:7-31", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high
@@ -1131,7 +1131,7 @@ axes:
   ownership: {status: "isomorphic-or-arena-adapted", evidence: ["cpp@d788e8ec:src/shapes/vertex.cpp:5-23", "crates/nuxie-graph/src/lib.rs:607-817"]}
   compensation:
     status: "present"
-    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none (C++ uses retained object-local dirt/state)", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
+    mechanisms: [{name: "path epoch fanout", kind: "cross-file drift tracker", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/artboard.rs:3788-3790,3948-3966; crates/nuxie-runtime/src/draw.rs:10965-10975"]}]
     import_time_constants: [{name: "RuntimePathComposerLookupCacheKey.graph_identity", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/draw.rs:10920-10949"]}]
 idiom_rules_invoked: ["AF-1 retained identity", "AF-2 push never reconstruct", "AF-4 one dirt model", "AF-8 no invented lifecycles"]
 confidence: high

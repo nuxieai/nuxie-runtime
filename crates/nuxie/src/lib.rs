@@ -1963,6 +1963,13 @@ impl OwnedArtboardInstance {
             .geometry_path_segments_with_bounds(&mut self.geometry)
     }
 
+    pub(crate) fn retained_geometry_path_segments_with_bounds(
+        &mut self,
+    ) -> Vec<RuntimeGeometryHit> {
+        self.raw
+            .retained_geometry_path_segments_with_bounds(&mut self.geometry)
+    }
+
     pub(crate) fn semantic_text_path_segments_with_bounds(
         &mut self,
     ) -> Vec<RuntimeSemanticTextHit> {

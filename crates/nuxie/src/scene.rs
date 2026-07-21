@@ -15457,6 +15457,28 @@ impl Frame<'_> {
     /// resolved to scene object ids before returning, so higher layers can
     /// immediately translate them to durable semantic identities.
     pub fn geometry_paths_with_bounds(&mut self, instance: InstanceId) -> Vec<SceneObjectHit> {
+        self.resolve_geometry_paths_with_bounds(instance, false)
+    }
+
+    /// Enumerate every retained authored Shape and Text occurrence with bounds
+    /// in the root presentation's coordinate space.
+    ///
+    /// Effective-opacity changes do not remove occurrences from this
+    /// catalogue. Use [`Self::hit_test_paths_with_bounds`] or
+    /// [`Self::geometry_paths_with_bounds`] when current paint visibility must
+    /// remain authoritative.
+    pub fn retained_geometry_paths_with_bounds(
+        &mut self,
+        instance: InstanceId,
+    ) -> Vec<SceneObjectHit> {
+        self.resolve_geometry_paths_with_bounds(instance, true)
+    }
+
+    fn resolve_geometry_paths_with_bounds(
+        &mut self,
+        instance: InstanceId,
+        include_invisible: bool,
+    ) -> Vec<SceneObjectHit> {
         let Some((artboard, local_hits)) = self
             .scene
             .instances
@@ -15466,7 +15488,11 @@ impl Frame<'_> {
             .map(|live| {
                 (
                     live.artboard,
-                    live.runtime.geometry_path_segments_with_bounds(),
+                    if include_invisible {
+                        live.runtime.retained_geometry_path_segments_with_bounds()
+                    } else {
+                        live.runtime.geometry_path_segments_with_bounds()
+                    },
                 )
             })
         else {
@@ -21187,12 +21213,12 @@ fn lower_artboard(
             .get(&node.id)
             .copied()
             .ok_or_else(|| {
-                EditDiagnostic::new(
-                    origins.object(node.id, fallback_operation_index),
-                    vec![EditId::Object(node.id)],
-                    EditReason::InternalInvariant,
-                )
-            })?;
+            EditDiagnostic::new(
+                origins.object(node.id, fallback_operation_index),
+                vec![EditId::Object(node.id)],
+                EditReason::InternalInvariant,
+            )
+        })?;
         if objects_by_local.len() != style_local_id {
             return Err(EditDiagnostic::new(
                 origins.object(node.id, fallback_operation_index),
@@ -21204,12 +21230,12 @@ fn lower_artboard(
             .get(&node.id)
             .copied()
             .ok_or_else(|| {
-            EditDiagnostic::new(
-                origins.object(node.id, fallback_operation_index),
-                vec![EditId::Object(node.id)],
-                EditReason::InternalInvariant,
-            )
-        })?;
+                EditDiagnostic::new(
+                    origins.object(node.id, fallback_operation_index),
+                    vec![EditId::Object(node.id)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
         let parent_id = u32::try_from(parent_id).map_err(|_| {
             EditDiagnostic::new(
                 origins.object(node.id, fallback_operation_index),
@@ -29917,6 +29943,35 @@ mod tests {
                 40.0,
                 0xff33_77aa,
             )?;
+            let hidden_child = tx.create(
+                Parent::Artboard(child),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Hidden child Shape".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 0.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(hidden_child),
+                NodeSpec::Rectangle(RectangleSpec::new("Hidden child Rectangle", 10.0, 10.0)),
+            )?;
+            let hidden_fill = tx.create(
+                Parent::Object(hidden_child),
+                NodeSpec::Fill(FillSpec {
+                    name: "Hidden child Fill".into(),
+                }),
+            )?;
+            tx.create(
+                Parent::Object(hidden_fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Hidden child Color".into(),
+                    color: 0xffff_0000,
+                }),
+            )?;
             let mut machines = tx.machines();
             let machine = machines.create_machine(
                 child,
@@ -30029,6 +30084,31 @@ mod tests {
         runtime.advance(0.0);
         let visible = owned_canonical_draw(&mut runtime)?;
         assert!(visible.contains("drawPath "));
+        let visible_geometry = runtime.geometry_path_segments_with_bounds();
+        assert!(
+            visible_geometry.iter().any(|hit| {
+                hit.path.len() == 2 && hit.path.last().is_some_and(|segment| segment.local_id == 1)
+            }),
+            "visible geometry must expose the nested child occurrence",
+        );
+        assert!(
+            visible_geometry
+                .iter()
+                .all(|hit| { hit.path.last().is_none_or(|segment| segment.local_id != 5) }),
+            "ordinary geometry must exclude the authored opacity-zero nested child: {visible_geometry:#?}",
+        );
+        let retained_before_hide = runtime.retained_geometry_path_segments_with_bounds();
+        assert!(
+            retained_before_hide.iter().any(|hit| {
+                hit.path.len() == 2
+                    && hit.path.last().is_some_and(|segment| segment.local_id == 5)
+                    && hit.bounds.min_x.is_finite()
+                    && hit.bounds.min_y.is_finite()
+                    && hit.bounds.max_x > hit.bounds.min_x
+                    && hit.bounds.max_y > hit.bounds.min_y
+            }),
+            "retained geometry must include the authored opacity-zero nested child: {retained_before_hide:#?}",
+        );
 
         assert!(root.set_bool("shown", false));
         assert!(runtime.bind_view_model(&root));
@@ -30037,6 +30117,20 @@ mod tests {
         assert!(
             !hidden.contains("drawPath "),
             "container world opacity must suppress its nested occurrence: {hidden}"
+        );
+        let retained = runtime.retained_geometry_path_segments_with_bounds();
+        assert!(
+            retained.iter().any(|hit| {
+                hit.path.len() == 2 && hit.path.last().is_some_and(|segment| segment.local_id == 5)
+            }),
+            "retained geometry must preserve the authored opacity-zero nested occurrence after ancestor visibility changes: {retained:#?}",
+        );
+        assert!(
+            runtime
+                .hit_test_paths(crate::Vec2D::new(-10.0, -7.0))
+                .iter()
+                .all(|path| path.last().is_none_or(|local_id| *local_id != 5)),
+            "retained occurrence enumeration must not make the opacity-zero child point-interactive",
         );
         Ok(())
     }

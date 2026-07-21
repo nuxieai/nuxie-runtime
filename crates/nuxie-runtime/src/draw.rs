@@ -634,10 +634,41 @@ impl ArtboardInstance {
             &mut cache.paths,
             Mat2D::IDENTITY,
             false,
+            false,
         )
     }
 
-    /// Settle pending writes and enumerate every retained Text draw occurrence
+    /// Settle pending writes and enumerate every retained Shape and Text
+    /// occurrence with bounds in the root artboard's coordinate space.
+    ///
+    /// Unlike [`Self::geometry_path_segments_with_bounds`], this catalogue is
+    /// stable across effective-opacity changes. It includes drawable
+    /// occurrences whose current render opacity is zero while point hit tests
+    /// and ordinary visible-geometry queries remain visibility-authoritative.
+    pub fn retained_geometry_path_segments_with_bounds(
+        &mut self,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<RuntimeGeometryHit> {
+        self.update_pass();
+        let Some(runtime) = self.runtime_file() else {
+            return Vec::new();
+        };
+        let Some(graph) = self.runtime_graph() else {
+            return Vec::new();
+        };
+        cache.retain_instance(self);
+        self.geometry_path_segments_with_path_cache(
+            runtime,
+            graph,
+            None,
+            &mut cache.paths,
+            Mat2D::IDENTITY,
+            true,
+            false,
+        )
+    }
+
+    /// Settle pending writes and enumerate every visible Text draw occurrence
     /// with its exact resolved value and concrete root-artboard bounds.
     ///
     /// Runtime-local identities stay at this low-level boundary. The public
@@ -661,6 +692,7 @@ impl ArtboardInstance {
             None,
             &mut cache.paths,
             Mat2D::IDENTITY,
+            false,
             true,
         )
         .into_iter()
@@ -725,6 +757,7 @@ impl ArtboardInstance {
             &mut cache.paths,
             Mat2D::IDENTITY,
             false,
+            false,
         )
     }
 
@@ -735,6 +768,7 @@ impl ArtboardInstance {
         point: Option<RenderVec2D>,
         path_cache: &mut RuntimeRenderPathCache,
         artboard_to_root: Mat2D,
+        include_invisible: bool,
         include_text_value: bool,
     ) -> Vec<RuntimeGeometryHit> {
         // Geometry queries live in the artboard's unshifted world space. This
@@ -754,7 +788,11 @@ impl ArtboardInstance {
             }
         }
 
-        let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let prepared = if include_invisible {
+            path_cache.retained_geometry_artboard_frame(self, graph, runtime)
+        } else {
+            path_cache.prepared_artboard_frame(self, graph, Some(runtime))
+        };
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
         let mut active_clips = Vec::new();
         let mut back_to_front_hits = Vec::new();
@@ -900,6 +938,7 @@ impl ArtboardInstance {
                             child_point,
                             child_cache,
                             child_to_root,
+                            include_invisible,
                             include_text_value,
                         )
                         .into_iter()
@@ -923,6 +962,7 @@ impl ArtboardInstance {
                             child_point,
                             child_cache,
                             child_to_root,
+                            include_invisible,
                             include_text_value,
                         )
                         .into_iter()
@@ -998,6 +1038,7 @@ impl ArtboardInstance {
                             child_point,
                             child_cache,
                             artboard_to_root.multiply(child_world),
+                            include_invisible,
                             include_text_value,
                         )
                         .into_iter()
@@ -1033,7 +1074,7 @@ impl ArtboardInstance {
                     .component(local_id)
                     .map(|component| component.transform.render_opacity)
                     .unwrap_or(0.0);
-                if !render_opacity.is_finite() || render_opacity <= 0.0 {
+                if !include_invisible && (!render_opacity.is_finite() || render_opacity <= 0.0) {
                     continue;
                 }
                 let layout_constraint =
@@ -1105,10 +1146,12 @@ impl ArtboardInstance {
                 Some(point) => command.shape_paints.iter().any(|paint| {
                     runtime_geometry_shape_paint_contains(runtime, self, paint, shape_world, point)
                 }),
-                None => command
-                    .shape_paints
-                    .iter()
-                    .any(|paint| runtime_geometry_shape_paint_is_effectively_visible(self, paint)),
+                None => {
+                    include_invisible
+                        || command.shape_paints.iter().any(|paint| {
+                            runtime_geometry_shape_paint_is_effectively_visible(self, paint)
+                        })
+                }
             };
             if matches_query
                 && let Some(bounds) = self.geometry_world_bounds_with_path_cache_and_transform(
@@ -1498,6 +1541,7 @@ impl ArtboardInstance {
             layout_bounds,
             &sorted,
             &mut path_cache,
+            false,
         )
     }
 
@@ -1507,6 +1551,7 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         sorted_drawable_order: &[SortedDrawableNode],
         path_cache: &mut RuntimeRenderPathCache,
+        include_invisible: bool,
     ) -> Vec<RuntimeDrawCommand> {
         let mut commands = Vec::new();
         let mut pending_clip_operations = Vec::<&SortedDrawableNode>::new();
@@ -1515,7 +1560,10 @@ impl ArtboardInstance {
         for drawable in sorted_drawable_order {
             let prev_clips = empty_clips;
             empty_clips += self.runtime_empty_clip_count(drawable, graph);
-            if !self.runtime_will_draw(drawable) || empty_clips != prev_clips || empty_clips > 0 {
+            if !self.runtime_will_draw(drawable, include_invisible)
+                || empty_clips != prev_clips
+                || empty_clips > 0
+            {
                 continue;
             }
 
@@ -2737,7 +2785,7 @@ impl ArtboardInstance {
         ])
     }
 
-    fn runtime_will_draw(&self, drawable: &SortedDrawableNode) -> bool {
+    fn runtime_will_draw(&self, drawable: &SortedDrawableNode, include_invisible: bool) -> bool {
         match drawable.kind {
             DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy => true,
             DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
@@ -2771,7 +2819,7 @@ impl ArtboardInstance {
                         .is_some()
                         && self
                             .runtime_drawable_render_opacity(drawable)
-                            .is_some_and(|opacity| opacity != 0.0);
+                            .is_some_and(|opacity| include_invisible || opacity != 0.0);
                 }
 
                 if sorted_drawable_is_nested_artboard(drawable.type_name) {
@@ -2781,7 +2829,7 @@ impl ArtboardInstance {
                 if sorted_drawable_uses_render_opacity(drawable.type_name) {
                     return self
                         .runtime_drawable_render_opacity(drawable)
-                        .is_some_and(|opacity| opacity != 0.0);
+                        .is_some_and(|opacity| include_invisible || opacity != 0.0);
                 }
 
                 true
@@ -7381,6 +7429,7 @@ impl RuntimePaintPreparationFrame {
 #[derive(Default)]
 pub struct RuntimeRenderPathCache {
     prepared_artboard: Option<RuntimePreparedArtboardFrame>,
+    retained_geometry_artboard: Option<RuntimePreparedArtboardFrame>,
     sorted_drawable_order: Option<RuntimeSortedDrawableOrderFrame>,
     layout_bounds: Option<RuntimeLayoutBoundsFrame>,
     path_composer_lookup: Option<RuntimePathComposerLookupFrame>,
@@ -8463,6 +8512,7 @@ impl RuntimeRenderPathCache {
                 layout_bounds.as_ref().as_ref(),
                 sorted_drawable_order.as_slice(),
                 self,
+                false,
             );
             let background =
                 runtime_prepared_background_frame(instance, graph, layout_bounds.as_ref().as_ref());
@@ -8477,6 +8527,44 @@ impl RuntimeRenderPathCache {
         self.prepared_artboard
             .as_ref()
             .expect("prepared artboard frame was just populated")
+            .clone()
+    }
+
+    fn retained_geometry_artboard_frame(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        runtime: &RuntimeFile,
+    ) -> RuntimePreparedArtboardFrame {
+        let key = RuntimePreparedArtboardCacheKey {
+            graph_global_id: graph.global_id,
+            prepared_epoch: instance.prepared_epoch(),
+        };
+        if self
+            .retained_geometry_artboard
+            .as_ref()
+            .is_none_or(|frame| frame.key != key)
+        {
+            let layout_bounds = self.layout_bounds_frame(instance, graph, Some(runtime));
+            let sorted_drawable_order = self.sorted_drawable_order_frame(instance, graph);
+            let commands = instance.draw_commands_with_sorted_drawable_order(
+                graph,
+                layout_bounds.as_ref().as_ref(),
+                sorted_drawable_order.as_slice(),
+                self,
+                true,
+            );
+            self.retained_geometry_artboard = Some(RuntimePreparedArtboardFrame {
+                key,
+                layout_bounds,
+                background: None,
+                commands: Arc::new(commands),
+            });
+        }
+
+        self.retained_geometry_artboard
+            .as_ref()
+            .expect("retained geometry artboard frame was just populated")
             .clone()
     }
 

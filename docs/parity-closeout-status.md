@@ -104,9 +104,22 @@ upstream-sync-map registry).
       as-is: overlay/from_instance_mutable/detach_list_storage stay
       boundary deep-copies; top-level fonts keep their pre-existing
       no-mirror asymmetry (revisit at e3/f).
-    - [ ] e3 graph sources hold retained binds (`set_source(cell)` +
-      `reconcile`) replacing copied values; SM/artboard bind seams build
-      a parent-linked context instead of candidates.
+    - [x] e3 landed via lane, orchestrator-verified (rt lib 343, nuxie
+      132, probe 707/707, golden 317/317, scripted main 317/317 + exactly
+      the four known reds — zero corpus movement): owned-candidate graph
+      sources hold retained binds (set_source + rebind-reconcile;
+      same-cell ptr_eq rebinds become dirt-driven, ending value-copy
+      thrash); cell lookup lives on the owned types
+      (cell_for_source_path with C++ tryGetViewModelProperty semantics);
+      RuntimeGraphSourceValueTarget adapts the direction engine onto the
+      graph's value slot so converters apply unchanged;
+      collect_source_dirt now reports whether sink dirt was folded (so a
+      rebind latch can't flip the favored origin). KEY FINDING: the four
+      reds did NOT flip — C++ pin evidence shows the missing seeding
+      lives in the artboard-side owned-path target-to-source pull
+      (Artboard::updateDataBinds(true) → DataBind::updateSourceBinding),
+      NOT the SM copy path. That pull is e4's PRIMARY target; e3's
+      read_target adapter + retained cells are the ready plumbing.
     - [ ] e4 listeners register as cell dependents; delete the rescan loop.
     - [ ] e5 Scene facade drops the dirty-rebind bit; triggers read
       through cells.

@@ -104,7 +104,13 @@ pub enum RuntimeViewModelCellValue {
     Trigger(u64),
     SymbolListIndex(u32),
     AssetImage(u32),
-    AssetFont(u32),
+    /// Two-part font value (C++ `ViewModelInstanceAssetFont`): the serialized
+    /// file-asset index plus a change-identity stamp for the retained live
+    /// Font bytes. The bytes themselves stay in the owning slot
+    /// (`RuntimeFontAssetValue`); `live_identity` is a monotonic stamp bumped
+    /// exactly when the retained bytes change identity (`Arc::ptr_eq`
+    /// semantics), so cell-level change detection matches the payload.
+    AssetFont { asset_index: u32, live_identity: u64 },
     Artboard(u32),
 }
 
@@ -335,7 +341,10 @@ impl RuntimeViewModelCellKind {
             Self::Trigger => RuntimeViewModelCellValue::Trigger(0),
             Self::SymbolListIndex => RuntimeViewModelCellValue::SymbolListIndex(0),
             Self::AssetImage => RuntimeViewModelCellValue::AssetImage(0),
-            Self::AssetFont => RuntimeViewModelCellValue::AssetFont(0),
+            Self::AssetFont => RuntimeViewModelCellValue::AssetFont {
+                asset_index: 0,
+                live_identity: 0,
+            },
             Self::Artboard => RuntimeViewModelCellValue::Artboard(0),
             Self::ViewModel | Self::List => return None,
         })
@@ -519,7 +528,10 @@ impl RuntimeViewModelInstanceCells {
                     RuntimeViewModelCellKind::AssetFont => file
                         .view_model_instance_font_asset_index_for_object(value)
                         .and_then(|index| u32::try_from(index).ok())
-                        .map(RuntimeViewModelCellValue::AssetFont),
+                        .map(|asset_index| RuntimeViewModelCellValue::AssetFont {
+                            asset_index,
+                            live_identity: 0,
+                        }),
                     RuntimeViewModelCellKind::Artboard => file
                         .view_model_instance_artboard_index_for_object(value)
                         .and_then(|index| u32::try_from(index).ok())

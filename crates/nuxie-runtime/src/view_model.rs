@@ -3168,16 +3168,109 @@ impl Default for RuntimeFontAssetValue {
     }
 }
 
-/// NOT cell-backed in slice e1: the font value is a two-part payload
-/// (file-asset index + retained live Font bytes with `Arc::ptr_eq` change
-/// semantics) that `RuntimeViewModelCellValue::AssetFont(u32)` cannot carry,
-/// and `font_asset_value_by_property_*` returns `&RuntimeFontAssetValue`
-/// borrowed from this storage. Migrates with the font-cell payload decision
-/// in a later slice.
-#[derive(Debug, Clone)]
+/// Font slot: the cell carries change identity while the slot keeps the
+/// actual two-part payload (file-asset index + retained live Font bytes),
+/// because `font_asset_value_by_property_*` returns `&RuntimeFontAssetValue`
+/// borrowed from this storage. The cell's `AssetFont` payload mirrors the
+/// file-asset index plus a monotonic `live_identity` stamp bumped exactly
+/// when the retained bytes change identity (`Arc::ptr_eq` semantics), so a
+/// retained dependent observes precisely the changes the slot reports. The
+/// slot's methods are the only writers of either half.
+#[derive(Debug)]
 struct RuntimeOwnedViewModelFontAsset {
     property_index: usize,
     value: RuntimeFontAssetValue,
+    cell: RuntimeViewModelCell,
+}
+
+fn same_live_font_identity(current: Option<&Arc<[u8]>>, next: Option<&Arc<[u8]>>) -> bool {
+    match (current, next) {
+        (Some(current), Some(next)) => Arc::ptr_eq(current, next),
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+/// Monotonic change-identity stamp for retained live Font bytes. Two stamps
+/// are equal only when the bytes' identity has not changed since the last
+/// cell write, preserving `Arc::ptr_eq` change semantics at the cell layer.
+fn next_live_font_identity() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
+
+impl RuntimeOwnedViewModelFontAsset {
+    fn new(property_index: usize, value: RuntimeFontAssetValue) -> Self {
+        let live_identity = if value.live_font_bytes_arc().is_some() {
+            next_live_font_identity()
+        } else {
+            0
+        };
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::AssetFont {
+            asset_index: owned_scalar_u32_payload(value.file_asset_index()),
+            live_identity,
+        });
+        Self {
+            property_index,
+            value,
+            cell,
+        }
+    }
+
+    fn set_file_asset_index(&mut self, file_asset_index: u64) -> bool {
+        let changed = self.value.set_file_asset_index(file_asset_index);
+        if changed {
+            self.write_cell(false);
+        }
+        changed
+    }
+
+    fn set_live_font_bytes(&mut self, font_bytes: Option<Arc<[u8]>>) -> bool {
+        let bytes_changed =
+            !same_live_font_identity(self.value.live_font_bytes_arc(), font_bytes.as_ref());
+        let changed = self.value.set_live_font_bytes(font_bytes);
+        if changed {
+            self.write_cell(bytes_changed);
+        }
+        changed
+    }
+
+    fn apply_data_bind_value(&mut self, value: &RuntimeFontAssetValue) -> bool {
+        let bytes_changed =
+            !same_live_font_identity(self.value.live_font_bytes_arc(), value.live_font_bytes_arc());
+        let changed = self.value.apply_data_bind_value(value);
+        if changed {
+            self.write_cell(bytes_changed);
+        }
+        changed
+    }
+
+    /// Mirror the slot payload into the cell after a change the payload
+    /// already reported. The cell write is 1:1 with the slot's change
+    /// contract: an index change alters `asset_index`, a bytes-identity
+    /// change bumps `live_identity`, and a bytes write that only clears the
+    /// index sentinel alters `asset_index` alone.
+    fn write_cell(&self, bytes_changed: bool) {
+        let live_identity = if bytes_changed {
+            next_live_font_identity()
+        } else {
+            match self.cell.value() {
+                RuntimeViewModelCellValue::AssetFont { live_identity, .. } => live_identity,
+                _ => 0,
+            }
+        };
+        self.cell.set_value(RuntimeViewModelCellValue::AssetFont {
+            asset_index: owned_scalar_u32_payload(self.value.file_asset_index()),
+            live_identity,
+        });
+    }
+}
+
+impl Clone for RuntimeOwnedViewModelFontAsset {
+    fn clone(&self) -> Self {
+        Self::new(self.property_index, self.value.clone())
+    }
 }
 
 #[derive(Debug)]
@@ -4153,7 +4246,7 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        asset.value.set_file_asset_index(file_asset_index)
+        asset.set_file_asset_index(file_asset_index)
     }
 
     fn set_live_font_bytes_by_property_name(
@@ -4179,7 +4272,7 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        asset.value.set_live_font_bytes(font_bytes)
+        asset.set_live_font_bytes(font_bytes)
     }
 
     fn set_artboard_by_property_name(&mut self, property_name: &str, value: u64) -> bool {
@@ -4410,7 +4503,7 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        current.value.set_file_asset_index(file_asset_index)
+        current.set_file_asset_index(file_asset_index)
     }
 
     fn sync_live_font_bytes_by_property_index(
@@ -4434,7 +4527,7 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        current.value.set_live_font_bytes(font_bytes)
+        current.set_live_font_bytes(font_bytes)
     }
 
     fn apply_font_asset_data_bind_value_by_property_index(
@@ -4458,7 +4551,7 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        current.value.apply_data_bind_value(value)
+        current.apply_data_bind_value(value)
     }
 
     fn sync_artboard_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
@@ -5828,12 +5921,12 @@ fn runtime_owned_view_model_font_assets(
                 .into_iter()
                 .enumerate()
                 .filter_map(|(property_index, property)| {
-                    (property.type_name == "ViewModelPropertyAssetFont").then_some(
-                        RuntimeOwnedViewModelFontAsset {
+                    (property.type_name == "ViewModelPropertyAssetFont").then(|| {
+                        RuntimeOwnedViewModelFontAsset::new(
                             property_index,
-                            value: RuntimeFontAssetValue::default(),
-                        },
-                    )
+                            RuntimeFontAssetValue::default(),
+                        )
+                    })
                 })
                 .collect()
         })
@@ -5865,10 +5958,10 @@ fn runtime_owned_view_model_font_assets_for_instance(
                     )?;
                     let file_asset_index =
                         file.view_model_instance_font_asset_index_for_object(source)?;
-                    Some(RuntimeOwnedViewModelFontAsset {
+                    Some(RuntimeOwnedViewModelFontAsset::new(
                         property_index,
-                        value: RuntimeFontAssetValue::from_file_asset_index(file_asset_index),
-                    })
+                        RuntimeFontAssetValue::from_file_asset_index(file_asset_index),
+                    ))
                 })
                 .collect()
         })
@@ -8546,7 +8639,7 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        let changed = asset.value.set_file_asset_index(file_asset_index);
+        let changed = asset.set_file_asset_index(file_asset_index);
         self.track_mutation(changed)
     }
 
@@ -8573,7 +8666,7 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        let changed = asset.value.set_live_font_bytes(font_bytes);
+        let changed = asset.set_live_font_bytes(font_bytes);
         self.track_mutation(changed)
     }
 
@@ -9489,7 +9582,7 @@ impl RuntimeOwnedViewModelInstance {
             else {
                 return false;
             };
-            let changed = asset.value.apply_data_bind_value(value);
+            let changed = asset.apply_data_bind_value(value);
             return self.track_mutation(changed);
         }
         let Some((property_index, view_model_path)) = property_path.split_last() else {

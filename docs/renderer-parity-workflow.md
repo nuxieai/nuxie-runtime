@@ -192,7 +192,7 @@ The patched package provenance is:
 - `wgpu-core` canonical source patch SHA-256:
   `9751a43416597ec05ba9608f924cd4ada7eeb123643f0b45eec671c3c0245411`;
 - `wgpu-hal` canonical source patch SHA-256:
-  `9e55f5a57cbe17cfe0d61d22ab5c691e88e2dfba510496bd4a039fbc85893e69`;
+  `b6d2a27aa6fabe80bf02a0c3744819629894202ae7081a9035b6a49a3d3b0745`;
 - six-manifest distribution wiring SHA-256:
   `693f49693094a63d258bf151bb462f1345a37bd1720e828c427c79edc874791a`;
 - direct-crate `wgpu`, core, and HAL lock SHA-256 values:
@@ -200,10 +200,9 @@ The patched package provenance is:
   `f57c034f1479e0fcc1257c094521091d3ebb99775a988902f8cf42dae083b7e0`,
   and `bc27e50dd420d2dd78fdce4000b28fb8492fb07cda4da37c4fd488f0829a4476`.
 
-The embedded hashes in the two vendor-local `NUXIE_PATCH.md` files predate
-the final formatting-only source normalization. Those metadata bytes are
-preserved because they are part of the frozen candidate source identity; the
-recomputed post-format canonical source-patch hashes above are authoritative.
+The embedded `wgpu-core` source hash predates its final formatting-only source
+normalization; the recomputed core hash above is authoritative. The companion
+HAL hash is current and includes the conditional Metal invariance fix.
 
 The seven-package vendored family is path-wired transitively, not merely
 selected by a workspace-root `[patch]`. `make renderer-wgpu-consumer-check`

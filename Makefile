@@ -1,4 +1,4 @@
-.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-runtime-ref-check perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke apple-runtime-check apple-runtime-header-smoke apple-runtime-release-panic-smoke apple-runtime-xcframework size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-runtime-ref-check perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke apple-runtime-check apple-runtime-header-smoke apple-runtime-release-panic-smoke apple-runtime-xcframework size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -19,6 +19,9 @@ RENDERER_GOLDEN_RUST_REPLAY ?= $(RENDERER_GOLDEN_TARGET_DIR)/release/renderer-re
 RENDERER_DAWN_REFERENCE_BUILD_DIR ?= $(CURDIR)/target/renderer-dawn-reference-build
 RENDERER_DAWN_REFERENCE_DIR ?= $(CURDIR)/target/renderer-dawn-reference
 RENDERER_DAWN_REFERENCE_REPLAY ?= $(RENDERER_DAWN_REFERENCE_DIR)/renderer-replay
+RENDERER_DAWN_LIVE_REFERENCE_BUILD_DIR ?= $(CURDIR)/target/renderer-dawn-live-reference-build
+RENDERER_DAWN_LIVE_REFERENCE_DIR ?= $(CURDIR)/target/renderer-dawn-live-reference
+RENDERER_DAWN_LIVE_REFERENCE_REPLAY ?= $(RENDERER_DAWN_LIVE_REFERENCE_DIR)/renderer-replay
 RENDERER_SAME_RUNNER_OUTPUT_DIR ?= $(CURDIR)/target/renderer-same-runner-corpus
 RENDERER_CORPUS_MANIFEST ?= $(CURDIR)/corpus-r.toml
 RENDERER_CORPUS_EXPECTED_ROWS ?= 1468
@@ -199,6 +202,7 @@ renderer-shaders-check:
 renderer-wgpu-backend-check:
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo check --locked --manifest-path vendor/wgpu-30.0.0/Cargo.toml --no-default-features --features std,metal,wgsl
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal coalescing
+	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-hal-30.0.0/Cargo.toml --lib --features metal invariant_position
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo test --locked --manifest-path vendor/wgpu-core-30.0.0/Cargo.toml --lib command_buffer
 
 renderer-wgpu-consumer-check:
@@ -215,9 +219,11 @@ renderer-fuzz-replay:
 renderer-golden: renderer-replay
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend rust-wgpu --jobs "$(RENDERER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
 
-# The same-runner gate deliberately keeps the reference and candidate builds
-# separate. CI may restore only RENDERER_DAWN_REFERENCE_REPLAY from its exact
-# pinned-input cache; the Rust candidate below is always compiled from HEAD.
+# The same-runner gate deliberately keeps the live reference and candidate
+# builds separate. CI may restore only RENDERER_DAWN_LIVE_REFERENCE_REPLAY from
+# its exact pinned-input cache; the Rust candidate below is always compiled
+# from HEAD. The historical RENDERER_DAWN_REFERENCE_REPLAY remains isolated for
+# the immutable Phase R oracle and is never relabeled as current-runtime output.
 renderer-rust-replay-release:
 	CARGO_TARGET_DIR="$(RENDERER_GOLDEN_TARGET_DIR)" cargo build --quiet --locked --release -p renderer-replay --bin renderer-replay
 
@@ -237,9 +243,22 @@ renderer-dawn-reference-check:
 	@test -x "$(RENDERER_DAWN_REFERENCE_REPLAY)" || { echo "missing executable C++ Dawn reference replay: $(RENDERER_DAWN_REFERENCE_REPLAY)" >&2; exit 2; }
 	@if otool -L "$(RENDERER_DAWN_REFERENCE_REPLAY)" | tail -n +2 | grep -Eiq 'dawn|webgpu'; then echo "C++ Dawn reference replay unexpectedly requires a non-system Dawn/WebGPU dynamic library" >&2; exit 2; fi
 
-renderer-golden-same-runner: renderer-rust-replay-release renderer-dawn-reference-check
+renderer-dawn-live-reference-bootstrap:
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_DAWN_LIVE_JOBS="$(RENDERER_JOBS)" tools/renderer-dawn-live-reference-bootstrap.sh
+
+renderer-dawn-live-reference-replay:
+	MACOSX_DEPLOYMENT_TARGET=12.0 RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" CARGO_TARGET_DIR="$(RENDERER_DAWN_LIVE_REFERENCE_BUILD_DIR)" cargo build --quiet --locked --release -p renderer-replay --no-default-features --features perf-dawn --bin renderer-replay
+	mkdir -p "$(RENDERER_DAWN_LIVE_REFERENCE_DIR)"
+	cp "$(RENDERER_DAWN_LIVE_REFERENCE_BUILD_DIR)/release/renderer-replay" "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)"
+	chmod 0755 "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)"
+
+renderer-dawn-live-reference-check:
+	@test -x "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)" || { echo "missing executable current-runtime C++ Dawn reference replay: $(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)" >&2; exit 2; }
+	@if otool -L "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)" | tail -n +2 | grep -Eiq 'dawn|webgpu'; then echo "current-runtime C++ Dawn reference replay unexpectedly requires a non-system Dawn/WebGPU dynamic library" >&2; exit 2; fi
+
+renderer-golden-same-runner: renderer-rust-replay-release renderer-dawn-live-reference-check
 	@actual_rows=$$(awk '$$0 == "[[entry]]" { count++ } END { print count + 0 }' "$(RENDERER_CORPUS_MANIFEST)"); test "$$actual_rows" = "$(RENDERER_CORPUS_EXPECTED_ROWS)" || { echo "renderer corpus row count drifted: expected $(RENDERER_CORPUS_EXPECTED_ROWS), got $$actual_rows" >&2; exit 2; }
-	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --backend rust-wgpu --reference-replay "$(RENDERER_DAWN_REFERENCE_REPLAY)" --reference-backend ffi-dawn --output-dir "$(RENDERER_SAME_RUNNER_OUTPUT_DIR)" --jobs "$(RENDERER_SAME_RUNNER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
+	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_CORPUS_MANIFEST)" --replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --backend rust-wgpu --reference-replay "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)" --reference-backend ffi-dawn --output-dir "$(RENDERER_SAME_RUNNER_OUTPUT_DIR)" --jobs "$(RENDERER_SAME_RUNNER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
 
 renderer-stub-baseline: renderer-replay
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --replay "$(CURDIR)/target/debug/renderer-replay" --backend stub --output-dir target/renderer-stub-corpus --jobs "$(RENDERER_JOBS)" --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --expect-all-fail

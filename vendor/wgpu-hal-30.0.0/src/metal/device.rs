@@ -37,6 +37,10 @@ type DeviceResult<T> = Result<T, crate::DeviceError>;
 /// require workarounds gated on this flag.
 const IS_WATCHOS_ILP32: bool = cfg!(target_pointer_width = "32");
 
+fn msl_has_invariant_position(source: &str) -> bool {
+    source.contains("[[position, invariant]]")
+}
+
 struct CompiledShader {
     library: Retained<ProtocolObject<dyn MTLLibrary>>,
     function: Retained<ProtocolObject<dyn MTLFunction>>,
@@ -272,8 +276,15 @@ impl super::Device {
                 let options = MTLCompileOptions::new();
                 options.setLanguageVersion(self.shared.private_caps.msl_version);
 
+                // Dawn enables preserveInvariance only when Tint emitted a `[[invariant]]`
+                // position. wgpu-hal's unconditional opt-in also makes ordinary vertex-position
+                // arithmetic conservative on Apple Paravirtual devices, changing 4x-MSAA edge
+                // coverage relative to Dawn/Tint. Mirror Dawn and opt in only when Naga emitted
+                // an invariant position for this entry point.
                 // https://developer.apple.com/documentation/metal/mtlcompileoptions/preserveinvariance
-                if available!(macos = 11.0, ios = 13.0, tvos = 14.0, visionos = 1.0) {
+                if msl_has_invariant_position(&source)
+                    && available!(macos = 11.0, ios = 13.0, tvos = 14.0, visionos = 1.0)
+                {
                     options.setPreserveInvariance(true);
                 }
 
@@ -456,6 +467,23 @@ impl super::Device {
 
     pub fn raw_device(&self) -> &Retained<ProtocolObject<dyn MTLDevice>> {
         &self.shared.device
+    }
+}
+
+#[cfg(test)]
+mod invariant_position_tests {
+    use super::msl_has_invariant_position;
+
+    #[test]
+    fn ordinary_position_does_not_request_preserved_invariance() {
+        assert!(!msl_has_invariant_position("float4 position [[position]];"));
+    }
+
+    #[test]
+    fn invariant_position_requests_preserved_invariance() {
+        assert!(msl_has_invariant_position(
+            "float4 position [[position, invariant]];"
+        ));
     }
 }
 

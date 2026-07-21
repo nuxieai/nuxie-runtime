@@ -209,6 +209,10 @@ pub enum EditReason {
         requirement: &'static str,
         actual: usize,
     },
+    InvalidViewModelTopology {
+        requirement: &'static str,
+        actual: usize,
+    },
     EmptyMachineInputName,
     DuplicateMachineInputName,
     EmptyEventPropertyName,
@@ -831,6 +835,8 @@ pub struct VmCursor<T> {
     number: ViewModelNumberId,
     number_slot: usize,
     nested_slot: Option<usize>,
+    global_slot: Option<usize>,
+    global_property_index: usize,
     value: PhantomData<fn(T) -> T>,
 }
 
@@ -1871,6 +1877,7 @@ pub enum AuthoredObjectKind {
     BlendAnimationDirect,
     StateTransition,
     TriggerCondition,
+    ViewModelTriggerCondition,
     BooleanEqualsCondition,
     NumberCondition,
     FireEvent,
@@ -1953,6 +1960,9 @@ impl RecordSpec {
             Self::Machine(MachineRecordSpec::TriggerCondition { .. }) => {
                 AuthoredObjectKind::TriggerCondition
             }
+            Self::Machine(MachineRecordSpec::ViewModelTriggerCondition { .. }) => {
+                AuthoredObjectKind::ViewModelTriggerCondition
+            }
             Self::Machine(MachineRecordSpec::BooleanEqualsCondition { .. }) => {
                 AuthoredObjectKind::BooleanEqualsCondition
             }
@@ -2026,9 +2036,20 @@ pub enum KeyInterpolation {
     },
 }
 
+/// Runtime visibility of an authored ViewModel definition.
+///
+/// Local models may be installed as an artboard default. Global models occupy
+/// canonical file-order slots and are available to every bound artboard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewModelScope {
+    Local,
+    Global,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ViewModelSpec {
     pub name: String,
+    pub scope: ViewModelScope,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2949,6 +2970,10 @@ enum MachineRecordSpec {
         transition: ObjectId,
         input: MachineInputId,
     },
+    ViewModelTriggerCondition {
+        transition: ObjectId,
+        trigger: ViewModelTriggerId,
+    },
     BooleanEqualsCondition {
         transition: ObjectId,
         input: MachineInputId,
@@ -2997,6 +3022,7 @@ impl MachineRecordSpec {
             }
             Self::Transition { source, .. } => Some(*source),
             Self::TriggerCondition { transition, .. }
+            | Self::ViewModelTriggerCondition { transition, .. }
             | Self::BooleanEqualsCondition { transition, .. }
             | Self::NumberCondition { transition, .. } => Some(*transition),
             Self::FireEvent { owner, .. } => Some(*owner),
@@ -3843,6 +3869,7 @@ impl Hierarchy<'_> {
                                     | AuthoredObjectKind::StateTransition
                             ) | (
                                 MachineRecordSpec::TriggerCondition { .. }
+                                    | MachineRecordSpec::ViewModelTriggerCondition { .. }
                                     | MachineRecordSpec::BooleanEqualsCondition { .. }
                                     | MachineRecordSpec::NumberCondition { .. },
                                 AuthoredObjectKind::StateTransition
@@ -3934,6 +3961,15 @@ impl Hierarchy<'_> {
                         }
                         MachineRecordSpec::TriggerCondition { input, .. } => {
                             Some((input.object_id(), AuthoredObjectKind::MachineTrigger))
+                        }
+                        MachineRecordSpec::ViewModelTriggerCondition { trigger, .. } => {
+                            if !self.index.view_model_triggers.contains_key(trigger) {
+                                return Err(self.abort(
+                                    vec![EditId::Object(id), EditId::Object(trigger.object_id())],
+                                    EditReason::UnknownObject,
+                                ));
+                            }
+                            None
                         }
                         MachineRecordSpec::BooleanEqualsCondition { input, .. } => {
                             Some((input.object_id(), AuthoredObjectKind::MachineBoolean))
@@ -4653,6 +4689,16 @@ struct LiveInstance {
     runtime: OwnedArtboardInstance,
     machines: RetainedMachineInstances,
     view_model: Option<RetainedViewModelInstance>,
+    global_only_view_model_context: Option<RuntimeOwnedViewModelContext>,
+}
+
+impl LiveInstance {
+    fn owned_view_model_context(&self) -> Option<&RuntimeOwnedViewModelContext> {
+        self.view_model
+            .as_ref()
+            .map(|view_model| &view_model.context)
+            .or(self.global_only_view_model_context.as_ref())
+    }
 }
 
 struct RetainedViewModelInstance {
@@ -5013,6 +5059,7 @@ fn instantiate_runtime_mount(
         OwnedArtboardInstance,
         RetainedMachineInstances,
         Option<RetainedViewModelInstance>,
+        Option<RuntimeOwnedViewModelContext>,
     ),
     (),
 > {
@@ -5027,6 +5074,7 @@ fn instantiate_runtime_mount_with_carry(
         OwnedArtboardInstance,
         RetainedMachineInstances,
         Option<RetainedViewModelInstance>,
+        Option<RuntimeOwnedViewModelContext>,
     ),
     (),
 > {
@@ -5060,7 +5108,7 @@ fn instantiate_runtime_mount_with_carry(
             // A generated owned context is required for mutable nested paths.
             // Replay the exact authored default instance (including child
             // instances) into it once; imported child pointers are immutable.
-            let mut value = runtime.instantiate_view_model().ok_or(())?;
+            let value = runtime.instantiate_view_model().ok_or(())?;
             for (path, authored_items) in &default.authored_lists {
                 let source = value
                     .raw()
@@ -5240,7 +5288,26 @@ fn instantiate_runtime_mount_with_carry(
             })
         })
         .transpose()?;
-    Ok((runtime, machines, view_model))
+    let global_only_view_model_context = if view_model.is_none() {
+        let mut context = RuntimeOwnedViewModelContext::new();
+        context.complete(&materialized.file.runtime, None).then(|| {
+            let _ = runtime
+                .raw_mut()
+                .bind_owned_view_model_artboard_contexts(&materialized.file.runtime, &context);
+            for machine in &mut machines.values {
+                let _ = machine.bind_owned_view_model_contexts(&context);
+            }
+            context
+        })
+    } else {
+        None
+    };
+    Ok((
+        runtime,
+        machines,
+        view_model,
+        global_only_view_model_context,
+    ))
 }
 
 fn capture_view_model_carry(
@@ -5474,6 +5541,9 @@ pub enum ExportedObjectKind {
     BindablePropertyAsset,
     StateTransition,
     TransitionTriggerCondition,
+    TransitionViewModelCondition,
+    TransitionPropertyViewModelComparator,
+    TransitionValueTriggerComparator,
     TransitionBooleanEqualsCondition,
     TransitionNumberCondition,
     StateMachineFireEvent,
@@ -5760,6 +5830,7 @@ pub enum ExportedProperty {
     ListenerNumberValue(f32),
     ListenerFireEventId(u32),
     ViewModelName(String),
+    ViewModelType(u32),
     DataEnumName(String),
     DataEnumValueKey(String),
     DataEnumValueLabel(String),
@@ -5990,6 +6061,7 @@ impl ExportedProperty {
             Self::ListenerNumberValue(_) => PROPERTY_LISTENER_NUMBER_VALUE,
             Self::ListenerFireEventId(_) => PROPERTY_LISTENER_FIRE_EVENT_ID,
             Self::ViewModelName(_) => PROPERTY_VIEW_MODEL_COMPONENT_NAME,
+            Self::ViewModelType(_) => PROPERTY_VIEW_MODEL_TYPE,
             Self::DataEnumName(_) => PROPERTY_DATA_ENUM_NAME,
             Self::DataEnumValueKey(_) => PROPERTY_DATA_ENUM_VALUE_KEY,
             Self::DataEnumValueLabel(_) => PROPERTY_DATA_ENUM_VALUE_LABEL,
@@ -6145,6 +6217,7 @@ impl ExportedProperty {
                 AuthoringValue::Uint(u64::from(u32::from(comparator)))
             }
             Self::ViewModelId(value)
+            | Self::ViewModelType(value)
             | Self::BindablePropertyEnumValue(value)
             | Self::BindablePropertyTriggerValue(value)
             | Self::BindablePropertyIntegerValue(value)
@@ -6405,6 +6478,15 @@ impl ExportedRecord {
             ExportedObjectKind::BindablePropertyAsset => TYPE_BINDABLE_PROPERTY_ASSET,
             ExportedObjectKind::StateTransition => TYPE_STATE_TRANSITION,
             ExportedObjectKind::TransitionTriggerCondition => TYPE_TRANSITION_TRIGGER_CONDITION,
+            ExportedObjectKind::TransitionViewModelCondition => {
+                TYPE_TRANSITION_VIEW_MODEL_CONDITION
+            }
+            ExportedObjectKind::TransitionPropertyViewModelComparator => {
+                TYPE_TRANSITION_PROPERTY_VIEW_MODEL_COMPARATOR
+            }
+            ExportedObjectKind::TransitionValueTriggerComparator => {
+                TYPE_TRANSITION_VALUE_TRIGGER_COMPARATOR
+            }
             ExportedObjectKind::TransitionBooleanEqualsCondition => TYPE_TRANSITION_BOOL_CONDITION,
             ExportedObjectKind::TransitionNumberCondition => TYPE_TRANSITION_NUMBER_CONDITION,
             ExportedObjectKind::StateMachineFireEvent => TYPE_STATE_MACHINE_FIRE_EVENT,
@@ -6708,7 +6790,7 @@ impl Scene {
                     ))
                 })?;
             let carry = capture_view_model_carry(previous_materialized, instance);
-            let (runtime, machines, view_model) =
+            let (runtime, machines, view_model, global_only_view_model_context) =
                 instantiate_runtime_mount_with_carry(materialized, Some(&carry)).map_err(|_| {
                     EditError::commit(EditDiagnostic::new(
                         touched_operation_index,
@@ -6732,6 +6814,7 @@ impl Scene {
                     runtime,
                     machines,
                     view_model,
+                    global_only_view_model_context,
                 },
             ));
         }
@@ -6781,7 +6864,7 @@ impl Scene {
             .materialized
             .get(&artboard)
             .ok_or(InstanceError::UnknownArtboard)?;
-        let (runtime, machines, view_model) =
+        let (runtime, machines, view_model, global_only_view_model_context) =
             instantiate_runtime_mount(materialized).map_err(|_| InstanceError::RuntimeRejected)?;
         let id = InstanceId(
             allocate_global_identity(&NEXT_INSTANCE_ID).ok_or(InstanceError::IdentityExhausted)?,
@@ -6796,6 +6879,7 @@ impl Scene {
             runtime,
             machines,
             view_model,
+            global_only_view_model_context,
         };
         if let Some(vacant) = self.instances.iter_mut().find(|slot| slot.is_none()) {
             *vacant = Some(live);
@@ -6897,14 +6981,12 @@ impl Scene {
         let default = self
             .materialized
             .get(&artboard)
-            .and_then(|materialized| materialized.view_model_default.as_ref())
-            .ok_or(ResolveError::UnknownViewModelInstance)?;
-        let root_authored_instance = default.authored_instance;
+            .and_then(|materialized| materialized.view_model_default.as_ref());
 
         let (target_model_index, target_instance_index) =
             authored_view_model_instance_location(&self.definitions, authored_instance)
                 .ok_or(ResolveError::UnknownViewModelInstance)?;
-        let (number_model_index, number_definition) = self
+        let (number_model_index, number_property_index, number_definition) = self
             .definitions
             .view_models
             .iter()
@@ -6913,13 +6995,61 @@ impl Scene {
                 model
                     .numbers
                     .iter()
-                    .find(|candidate| candidate.id == number)
-                    .map(|definition| (model_index, definition))
+                    .enumerate()
+                    .find(|(_, candidate)| candidate.id == number)
+                    .map(|(property_index, definition)| (model_index, property_index, definition))
             })
             .ok_or(ResolveError::UnknownViewModelNumber)?;
         if number_model_index != target_model_index {
             return Err(ResolveError::UnknownViewModelNumber);
         }
+
+        if self
+            .definitions
+            .view_models
+            .get(target_model_index)
+            .is_some_and(|model| model.spec.scope == ViewModelScope::Global)
+        {
+            if target_instance_index != 0 {
+                return Err(ResolveError::UnknownViewModelInstance);
+            }
+            let live = self
+                .instances
+                .get(instance_slot)
+                .and_then(Option::as_ref)
+                .ok_or(ResolveError::UnknownViewModelInstance)?;
+            let global = live
+                .owned_view_model_context()
+                .ok_or(ResolveError::UnknownViewModelInstance)?
+                .global_slot_handle(target_model_index)
+                .ok_or(ResolveError::UnknownViewModelInstance)?;
+            if global
+                .borrow()
+                .number_value_by_property_index(number_property_index)
+                .is_none()
+            {
+                return Err(ResolveError::UnknownViewModelNumber);
+            }
+            return Ok(VmCursor {
+                scene: self.identity.id,
+                epoch: self.epoch,
+                instance_slot,
+                instance,
+                root_authored_instance: default
+                    .map(|default| default.authored_instance)
+                    .unwrap_or(authored_instance),
+                authored_instance,
+                number,
+                number_slot: 0,
+                nested_slot: None,
+                global_slot: Some(target_model_index),
+                global_property_index: number_property_index,
+                value: PhantomData,
+            });
+        }
+
+        let default = default.ok_or(ResolveError::UnknownViewModelInstance)?;
+        let root_authored_instance = default.authored_instance;
 
         if authored_instance == root_authored_instance {
             let metadata = default
@@ -6951,6 +7081,8 @@ impl Scene {
                 number,
                 number_slot,
                 nested_slot: None,
+                global_slot: None,
+                global_property_index: 0,
                 value: PhantomData,
             });
         }
@@ -7011,6 +7143,8 @@ impl Scene {
             number,
             number_slot: 0,
             nested_slot: Some(nested_slot),
+            global_slot: None,
+            global_property_index: 0,
             value: PhantomData,
         })
     }
@@ -10990,15 +11124,31 @@ impl VmTx<'_> {
         instance: ViewModelInstanceId,
     ) -> std::result::Result<(), EditAbort> {
         let operation_index = self.begin_operation()?;
-        if !self
+        let (instance_model_index, _) = self
             .definition_index
             .view_model_instances
-            .contains_key(&instance)
+            .get(&instance)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::Object(instance.object_id())],
+                    EditReason::UnknownObject,
+                )
+            })?;
+        if self
+            .definitions
+            .view_models
+            .get(instance_model_index)
+            .is_some_and(|model| model.spec.scope == ViewModelScope::Global)
         {
             return Err(EditAbort::new(
                 operation_index,
-                vec![EditId::Object(instance.object_id())],
-                EditReason::UnknownObject,
+                vec![
+                    EditId::Artboard(artboard),
+                    EditId::Object(instance.object_id()),
+                ],
+                EditReason::InvalidMachineReference,
             ));
         }
         let artboard_index = self
@@ -12738,6 +12888,7 @@ impl MachineTx<'_> {
             machine_record.artboard,
             operation_index,
             machine.object_id(),
+            true,
         )?;
         normalize_optional_machine_name(&mut name);
         self.create_listener_record(
@@ -13061,6 +13212,7 @@ impl MachineTx<'_> {
             listener_record.artboard,
             operation_index,
             listener.object_id(),
+            true,
         )?;
         self.insert_record(
             listener_record.artboard,
@@ -13484,6 +13636,38 @@ impl MachineTx<'_> {
             RecordSpec::Machine(MachineRecordSpec::TriggerCondition {
                 transition: transition.object_id(),
                 input,
+            }),
+        )
+    }
+
+    /// Add a one-shot transition condition driven by the artboard's retained
+    /// default ViewModel trigger counter.
+    pub fn add_view_model_trigger_condition(
+        &mut self,
+        transition: MachineTransitionId,
+        trigger: ViewModelTriggerId,
+    ) -> std::result::Result<ObjectId, EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let transition_record = self.expect_kind(
+            transition.object_id(),
+            AuthoredObjectKind::StateTransition,
+            "transition",
+            operation_index,
+        )?;
+        self.validate_machine_view_model_source(
+            &MachineViewModelSource::Trigger(ViewModelTriggerSource::direct(trigger)),
+            transition_record.artboard,
+            operation_index,
+            transition.object_id(),
+            false,
+        )?;
+        self.insert_record(
+            transition_record.artboard,
+            transition_record.artboard_index,
+            operation_index,
+            RecordSpec::Machine(MachineRecordSpec::ViewModelTriggerCondition {
+                transition: transition.object_id(),
+                trigger,
             }),
         )
     }
@@ -14002,6 +14186,7 @@ impl MachineTx<'_> {
         artboard: ArtboardId,
         operation_index: usize,
         owner: ObjectId,
+        allow_global_root: bool,
     ) -> std::result::Result<(), EditAbort> {
         let (property, children, property_model_index) = match source {
             MachineViewModelSource::Number(source) => (
@@ -14089,6 +14274,15 @@ impl MachineTx<'_> {
                 EditReason::InvalidMachineReference,
             )
         })?;
+        if allow_global_root
+            && self
+                .definitions
+                .view_models
+                .get(root_model_index)
+                .is_some_and(|model| model.spec.scope == ViewModelScope::Global)
+        {
+            return Ok(());
+        }
         let artboard_index = self.artboard_index(artboard, operation_index)?;
         let default_instance = self
             .definitions
@@ -14397,13 +14591,29 @@ impl Frame<'_> {
         if cursor.scene != self.scene.identity.id || cursor.epoch != self.scene.epoch {
             return Err(StaleCursor);
         }
-        let retained = self
+        let live = self
             .scene
             .instances
             .get(cursor.instance_slot)
             .and_then(Option::as_ref)
             .filter(|instance| instance.id == cursor.instance)
-            .and_then(|instance| instance.view_model.as_ref())
+            .ok_or(StaleCursor)?;
+        if let Some(global_slot) = cursor.global_slot {
+            return live
+                .owned_view_model_context()
+                .ok_or(StaleCursor)?
+                .global_slot_handle(global_slot)
+                .filter(|global| global.borrow().view_model_index() == global_slot)
+                .and_then(|global| {
+                    global
+                        .borrow()
+                        .number_value_by_property_index(cursor.global_property_index)
+                })
+                .ok_or(StaleCursor);
+        }
+        let retained = live
+            .view_model
+            .as_ref()
             .filter(|view_model| view_model.authored_instance == cursor.root_authored_instance)
             .ok_or(StaleCursor)?;
         if let Some(nested_slot) = cursor.nested_slot {
@@ -14592,18 +14802,37 @@ impl Frame<'_> {
         if cursor.scene != self.scene.identity.id || cursor.epoch != self.scene.epoch {
             return Err(StaleCursor);
         }
-        let retained = self
+        let live = self
             .scene
             .instances
             .get_mut(cursor.instance_slot)
             .and_then(Option::as_mut)
             .filter(|instance| instance.id == cursor.instance)
-            .and_then(|instance| instance.view_model.as_mut())
-            .filter(|view_model| view_model.authored_instance == cursor.root_authored_instance)
             .ok_or(StaleCursor)?;
         if !value.is_finite() {
             return Ok(false);
         }
+        if let Some(global_slot) = cursor.global_slot {
+            let global = live
+                .owned_view_model_context()
+                .ok_or(StaleCursor)?
+                .global_slot_handle(global_slot)
+                .filter(|global| global.borrow().view_model_index() == global_slot)
+                .cloned()
+                .ok_or(StaleCursor)?;
+            let changed = global
+                .borrow_mut()
+                .set_number_by_property_index(cursor.global_property_index, value);
+            if let Some(retained) = live.view_model.as_mut() {
+                retained.dirty |= changed;
+            }
+            return Ok(changed);
+        }
+        let retained = live
+            .view_model
+            .as_mut()
+            .filter(|view_model| view_model.authored_instance == cursor.root_authored_instance)
+            .ok_or(StaleCursor)?;
         if let Some(nested_slot) = cursor.nested_slot {
             let RetainedViewModelInstance {
                 value: retained_value,
@@ -15063,12 +15292,13 @@ impl Frame<'_> {
             .hit_test_path_segments_with_bounds(point)
             .first()
             .map(StateMachineEventContext::from_geometry_hit);
+        let context = live.owned_view_model_context().cloned();
         let (runtime, machines, view_model) =
             (&live.runtime, &mut live.machines, &mut live.view_model);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current = match (view_model.as_mut(), event_context.as_ref()) {
-                (Some(view_model), Some(event_context)) => {
-                    let bound = machine.bind_owned_view_model_handle(view_model.value.handle());
+            let current = match (context.as_ref(), event_context.as_ref()) {
+                (Some(context), Some(event_context)) => {
+                    let bound = machine.bind_owned_view_model_contexts(context);
                     bound
                         | machine.pointer_down_with_event_context(
                             runtime.raw(),
@@ -15078,8 +15308,8 @@ impl Frame<'_> {
                             event_context,
                         )
                 }
-                (Some(view_model), None) => {
-                    let bound = machine.bind_owned_view_model_handle(view_model.value.handle());
+                (Some(context), None) => {
+                    let bound = machine.bind_owned_view_model_contexts(context);
                     bound | machine.pointer_down(runtime.raw(), point.x, point.y, pointer_id)
                 }
                 (None, Some(event_context)) => machine.pointer_down_with_event_context(
@@ -15120,11 +15350,12 @@ impl Frame<'_> {
         else {
             return false;
         };
+        let context = live.owned_view_model_context().cloned();
         let (runtime, machines, view_model) =
             (&live.runtime, &mut live.machines, &mut live.view_model);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current = if let Some(view_model) = view_model.as_mut() {
-                let bound = machine.bind_owned_view_model_handle(view_model.value.handle());
+            let current = if let Some(context) = context.as_ref() {
+                let bound = machine.bind_owned_view_model_contexts(context);
                 bound
                     | machine.pointer_move(
                         runtime.raw(),
@@ -15164,12 +15395,13 @@ impl Frame<'_> {
             .hit_test_path_segments_with_bounds(point)
             .first()
             .map(StateMachineEventContext::from_geometry_hit);
+        let context = live.owned_view_model_context().cloned();
         let (runtime, machines, view_model) =
             (&live.runtime, &mut live.machines, &mut live.view_model);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current = match (view_model.as_mut(), event_context.as_ref()) {
-                (Some(view_model), Some(event_context)) => {
-                    let bound = machine.bind_owned_view_model_handle(view_model.value.handle());
+            let current = match (context.as_ref(), event_context.as_ref()) {
+                (Some(context), Some(event_context)) => {
+                    let bound = machine.bind_owned_view_model_contexts(context);
                     bound
                         | machine.pointer_up_with_event_context(
                             runtime.raw(),
@@ -15179,8 +15411,8 @@ impl Frame<'_> {
                             event_context,
                         )
                 }
-                (Some(view_model), None) => {
-                    let bound = machine.bind_owned_view_model_handle(view_model.value.handle());
+                (Some(context), None) => {
+                    let bound = machine.bind_owned_view_model_contexts(context);
                     bound | machine.pointer_up(runtime.raw(), point.x, point.y, pointer_id)
                 }
                 (None, Some(event_context)) => machine.pointer_up_with_event_context(
@@ -15214,11 +15446,12 @@ impl Frame<'_> {
         else {
             return false;
         };
+        let context = live.owned_view_model_context().cloned();
         let (runtime, machines, view_model) =
             (&live.runtime, &mut live.machines, &mut live.view_model);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current = if let Some(view_model) = view_model.as_mut() {
-                let bound = machine.bind_owned_view_model_handle(view_model.value.handle());
+            let current = if let Some(context) = context.as_ref() {
+                let bound = machine.bind_owned_view_model_contexts(context);
                 bound | machine.pointer_exit(runtime.raw(), point.x, point.y, pointer_id)
             } else {
                 machine.pointer_exit(runtime.raw(), point.x, point.y, pointer_id)
@@ -15303,16 +15536,9 @@ impl Frame<'_> {
             return view_model_changed | live.runtime.advance(elapsed_seconds);
         }
 
-        let (runtime, machines, view_model) =
-            (&mut live.runtime, &mut live.machines, &mut live.view_model);
-        let machine_changed = match view_model.as_mut() {
-            Some(view_model) => runtime.advance_with_state_machines_and_view_model(
-                &mut machines.values,
-                elapsed_seconds,
-                &mut view_model.value,
-            ),
-            None => runtime.advance_with_state_machines(&mut machines.values, elapsed_seconds),
-        };
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
+        let machine_changed =
+            runtime.advance_with_state_machines(&mut machines.values, elapsed_seconds);
         let changed = view_model_changed | machine_changed;
         for machine in &machines.values {
             for index in 0..machine.reported_event_count() {
@@ -15379,22 +15605,14 @@ impl Frame<'_> {
                 .map_err(|_| AdvanceError::RuntimeRejected);
         }
 
-        let (runtime, machines, view_model) =
-            (&mut live.runtime, &mut live.machines, &mut live.view_model);
-        let machine_changed = match view_model.as_mut() {
-            Some(view_model) => runtime.try_advance_with_state_machines_and_view_model_and_factory(
-                &mut machines.values,
-                elapsed_seconds,
-                &mut view_model.value,
-                factory,
-            ),
-            None => runtime.try_advance_with_state_machines_and_factory(
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
+        let machine_changed = runtime
+            .try_advance_with_state_machines_and_factory(
                 &mut machines.values,
                 elapsed_seconds,
                 factory,
-            ),
-        }
-        .map_err(|_| AdvanceError::RuntimeRejected)?;
+            )
+            .map_err(|_| AdvanceError::RuntimeRejected)?;
         let changed = view_model_changed | machine_changed;
         for machine in &machines.values {
             for index in 0..machine.reported_event_count() {
@@ -17071,9 +17289,13 @@ fn lower_view_model_catalog(
                 EditReason::InternalInvariant,
             )
         })?;
+        let mut properties = vec![ExportedProperty::ViewModelName(model.spec.name.clone())];
+        if model.spec.scope == ViewModelScope::Global {
+            properties.push(ExportedProperty::ViewModelType(2));
+        }
         records.push(ExportedRecord {
             kind: ExportedObjectKind::ViewModel,
-            properties: vec![ExportedProperty::ViewModelName(model.spec.name.clone())],
+            properties,
         });
         let mut names = BTreeSet::new();
         for (number_index, number) in model.numbers.iter().enumerate() {
@@ -19110,6 +19332,16 @@ fn validate_view_model_definitions(
     let mut child_models = BTreeMap::new();
     let mut instance_models = BTreeMap::new();
     for (model_index, model) in definitions.view_models.iter().enumerate() {
+        if model.spec.scope == ViewModelScope::Global && model.instances.is_empty() {
+            return Err(EditDiagnostic::new(
+                origins.object(model.id.object_id(), fallback_operation_index),
+                vec![EditId::Object(model.id.object_id())],
+                EditReason::InvalidViewModelTopology {
+                    requirement: "global ViewModel must author a canonical first instance",
+                    actual: 0,
+                },
+            ));
+        }
         if !identities.insert(model.id.object_id())
             || view_model_models.insert(model.id, model_index).is_some()
         {
@@ -22487,12 +22719,70 @@ fn append_machine_export_records(
                             matches!(
                                 spec,
                                 MachineRecordSpec::TriggerCondition { .. }
+                                    | MachineRecordSpec::ViewModelTriggerCondition { .. }
                                     | MachineRecordSpec::BooleanEqualsCondition { .. }
                                     | MachineRecordSpec::NumberCondition { .. }
                             )
                         })
                         .copied()
                     {
+                        if let MachineRecordSpec::ViewModelTriggerCondition {
+                            transition: owner,
+                            trigger,
+                        } = condition_spec
+                        {
+                            if *owner != transition.id {
+                                return Err(EditDiagnostic::new(
+                                    origins.object(condition.id, fallback_operation_index),
+                                    vec![EditId::Object(condition.id)],
+                                    EditReason::InternalInvariant,
+                                ));
+                            }
+                            let (model_index, property_index) = view_models
+                                .trigger_indices
+                                .get(trigger)
+                                .copied()
+                                .ok_or_else(|| {
+                                    EditDiagnostic::new(
+                                        origins.object(condition.id, fallback_operation_index),
+                                        vec![
+                                            EditId::Object(condition.id),
+                                            EditId::Object(trigger.object_id()),
+                                        ],
+                                        EditReason::UnknownObject,
+                                    )
+                                })?;
+                            records.push(ExportedRecord {
+                                kind: ExportedObjectKind::BindablePropertyTrigger,
+                                properties: vec![ExportedProperty::BindablePropertyTriggerValue(0)],
+                            });
+                            records.push(ExportedRecord {
+                                kind: ExportedObjectKind::DataBindContext,
+                                properties: vec![
+                                    ExportedProperty::DataBindPropertyKey(u32::from(
+                                        PROPERTY_BINDABLE_PROPERTY_TRIGGER_VALUE,
+                                    )),
+                                    ExportedProperty::DataBindFlags(0),
+                                    ExportedProperty::DataBindSourcePath(vec![
+                                        model_index,
+                                        property_index,
+                                    ]),
+                                ],
+                            });
+                            records.push(ExportedRecord {
+                                kind: ExportedObjectKind::TransitionViewModelCondition,
+                                properties: Vec::new(),
+                            });
+                            records.push(ExportedRecord {
+                                kind: ExportedObjectKind::TransitionPropertyViewModelComparator,
+                                properties: Vec::new(),
+                            });
+                            records.push(ExportedRecord {
+                                kind: ExportedObjectKind::TransitionValueTriggerComparator,
+                                properties: Vec::new(),
+                            });
+                            continue;
+                        }
                         let (owner, input, value) = match condition_spec {
                             MachineRecordSpec::TriggerCondition { transition, input } => {
                                 (*transition, *input, MachineConditionExportValue::Trigger)
@@ -23652,12 +23942,15 @@ mod tests {
             })?;
             let mut view_models = tx.view_models();
             let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Root".into(),
             })?;
             let paywall_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Paywall".into(),
             })?;
             let product_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Product".into(),
             })?;
             let primary = view_models.create_child(
@@ -23788,12 +24081,15 @@ mod tests {
             let (model_a, model_b, items) = {
                 let mut view_models = tx.view_models();
                 let root_model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "Root model".into(),
                 })?;
                 let model_a = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "A model".into(),
                 })?;
                 let model_b = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "B model".into(),
                 })?;
                 let items = view_models.create_list(
@@ -24047,9 +24343,11 @@ mod tests {
 
                     let mut view_models = tx.view_models();
                     let root_model = view_models.create(ViewModelSpec {
+                        scope: ViewModelScope::Local,
                         name: "Root model".into(),
                     })?;
                     let item_model = view_models.create(ViewModelSpec {
+                        scope: ViewModelScope::Local,
                         name: "Item model".into(),
                     })?;
                     let enabled = view_models.create_boolean(
@@ -24450,6 +24748,7 @@ mod tests {
             let (model, operand) = {
                 let mut view_models = tx.view_models();
                 let model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "Operand model".into(),
                 })?;
                 let operand = view_models.create_number(
@@ -24921,6 +25220,7 @@ mod tests {
             })?;
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "State".into(),
             })?;
             let value = view_models.create_number(
@@ -25033,6 +25333,7 @@ mod tests {
             )?;
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "State".into(),
             })?;
             let value = view_models.create_string(
@@ -25157,6 +25458,7 @@ mod tests {
             let (base, operand) = {
                 let mut view_models = tx.view_models();
                 let model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "State".into(),
                 })?;
                 let base = view_models.create_number(
@@ -25302,6 +25604,7 @@ mod tests {
             let base = {
                 let mut view_models = tx.view_models();
                 let model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "State".into(),
                 })?;
                 let base = view_models.create_number(
@@ -25416,6 +25719,7 @@ mod tests {
             let base = {
                 let mut view_models = tx.view_models();
                 let model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "State".into(),
                 })?;
                 let base = view_models.create_number(
@@ -25600,6 +25904,7 @@ mod tests {
             let base = {
                 let mut view_models = tx.view_models();
                 let model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "State".into(),
                 })?;
                 let base = view_models.create_number(
@@ -25727,6 +26032,7 @@ mod tests {
                 height: 10.0,
             })?;
             let card = tx.view_models().create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Card".into(),
             })?;
             tx.create_project_data_converter(
@@ -25785,6 +26091,7 @@ mod tests {
             let (card_model, count, placeholder_cards) = {
                 let mut view_models = tx.view_models();
                 let root_model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "Root model".into(),
                 })?;
                 let count = view_models.create_number(
@@ -25800,6 +26107,7 @@ mod tests {
                     },
                 )?;
                 let card_model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "Card model".into(),
                 })?;
                 let root_defaults = view_models.create_instance(
@@ -25970,6 +26278,7 @@ mod tests {
             })?;
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "State".into(),
             })?;
             let value = view_models.create_number(
@@ -26098,6 +26407,7 @@ mod tests {
             })?;
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "State".into(),
             })?;
             let value = view_models.create_number(
@@ -26444,6 +26754,7 @@ mod tests {
             let inverse = make_shape(tx, "Inverse", 80.0, 0.6, 0xff44_5566)?;
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Visibility model".into(),
             })?;
             let shown = view_models.create_boolean(
@@ -26599,9 +26910,11 @@ mod tests {
 
                 let mut view_models = tx.view_models();
                 let root = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "Root".into(),
                 })?;
                 let settings = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "Settings".into(),
                 })?;
                 let settings_property = view_models.create_child(
@@ -26777,6 +27090,7 @@ mod tests {
             )?;
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Model".into(),
             })?;
             let shown = view_models.create_boolean(
@@ -26872,6 +27186,7 @@ mod tests {
             {
                 let mut view_models = tx.view_models();
                 let model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: "Playback".into(),
                 })?;
                 let duration = view_models.create_number(
@@ -27018,6 +27333,7 @@ mod tests {
             })?;
             let mut view_models = tx.view_models();
             let product = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Product".into(),
             })?;
             let name = view_models.create_string(
@@ -27167,6 +27483,7 @@ mod tests {
             )?;
             let mut view_models = tx.view_models();
             let product = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Product model".into(),
             })?;
             let name = view_models.create_string(
@@ -27323,12 +27640,15 @@ mod tests {
             })?;
             let mut view_models = tx.view_models();
             view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Seed".into(),
             })?;
             let root = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Root".into(),
             })?;
             let paywall = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Paywall".into(),
             })?;
             view_models.create_number(
@@ -27430,6 +27750,7 @@ mod tests {
                 ("Second", "Second number", "Second defaults", 2.0),
             ] {
                 let model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
                     name: model_name.into(),
                 })?;
                 let number = view_models.create_number(
@@ -29529,9 +29850,11 @@ mod tests {
             })?;
             let mut view_models = tx.view_models();
             let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Root".into(),
             })?;
             let child_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Card props".into(),
             })?;
             let card = view_models.create_child(
@@ -29638,9 +29961,11 @@ mod tests {
             )?;
             let mut view_models = tx.view_models();
             let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Root".into(),
             })?;
             let card_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Card props".into(),
             })?;
             let card = view_models.create_child(
@@ -29888,6 +30213,7 @@ mod tests {
 
             let mut view_models = tx.view_models();
             let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Root".into(),
             })?;
             let source_enabled = view_models.create_boolean(
@@ -30174,6 +30500,7 @@ mod tests {
             )?;
             let mut view_models = tx.view_models();
             let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
                 name: "Visibility".into(),
             })?;
             let shown = view_models.create_boolean(
@@ -30317,12 +30644,15 @@ mod tests {
                     })?;
                     let mut view_models = tx.view_models();
                     let root_model = view_models.create(ViewModelSpec {
+                        scope: ViewModelScope::Local,
                         name: "Root".into(),
                     })?;
                     let child_model = view_models.create(ViewModelSpec {
+                        scope: ViewModelScope::Local,
                         name: "Card props".into(),
                     })?;
                     let unrelated_model = view_models.create(ViewModelSpec {
+                        scope: ViewModelScope::Local,
                         name: "Unrelated".into(),
                     })?;
                     let card = view_models.create_child(
@@ -32011,6 +32341,656 @@ mod tests {
         assert_eq!(machine.reported_event_count(), 1);
         instance.advance_with_state_machine(&mut machine, 0.0);
         assert_eq!(machine.reported_event_count(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn scene_view_model_trigger_advances_once_without_handle_downgrade_or_replay() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((artboard, defaults, trigger), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "ViewModel trigger".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Fader".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let idle = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Idle".into(),
+                    fps: 60,
+                    duration: 1,
+                },
+            )?;
+            tx.animations()
+                .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+            let active = tx.animations().create_linear(
+                artboard,
+                LinearAnimationSpec {
+                    name: "Active".into(),
+                    fps: 60,
+                    duration: 1,
+                },
+            )?;
+            tx.animations()
+                .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+
+            let (defaults, trigger) = {
+                let mut view_models = tx.view_models();
+                let model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
+                    name: "Root".into(),
+                })?;
+                let trigger = view_models.create_trigger(
+                    model,
+                    ViewModelTriggerSpec {
+                        name: "fire".into(),
+                    },
+                )?;
+                let defaults = view_models.create_instance(
+                    model,
+                    ViewModelInstanceSpec {
+                        name: Some("Defaults".into()),
+                    },
+                )?;
+                view_models.set_trigger(defaults, trigger, 0)?;
+                view_models.set_artboard_default(artboard, defaults)?;
+                (defaults, trigger)
+            };
+
+            let mut machines = tx.machines();
+            let event = machines.create_event(
+                artboard,
+                EventSpec {
+                    name: Some("Activated".into()),
+                },
+            )?;
+            let machine = machines.create_machine(
+                artboard,
+                MachineSpec {
+                    name: Some("Switcher".into()),
+                },
+            )?;
+            let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+            let entry = machines.create_entry_state(layer)?;
+            let any = machines.create_any_state(layer)?;
+            machines.create_exit_state(layer)?;
+            let idle_state =
+                machines.create_animation_state(layer, AnimationStateSpec { animation: idle })?;
+            let active_state =
+                machines.create_animation_state(layer, AnimationStateSpec { animation: active })?;
+            machines.create_transition(entry, idle_state)?;
+            let transition = machines.create_transition(any, active_state)?;
+            machines.add_view_model_trigger_condition(transition, trigger)?;
+            machines.add_fire_event(active_state, event, FireEventOccurs::AtStart)?;
+            Ok((artboard, defaults, trigger))
+        })?;
+
+        let instance = scene.instantiate(artboard)?;
+        let mut events = Vec::new();
+        assert!(scene.frame().advance(instance, 0.0, &mut events));
+        assert!(events.is_empty());
+        assert_eq!(
+            scene
+                .instances
+                .iter()
+                .filter_map(Option::as_ref)
+                .find(|live| live.id == instance)
+                .and_then(|live| {
+                    live.runtime
+                        .raw()
+                        .double_property(1, PROPERTY_WORLD_OPACITY)
+                }),
+            Some(0.2)
+        );
+
+        assert_eq!(
+            scene.set_vm_trigger(instance, defaults, trigger, 1),
+            Ok(true)
+        );
+        assert!(scene.frame().advance(instance, 0.0, &mut events));
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            SceneEvent::Authored { name, .. } if name.as_deref() == Some("Activated")
+        ));
+        assert_eq!(
+            scene
+                .instances
+                .iter()
+                .filter_map(Option::as_ref)
+                .find(|live| live.id == instance)
+                .and_then(|live| {
+                    live.runtime
+                        .raw()
+                        .double_property(1, PROPERTY_WORLD_OPACITY)
+                }),
+            Some(0.8),
+            "Scene::set_vm_trigger must remain fireable through the composite bind used by advance"
+        );
+
+        let _ = scene.frame().advance(instance, 0.0, &mut events);
+        assert!(
+            events.is_empty(),
+            "an unchanged trigger counter must not replay on the next Scene advance"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn scene_global_listener_action_and_trigger_transition_share_one_retained_context() -> Result<()>
+    {
+        let mut scene = Scene::new();
+        let ((artboard, root_defaults, root_trigger, unrelated, global_defaults, global_number), _) =
+            scene.edit(|tx| {
+                let artboard = tx.create_artboard(ArtboardSpec {
+                    name: "Global listener".into(),
+                    width: 100.0,
+                    height: 100.0,
+                })?;
+                let shape = tx.create(
+                    Parent::Artboard(artboard),
+                    NodeSpec::Shape(ShapeSpec {
+                        name: "Target".into(),
+                        x: 0.0,
+                        y: 0.0,
+                        opacity: 1.0,
+                        rotation: 0.0,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                    }),
+                )?;
+                let idle = tx.animations().create_linear(
+                    artboard,
+                    LinearAnimationSpec {
+                        name: "Idle".into(),
+                        fps: 60,
+                        duration: 1,
+                    },
+                )?;
+                tx.animations()
+                    .set_key(idle, shape, props::WORLD_OPACITY, 0, 0.2)?;
+                let active = tx.animations().create_linear(
+                    artboard,
+                    LinearAnimationSpec {
+                        name: "Active".into(),
+                        fps: 60,
+                        duration: 1,
+                    },
+                )?;
+                tx.animations()
+                    .set_key(active, shape, props::WORLD_OPACITY, 0, 0.8)?;
+
+                let (root_defaults, root_trigger, unrelated, global_defaults, global_number) = {
+                    let mut view_models = tx.view_models();
+                    let root = view_models.create(ViewModelSpec {
+                        scope: ViewModelScope::Local,
+                        name: "Root".into(),
+                    })?;
+                    let root_trigger = view_models.create_trigger(
+                        root,
+                        ViewModelTriggerSpec {
+                            name: "fire".into(),
+                        },
+                    )?;
+                    let unrelated = view_models.create_number(
+                        root,
+                        ViewModelNumberSpec {
+                            name: "unrelated".into(),
+                        },
+                    )?;
+                    let root_defaults = view_models.create_instance(
+                        root,
+                        ViewModelInstanceSpec {
+                            name: Some("Root defaults".into()),
+                        },
+                    )?;
+                    view_models.set_trigger(root_defaults, root_trigger, 0)?;
+                    view_models.set_number(root_defaults, unrelated, 0.0)?;
+                    view_models.set_artboard_default(artboard, root_defaults)?;
+
+                    let global = view_models.create(ViewModelSpec {
+                        scope: ViewModelScope::Global,
+                        name: "Global state".into(),
+                    })?;
+                    let global_number = view_models.create_number(
+                        global,
+                        ViewModelNumberSpec {
+                            name: "value".into(),
+                        },
+                    )?;
+                    let global_defaults = view_models.create_instance(
+                        global,
+                        ViewModelInstanceSpec {
+                            name: Some("Global defaults".into()),
+                        },
+                    )?;
+                    view_models.set_number(global_defaults, global_number, 0.0)?;
+                    (
+                        root_defaults,
+                        root_trigger,
+                        unrelated,
+                        global_defaults,
+                        global_number,
+                    )
+                };
+
+                let mut machines = tx.machines();
+                let event = machines.create_event(
+                    artboard,
+                    EventSpec {
+                        name: Some("Activated".into()),
+                    },
+                )?;
+                let machine = machines.create_machine(
+                    artboard,
+                    MachineSpec {
+                        name: Some("Switcher".into()),
+                    },
+                )?;
+                let listener = machines.create_view_model_listener(
+                    machine,
+                    shape,
+                    MachineViewModelSource::Trigger(ViewModelTriggerSource::direct(root_trigger)),
+                    Some("Root trigger listener".into()),
+                )?;
+                machines.add_listener_view_model_number_action(
+                    listener,
+                    ViewModelNumberSource::direct(global_number),
+                    64.0,
+                )?;
+                let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+                let entry = machines.create_entry_state(layer)?;
+                let any = machines.create_any_state(layer)?;
+                machines.create_exit_state(layer)?;
+                let idle_state = machines
+                    .create_animation_state(layer, AnimationStateSpec { animation: idle })?;
+                let active_state = machines
+                    .create_animation_state(layer, AnimationStateSpec { animation: active })?;
+                machines.create_transition(entry, idle_state)?;
+                let transition = machines.create_transition(any, active_state)?;
+                machines.add_view_model_trigger_condition(transition, root_trigger)?;
+                machines.add_fire_event(active_state, event, FireEventOccurs::AtStart)?;
+                Ok((
+                    artboard,
+                    root_defaults,
+                    root_trigger,
+                    unrelated,
+                    global_defaults,
+                    global_number,
+                ))
+            })?;
+
+        let model_records = scene
+            .export_records()
+            .into_records()
+            .into_iter()
+            .filter(|record| record.kind == ExportedObjectKind::ViewModel)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            model_records
+                .iter()
+                .map(|record| record.properties.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                vec![ExportedProperty::ViewModelName("Root".into())],
+                vec![
+                    ExportedProperty::ViewModelName("Global state".into()),
+                    ExportedProperty::ViewModelType(2),
+                ],
+            ],
+            "local records stay byte-shaped as before, while the global model occupies canonical file slot 1",
+        );
+
+        let instance = scene.instantiate(artboard)?;
+        let global_cursor = scene.vm_cursor(instance, global_defaults, global_number)?;
+        let unrelated_cursor = scene.vm_cursor(instance, root_defaults, unrelated)?;
+        let mut events = Vec::new();
+        assert!(scene.frame().advance(instance, 0.0, &mut events));
+        assert!(events.is_empty());
+
+        assert_eq!(
+            scene.set_vm_trigger(instance, root_defaults, root_trigger, 1),
+            Ok(true)
+        );
+        assert!(scene.frame().advance(instance, 0.0, &mut events));
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            SceneEvent::Authored { name, .. } if name.as_deref() == Some("Activated")
+        ));
+        assert_eq!(scene.frame().get_vm(global_cursor), Ok(64.0));
+
+        assert_eq!(scene.frame().set_vm(global_cursor, 17.0), Ok(true));
+        assert_eq!(scene.frame().set_vm(unrelated_cursor, 3.0), Ok(true));
+        let _ = scene.frame().advance(instance, 0.0, &mut events);
+        assert!(
+            events.is_empty(),
+            "the acknowledged trigger must not replay"
+        );
+        assert_eq!(
+            scene.frame().get_vm(global_cursor),
+            Ok(17.0),
+            "an unrelated root mutation must not replay the trigger listener's global write",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn scene_globals_without_local_default_bind_canonical_cursors_and_listener_actions()
+    -> Result<()> {
+        let mut scene = Scene::new();
+        let ((artboard, source_defaults, source_number, target_defaults, target_number), _) = scene
+            .edit(|tx| {
+                let artboard = tx.create_artboard(ArtboardSpec {
+                    name: "Global-only listener".into(),
+                    width: 100.0,
+                    height: 100.0,
+                })?;
+                let shape = tx.create(
+                    Parent::Artboard(artboard),
+                    NodeSpec::Shape(ShapeSpec {
+                        name: "Target".into(),
+                        x: 0.0,
+                        y: 0.0,
+                        opacity: 1.0,
+                        rotation: 0.0,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                    }),
+                )?;
+
+                let (source_defaults, source_number, target_defaults, target_number) = {
+                    let mut view_models = tx.view_models();
+                    let source = view_models.create(ViewModelSpec {
+                        scope: ViewModelScope::Global,
+                        name: "Global source".into(),
+                    })?;
+                    let source_number = view_models.create_number(
+                        source,
+                        ViewModelNumberSpec {
+                            name: "source".into(),
+                        },
+                    )?;
+                    let source_defaults = view_models.create_instance(
+                        source,
+                        ViewModelInstanceSpec {
+                            name: Some("Global source defaults".into()),
+                        },
+                    )?;
+                    view_models.set_number(source_defaults, source_number, 2.0)?;
+
+                    let target = view_models.create(ViewModelSpec {
+                        scope: ViewModelScope::Global,
+                        name: "Global target".into(),
+                    })?;
+                    let target_number = view_models.create_number(
+                        target,
+                        ViewModelNumberSpec {
+                            name: "target".into(),
+                        },
+                    )?;
+                    let target_defaults = view_models.create_instance(
+                        target,
+                        ViewModelInstanceSpec {
+                            name: Some("Global target defaults".into()),
+                        },
+                    )?;
+                    view_models.set_number(target_defaults, target_number, 7.0)?;
+                    (
+                        source_defaults,
+                        source_number,
+                        target_defaults,
+                        target_number,
+                    )
+                };
+
+                let mut machines = tx.machines();
+                let machine = machines.create_machine(
+                    artboard,
+                    MachineSpec {
+                        name: Some("Global listener".into()),
+                    },
+                )?;
+                let listener = machines.create_view_model_listener(
+                    machine,
+                    shape,
+                    MachineViewModelSource::Number(ViewModelNumberSource::direct(source_number)),
+                    Some("Global source listener".into()),
+                )?;
+                machines.add_listener_view_model_number_action(
+                    listener,
+                    ViewModelNumberSource::direct(target_number),
+                    64.0,
+                )?;
+                let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+                let entry = machines.create_entry_state(layer)?;
+                machines.create_any_state(layer)?;
+                let exit = machines.create_exit_state(layer)?;
+                machines.create_transition(entry, exit)?;
+                Ok((
+                    artboard,
+                    source_defaults,
+                    source_number,
+                    target_defaults,
+                    target_number,
+                ))
+            })
+            .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+        let instance = scene.instantiate(artboard)?;
+        let source = scene.vm_cursor(instance, source_defaults, source_number)?;
+        let target = scene.vm_cursor(instance, target_defaults, target_number)?;
+        assert_eq!(scene.frame().get_vm(source), Ok(2.0));
+        assert_eq!(scene.frame().get_vm(target), Ok(7.0));
+
+        assert_eq!(scene.frame().set_vm(source, 3.0), Ok(true));
+        assert!(scene.frame().advance(instance, 0.0, &mut Vec::new()));
+        assert_eq!(scene.frame().get_vm(target), Ok(64.0));
+        Ok(())
+    }
+
+    #[test]
+    fn global_view_model_requires_a_canonical_first_instance() {
+        let mut scene = Scene::new();
+        let error = scene
+            .edit(|tx| {
+                tx.create_artboard(ArtboardSpec {
+                    name: "Canvas".into(),
+                    width: 100.0,
+                    height: 100.0,
+                })?;
+                tx.view_models().create(ViewModelSpec {
+                    scope: ViewModelScope::Global,
+                    name: "Missing default".into(),
+                })?;
+                Ok(())
+            })
+            .expect_err("global models without a canonical first instance must reject");
+        assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+        assert_eq!(
+            error.diagnostic().reason,
+            EditReason::InvalidViewModelTopology {
+                requirement: "global ViewModel must author a canonical first instance",
+                actual: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn global_instance_cannot_be_installed_as_an_artboard_default() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((artboard, global_defaults, transition, global_trigger), _) = scene
+            .edit(|tx| {
+                let artboard = tx.create_artboard(ArtboardSpec {
+                    name: "Canvas".into(),
+                    width: 100.0,
+                    height: 100.0,
+                })?;
+                let mut view_models = tx.view_models();
+                let global = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Global,
+                    name: "Global".into(),
+                })?;
+                let global_trigger = view_models.create_trigger(
+                    global,
+                    ViewModelTriggerSpec {
+                        name: "fire".into(),
+                    },
+                )?;
+                let global_defaults = view_models.create_instance(
+                    global,
+                    ViewModelInstanceSpec {
+                        name: Some("Global defaults".into()),
+                    },
+                )?;
+                drop(view_models);
+
+                let mut machines = tx.machines();
+                let machine = machines.create_machine(artboard, MachineSpec { name: None })?;
+                let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+                machines.create_any_state(layer)?;
+                let entry = machines.create_entry_state(layer)?;
+                let exit = machines.create_exit_state(layer)?;
+                let transition = machines.create_transition(entry, exit)?;
+                Ok((artboard, global_defaults, transition, global_trigger))
+            })
+            .expect("the valid global fixture must commit");
+
+        let error = scene
+            .edit(|tx| {
+                tx.view_models()
+                    .set_artboard_default(artboard, global_defaults)
+            })
+            .expect_err("global instance is never an artboard main/default");
+        assert_eq!(error.kind(), EditErrorKind::Aborted);
+        assert_eq!(
+            error.diagnostic().reason,
+            EditReason::InvalidMachineReference
+        );
+
+        let error = scene
+            .edit(|tx| {
+                tx.machines()
+                    .add_view_model_trigger_condition(transition, global_trigger)
+            })
+            .expect_err("transition trigger conditions remain artboard-default-only");
+        assert_eq!(error.kind(), EditErrorKind::Aborted);
+        assert_eq!(
+            error.diagnostic().reason,
+            EditReason::InvalidMachineReference
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn local_non_default_machine_sources_reject_for_listeners_and_actions() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((machine, shape, root_number, other_number), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Canvas".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Target".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let (root_number, other_number) = {
+                let mut view_models = tx.view_models();
+                let root = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
+                    name: "Root".into(),
+                })?;
+                let root_number = view_models.create_number(
+                    root,
+                    ViewModelNumberSpec {
+                        name: "root".into(),
+                    },
+                )?;
+                let root_defaults =
+                    view_models.create_instance(root, ViewModelInstanceSpec { name: None })?;
+                view_models.set_artboard_default(artboard, root_defaults)?;
+
+                let other = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
+                    name: "Other".into(),
+                })?;
+                let other_number = view_models.create_number(
+                    other,
+                    ViewModelNumberSpec {
+                        name: "other".into(),
+                    },
+                )?;
+                view_models.create_instance(other, ViewModelInstanceSpec { name: None })?;
+                (root_number, other_number)
+            };
+            let mut machines = tx.machines();
+            let machine = machines.create_machine(artboard, MachineSpec { name: None })?;
+            let layer = machines.create_layer(machine, MachineLayerSpec { name: None })?;
+            machines.create_any_state(layer)?;
+            machines.create_entry_state(layer)?;
+            machines.create_exit_state(layer)?;
+            Ok((machine, shape, root_number, other_number))
+        })?;
+
+        let error = scene
+            .edit(|tx| {
+                tx.machines().create_view_model_listener(
+                    machine,
+                    shape,
+                    MachineViewModelSource::Number(ViewModelNumberSource::direct(other_number)),
+                    None,
+                )
+            })
+            .expect_err("non-default local listener source must reject");
+        assert_eq!(error.kind(), EditErrorKind::Aborted);
+        assert_eq!(
+            error.diagnostic().reason,
+            EditReason::InvalidMachineReference
+        );
+
+        let (listener, _) = scene.edit(|tx| {
+            tx.machines().create_view_model_listener(
+                machine,
+                shape,
+                MachineViewModelSource::Number(ViewModelNumberSource::direct(root_number)),
+                None,
+            )
+        })?;
+        let error = scene
+            .edit(|tx| {
+                tx.machines().add_listener_view_model_number_action(
+                    listener,
+                    ViewModelNumberSource::direct(other_number),
+                    1.0,
+                )
+            })
+            .expect_err("non-default local action target must reject");
+        assert_eq!(error.kind(), EditErrorKind::Aborted);
+        assert_eq!(
+            error.diagnostic().reason,
+            EditReason::InvalidMachineReference
+        );
         Ok(())
     }
 

@@ -28,6 +28,7 @@ use crate::{
 use nuxie_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use nuxie_graph::ArtboardGraph;
 use nuxie_schema::{FieldKind, definition_by_type_key};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
 
@@ -510,6 +511,7 @@ pub(crate) struct RuntimeArtboardOwnedContextKey {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RuntimeArtboardOwnedContextInstanceKey {
     view_model_index: usize,
+    declared_view_model_index: Option<usize>,
     instance_identity: u64,
     mutation_generation: u64,
     context_chain: Vec<Vec<usize>>,
@@ -523,6 +525,7 @@ impl RuntimeArtboardOwnedContextKey {
         Self {
             instances: vec![RuntimeArtboardOwnedContextInstanceKey {
                 view_model_index: context.view_model_index,
+                declared_view_model_index: None,
                 instance_identity: context.instance_identity(),
                 mutation_generation: context.mutation_generation(),
                 context_chain: context_chain
@@ -540,6 +543,7 @@ impl RuntimeArtboardOwnedContextKey {
     ) -> bool {
         self.instances.len() == 1
             && self.instances[0].view_model_index == context.view_model_index
+            && self.instances[0].declared_view_model_index.is_none()
             && self.instances[0].instance_identity == context.instance_identity()
             && self.instances[0].mutation_generation == context.mutation_generation()
             && self.instances[0].context_chain.len() == context_chain.len()
@@ -558,6 +562,7 @@ impl RuntimeArtboardOwnedContextKey {
                     let context = candidate.context.borrow();
                     RuntimeArtboardOwnedContextInstanceKey {
                         view_model_index: context.view_model_index(),
+                        declared_view_model_index: candidate.declared_view_model_index,
                         instance_identity: context.instance_identity(),
                         mutation_generation: context.mutation_generation(),
                         context_chain: candidate.context_chain.clone(),
@@ -576,6 +581,7 @@ impl RuntimeArtboardOwnedContextKey {
                 .all(|(stored, current)| {
                     let context = current.context.borrow();
                     stored.view_model_index == context.view_model_index()
+                        && stored.declared_view_model_index == current.declared_view_model_index
                         && stored.instance_identity == context.instance_identity()
                         && stored.mutation_generation == context.mutation_generation()
                         && stored.context_chain == current.context_chain
@@ -604,6 +610,7 @@ impl RuntimeArtboardOwnedContextKey {
 pub(crate) struct RuntimeOwnedViewModelBindingCandidate {
     pub(crate) context: RuntimeOwnedViewModelHandle,
     pub(crate) context_chain: Vec<Vec<usize>>,
+    declared_view_model_index: Option<usize>,
 }
 
 impl RuntimeOwnedViewModelBindingCandidate {
@@ -611,6 +618,7 @@ impl RuntimeOwnedViewModelBindingCandidate {
         Self {
             context: RuntimeOwnedViewModelHandle::new(context.clone()),
             context_chain: vec![Vec::new()],
+            declared_view_model_index: None,
         }
     }
 
@@ -618,11 +626,149 @@ impl RuntimeOwnedViewModelBindingCandidate {
         Self {
             context: context.clone(),
             context_chain: vec![Vec::new()],
+            declared_view_model_index: None,
         }
     }
 
-    fn context_chain(&self) -> Vec<&[usize]> {
+    pub(crate) fn context_handle(context: &RuntimeOwnedViewModelContextHandle) -> Self {
+        Self {
+            context: context.root_handle(),
+            context_chain: vec![context.scope_path().to_vec()],
+            declared_view_model_index: None,
+        }
+    }
+
+    pub(crate) fn declared_global_slot(
+        context: &RuntimeOwnedViewModelHandle,
+        declared_view_model_index: usize,
+    ) -> Self {
+        Self {
+            context: context.clone(),
+            context_chain: vec![Vec::new()],
+            declared_view_model_index: Some(declared_view_model_index),
+        }
+    }
+
+    pub(crate) fn source_path_for_context_path<'a>(
+        &self,
+        context: &RuntimeOwnedViewModelInstance,
+        context_path: &[usize],
+        source_path: &'a [u32],
+        path_is_name_based: bool,
+    ) -> Option<Cow<'a, [u32]>> {
+        let Some(declared_view_model_index) = self.declared_view_model_index else {
+            return Some(Cow::Borrowed(source_path));
+        };
+        if path_is_name_based || !context_path.is_empty() {
+            return Some(Cow::Borrowed(source_path));
+        }
+        let (&source_view_model_index, _) = source_path.split_first()?;
+        if usize::try_from(source_view_model_index).ok()? != declared_view_model_index {
+            return None;
+        }
+        if context.view_model_index == declared_view_model_index {
+            return Some(Cow::Borrowed(source_path));
+        }
+        let mut rewritten = source_path.to_vec();
+        rewritten[0] = u32::try_from(context.view_model_index).ok()?;
+        Some(Cow::Owned(rewritten))
+    }
+
+    fn context_path_for_source_path<'a>(
+        &self,
+        context: &RuntimeOwnedViewModelInstance,
+        context_path: &'a [usize],
+        source_path: &[u32],
+    ) -> Option<RuntimeOwnedViewModelContextPathStorage<'a>> {
+        let source_path =
+            self.source_path_for_context_path(context, context_path, source_path, false)?;
+        RuntimeOwnedViewModelContextPathStorage::from_context_source_path(
+            context,
+            context_path,
+            source_path.as_ref(),
+        )
+    }
+
+    pub(crate) fn context_chain(&self) -> Vec<&[usize]> {
         self.context_chain.iter().map(Vec::as_slice).collect()
+    }
+
+    pub(crate) fn mutation_generation(&self) -> u64 {
+        self.context.borrow().mutation_generation()
+    }
+
+    pub(crate) fn same_binding(&self, other: &Self) -> bool {
+        self.context.ptr_eq(&other.context)
+            && self.context_chain == other.context_chain
+            && self.declared_view_model_index == other.declared_view_model_index
+    }
+
+    pub(crate) fn property_path_for_source_path(&self, source_path: &[u32]) -> Option<Vec<usize>> {
+        let context = self.context.borrow();
+        self.context_chain.iter().find_map(|context_path| {
+            self.context_path_for_source_path(&context, context_path, source_path)
+                .map(|path| path.as_slice().to_vec())
+        })
+    }
+
+    pub(crate) fn resolve_value_for_source_path(
+        &self,
+        value: &RuntimeDataBindGraphValue,
+        source_path: &[u32],
+    ) -> Option<RuntimeDataBindGraphValue> {
+        let property_path = self.property_path_for_source_path(source_path)?;
+        let context = self.context.borrow();
+        runtime_owned_view_model_binding_value_for_property_path(&context, &property_path).and_then(
+            |resolved| {
+                matches!(
+                    (value, &resolved),
+                    (
+                        RuntimeDataBindGraphValue::Number(_),
+                        RuntimeDataBindGraphValue::Number(_)
+                    ) | (
+                        RuntimeDataBindGraphValue::Boolean(_),
+                        RuntimeDataBindGraphValue::Boolean(_)
+                    ) | (
+                        RuntimeDataBindGraphValue::String(_),
+                        RuntimeDataBindGraphValue::String(_)
+                    ) | (
+                        RuntimeDataBindGraphValue::Color(_),
+                        RuntimeDataBindGraphValue::Color(_)
+                    ) | (
+                        RuntimeDataBindGraphValue::Enum(_),
+                        RuntimeDataBindGraphValue::Enum(_)
+                    ) | (
+                        RuntimeDataBindGraphValue::SymbolListIndex(_),
+                        RuntimeDataBindGraphValue::SymbolListIndex(_)
+                    ) | (
+                        RuntimeDataBindGraphValue::List { .. },
+                        RuntimeDataBindGraphValue::List { .. }
+                    ) | (
+                        RuntimeDataBindGraphValue::ListLength(_),
+                        RuntimeDataBindGraphValue::List { .. }
+                    ) | (
+                        RuntimeDataBindGraphValue::Asset(_),
+                        RuntimeDataBindGraphValue::Asset(_)
+                    ) | (
+                        RuntimeDataBindGraphValue::Artboard(_),
+                        RuntimeDataBindGraphValue::Artboard(_)
+                    ) | (
+                        RuntimeDataBindGraphValue::Trigger(_),
+                        RuntimeDataBindGraphValue::Trigger(_)
+                    ) | (
+                        RuntimeDataBindGraphValue::ViewModel(_),
+                        RuntimeDataBindGraphValue::ViewModel(_)
+                    )
+                )
+                .then(|| match (value, resolved) {
+                    (
+                        RuntimeDataBindGraphValue::ListLength(_),
+                        RuntimeDataBindGraphValue::List { item_count },
+                    ) => RuntimeDataBindGraphValue::ListLength(item_count),
+                    (_, resolved) => resolved,
+                })
+            },
+        )
     }
 }
 
@@ -1437,10 +1583,16 @@ fn runtime_owned_view_model_binding_value_for_candidates(
     candidates.iter().find_map(|candidate| {
         let context = candidate.context.borrow();
         candidate.context_chain.iter().find_map(|context_path| {
+            let path = candidate.source_path_for_context_path(
+                &context,
+                context_path,
+                path,
+                path_is_name_based,
+            )?;
             let source_path = context.property_path_for_context_source_path_with_manifest_mode(
                 file,
                 context_path,
-                path,
+                path.as_ref(),
                 path_is_name_based,
                 scripting_manifest,
             )?;
@@ -1459,10 +1611,16 @@ fn runtime_owned_view_model_binding_source_for_candidates(
     candidates.iter().find_map(|candidate| {
         let context = candidate.context.borrow();
         let property_path = candidate.context_chain.iter().find_map(|context_path| {
+            let path = candidate.source_path_for_context_path(
+                &context,
+                context_path,
+                path,
+                path_is_name_based,
+            )?;
             context.property_path_for_context_source_path_with_manifest_mode(
                 file,
                 context_path,
-                path,
+                path.as_ref(),
                 path_is_name_based,
                 scripting_manifest,
             )
@@ -1509,17 +1667,19 @@ fn runtime_owned_view_model_value_for_candidates(
     candidates.iter().find_map(|candidate| {
         let context = candidate.context.borrow();
         candidate.context_chain.iter().find_map(|context_path| {
+            let path =
+                candidate.source_path_for_context_path(&context, context_path, path, false)?;
             default_value.resolve_from_owned_view_model_context_path(
                 file,
                 &context,
                 context_path,
-                path,
+                path.as_ref(),
             )
         })
     })
 }
 
-fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
+pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
     converter: &mut RuntimeDataBindGraphConverter,
     candidates: &[RuntimeOwnedViewModelBindingCandidate],
 ) -> bool {
@@ -1533,12 +1693,21 @@ fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_cand
                 .iter()
                 .find_map(|candidate| {
                     let context = candidate.context.borrow();
-                    let value = RuntimeDataBindGraphValue::Number(0.0)
-                        .resolve_from_owned_view_model_instance(&context, source_path)?;
-                    match value {
-                        RuntimeDataBindGraphValue::Number(value) => Some(value),
-                        _ => None,
-                    }
+                    candidate.context_chain.iter().find_map(|context_path| {
+                        let source_path = candidate.source_path_for_context_path(
+                            &context,
+                            context_path,
+                            source_path,
+                            false,
+                        )?;
+                        let property_path =
+                            RuntimeOwnedViewModelContextPathStorage::from_context_source_path(
+                                &context,
+                                context_path,
+                                source_path.as_ref(),
+                            )?;
+                        context.number_value_by_property_path(property_path.as_slice())
+                    })
                 })
                 .unwrap_or(0.0);
             if *operation_value == value {
@@ -1547,6 +1716,15 @@ fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_cand
             *operation_value = value;
             true
         }
+        RuntimeDataBindGraphConverter::Project {
+            program,
+            resolved_values,
+            ..
+        } => crate::data_bind_graph::refresh_runtime_project_resolved_values_for_owned_candidates(
+            program,
+            resolved_values,
+            candidates,
+        ),
         RuntimeDataBindGraphConverter::Group(converters) => {
             converters.iter_mut().fold(false, |changed, converter| {
                 runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
@@ -1678,10 +1856,16 @@ fn runtime_owned_view_model_font_value_for_candidates(
     candidates.iter().find_map(|candidate| {
         let context = candidate.context.borrow();
         candidate.context_chain.iter().find_map(|context_path| {
+            let path = candidate.source_path_for_context_path(
+                &context,
+                context_path,
+                path,
+                path_is_name_based,
+            )?;
             let source_path = context.property_path_for_context_source_path_with_manifest_mode(
                 file,
                 context_path,
-                path,
+                path.as_ref(),
                 path_is_name_based,
                 scripting_manifest,
             )?;
@@ -3990,10 +4174,11 @@ impl ArtboardInstance {
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
     ) -> bool {
+        let changed = self.bind_owned_view_model_artboard_context_snapshot(file, context);
         self.artboard_owned_view_model_handle = None;
         self.artboard_owned_view_model_context =
             Some(RuntimeOwnedViewModelContext::from_main(context.clone()));
-        self.bind_owned_view_model_artboard_context_snapshot(file, context)
+        changed
     }
 
     /// Bind and retain one shared owned view-model graph.
@@ -4016,14 +4201,14 @@ impl ArtboardInstance {
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelContextHandle,
     ) -> bool {
+        let candidate = RuntimeOwnedViewModelBindingCandidate::context_handle(context);
+        let changed =
+            self.bind_owned_view_model_artboard_context_candidates(file, &[candidate], true, true);
         self.artboard_owned_view_model_context = Some(
             RuntimeOwnedViewModelContext::from_main_handle(context.root_handle()),
         );
         self.artboard_owned_view_model_handle = Some(context.clone());
-        let root = context.root_handle();
-        let root = root.borrow();
-        let context_chain = [context.scope_path()];
-        self.bind_owned_view_model_artboard_context_chain(file, &root, &context_chain, true, true)
+        changed
     }
 
     fn bind_owned_view_model_artboard_context_snapshot(
@@ -4042,13 +4227,29 @@ impl ArtboardInstance {
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelContext,
     ) -> bool {
+        let mut candidates = Vec::new();
+        if let Some(main) = context.main_handle() {
+            candidates.push(RuntimeOwnedViewModelBindingCandidate::root_handle(main));
+        }
+        candidates.extend(
+            crate::runtime_global_view_model_indices(file)
+                .into_iter()
+                .filter_map(|view_model_index| {
+                    context
+                        .global_slot_handle(view_model_index)
+                        .map(|instance| {
+                            RuntimeOwnedViewModelBindingCandidate::declared_global_slot(
+                                instance,
+                                view_model_index,
+                            )
+                        })
+                }),
+        );
+        let changed =
+            self.bind_owned_view_model_artboard_context_candidates(file, &candidates, true, true);
         self.artboard_owned_view_model_handle = None;
         self.artboard_owned_view_model_context = Some(context.clone());
-        let candidates = context
-            .handles()
-            .map(RuntimeOwnedViewModelBindingCandidate::root_handle)
-            .collect::<Vec<_>>();
-        self.bind_owned_view_model_artboard_context_candidates(file, &candidates, true, true)
+        changed
     }
 
     pub(crate) fn bind_owned_view_model_artboard_context_candidates(
@@ -4059,6 +4260,8 @@ impl ArtboardInstance {
         allow_full_context_bindings: bool,
     ) -> bool {
         if bind_self {
+            self.artboard_owned_view_model_handle = None;
+            self.artboard_owned_view_model_context = None;
             self.artboard_owned_view_model_candidates = candidates.to_vec();
         }
         let rebind_self = self.retain_owned_view_model_context_candidates(candidates);
@@ -4109,19 +4312,21 @@ impl ArtboardInstance {
                     &stateful_context,
                 ));
             }
-            nested_candidates.extend(
-                nested
-                    .stateful_global_view_model_contexts
-                    .values()
-                    .map(RuntimeOwnedViewModelBindingCandidate::root),
-            );
+            nested_candidates.extend(nested.stateful_global_view_model_contexts.iter().map(
+                |(&view_model_index, context)| {
+                    RuntimeOwnedViewModelBindingCandidate::declared_global_slot(
+                        &RuntimeOwnedViewModelHandle::new(context.clone()),
+                        view_model_index,
+                    )
+                },
+            ));
             // A nested composite has its local main/globals first and inherits
             // the complete parent context as fallback.
             nested_candidates.extend(child_candidates);
 
             if rebind_self {
-                changed |= nested
-                    .bind_owned_view_model_animation_context_candidates(file, &nested_candidates);
+                changed |=
+                    nested.bind_owned_view_model_animation_context_candidates(&nested_candidates);
             }
             changed |= nested
                 .child
@@ -4172,16 +4377,17 @@ impl ArtboardInstance {
         if let Some(context) = nested.stateful_view_model_context.clone() {
             candidates.push(RuntimeOwnedViewModelBindingCandidate::root(&context));
         }
-        candidates.extend(
-            nested
-                .stateful_global_view_model_contexts
-                .values()
-                .map(RuntimeOwnedViewModelBindingCandidate::root),
-        );
+        candidates.extend(nested.stateful_global_view_model_contexts.iter().map(
+            |(&view_model_index, context)| {
+                RuntimeOwnedViewModelBindingCandidate::declared_global_slot(
+                    &RuntimeOwnedViewModelHandle::new(context.clone()),
+                    view_model_index,
+                )
+            },
+        ));
         candidates.extend(inherited_candidates);
 
-        let mut changed =
-            nested.bind_owned_view_model_animation_context_candidates(file, &candidates);
+        let mut changed = nested.bind_owned_view_model_animation_context_candidates(&candidates);
         changed |= nested
             .child
             .bind_owned_view_model_artboard_context_candidates(file, &candidates, true, true);
@@ -4214,12 +4420,8 @@ impl ArtboardInstance {
                         true,
                         allow_full_context_bindings,
                     );
-                let contexts = child_candidates
-                    .iter()
-                    .map(|candidate| (candidate.context.clone(), candidate.context_chain.clone()))
-                    .collect::<Vec<_>>();
                 for state_machine in &mut item.state_machines {
-                    if state_machine.bind_owned_view_model_context_chains(file, &contexts) {
+                    if state_machine.bind_owned_view_model_context_candidates(&child_candidates) {
                         changed = true;
                         changed |= state_machine.advance_data_context();
                     }
@@ -4253,10 +4455,13 @@ impl ArtboardInstance {
         allow_full_context_bindings: bool,
     ) -> bool {
         if bind_self {
+            self.artboard_owned_view_model_handle = None;
+            self.artboard_owned_view_model_context = None;
             self.artboard_owned_view_model_candidates =
                 vec![RuntimeOwnedViewModelBindingCandidate {
                     context: RuntimeOwnedViewModelHandle::new(context.clone()),
                     context_chain: context_chain.iter().map(|path| path.to_vec()).collect(),
+                    declared_view_model_index: None,
                 }];
         }
         let rebind_self = self.retain_owned_view_model_context_chain(context, context_chain);
@@ -4351,6 +4556,7 @@ impl ArtboardInstance {
             let parent_candidates = [RuntimeOwnedViewModelBindingCandidate {
                 context: RuntimeOwnedViewModelHandle::new(context.clone()),
                 context_chain: context_chain.iter().map(|path| path.to_vec()).collect(),
+                declared_view_model_index: None,
             }];
             changed |= self.bind_owned_view_model_component_list_context_candidates(
                 file,
@@ -4913,11 +5119,17 @@ impl ArtboardInstance {
             let source = candidates.iter().find_map(|candidate| {
                 let context = candidate.context.borrow();
                 candidate.context_chain.iter().find_map(|context_path| {
+                    let path = candidate.source_path_for_context_path(
+                        &context,
+                        context_path,
+                        &binding.path,
+                        false,
+                    )?;
                     let property_path = context
                         .property_path_for_context_source_path_with_manifest_mode(
                             file,
                             context_path,
-                            &binding.path,
+                            path.as_ref(),
                             false,
                             allow_full_context_bindings,
                         )?;
@@ -4946,11 +5158,17 @@ impl ArtboardInstance {
             let source = candidates.iter().find_map(|candidate| {
                 let context = candidate.context.borrow();
                 candidate.context_chain.iter().find_map(|context_path| {
+                    let path = candidate.source_path_for_context_path(
+                        &context,
+                        context_path,
+                        &binding.path,
+                        binding.path_is_name_based,
+                    )?;
                     let property_path = context
                         .property_path_for_context_source_path_with_manifest_mode(
                             file,
                             context_path,
-                            &binding.path,
+                            path.as_ref(),
                             binding.path_is_name_based,
                             allow_full_context_bindings,
                         )?;
@@ -5112,13 +5330,24 @@ impl ArtboardInstance {
             .map(|candidate| {
                 let context = candidate.context.borrow();
                 let context_chain = candidate.context_chain();
-                let child_context = self.owned_view_model_context_chain_for_nested_host(
-                    file,
-                    &context,
-                    &context_chain,
-                    host_local_id,
-                    scripting_manifest,
-                );
+                let child_context = self
+                    .nested_artboards
+                    .get(&host_local_id)
+                    .and_then(|nested| {
+                        let path = nested.data_bind_path_ids.as_deref()?;
+                        if nested.data_bind_path_is_relative {
+                            return self.owned_view_model_context_chain_for_nested_host(
+                                file,
+                                &context,
+                                &context_chain,
+                                host_local_id,
+                                scripting_manifest,
+                            );
+                        }
+                        context_chain.iter().find_map(|context_path| {
+                            candidate.context_path_for_source_path(&context, context_path, path)
+                        })
+                    });
                 let mut child_context_chain = Vec::with_capacity(
                     candidate.context_chain.len() + usize::from(child_context.is_some()),
                 );
@@ -5129,6 +5358,7 @@ impl ArtboardInstance {
                 RuntimeOwnedViewModelBindingCandidate {
                     context: candidate.context.clone(),
                     context_chain: child_context_chain,
+                    declared_view_model_index: candidate.declared_view_model_index,
                 }
             })
             .collect()
@@ -5363,6 +5593,7 @@ impl ArtboardInstance {
                     RuntimeOwnedViewModelBindingCandidate {
                         context,
                         context_chain: candidate.context_chain.clone(),
+                        declared_view_model_index: candidate.declared_view_model_index,
                     }
                 })
                 .collect::<Vec<_>>();
@@ -5481,7 +5712,11 @@ impl ArtboardInstance {
         self.mark_artboard_data_bind_work_dirty();
         self.stateful_nested_view_model_contexts_dirty = true;
         self.bind_owned_view_model_target_to_source_bindings(&file, &candidates, true);
-        let mut changed = self.refresh_artboard_converter_dependents(|converter| {
+        // A shared graph mutation is observable work even when it only
+        // touches an unprojected list row or child. The retained invalidation
+        // must be consumed exactly once by this artboard.
+        let mut changed = true;
+        changed |= self.refresh_artboard_converter_dependents(|converter| {
             runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
                 converter,
                 &candidates,
@@ -5514,11 +5749,7 @@ impl ArtboardInstance {
         {
             return false;
         }
-        let refreshed_owned_context = if self.artboard_owned_view_model_handle.is_some() {
-            self.refresh_retained_owned_view_model_artboard_context()
-        } else {
-            self.refresh_owned_view_model_artboard_context_if_mutated()
-        };
+        let refreshed_owned_context = self.refresh_owned_view_model_artboard_context_if_mutated();
         if elapsed_seconds == 0.0
             && root_transform == Mat2D::IDENTITY
             && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
@@ -5638,19 +5869,6 @@ impl ArtboardInstance {
             self.artboard_data_bind_processed_epoch = dirty_epoch_at_start;
         }
         changed
-    }
-
-    fn refresh_retained_owned_view_model_artboard_context(&mut self) -> bool {
-        let Some(context) = self.artboard_owned_view_model_handle.clone() else {
-            return false;
-        };
-        let Some(file) = self.runtime_file_arc() else {
-            return false;
-        };
-        let root = context.root_handle();
-        let root = root.borrow();
-        let context_chain = [context.scope_path()];
-        self.bind_owned_view_model_artboard_context_chain(&file, &root, &context_chain, true, true)
     }
 
     fn write_retained_owned_view_model_artboard_source(
@@ -7441,16 +7659,18 @@ impl ArtboardInstance {
             if let Some(context) = nested.stateful_view_model_context.clone() {
                 nested_candidates.push(RuntimeOwnedViewModelBindingCandidate::root(&context));
             }
-            nested_candidates.extend(
-                nested
-                    .stateful_global_view_model_contexts
-                    .values()
-                    .map(RuntimeOwnedViewModelBindingCandidate::root),
-            );
+            nested_candidates.extend(nested.stateful_global_view_model_contexts.iter().map(
+                |(&view_model_index, context)| {
+                    RuntimeOwnedViewModelBindingCandidate::declared_global_slot(
+                        &RuntimeOwnedViewModelHandle::new(context.clone()),
+                        view_model_index,
+                    )
+                },
+            ));
             nested_candidates.extend(inherited_candidates);
             changed = true;
-            changed |= nested
-                .bind_owned_view_model_animation_context_candidates(&file, &nested_candidates);
+            changed |=
+                nested.bind_owned_view_model_animation_context_candidates(&nested_candidates);
             changed |= nested
                 .child
                 .bind_owned_view_model_artboard_context_candidates(
@@ -7827,6 +8047,121 @@ mod tests {
             ),
         ])
         .expect("font binding fixture imports")
+    }
+
+    fn cross_model_global_slot_binding_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Main".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModel",
+                vec![
+                    property(
+                        "ViewModel",
+                        "name",
+                        AuthoringValue::String("Declared global".to_owned()),
+                    ),
+                    property("ViewModel", "viewModelType", AuthoringValue::Uint(2)),
+                ],
+            ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("width".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Compatible override".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("width".to_owned()),
+                )],
+            ),
+            record(
+                "Artboard",
+                vec![
+                    property("Artboard", "width", AuthoringValue::Double(100.0)),
+                    property("Artboard", "height", AuthoringValue::Double(100.0)),
+                    property("Artboard", "viewModelId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            record(
+                "Rectangle",
+                vec![
+                    property("Rectangle", "parentId", AuthoringValue::Uint(0)),
+                    property("Rectangle", "width", AuthoringValue::Double(10.0)),
+                    property("Rectangle", "height", AuthoringValue::Double(10.0)),
+                ],
+            ),
+            record(
+                "DataBindContext",
+                vec![
+                    property(
+                        "DataBindContext",
+                        "propertyKey",
+                        AuthoringValue::Uint(u64::from(
+                            property_key_for_name("Rectangle", "width").expect("width key"),
+                        )),
+                    ),
+                    property(
+                        "DataBindContext",
+                        "sourcePathIds",
+                        AuthoringValue::Bytes(vec![1, 0]),
+                    ),
+                ],
+            ),
+        ])
+        .expect("cross-model global-slot binding fixture imports")
+    }
+
+    #[test]
+    fn composite_artboard_binding_addresses_declared_global_slot_not_occupant_identity() {
+        let file = cross_model_global_slot_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard builds");
+        let main = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("main ViewModel builds"),
+        );
+        let override_instance = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2)
+                .expect("cross-model override ViewModel builds"),
+        );
+        assert!(
+            override_instance
+                .borrow_mut()
+                .set_number_by_property_index(0, 73.0)
+        );
+        let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(main);
+        assert!(contexts.set_global_slot_handle(&file, 1, override_instance));
+
+        assert!(artboard.bind_owned_view_model_artboard_contexts(&file, &contexts));
+        assert!(artboard.advance_artboard_data_binds());
+        let width_key = property_key_for_name("Rectangle", "width").expect("width key");
+        assert_eq!(
+            artboard.double_property(1, width_key),
+            Some(73.0),
+            "source path [1, 0] must resolve through declared global slot 1 even when VM2 occupies it"
+        );
     }
 
     fn shape_length_binding_fixture() -> RuntimeFile {

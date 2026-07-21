@@ -47,7 +47,12 @@ use crate::{ArtboardInstance, ComponentDirt, Mat2D, TransformProperty};
 // not only each individual image. Compressed assets can be tiny while their
 // canonical RGBA textures are large, so the encoded FileAsset budget cannot
 // substitute for this post-header, pre-decode reservation.
-const MAX_RETAINED_DECODED_IMAGE_BYTES: usize = MAX_DECODED_IMAGE_BYTES;
+// Keep the aggregate independently bounded while admitting ordinary Rive
+// files containing more than one large image. In particular, the upstream
+// jellyfish corpus retains 23 individually bounded images totaling just over
+// 64 MiB. Two per-image budgets preserve that valid file and still cap every
+// artboard-tree cache at 128 MiB.
+const MAX_RETAINED_DECODED_IMAGE_BYTES: usize = MAX_DECODED_IMAGE_BYTES * 2;
 
 struct RuntimeImageAssetCatalog<'a> {
     globals: Vec<u32>,
@@ -4453,7 +4458,7 @@ impl ArtboardInstance {
             .component(layout_local)
             .map(|component| component.transform.world_transform)
             .unwrap_or(Mat2D::IDENTITY);
-        if !visiting.insert(layout_local) {
+        if visiting.contains(&layout_local) {
             return stored_world;
         }
         let bounds = layout_bounds
@@ -4477,6 +4482,7 @@ impl ArtboardInstance {
                             .or_else(|| {
                                 self.runtime_supported_layout_component_bounds(parent_local, graph)
                             })?;
+                        visiting.insert(layout_local);
                         let parent_world = self
                             .runtime_layout_component_world_transform_with_bounds_guarded(
                                 parent_local,
@@ -25820,6 +25826,22 @@ mod tests {
                     AuthoringValue::Uint(12),
                 )],
             ),
+            authoring_record(
+                "ImageAsset",
+                vec![authoring_property(
+                    "ImageAsset",
+                    "assetId",
+                    AuthoringValue::Uint(13),
+                )],
+            ),
+            authoring_record(
+                "ImageAsset",
+                vec![authoring_property(
+                    "ImageAsset",
+                    "assetId",
+                    AuthoringValue::Uint(14),
+                )],
+            ),
             authoring_record("Artboard", Vec::new()),
         ])
         .expect("mixed embedded/external image fixture imports");
@@ -25830,10 +25852,12 @@ mod tests {
             .map(|asset| asset.id)
             .collect::<Vec<_>>();
         let image_assets = RuntimeImageAssetCatalog::from_runtime(&file);
-        assert_eq!(image_globals.len(), 3);
+        assert_eq!(image_globals.len(), 5);
         let external_images = BTreeMap::from([
             (11, Arc::<[u8]>::from(encoded.clone())),
-            (12, Arc::<[u8]>::from(encoded)),
+            (12, Arc::<[u8]>::from(encoded.clone())),
+            (13, Arc::<[u8]>::from(encoded.clone())),
+            (14, Arc::<[u8]>::from(encoded)),
         ]);
         let stats = Rc::new(CountingStats::default());
         stats.image_decode_failures_remaining.set(1);
@@ -25873,7 +25897,25 @@ mod tests {
             &mut factory,
             &mut images,
         )
-        .expect("external image fills the remaining budget");
+        .expect("second image fits the aggregate budget");
+        predecode_render_image(
+            &file,
+            &image_assets,
+            image_globals[2],
+            Some(&external_images),
+            &mut factory,
+            &mut images,
+        )
+        .expect("third image fits the aggregate budget");
+        predecode_render_image(
+            &file,
+            &image_assets,
+            image_globals[3],
+            Some(&external_images),
+            &mut factory,
+            &mut images,
+        )
+        .expect("fourth image fills the aggregate budget");
         assert_eq!(
             images.retained_decoded_bytes,
             MAX_RETAINED_DECODED_IMAGE_BYTES
@@ -25882,42 +25924,44 @@ mod tests {
             predecode_render_image(
                 &file,
                 &image_assets,
-                image_globals[2],
+                image_globals[4],
                 Some(&external_images),
                 &mut factory,
                 &mut images,
             ),
             Err(ImageDecodeError),
-            "the third individually valid compressed image exceeds the aggregate budget"
+            "the fifth individually valid compressed image exceeds the aggregate budget"
         );
         assert_eq!(
             stats.image_decode_attempts.get(),
-            3,
+            5,
             "aggregate admission rejects before invoking the decoder"
         );
         assert!(images.get(image_globals[0]).is_some());
         assert!(images.get(image_globals[1]).is_some());
-        assert!(images.get(image_globals[2]).is_none());
+        assert!(images.get(image_globals[2]).is_some());
+        assert!(images.get(image_globals[3]).is_some());
+        assert!(images.get(image_globals[4]).is_none());
     }
 
     #[test]
     fn retained_image_replacement_admits_net_size_and_rejects_atomically() {
-        const HALF_BUDGET_WIDTH: u32 = 4_096;
-        const HALF_BUDGET_HEIGHT: u32 = 2_048;
+        const QUARTER_BUDGET_WIDTH: u32 = 4_096;
+        const QUARTER_BUDGET_HEIGHT: u32 = 2_048;
 
         let mut images = RuntimeRenderImages::default();
-        for global_id in [7, 8] {
+        for global_id in [7, 8, 9, 10] {
             images.insert(
                 global_id,
                 Box::new(SizedTestRenderImage {
-                    width: HALF_BUDGET_WIDTH,
-                    height: HALF_BUDGET_HEIGHT,
+                    width: QUARTER_BUDGET_WIDTH,
+                    height: QUARTER_BUDGET_HEIGHT,
                 }),
             );
         }
         assert_eq!(
             images.retained_decoded_bytes, MAX_RETAINED_DECODED_IMAGE_BYTES,
-            "two half-budget images fill the aggregate exactly",
+            "four quarter-budget images fill the aggregate exactly",
         );
 
         images.insert(
@@ -25929,9 +25973,13 @@ mod tests {
         );
         let replacement = images.get(7).expect("smaller replacement is retained");
         assert_eq!((replacement.width(), replacement.height()), (1, 1));
-        let retained_after_replacement = decoded_rgba_len(HALF_BUDGET_WIDTH, HALF_BUDGET_HEIGHT)
-            .expect("half-budget dimensions are valid")
-            .checked_add(decoded_rgba_len(1, 1).expect("one pixel is valid"))
+        let quarter_budget = decoded_rgba_len(QUARTER_BUDGET_WIDTH, QUARTER_BUDGET_HEIGHT)
+            .expect("quarter-budget dimensions are valid");
+        let retained_after_replacement = quarter_budget
+            .checked_mul(3)
+            .and_then(|retained| {
+                retained.checked_add(decoded_rgba_len(1, 1).expect("one pixel is valid"))
+            })
             .expect("test dimensions fit usize");
         assert_eq!(images.retained_decoded_bytes, retained_after_replacement);
 
@@ -25948,7 +25996,7 @@ mod tests {
         assert_eq!(
             (retained.width(), retained.height()),
             (1, 1),
-            "the other half-budget image plus a 48 MiB replacement exceeds the aggregate",
+            "the other three quarter-budget images plus a 48 MiB replacement exceed the aggregate",
         );
         assert_eq!(
             images.retained_decoded_bytes, retained_after_replacement,

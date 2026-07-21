@@ -108,6 +108,7 @@ pub(crate) fn runtime_state_machine_input(
 pub struct RuntimeStateMachine {
     pub global_id: u32,
     pub name: Option<Arc<str>>,
+    pub(crate) default_view_model_index: Option<usize>,
     pub inputs: Arc<Vec<RuntimeStateMachineInput>>,
     pub(crate) listeners: Arc<Vec<RuntimeStateMachineListener>>,
     pub layers: Arc<Vec<RuntimeStateMachineLayer>>,
@@ -266,6 +267,7 @@ pub(crate) fn build_state_machines<'a>(
                     .object
                     .string_property("name")
                     .map(Arc::<str>::from),
+                default_view_model_index,
                 inputs: Arc::new(
                     state_machine
                         .inputs
@@ -570,6 +572,7 @@ pub(crate) struct RuntimeStateMachineListener {
     pub(crate) target_local_id: usize,
     pub(crate) listener_types: Vec<RuntimeListenerType>,
     pub(crate) event_local_indices: Vec<usize>,
+    pub(crate) view_model_index: Option<usize>,
     pub(crate) view_model_property_path: Option<Vec<usize>>,
     pub(crate) hit_paths: Vec<RuntimeListenerHitPath>,
     pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
@@ -748,12 +751,16 @@ fn runtime_state_machine_listener(
         Vec::new()
     };
     let event_local_indices = runtime_listener_event_local_indices(listener);
-    let view_model_property_path = runtime_listener_view_model_property_path(listener);
+    let (view_model_index, view_model_property_path) =
+        runtime_listener_view_model_property_path(listener)
+            .map(|(view_model_index, property_path)| (Some(view_model_index), Some(property_path)))
+            .unwrap_or((None, None));
 
     Some(RuntimeStateMachineListener {
         target_local_id,
         listener_types,
         event_local_indices,
+        view_model_index,
         view_model_property_path,
         hit_paths,
         listener_actions: listener
@@ -772,7 +779,7 @@ fn runtime_state_machine_listener(
 
 fn runtime_listener_view_model_property_path(
     listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
-) -> Option<Vec<usize>> {
+) -> Option<(usize, Vec<usize>)> {
     let encoded = if listener.object.type_name == "StateMachineListenerSingle" {
         (listener
             .object
@@ -793,14 +800,15 @@ fn runtime_listener_view_model_property_path(
             })
             .and_then(|input_type| input_type.id_list_property("viewModelPathIds"))
     }?;
-    let path = encoded
+    let (view_model_index, property_path) = encoded.split_first()?;
+    let view_model_index = usize::try_from(*view_model_index).ok()?;
+    let property_path = property_path
         .iter()
-        .skip(1)
         .copied()
         .map(usize::try_from)
         .collect::<Result<Vec<_>, _>>()
         .ok()?;
-    (!path.is_empty()).then_some(path)
+    (!property_path.is_empty()).then_some((view_model_index, property_path))
 }
 
 fn runtime_listener_types(
@@ -2561,6 +2569,14 @@ impl StateMachineViewModelTriggerInstance {
 
     pub(crate) fn reset(&mut self) {
         self.value = 0;
+        self.changed = false;
+        self.used_layers.clear();
+    }
+
+    /// Acknowledge one consumed counter value without forgetting the retained
+    /// source baseline. A later refresh of an unrelated ViewModel property
+    /// must not make the same counter value fireable again.
+    pub(crate) fn advanced(&mut self) {
         self.changed = false;
         self.used_layers.clear();
     }

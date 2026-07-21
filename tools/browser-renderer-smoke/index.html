@@ -39,6 +39,35 @@
       } from "./pkg/browser_renderer_smoke.js";
 
       const status = document.querySelector("#status");
+      const withStrictWebgl2ContextReuse = async (callback) => {
+        const originalGetContext = HTMLCanvasElement.prototype.getContext;
+        const attributesByCanvas = new WeakMap();
+        const normalizedAttributes = (attributes) => ({
+          antialias: attributes?.antialias ?? true,
+          stencil: attributes?.stencil ?? false,
+        });
+        HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+          if (type !== "webgl2") {
+            return originalGetContext.call(this, type, ...args);
+          }
+          const requested = normalizedAttributes(args[0]);
+          const existing = attributesByCanvas.get(this);
+          if (existing && (
+            existing.antialias !== requested.antialias
+            || existing.stencil !== requested.stencil
+          )) {
+            return null;
+          }
+          const context = originalGetContext.call(this, type, ...args);
+          if (context && !existing) attributesByCanvas.set(this, requested);
+          return context;
+        };
+        try {
+          return await callback();
+        } finally {
+          HTMLCanvasElement.prototype.getContext = originalGetContext;
+        }
+      };
       const measureWebgl2ImageUploads = async (callback) => {
         const originalTexImage2D = WebGL2RenderingContext.prototype.texImage2D;
         let textureUploads = 0;
@@ -244,7 +273,9 @@
         }
         if (!forceFallback && !forceCompatibility) {
           results.push(await assert_direct_gpu_canvas_image(document.createElement("canvas"), "webgpu"));
-          results.push(await assert_direct_gpu_canvas_image(document.createElement("canvas"), "webgl2"));
+          results.push(await withStrictWebgl2ContextReuse(
+            () => assert_direct_gpu_canvas_image(document.createElement("canvas"), "webgl2"),
+          ));
           const imageMesh = await measureWebgl2ImageUploads(
             () => assert_webgl2_image_mesh(document.createElement("canvas")),
           );

@@ -5,6 +5,10 @@ use std::{
 
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 
+use crate::artboard_data_bind::{
+    RuntimeOwnedViewModelBindingCandidate,
+    runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates,
+};
 use crate::draw::color_lerp;
 use crate::project_data_converter::{
     PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS, project_data_converter_bounded_list_length,
@@ -15,8 +19,7 @@ use crate::{
     ProjectDataConverterContext, ProjectDataConverterOutputType, ProjectDataConverterProgram,
     ProjectDataConverterResolver, ProjectDataConverterState, ProjectDataValue,
     ProjectDataValuePath, ProjectDataViewModelReference, RuntimeDataContext,
-    RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelContext,
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeStateMachine,
+    RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance, RuntimeStateMachine,
     RuntimeTransitionInterpolator, RuntimeViewModelPointer, ScriptValue,
     StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
     StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
@@ -1444,78 +1447,6 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
     }
 }
 
-pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_contexts(
-    converter: &mut RuntimeDataBindGraphConverter,
-    context: &RuntimeOwnedViewModelContext,
-) -> bool {
-    match converter {
-        RuntimeDataBindGraphConverter::OperationViewModel {
-            operation_value,
-            source_path: Some(source_path),
-            ..
-        } => {
-            let value = context
-                .instances()
-                .find_map(|instance| {
-                    runtime_owned_view_model_number_value_for_source_path(&instance, source_path)
-                })
-                .unwrap_or(0.0);
-            if *operation_value == value {
-                return false;
-            }
-            *operation_value = value;
-            true
-        }
-        RuntimeDataBindGraphConverter::Group(converters) => {
-            converters.iter_mut().fold(false, |changed, converter| {
-                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_contexts(
-                    converter, context,
-                ) || changed
-            })
-        }
-        _ => false,
-    }
-}
-
-fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context_chains(
-    converter: &mut RuntimeDataBindGraphConverter,
-    contexts: &[(RuntimeOwnedViewModelHandle, Vec<Vec<usize>>)],
-) -> bool {
-    match converter {
-        RuntimeDataBindGraphConverter::OperationViewModel {
-            operation_value,
-            source_path: Some(source_path),
-            ..
-        } => {
-            // The existing owned converter path is absolute; preserve that
-            // behavior while searching the ordered composite candidates.
-            let value = contexts
-                .iter()
-                .find_map(|(context, _)| {
-                    runtime_owned_view_model_number_value_for_source_path(
-                        &context.borrow(),
-                        source_path,
-                    )
-                })
-                .unwrap_or(0.0);
-            if *operation_value == value {
-                return false;
-            }
-            *operation_value = value;
-            true
-        }
-        RuntimeDataBindGraphConverter::Group(converters) => converters.iter_mut().fold(
-            false,
-            |changed, converter| {
-                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context_chains(
-                    converter, contexts,
-                ) || changed
-            },
-        ),
-        _ => false,
-    }
-}
-
 fn update_runtime_project_resolved_value(
     resolved_values: &mut Vec<(ProjectDataValuePath, ProjectDataValue)>,
     path: &[u32],
@@ -1572,6 +1503,44 @@ fn refresh_runtime_project_resolved_values_for_owned_context(
             continue;
         };
         let value = source_path.owned_number_value(context, context_chain);
+        let Some(value) = value else {
+            continue;
+        };
+        next.push((path, ProjectDataValue::Number(f64::from(value))));
+    }
+    if *resolved_values == next {
+        return false;
+    }
+    *resolved_values = next;
+    true
+}
+
+pub(crate) fn refresh_runtime_project_resolved_values_for_owned_candidates(
+    program: &ProjectDataConverterProgram,
+    resolved_values: &mut Vec<(ProjectDataValuePath, ProjectDataValue)>,
+    candidates: &[RuntimeOwnedViewModelBindingCandidate],
+) -> bool {
+    let mut next = Vec::new();
+    for path in program.value_paths() {
+        let Some(source_path) = runtime_project_data_value_path(&path) else {
+            continue;
+        };
+        let value = candidates.iter().find_map(|candidate| {
+            if source_path.is_relative {
+                let context = candidate.context.borrow();
+                let context_chain = candidate.context_chain();
+                source_path.owned_number_value(&context, &context_chain)
+            } else {
+                let RuntimeProjectDataValuePathSegments::Ids(path) = &source_path.segments else {
+                    return None;
+                };
+                let property_path = candidate.property_path_for_source_path(path)?;
+                candidate
+                    .context
+                    .borrow()
+                    .number_value_by_property_path(&property_path)
+            }
+        });
         let Some(value) = value else {
             continue;
         };
@@ -3741,16 +3710,6 @@ pub(crate) enum RuntimeDataBindGraphValue {
 }
 
 impl RuntimeDataBindGraphValue {
-    pub(crate) fn resolve_from_owned_view_model_context(
-        &self,
-        context: &RuntimeOwnedViewModelContext,
-        path: &[u32],
-    ) -> Option<Self> {
-        context
-            .instances()
-            .find_map(|instance| self.resolve_from_owned_view_model_instance(&instance, path))
-    }
-
     pub(crate) fn resolve_from_owned_view_model_instance(
         &self,
         context: &RuntimeOwnedViewModelInstance,
@@ -4660,34 +4619,6 @@ impl RuntimeDataBindGraph {
         true
     }
 
-    pub(crate) fn bind_owned_view_model_contexts(
-        &mut self,
-        context: &RuntimeOwnedViewModelContext,
-    ) -> bool {
-        for source in &mut self.sources {
-            if let Some(value) = source
-                .value
-                .resolve_from_owned_view_model_context(context, &source.path)
-            {
-                source.value = value;
-                source.bound = true;
-            } else {
-                source.bound = false;
-            }
-            if let Some(converter) = source.converter.as_mut() {
-                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_contexts(
-                    converter, context,
-                );
-            }
-            source.reset_converter_state();
-            source.mark_reconcile_dirty();
-        }
-        self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
-        self.imported_view_model_context = None;
-        self.mark_default_view_model_bindings_dirty();
-        true
-    }
-
     pub(crate) fn bind_owned_view_model_context_chain(
         &mut self,
         file: &RuntimeFile,
@@ -4724,22 +4655,13 @@ impl RuntimeDataBindGraph {
         true
     }
 
-    pub(crate) fn bind_owned_view_model_context_chains(
+    pub(crate) fn bind_owned_view_model_context_candidates(
         &mut self,
-        file: &RuntimeFile,
-        contexts: &[(RuntimeOwnedViewModelHandle, Vec<Vec<usize>>)],
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
     ) -> bool {
         for source in &mut self.sources {
-            if let Some(value) = contexts.iter().find_map(|(context, context_chain)| {
-                let context = context.borrow();
-                context_chain.iter().find_map(|context_path| {
-                    source.value.resolve_from_owned_view_model_context_path(
-                        file,
-                        &context,
-                        context_path,
-                        &source.path,
-                    )
-                })
+            if let Some(value) = candidates.iter().find_map(|candidate| {
+                candidate.resolve_value_for_source_path(&source.value, &source.path)
             }) {
                 source.value = value;
                 source.bound = true;
@@ -4747,9 +4669,8 @@ impl RuntimeDataBindGraph {
                 source.bound = false;
             }
             if let Some(converter) = source.converter.as_mut() {
-                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context_chains(
-                    converter,
-                    contexts,
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
+                    converter, candidates,
                 );
             }
             source.reset_converter_state();
@@ -5431,6 +5352,29 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         value: u64,
     ) -> bool {
+        let Some(source_path) = self.source_path_for_data_bind(data_bind_index) else {
+            return false;
+        };
+        let Some(property_path) =
+            runtime_owned_view_model_property_path_from_source_path(context, &source_path)
+        else {
+            return false;
+        };
+        self.fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+            context,
+            data_bind_index,
+            value,
+            &property_path,
+        )
+    }
+
+    pub(crate) fn fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        value: u64,
+        property_path: &[usize],
+    ) -> bool {
         if self.context_kind != RuntimeDataBindGraphContextKind::OwnedViewModel {
             return false;
         }
@@ -5463,13 +5407,7 @@ impl RuntimeDataBindGraph {
         source.target_to_source_dirty = false;
         source.source_to_target_dirty_after_immediate = false;
 
-        let Some(property_path) =
-            runtime_owned_view_model_property_path_from_source_path(context, &path)
-        else {
-            return false;
-        };
-        let Some(current_context_value) =
-            runtime_owned_view_model_trigger_value_for_source_path(context, &path)
+        let Some(current_context_value) = context.trigger_value_by_property_path(property_path)
         else {
             return false;
         };
@@ -7652,7 +7590,10 @@ impl RuntimeDataBindGraph {
         if !matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_)) {
             return None;
         }
-        source.path.last().copied()
+        let [_, property_id] = source.path.as_slice() else {
+            return None;
+        };
+        Some(*property_id)
     }
 
     pub(crate) fn number_target_global_id_for_data_bind(
@@ -10297,6 +10238,49 @@ mod tests {
             imported_view_model_overrides: BTreeMap::new(),
             key_frame_source_revision: 0,
         }
+    }
+
+    fn graph_with_trigger_binding(path: &[u32]) -> RuntimeDataBindGraph {
+        let mut sources = Vec::new();
+        let mut targets = Vec::new();
+        let mut bindings = Vec::new();
+        RuntimeDataBindGraph::push_default_view_model_binding(
+            &mut sources,
+            &mut targets,
+            &mut bindings,
+            0,
+            path,
+            0,
+            None,
+            RuntimeDataBindGraphTarget::Trigger { global_id: 7 },
+            RuntimeDataBindGraphValue::Trigger(0),
+        );
+        RuntimeDataBindGraph {
+            context_kind: RuntimeDataBindGraphContextKind::DefaultViewModel,
+            default_view_model_bindings_dirty: true,
+            formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
+            sources,
+            targets,
+            default_view_model_bindings: bindings,
+            imported_view_model_context: None,
+            imported_view_model_overrides: BTreeMap::new(),
+            key_frame_source_revision: 0,
+        }
+    }
+
+    #[test]
+    fn only_exact_direct_trigger_paths_mirror_into_transition_triggers() {
+        assert_eq!(
+            graph_with_trigger_binding(&[1, 2])
+                .default_view_model_trigger_source_property_id_for_data_bind(0),
+            Some(2)
+        );
+        assert_eq!(
+            graph_with_trigger_binding(&[1, 5, 2])
+                .default_view_model_trigger_source_property_id_for_data_bind(0),
+            None,
+            "a nested trigger with a colliding leaf id must not fire the direct root trigger",
+        );
     }
 
     #[test]

@@ -4,9 +4,10 @@ use nuxie_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDataContext,
     RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDrawCommandKind,
     RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
-    RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
-    RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
-    RuntimeViewModelLinkError, StateMachineInputKind, StateMachineInstance, TransformProperty,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
+    RuntimeShapePaintPathKind, RuntimeShapePaintState, RuntimeViewModelLinkError,
+    StateMachineInputKind, StateMachineInstance, TransformProperty,
     bound_script_view_model_from_owned_context, runtime_data_context_lookup_reports,
     script_view_model_from_owned,
 };
@@ -13375,6 +13376,97 @@ fn synthetic_state_machine_retained_viewmodel_trigger_transition(file_id: u64) -
     })
 }
 
+fn synthetic_view_model_listener_trigger_then_number_transition(file_id: u64) -> Vec<u8> {
+    const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "watch");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyTrigger", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyTrigger", "name", "fire");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "output");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceTrigger", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceTrigger", "viewModelPropertyId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 2);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+
+        let mut listener_path = Vec::new();
+        push_var_uint(&mut listener_path, 0);
+        push_var_uint(&mut listener_path, 0);
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 11);
+            push_bytes_property(
+                bytes,
+                "StateMachineListenerSingle",
+                "viewModelPathIds",
+                &listener_path,
+            );
+        });
+        push_bindable_trigger_value_data_bind_context_with_converter_and_flags(
+            bytes,
+            1,
+            &[0, 1],
+            None,
+            DATA_BIND_TO_SOURCE,
+        );
+        push_object_with_properties(bytes, "ListenerViewModelChange", |_| {});
+        push_bindable_number_data_bind_context_with_converter_and_flags(
+            bytes,
+            42.0,
+            &[0, 2],
+            None,
+            DATA_BIND_TO_SOURCE,
+        );
+        push_object_with_properties(bytes, "ListenerViewModelChange", |_| {});
+
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_bindable_trigger_data_bind_context(bytes, &[0, 1]);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |_| {});
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_object_with_properties(bytes, "TransitionValueTriggerComparator", |_| {});
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_viewmodel_boolean_condition(
     file_id: u64,
     initial_value: bool,
@@ -17078,6 +17170,52 @@ fn outer_settlement_evaluates_a_retained_view_model_trigger_before_resetting_it(
             .map(|animation| animation.animation_index()),
         Some(1),
         "{label} should enter the trigger target animation",
+    );
+}
+
+#[test]
+fn composite_listener_trigger_survives_a_later_view_model_write_until_transition_probe() {
+    let label = "synthetic/runtime_view_model_listener_trigger_then_number.riv";
+    let bytes = synthetic_view_model_listener_trigger_then_number_transition(9691);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+    let contexts = RuntimeOwnedViewModelContext::from_main_handle(context.clone());
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
+    assert_eq!(
+        state_machine
+            .current_animation(0)
+            .map(|animation| animation.animation_index()),
+        Some(0),
+        "{label} should enter the initial animation"
+    );
+    assert!(state_machine.bind_owned_view_model_contexts(&contexts));
+    assert!(
+        context
+            .borrow_mut()
+            .set_number_by_property_name("watch", 1.0),
+        "{label} failed to change the listener source"
+    );
+    assert!(state_machine.bind_owned_view_model_contexts(&contexts));
+    assert_eq!(
+        context.borrow().number_value_by_property_name("output"),
+        Some(42.0),
+        "the later ViewModel action must still be applied"
+    );
+
+    let _ = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    assert_eq!(
+        state_machine
+            .current_animation(0)
+            .map(|animation| animation.animation_index()),
+        Some(1),
+        "the earlier trigger action must remain fireable after the later action rebinds the context"
     );
 }
 

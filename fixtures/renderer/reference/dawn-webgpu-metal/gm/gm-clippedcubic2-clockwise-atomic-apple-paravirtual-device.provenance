@@ -15,7 +15,6 @@ frame=0
 mode=clockwise-atomic
 sample_count=1
 source_oracle=same-runner-replay
-source_provenance_sha256=1ae2cfe01dc4e2e0c37c20dc86239d6c18743f920142e2d4e9fe9df57d4a09ff
 source_ci_run=29788092231
 source_ci_artifact=8480363545
 capture_date=2026-07-20

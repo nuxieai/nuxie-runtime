@@ -1143,6 +1143,8 @@ fn validate_reference_identity(base: &Path, entries: &[Entry]) -> Result<(), Str
 fn validate_adapter_reference_provenance(base: &Path, entries: &[Entry]) -> Result<(), String> {
     for entry in entries {
         let mut adapters = HashSet::with_capacity(entry.adapter_reference.len());
+        let mut runtime_revision = None;
+        let mut dawn_revision = None;
         for adapter_reference in &entry.adapter_reference {
             if !adapters.insert(adapter_reference.adapter.as_str()) {
                 return Err(format!(
@@ -1214,13 +1216,24 @@ fn validate_adapter_reference_provenance(base: &Path, entries: &[Entry]) -> Resu
                 field("stream_sha256")?,
                 &actual_stream_sha256,
             )?;
-            require_hex_field(
-                provenance,
+            let adapter_runtime_revision = field("runtime_revision")?;
+            require_hex_field(provenance, "runtime_revision", adapter_runtime_revision, 40)?;
+            require_shared_adapter_revision(
+                &entry.id,
+                &adapter_reference.adapter,
                 "runtime_revision",
-                field("runtime_revision")?,
-                40,
+                adapter_runtime_revision,
+                &mut runtime_revision,
             )?;
-            require_hex_field(provenance, "dawn_revision", field("dawn_revision")?, 40)?;
+            let adapter_dawn_revision = field("dawn_revision")?;
+            require_hex_field(provenance, "dawn_revision", adapter_dawn_revision, 40)?;
+            require_shared_adapter_revision(
+                &entry.id,
+                &adapter_reference.adapter,
+                "dawn_revision",
+                adapter_dawn_revision,
+                &mut dawn_revision,
+            )?;
             require_hex_field(provenance, "replay_sha256", field("replay_sha256")?, 64)?;
             let reference_path = if adapter_reference.reference.is_absolute() {
                 adapter_reference.reference.clone()
@@ -1334,6 +1347,25 @@ fn require_hex_field(path: &Path, field: &str, value: &str, len: usize) -> Resul
             "{} {field} must be exactly {len} hexadecimal characters",
             path.display()
         ))
+    }
+}
+
+fn require_shared_adapter_revision(
+    entry_id: &str,
+    adapter: &str,
+    field: &str,
+    actual: &str,
+    expected: &mut Option<String>,
+) -> Result<(), String> {
+    match expected {
+        Some(expected) if expected != actual => Err(format!(
+            "{entry_id} adapter references disagree on {field}: expected `{expected}`, adapter `{adapter}` has `{actual}`"
+        )),
+        Some(_) => Ok(()),
+        None => {
+            *expected = Some(actual.to_owned());
+            Ok(())
+        }
     }
 }
 

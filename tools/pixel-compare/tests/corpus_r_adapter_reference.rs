@@ -70,6 +70,22 @@ provenance = "reference-b.provenance"
 }
 
 #[test]
+fn static_adapter_references_require_one_runtime_revision() {
+    assert_mixed_adapter_revision_is_rejected(
+        "runtime_revision",
+        "dddddddddddddddddddddddddddddddddddddddd",
+    );
+}
+
+#[test]
+fn static_adapter_references_require_one_dawn_revision() {
+    assert_mixed_adapter_revision_is_rejected(
+        "dawn_revision",
+        "dddddddddddddddddddddddddddddddddddddddd",
+    );
+}
+
+#[test]
 fn static_adapter_reference_rejects_an_unknown_adapter_without_falling_back() {
     let root = temporary_directory("unknown-adapter-reference");
     fs::create_dir_all(&root).unwrap();
@@ -497,6 +513,78 @@ fn write_valid_provenance(root: &Path, adapter: &str, reference: &str) {
         ),
     )
     .unwrap();
+}
+
+fn assert_mixed_adapter_revision_is_rejected(field: &str, replacement: &str) {
+    let root = temporary_directory(&format!("mixed-{field}"));
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("fixture.rive-stream"), "fake renderer stream\n").unwrap();
+    write_png(root.join("reference-a.png"), [10, 20, 30, 255]);
+    write_png(root.join("reference-b.png"), [40, 50, 60, 255]);
+    write_valid_provenance(&root, "Adapter A", "reference-a.png");
+    write_valid_provenance(&root, "Apple Paravirtual device", "reference-b.png");
+    let provenance_path = root.join("reference-b.provenance");
+    let provenance = fs::read_to_string(&provenance_path).unwrap();
+    let original = match field {
+        "runtime_revision" => "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "dawn_revision" => "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        _ => panic!("unexpected revision field {field}"),
+    };
+    fs::write(
+        &provenance_path,
+        provenance.replace(
+            &format!("{field}={original}"),
+            &format!("{field}={replacement}"),
+        ),
+    )
+    .unwrap();
+    let replay = install_fake_replay(&root);
+    fs::write(
+        root.join("corpus.toml"),
+        r#"
+[[entry]]
+id = "adapter-bound"
+stream = "fixture.rive-stream"
+reference = "reference-a.png"
+status = "exact"
+max_channel_delta = 0
+max_different_pixels = 0
+mode = "clockwise-atomic"
+
+[[entry.adapter_reference]]
+adapter = "Adapter A"
+reference = "reference-a.png"
+provenance = "reference-a.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "reference-b.png"
+provenance = "reference-b.provenance"
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+        .current_dir(&root)
+        .env("FAKE_ADAPTER", "Apple Paravirtual device")
+        .env("FAKE_REPLAY_PNG", root.join("reference-b.png"))
+        .args(["--manifest", "corpus.toml"])
+        .args(["--replay", replay.to_str().unwrap()])
+        .args(["--backend", "rust-wgpu"])
+        .args(["--output-dir", "artifacts"])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(&format!(
+            "adapter-bound adapter references disagree on {field}"
+        )),
+        "stderr:\n{stderr}"
+    );
+
+    fs::remove_dir_all(root).unwrap();
 }
 
 fn install_fake_replay(root: &Path) -> PathBuf {

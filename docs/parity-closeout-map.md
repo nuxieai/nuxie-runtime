@@ -329,6 +329,45 @@ the semantic family (which waits for #LT-1).
 
 ---
 
+## Phase RB — Data-binding foundation rebuild (#RB) — P0 (user-directed 2026-07-21)
+
+### #RB-1 Retained-identity view-model/data-bind core — SPINE, L (own mini-queue)
+User decision: rebuild the view-model, data-binding, and value layers to
+match the C++ architecture exactly, replacing the copied-value/polling
+design. C++ retains the mutable `ViewModelInstanceValue`, registers each
+`DataBind` as a dependent (`data_bind.cpp` `DataBind::source()`,
+`viewmodel_instance_number.cpp` `propertyValueChanged()`,
+`dependency_helper.hpp` `addDirt()`), and propagates dirt through the
+ordinary update cycle. The Rust port flattened bound sources into copied
+`RuntimeDataBindGraphValue`s and grew a compensation family to reconstruct
+the lost identity: whole-model mutation clocks, candidate context vectors
+with path rewriting, generation-diff refresh/rebind, listener observed-copy
+rescans (bounded at 100 iterations), detached/mirrored instance trees with
+alias registries, per-source direction/reconcile flags, converter polling,
+and fabricated unresolved placeholders. Evidence that the compensation
+family cannot hold the invariant: all 20 editor-cutover regressions repaired
+2026-07-21 plus the one still open (four scripted entries) localize inside
+it, each introduced by a reasonable-looking edit.
+**Port slices (each floor-gated):** (a) retained typed property cells
+(`ViewModelInstanceValue` analogs with shared identity, `rcp` ≈ retained
+handles); (b) dependent registration + property-level dirt
+(`DependencyHelper`); (c) parent-linked `DataContext` replacing candidate
+vectors; (d) retained `DataBind`/listener/converter lifecycle with C++'s
+favored-direction init ordering; (e) migrate state-machine/artboard/facade
+callers; (f) DELETION gate.
+**Gate:** all five floors green at completed values (647 exact segments,
+707 probe assertions, scripted lane including the four currently-red
+entries, 1,468 pixels, workspace) AND the compensation family is deleted —
+`mutation_generation`-based rebinds, `RuntimeOwnedViewModelBindingCandidate`
+chains, listener observed-copy rescans, alias mirror registries, and the
+Scene-wide rebind bit are all gone. Any survivor means the invariant was
+not reached. The four red scripted entries are expected to close as a
+byproduct; if any stays red it is a fresh divergence to localize on the new
+foundation. Editor-team changes to this layer freeze until #RB-1 lands
+(or route through the same floor gates).
+
+---
+
 ## Phase 3 — Hardening & decisions (#HD) — P2
 
 - **#HD-1 Threading-model decision (A6) — USER-GATE, then S or L.** Either

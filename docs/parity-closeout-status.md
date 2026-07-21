@@ -36,6 +36,10 @@ upstream-sync-map registry).
 
 ## Ticket checklist
 
+- [ ] #RB-1 data-binding foundation rebuild (map Phase RB; user-directed
+  2026-07-21, P0) — port C++'s retained-identity view-model/data-bind core
+  and delete the compensation family; floors are the harness; exit gate
+  includes the deletion list. See the map's Phase RB for slices (a)-(f).
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -95,7 +99,24 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. Regression repair (remaining half) — FOUR scripted-golden-compare
+1. #RB-1 data-binding foundation rebuild (map Phase RB; user-directed
+   2026-07-21) — port C++'s retained-identity model (retained
+   `ViewModelInstanceValue` cells, `DependencyHelper` dependent dirt,
+   parent-linked `DataContext`, retained DataBind/listener/converter
+   lifecycle) and DELETE the compensation family (mutation clocks,
+   candidate vectors, listener rescans, alias mirrors, Scene-wide rebind
+   bit). Floors are the harness; the four red scripted entries are
+   expected to close as a byproduct (their point-fix chase is STOPPED —
+   full evidence trail retained below for cross-checking the rebuild).
+   Editor-team changes to this layer are frozen until it lands. A final
+   supporting fact from the bind-table diff: the pre-rebase machinery
+   never rewrote graph sources from the owned context in the runner flow
+   at all (empty bind log at `a159897f`), while the candidate binder
+   rewrites every source from instance-0 values ([4,0]→95, [3,0]→40,
+   [2,4]→1.0667) — the two designs disagree even about WHEN binding
+   happens, which is exactly why point-fixing inside them cannot converge.
+2. ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
+   subsumed by #RB-1) — FOUR scripted-golden-compare
    entries broken by concurrent main `c7d48ca0` (`db_health_tracker`,
    `echo_show_demo`, `list_index_script_access`, `superbowl`: wild
    transform/gradient/path divergences under forced scripting; the default
@@ -165,14 +186,15 @@ upstream-sync-map registry).
    drifted `ba2b6434`, and CI's `cargo test --workspace` skips the probe
    suite when `RIVE_CPP_PROBE` is unset, so main went red silently — the
    same class as the five `974aab66` component-list regressions.
-2. #B-5 editor-cutover parity audit — classify every runtime-behavior hunk
-   of `974aab66`/`c7d48ca0` (see Ticket checklist); the scout report seeds
-   the classification table.
 3. #B-1 port — execute the approved S3-1 (TextInput) + S3-3 (static linking)
    port per `docs/upstream-sync-map.md`; advance `LAST_SYNCED_SHA` to
-   `b73bc675` on a green ratchet.
-4. #OR-1 — side-channel spec + C++ emit once the floor is restored.
-5. #FT-TEXT — unblocked by the #B-1 approval; starts after the port lands.
+   `b73bc675` on a green ratchet. (Text-input code is outside the #RB-1
+   layer; may proceed in a lane while #RB-1 holds the spine.)
+4. #B-5 editor-cutover parity audit — classify every runtime-behavior hunk
+   of `974aab66`/`c7d48ca0` (see Ticket checklist); most (b)/(c) rows are
+   expected to dissolve into #RB-1's deletion gate.
+5. #OR-1 — side-channel spec + C++ emit once the floor is restored.
+6. #FT-TEXT — unblocked by the #B-1 approval; starts after the port lands.
 
 ## Pending USER-GATEs
 
@@ -206,6 +228,16 @@ Decisions log.)
   scripting OFF and ON.** ON has ~52 KiB headroom today; if the approved
   TextInput port pushes ON past the budget, the gate reopens with fresh
   measurements — the constant is never silently raised.
+- 2026-07-21: **#RB-1 opened (user decision): rebuild the view-model,
+  data-binding, and value layers to match the C++ architecture exactly.**
+  Rationale: the Rust port flattened bound sources into copied values,
+  losing C++'s retained `ViewModelInstanceValue` identity and dependent
+  registration; the resulting compensation family (mutation clocks,
+  candidate vectors, listener rescans, alias mirrors, facade-wide rebinds)
+  has produced every one of the 20+ editor-cutover parity regressions found
+  2026-07-21, including the four still-red scripted entries. Point-fixing
+  inside the compensations is stopped; the map gains Phase RB with a
+  deletion exit gate. Editor changes to this layer freeze until it lands.
 - 2026-07-21: **#B-3 replacement budget user-approved: 9 MiB (9,437,184 B),
   both variants blocking.** The 8 MiB decision predated `974aab66`; honest
   re-measurement with the 43-root harness (OFF 7.84 MiB / ON 8.70 MiB)

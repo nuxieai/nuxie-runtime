@@ -83,14 +83,21 @@ upstream-sync-map registry).
    gate is green). Attribution proven on a pristine `5927654b` worktree.
    `c7d48ca0` touched no nuxie-scripting code, so the cause is runtime code
    behaving differently under forced scripting — start from its artboard.rs
-   (+1,350) / data_bind_graph.rs / instance.rs (+901) changes. LOCALIZED
-   LEAD (2026-07-21): in `db_health_tracker`, the diverging drawPath's glyph
-   outlines are byte-identical on both sides; only the container translate
-   differs (Rust x=-2673.9541 vs C++ x=271.491211, y equal) on a data-bound
-   Text — a text measure/alignment divergence in scripted mode, not a value
-   difference. Reproduce with both scripted runners on the file directly
-   (`--samples 0`, Rust adds `--execute-scripts`) and diff the streams;
-   everything else is LSB float noise. The commit's
+   (+1,350 — NOTE: almost all tests; production changes are the
+   owned-candidate bind refactor) / data_bind_graph.rs / instance.rs
+   changes. LOCALIZED LEAD (2026-07-21, sharpened): in `db_health_tracker`,
+   EVERY row-container transform in the scripted lane is shifted by exactly
+   -2945.44531 versus both C++ and the pre-rebase-green Rust baseline
+   (271.49→-2673.95, 582.49→-2362.95, -20.51→-2965.95, 1195.49→-1749.95;
+   y identical, glyph outlines byte-identical). One scalar diverges — the
+   list container's scrolled/bound x offset, most plausibly a data-bound
+   number through the DataConverterInterpolator/BlendState1DViewModel
+   chain evaluating differently under scripting-enabled import. Reproduce:
+   run both scripted runners on the file (`--samples 0`, Rust adds
+   `--execute-scripts`) and diff; everything else is LSB float noise. A
+   green Rust baseline stream builds from pre-rebase commit `a159897f`
+   (reflog) with `cargo build -p rust-golden-runner --features scripting`.
+   The commit's
    OTHER regression — ten trigger probe assertions — is FIXED 2026-07-21:
    `reset_advanced_data_context` had swapped `trigger.reset()` for
    value-retaining `advanced()`, but C++

@@ -33,7 +33,7 @@ explicit accepted-architecture D-row ("retained renderer invalidation
 epochs are the deliberate Phase R design; C++ has no counterpart because
 it has no retained replay caches"), with the standing rule that any epoch
 later found compensating for a missed PORT (not bridging to the renderer)
-is carved out and fixed individually. AWAITING USER APPROVAL.
+is carved out and fixed individually. USER APPROVED 2026-07-21 — recorded as register D-12; the ~60-70 Family B rows are closed as documented-and-intentional.
 
 ## Family C — New rebuild candidates (planner-verified or pending)
 

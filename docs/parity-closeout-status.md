@@ -146,7 +146,7 @@ upstream-sync-map registry).
   36 UNKNOWN / 48 N/A. Planner triage (docs/b6-audit/TRIAGE.md) collapses
   DIVERGENT into: ~65 rows = RB-1 scope (keyframe data-bind graphs now
   explicitly included); ~60-70 rows = retained-renderer invalidation
-  epochs → PROPOSED accepted-architecture D-row, AWAITING USER; RB-2
+  epochs → APPROVED as register D-12 (accepted architecture); RB-2
   opened (focus system, spot-verified, ties into #FT-TEXT keyboard gap);
   5 small families pending planner verification; 36 UNKNOWNs re-pass
   after RB-1. JUDGE VALIDATED 2026-07-21: caught the known-bad pre-RB1 data binds
@@ -354,6 +354,11 @@ Decisions log.)
   2026-07-21, including the four still-red scripted entries. Point-fixing
   inside the compensations is stopped; the map gains Phase RB with a
   deletion exit gate. Editor changes to this layer freeze until it lands.
+- 2026-07-21: **#B-6 Family B user-approved as register D-12.** The
+  retained-renderer invalidation epochs are accepted architecture (the
+  deliberate Phase R retained-replay design's required bridge), closing
+  ~60-70 DIVERGENT audit rows as documented-and-intentional, with the
+  ported-information-loss guardrail recorded in the D-row.
 - 2026-07-21: **#B-3 replacement budget user-approved: 9 MiB (9,437,184 B),
   both variants blocking.** The 8 MiB decision predated `974aab66`; honest
   re-measurement with the 43-root harness (OFF 7.84 MiB / ON 8.70 MiB)

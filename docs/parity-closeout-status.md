@@ -36,15 +36,25 @@ upstream-sync-map registry).
 
 ## Ticket checklist
 
-- [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — review
-  the teammate's editor patches (`974aab66`, `c7d48ca0`, and any successors
-  on `levi/editor-cutover*`) against the pinned-C++ parity contract:
-  classify each runtime-behavior change as parity-neutral additive, a
-  divergence to repair, or a D-row candidate. Both commits have already
-  produced oracle-caught regressions (5+1 and 10+4 respectively), so the
-  audit closes only when every behavior-bearing hunk has a classification
-  and each class-(b) row has a fixture or probe test. A scout report seeding
-  this audit was dispatched 2026-07-21; fold its findings here.
+- [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
+  report complete, 12 findings. VERDICT: broadly parity-aligned with
+  isolated slips, not structurally off-course — most bytes are additive
+  editor surface (project-data-converter format, event-context host APIs,
+  converter build cache) plus tests. Risk concentrates in ONE refactor:
+  the owned-view-model "candidate" unification (c7d48ca0), which added a
+  strict value-kind match guard in `resolve_value_for_source_path`
+  (kind mismatch → `bound=false` → serialized-default fallback) and new
+  unresolved-source fallbacks synthesizing bindable defaults from
+  serialized `propertyValue` (enum default changed 0 → u32::MAX). That
+  guard/fallback pair is the prime suspect for the open scalar shift.
+  Remaining (c)-class rows needing fixtures before close: (i) 974aab66's
+  two-way custom-property seeding no longer target→source-seeds two-way
+  binds (C++ seeds both, favored direction wins) — fixture: two-way
+  TrimPath.start bind, serialized target ≠ source initial, t=0; (ii) a
+  parent-relative nested number/enum bind with serialized target
+  propertyValue ≠ 0 at t=0; (iii) self-referential layout recursion guard
+  (mark-on-entry → deferred insert); (iv) owned trigger source paths
+  deeper than 2 segments. Each becomes a repair or an explicit D-row.
 - [ ] #B-1 Phase S sync to b73bc675 — triage submitted; USER-GATE blocks port/pin movement
 - [ ] #B-2 port-manifest invariant — implementation/local gate complete at
   exact b73bc675 (447/447: 378 ported / 21 partial / 43 absent / 5 N/A);
@@ -113,7 +123,13 @@ upstream-sync-map registry).
    `tools/rust-golden-runner/src/main.rs` whose runtime callee c7d48ca0
    changed. `rebind_nested_script_owned_contexts` is ruled out (no-op for
    script-free files); audit the remaining cfg(scripting) blocks that run
-   regardless of the flag and diff their callees across c7d48ca0.
+   regardless of the flag and diff their callees across c7d48ca0. PRIME
+   SUSPECT (#B-5 scout): the candidate unification's strict value-kind
+   match guard in `resolve_value_for_source_path` — a kind mismatch flips
+   the source to `bound=false` and falls back to the serialized default,
+   which would displace the bound scroll scalar by exactly the constant
+   observed. Check whether the scripting-feature bind path resolves that
+   source with a different value kind than the featureless path.
    The commit's
    OTHER regression — ten trigger probe assertions — is FIXED 2026-07-21:
    `reset_advanced_data_context` had swapped `trigger.reset()` for

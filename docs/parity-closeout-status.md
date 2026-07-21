@@ -116,20 +116,32 @@ upstream-sync-map registry).
    `--execute-scripts`) and diff; everything else is LSB float noise. A
    green Rust baseline stream builds from pre-rebase commit `a159897f`
    (reflog) with `cargo build -p rust-golden-runner --features scripting`.
-   SECOND DISCRIMINATOR (2026-07-21): the scripting-FEATURE build diverges
-   even with `--execute-scripts` OFF (plain import, no script execution),
-   while the featureless binary is exact — so the culprit is a
-   non-flag-gated `cfg(feature = "scripting")` call site in
-   `tools/rust-golden-runner/src/main.rs` whose runtime callee c7d48ca0
-   changed. `rebind_nested_script_owned_contexts` is ruled out (no-op for
-   script-free files); audit the remaining cfg(scripting) blocks that run
-   regardless of the flag and diff their callees across c7d48ca0. PRIME
-   SUSPECT (#B-5 scout): the candidate unification's strict value-kind
-   match guard in `resolve_value_for_source_path` — a kind mismatch flips
-   the source to `bound=false` and falls back to the serialized default,
-   which would displace the bound scroll scalar by exactly the constant
-   observed. Check whether the scripting-feature bind path resolves that
-   source with a different value kind than the featureless path.
+   BISECTION COMPLETE THROUGH FOUR STRIKES (2026-07-21): (1) the
+   scripting-FEATURE runner build diverges even with `--execute-scripts`
+   OFF while the featureless binary from the same tree is exact; every
+   runner-side cfg difference was patched out experimentally (scripted
+   preallocation, scripted-drawable init, the rebind call) with no effect —
+   EXCEPT `selected_artboard_owned_view_model_context`, where the feature
+   build constructs the owned main context with
+   `RuntimeOwnedViewModelInstance::from_instance(runtime, vm_index, 0)`
+   (serialized instance 0) and the featureless build uses `::new`
+   (definition defaults); forcing `::new` in the feature build makes the
+   stream exact. (2) The runner is CORRECT: C++'s scripted runner does the
+   same (`File::createViewModelInstance(viewModelId, 0)` copies serialized
+   instance 0) and C++ still renders 271.49 — so the runtime's handling of
+   a from_instance-built owned context is at fault. (3) The #B-5 scout's
+   kind-guard suspect is EXONERATED: instrumentation shows zero kind
+   mismatches; `property_path_for_source_path` fails identically in both
+   builds for source paths [3,0] and [2,4] (common, not the delta). (4)
+   Property ordering is exonerated: both constructors share
+   `from_view_model`'s definition walk; only seeded VALUES differ. NEXT
+   MOVE (mechanical): instrument
+   `runtime_owned_view_model_binding_value_for_property_path` to dump every
+   resolved (property_path, value) pair in both builds on
+   `db_health_tracker --samples 0`, diff the tables — the diverging
+   property identifies the c7d48ca0 hunk mis-consuming instance-0 values
+   (pre-rebase `a159897f` machinery handled the identical context
+   correctly).
    The commit's
    OTHER regression — ten trigger probe assertions — is FIXED 2026-07-21:
    `reset_advanced_data_context` had swapped `trigger.reset()` for

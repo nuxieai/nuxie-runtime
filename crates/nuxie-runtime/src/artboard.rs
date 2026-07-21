@@ -5624,11 +5624,22 @@ impl RuntimeNestedArtboardInstance {
                 reported_events.as_mut().map(|events| &mut **events),
             );
         }
+        // C++ advances the ENTIRE nested subtree before any data-bind pass
+        // reaches it: `NestedArtboard::advanceComponent` only advances
+        // animations and `advanceInternal` (src/nested_artboard.cpp:965-1008),
+        // while the data binds — including the owned-path target-to-source
+        // pulls — run later through `Artboard::updateDataBinds` recursing
+        // artboard hosts first (src/artboard.cpp:1195-1201, called from
+        // `updatePass` at src/artboard.cpp:1420). Advancing this child's
+        // binds before its own nested artboards let a grandchild state
+        // machine observe a reverse write one pass earlier than C++ (the
+        // db_health_tracker blend consumed the pulled value on the first
+        // frame where C++ still blends the pre-pull value).
+        changed |= self.child.advance_nested_artboards(local_elapsed_seconds);
         // Mirrors C++ src/nested_artboard.cpp NestedArtboard::updateDataBinds.
         changed |= self
             .child
             .advance_artboard_data_binds_with_elapsed(local_elapsed_seconds);
-        changed |= self.child.advance_nested_artboards(local_elapsed_seconds);
         changed
     }
 

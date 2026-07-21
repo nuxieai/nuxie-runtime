@@ -68,9 +68,30 @@ upstream-sync-map registry).
     instance-0 scroll-scalar bug class) and sibling propagation without
     echo. NOTE for (e): the old view_model module exports a colliding
     `RuntimeDataContext` name; resolve at migration.
-  - [ ] (e) migrate consumers (state machine, artboard, facade, listeners,
-    converters) — sequenced by the compensation-family call-site inventory
-    (scout dispatched 2026-07-21); floors green after every migration step.
+  - [ ] (e) migrate consumers — sequenced by
+    docs/rb1-compensation-inventory.md; floors green after every step.
+    DESIGN DECISIONS (2026-07-21, binding): (1) `RuntimeOwnedViewModelInstance`
+    keeps its public API but its scalar VALUE STORAGE re-backs onto
+    `RuntimeViewModelInstanceCells` — hybrid first (scalars on cells;
+    lists/children/aliases unchanged), then children share cells (which
+    dissolves the alias-mirror machinery naturally: shared identity needs
+    no synchronization). (2) `Clone` for the instance must remain a DEEP
+    copy (C++ `copyViewModelInstance`); sharing stays explicit via the
+    existing `RuntimeOwnedViewModelHandle` Rc wrapper — deriving shared
+    scalars into `.clone()` would silently flip snapshot semantics across
+    hundreds of call sites. (3) The old `view_model::RuntimeDataContext`
+    export name collides with the new core's context; the new type stays
+    namespaced until the old one deletes. Steps:
+    - [ ] e1 re-back owned-instance scalar storage with cells (writes
+      cascade; mutation clock retained temporarily; deep-copy Clone).
+    - [ ] e2 children/lists share cells; alias mirrors become no-ops.
+    - [ ] e3 graph sources hold retained binds (`set_source(cell)` +
+      `reconcile`) replacing copied values; SM/artboard bind seams build
+      a parent-linked context instead of candidates.
+    - [ ] e4 listeners register as cell dependents; delete the rescan loop.
+    - [ ] e5 Scene facade drops the dirty-rebind bit; triggers read
+      through cells.
+- [ ] (f) deletion gate follows e5.
   - [ ] (f) deletion gate: mutation clocks, candidate vectors, listener
     rescans, alias mirrors, Scene-wide rebind bit all removed; floors at
     completed values including the four currently-red scripted entries.

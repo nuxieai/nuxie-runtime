@@ -4712,7 +4712,6 @@ struct RetainedViewModelInstance {
     nested_strings: Vec<RetainedNestedViewModelString>,
     nested_booleans: Vec<RetainedNestedViewModelBoolean>,
     list_string_match_booleans: Vec<RetainedViewModelListStringMatchBoolean>,
-    dirty: bool,
 }
 
 struct RetainedViewModelNumber {
@@ -5284,7 +5283,6 @@ fn instantiate_runtime_mount_with_carry(
                 nested_strings: Vec::new(),
                 nested_booleans: Vec::new(),
                 list_string_match_booleans: Vec::new(),
-                dirty: false,
             })
         })
         .transpose()?;
@@ -5384,32 +5382,6 @@ fn capture_view_model_carry(
         carry.strings.insert(metadata.name.clone(), value.to_vec());
     }
     carry
-}
-
-fn flush_view_model(live: &mut LiveInstance) -> bool {
-    let Some(view_model) = live.view_model.as_mut() else {
-        return false;
-    };
-    if !view_model.dirty {
-        return false;
-    }
-    view_model
-        .context
-        .set_main_handle(view_model.value.handle().clone());
-    let file = Arc::clone(live.runtime.file());
-    let mut changed = live
-        .runtime
-        .raw_mut()
-        .bind_default_view_model_artboard_list_context(&file.runtime);
-    changed |= live
-        .runtime
-        .raw_mut()
-        .bind_owned_view_model_artboard_contexts(&file.runtime, &view_model.context);
-    for machine in &mut live.machines.values {
-        changed |= machine.bind_owned_view_model_contexts(&view_model.context);
-    }
-    view_model.dirty = false;
-    changed
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7715,7 +7687,6 @@ impl Scene {
             .value
             .raw_mut()
             .set_color_by_source_handle(&source, value);
-        retained.dirty |= changed;
         Ok(changed)
     }
 
@@ -7777,7 +7748,6 @@ impl Scene {
             .value
             .raw_mut()
             .set_enum_by_source_handle(&source, u64::from(value));
-        retained.dirty |= changed;
         Ok(changed)
     }
 
@@ -7833,7 +7803,6 @@ impl Scene {
             .value
             .raw_mut()
             .set_trigger_by_source_handle(&source, u64::from(value));
-        retained.dirty |= changed;
         Ok(changed)
     }
 
@@ -7889,7 +7858,6 @@ impl Scene {
             .value
             .raw_mut()
             .set_symbol_list_index_by_source_handle(&source, u64::from(value));
-        retained.dirty |= changed;
         Ok(changed)
     }
 
@@ -7963,7 +7931,6 @@ impl Scene {
             .value
             .raw_mut()
             .set_asset_by_source_handle(&source, runtime_asset);
-        retained.dirty |= changed;
         Ok(changed)
     }
 
@@ -14823,9 +14790,6 @@ impl Frame<'_> {
             let changed = global
                 .borrow_mut()
                 .set_number_by_property_index(cursor.global_property_index, value);
-            if let Some(retained) = live.view_model.as_mut() {
-                retained.dirty |= changed;
-            }
             return Ok(changed);
         }
         let retained = live
@@ -14837,7 +14801,6 @@ impl Frame<'_> {
             let RetainedViewModelInstance {
                 value: retained_value,
                 nested_numbers,
-                dirty,
                 ..
             } = retained;
             let number = nested_numbers
@@ -14852,7 +14815,6 @@ impl Frame<'_> {
                 .set_number_by_source_handle(&number.source, value);
             number.value = value;
             number.overridden = true;
-            *dirty |= changed;
             return Ok(changed);
         }
         if !retained
@@ -14871,7 +14833,6 @@ impl Frame<'_> {
             .raw_mut()
             .set_number_by_slot(cursor.number_slot, value);
         number.overridden = true;
-        retained.dirty |= changed;
         Ok(changed)
     }
 
@@ -14901,7 +14862,6 @@ impl Frame<'_> {
             let RetainedViewModelInstance {
                 value: retained_value,
                 nested_strings,
-                dirty,
                 ..
             } = retained;
             let string = nested_strings
@@ -14919,7 +14879,6 @@ impl Frame<'_> {
                 string.value.extend_from_slice(value.as_bytes());
             }
             string.overridden = true;
-            *dirty |= changed;
             return Ok(changed);
         }
         if !retained
@@ -14938,7 +14897,6 @@ impl Frame<'_> {
             .raw_mut()
             .set_string_by_property_index(string.property_index, value.as_bytes());
         string.overridden = true;
-        retained.dirty |= changed;
         Ok(changed)
     }
 
@@ -15072,7 +15030,6 @@ impl Frame<'_> {
                 changed
             }
         };
-        retained.dirty |= selected_changed || relation_changed;
         Ok(selected_changed || relation_changed)
     }
 
@@ -15102,7 +15059,6 @@ impl Frame<'_> {
             let RetainedViewModelInstance {
                 value: retained_value,
                 nested_booleans,
-                dirty,
                 ..
             } = retained;
             let boolean = nested_booleans
@@ -15117,7 +15073,6 @@ impl Frame<'_> {
                 .set_boolean_by_source_handle(&boolean.source, value);
             boolean.value = value;
             boolean.overridden = true;
-            *dirty |= changed;
             return Ok(changed);
         }
         if !retained
@@ -15136,7 +15091,6 @@ impl Frame<'_> {
             .raw_mut()
             .set_boolean_by_property_index(boolean.property_index, value);
         boolean.overridden = true;
-        retained.dirty |= changed;
         Ok(changed)
     }
 
@@ -15292,40 +15246,20 @@ impl Frame<'_> {
             .hit_test_path_segments_with_bounds(point)
             .first()
             .map(StateMachineEventContext::from_geometry_hit);
-        let context = live.owned_view_model_context().cloned();
-        let (runtime, machines, view_model) =
-            (&live.runtime, &mut live.machines, &mut live.view_model);
+        let (runtime, machines) = (&live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current = match (context.as_ref(), event_context.as_ref()) {
-                (Some(context), Some(event_context)) => {
-                    let bound = machine.bind_owned_view_model_contexts(context);
-                    bound
-                        | machine.pointer_down_with_event_context(
-                            runtime.raw(),
-                            point.x,
-                            point.y,
-                            pointer_id,
-                            event_context,
-                        )
-                }
-                (Some(context), None) => {
-                    let bound = machine.bind_owned_view_model_contexts(context);
-                    bound | machine.pointer_down(runtime.raw(), point.x, point.y, pointer_id)
-                }
-                (None, Some(event_context)) => machine.pointer_down_with_event_context(
+            let current = match event_context.as_ref() {
+                Some(event_context) => machine.pointer_down_with_event_context(
                     runtime.raw(),
                     point.x,
                     point.y,
                     pointer_id,
                     event_context,
                 ),
-                (None, None) => machine.pointer_down(runtime.raw(), point.x, point.y, pointer_id),
+                None => machine.pointer_down(runtime.raw(), point.x, point.y, pointer_id),
             };
             current | hit
         });
-        if hit && let Some(view_model) = view_model.as_mut() {
-            view_model.dirty = true;
-        }
         hit
     }
 
@@ -15350,28 +15284,12 @@ impl Frame<'_> {
         else {
             return false;
         };
-        let context = live.owned_view_model_context().cloned();
-        let (runtime, machines, view_model) =
-            (&live.runtime, &mut live.machines, &mut live.view_model);
+        let (runtime, machines) = (&live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current = if let Some(context) = context.as_ref() {
-                let bound = machine.bind_owned_view_model_contexts(context);
-                bound
-                    | machine.pointer_move(
-                        runtime.raw(),
-                        point.x,
-                        point.y,
-                        elapsed_seconds,
-                        pointer_id,
-                    )
-            } else {
-                machine.pointer_move(runtime.raw(), point.x, point.y, elapsed_seconds, pointer_id)
-            };
+            let current =
+                machine.pointer_move(runtime.raw(), point.x, point.y, elapsed_seconds, pointer_id);
             current | hit
         });
-        if hit && let Some(view_model) = view_model.as_mut() {
-            view_model.dirty = true;
-        }
         hit
     }
 
@@ -15395,40 +15313,20 @@ impl Frame<'_> {
             .hit_test_path_segments_with_bounds(point)
             .first()
             .map(StateMachineEventContext::from_geometry_hit);
-        let context = live.owned_view_model_context().cloned();
-        let (runtime, machines, view_model) =
-            (&live.runtime, &mut live.machines, &mut live.view_model);
+        let (runtime, machines) = (&live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current = match (context.as_ref(), event_context.as_ref()) {
-                (Some(context), Some(event_context)) => {
-                    let bound = machine.bind_owned_view_model_contexts(context);
-                    bound
-                        | machine.pointer_up_with_event_context(
-                            runtime.raw(),
-                            point.x,
-                            point.y,
-                            pointer_id,
-                            event_context,
-                        )
-                }
-                (Some(context), None) => {
-                    let bound = machine.bind_owned_view_model_contexts(context);
-                    bound | machine.pointer_up(runtime.raw(), point.x, point.y, pointer_id)
-                }
-                (None, Some(event_context)) => machine.pointer_up_with_event_context(
+            let current = match event_context.as_ref() {
+                Some(event_context) => machine.pointer_up_with_event_context(
                     runtime.raw(),
                     point.x,
                     point.y,
                     pointer_id,
                     event_context,
                 ),
-                (None, None) => machine.pointer_up(runtime.raw(), point.x, point.y, pointer_id),
+                None => machine.pointer_up(runtime.raw(), point.x, point.y, pointer_id),
             };
             current | hit
         });
-        if hit && let Some(view_model) = view_model.as_mut() {
-            view_model.dirty = true;
-        }
         hit
     }
 
@@ -15446,21 +15344,11 @@ impl Frame<'_> {
         else {
             return false;
         };
-        let context = live.owned_view_model_context().cloned();
-        let (runtime, machines, view_model) =
-            (&live.runtime, &mut live.machines, &mut live.view_model);
+        let (runtime, machines) = (&live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current = if let Some(context) = context.as_ref() {
-                let bound = machine.bind_owned_view_model_contexts(context);
-                bound | machine.pointer_exit(runtime.raw(), point.x, point.y, pointer_id)
-            } else {
-                machine.pointer_exit(runtime.raw(), point.x, point.y, pointer_id)
-            };
+            let current = machine.pointer_exit(runtime.raw(), point.x, point.y, pointer_id);
             current | hit
         });
-        if hit && let Some(view_model) = view_model.as_mut() {
-            view_model.dirty = true;
-        }
         hit
     }
 
@@ -15531,15 +15419,14 @@ impl Frame<'_> {
         let Some(materialized) = materialized.get(&live.artboard) else {
             return false;
         };
-        let view_model_changed = flush_view_model(live);
         if live.machines.is_empty() {
-            return view_model_changed | live.runtime.advance(elapsed_seconds);
+            return live.runtime.advance(elapsed_seconds);
         }
 
         let (runtime, machines) = (&mut live.runtime, &mut live.machines);
         let machine_changed =
             runtime.advance_with_state_machines(&mut machines.values, elapsed_seconds);
-        let changed = view_model_changed | machine_changed;
+        let changed = machine_changed;
         for machine in &machines.values {
             for index in 0..machine.reported_event_count() {
                 let Some(reported) = machine.reported_event(index) else {
@@ -15596,12 +15483,10 @@ impl Frame<'_> {
         let materialized = materialized
             .get(&live.artboard)
             .ok_or(AdvanceError::RuntimeRejected)?;
-        let view_model_changed = flush_view_model(live);
         if live.machines.is_empty() {
             return live
                 .runtime
                 .try_advance_with_factory(factory, elapsed_seconds)
-                .map(|changed| view_model_changed | changed)
                 .map_err(|_| AdvanceError::RuntimeRejected);
         }
 
@@ -15613,7 +15498,7 @@ impl Frame<'_> {
                 factory,
             )
             .map_err(|_| AdvanceError::RuntimeRejected)?;
-        let changed = view_model_changed | machine_changed;
+        let changed = machine_changed;
         for machine in &machines.values {
             for index in 0..machine.reported_event_count() {
                 let Some(reported) = machine.reported_event(index) else {

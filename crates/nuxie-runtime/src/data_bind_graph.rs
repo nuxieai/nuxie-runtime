@@ -288,6 +288,9 @@ fn runtime_graph_value_from_cell_value(
         (RuntimeViewModelCellValue::Artboard(value), RuntimeDataBindGraphValue::Artboard(_)) => {
             RuntimeDataBindGraphValue::Artboard(u64::from(*value))
         }
+        (RuntimeViewModelCellValue::Trigger(value), RuntimeDataBindGraphValue::Trigger(_)) => {
+            RuntimeDataBindGraphValue::Trigger(*value)
+        }
         _ => return None,
     })
 }
@@ -316,6 +319,7 @@ fn runtime_cell_value_from_graph_value(
         RuntimeDataBindGraphValue::Artboard(value) => {
             RuntimeViewModelCellValue::Artboard(u32_payload(*value))
         }
+        RuntimeDataBindGraphValue::Trigger(value) => RuntimeViewModelCellValue::Trigger(*value),
         _ => return None,
     })
 }

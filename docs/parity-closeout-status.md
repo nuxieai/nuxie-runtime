@@ -14,19 +14,20 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): **restored 2026-07-21, then re-broken
-by concurrent main `c7d48ca0` the same day** (see Next queue item 1: ten
-trigger probe assertions + four scripted corpus entries, proven present on
-pristine origin/main). The 2026-07-21 closeout work itself is green: both
-runtime golden gates 317/317 exact / 647/647 segments (the decoded-image
-policy split re-admitted `jellyfish_test`), and the seven prior probe
-failures are repaired — five were `974aab66` regressions (eager bind-time
-component-list sizing), two were genuine long-standing divergences the
-stale probe had masked (opacity-zero willDraw filtering in the oracle
-stream, unresolved name-based number bind). NOTE: the `RIVE_RUNTIME_DIR`
-checkout governs probe/runner builds — it was found at `ba2b6434` and must
-be at pin `d788e8ec` for any floor run; unpinned checkouts have now
-poisoned two consecutive concurrent-main changes.
+Regression floor (must stay green): runtime lib 345/345, nuxie lib 132/132,
+C++ probe 708/708, both runtime golden gates 317/317 exact / 647/647 segments
+with zero failures. The workspace push gate has three stale Scene integration
+assertions awaiting the required user decision after e5(A):
+`authored_event_and_view_model_listeners_export_typed_sources_and_view_model_actions_execute`
+expects a chained event-listener ViewModel write on the event-creation frame,
+while `authored_listener_fire_event_survives_until_the_next_frame_report` and
+`typed_vertical_component_list_exports_imports_advances_and_draws_two_view_model_items`
+require `advance() == true` for listener-event-only delivery. Pinned C++ and
+the focused probe require the write on the next ordinary frame and return
+false for listener-only notification. Do not edit those expectations without
+approval.
+NOTE: the `RIVE_RUNTIME_DIR` checkout governs probe/runner builds — it must
+be at pin `d788e8ec`; unpinned checkouts poisoned two earlier floor runs.
 
 Upstream pins: runtime `d788e8ec` (cycle-3 cut `b73bc675`, 3 commits ahead,
 awaiting #B-1 approval). Upstream advanced after that completed inventory to
@@ -136,7 +137,7 @@ upstream-sync-map registry).
       Rust fires neither → Weather enum 3 vs 0);
       list_index_script_access = script-visible list index seam
       (getIndexString "-1"; digit glyph differs). Both are e5/f scope.
-    - [ ] e5 final retained-cell cutover.
+    - [x] e5 final retained-cell cutover.
       - [x] (A) Ordinary state-machine frames drain queued events before
         advancing data binds/layers, without the compensating zero-time
         layer advance (`state_machine_instance.cpp:2320-2335,2555-2584`).
@@ -149,12 +150,18 @@ upstream-sync-map registry).
         before-create/bind/init ordering (`artboard_component_list.cpp:759-784,
         1453-1477,1528-1543`; `artboard.cpp:2551-2573`) instead of collapsing
         same-graph rows through a graph-id snapshot.
-      - [ ] (C) Scene facade drops the dirty-rebind bit; triggers read
-        through cells.
+      - [x] (C) Scene facade drops its dirty bit, advance-time flush, and
+        pointer-time rebinds. Owned state-machine triggers retain and read
+        the resolved trigger cell; fire/acknowledgment mutate that cell, and
+        the suppressed C++ 1→0 acknowledgment does not notify ViewModel
+        listeners (`viewmodel_instance_trigger.cpp:10-27`;
+        `state_machine_instance.cpp:1374-1380,2546-2565`). Runtime lib rises
+        to 345/345; nuxie lib 132/132 and C++ probe 708/708 remain green.
 - [ ] (f) deletion gate follows e5.
   - [ ] (f) deletion gate: mutation clocks, candidate vectors, listener
-    rescans, alias mirrors, Scene-wide rebind bit all removed; floors at
-    completed values including the four currently-red scripted entries.
+    rescans, alias mirrors, and remaining copied-direction state all removed;
+    floors stay at their completed values, including scripted 317/317 with
+    zero failures.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -538,3 +545,10 @@ Decisions log.)
   indices 0/1/2 and pull their script mutations before first draw; the focused
   33,432-byte scripted C++ stream is exact, and the full scripted gate is now
   317/317 entries with 647/647 exact segments and zero failures.
+- 2026-07-21 — #RB-1 e5(C) completed the retained-cell cutover: Scene no
+  longer polls a dirty bit or rebinds contexts on writes/pointer dispatch;
+  owned triggers retain their source cells through fireability and C++-style
+  acknowledgment. Floors are rt lib 345, nuxie lib 132, probe 708, and both
+  golden corpora 317/317 entries with 647/647 exact segments. The workspace
+  push gate is held on the three stale Scene integration expectations recorded
+  at the top of this file.

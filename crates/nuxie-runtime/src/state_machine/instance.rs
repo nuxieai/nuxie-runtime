@@ -716,6 +716,16 @@ enum RuntimeViewModelListenerValue {
     Trigger(u64),
 }
 
+/// C++ `ListenerViewModel::reportToStateMachine` ignores the suppressed
+/// trigger-zero write performed by `ViewModelInstanceTrigger::advanced()`
+/// (`state_machine_instance.cpp:1374-1380`). Other changed values report.
+fn runtime_view_model_listener_should_dispatch(
+    previous: &RuntimeViewModelListenerValue,
+    current: &RuntimeViewModelListenerValue,
+) -> bool {
+    previous != current && !matches!(current, RuntimeViewModelListenerValue::Trigger(0))
+}
+
 fn runtime_view_model_listener_value(
     context: &RuntimeOwnedViewModelInstance,
     property_path: &[usize],
@@ -4966,7 +4976,9 @@ impl StateMachineInstance {
                 .observed
                 .as_ref()
                 .zip(current.as_ref())
-                .is_some_and(|(previous, current)| previous != current);
+                .is_some_and(|(previous, current)| {
+                    runtime_view_model_listener_should_dispatch(previous, current)
+                });
             listener.observed = current;
             if should_dispatch {
                 changed.push(listener.actions.clone());
@@ -5051,7 +5063,9 @@ impl StateMachineInstance {
                 .observed
                 .as_ref()
                 .zip(current.as_ref())
-                .is_some_and(|(previous, current)| previous != current);
+                .is_some_and(|(previous, current)| {
+                    runtime_view_model_listener_should_dispatch(previous, current)
+                });
             listener.observed = current;
             if should_dispatch {
                 changed.push(listener.actions.clone());
@@ -5464,10 +5478,10 @@ impl StateMachineInstance {
             return;
         }
         for trigger in &mut self.view_model_triggers {
-            // C++ `ViewModelInstanceTrigger::advanced()` zeroes the property
-            // value itself (`propertyValue(0)` under SuppressDelegation), so
-            // the post-advance counter always reads zero.
-            trigger.reset();
+            // C++ `ViewModelInstance::advanced()` walks the retained values;
+            // `ViewModelInstanceTrigger::advanced()` zeroes `propertyValue`
+            // under SuppressDelegation, then clears its changed flag.
+            trigger.advanced();
         }
         self.data_bind_graph.reset_bound_trigger_sources();
         if self
@@ -6136,21 +6150,24 @@ impl StateMachineInstance {
         let default_view_model_index = self.default_view_model_index;
         let mut active = self.default_view_model_triggers.clone();
         for trigger in &mut active {
-            let value = default_view_model_index.and_then(|view_model_index| {
+            let resolved = default_view_model_index.and_then(|view_model_index| {
                 let view_model_index = u32::try_from(view_model_index).ok()?;
                 let source_path = [view_model_index, trigger.view_model_property_id()];
                 candidates.iter().find_map(|candidate| {
-                    let property_path = candidate.property_path_for_source_path(&source_path)?;
-                    candidate
-                        .context
-                        .borrow()
-                        .trigger_value_by_property_path(&property_path)
+                    candidate.resolve_value_and_cell_for_source_path(
+                        &RuntimeDataBindGraphValue::Trigger(trigger.value()),
+                        &source_path,
+                    )
                 })
             });
-            if let Some(value) = value {
-                trigger.replace_value(value);
-            } else {
-                trigger.reset();
+            match resolved {
+                Some((RuntimeDataBindGraphValue::Trigger(_), Some(cell))) => {
+                    trigger.bind_cell(cell)
+                }
+                Some((RuntimeDataBindGraphValue::Trigger(value), None)) => {
+                    trigger.replace_value(value)
+                }
+                _ => trigger.reset(),
             }
         }
         self.view_model_triggers = active;
@@ -6162,21 +6179,24 @@ impl StateMachineInstance {
     ) {
         let default_view_model_index = self.default_view_model_index;
         for trigger in &mut self.view_model_triggers {
-            let value = default_view_model_index.and_then(|view_model_index| {
+            let resolved = default_view_model_index.and_then(|view_model_index| {
                 let view_model_index = u32::try_from(view_model_index).ok()?;
                 let source_path = [view_model_index, trigger.view_model_property_id()];
                 candidates.iter().find_map(|candidate| {
-                    let property_path = candidate.property_path_for_source_path(&source_path)?;
-                    candidate
-                        .context
-                        .borrow()
-                        .trigger_value_by_property_path(&property_path)
+                    candidate.resolve_value_and_cell_for_source_path(
+                        &RuntimeDataBindGraphValue::Trigger(trigger.value()),
+                        &source_path,
+                    )
                 })
             });
-            if let Some(value) = value {
-                trigger.set_value(value);
-            } else {
-                trigger.reset();
+            match resolved {
+                Some((RuntimeDataBindGraphValue::Trigger(_), Some(cell))) => {
+                    trigger.bind_cell(cell)
+                }
+                Some((RuntimeDataBindGraphValue::Trigger(value), None)) => {
+                    trigger.replace_value(value)
+                }
+                _ => trigger.reset(),
             }
         }
     }

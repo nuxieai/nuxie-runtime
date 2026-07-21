@@ -8,6 +8,7 @@ use crate::data_bind_graph::{
 use crate::focus::RuntimeFocusTree;
 use crate::properties::{artboard_index_for_graph, property_key_for_name};
 use crate::scripting::{RuntimeScriptInstanceHandle, ScriptError, ScriptListenerActionDefinition};
+use crate::view_model_cell::{RuntimeViewModelCell, RuntimeViewModelCellValue};
 use crate::{
     ArtboardInstance, RuntimeGeometryHit, RuntimeGeometryHitOccurrence,
     RuntimeGeometryHitPathSegment,
@@ -2530,6 +2531,7 @@ pub(crate) struct StateMachineViewModelTriggerInstance {
     value: u64,
     changed: bool,
     used_layers: Vec<usize>,
+    cell: Option<RuntimeViewModelCell>,
 }
 
 impl StateMachineViewModelTriggerInstance {
@@ -2540,6 +2542,7 @@ impl StateMachineViewModelTriggerInstance {
             value,
             changed: false,
             used_layers: Vec::new(),
+            cell: None,
         }
     }
 
@@ -2548,11 +2551,18 @@ impl StateMachineViewModelTriggerInstance {
     }
 
     pub(crate) fn increment(&mut self) {
+        if let Some(cell) = &self.cell {
+            cell.fire_trigger();
+            return;
+        }
         self.value = self.value.saturating_add(1);
         self.changed = true;
     }
 
     pub(crate) fn set_value(&mut self, value: u64) -> bool {
+        if let Some(cell) = &self.cell {
+            return cell.set_value(RuntimeViewModelCellValue::Trigger(value));
+        }
         if self.value == value {
             return false;
         }
@@ -2562,27 +2572,38 @@ impl StateMachineViewModelTriggerInstance {
     }
 
     pub(crate) fn replace_value(&mut self, value: u64) {
+        self.cell = None;
         self.value = value;
         self.changed = false;
         self.used_layers.clear();
     }
 
     pub(crate) fn reset(&mut self) {
+        self.cell = None;
         self.value = 0;
         self.changed = false;
         self.used_layers.clear();
     }
 
-    /// Acknowledge one consumed counter value without forgetting the retained
-    /// source baseline. A later refresh of an unrelated ViewModel property
-    /// must not make the same counter value fireable again.
+    /// C++ `ViewModelInstance::advanced()` acknowledges the retained source;
+    /// `ViewModelInstanceTrigger::advanced()` additionally zeroes the counter
+    /// under `SuppressDelegation`. Copied fallbacks preserve that contract.
     pub(crate) fn advanced(&mut self) {
-        self.changed = false;
+        if let Some(cell) = &self.cell {
+            cell.advanced();
+        } else {
+            self.value = 0;
+            self.changed = false;
+        }
         self.used_layers.clear();
     }
 
     pub(crate) fn is_fireable_for_layer(&self, layer_index: usize) -> bool {
-        self.changed && !self.used_layers.contains(&layer_index)
+        self.cell
+            .as_ref()
+            .map(RuntimeViewModelCell::has_changed)
+            .unwrap_or(self.changed)
+            && !self.used_layers.contains(&layer_index)
     }
 
     pub(crate) fn use_in_layer(&mut self, layer_index: usize) {
@@ -2592,7 +2613,30 @@ impl StateMachineViewModelTriggerInstance {
     }
 
     pub(crate) fn value(&self) -> u64 {
-        self.value
+        self.cell
+            .as_ref()
+            .and_then(|cell| match cell.value() {
+                RuntimeViewModelCellValue::Trigger(value) => Some(value),
+                _ => None,
+            })
+            .unwrap_or(self.value)
+    }
+
+    pub(crate) fn bind_cell(&mut self, cell: RuntimeViewModelCell) {
+        if self
+            .cell
+            .as_ref()
+            .is_some_and(|current| current.ptr_eq(&cell))
+        {
+            return;
+        }
+        debug_assert!(matches!(
+            cell.value(),
+            RuntimeViewModelCellValue::Trigger(_)
+        ));
+        self.cell = Some(cell);
+        self.changed = false;
+        self.used_layers.clear();
     }
 
     pub(crate) fn view_model_property_id(&self) -> u32 {

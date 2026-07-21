@@ -10571,6 +10571,39 @@ mod tests {
     }
 
     #[test]
+    fn retained_owned_trigger_is_live_and_acknowledged_through_its_source_cell() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9721, false);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has the default ViewModel"),
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert!(context.borrow_mut().set_trigger_by_property_index(2, 1));
+        assert_eq!(
+            state_machine.active_view_model_trigger_count(0),
+            Some(1),
+            "the machine must read the retained trigger source without a candidate rebind"
+        );
+        assert_eq!(
+            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
+            Some(true)
+        );
+
+        state_machine.reset_advanced_data_context();
+        assert_eq!(
+            context.borrow().trigger_value_by_property_path(&[2]),
+            Some(0)
+        );
+        assert_eq!(state_machine.active_view_model_trigger_count(0), Some(0));
+        assert_eq!(
+            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
+            Some(false),
+            "acknowledging the machine frame must acknowledge the retained source cell"
+        );
+    }
+
+    #[test]
     fn switching_from_retained_handle_to_composite_clears_stale_refresh_source() {
         let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9696, false);
         let stale = RuntimeOwnedViewModelHandle::new(

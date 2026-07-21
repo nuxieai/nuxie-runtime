@@ -725,9 +725,9 @@ impl RuntimeOwnedViewModelBindingCandidate {
     /// coverage (same candidate path walk, same value-kind matrix), PLUS the
     /// retained scalar cell backing the resolved value when the source is a
     /// migratable scalar kind. The cell is `None` for lists, list lengths,
-    /// view-model values, triggers (e5), strings and fonts (payload mirrors
-    /// beside the cell keep the slot setter as the only writer) — those
-    /// sources stay on the copied-value machinery.
+    /// view-model values, strings and fonts (payload mirrors beside the cell
+    /// keep the slot setter as the only writer) — those sources stay on the
+    /// copied-value machinery.
     pub(crate) fn resolve_value_and_cell_for_source_path(
         &self,
         value: &RuntimeDataBindGraphValue,
@@ -736,33 +736,38 @@ impl RuntimeOwnedViewModelBindingCandidate {
         let property_path = self.property_path_for_source_path(source_path)?;
         let context = self.context.borrow();
         let resolved = Self::kind_matched_binding_value(&context, &property_path, value)?;
-        let cell = context.cell_by_property_path(&property_path).filter(|cell| {
-            matches!(
-                (&cell.value(), &resolved),
-                (
-                    RuntimeViewModelCellValue::Number(_),
-                    RuntimeDataBindGraphValue::Number(_)
-                ) | (
-                    RuntimeViewModelCellValue::Boolean(_),
-                    RuntimeDataBindGraphValue::Boolean(_)
-                ) | (
-                    RuntimeViewModelCellValue::Color(_),
-                    RuntimeDataBindGraphValue::Color(_)
-                ) | (
-                    RuntimeViewModelCellValue::Enum(_),
-                    RuntimeDataBindGraphValue::Enum(_)
-                ) | (
-                    RuntimeViewModelCellValue::SymbolListIndex(_),
-                    RuntimeDataBindGraphValue::SymbolListIndex(_)
-                ) | (
-                    RuntimeViewModelCellValue::AssetImage(_),
-                    RuntimeDataBindGraphValue::Asset(_)
-                ) | (
-                    RuntimeViewModelCellValue::Artboard(_),
-                    RuntimeDataBindGraphValue::Artboard(_)
+        let cell = context
+            .cell_by_property_path(&property_path)
+            .filter(|cell| {
+                matches!(
+                    (&cell.value(), &resolved),
+                    (
+                        RuntimeViewModelCellValue::Number(_),
+                        RuntimeDataBindGraphValue::Number(_)
+                    ) | (
+                        RuntimeViewModelCellValue::Boolean(_),
+                        RuntimeDataBindGraphValue::Boolean(_)
+                    ) | (
+                        RuntimeViewModelCellValue::Color(_),
+                        RuntimeDataBindGraphValue::Color(_)
+                    ) | (
+                        RuntimeViewModelCellValue::Enum(_),
+                        RuntimeDataBindGraphValue::Enum(_)
+                    ) | (
+                        RuntimeViewModelCellValue::SymbolListIndex(_),
+                        RuntimeDataBindGraphValue::SymbolListIndex(_)
+                    ) | (
+                        RuntimeViewModelCellValue::AssetImage(_),
+                        RuntimeDataBindGraphValue::Asset(_)
+                    ) | (
+                        RuntimeViewModelCellValue::Artboard(_),
+                        RuntimeDataBindGraphValue::Artboard(_)
+                    ) | (
+                        RuntimeViewModelCellValue::Trigger(_),
+                        RuntimeDataBindGraphValue::Trigger(_)
+                    )
                 )
-            )
-        });
+            });
         Some((resolved, cell))
     }
 

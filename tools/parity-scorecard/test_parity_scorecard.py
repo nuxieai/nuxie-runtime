@@ -20,6 +20,7 @@ GATE_COMMANDS = {
     "renderer-golden": ["make", "renderer-golden"],
     "cargo-test-workspace": ["cargo", "test", "--workspace"],
     "capi-smoke": ["make", "capi-smoke"],
+    "size-report": ["make", "size-report"],
 }
 
 
@@ -35,6 +36,10 @@ def renderer_summary(entries=RENDERER_ENTRIES):
         f"renderer-corpus exact={entries} byte-exact={entries} "
         f"diverges=0 gated=0 total={entries}\n"
     )
+
+
+def size_summary(off=7534056, on=8335288, budget=8388608):
+    return f"size-report summary: off-bytes={off} on-bytes={on} budget-bytes={budget}\n"
 
 
 class ParityScorecardCliTests(unittest.TestCase):
@@ -318,6 +323,50 @@ class ParityScorecardCliTests(unittest.TestCase):
         )
         self.assertIn("| 5 Performance & size | PARTIAL |", completed.stdout)
 
+    def test_check_reports_recorded_size_evidence_within_budget_as_green(self):
+        repo, evidence = self.create_green_repo()
+        self.write_evidence(
+            evidence / "size-report.json", "size-report", size_summary()
+        )
+
+        completed = self.run_check(repo)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn(
+            "size OFF 7.19 MiB / ON 7.95 MiB vs budget 8.00 MiB (both variants block)",
+            completed.stdout,
+        )
+
+    def test_check_rejects_size_evidence_over_budget(self):
+        repo, evidence = self.create_green_repo()
+        self.write_evidence(
+            evidence / "size-report.json",
+            "size-report",
+            size_summary(on=8388609),
+            exit_code=1,
+        )
+
+        completed = self.run_check(repo)
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("size-report gate exited 1", completed.stderr)
+        self.assertIn("size-report exceeds the #B-3 budget", completed.stderr)
+
+    def test_check_rejects_size_evidence_whose_budget_drifted(self):
+        repo, evidence = self.create_green_repo()
+        self.write_evidence(
+            evidence / "size-report.json",
+            "size-report",
+            size_summary(on=9000000, budget=9437184),
+        )
+
+        completed = self.run_check(repo)
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn(
+            "size-report budget drifted from the #B-3 decision", completed.stderr
+        )
+
     def test_check_rejects_an_sdk_denominator_that_omits_register_rows(self):
         repo, _ = self.create_green_repo()
         definition = (repo / "parity-scorecard.toml").read_text()
@@ -463,6 +512,8 @@ class ParityScorecardCliTests(unittest.TestCase):
                 [performance]
                 blocking_min_entries = 20
                 max_ratio = 1.0
+                [size]
+                budget_bytes = 8388608
                 """
             ).lstrip()
         )

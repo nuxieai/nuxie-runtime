@@ -29,3 +29,9 @@ required_adapters = 2
 [performance]
 blocking_min_entries = 20
 max_ratio = 1.0
+
+# #B-3 decision 2026-07-21: the release-size renderer-on link closure must
+# stay within 8 MiB for BOTH scripting variants. A breach reopens the budget
+# USER-GATE with fresh measurements; the constant is never silently raised.
+[size]
+budget_bytes = 8388608

@@ -135,6 +135,15 @@ jobs:
             --output target/parity-scorecard/evidence/capi-smoke.json \
             -- make capi-smoke
 
+      - name: Record SDK size budget (#B-3, 8 MiB both variants)
+        if: always()
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate size-report \
+            --output target/parity-scorecard/evidence/size-report.json \
+            -- make size-report
+
       - name: Upload runtime scorecard evidence
         if: always()
         uses: actions/upload-artifact@v4

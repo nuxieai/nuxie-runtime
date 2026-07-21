@@ -6,8 +6,12 @@ the portable `nux-capi` ABI with the pure-Rust `nuxie-renderer` and vendored
 `wgpu` backend retained. It is measured with scripting both disabled and
 enabled.
 
-No new size budget is set in this document. Choosing one is the #B-3
-**USER-GATE**.
+**Budget (#B-3 decision, 2026-07-21): 8 MiB = 8,388,608 B, blocking for BOTH
+scripting variants.** `make size-report` fails when either link closure
+exceeds it, and `make parity-scorecard` validates the recorded evidence
+against `size.budget_bytes` in `parity-scorecard.toml`. Scripting ON currently
+has ~52 KiB of headroom; a breach reopens the budget USER-GATE with fresh
+measurements — the constant is never silently raised.
 
 ## Current measurement
 

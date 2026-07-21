@@ -27,7 +27,10 @@ GATE_COMMANDS = {
     "renderer-golden": ("make", "renderer-golden"),
     "cargo-test-workspace": ("cargo", "test", "--workspace"),
     "capi-smoke": ("make", "capi-smoke"),
+    "size-report": ("make", "size-report"),
 }
+
+MIB = 1024 * 1024
 
 GOLDEN_SUMMARY = re.compile(
     r"^golden-compare summary: entries=(?P<entries>\d+) "
@@ -39,6 +42,11 @@ GOLDEN_SUMMARY = re.compile(
 RENDERER_SUMMARY = re.compile(
     r"^renderer-corpus exact=(?P<exact>\d+) byte-exact=(?P<byte_exact>\d+) "
     r"diverges=(?P<diverges>\d+) gated=(?P<gated>\d+) total=(?P<total>\d+)$",
+    re.MULTILINE,
+)
+SIZE_SUMMARY = re.compile(
+    r"^size-report summary: off-bytes=(?P<off>\d+) "
+    r"on-bytes=(?P<on>\d+) budget-bytes=(?P<budget>\d+)$",
     re.MULTILINE,
 )
 
@@ -227,6 +235,7 @@ def check_scorecard(options: argparse.Namespace) -> int:
         scripted,
         renderer,
         repo_root,
+        evidence_dir,
         source_sha,
         errors,
     )
@@ -532,6 +541,7 @@ def build_tiers(
     scripted: bool,
     renderer: bool,
     repo_root: Path,
+    evidence_dir: Path,
     source_sha: str,
     errors: list[str],
 ) -> list[dict[str, Any]]:
@@ -675,7 +685,12 @@ def build_tiers(
                     "r4-timing-gate per-commit scorecard evidence not built "
                     "(existing Phase R gate)",
                 ),
-                ratchet("size-mib", "NOT_BUILT", "size MiB not built (#B-3)"),
+                size_ratchet(
+                    evidence_dir,
+                    source_sha,
+                    size_requirements(definition, errors),
+                    errors,
+                ),
             ],
         ),
     ]
@@ -763,6 +778,57 @@ def provisional_perf(
         f"runtime ratio {ratio:.3f} over {entries}/{minimum} files (non-blocking; #OR-9)",
         value=ratio,
         target=maximum,
+    )
+
+
+def size_requirements(definition: dict[str, Any], errors: list[str]) -> int:
+    size = definition.get("size", {})
+    budget = size.get("budget_bytes")
+    if not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0:
+        errors.append("size.budget_bytes must be a positive integer")
+        return 8 * MIB
+    return budget
+
+
+def size_ratchet(
+    evidence_dir: Path,
+    source_sha: str,
+    budget_bytes: int,
+    errors: list[str],
+) -> dict[str, Any]:
+    path = evidence_dir / "size-report.json"
+    if not path.is_file():
+        return ratchet(
+            "size-mib",
+            "NOT_BUILT",
+            "size evidence not built (#B-3 gate: make size-report)",
+        )
+    evidence = read_evidence(path, "size-report", errors)
+    if evidence is None:
+        return ratchet("size-mib", "RED", "size evidence malformed")
+    valid = validate_evidence_identity(evidence, source_sha, errors)
+    summary = one_summary(SIZE_SUMMARY, evidence, errors)
+    if summary is None:
+        return ratchet("size-mib", "RED", "size summary missing")
+    if summary["budget"] != budget_bytes:
+        errors.append(
+            "size-report budget drifted from the #B-3 decision: "
+            f"expected {budget_bytes}, got {summary['budget']}"
+        )
+        valid = False
+    if summary["off"] > budget_bytes or summary["on"] > budget_bytes:
+        errors.append(
+            f"size-report exceeds the #B-3 budget: off={summary['off']} "
+            f"on={summary['on']} budget={budget_bytes}"
+        )
+        valid = False
+    return ratchet(
+        "size-mib",
+        "GREEN" if valid else "RED",
+        f"size OFF {summary['off'] / MIB:.2f} MiB / ON {summary['on'] / MIB:.2f} MiB "
+        f"vs budget {budget_bytes / MIB:.2f} MiB (both variants block)",
+        value=round(summary["on"] / MIB, 2),
+        target=round(budget_bytes / MIB, 2),
     )
 
 

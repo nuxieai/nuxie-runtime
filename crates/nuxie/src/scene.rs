@@ -27537,6 +27537,7 @@ mod tests {
             artboard,
             MaterializedArtboard {
                 file,
+                image_intrinsic_dimensions_by_global: BTreeMap::new(),
                 objects,
                 animations: BTreeMap::new(),
                 machines: BTreeMap::new(),
@@ -27682,6 +27683,7 @@ mod tests {
             artboard,
             MaterializedArtboard {
                 file,
+                image_intrinsic_dimensions_by_global: BTreeMap::new(),
                 objects,
                 animations: BTreeMap::new(),
                 machines: BTreeMap::new(),

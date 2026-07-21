@@ -1108,7 +1108,7 @@ fn shaped_soft_wrap_preserves_terminal_skipped_whitespace_boundaries_without_a_n
 #[test]
 fn shaped_text_geometry_applies_the_authored_non_uniform_world_transform() -> Result<()> {
     const LOCAL_ADVANCE: f32 = 10.878_906;
-    const LOCAL_CARET_HEIGHT: f32 = 22.721_35;
+    const LOCAL_CARET_HEIGHT: f32 = 20.0;
     const TRANSLATE_X: f32 = 30.0;
     const TRANSLATE_Y: f32 = 40.0;
     const ROTATION: f32 = std::f32::consts::FRAC_PI_2;

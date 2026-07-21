@@ -93,7 +93,17 @@ upstream-sync-map registry).
       on old storage (two-part payload: file-asset index + retained live
       Font bytes with Arc::ptr_eq change semantics) — needs a font-cell
       payload decision in e2.
-    - [ ] e2 children/lists share cells; alias mirrors become no-ops.
+    - [x] e2 landed via lane, orchestrator-verified (rt lib 341, nuxie
+      132, probe 707/707, golden 317/317, scripted main 317/317 + only
+      the four known reds): AssetFont onto cells via a change-identity
+      stamp beside the retained payload; nested children shared by cell
+      identity (C++ rcp semantics) with Clone porting copyViewModelInstance's
+      instancesMap dedupe so sharing topology survives inside deep copies;
+      alias-mirror bodies reduced to forwarding + debug_assert of shared
+      identity (signatures/call sites intact for slice f). Boundaries kept
+      as-is: overlay/from_instance_mutable/detach_list_storage stay
+      boundary deep-copies; top-level fonts keep their pre-existing
+      no-mirror asymmetry (revisit at e3/f).
     - [ ] e3 graph sources hold retained binds (`set_source(cell)` +
       `reconcile`) replacing copied values; SM/artboard bind seams build
       a parent-linked context instead of candidates.

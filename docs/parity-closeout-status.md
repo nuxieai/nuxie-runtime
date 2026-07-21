@@ -108,3 +108,6 @@ upstream-sync-map registry).
 - 2026-07-20 — #B-1 pin/candidate probing exposed stale golden-runner objects
   across `RIVE_RUNTIME_DIR` changes. The runner now rebuilds both translation
   units for every invocation, preventing upstream-header/library ABI mixing.
+- 2026-07-20 — Adapter-selected static renderer references now participate in
+  the same physical-alias and stream/frame/mode identity checks as primary
+  references; adapter-bound stub oracles must be members of the approved set.

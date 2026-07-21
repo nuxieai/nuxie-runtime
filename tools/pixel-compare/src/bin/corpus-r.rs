@@ -1107,36 +1107,61 @@ fn validate_entry_ids(entries: &[Entry]) -> Result<(), String> {
 fn validate_reference_identity(base: &Path, entries: &[Entry]) -> Result<(), String> {
     let mut owners = HashMap::<PathBuf, (&str, &Path)>::new();
     for entry in entries {
-        let physical = if entry.reference.is_absolute() {
-            entry.reference.clone()
-        } else {
-            base.join(&entry.reference)
-        };
-        let physical = physical.canonicalize().unwrap_or(physical);
-        if let Some((previous_id, previous_reference)) =
-            owners.insert(physical.clone(), (&entry.id, &entry.reference))
+        if !entry.adapter_reference.is_empty()
+            && !entry
+                .adapter_reference
+                .iter()
+                .any(|adapter| adapter.reference == entry.reference)
         {
-            if previous_reference != entry.reference {
-                return Err(format!(
-                    "manifest entries {previous_id} ({}) and {} ({}) resolve to the same physical reference {}; reference paths must remain unique",
-                    previous_reference.display(),
-                    entry.id,
-                    entry.reference.display(),
-                    physical.display(),
-                ));
+            return Err(format!(
+                "{} top-level reference must match an adapter reference: {}",
+                entry.id,
+                entry.reference.display()
+            ));
+        }
+        for reference in entry_references(entry) {
+            let physical = if reference.is_absolute() {
+                reference.to_path_buf()
+            } else {
+                base.join(reference)
+            };
+            let physical = physical.canonicalize().unwrap_or(physical);
+            if let Some((previous_id, previous_reference)) =
+                owners.insert(physical.clone(), (&entry.id, reference))
+            {
+                if previous_reference != reference {
+                    return Err(format!(
+                        "manifest entries {previous_id} ({}) and {} ({}) resolve to the same physical reference {}; reference paths must remain unique",
+                        previous_reference.display(),
+                        entry.id,
+                        reference.display(),
+                        physical.display(),
+                    ));
+                }
             }
         }
     }
 
     validate_reference_identities(
         base,
-        entries.iter().map(|entry| ReferenceIdentity {
-            id: &entry.id,
-            stream: &entry.stream,
-            frame: entry.frame,
-            mode: &entry.mode,
-            reference: &entry.reference,
+        entries.iter().flat_map(|entry| {
+            entry_references(entry).map(|reference| ReferenceIdentity {
+                id: &entry.id,
+                stream: &entry.stream,
+                frame: entry.frame,
+                mode: &entry.mode,
+                reference,
+            })
         }),
+    )
+}
+
+fn entry_references(entry: &Entry) -> impl Iterator<Item = &Path> {
+    std::iter::once(entry.reference.as_path()).chain(
+        entry
+            .adapter_reference
+            .iter()
+            .map(|adapter| adapter.reference.as_path()),
     )
 }
 
@@ -1503,6 +1528,14 @@ mod tests {
         }
     }
 
+    fn adapter_reference(adapter: &str, reference: &str) -> AdapterReference {
+        AdapterReference {
+            adapter: adapter.to_owned(),
+            reference: PathBuf::from(reference),
+            provenance: None,
+        }
+    }
+
     #[test]
     fn rejects_reference_reuse_across_modes() {
         let entries = [
@@ -1520,6 +1553,81 @@ mod tests {
             entry("msaa", "msaa", "msaa.png"),
         ];
         validate_reference_identity(Path::new("/repo"), &entries).unwrap();
+    }
+
+    #[test]
+    fn rejects_adapter_reference_reuse_across_modes() {
+        let mut atomic = entry("atomic", "clockwise-atomic", "atomic.png");
+        atomic
+            .adapter_reference
+            .push(adapter_reference("Adapter A", "atomic.png"));
+        atomic
+            .adapter_reference
+            .push(adapter_reference("Adapter B", "shared.png"));
+        let mut msaa = entry("msaa", "msaa", "msaa.png");
+        msaa.adapter_reference
+            .push(adapter_reference("Adapter C", "msaa.png"));
+        msaa.adapter_reference
+            .push(adapter_reference("Adapter D", "shared.png"));
+
+        let error = validate_reference_identity(Path::new("/repo"), &[atomic, msaa]).unwrap_err();
+        assert!(error.contains("keyed by stream, frame, and mode"));
+    }
+
+    #[test]
+    fn rejects_adapter_reference_aliases_across_modes() {
+        let mut atomic = entry("atomic", "clockwise-atomic", "atomic.png");
+        atomic
+            .adapter_reference
+            .push(adapter_reference("Adapter A", "atomic.png"));
+        atomic
+            .adapter_reference
+            .push(adapter_reference("Adapter B", "alias/shared.png"));
+        let mut msaa = entry("msaa", "msaa", "msaa.png");
+        msaa.adapter_reference
+            .push(adapter_reference("Adapter C", "msaa.png"));
+        msaa.adapter_reference
+            .push(adapter_reference("Adapter D", "alias/sub/../shared.png"));
+
+        validate_reference_identity(Path::new("/repo"), &[atomic, msaa]).unwrap_err();
+    }
+
+    #[test]
+    fn rejects_adapter_alias_of_top_level_reference() {
+        let mut adapter_bound = entry("adapter-bound", "clockwise-atomic", "shared.png");
+        adapter_bound
+            .adapter_reference
+            .push(adapter_reference("Adapter A", "shared.png"));
+        adapter_bound
+            .adapter_reference
+            .push(adapter_reference("Adapter B", "/repo/shared.png"));
+
+        let error = validate_reference_identity(Path::new("/repo"), &[adapter_bound]).unwrap_err();
+        assert!(error.contains("resolve to the same physical reference"));
+    }
+
+    #[test]
+    fn rejects_orphan_top_level_reference_for_adapter_bound_entry() {
+        let mut adapter_bound = entry("adapter-bound", "clockwise-atomic", "orphan.png");
+        adapter_bound
+            .adapter_reference
+            .push(adapter_reference("Adapter A", "adapter-a.png"));
+
+        let error = validate_reference_identity(Path::new("/repo"), &[adapter_bound]).unwrap_err();
+        assert!(error.contains("top-level reference must match an adapter reference"));
+    }
+
+    #[test]
+    fn accepts_top_level_reference_from_adapter_set() {
+        let mut adapter_bound = entry("adapter-bound", "clockwise-atomic", "adapter-a.png");
+        adapter_bound
+            .adapter_reference
+            .push(adapter_reference("Adapter A", "adapter-a.png"));
+        adapter_bound
+            .adapter_reference
+            .push(adapter_reference("Adapter B", "adapter-b.png"));
+
+        validate_reference_identity(Path::new("/repo"), &[adapter_bound]).unwrap();
     }
 
     #[test]

@@ -14,10 +14,14 @@ renderer_entries = 1468
 rows = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"]
 closed = []
 
-# One adapter has passed the Phase R same-adapter C++ Dawn/Rust wgpu corpus.
-# #HD-2 must add a distinct adapter/OS before this ratchet becomes green.
+# M5 Max and Apple Paravirtual device have each passed the same-adapter C++
+# Dawn/Rust wgpu corpus. #HD-2's distinct-adapter ratchet is green; its
+# purpose-built clockwise-atomic hypothesis oracle remains open.
 [platform]
-verified_adapters = ["Apple M5 Max / Dawn WebGPU on Metal"]
+verified_adapters = [
+  "Apple M5 Max / Dawn WebGPU on Metal",
+  "Apple Paravirtual device / Dawn WebGPU on Metal",
+]
 required_adapters = 2
 
 # #OR-9 owns changing the current six-file, non-blocking measurement into

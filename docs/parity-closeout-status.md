@@ -11,7 +11,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 1 Frame parity | PARTIAL | exact-segments 647/647; scripted 647/647; e2e-exact: gate not built | floor green; #OR-6 missing |
 | 2 Interaction parity | RED | side-channel: gate not built; fuzz-clean-nights: 0 | #OR-1/2/3/7 |
 | 3 SDK parity | RED | A-rows closed 0/8 | register A-table |
-| 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 1/2 | static floor now fails closed across the known M5 Max / Paravirtual clippedcubic2 oracle split; full adapter matrix remains #HD-2 |
+| 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2 | M5 Max and Apple Paravirtual static floors are exact and fail closed; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.19 MiB OFF / 7.95 MiB ON, budget pending | #OR-9, #B-3 USER-GATE |
 
 Regression floor (must stay green): `make golden-compare` 317/647 ·
@@ -52,7 +52,8 @@ upstream-sync-map registry).
 - [ ] #FT-FIXSWEEP typeKey fixtures (F10/C1/F9)
 - [ ] #FT diagnostic spot-check: unported Lua binding → named diagnostic (from #LT-2)
 - [ ] #HD-1 threading-model decision (USER-GATE)
-- [ ] #HD-2 renderer oracle hardening (V7)
+- [ ] #HD-2 renderer oracle hardening (V7; adapter matrix 2/2 complete,
+  clockwise-atomic hypothesis oracle pending)
 - [ ] #HD-3 WebGL2 decision (USER-GATE)
 - [ ] #HD-4 TODO(golden) pair
 - [ ] #HD-5 publish the parity claim doc
@@ -122,3 +123,9 @@ upstream-sync-map registry).
 - 2026-07-20 — Adapter-selected static renderer references now participate in
   the same physical-alias and stream/frame/mode identity checks as primary
   references; adapter-bound stub oracles must be members of the approved set.
+- 2026-07-20 — #HD-2's adapter ratchet advanced from 1/2 to 2/2 without a
+  status or tolerance change. Eighty-two clockwise-atomic rows now select
+  strict C++ Dawn references for Apple M5 Max and Apple Paravirtual device;
+  the 28 legacy native-Metal rows were recaptured on M5 at renderer pin
+  `7c778d13` / Dawn `211333b2`. Both static floors report 1,468/1,468 exact;
+  the first main CI rerun is pending.

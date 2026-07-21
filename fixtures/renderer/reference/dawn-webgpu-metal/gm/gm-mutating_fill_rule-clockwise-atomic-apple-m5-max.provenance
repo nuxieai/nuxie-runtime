@@ -1,0 +1,16 @@
+provenance_schema=1
+backend=metal
+renderer_implementation=cpp-dawn-webgpu
+capture_tool=renderer-replay-ffi-dawn
+adapter_device=Apple M5 Max
+case_id=gm-mutating_fill_rule-clockwise-atomic
+stream_sha256=cc77ca12752f64aff99dd69c15c10c91abb072c821c06d50b5739e95d9dcbe78
+runtime_revision=7c778d13c5d903b3b74eec1dd6bb68a811dea5f2
+dawn_revision=211333b2e3e429c3508f25c81c547f602adf448c
+replay_sha256=37121d13ffb721f212c2f8bc88dc73ac152da3ef4f260c7857cb5999671c9952
+png_sha256=7a3888139b8a7984f21a0f58f2cb4b6a894084aa796617c9c0ec96ff07c68e62
+frame_width=600
+frame_height=300
+frame=0
+mode=clockwise-atomic
+sample_count=1

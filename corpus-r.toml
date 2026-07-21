@@ -539,13 +539,22 @@ max_different_pixels = 32
 id = "gm-convexpaths-clockwise-atomic"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/convexpaths.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/convexpaths-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-convexpaths-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 64
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-convexpaths-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-convexpaths-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-convexpaths-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-convexpaths-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "gm-convexpaths-msaa"
@@ -666,6 +675,15 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-dstreadshuffle-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-dstreadshuffle-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-dstreadshuffle-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-dstreadshuffle-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "gm-dstreadshuffle-msaa"
@@ -707,13 +725,22 @@ max_different_pixels = 32
 id = "gm-emptyfeather-clockwise-atomic"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/emptyfeather.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/emptyfeather-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptyfeather-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 144
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptyfeather-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptyfeather-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptyfeather-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptyfeather-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "gm-emptyfeather-msaa"
@@ -755,13 +782,22 @@ max_different_pixels = 32
 id = "gm-emptystrokefeather-clockwise-atomic"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/emptystrokefeather.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/emptystrokefeather-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptystrokefeather-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 128
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptystrokefeather-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptystrokefeather-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptystrokefeather-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-emptystrokefeather-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "gm-emptystrokefeather-msaa"
@@ -1643,13 +1679,22 @@ max_different_pixels = 32
 id = "gm-mutating_fill_rule-clockwise-atomic"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/mutating_fill_rule.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/mutating_fill_rule-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-mutating_fill_rule-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 64
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-mutating_fill_rule-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-mutating_fill_rule-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-mutating_fill_rule-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-mutating_fill_rule-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "gm-mutating_fill_rule-msaa"
@@ -1715,13 +1760,22 @@ max_different_pixels = 32
 id = "gm-oval-clockwise-atomic"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/oval.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/oval-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-oval-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 128
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-oval-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-oval-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-oval-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-oval-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "gm-oval-msaa"
@@ -2099,13 +2153,22 @@ max_different_pixels = 32
 id = "gm-rawtext-clockwise-atomic"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/rawtext.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/rawtext-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-rawtext-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 288
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-rawtext-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-rawtext-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-rawtext-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-rawtext-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "gm-rawtext-msaa"
@@ -2267,13 +2330,22 @@ max_different_pixels = 32
 id = "gm-strokefill-clockwise-atomic"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/strokefill.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/strokefill-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokefill-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 128
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokefill-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokefill-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokefill-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-strokefill-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "gm-strokefill-msaa"
@@ -2603,13 +2675,22 @@ max_different_pixels = 32
 id = "gm-zeroPath-clockwise-atomic"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/zeroPath.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/zeroPath-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-zeroPath-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-zeroPath-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-zeroPath-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-zeroPath-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-zeroPath-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "gm-zeroPath-msaa"
@@ -2754,6 +2835,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-align_target-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-align_target-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-align_target-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-align_target-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-align_target-frame-0-msaa"
@@ -3019,6 +3110,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-audio_script-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-audio_script-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-audio_script-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-audio_script-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-audio_script-frame-0-msaa"
 kind = "riv-stream"
@@ -3035,13 +3136,23 @@ max_different_pixels = 32
 id = "riv-background_measure-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/background_measure.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/background_measure-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-background_measure-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-background_measure-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-background_measure-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-background_measure-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-background_measure-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-background_measure-frame-0-msaa"
@@ -3355,6 +3466,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-bindable_artboard_nesty-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-bindable_artboard_nesty-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-bindable_artboard_nesty-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-bindable_artboard_nesty-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-bindable_artboard_nesty-frame-0-msaa"
 kind = "riv-stream"
@@ -3522,6 +3643,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-car_widgets_v01-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-car_widgets_v01-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-car_widgets_v01-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-car_widgets_v01-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-car_widgets_v01-frame-0-msaa"
@@ -4123,6 +4254,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-coin-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-coin-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-coin-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-coin-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-coin-frame-0-msaa"
 kind = "riv-stream"
@@ -4170,6 +4311,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-collapse_data_binds-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-collapse_data_binds-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-collapse_data_binds-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-collapse_data_binds-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-collapse_data_binds-frame-0-msaa"
@@ -4843,6 +4994,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-component_stateful-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-component_stateful-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-component_stateful-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-component_stateful-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-component_stateful-frame-0-msaa"
 kind = "riv-stream"
@@ -4938,6 +5099,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-computed_values_test-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-computed_values_test-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-computed_values_test-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-computed_values_test-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-computed_values_test-frame-0-msaa"
@@ -5299,6 +5470,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_bind_test_cmdq-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_bind_test_cmdq-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_bind_test_cmdq-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_bind_test_cmdq-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-data_bind_test_cmdq-frame-0-msaa"
 kind = "riv-stream"
@@ -5323,6 +5504,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_artboards_source_test-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_artboards_source_test-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_artboards_source_test-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_artboards_source_test-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-data_binding_artboards_source_test-frame-0-msaa"
 kind = "riv-stream"
@@ -5346,6 +5537,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_artboards_test-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_artboards_test-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_artboards_test-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_artboards_test-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-data_binding_artboards_test-frame-0-msaa"
@@ -5394,6 +5595,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_test-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_test-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_test-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_binding_test-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-data_binding_test-frame-0-msaa"
@@ -5611,6 +5822,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_converter_to_number-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_converter_to_number-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_converter_to_number-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_converter_to_number-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-data_converter_to_number-frame-0-msaa"
 kind = "riv-stream"
@@ -5634,6 +5855,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_viz_demo-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_viz_demo-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_viz_demo-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-data_viz_demo-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-data_viz_demo-frame-0-msaa"
@@ -5723,13 +5954,23 @@ max_different_pixels = 32
 id = "riv-databind_solo_to_enum-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/databind_solo_to_enum.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/databind_solo_to_enum-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_solo_to_enum-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_solo_to_enum-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_solo_to_enum-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_solo_to_enum-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_solo_to_enum-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-databind_solo_to_enum-frame-0-msaa"
@@ -5755,6 +5996,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_viewmodel-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_viewmodel-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_viewmodel-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_viewmodel-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-databind_viewmodel-frame-0-msaa"
 kind = "riv-stream"
@@ -5779,6 +6030,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_viewmodel-frame-1-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_viewmodel-frame-1-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_viewmodel-frame-1-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-databind_viewmodel-frame-1-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-databind_viewmodel-frame-1-msaa"
 kind = "riv-stream"
@@ -5795,13 +6056,23 @@ max_different_pixels = 32
 id = "riv-db_health_tracker-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/db_health_tracker.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/db_health_tracker-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-db_health_tracker-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 1152
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-db_health_tracker-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-db_health_tracker-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-db_health_tracker-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-db_health_tracker-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-db_health_tracker-frame-0-msaa"
@@ -6043,6 +6314,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-double_line-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-double_line-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-double_line-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-double_line-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-double_line-frame-0-msaa"
 kind = "riv-stream"
@@ -6107,13 +6388,23 @@ max_different_pixels = 32
 id = "riv-draw_rule_cycle-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/draw_rule_cycle.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/draw_rule_cycle-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-draw_rule_cycle-frame-0-msaa"
@@ -6131,13 +6422,23 @@ max_different_pixels = 32
 id = "riv-draw_rule_cycle-frame-1-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/draw_rule_cycle.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/draw_rule_cycle-frame-1-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-1-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 1
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-1-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-1-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-1-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-1-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-draw_rule_cycle-frame-1-msaa"
@@ -6155,13 +6456,23 @@ max_different_pixels = 32
 id = "riv-draw_rule_cycle-frame-2-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/draw_rule_cycle.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/draw_rule_cycle-frame-2-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-2-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 2
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-2-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-2-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-2-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-2-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-draw_rule_cycle-frame-2-msaa"
@@ -6179,13 +6490,23 @@ max_different_pixels = 32
 id = "riv-draw_rule_cycle-frame-3-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/draw_rule_cycle.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/draw_rule_cycle-frame-3-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-3-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 3
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-3-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-3-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-3-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-3-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-draw_rule_cycle-frame-3-msaa"
@@ -6203,13 +6524,23 @@ max_different_pixels = 32
 id = "riv-draw_rule_cycle-frame-4-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/draw_rule_cycle.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/draw_rule_cycle-frame-4-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-4-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 4
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-4-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-4-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-4-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-draw_rule_cycle-frame-4-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-draw_rule_cycle-frame-4-msaa"
@@ -6235,6 +6566,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-echo_show_demo-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-echo_show_demo-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-echo_show_demo-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-echo_show_demo-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-echo_show_demo-frame-0-msaa"
 kind = "riv-stream"
@@ -6258,6 +6599,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-ellipsis-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-ellipsis-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-ellipsis-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-ellipsis-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-ellipsis-frame-0-msaa"
@@ -7027,6 +7378,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-fit_font_size_test-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-fit_font_size_test-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-fit_font_size_test-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-fit_font_size_test-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-fit_font_size_test-frame-0-msaa"
 kind = "riv-stream"
@@ -7195,6 +7556,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-focus_traversal-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-focus_traversal-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-focus_traversal-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-focus_traversal-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-focus_traversal-frame-0-msaa"
 kind = "riv-stream"
@@ -7291,6 +7662,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-follow_path_path-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-follow_path_path-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-follow_path_path-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-follow_path_path-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-follow_path_path-frame-0-msaa"
 kind = "riv-stream"
@@ -7331,13 +7712,23 @@ max_different_pixels = 32
 id = "riv-follow_path_shapes-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/follow_path_shapes.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/follow_path_shapes-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-follow_path_shapes-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-follow_path_shapes-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-follow_path_shapes-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-follow_path_shapes-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-follow_path_shapes-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-follow_path_shapes-frame-0-msaa"
@@ -7410,6 +7801,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-format_number_with_commas-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-format_number_with_commas-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-format_number_with_commas-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-format_number_with_commas-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-format_number_with_commas-frame-0-msaa"
@@ -7531,6 +7932,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-hello_world-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-hello_world-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-hello_world-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-hello_world-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-hello_world-frame-0-msaa"
 kind = "riv-stream"
@@ -7571,13 +7982,23 @@ max_different_pixels = 32
 id = "riv-hit_test_nested-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/hit_test_nested.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/hit_test_nested-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-hit_test_nested-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-hit_test_nested-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-hit_test_nested-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-hit_test_nested-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-hit_test_nested-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-hit_test_nested-frame-0-msaa"
@@ -8082,6 +8503,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-interpolate_to_end-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-interpolate_to_end-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-interpolate_to_end-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-interpolate_to_end-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-interpolate_to_end-frame-0-msaa"
@@ -8779,6 +9210,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-keyboard_listener-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-keyboard_listener-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-keyboard_listener-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-keyboard_listener-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-keyboard_listener-frame-0-msaa"
 kind = "riv-stream"
@@ -8802,6 +9243,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-library-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-library-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-library-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-library-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-library-frame-0-msaa"
@@ -9523,6 +9974,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-listener_view_model-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-listener_view_model-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-listener_view_model-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-listener_view_model-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-listener_view_model-frame-0-msaa"
 kind = "riv-stream"
@@ -9546,6 +10007,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-local_bounds-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-local_bounds-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-local_bounds-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-local_bounds-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-local_bounds-frame-0-msaa"
@@ -9955,6 +10426,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-modifier_test-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-modifier_test-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-modifier_test-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-modifier_test-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-modifier_test-frame-0-msaa"
 kind = "riv-stream"
@@ -9979,6 +10460,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-modifier_to_run-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-modifier_to_run-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-modifier_to_run-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-modifier_to_run-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-modifier_to_run-frame-0-msaa"
 kind = "riv-stream"
@@ -10002,6 +10493,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-multi_listeners-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-multi_listeners-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-multi_listeners-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-multi_listeners-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-multi_listeners-frame-0-msaa"
@@ -10411,6 +10912,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_hug-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_hug-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_hug-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_hug-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-nested_hug-frame-0-msaa"
 kind = "riv-stream"
@@ -10459,6 +10970,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-nested_solo-frame-0-msaa"
 kind = "riv-stream"
@@ -10482,6 +11003,16 @@ frame = 1
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-1-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-1-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-1-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-1-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-nested_solo-frame-1-msaa"
@@ -10507,6 +11038,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-2-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-2-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-2-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-2-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-nested_solo-frame-2-msaa"
 kind = "riv-stream"
@@ -10530,6 +11071,16 @@ frame = 3
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-3-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-3-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-3-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-3-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-nested_solo-frame-3-msaa"
@@ -10555,6 +11106,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-4-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-4-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-4-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-nested_solo-frame-4-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-nested_solo-frame-4-msaa"
 kind = "riv-stream"
@@ -10571,13 +11132,23 @@ max_different_pixels = 32
 id = "riv-new_text-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/new_text.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/new_text-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-new_text-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 48
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-new_text-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-new_text-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-new_text-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-new_text-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-new_text-frame-0-msaa"
@@ -12059,13 +12630,23 @@ max_different_pixels = 32
 id = "riv-replace_view_model-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/replace_view_model.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/replace_view_model-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_view_model-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_view_model-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_view_model-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_view_model-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_view_model-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-replace_view_model-frame-0-msaa"
@@ -12083,13 +12664,23 @@ max_different_pixels = 32
 id = "riv-replace_view_model-frame-1-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/replace_view_model.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/replace_view_model-frame-1-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_view_model-frame-1-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 1
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_view_model-frame-1-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_view_model-frame-1-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_view_model-frame-1-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_view_model-frame-1-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-replace_view_model-frame-1-msaa"
@@ -12114,6 +12705,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_vm_instance-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_vm_instance-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_vm_instance-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-replace_vm_instance-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-replace_vm_instance-frame-0-msaa"
@@ -12186,6 +12787,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-rewards_demo-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-rewards_demo-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-rewards_demo-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-rewards_demo-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-rewards_demo-frame-0-msaa"
@@ -12403,6 +13014,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-runtime_nested_text_runs-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-runtime_nested_text_runs-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-runtime_nested_text_runs-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-runtime_nested_text_runs-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-runtime_nested_text_runs-frame-0-msaa"
 kind = "riv-stream"
@@ -12426,6 +13047,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-saturation-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-saturation-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-saturation-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-saturation-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-saturation-frame-0-msaa"
@@ -12563,13 +13194,23 @@ max_different_pixels = 32
 id = "riv-script_create_text_runs-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/script_create_text_runs.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/script_create_text_runs-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_create_text_runs-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_create_text_runs-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_create_text_runs-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_create_text_runs-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_create_text_runs-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-script_create_text_runs-frame-0-msaa"
@@ -12587,13 +13228,23 @@ max_different_pixels = 32
 id = "riv-script_create_text_runs-frame-1-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/script_create_text_runs.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/script_create_text_runs-frame-1-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_create_text_runs-frame-1-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 1
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_create_text_runs-frame-1-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_create_text_runs-frame-1-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_create_text_runs-frame-1-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_create_text_runs-frame-1-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-script_create_text_runs-frame-1-msaa"
@@ -12635,13 +13286,23 @@ max_different_pixels = 32
 id = "riv-script_dependency_test-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/script_dependency_test.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/script_dependency_test-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_dependency_test-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_dependency_test-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_dependency_test-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_dependency_test-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-script_dependency_test-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-script_dependency_test-frame-0-msaa"
@@ -13915,6 +14576,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-scroll_snap-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-scroll_snap-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-scroll_snap-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-scroll_snap-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-scroll_snap-frame-0-msaa"
 kind = "riv-stream"
@@ -14923,6 +15594,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-spotify_kids_app_icon-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-spotify_kids_app_icon-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-spotify_kids_app_icon-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-spotify_kids_app_icon-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-spotify_kids_app_icon-frame-0-msaa"
 kind = "riv-stream"
@@ -14939,13 +15620,23 @@ max_different_pixels = 32
 id = "riv-spotify_kids_demo-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/spotify_kids_demo.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/spotify_kids_demo-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-spotify_kids_demo-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-spotify_kids_demo-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-spotify_kids_demo-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-spotify_kids_demo-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-spotify_kids_demo-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-spotify_kids_demo-frame-0-msaa"
@@ -15659,13 +16350,23 @@ max_different_pixels = 32
 id = "riv-stateful_multi_property-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/stateful_multi_property.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/stateful_multi_property-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-stateful_multi_property-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-stateful_multi_property-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-stateful_multi_property-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-stateful_multi_property-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-stateful_multi_property-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-stateful_multi_property-frame-0-msaa"
@@ -15683,13 +16384,23 @@ max_different_pixels = 32
 id = "riv-stateful_nested-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/stateful_nested.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/stateful_nested-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-stateful_nested-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-stateful_nested-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-stateful_nested-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-stateful_nested-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-stateful_nested-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-stateful_nested-frame-0-msaa"
@@ -15851,13 +16562,23 @@ max_different_pixels = 32
 id = "riv-superbowl-frame-0-clockwise-atomic"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/superbowl.rive-stream"
-reference = "fixtures/renderer/reference/metal/riv/superbowl-frame-0-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-superbowl-frame-0-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 128
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-superbowl-frame-0-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-superbowl-frame-0-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-superbowl-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-superbowl-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-superbowl-frame-0-msaa"
@@ -16051,6 +16772,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-test_modifier_run-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-test_modifier_run-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-test_modifier_run-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-test_modifier_run-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-test_modifier_run-frame-0-msaa"
 kind = "riv-stream"
@@ -16075,6 +16806,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_follow_path_shape_length-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_follow_path_shape_length-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_follow_path_shape_length-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_follow_path_shape_length-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-text_follow_path_shape_length-frame-0-msaa"
 kind = "riv-stream"
@@ -16098,6 +16839,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_input-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_input-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_input-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_input-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-text_input-frame-0-msaa"
@@ -16243,6 +16994,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_listener_simpler-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_listener_simpler-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_listener_simpler-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_listener_simpler-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-text_listener_simpler-frame-0-msaa"
 kind = "riv-stream"
@@ -16314,6 +17075,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_vertical_trim_test-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_vertical_trim_test-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_vertical_trim_test-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-text_vertical_trim_test-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-text_vertical_trim_test-frame-0-msaa"
@@ -16507,6 +17278,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-transition_actions-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-transition_actions-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-transition_actions-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-transition_actions-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-transition_actions-frame-0-msaa"
 kind = "riv-stream"
@@ -16698,6 +17479,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-trigger_fires_single_change-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-trigger_fires_single_change-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-trigger_fires_single_change-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-trigger_fires_single_change-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-trigger_fires_single_change-frame-0-msaa"
@@ -17155,6 +17946,16 @@ status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
 
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-vertical_align_ellipsis-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-vertical_align_ellipsis-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-vertical_align_ellipsis-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-vertical_align_ellipsis-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
+
 [[entry]]
 id = "riv-vertical_align_ellipsis-frame-0-msaa"
 kind = "riv-stream"
@@ -17178,6 +17979,16 @@ frame = 0
 status = "exact"
 max_channel_delta = 2
 max_different_pixels = 32
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-viewmodel_access-frame-0-clockwise-atomic.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-viewmodel_access-frame-0-clockwise-atomic.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-viewmodel_access-frame-0-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-viewmodel_access-frame-0-clockwise-atomic-apple-paravirtual-device.provenance"
 
 [[entry]]
 id = "riv-viewmodel_access-frame-0-msaa"

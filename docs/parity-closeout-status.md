@@ -141,7 +141,15 @@ upstream-sync-map registry).
   bf051718's ancestors) and pass a known-good subsystem before the
   447-row fan-out is trusted. Batch fan-out over the #B-2 manifest in
   dependency order; findings feed the ticket queue mechanically.
-  JUDGE VALIDATED 2026-07-21: caught the known-bad pre-RB1 data binds
+  SWEEP COMPLETE + TRIAGED 2026-07-21 (executor session, e528fe2b):
+  447/447 rows recorded — 19 ISOMORPHIC / 182 ADAPTED / 162 DIVERGENT /
+  36 UNKNOWN / 48 N/A. Planner triage (docs/b6-audit/TRIAGE.md) collapses
+  DIVERGENT into: ~65 rows = RB-1 scope (keyframe data-bind graphs now
+  explicitly included); ~60-70 rows = retained-renderer invalidation
+  epochs → PROPOSED accepted-architecture D-row, AWAITING USER; RB-2
+  opened (focus system, spot-verified, ties into #FT-TEXT keyboard gap);
+  5 small families pending planner verification; 36 UNKNOWNs re-pass
+  after RB-1. JUDGE VALIDATED 2026-07-21: caught the known-bad pre-RB1 data binds
   (independent rediscovery of the in-file compensation family), cleared
   keyed animation, and produced two binding amendments — the
   mutation-timing gate on axis (e) and the cross-file coverage clause

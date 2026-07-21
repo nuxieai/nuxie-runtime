@@ -108,11 +108,12 @@ a user decision.
 ## Phase 0 — Baseline (#B) — do first, mostly parallel lanes
 
 ### #B-1 Phase S sync cycle to current upstream — SPINE, S/M, USER-GATE
-Upstream is at `b73bc675`, 3 commits past the pin, including TextInput
-improvements (`1b4df2ad`) that land squarely on #FT-TEXT. Run the
-`/sync-upstream` workflow as written (inventory → triage report → STOP for
-approval → port approved rows → advance pins). **Blocks #FT-TEXT**; nothing
-else waits on it.
+The fixed cycle-3 approval cut is `b73bc675`, 3 commits past the pin, including
+TextInput improvements (`1b4df2ad`) that land squarely on #FT-TEXT. Later
+upstream drift is a separate inventory, not an implicit widening of this cut.
+Run the `/sync-upstream` workflow as written (inventory → triage report → STOP
+for approval → port approved rows → advance pins). **Blocks #FT-TEXT**;
+nothing else waits on it.
 **Gate:** ratchet green at the new pin; `LAST_SYNCED_SHA` advanced; triage
 file committed.
 

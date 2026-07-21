@@ -8824,8 +8824,8 @@ mode = "clockwise-atomic"
 backend = "metal"
 frame = 0
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+max_channel_delta = 0
+max_different_pixels = 0
 
 [[entry]]
 id = "riv-library_data_enum_test-frame-0-msaa"
@@ -8836,8 +8836,8 @@ mode = "msaa"
 backend = "metal"
 frame = 0
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+max_channel_delta = 0
+max_different_pixels = 0
 
 [[entry]]
 id = "riv-library_data_enum_test-frame-1-clockwise-atomic"
@@ -8848,8 +8848,8 @@ mode = "clockwise-atomic"
 backend = "metal"
 frame = 1
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+max_channel_delta = 0
+max_different_pixels = 0
 
 [[entry]]
 id = "riv-library_data_enum_test-frame-1-msaa"
@@ -8860,8 +8860,8 @@ mode = "msaa"
 backend = "metal"
 frame = 1
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+max_channel_delta = 0
+max_different_pixels = 0
 
 [[entry]]
 id = "riv-library_data_enum_test-frame-2-clockwise-atomic"
@@ -8872,8 +8872,8 @@ mode = "clockwise-atomic"
 backend = "metal"
 frame = 2
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+max_channel_delta = 0
+max_different_pixels = 0
 
 [[entry]]
 id = "riv-library_data_enum_test-frame-2-msaa"
@@ -8884,8 +8884,8 @@ mode = "msaa"
 backend = "metal"
 frame = 2
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+max_channel_delta = 0
+max_different_pixels = 0
 
 [[entry]]
 id = "riv-library_data_enum_test-frame-3-clockwise-atomic"
@@ -8896,8 +8896,8 @@ mode = "clockwise-atomic"
 backend = "metal"
 frame = 3
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+max_channel_delta = 0
+max_different_pixels = 0
 
 [[entry]]
 id = "riv-library_data_enum_test-frame-3-msaa"
@@ -8908,8 +8908,8 @@ mode = "msaa"
 backend = "metal"
 frame = 3
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+max_channel_delta = 0
+max_different_pixels = 0
 
 [[entry]]
 id = "riv-library_data_enum_test-frame-4-clockwise-atomic"
@@ -8920,8 +8920,8 @@ mode = "clockwise-atomic"
 backend = "metal"
 frame = 4
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+max_channel_delta = 0
+max_different_pixels = 0
 
 [[entry]]
 id = "riv-library_data_enum_test-frame-4-msaa"
@@ -8932,8 +8932,8 @@ mode = "msaa"
 backend = "metal"
 frame = 4
 status = "exact"
-max_channel_delta = 2
-max_different_pixels = 32
+max_channel_delta = 0
+max_different_pixels = 0
 
 [[entry]]
 id = "riv-library_export_animation_test-frame-0-clockwise-atomic"
@@ -15887,7 +15887,7 @@ max_different_pixels = 64
 id = "riv-tape-frame-0-msaa"
 kind = "riv-stream"
 stream = "fixtures/renderer/streams/riv/tape.rive-stream"
-reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-tape-frame-0-msaa.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/riv/riv-tape-frame-0-msaa-d788.png"
 mode = "msaa"
 backend = "metal"
 frame = 0

@@ -469,6 +469,140 @@ provenance = "reference-a.provenance"
     fs::remove_dir_all(root).unwrap();
 }
 
+#[test]
+fn stub_poison_clear_is_scoped_to_expect_all_fail() {
+    let root = temporary_directory("stub-poison-clear-scope");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("fixture.rive-stream"), "fake renderer stream\n").unwrap();
+    write_png(root.join("transparent.png"), [0, 0, 0, 0]);
+    write_png(root.join("poison.png"), [255, 0, 255, 255]);
+    let replay = install_clear_sensitive_fake_replay(&root);
+    fs::write(
+        root.join("corpus.toml"),
+        r#"
+[[entry]]
+id = "transparent-reference"
+stream = "fixture.rive-stream"
+reference = "transparent.png"
+status = "exact"
+max_channel_delta = 0
+max_different_pixels = 0
+mode = "clockwise-atomic"
+"#,
+    )
+    .unwrap();
+
+    let normal = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+        .current_dir(&root)
+        .env("FAKE_ADAPTER", "")
+        .env("FAKE_REPLAY_PNG", root.join("transparent.png"))
+        .env("FAKE_POISON_PNG", root.join("poison.png"))
+        .args(["--manifest", "corpus.toml"])
+        .args(["--replay", replay.to_str().unwrap()])
+        .args(["--backend", "stub"])
+        .args(["--output-dir", "normal-artifacts"])
+        .output()
+        .unwrap();
+    assert!(
+        normal.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&normal.stdout),
+        String::from_utf8_lossy(&normal.stderr)
+    );
+    assert!(String::from_utf8_lossy(&normal.stdout)
+        .contains("exact transparent-reference: byte-exact=true"));
+    assert_eq!(
+        sha256(root.join("normal-artifacts/transparent-reference.png")),
+        sha256(root.join("transparent.png"))
+    );
+
+    let negative_control = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+        .current_dir(&root)
+        .env("FAKE_ADAPTER", "")
+        .env("FAKE_REPLAY_PNG", root.join("transparent.png"))
+        .env("FAKE_POISON_PNG", root.join("poison.png"))
+        .args(["--manifest", "corpus.toml"])
+        .args(["--replay", replay.to_str().unwrap()])
+        .args(["--backend", "stub"])
+        .args(["--output-dir", "negative-control-artifacts"])
+        .arg("--expect-all-fail")
+        .output()
+        .unwrap();
+    assert!(
+        negative_control.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&negative_control.stdout),
+        String::from_utf8_lossy(&negative_control.stderr)
+    );
+    assert!(String::from_utf8_lossy(&negative_control.stdout)
+        .contains("diverges transparent-reference: different-pixels=1"));
+    assert_eq!(
+        sha256(root.join("negative-control-artifacts/transparent-reference.png")),
+        sha256(root.join("poison.png"))
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn stub_baseline_rejects_nonblank_tolerance_passes() {
+    let root = temporary_directory("stub-baseline-tolerance-pass");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("fixture.rive-stream"), "fake renderer stream\n").unwrap();
+    write_png(root.join("within-tolerance.png"), [10, 20, 30, 255]);
+    write_png(root.join("strict.png"), [40, 50, 60, 255]);
+    write_png(root.join("transparent.png"), [0, 0, 0, 0]);
+    let replay = install_fake_replay(&root);
+    fs::write(
+        root.join("corpus.toml"),
+        r#"
+[[entry]]
+id = "nonblank-within-tolerance"
+stream = "fixture.rive-stream"
+reference = "within-tolerance.png"
+status = "exact"
+max_channel_delta = 0
+max_different_pixels = 1
+mode = "clockwise-atomic"
+
+[[entry]]
+id = "strict-negative-control"
+stream = "fixture.rive-stream"
+reference = "strict.png"
+status = "exact"
+max_channel_delta = 0
+max_different_pixels = 0
+mode = "msaa"
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_corpus-r"))
+        .current_dir(&root)
+        .env("FAKE_ADAPTER", "")
+        .env("FAKE_REPLAY_PNG", root.join("transparent.png"))
+        .args(["--manifest", "corpus.toml"])
+        .args(["--replay", replay.to_str().unwrap()])
+        .args(["--backend", "stub"])
+        .args(["--output-dir", "artifacts"])
+        .arg("--expect-all-fail")
+        .output()
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "stdout:\n{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("unexpectedly passed 1 entries"),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 fn temporary_directory(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
         "pixel-compare-{label}-{}-{}",
@@ -600,6 +734,35 @@ while [ "$#" -gt 0 ]; do
     shift 2
 done
 cp "$FAKE_REPLAY_PNG" "$output"
+printf 'adapter=%s\n' "$FAKE_ADAPTER"
+"#,
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&path, permissions).unwrap();
+    path
+}
+
+fn install_clear_sensitive_fake_replay(root: &Path) -> PathBuf {
+    let path = root.join("clear-sensitive-renderer-replay.sh");
+    fs::write(
+        &path,
+        r#"#!/bin/sh
+output=''
+clear=''
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --output) output="$2" ;;
+        --clear) clear="$2" ;;
+    esac
+    shift 2
+done
+if [ "$clear" = "0xff00ffff" ]; then
+    cp "$FAKE_POISON_PNG" "$output"
+else
+    cp "$FAKE_REPLAY_PNG" "$output"
+fi
 printf 'adapter=%s\n' "$FAKE_ADAPTER"
 "#,
     )

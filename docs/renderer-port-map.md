@@ -191,9 +191,10 @@ Blocked by: V2 M7 + user activation
 
 ### Exit Criteria
 
-CI renders references, diffs against a transparent stub Rust renderer, rejects
-any byte-exact nonblank reference, requires tolerance-divergent negative
-controls, and reports the metric. Failure artifacts are inspectable.
+CI renders references, diffs against a poison-cleared do-nothing Rust renderer,
+requires every active reference to diverge outside its production tolerance,
+and reports the metric. Failure artifacts are inspectable. Ordinary stub replay
+retains the authored clear; poison is scoped to the negative-control gate.
 
 ## #R-1: wgpu Foundation And Shaders
 

@@ -16,6 +16,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const DEFAULT_REPLAY_TIMEOUT_SECONDS: u64 = 60;
+// A transparent no-op necessarily matches canonical transparent references.
+// Poison only the stub negative control so those entries exercise the same
+// production tolerance contract while ordinary replay keeps its authored clear.
+const STUB_NEGATIVE_CONTROL_CLEAR: u32 = 0xff00ffff;
 
 #[derive(Debug, Deserialize)]
 struct Manifest {
@@ -141,7 +145,6 @@ enum EntryOutcome {
     Compared {
         report: DiffReport,
         byte_exact: bool,
-        reference_is_transparent_blank: bool,
         adapter_check: Option<AdapterCheck>,
     },
 }
@@ -187,19 +190,15 @@ struct EntryExecution {
 struct Counts {
     exact: usize,
     byte_exact: usize,
-    transparent_blank_byte_exact: usize,
     diverges: usize,
     gated: usize,
 }
 
 fn validate_stub_baseline(counts: &Counts) -> Result<(), String> {
-    let nonblank_byte_exact = counts
-        .byte_exact
-        .checked_sub(counts.transparent_blank_byte_exact)
-        .ok_or_else(|| "stub baseline byte-exact counts are inconsistent".to_owned())?;
-    if nonblank_byte_exact != 0 {
+    if counts.exact != 0 {
         return Err(format!(
-            "stub baseline unexpectedly byte-matched {nonblank_byte_exact} nonblank references"
+            "stub baseline unexpectedly passed {} entries within tolerance",
+            counts.exact
         ));
     }
 
@@ -257,6 +256,8 @@ fn run_entry(
     let candidate_replay = ReplayInvocation {
         replay: &options.replay,
         backend: &options.backend,
+        clear: (options.expect_all_fail && options.backend == "stub")
+            .then_some(STUB_NEGATIVE_CONTROL_CLEAR),
     };
     let output = match run_replay(candidate_replay, entry, &actual, options.replay_timeout) {
         Ok(output) => output,
@@ -346,6 +347,7 @@ fn run_entry(
 struct ReplayInvocation<'a> {
     replay: &'a Path,
     backend: &'a str,
+    clear: Option<u32>,
 }
 
 fn run_replay(
@@ -358,12 +360,17 @@ fn run_replay(
         .map_err(|error| ReplayError::without_diagnostics(error.to_string()))?;
     let output =
         path_str(output).map_err(|error| ReplayError::without_diagnostics(error.to_string()))?;
-    let mut child = Command::new(invocation.replay)
+    let mut command = Command::new(invocation.replay);
+    command
         .args(["--stream", stream])
         .args(["--output", output])
         .args(["--backend", invocation.backend])
         .args(["--frame", &entry.frame.to_string()])
-        .args(["--mode", &entry.mode])
+        .args(["--mode", &entry.mode]);
+    if let Some(clear) = invocation.clear {
+        command.args(["--clear", &format!("0x{clear:08x}")]);
+    }
+    let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -754,7 +761,6 @@ fn compare_entry(
     Ok(EntryOutcome::Compared {
         report,
         byte_exact: expected == actual_image,
-        reference_is_transparent_blank: expected.pixels.iter().all(|channel| *channel == 0),
         adapter_check,
     })
 }
@@ -810,13 +816,10 @@ fn emit_entry(
         EntryOutcome::Compared {
             report,
             byte_exact,
-            reference_is_transparent_blank,
             adapter_check,
         } if report.within_tolerance => {
             counts.exact += 1;
             counts.byte_exact += usize::from(byte_exact);
-            counts.transparent_blank_byte_exact +=
-                usize::from(byte_exact && reference_is_transparent_blank);
             writeln!(
                 stdout,
                 "{} {}: byte-exact={} different-pixels={} max-channel-delta={}",
@@ -1492,6 +1495,7 @@ impl Options {
         Some(ReplayInvocation {
             replay: self.reference_replay.as_deref()?,
             backend: self.reference_backend.as_deref()?,
+            clear: None,
         })
     }
 }
@@ -1909,7 +1913,6 @@ mod tests {
                     within_tolerance: true,
                 },
                 byte_exact: false,
-                reference_is_transparent_blank: false,
                 adapter_check: None,
             }),
         };
@@ -1937,50 +1940,16 @@ mod tests {
     }
 
     #[test]
-    fn transparent_blank_byte_matches_are_counted_for_the_stub_guard() {
-        let entry = entry("transparent-blank", "clockwise-atomic", "reference.png");
-        let execution = EntryExecution {
-            diagnostics: ChildDiagnostics::default(),
-            outcome: Ok(EntryOutcome::Compared {
-                report: DiffReport {
-                    width: 1,
-                    height: 1,
-                    different_pixels: 0,
-                    max_channel_delta: 0,
-                    within_tolerance: true,
-                },
-                byte_exact: true,
-                reference_is_transparent_blank: true,
-                adapter_check: None,
-            }),
-        };
-        let mut counts = Counts::default();
-
-        emit_entry(
-            &entry,
-            execution,
-            false,
-            Path::new("output"),
-            &mut counts,
-            &mut Vec::new(),
-            &mut Vec::new(),
-        )
-        .unwrap();
-
-        assert_eq!(counts.byte_exact, 1);
-        assert_eq!(counts.transparent_blank_byte_exact, 1);
-    }
-
-    #[test]
-    fn stub_baseline_allows_transparent_blank_byte_matches() {
-        validate_stub_baseline(&Counts {
-            exact: 36,
-            byte_exact: 26,
-            transparent_blank_byte_exact: 26,
-            diverges: 1_432,
+    fn stub_baseline_rejects_transparent_blank_byte_matches() {
+        let error = validate_stub_baseline(&Counts {
+            exact: 1,
+            byte_exact: 1,
+            diverges: 1,
             gated: 0,
         })
-        .unwrap();
+        .unwrap_err();
+
+        assert!(error.contains("unexpectedly passed 1 entries"));
     }
 
     #[test]
@@ -1988,21 +1957,19 @@ mod tests {
         let error = validate_stub_baseline(&Counts {
             exact: 1,
             byte_exact: 1,
-            transparent_blank_byte_exact: 0,
             diverges: 1,
             gated: 0,
         })
         .unwrap_err();
 
-        assert!(error.contains("nonblank"));
+        assert!(error.contains("unexpectedly passed 1 entries"));
     }
 
     #[test]
     fn stub_baseline_requires_a_tolerance_divergence() {
         let error = validate_stub_baseline(&Counts {
-            exact: 1,
+            exact: 0,
             byte_exact: 0,
-            transparent_blank_byte_exact: 0,
             diverges: 0,
             gated: 0,
         })

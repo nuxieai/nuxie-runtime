@@ -164,6 +164,11 @@ worker may act on that category.
   - `tools/fetch-test-assets.sh`
   - `tools/check-renderer-decoder-provenance.sh`
   - `tools/generate-renderer-shaders.sh`
+- Port-manifest inventory registry (advance these two together whenever an
+  approved manifest classification update changes its upstream cut; never
+  strand CI and the generated manifest at different revisions):
+  - `.github/workflows/ci.yml` top-level `PORT_MANIFEST_RIVE_RUNTIME_REF`
+  - `port-manifest.toml` `upstream_ref`
 - Historical Phase R oracle registry (do not advance during a runtime sync;
   regenerate and review the reference artifacts first):
   - `.github/workflows/ci.yml` `renderer-golden` override

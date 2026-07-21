@@ -27,9 +27,13 @@ upstream-sync-map registry).
 ## Ticket checklist
 
 - [ ] #B-1 Phase S sync to b73bc675 — triage submitted; USER-GATE blocks port/pin movement
-- [x] #B-2 port-manifest invariant — 447/447 at exact b73bc675 (378 ported / 21 partial / 43 absent / 5 N/A); CI wired
+- [ ] #B-2 port-manifest invariant — implementation/local gate complete at
+  exact b73bc675 (447/447: 378 ported / 21 partial / 43 absent / 5 N/A);
+  first main CI green pending
 - [ ] #B-3 size re-measure — measurement/audit complete; USER-GATE blocks the new budget
-- [x] #B-4 `make parity-scorecard` — canonical five-floor evidence enforced; CI publication wired
+- [ ] #B-4 `make parity-scorecard` — implementation/local gate complete;
+  canonical five-floor evidence and CI publication wired; first main CI green
+  pending
 - [ ] #OR-1 side-channel spec + C++ emit
 - [ ] #OR-2 Rust emit + corpus-wide side-channel exact
 - [ ] #OR-3 script verbs (setInput/VM-mutation/resize; key/textInput reserved)
@@ -97,7 +101,14 @@ upstream-sync-map registry).
   exactness, migrated three stale atomic/tape renderer oracles without changing
   their contracts, and bound the adapter-dependent clippedcubic2 strict oracle
   to exact M5 Max / Apple Paravirtual references from the same historical `7c`
-  revision, with provenance and a fail-closed revision-consistency check.
+  revision, with provenance and a fail-closed revision-consistency check. The
+  tape row's d788 static reference has a distinct path from the immutable 7c
+  strict-atlas reference, so either capture workflow cannot overwrite the
+  other's evidence.
+- 2026-07-20 — Closeout hardening made the renderer negative control fail
+  every active row: exact 0 / diverges 1,468. Ten 6×5 enum rows whose former
+  32-pixel budget accepted every possible image tightened from 2/32 to 0/0;
+  the real Rust/reference pairs remain byte-exact.
 - 2026-07-20 — #B-2 landed the 447-row fail-closed port manifest; exact-b73
   verification reports 378 ported, 21 partial, 43 absent, and 5 N/A.
 - 2026-07-20 — #B-3 remeasured the complete 42-root Darwin renderer surface

@@ -118,8 +118,8 @@ ship this list as documentation; each row needs to stay true under Phase S.
 
 | id | item |
 |---|---|
-| H1 | Upstream is 3 commits past the pin, including **TextInput improvements** (`1b4df2ad`) — directly on the F2 gap — plus scripting static-link requires (`b73bc675`) and performance-tab updates. Run the Phase S cycle. |
-| H2 | `docs/SIZE.md` is stale (pre-Phase-R): the 2.50 MiB `nux-capi` figure excludes nuxie-renderer + vendored wgpu. Re-measure; the ≤2.75 MiB budget is likely blown and needs a conscious new number. |
+| H1 | Cycle-3 triage is submitted for the fixed `d788e8ec..b73bc675` cut: TextInput (`1b4df2ad`) and static-link (`b73bc675`) are recommended PORT, profiler (`079305d7`) WATCH; approval is pending. Later `ba2b6434` drift belongs to the next inventory. |
+| H2 | Post-Phase-R size is measured reproducibly at 7.19 MiB scripting OFF / 7.95 MiB ON for the renderer link closure. The historical ≤2.75 MiB budget is retired; the replacement budget and whether one or both variants block remain a USER-GATE. |
 | H3 | Two `TODO(golden)` markers: `state_machine.rs:797` (port `addToHitLookup`), `draw.rs:3555` (unify layout-bounds path). |
 | H4 | `event_report.hpp` equivalence is thin (one trace) — fold into V4's event side-channel work. |
 

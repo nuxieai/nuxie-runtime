@@ -136,8 +136,15 @@ upstream-sync-map registry).
       Rust fires neither → Weather enum 3 vs 0);
       list_index_script_access = script-visible list index seam
       (getIndexString "-1"; digit glyph differs). Both are e5/f scope.
-    - [ ] e5 Scene facade drops the dirty-rebind bit; triggers read
-      through cells.
+    - [ ] e5 final retained-cell cutover.
+      - [x] (A) Ordinary state-machine frames drain queued events before
+        advancing data binds/layers, without the compensating zero-time
+        layer advance (`state_machine_instance.cpp:2320-2335,2555-2584`).
+        `echo_show_demo` is exact; focused C++ probe coverage raises the
+        probe floor to 708/708.
+      - [ ] (B) Close or fully localize `list_index_script_access`.
+      - [ ] (C) Scene facade drops the dirty-rebind bit; triggers read
+        through cells.
 - [ ] (f) deletion gate follows e5.
   - [ ] (f) deletion gate: mutation clocks, candidate vectors, listener
     rescans, alias mirrors, Scene-wide rebind bit all removed; floors at
@@ -514,3 +521,8 @@ Decisions log.)
   probe/runner rebuild of the day silently targeted the wrong revision. The
   checkout was restored to pin `d788e8ec` and `librive` (+text/layout
   companions) rebuilt before any floor evidence was accepted.
+- 2026-07-21 — #RB-1 e5(A) ported pinned C++'s event-drain boundary:
+  queued events notify before the next ordinary frame's data-bind/layer
+  advance, and the old listener-only zero-time layer advance is gone.
+  `echo_show_demo` flipped exact; nuxie-runtime lib 344/344 and the raised
+  C++ probe floor 708/708 are green.

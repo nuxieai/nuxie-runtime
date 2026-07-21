@@ -2158,7 +2158,6 @@ impl StateMachineInstance {
     pub(crate) fn apply_local_event_listeners(
         &mut self,
         artboard: &mut ArtboardInstance,
-        state_machine: &RuntimeStateMachine,
         mut next_event_index: usize,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
@@ -2177,6 +2176,11 @@ impl StateMachineInstance {
                 break;
             }
 
+            // Mirrors C++ `StateMachineInstance::applyEvents()` updating
+            // data binds before each queued notification batch
+            // (`state_machine_instance.cpp:2320-2335`). Layer advancement is
+            // deliberately left to the caller's single ordinary advance.
+            self.update_data_binds_false();
             let events = self.reported_events[next_event_index..].to_vec();
             next_event_index = self.reported_events.len();
             let notified = self.notify_events_with_context(
@@ -2195,12 +2199,6 @@ impl StateMachineInstance {
             }
             self.reported_events
                 .append(&mut self.pending_listener_events);
-            changed |= self.advance_preserving_reported_events(
-                artboard,
-                state_machine,
-                0.0,
-                owned_context.as_deref_mut(),
-            );
         }
         changed
     }
@@ -5480,11 +5478,11 @@ impl StateMachineInstance {
         }
     }
 
-    /// Mirrors C++ `DataBindContainer::updateDataBinds(false)` for a
-    /// transition probe. Dirty source-to-target values must be visible to the
-    /// conditions, but a zero-time outer settlement pass must not poll or
-    /// write target-to-source bindings.
-    fn update_data_binds_for_state_probe(&mut self) {
+    /// Mirrors C++ `DataBindContainer::updateDataBinds(false)`. Dirty
+    /// source-to-target values must be visible to event listeners and
+    /// transition conditions without polling or writing target-to-source
+    /// bindings.
+    fn update_data_binds_false(&mut self) {
         if self.data_bind_graph.default_view_model_context_bound() {
             self.apply_default_view_model_bindings(
                 true,
@@ -5781,7 +5779,7 @@ impl StateMachineInstance {
             self.focus.sync(artboard);
         }
         self.refresh_owned_view_model_candidates();
-        self.update_data_binds_for_state_probe();
+        self.update_data_binds_false();
 
         let data_context_present = self.data_bind_graph.data_context_present();
         let data_context_view_model_bound = self.data_bind_graph.default_view_model_context_bound();

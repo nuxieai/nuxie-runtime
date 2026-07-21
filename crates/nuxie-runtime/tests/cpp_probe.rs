@@ -1427,6 +1427,50 @@ fn synthetic_state_machine_fire_events(file_id: u64) -> Vec<u8> {
     })
 }
 
+fn synthetic_state_machine_fire_event_listener_input_change(file_id: u64) -> Vec<u8> {
+    const AT_START: u64 = 0;
+    const REPORTED_EVENT: u64 = 2;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "Event", |bytes| {
+            push_string_property(bytes, "Event", "name", "set-observed");
+        });
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+            push_string_property(bytes, "StateMachineNumber", "name", "observed");
+        });
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 5);
+            push_uint_property(
+                bytes,
+                "StateMachineListenerSingle",
+                "eventId",
+                REPORTED_EVENT,
+            );
+        });
+        push_object_with_properties(bytes, "ListenerNumberChange", |bytes| {
+            push_uint_property(bytes, "ListenerNumberChange", "inputId", 0);
+            push_f32_property(bytes, "ListenerNumberChange", "value", 7.0);
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_state_machine_fire_event(bytes, REPORTED_EVENT, AT_START);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_callback_keyframe_event(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
@@ -18340,6 +18384,80 @@ fn state_machine_fire_events_match_cpp_probe() {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_fire_event_listeners_apply_on_the_next_frame() {
+    let label = "synthetic/runtime_state_machine_fire_event_listener_input_change.riv";
+    let bytes = synthetic_state_machine_fire_event_listener_input_change(8921);
+    let cpp = probe_path().map(|probe| {
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args)
+    });
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert_eq!(
+        state_machine
+            .input(0)
+            .and_then(|input| input.number_value()),
+        Some(0.0),
+        "{label} input must begin at its imported default"
+    );
+    let first_advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    assert!(first_advanced);
+    assert_eq!(state_machine.reported_event_count(), 1);
+    assert_eq!(
+        state_machine
+            .input(0)
+            .and_then(|input| input.number_value()),
+        Some(0.0),
+        "{label} a newly reported event must not notify listeners in the firing frame"
+    );
+    let first_report = state_machine.clone();
+
+    let second_advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    assert!(
+        !second_advanced,
+        "{label} listener delivery alone must not keep the C++ frame advancing"
+    );
+    assert_eq!(
+        state_machine
+            .input(0)
+            .and_then(|input| input.number_value()),
+        Some(7.0),
+        "{label} the queued event must notify listeners before the next frame advances"
+    );
+
+    if let Some(cpp) = cpp {
+        let cpp_reports = &cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"))
+            .runtime_state_machine_advances;
+        assert_eq!(cpp_reports.len(), 2, "{label} C++ report count mismatch");
+        compare_state_machine_advance(
+            cpp_reports.first().unwrap(),
+            &first_report,
+            first_advanced,
+            label,
+        );
+        compare_state_machine_advance(
+            cpp_reports.get(1).unwrap(),
+            &state_machine,
+            second_advanced,
+            label,
+        );
+    }
 }
 
 #[test]

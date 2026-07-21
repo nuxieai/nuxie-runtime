@@ -2919,7 +2919,15 @@ impl ArtboardInstance {
             return false;
         };
         let mut owned_context = owned_context;
-        let mut changed = match owned_context.as_deref_mut() {
+        // C++ consumes events at the start of a new frame, before data binds
+        // and layers advance (`state_machine_instance.cpp:2555-2565`). Events
+        // reported by those layers therefore remain queued until the next
+        // ordinary frame instead of notifying listeners in the firing frame.
+        // Like C++ `advance()`, queued listener changes do not contribute to
+        // this frame's return value; only the ensuing data-bind/layer advance
+        // does (`state_machine_instance.cpp:2555-2584`).
+        instance.apply_local_event_listeners(self, 0, owned_context.as_deref_mut());
+        match owned_context.as_deref_mut() {
             Some(context) => instance.advance_with_owned_view_model_context(
                 self,
                 state_machine,
@@ -2927,14 +2935,7 @@ impl ArtboardInstance {
                 context,
             ),
             None => instance.advance(self, state_machine, elapsed_seconds),
-        };
-        changed |= instance.apply_local_event_listeners(
-            self,
-            state_machine,
-            0,
-            owned_context.as_deref_mut(),
-        );
-        changed
+        }
     }
 
     fn advance_state_machine_instance_preserving_events(
@@ -2957,7 +2958,6 @@ impl ArtboardInstance {
         );
         changed |= instance.apply_local_event_listeners(
             self,
-            state_machine,
             next_event_index,
             owned_context.as_deref_mut(),
         );

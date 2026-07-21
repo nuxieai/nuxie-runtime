@@ -61,6 +61,49 @@ class ParityScorecardCliTests(unittest.TestCase):
             workflow,
         )
 
+    def test_same_runner_uses_current_runtime_without_relabeling_historical_oracle(self):
+        workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+        makefile = (REPO_ROOT / "Makefile").read_text()
+        live_bootstrap = (
+            REPO_ROOT / "tools" / "renderer-dawn-live-reference-bootstrap.sh"
+        ).read_text()
+        live_cache_key = (
+            REPO_ROOT / "tools" / "renderer-dawn-live-reference-cache-key.sh"
+        ).read_text()
+
+        self.assertIn(
+            "RIVE_RUNTIME_REF: 7c778d13c5d903b3b74eec1dd6bb68a811dea5f2",
+            workflow,
+        )
+        self.assertIn(
+            "RIVE_SAME_RUNNER_RUNTIME_REF: "
+            "d788e8ec6e8b598526607d6a1e8818e8b637b60c",
+            workflow,
+        )
+        self.assertIn("make renderer-dawn-reference-bootstrap", workflow)
+        self.assertIn("tools/renderer-dawn-live-reference-cache-key.sh", workflow)
+        self.assertRegex(
+            workflow,
+            re.compile(
+                r"Bootstrap current-runtime Dawn live reference replay[\s\S]{0,1200}"
+                r"RIVE_RUNTIME_DIR: \$\{\{ github\.workspace \}\}/rive-runtime-shaders"
+            ),
+        )
+        self.assertRegex(
+            makefile,
+            re.compile(
+                r"renderer-golden-same-runner: "
+                r"renderer-rust-replay-release renderer-dawn-live-reference-check"
+            ),
+        )
+        self.assertIn(
+            '--reference-replay "$(RENDERER_DAWN_LIVE_REFERENCE_REPLAY)"',
+            makefile,
+        )
+        dependency_manifest = "renderer-dawn-live-reference-dependencies.txt"
+        self.assertIn(dependency_manifest, live_bootstrap)
+        self.assertIn(dependency_manifest, live_cache_key)
+
     def test_record_streams_gate_output_and_preserves_nonzero_exit_status(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary = Path(temporary_directory)

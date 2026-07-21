@@ -411,7 +411,7 @@ coalesces only render passes proved to have no ordered pre-pass work and drops
 only transition buffers proved to contain no initialization clear. Its
 canonical core/HAL source patch hashes are respectively
 `9751a43416597ec05ba9608f924cd4ada7eeb123643f0b45eec671c3c0245411` and
-`9e55f5a57cbe17cfe0d61d22ab5c691e88e2dfba510496bd4a039fbc85893e69`.
+`b6d2a27aa6fabe80bf02a0c3744819629894202ae7081a9035b6a49a3d3b0745`.
 The seven vendored packages are transitively path-wired, and the external
 git/path consumer check resolves and compiles that exact stack without a
 registry duplicate. Crates.io publication remains disabled until these

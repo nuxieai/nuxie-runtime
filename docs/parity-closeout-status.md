@@ -11,7 +11,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 1 Frame parity | PARTIAL | exact-segments 647/647; scripted 647/647; e2e-exact: gate not built | floor green; #OR-6 missing |
 | 2 Interaction parity | RED | side-channel: gate not built; fuzz-clean-nights: 0 | #OR-1/2/3/7 |
 | 3 SDK parity | RED | A-rows closed 0/8 | register A-table |
-| 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2 | M5 Max and Apple Paravirtual static floors are exact and fail closed; #HD-2's hypothesis oracle and #HD-3 remain |
+| 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.19 MiB OFF / 7.95 MiB ON, budget pending | #OR-9, #B-3 USER-GATE |
 
 Regression floor (must stay green): `make golden-compare` 317/647 ·
@@ -53,6 +53,7 @@ upstream-sync-map registry).
 - [ ] #FT diagnostic spot-check: unported Lua binding → named diagnostic (from #LT-2)
 - [ ] #HD-1 threading-model decision (USER-GATE)
 - [ ] #HD-2 renderer oracle hardening (V7; adapter matrix 2/2 complete,
+  current-runtime same-runner 1,468/1,468 local, Paravirtual CI rerun and
   clockwise-atomic hypothesis oracle pending)
 - [ ] #HD-3 WebGL2 decision (USER-GATE)
 - [ ] #HD-4 TODO(golden) pair
@@ -129,3 +130,14 @@ upstream-sync-map registry).
   the 28 legacy native-Metal rows were recaptured on M5 at renderer pin
   `7c778d13` / Dawn `211333b2`. Both static floors report 1,468/1,468 exact;
   the first main CI rerun is pending.
+- 2026-07-20 — Main CI run `29806487036` kept the non-renderer required gates
+  green but exposed nine same-runner rows: `tape` was a historical-7c versus
+  product-d788 oracle skew, while the other eight localized to unconditional
+  Metal `preserveInvariance` changing one-of-four edge samples on Apple
+  Paravirtual. The gate now builds a separately pinned d788 C++ Dawn replay,
+  including immutable dependency revisions and an exact-input cache, without
+  relabeling the historical 7c oracle. Vendored wgpu now requests preserved
+  invariance only for Naga-emitted invariant positions. Local M5 same-runner is
+  1,468/1,468 contract-exact (1,370 byte-exact); the static floor is also
+  1,468/1,468 with byte-exactness improved from 831 to 837. All five regression
+  floors are green; the main Paravirtual rerun is pending.

@@ -181,6 +181,9 @@ jobs:
       # Shader provenance advanced independently during the Phase S sync.
       # Keep it separate from the historical pixel oracle above.
       RIVE_SHADER_RUNTIME_REF: d788e8ec6e8b598526607d6a1e8818e8b637b60c
+      # Same-adapter replay follows the current product runtime. It has a
+      # separate build and cache from the immutable Phase R oracle.
+      RIVE_SAME_RUNNER_RUNTIME_REF: d788e8ec6e8b598526607d6a1e8818e8b637b60c
     defaults:
       run:
         shell: bash
@@ -266,7 +269,9 @@ jobs:
           RENDERER_JOBS: 4
         run: |
           depot_tools_dir="${RUNNER_TEMP}/depot_tools"
-          git clone --no-checkout https://chromium.googlesource.com/chromium/tools/depot_tools.git "${depot_tools_dir}"
+          if [[ ! -d "${depot_tools_dir}/.git" ]]; then
+            git clone --no-checkout https://chromium.googlesource.com/chromium/tools/depot_tools.git "${depot_tools_dir}"
+          fi
           git -C "${depot_tools_dir}" checkout --detach "${DEPOT_TOOLS_REF}"
           export PATH="${depot_tools_dir}:${PATH}"
           # Initialize the pinned checkout's CIPD-managed Python and helper
@@ -282,6 +287,48 @@ jobs:
           make renderer-dawn-reference-check
           file target/renderer-dawn-reference/renderer-replay
           shasum -a 256 target/renderer-dawn-reference/renderer-replay
+
+      - name: Compute current-runtime C++ Dawn live reference cache key
+        id: dawn-live-reference-key
+        env:
+          RIVE_RUNTIME_DIR: ${{ github.workspace }}/rive-runtime-shaders
+        run: |
+          key="$(tools/renderer-dawn-live-reference-cache-key.sh)"
+          echo "key=${key}" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore current-runtime C++ Dawn live reference replay
+        id: dawn-live-reference-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/target/renderer-dawn-live-reference/renderer-replay
+          key: ${{ steps.dawn-live-reference-key.outputs.key }}
+
+      - name: Bootstrap current-runtime Dawn live reference replay
+        if: steps.dawn-live-reference-cache.outputs.cache-hit != 'true'
+        env:
+          DEPOT_TOOLS_UPDATE: 0
+          RENDERER_JOBS: 4
+          RIVE_RUNTIME_DIR: ${{ github.workspace }}/rive-runtime-shaders
+        run: |
+          depot_tools_dir="${RUNNER_TEMP}/depot_tools"
+          if [[ ! -d "${depot_tools_dir}/.git" ]]; then
+            git clone --no-checkout https://chromium.googlesource.com/chromium/tools/depot_tools.git "${depot_tools_dir}"
+          fi
+          git -C "${depot_tools_dir}" checkout --detach "${DEPOT_TOOLS_REF}"
+          export PATH="${depot_tools_dir}:${PATH}"
+          # Initialize the pinned checkout's CIPD-managed Python and helper
+          # tools without allowing depot_tools to update its source revision.
+          "${depot_tools_dir}/ensure_bootstrap"
+          test -s "${depot_tools_dir}/python3_bin_reldir.txt"
+          "${depot_tools_dir}/python-bin/python3" --version
+          make renderer-dawn-live-reference-bootstrap
+          make renderer-dawn-live-reference-replay
+
+      - name: Verify current-runtime C++ Dawn live reference replay
+        run: |
+          make renderer-dawn-live-reference-check
+          file target/renderer-dawn-live-reference/renderer-replay
+          shasum -a 256 target/renderer-dawn-live-reference/renderer-replay
 
       - name: Verify dual fuzz replay and renderer stub baseline
         env:

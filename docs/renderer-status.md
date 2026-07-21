@@ -12,8 +12,13 @@ standing approvals, it fails closed and may only report blockers.
 
 Run `make renderer-golden-same-runner`.
 
-- Rust wgpu versus same-runner C++ Dawn: exact=1,468, byte-exact=1,360,
-  diverges=0, gated=0, total=1,468.
+- The target uses the separately pinned current-runtime (`d788e8ec`) C++ Dawn
+  live replay; it does not relabel the immutable Phase R (`7c778d13`) oracle.
+- Local Apple M5 Max, current-runtime d788: exact=1,468, byte-exact=1,370,
+  diverges=0, gated=0, total=1,468. The Apple Paravirtual main-CI rerun is
+  pending.
+- Historical Phase R 7c closeout: exact=1,468, byte-exact=1,360,
+  diverges=0, gated=0, total=1,468; retain this only as archived evidence.
 - Contract exactness remains the release gate. Decoded-RGBA byte identity is a
   secondary, non-gating health metric; see `docs/renderer-exactness-map.md`.
 - Poisoned do-nothing negative control: 1,468 tolerance divergences, zero

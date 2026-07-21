@@ -7,8 +7,8 @@ signal so that the work has a finite end condition.
 ## Metrics
 
 `make renderer-golden-same-runner` reports two independent numbers against a
-C++ Dawn replay captured immediately before each Rust frame on the same
-adapter:
+separately pinned current-runtime (`d788e8ec`) C++ Dawn live replay, run
+immediately before each Rust frame on the same adapter:
 
 - **Contract exact**: decoded Rust pixels satisfy the row's reviewed
   `max_channel_delta` and `max_different_pixels` contract. This is the release
@@ -17,10 +17,15 @@ adapter:
   byte. This is a non-gating health metric. It does not compare PNG container
   bytes.
 
-The completed corpus is:
+The current d788 live-oracle result on Apple M5 Max is:
 
 - Contract: `exact=1,468`, `diverges=0`, `gated=0`, `total=1,468`.
-- Byte identity: `1,360/1,468` active rows.
+- Byte identity: `1,370/1,468` active rows.
+
+The immutable Phase R 7c closeout remains `exact=1,468`,
+`byte-exact=1,360`, `diverges=0`, `gated=0`, `total=1,468`. These results name
+different C++ runtime oracles and must not be collapsed or relabeled. The
+current-runtime Apple Paravirtual rerun is pending.
 
 The byte-exact metric does not replace the contract metric. Applying `0/0` to
 the whole corpus would redefine hundreds of already reviewed edge-coverage
@@ -48,26 +53,24 @@ and `capture-corpus-r-references --backend ffi-dawn`. The capture tool records
 provenance automatically.
 
 For CI hosts whose Metal adapter is not the adapter that produced the committed
-PNG, `corpus-r` can instead create the C++ Dawn oracle on that same runner and
-compare the Rust frame immediately afterward:
+PNG, `corpus-r` creates the current-runtime C++ Dawn oracle on that runner and
+compares the Rust frame immediately afterward. On a new machine, point
+`RIVE_RUNTIME_DIR` at a clean exact-d788 checkout, put the pinned depot tools,
+Naga 30, and Premake on `PATH`, then run:
 
 ```sh
-make renderer-dawn-reference-replay renderer-rust-replay-release
-cargo run -p pixel-compare --bin corpus-r -- \
-  --replay target/renderer-golden/release/renderer-replay \
-  --backend rust-wgpu \
-  --reference-replay target/renderer-dawn-reference/renderer-replay \
-  --reference-backend ffi-dawn \
-  --output-dir target/renderer-same-runner-corpus
+export RIVE_RUNTIME_DIR=/path/to/clean-d788-rive-runtime
+make renderer-dawn-live-reference-bootstrap
+make renderer-dawn-live-reference-replay
+make renderer-golden-same-runner
 ```
 
-`perf-dawn` is release-only. On a new machine, run
-`make renderer-dawn-reference-bootstrap` once (with the pinned depot tools,
-Naga 30, and Premake on `PATH`) before building the reference replay. The CI
-gate caches only the resulting static reference executable; it always rebuilds
-the separate Rust replay from the candidate revision. The cached replay is
-built FFI-only, so Rust renderer and vendored-wgpu changes do not invalidate
-the pinned C++ oracle.
+The live bootstrap verifies the runtime, Dawn, and dependency revisions before
+building. CI caches only the resulting FFI-only live replay under its
+exact-input cache key; it always rebuilds the Rust candidate from HEAD. The
+historical `renderer-dawn-reference-*` targets remain reserved for the
+immutable Phase R 7c oracle and are not consumed by
+`renderer-golden-same-runner`.
 
 This mode still applies each manifest row's existing channel and pixel budgets;
 it neither edits nor widens them. Each row leaves the C++ reference PNG, Rust

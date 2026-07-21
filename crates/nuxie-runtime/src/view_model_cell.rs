@@ -31,6 +31,8 @@ impl RuntimeCellDirt {
     pub const NONE: Self = Self(0);
     /// The bound source value changed (C++ `ComponentDirt::Bindings`).
     pub const BINDINGS: Self = Self(1 << 0);
+    /// The bound target value changed (C++ `ComponentDirt::BindingsTarget`).
+    pub const BINDINGS_TARGET: Self = Self(1 << 1);
 
     pub fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0

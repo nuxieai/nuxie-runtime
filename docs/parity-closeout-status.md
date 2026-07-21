@@ -57,10 +57,17 @@ upstream-sync-map registry).
     ALSO: scout inventory landed as docs/rb1-compensation-inventory.md
     (five public seams, full call-site lists, deletion checklist,
     test-rewrite counts).
-  - [ ] (d) retained `DataBind` lifecycle (`data_bind.cpp`): `source(cell)`
-    registers the bind's sink as dependent (skipped for bindsOnce); typed
-    ContextValues; C++ favored-direction init ordering
-    (`updateSourceBinding`, TargetOrigin, `sourceToTargetRunsFirst`).
+  - [x] (d) retained `DataBind` direction engine — landed
+    (`retained_data_bind.rs`): `set_source(cell)` registers the sink as
+    dependent (bindsOnce never registers), two dirt bits
+    (BINDINGS/BINDINGS_TARGET), TargetOrigin latch with favored-direction
+    reconcile, suppressed self-notify on both apply paths, and
+    `reconcile()` in C++ favor order. Target application is behind the
+    `RuntimeDataBindTarget` trait; converters and the arena wiring land in
+    (e). 6 tests incl. the two-way target-seeds-source init ordering (the
+    instance-0 scroll-scalar bug class) and sibling propagation without
+    echo. NOTE for (e): the old view_model module exports a colliding
+    `RuntimeDataContext` name; resolve at migration.
   - [ ] (e) migrate consumers (state machine, artboard, facade, listeners,
     converters) — sequenced by the compensation-family call-site inventory
     (scout dispatched 2026-07-21); floors green after every migration step.

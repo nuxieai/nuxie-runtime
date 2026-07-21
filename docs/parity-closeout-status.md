@@ -120,7 +120,22 @@ upstream-sync-map registry).
       (Artboard::updateDataBinds(true) → DataBind::updateSourceBinding),
       NOT the SM copy path. That pull is e4's PRIMARY target; e3's
       read_target adapter + retained cells are the ready plumbing.
-    - [ ] e4 listeners register as cell dependents; delete the rescan loop.
+    - [x] e4 landed via lane, orchestrator-verified (rt lib 344, nuxie
+      132, probe 707/707, golden 317/317, scripted 317/317 main + only
+      TWO reds remaining): db_health_tracker and superbowl FLIPPED GREEN.
+      Premise falsified by instrumentation: VM end-of-frame state was
+      byte-identical to C++ all along — the real bug was PULL ORDERING
+      (child data-bind pulls ran before the nested subtree advanced; C++
+      advances the whole subtree first, artboard.cpp:1195-1201 pull
+      recursion, nested_artboard.cpp:965-1008). One-statement fix with
+      pin citations. Listeners now register as cell dependents
+      (dirt-driven with last-delivered dedup; rescan loop intact for
+      slice f). Remaining two reds localized with evidence:
+      echo_show_demo = SM event-fire timing at t=0 (C++ fires the Night
+      listener via StateMachineFireEvent on a duration-100 transition;
+      Rust fires neither → Weather enum 3 vs 0);
+      list_index_script_access = script-visible list index seam
+      (getIndexString "-1"; digit glyph differs). Both are e5/f scope.
     - [ ] e5 Scene facade drops the dirty-rebind bit; triggers read
       through cells.
 - [ ] (f) deletion gate follows e5.

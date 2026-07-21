@@ -1,4 +1,6 @@
 import json
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -8,9 +10,17 @@ from pathlib import Path
 
 
 TOOL = Path(__file__).with_name("parity_scorecard.py")
+REPO_ROOT = TOOL.parents[2]
 RUNTIME_ENTRIES = 317
 RUNTIME_SEGMENTS = 647
 RENDERER_ENTRIES = 1468
+GATE_COMMANDS = {
+    "golden-compare": ["make", "golden-compare"],
+    "scripted-golden-compare": ["make", "scripted-golden-compare"],
+    "renderer-golden": ["make", "renderer-golden"],
+    "cargo-test-workspace": ["cargo", "test", "--workspace"],
+    "capi-smoke": ["make", "capi-smoke"],
+}
 
 
 def golden_summary(entries=RUNTIME_ENTRIES, segments=RUNTIME_SEGMENTS):
@@ -28,9 +38,40 @@ def renderer_summary(entries=RENDERER_ENTRIES):
 
 
 class ParityScorecardCliTests(unittest.TestCase):
+    def test_ci_records_static_renderer_floor_and_keeps_same_runner_separate(self):
+        workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+
+        self.assertRegex(
+            workflow,
+            re.compile(
+                r"--gate renderer-golden[\s\\]+"
+                r"--output target/parity-scorecard/evidence/renderer-golden\.json[\s\\]+"
+                r"-- make renderer-golden(?:\s|$)"
+            ),
+        )
+        self.assertNotRegex(
+            workflow,
+            re.compile(
+                r"--gate renderer-golden[\s\S]{0,240}"
+                r"-- make renderer-golden-same-runner"
+            ),
+        )
+        self.assertIn(
+            "- name: Verify same-runner renderer pixels (non-scorecard)",
+            workflow,
+        )
+
     def test_record_streams_gate_output_and_preserves_nonzero_exit_status(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
-            evidence = Path(temporary_directory) / "golden-compare.json"
+            temporary = Path(temporary_directory)
+            evidence = temporary / "golden-compare.json"
+            fake_bin = temporary / "bin"
+            fake_bin.mkdir()
+            fake_make = fake_bin / "make"
+            fake_make.write_text("#!/bin/sh\nprintf 'gate output\\n'\nexit 7\n")
+            fake_make.chmod(0o755)
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
 
             completed = subprocess.run(
                 [
@@ -44,12 +85,12 @@ class ParityScorecardCliTests(unittest.TestCase):
                     "--source-sha",
                     "test-sha",
                     "--",
-                    sys.executable,
-                    "-c",
-                    "import sys; print('gate output'); sys.exit(7)",
+                    "make",
+                    "golden-compare",
                 ],
                 text=True,
                 capture_output=True,
+                env=environment,
             )
 
             self.assertEqual(completed.returncode, 7)
@@ -59,7 +100,39 @@ class ParityScorecardCliTests(unittest.TestCase):
             self.assertEqual(record["gate"], "golden-compare")
             self.assertEqual(record["source_sha"], "test-sha")
             self.assertEqual(record["exit_code"], 7)
+            self.assertEqual(record["command"], ["make", "golden-compare"])
             self.assertEqual(record["output"], "gate output\n")
+
+    def test_record_rejects_a_command_that_does_not_match_the_gate(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary = Path(temporary_directory)
+            evidence = temporary / "capi-smoke.json"
+            marker = temporary / "command-ran"
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "record",
+                    "--gate",
+                    "capi-smoke",
+                    "--output",
+                    str(evidence),
+                    "--source-sha",
+                    "test-sha",
+                    "--",
+                    sys.executable,
+                    "-c",
+                    f"from pathlib import Path; Path({str(marker)!r}).touch()",
+                ],
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("capi-smoke command mismatch", completed.stderr)
+            self.assertFalse(marker.exists())
+            self.assertFalse(evidence.exists())
 
     def test_check_rejects_failed_gate_even_when_its_summary_looks_green(self):
         repo, evidence = self.create_green_repo()
@@ -147,6 +220,36 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 1)
         self.assertIn(
             "renderer-golden evidence is stale: expected test-sha, got old-sha",
+            completed.stderr,
+        )
+
+    def test_check_rejects_evidence_without_a_recorded_command(self):
+        repo, evidence = self.create_green_repo()
+        path = evidence / "cargo-test-workspace.json"
+        document = json.loads(path.read_text())
+        del document["command"]
+        path.write_text(json.dumps(document) + "\n")
+
+        completed = self.run_check(repo)
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn(
+            "cargo-test-workspace evidence has no command",
+            completed.stderr,
+        )
+
+    def test_check_rejects_evidence_recorded_for_a_different_command(self):
+        repo, evidence = self.create_green_repo()
+        path = evidence / "cargo-test-workspace.json"
+        document = json.loads(path.read_text())
+        document["command"] = ["cargo", "test", "-p", "nux-capi"]
+        path.write_text(json.dumps(document) + "\n")
+
+        completed = self.run_check(repo)
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn(
+            "cargo-test-workspace evidence command mismatch",
             completed.stderr,
         )
 
@@ -279,6 +382,7 @@ class ParityScorecardCliTests(unittest.TestCase):
                     "gate": gate,
                     "source_sha": "test-sha",
                     "exit_code": exit_code,
+                    "command": GATE_COMMANDS[gate],
                     "output": output,
                 }
             )

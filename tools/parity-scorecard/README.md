@@ -23,9 +23,18 @@ python3 tools/parity-scorecard/parity_scorecard.py record \
   -- make golden-compare
 ```
 
+Each evidence file records its command, and both `record` and `check` require
+the gate's canonical command: `make golden-compare`, `make
+scripted-golden-compare`, `make renderer-golden`, `cargo test --workspace`, or
+`make capi-smoke`. The separately required CI check `make
+renderer-golden-same-runner` is deliberately not scorecard evidence; the
+renderer scorecard floor is the checked-in-reference `make renderer-golden`
+gate.
+
 `record` returns the gate's exit status. `check` fails if required evidence is
-missing, stale, malformed, nonzero, or disagrees with the current corpus
-manifests. A successful summary from a failed command is therefore still red.
+missing, stale, malformed, nonzero, bound to a different command, or disagrees
+with the current corpus manifests. A successful summary from a failed or
+mismatched command is therefore still red.
 The manifest-derived totals must also remain at or above the committed
 317-entry/647-segment runtime and 1,468-entry renderer floors in
 `parity-scorecard.toml`, so deleting coverage cannot lower both sides of a

@@ -21,6 +21,13 @@ REPORT_SCHEMA = "nuxie-parity-scorecard-v1"
 MIN_RUNTIME_ENTRIES = 317
 MIN_RUNTIME_EXACT_SEGMENTS = 647
 MIN_RENDERER_ENTRIES = 1468
+GATE_COMMANDS = {
+    "golden-compare": ("make", "golden-compare"),
+    "scripted-golden-compare": ("make", "scripted-golden-compare"),
+    "renderer-golden": ("make", "renderer-golden"),
+    "cargo-test-workspace": ("cargo", "test", "--workspace"),
+    "capi-smoke": ("make", "capi-smoke"),
+}
 
 GOLDEN_SUMMARY = re.compile(
     r"^golden-compare summary: entries=(?P<entries>\d+) "
@@ -41,6 +48,7 @@ class Evidence:
     gate: str
     source_sha: str
     exit_code: int
+    command: tuple[str, ...]
     output: str
 
 
@@ -77,6 +85,20 @@ def record_evidence(options: argparse.Namespace) -> int:
         command = command[1:]
     if not command:
         print("parity-scorecard record requires a command after --", file=sys.stderr)
+        return 2
+    expected_command = GATE_COMMANDS.get(options.gate)
+    if expected_command is None:
+        print(
+            f"parity-scorecard error: {options.gate} has no canonical command",
+            file=sys.stderr,
+        )
+        return 2
+    if tuple(command) != expected_command:
+        print(
+            f"parity-scorecard error: {options.gate} command mismatch: "
+            f"expected {list(expected_command)!r}, got {command!r}",
+            file=sys.stderr,
+        )
         return 2
 
     source_errors: list[str] = []
@@ -376,6 +398,7 @@ def read_evidence(path: Path, expected_gate: str, errors: list[str]) -> Evidence
     gate = document.get("gate")
     source_sha = document.get("source_sha")
     exit_code = document.get("exit_code")
+    command = document.get("command")
     output = document.get("output")
     if gate != expected_gate:
         errors.append(f"expected {expected_gate} evidence, found {gate!r}")
@@ -386,10 +409,27 @@ def read_evidence(path: Path, expected_gate: str, errors: list[str]) -> Evidence
     if not isinstance(exit_code, int) or isinstance(exit_code, bool):
         errors.append(f"{expected_gate} evidence has no integer exit_code")
         return None
+    if (
+        not isinstance(command, list)
+        or not command
+        or any(not isinstance(argument, str) for argument in command)
+    ):
+        errors.append(f"{expected_gate} evidence has no command")
+        return None
+    expected_command = GATE_COMMANDS.get(expected_gate)
+    if expected_command is None:
+        errors.append(f"{expected_gate} has no canonical command")
+        return None
+    if tuple(command) != expected_command:
+        errors.append(
+            f"{expected_gate} evidence command mismatch: "
+            f"expected {list(expected_command)!r}, got {command!r}"
+        )
+        return None
     if not isinstance(output, str):
         errors.append(f"{expected_gate} evidence has no output text")
         return None
-    return Evidence(gate, source_sha, exit_code, output)
+    return Evidence(gate, source_sha, exit_code, tuple(command), output)
 
 
 def validate_evidence_identity(

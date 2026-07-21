@@ -283,20 +283,32 @@ jobs:
           file target/renderer-dawn-reference/renderer-replay
           shasum -a 256 target/renderer-dawn-reference/renderer-replay
 
-      - name: Verify dual fuzz replay, stub baseline, and same-runner renderer pixels
+      - name: Verify dual fuzz replay and renderer stub baseline
         env:
           RENDERER_JOBS: 4
-          # Stub rendering remains parallel. The same-runner gate serializes its
-          # C++ Dawn oracle to avoid four concurrent GPU replays wedging Metal.
-          RENDERER_SAME_RUNNER_JOBS: 1
           RENDERER_REPLAY_TIMEOUT_SECONDS: 60
         run: |
           make renderer-fuzz-replay
           make renderer-stub-baseline
+
+      - name: Record static renderer golden floor
+        env:
+          RENDERER_JOBS: 4
+          RENDERER_REPLAY_TIMEOUT_SECONDS: 60
+        run: |
           python3 tools/parity-scorecard/parity_scorecard.py record \
             --gate renderer-golden \
             --output target/parity-scorecard/evidence/renderer-golden.json \
-            -- make renderer-golden-same-runner
+            -- make renderer-golden
+
+      - name: Verify same-runner renderer pixels (non-scorecard)
+        env:
+          # Serialize the C++ Dawn oracle to avoid concurrent GPU replays
+          # wedging Metal. This remains a required CI check, but it is not the
+          # checked-in-reference renderer floor consumed by the scorecard.
+          RENDERER_SAME_RUNNER_JOBS: 1
+          RENDERER_REPLAY_TIMEOUT_SECONDS: 60
+        run: make renderer-golden-same-runner
 
       - name: Upload renderer scorecard evidence
         if: always()

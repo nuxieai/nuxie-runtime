@@ -717,7 +717,7 @@ axes:
     status: divergent
     mechanisms:
       - {name: "key_frame_prototype_revision_poll", kind: "AF-2 copied-state refresh / AF-8 invented lifecycle", mutation_gated: true, cpp_counterpart: none, evidence: ["crates/nuxie-runtime/src/animation.rs:1557", "crates/nuxie-runtime/src/animation.rs:1632-1641", "crates/nuxie-runtime/src/data_bind_graph.rs:4400-4435", "crates/nuxie-runtime/src/data_bind_graph.rs:4505-4519"]}
-      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1 retained-identity break / AF-2 copied-state refresh", mutation_gated: true, cpp_counterpart: "none (C++ retains BindableProperty pointers and writes them directly)", evidence: ["crates/nuxie-runtime/src/animation.rs:1555", "crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
+      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1 retained-identity break / AF-2 copied-state refresh", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/animation.rs:1555", "crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
     import_time_constants:
       - {name: "keyed-property type/source snapshots", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/animation.rs:407-429"]}
 idiom_rules_invoked: ["AF-5 import-time devirtualization"]
@@ -767,7 +767,7 @@ axes:
     status: divergent
     mechanisms:
       - {name: "key_frame_prototype_revision_poll", kind: "AF-2 copied-state refresh / AF-8 invented lifecycle", mutation_gated: true, cpp_counterpart: none, evidence: ["crates/nuxie-runtime/src/animation.rs:1557", "crates/nuxie-runtime/src/animation.rs:1632-1641", "crates/nuxie-runtime/src/data_bind_graph.rs:4400-4435", "crates/nuxie-runtime/src/data_bind_graph.rs:4505-4519"]}
-      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1 retained-identity break / AF-2 copied-state refresh", mutation_gated: true, cpp_counterpart: "none (C++ retains BindableProperty pointers and writes them directly)", evidence: ["crates/nuxie-runtime/src/animation.rs:1555", "crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
+      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1 retained-identity break / AF-2 copied-state refresh", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/animation.rs:1555", "crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
     import_time_constants:
       - {name: "keyed-property type/source snapshots", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/animation.rs:407-429"]}
 idiom_rules_invoked: ["AF-5 import-time devirtualization"]
@@ -793,7 +793,7 @@ axes:
     status: divergent
     mechanisms:
       - {name: "key_frame_prototype_revision_poll", kind: "AF-2 copied-state refresh / AF-8 invented lifecycle", mutation_gated: true, cpp_counterpart: none, evidence: ["crates/nuxie-runtime/src/animation.rs:1557", "crates/nuxie-runtime/src/animation.rs:1632-1641", "crates/nuxie-runtime/src/data_bind_graph.rs:4400-4435", "crates/nuxie-runtime/src/data_bind_graph.rs:4505-4519"]}
-      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1 retained-identity break / AF-2 copied-state refresh", mutation_gated: true, cpp_counterpart: "none (C++ retains BindableProperty pointers and writes them directly)", evidence: ["crates/nuxie-runtime/src/animation.rs:1555", "crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
+      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1 retained-identity break / AF-2 copied-state refresh", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/animation.rs:1555", "crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
     import_time_constants:
       - {name: "keyed-property type/source snapshots", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/animation.rs:407-429"]}
 idiom_rules_invoked: ["AF-5 import-time devirtualization"]
@@ -867,7 +867,7 @@ axes:
     status: divergent
     mechanisms:
       - {name: "key_frame_prototype_revision_poll", kind: "AF-2 copied-state refresh / AF-8 invented lifecycle", mutation_gated: true, cpp_counterpart: none, evidence: ["crates/nuxie-runtime/src/animation.rs:1557", "crates/nuxie-runtime/src/animation.rs:1632-1641", "crates/nuxie-runtime/src/data_bind_graph.rs:4400-4435", "crates/nuxie-runtime/src/data_bind_graph.rs:4505-4519"]}
-      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1 retained-identity break / AF-2 copied-state refresh", mutation_gated: true, cpp_counterpart: "none (C++ retains BindableProperty pointers and writes them directly)", evidence: ["crates/nuxie-runtime/src/animation.rs:1555", "crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
+      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1 retained-identity break / AF-2 copied-state refresh", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/animation.rs:1555", "crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
     import_time_constants:
       - {name: "keyed-property type/source snapshots", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/animation.rs:407-429"]}
 idiom_rules_invoked: ["AF-5 import-time devirtualization"]
@@ -965,7 +965,7 @@ axes:
     status: divergent
     mechanisms:
       - {name: "key_frame_prototype_revision_poll", kind: "AF-2 copied-state refresh / AF-8 invented lifecycle", mutation_gated: true, cpp_counterpart: none, evidence: ["crates/nuxie-runtime/src/animation.rs:1557", "crates/nuxie-runtime/src/animation.rs:1632-1641", "crates/nuxie-runtime/src/data_bind_graph.rs:4400-4435", "crates/nuxie-runtime/src/data_bind_graph.rs:4505-4519"]}
-      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1 retained-identity break / AF-2 copied-state refresh", mutation_gated: true, cpp_counterpart: "none (C++ retains BindableProperty pointers and writes them directly)", evidence: ["crates/nuxie-runtime/src/animation.rs:1555", "crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
+      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1 retained-identity break / AF-2 copied-state refresh", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/animation.rs:1555", "crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
     import_time_constants:
       - {name: "keyed-property type/source snapshots", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/animation.rs:407-429"]}
 idiom_rules_invoked: ["AF-5 import-time devirtualization"]
@@ -1188,7 +1188,7 @@ axes:
   compensation:
     status: divergent
     mechanisms:
-      - {name: "listener_observed_copy_rescan", kind: "AF-2 copied-state refresh / AF-4 push-to-poll regression", mutation_gated: true, cpp_counterpart: "none (C++ uses a Dirtable dependent callback)", evidence: ["crates/nuxie-runtime/src/state_machine/instance.rs:649", "crates/nuxie-runtime/src/state_machine/instance.rs:4902-4951"]}
+      - {name: "listener_observed_copy_rescan", kind: "AF-2 copied-state refresh / AF-4 push-to-poll regression", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/state_machine/instance.rs:649", "crates/nuxie-runtime/src/state_machine/instance.rs:4902-4951"]}
     import_time_constants:
       - {name: "RuntimeListenerType/property path", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/state_machine.rs:600-645", "crates/nuxie-runtime/src/state_machine.rs:718-790"]}
 idiom_rules_invoked: ["AF-5 import-time devirtualization"]
@@ -1645,9 +1645,9 @@ axes:
     status: divergent
     mechanisms:
       - {name: "key_frame_prototype_revision_poll", kind: "AF-2/AF-8", mutation_gated: true, cpp_counterpart: none, evidence: ["crates/nuxie-runtime/src/animation.rs:1632-1641", "crates/nuxie-runtime/src/data_bind_graph.rs:4400-4435"]}
-      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1/AF-2", mutation_gated: true, cpp_counterpart: "none (C++ retained BindableProperty targets)", evidence: ["crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
+      - {name: "copied_key_frame_value_holder_refresh", kind: "AF-1/AF-2", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/animation.rs:1643-1677", "crates/nuxie-runtime/src/animation.rs:1727-1758"]}
       - {name: "owned_view_model_candidate_generation_rebind", kind: "AF-2/AF-4", mutation_gated: true, cpp_counterpart: none, evidence: ["crates/nuxie-runtime/src/state_machine/instance.rs:5174-5220", "crates/nuxie-runtime/src/state_machine/instance.rs:5390-5403"]}
-      - {name: "listener_observed_copy_rescan", kind: "AF-2/AF-4", mutation_gated: true, cpp_counterpart: "none (C++ uses a Dirtable dependent callback)", evidence: ["crates/nuxie-runtime/src/state_machine/instance.rs:4902-4951"]}
+      - {name: "listener_observed_copy_rescan", kind: "AF-2/AF-4", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/state_machine/instance.rs:4902-4951"]}
       - {name: "view_model_trigger_observed_reset", kind: "AF-2 copied-state rescan", mutation_gated: true, cpp_counterpart: none, evidence: ["crates/nuxie-runtime/src/state_machine.rs:2527-2591", "crates/nuxie-runtime/src/state_machine/instance.rs:5984-6082"]}
       - {name: "focus_tree_descriptor_rescan", kind: "AF-8 invented lifecycle", mutation_gated: true, cpp_counterpart: none, evidence: ["crates/nuxie-runtime/src/state_machine/instance.rs:5754-5755", "crates/nuxie-runtime/src/focus.rs:837-930"]}
     import_time_constants:
@@ -1698,7 +1698,7 @@ axes:
   compensation:
     status: divergent
     mechanisms:
-      - {name: "listener_observed_copy_rescan", kind: "AF-2 copied-state refresh / AF-4 push-to-poll regression", mutation_gated: true, cpp_counterpart: "none (C++ uses a Dirtable dependent callback)", evidence: ["crates/nuxie-runtime/src/state_machine/instance.rs:649", "crates/nuxie-runtime/src/state_machine/instance.rs:4902-4951"]}
+      - {name: "listener_observed_copy_rescan", kind: "AF-2 copied-state refresh / AF-4 push-to-poll regression", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/state_machine/instance.rs:649", "crates/nuxie-runtime/src/state_machine/instance.rs:4902-4951"]}
     import_time_constants:
       - {name: "RuntimeListenerType/property path", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/state_machine.rs:600-645", "crates/nuxie-runtime/src/state_machine.rs:718-790"]}
 idiom_rules_invoked: ["AF-5 import-time devirtualization"]
@@ -1723,7 +1723,7 @@ axes:
   compensation:
     status: divergent
     mechanisms:
-      - {name: "listener_observed_copy_rescan", kind: "AF-2 copied-state refresh / AF-4 push-to-poll regression", mutation_gated: true, cpp_counterpart: "none (C++ uses a Dirtable dependent callback)", evidence: ["crates/nuxie-runtime/src/state_machine/instance.rs:649", "crates/nuxie-runtime/src/state_machine/instance.rs:4902-4951"]}
+      - {name: "listener_observed_copy_rescan", kind: "AF-2 copied-state refresh / AF-4 push-to-poll regression", mutation_gated: true, cpp_counterpart: "none", evidence: ["crates/nuxie-runtime/src/state_machine/instance.rs:649", "crates/nuxie-runtime/src/state_machine/instance.rs:4902-4951"]}
     import_time_constants:
       - {name: "RuntimeListenerType/property path", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-runtime/src/state_machine.rs:600-645", "crates/nuxie-runtime/src/state_machine.rs:718-790"]}
 idiom_rules_invoked: ["AF-5 import-time devirtualization"]

@@ -36,6 +36,15 @@ upstream-sync-map registry).
 
 ## Ticket checklist
 
+- [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — review
+  the teammate's editor patches (`974aab66`, `c7d48ca0`, and any successors
+  on `levi/editor-cutover*`) against the pinned-C++ parity contract:
+  classify each runtime-behavior change as parity-neutral additive, a
+  divergence to repair, or a D-row candidate. Both commits have already
+  produced oracle-caught regressions (5+1 and 10+4 respectively), so the
+  audit closes only when every behavior-bearing hunk has a classification
+  and each class-(b) row has a fixture or probe test. A scout report seeding
+  this audit was dispatched 2026-07-21; fold its findings here.
 - [ ] #B-1 Phase S sync to b73bc675 — triage submitted; USER-GATE blocks port/pin movement
 - [ ] #B-2 port-manifest invariant — implementation/local gate complete at
   exact b73bc675 (447/447: 378 ported / 21 partial / 43 absent / 5 N/A);
@@ -97,6 +106,14 @@ upstream-sync-map registry).
    `--execute-scripts`) and diff; everything else is LSB float noise. A
    green Rust baseline stream builds from pre-rebase commit `a159897f`
    (reflog) with `cargo build -p rust-golden-runner --features scripting`.
+   SECOND DISCRIMINATOR (2026-07-21): the scripting-FEATURE build diverges
+   even with `--execute-scripts` OFF (plain import, no script execution),
+   while the featureless binary is exact — so the culprit is a
+   non-flag-gated `cfg(feature = "scripting")` call site in
+   `tools/rust-golden-runner/src/main.rs` whose runtime callee c7d48ca0
+   changed. `rebind_nested_script_owned_contexts` is ruled out (no-op for
+   script-free files); audit the remaining cfg(scripting) blocks that run
+   regardless of the flag and diff their callees across c7d48ca0.
    The commit's
    OTHER regression — ten trigger probe assertions — is FIXED 2026-07-21:
    `reset_advanced_data_context` had swapped `trigger.reset()` for
@@ -107,11 +124,14 @@ upstream-sync-map registry).
    drifted `ba2b6434`, and CI's `cargo test --workspace` skips the probe
    suite when `RIVE_CPP_PROBE` is unset, so main went red silently — the
    same class as the five `974aab66` component-list regressions.
-2. #B-1 port — execute the approved S3-1 (TextInput) + S3-3 (static linking)
+2. #B-5 editor-cutover parity audit — classify every runtime-behavior hunk
+   of `974aab66`/`c7d48ca0` (see Ticket checklist); the scout report seeds
+   the classification table.
+3. #B-1 port — execute the approved S3-1 (TextInput) + S3-3 (static linking)
    port per `docs/upstream-sync-map.md`; advance `LAST_SYNCED_SHA` to
    `b73bc675` on a green ratchet.
-3. #OR-1 — side-channel spec + C++ emit once the floor is restored.
-4. #FT-TEXT — unblocked by the #B-1 approval; starts after the port lands.
+4. #OR-1 — side-channel spec + C++ emit once the floor is restored.
+5. #FT-TEXT — unblocked by the #B-1 approval; starts after the port lands.
 
 ## Pending USER-GATEs
 

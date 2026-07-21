@@ -30,8 +30,11 @@ required_adapters = 2
 blocking_min_entries = 20
 max_ratio = 1.0
 
-# #B-3 decision 2026-07-21: the release-size renderer-on link closure must
-# stay within 8 MiB for BOTH scripting variants. A breach reopens the budget
-# USER-GATE with fresh measurements; the constant is never silently raised.
+# #B-3 decision 2026-07-21 (user-approved after the same-day reopen): the
+# release-size renderer-on link closure must stay within 9 MiB for BOTH
+# scripting variants. The initial 8 MiB choice predated concurrent main
+# 974aab66 and was reopened when honest re-measurement put scripting-ON at
+# 8.70 MiB. A breach reopens the budget USER-GATE with fresh measurements;
+# the constant is never silently raised.
 [size]
-budget_bytes = 8388608
+budget_bytes = 9437184

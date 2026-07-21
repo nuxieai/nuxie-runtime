@@ -120,7 +120,7 @@ ship this list as documentation; each row needs to stay true under Phase S.
 | id | item |
 |---|---|
 | H1 | Cycle-3 approval granted 2026-07-21 for the fixed `d788e8ec..b73bc675` cut: PORT TextInput (`1b4df2ad`) and static-link (`b73bc675`), profiler (`079305d7`) deferred WATCH, both dependency WATCH rows retained. Later `ba2b6434` drift belongs to the next inventory. |
-| H2 | Budget decided 2026-07-21: 8 MiB (8,388,608 B) blocking for BOTH variants — and REOPENED the same day: post-`974aab66` re-measurement with the 43-root harness reports 7.84 MiB OFF / 8.70 MiB ON, so scripting ON breaches by 729,496 B. The constant was not raised; CI recording is held; the replacement budget is a pending USER-GATE. |
+| H2 | Size budget user-approved 2026-07-21: 9 MiB (9,437,184 B) blocking for BOTH variants. History: the initial 8 MiB choice predated `974aab66`; re-measurement with the 43-root harness (7.84 MiB OFF / 8.70 MiB ON) reopened the gate the same day, and the user approved the recommended replacement (~3.4% headroom over ON). Any future breach reopens the gate with fresh measurements rather than raising the constant. |
 | H3 | Two `TODO(golden)` markers: `state_machine.rs:797` (port `addToHitLookup`), `draw.rs:3555` (unify layout-bounds path). |
 | H4 | `event_report.hpp` equivalence is thin (one trace) — fold into V4's event side-channel work. |
 

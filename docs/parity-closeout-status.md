@@ -12,7 +12,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 2 Interaction parity | RED | side-channel: gate not built; fuzz-clean-nights: 0 | #OR-1/2/3/7 |
 | 3 SDK parity | RED | A-rows closed 0/8 | register A-table |
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
-| 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs 8 MiB budget — ON breaches; budget USER-GATE reopened, CI recording held | #OR-9, #B-3 reopened USER-GATE |
+| 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
 Regression floor (must stay green): **restored 2026-07-21, then re-broken
 by concurrent main `c7d48ca0` the same day** (see Next queue item 1: ten
@@ -40,10 +40,10 @@ upstream-sync-map registry).
 - [ ] #B-2 port-manifest invariant — implementation/local gate complete at
   exact b73bc675 (447/447: 378 ported / 21 partial / 43 absent / 5 N/A);
   first main CI green pending
-- [ ] #B-3 size re-measure — budget decided (8 MiB both variants) and wired
-  (`make size-report` blocks; scorecard validates `size-report.json`), but
-  the gate REOPENED same-day: post-974aab66 measurement is 7.84/8.70 MiB and
-  ON breaches. CI recording held pending the replacement budget USER-GATE
+- [ ] #B-3 size re-measure — user-approved budget 9 MiB (9,437,184 B) both
+  variants, fully wired (`make size-report` blocks; scorecard validates
+  `size-report.json`; CI records); close on the first green main CI
+  recording
 - [ ] #B-4 `make parity-scorecard` — implementation/local gate complete;
   canonical five-floor evidence and CI publication wired; first main CI green
   blocked by the decoded-image policy gate and seven freshly exposed d788
@@ -103,18 +103,8 @@ upstream-sync-map registry).
 
 ## Pending USER-GATEs
 
-- **#B-3 size budget REOPENED (2026-07-21).** The decided 8 MiB dual-variant
-  budget was breached the same day by honest re-measurement: concurrent main
-  `974aab66` (editor cutover) grew the runtime and added
-  `Factory::make_gpu_canvas_image` to the public renderer surface, which the
-  fail-closed root inventory caught; with the 43rd root retained, the
-  closures measure OFF 8,216,984 B (7.84 MiB) and ON 9,118,104 B (8.70 MiB,
-  729,496 B over). Per the decision's terms the constant was not raised: the
-  gate is red locally and the CI evidence-recording step is held. Decide the
-  replacement budget. Recommendation: 9 MiB (9,437,184 B) for both variants
-  (~3.4% headroom over ON); alternatives: 8 MiB scripting-OFF-only blocking
-  (ON unbounded until #FT scope lands), or demand a size reduction from the
-  974aab66 surface before re-budgeting.
+(none — the reopened #B-3 budget was decided 2026-07-21; see the
+Decisions log.)
 
 ## Decisions log
 
@@ -143,6 +133,12 @@ upstream-sync-map registry).
   scripting OFF and ON.** ON has ~52 KiB headroom today; if the approved
   TextInput port pushes ON past the budget, the gate reopens with fresh
   measurements — the constant is never silently raised.
+- 2026-07-21: **#B-3 replacement budget user-approved: 9 MiB (9,437,184 B),
+  both variants blocking.** The 8 MiB decision predated `974aab66`; honest
+  re-measurement with the 43-root harness (OFF 7.84 MiB / ON 8.70 MiB)
+  reopened the gate the same day, and the user approved the recommended
+  9 MiB replacement (~3.4% headroom over ON). CI evidence recording is
+  re-enabled.
 
 ## Log
 

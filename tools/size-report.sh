@@ -46,10 +46,13 @@ TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 REPORT_DIR="${TARGET_DIR}/size-report"
 HOST_ARCH="$(uname -m)"
 LEGACY_BUDGET_BYTES=2883584 # 2.75 MiB; informational only, never enforced here.
-# #B-3 decision 2026-07-21: both release-size link-closure variants block at
-# 8 MiB. Must match size.budget_bytes in parity-scorecard.toml; a breach
-# reopens the budget USER-GATE instead of raising this constant.
-BUDGET_BYTES=8388608
+# #B-3 decision 2026-07-21 (user-approved after the same-day reopen): both
+# release-size link-closure variants block at 9 MiB. The initial 8 MiB choice
+# predated concurrent main 974aab66; honest re-measurement with the 43-root
+# harness put scripting-ON at 8.70 MiB and reopened the gate. Must match
+# size.budget_bytes in parity-scorecard.toml; a breach reopens the budget
+# USER-GATE instead of raising this constant.
+BUDGET_BYTES=9437184
 
 for tool in "$CARGO_BIN" "$RUSTC_BIN" "$CC_BIN" git nm shasum strip size; do
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -409,6 +412,6 @@ if (( SIZE_ON > BUDGET_BYTES )); then
   BUDGET_STATUS=1
 fi
 if (( BUDGET_STATUS == 0 )); then
-  echo "size-report OK: both variants within the 8 MiB #B-3 budget. See docs/SIZE.md."
+  echo "size-report OK: both variants within the 9 MiB #B-3 budget. See docs/SIZE.md."
 fi
 exit "$BUDGET_STATUS"

@@ -135,11 +135,14 @@ jobs:
             --output target/parity-scorecard/evidence/capi-smoke.json \
             -- make capi-smoke
 
-      # The #B-3 size gate exists locally (make size-report) but is NOT
-      # recorded into scorecard evidence yet: honest re-measurement after
-      # concurrent main 974aab66 put the scripting-ON closure at 8.70 MiB,
-      # over the decided 8 MiB budget, which reopens the budget USER-GATE.
-      # Wire the record step here once the reopened budget is decided.
+      - name: Record SDK size budget (#B-3, 9 MiB both variants)
+        if: always()
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate size-report \
+            --output target/parity-scorecard/evidence/size-report.json \
+            -- make size-report
 
       - name: Upload runtime scorecard evidence
         if: always()

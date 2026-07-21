@@ -366,6 +366,37 @@ byproduct; if any stays red it is a fresh divergence to localize on the new
 foundation. Editor-team changes to this layer freeze until #RB-1 lands
 (or route through the same floor gates).
 
+## Phase RD — Renderer-feed restoration to the C++ retention boundary (#RD) — P0 after #RB-1 (user-directed 2026-07-21)
+
+### #RD-1 Immediate per-frame traversal, per-object retained resources — SPINE, XL (own mini-map before execution)
+User decision (2026-07-21, superseding register D-12): match C++'s
+retention boundary instead of the scene-level retained-replay design. C++
+retains GPU resources ON the live objects (each Shape its RenderPath, each
+paint its RenderPaint, mutated in place under ComponentDirt) and traverses
+the live drawable list every frame (`Artboard::draw`, live `willDraw()`),
+with backend-private batching below the Renderer interface. The Rust
+scene-level replay layer — prepared frames, retained command streams, path
+caches, and their eight invalidation epochs — is to be deleted; per-object
+retained resources remain (they ARE the C++ design). The performance claim
+is subordinate to design fidelity: the perf ratio stays measured and
+published, but a post-RD ratio above 1.0 is a user-reviewed number, not a
+blocker on this mandate.
+**Sequencing (binding):** (1) #RB-1 completes first — one foundation
+rebuild at a time while the editor team lands on main. (2) A measured
+spike precedes demolition: implement the live-traversal feed for a
+representative corpus slice, run the r4/renderer timing gates and
+perf-hot-loop on it, and publish the real delta — the number informs
+execution order and batching design, not whether to proceed. (3) Then a
+lane-by-lane migration with the same pattern as #RB-1: pixel corpus
+(1,468) and both golden gates are the referee at every merge — output is
+identical BY DEFINITION; only the production strategy changes. (4)
+DELETION gate: prepared-frame machinery, command-stream retention, epoch
+bridges, and the D-12 register row all removed together.
+**Gate:** all floors green at completed values on the live-traversal
+feed; zero scene-level cache/epoch mechanisms remaining (the #B-6 audit
+re-run over the renderer clusters returns no mutation-gated mechanisms);
+perf ratio measured and reported to the user.
+
 ---
 
 ## Phase 3 — Hardening & decisions (#HD) — P2

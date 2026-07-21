@@ -156,6 +156,12 @@ upstream-sync-map registry).
   with subsystem-clustered batching. Spec landed as
   docs/b6-structural-audit-spec.md; remaining: PORTING.md
   architecture-fidelity rules section, then the ~40-55 batch fan-out.
+- [ ] #RD-1 renderer-feed restoration to the C++ retention boundary
+  (user-directed 2026-07-21, P0 AFTER #RB-1; supersedes D-12) — see map
+  Phase RD: measured spike, then lane-by-lane live-traversal migration
+  with the pixel corpus as referee, ending in the scene-cache deletion
+  gate. The ~60-70 #B-6 Family B rows re-open and close for good at that
+  gate.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -354,6 +360,14 @@ Decisions log.)
   2026-07-21, including the four still-red scripted entries. Point-fixing
   inside the compensations is stopped; the map gains Phase RB with a
   deletion exit gate. Editor changes to this layer freeze until it lands.
+- 2026-07-21: **#RD-1 user-directed (supersedes D-12 the same day):
+  restore C++'s retention boundary.** Delete the scene-level retained
+  replay layer (prepared frames, command streams, path caches, epoch
+  bridges); keep per-object retained resources (the C++ design).
+  Performance is subordinate to design fidelity — the ratio stays
+  measured; >1.0 post-RD is a user-reviewed number, not a blocker.
+  Sequencing binding: after #RB-1; measured spike before demolition;
+  pixel corpus is the referee. See map Phase RD.
 - 2026-07-21: **#B-6 Family B user-approved as register D-12.** The
   retained-renderer invalidation epochs are accepted architecture (the
   deliberate Phase R retained-replay design's required bridge), closing

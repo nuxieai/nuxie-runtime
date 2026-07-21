@@ -14,16 +14,19 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs 8 MiB budget — ON breaches; budget USER-GATE reopened, CI recording held | #OR-9, #B-3 reopened USER-GATE |
 
-Regression floor (must stay green): **restored 2026-07-21.** Both runtime
-golden gates are 317/317 exact, 647/647 segments (the decoded-image policy
-split re-admitted `jellyfish_test`); the C++-probe suite is 706/706 at the
-exact `d788e8ec` probe. Five of the seven probe failures were regressions
-introduced by concurrent main `974aab66` (eager bind-time component-list
-sizing), not stale-probe artifacts; the other two (opacity-zero willDraw
-filtering in the oracle stream, unresolved name-based number bind) were
-genuine long-standing divergences the stale probe had masked. NOTE: the
-`RIVE_RUNTIME_DIR` checkout governs probe/runner builds — it was found at
-`ba2b6434` and must be at pin `d788e8ec` for any floor run.
+Regression floor (must stay green): **restored 2026-07-21, then re-broken
+by concurrent main `c7d48ca0` the same day** (see Next queue item 1: ten
+trigger probe assertions + four scripted corpus entries, proven present on
+pristine origin/main). The 2026-07-21 closeout work itself is green: both
+runtime golden gates 317/317 exact / 647/647 segments (the decoded-image
+policy split re-admitted `jellyfish_test`), and the seven prior probe
+failures are repaired — five were `974aab66` regressions (eager bind-time
+component-list sizing), two were genuine long-standing divergences the
+stale probe had masked (opacity-zero willDraw filtering in the oracle
+stream, unresolved name-based number bind). NOTE: the `RIVE_RUNTIME_DIR`
+checkout governs probe/runner builds — it was found at `ba2b6434` and must
+be at pin `d788e8ec` for any floor run; unpinned checkouts have now
+poisoned two consecutive concurrent-main changes.
 
 Upstream pins: runtime `d788e8ec` (cycle-3 cut `b73bc675`, 3 commits ahead,
 awaiting #B-1 approval). Upstream advanced after that completed inventory to
@@ -73,14 +76,30 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. Regression repair — restore the seven d788 C++-probe assertions (five
-   component-list binds, one opacity-zero draw filter, one name-based number
-   bind) with the probe rebuilt at the exact pin.
-2. #B-1 port — execute the approved S3-1 (TextInput) + S3-3 (static linking)
+1. Regression repair — ten trigger-flavored d788 C++-probe assertions
+   (`state_machine_default_viewmodel_trigger*`,
+   `*_non_number_formula_random_function_group_*`,
+   `*_remaining_*formula_fallbacks_*`) fail after concurrent main `c7d48ca0`
+   ("close editor cutover runtime gaps"): C++ reports view-model trigger
+   count 0 in target-to-source scenarios, Rust now reports 3. The commit
+   reworked trigger target-to-source propagation (new
+   `fire_owned_view_model_context_trigger_source_*` machinery plus
+   default-context writes into `view_model_triggers`) while
+   `RIVE_RUNTIME_DIR` sat at drifted `ba2b6434` with no exact-pin probe;
+   plain `cargo test --workspace` (as CI runs it) skips the probe suite
+   when `RIVE_CPP_PROBE` is unset, so main went red silently. Same class
+   as the five `974aab66` component-list regressions repaired 2026-07-21.
+   The same commit also breaks FOUR scripted-golden-compare entries
+   (`db_health_tracker`, `echo_show_demo`, `list_index_script_access`,
+   `superbowl` — wild transform/gradient/path divergences under forced
+   scripting). Attribution is proven: a pristine `5927654b` (origin/main)
+   worktree fails the identical probe tests and the identical four entries
+   with byte-identical messages, with no closeout commits present.
+2. #B-3 reopened USER-GATE — decide the replacement size budget (see
+   Pending USER-GATEs).
+3. #B-1 port — execute the approved S3-1 (TextInput) + S3-3 (static linking)
    port per `docs/upstream-sync-map.md`; advance `LAST_SYNCED_SHA` to
    `b73bc675` on a green ratchet.
-3. #B-3 — wire the decided 8 MiB dual-variant budget into `make size-report`
-   / the scorecard and close the ticket.
 4. #OR-1 — side-channel spec + C++ emit once the floor is restored.
 5. #FT-TEXT — unblocked by the #B-1 approval; starts after the port lands.
 
@@ -224,6 +243,16 @@ upstream-sync-map registry).
   decision was made against pre-974aab66 evidence. The constant was NOT
   raised; the CI recording step is held; the replacement budget is a pending
   USER-GATE (recommendation 9 MiB both variants).
+- 2026-07-21 — Rebase over concurrent main `c7d48ca0`/`5927654b` (editor
+  cutover gaps + apple runtime 0.1.2). The remote change had independently
+  "fixed" jellyfish by doubling the global decoded-image cap to 128 MiB —
+  the rejected arbitrary-constant option; the conflict resolved to the
+  approved D-11 policy split and the three admission tests were restored to
+  the 64 MiB bounded-host form. Post-rebase floors: both runtime golden
+  gates 317/317 exact / 647/647, capi-smoke ok, but `cargo test --workspace`
+  is 697/707 — ten NEW trigger-flavored probe regressions traced to
+  `c7d48ca0` (top of the Next queue), and the scripted gate's exit status
+  needs re-examination.
 - 2026-07-21 — Upstream checkout hygiene: `/Users/levi/dev/oss/rive-runtime`
   was at post-inventory `ba2b6434` with no built libraries, so the first
   probe/runner rebuild of the day silently targeted the wrong revision. The

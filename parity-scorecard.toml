@@ -1,0 +1,20 @@
+schema_version = 1
+
+# The A-row checklist remains source-of-truth in docs/parity-gap-register.md.
+# A closure is added here only in the same mechanically-gated ticket that
+# closes the corresponding register row.
+[sdk]
+rows = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"]
+closed = []
+
+# One adapter has passed the Phase R same-adapter C++ Dawn/Rust wgpu corpus.
+# #HD-2 must add a distinct adapter/OS before this ratchet becomes green.
+[platform]
+verified_adapters = ["Apple M5 Max / Dawn WebGPU on Metal"]
+required_adapters = 2
+
+# #OR-9 owns changing the current six-file, non-blocking measurement into
+# this blocking gate. These are the existing map requirements, not new limits.
+[performance]
+blocking_min_entries = 20
+max_ratio = 1.0

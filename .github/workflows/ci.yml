@@ -56,6 +56,75 @@ jobs:
       - name: Verify upstream C++ port manifest
         run: make port-manifest-check
 
+  # The administrator-pinned reusable workflow above owns the existing V2
+  # gate but does not export its raw summaries. Run the same floor on a hosted
+  # runner so the scorecard consumes real per-commit output and exit codes,
+  # never an inferred green status.
+  parity-runtime-evidence:
+    name: Parity runtime floor evidence
+    runs-on: macos-14
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+        with:
+          path: rive-rust
+
+      - name: Checkout reference rive-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: rive-app/rive-runtime
+          ref: ${{ env.RIVE_RUNTIME_REF }}
+          path: rive-runtime
+
+      - name: Install Rust stable
+        run: rustup toolchain install stable --profile minimal --no-self-update
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build reference Rive runtime
+        working-directory: ${{ env.RIVE_RUNTIME_DIR }}
+        run: |
+          RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" build/build_rive.sh debug
+          echo "${RIVE_RUNTIME_DIR}/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release" >> "${GITHUB_PATH}"
+
+      - name: Fetch pinned test assets
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make fixtures
+
+      - name: Record runtime golden ratchet
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate golden-compare \
+            --output target/parity-scorecard/evidence/golden-compare.json \
+            -- make golden-compare
+
+      - name: Record forced-scripted golden ratchet
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate scripted-golden-compare \
+            --output target/parity-scorecard/evidence/scripted-golden-compare.json \
+            -- make scripted-golden-compare
+
+      - name: Upload runtime scorecard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-scorecard-evidence-runtime-${{ github.run_attempt }}
+          path: rive-rust/target/parity-scorecard/evidence/*.json
+          if-no-files-found: warn
+          retention-days: 7
+
   browser-renderer:
     name: Browser WebGPU and WebGL2
     runs-on: macos-14
@@ -117,6 +186,11 @@ jobs:
 
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --no-self-update
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install pinned renderer shader tools
         run: |
@@ -200,7 +274,19 @@ jobs:
         run: |
           make renderer-fuzz-replay
           make renderer-stub-baseline
-          make renderer-golden-same-runner
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate renderer-golden \
+            --output target/parity-scorecard/evidence/renderer-golden.json \
+            -- make renderer-golden-same-runner
+
+      - name: Upload renderer scorecard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-scorecard-evidence-renderer-${{ github.run_attempt }}
+          path: target/parity-scorecard/evidence/*.json
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload same-runner corpus failure artifacts
         if: failure()
@@ -258,6 +344,64 @@ jobs:
           name: perf-compare-json
           path: rive-rust/target/perf-compare.json
           if-no-files-found: ignore
+
+  parity-scorecard:
+    name: Five-tier parity scorecard
+    if: ${{ always() }}
+    needs:
+      - parity-runtime-evidence
+      - renderer-golden
+      - perf-json
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download required floor evidence
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: parity-scorecard-evidence-*-${{ github.run_attempt }}
+          path: target/parity-scorecard/evidence
+          merge-multiple: true
+
+      - name: Download optional provisional perf evidence
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: perf-compare-json
+          path: target
+
+      - name: Publish and check parity scorecard
+        run: |
+          mkdir -p target/parity-scorecard/evidence
+          set +e
+          make parity-scorecard > target/parity-scorecard/scorecard.md
+          scorecard_status=$?
+          set -e
+          cat target/parity-scorecard/scorecard.md
+          cat target/parity-scorecard/scorecard.md >> "${GITHUB_STEP_SUMMARY}"
+          exit "${scorecard_status}"
+
+      - name: Upload parity scorecard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-scorecard-${{ github.run_attempt }}
+          path: |
+            target/parity-scorecard/scorecard.json
+            target/parity-scorecard/scorecard.md
+          if-no-files-found: warn
+          retention-days: 30
 
   # Negative-input fuzz smoke gate. This is additive and self-contained: it
   # fetches its pinned upstream seed corpus before running and needs no built

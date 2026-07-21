@@ -409,12 +409,22 @@ max_different_pixels = 32
 id = "gm-clippedcubic2-clockwise-atomic"
 kind = "upstream-gm-stream"
 stream = "fixtures/renderer/streams/gm/clippedcubic2.rive-stream"
-reference = "fixtures/renderer/reference/metal/gm/clippedcubic2-clockwise-atomic.png"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-clippedcubic2-clockwise-atomic-apple-m5-max.png"
 mode = "clockwise-atomic"
-backend = "metal"
+backend = "dawn-webgpu-metal"
 status = "exact"
 max_channel_delta = 1
 max_different_pixels = 0
+
+[[entry.adapter_reference]]
+adapter = "Apple M5 Max"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-clippedcubic2-clockwise-atomic-apple-m5-max.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-clippedcubic2-clockwise-atomic-apple-m5-max.provenance"
+
+[[entry.adapter_reference]]
+adapter = "Apple Paravirtual device"
+reference = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-clippedcubic2-clockwise-atomic-apple-paravirtual-device.png"
+provenance = "fixtures/renderer/reference/dawn-webgpu-metal/gm/gm-clippedcubic2-clockwise-atomic-apple-paravirtual-device.provenance"
 
 
 [[entry]]

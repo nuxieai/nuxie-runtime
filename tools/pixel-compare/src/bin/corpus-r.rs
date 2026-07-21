@@ -34,6 +34,16 @@ struct Entry {
     max_different_pixels: u64,
     gated: Option<String>,
     mode: String,
+    #[serde(default)]
+    adapter_reference: Vec<AdapterReference>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AdapterReference {
+    adapter: String,
+    reference: PathBuf,
+    #[serde(default)]
+    provenance: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -44,6 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     validate_entry_ids(&manifest.entry)?;
     if options.dynamic_reference().is_none() {
         validate_reference_identity(&reference_base, &manifest.entry)?;
+        validate_adapter_reference_provenance(&reference_base, &manifest.entry)?;
     }
     let entries = selected_entries(&manifest.entry, &options.probe_gated)?;
     fs::create_dir_all(&options.output_dir)?;
@@ -258,6 +269,40 @@ fn run_entry(
         }
     };
     diagnostics.append(&output);
+    let reference = if dynamic_reference.is_none()
+        && !options.expect_all_fail
+        && !entry.adapter_reference.is_empty()
+    {
+        match reported_adapter(&output.stdout) {
+            Ok(Some(adapter)) => entry
+                .adapter_reference
+                .iter()
+                .find(|candidate| candidate.adapter == adapter)
+                .ok_or_else(|| {
+                    format!(
+                        "renderer adapter `{adapter}` has no approved static reference for {}",
+                        entry.id
+                    )
+                })
+                .and_then(|selected| resolve_reference_path(reference_base, &selected.reference)),
+            Ok(None) => Err(format!(
+                "renderer adapter identity missing for {}: candidate did not report `adapter=`",
+                entry.id
+            )),
+            Err(error) => Err(error),
+        }
+    } else {
+        Ok(reference)
+    };
+    let reference = match reference {
+        Ok(reference) => reference,
+        Err(error) => {
+            return EntryExecution {
+                diagnostics,
+                outcome: Err(error),
+            }
+        }
+    };
     let adapter_check = match (dynamic_reference, reference_output.as_ref()) {
         (Some(reference_replay), Some(reference_output)) if output.status.success() => {
             match prepare_dynamic_reference_report(DynamicComparison {
@@ -715,17 +760,21 @@ fn compare_entry(
 }
 
 fn resolve_reference(base: &Path, entry: &Entry) -> Result<PathBuf, String> {
-    let physical = if entry.reference.is_absolute() {
-        entry.reference.clone()
+    resolve_reference_path(base, &entry.reference)
+}
+
+fn resolve_reference_path(base: &Path, reference: &Path) -> Result<PathBuf, String> {
+    let physical = if reference.is_absolute() {
+        reference.to_path_buf()
     } else {
-        base.join(&entry.reference)
+        base.join(reference)
     };
     if physical.is_file() {
         Ok(physical)
     } else {
         Err(format!(
             "renderer reference `{}` is missing and has no existing approved target",
-            entry.reference.display()
+            reference.display()
         ))
     }
 }
@@ -1091,6 +1140,203 @@ fn validate_reference_identity(base: &Path, entries: &[Entry]) -> Result<(), Str
     )
 }
 
+fn validate_adapter_reference_provenance(base: &Path, entries: &[Entry]) -> Result<(), String> {
+    for entry in entries {
+        let mut adapters = HashSet::with_capacity(entry.adapter_reference.len());
+        for adapter_reference in &entry.adapter_reference {
+            if !adapters.insert(adapter_reference.adapter.as_str()) {
+                return Err(format!(
+                    "{} repeats static adapter reference `{}`",
+                    entry.id, adapter_reference.adapter
+                ));
+            }
+            let provenance = adapter_reference.provenance.as_ref().ok_or_else(|| {
+                format!(
+                    "static adapter reference for {} adapter `{}` must name provenance",
+                    entry.id, adapter_reference.adapter
+                )
+            })?;
+            let provenance_path = if provenance.is_absolute() {
+                provenance.clone()
+            } else {
+                base.join(provenance)
+            };
+            let record = fs::read_to_string(&provenance_path).map_err(|error| {
+                format!(
+                    "failed to read adapter reference provenance {}: {error}",
+                    provenance.display()
+                )
+            })?;
+            let fields = parse_static_provenance(provenance, &record)?;
+            let field = |key: &str| {
+                fields
+                    .get(key)
+                    .copied()
+                    .ok_or_else(|| format!("{} has no {key}", provenance.display()))
+            };
+            require_provenance_field(
+                provenance,
+                "provenance_schema",
+                field("provenance_schema")?,
+                "1",
+            )?;
+            require_provenance_field(provenance, "backend", field("backend")?, "metal")?;
+            require_provenance_field(
+                provenance,
+                "renderer_implementation",
+                field("renderer_implementation")?,
+                "cpp-dawn-webgpu",
+            )?;
+            require_provenance_field(
+                provenance,
+                "capture_tool",
+                field("capture_tool")?,
+                "renderer-replay-ffi-dawn",
+            )?;
+            let provenance_adapter = field("adapter_device")?;
+            if provenance_adapter != adapter_reference.adapter {
+                return Err(format!(
+                    "{} adapter_device `{provenance_adapter}` does not match manifest adapter `{}`",
+                    provenance.display(),
+                    adapter_reference.adapter
+                ));
+            }
+            require_provenance_field(provenance, "case_id", field("case_id")?, &entry.id)?;
+            let stream_path = if entry.stream.is_absolute() {
+                entry.stream.clone()
+            } else {
+                base.join(&entry.stream)
+            };
+            let actual_stream_sha256 = sha256_file(&stream_path)?;
+            require_provenance_field(
+                provenance,
+                "stream_sha256",
+                field("stream_sha256")?,
+                &actual_stream_sha256,
+            )?;
+            require_hex_field(
+                provenance,
+                "runtime_revision",
+                field("runtime_revision")?,
+                40,
+            )?;
+            require_hex_field(provenance, "dawn_revision", field("dawn_revision")?, 40)?;
+            require_hex_field(provenance, "replay_sha256", field("replay_sha256")?, 64)?;
+            let reference_path = if adapter_reference.reference.is_absolute() {
+                adapter_reference.reference.clone()
+            } else {
+                base.join(&adapter_reference.reference)
+            };
+            let actual_png_sha256 = sha256_file(&reference_path)?;
+            let expected_png_sha256 = field("png_sha256")?;
+            require_hex_field(provenance, "png_sha256", expected_png_sha256, 64)?;
+            if expected_png_sha256 != actual_png_sha256 {
+                return Err(format!(
+                    "{} png_sha256 does not match {}",
+                    provenance.display(),
+                    adapter_reference.reference.display()
+                ));
+            }
+            let image = RgbaImage::read_png(&reference_path).map_err(|error| {
+                format!(
+                    "failed to decode adapter reference {}: {error}",
+                    adapter_reference.reference.display()
+                )
+            })?;
+            require_provenance_field(
+                provenance,
+                "frame_width",
+                field("frame_width")?,
+                &image.width.to_string(),
+            )?;
+            require_provenance_field(
+                provenance,
+                "frame_height",
+                field("frame_height")?,
+                &image.height.to_string(),
+            )?;
+            require_provenance_field(
+                provenance,
+                "frame",
+                field("frame")?,
+                &entry.frame.to_string(),
+            )?;
+            require_provenance_field(provenance, "mode", field("mode")?, &entry.mode)?;
+            let sample_count = if entry.mode == "msaa" { "4" } else { "1" };
+            require_provenance_field(
+                provenance,
+                "sample_count",
+                field("sample_count")?,
+                sample_count,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn parse_static_provenance<'a>(
+    path: &Path,
+    contents: &'a str,
+) -> Result<HashMap<&'a str, &'a str>, String> {
+    let mut fields = HashMap::new();
+    for (index, line) in contents.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let (key, value) = line.split_once('=').ok_or_else(|| {
+            format!(
+                "{} line {} is not key=value provenance",
+                path.display(),
+                index + 1
+            )
+        })?;
+        let key = key.trim();
+        let value = value.trim();
+        if key.is_empty() || value.is_empty() {
+            return Err(format!(
+                "{} line {} has an empty provenance key or value",
+                path.display(),
+                index + 1
+            ));
+        }
+        if fields.insert(key, value).is_some() {
+            return Err(format!(
+                "{} repeats provenance field `{key}`",
+                path.display()
+            ));
+        }
+    }
+    Ok(fields)
+}
+
+fn require_provenance_field(
+    path: &Path,
+    field: &str,
+    actual: &str,
+    expected: &str,
+) -> Result<(), String> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} {field} `{actual}` does not match expected `{expected}`",
+            path.display()
+        ))
+    }
+}
+
+fn require_hex_field(path: &Path, field: &str, value: &str, len: usize) -> Result<(), String> {
+    if value.len() == len && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} {field} must be exactly {len} hexadecimal characters",
+            path.display()
+        ))
+    }
+}
+
 struct Options {
     manifest: PathBuf,
     replay: PathBuf,
@@ -1221,6 +1467,7 @@ mod tests {
             max_different_pixels: 0,
             gated: Some("algorithm-core".to_owned()),
             mode: mode.to_owned(),
+            adapter_reference: Vec::new(),
         }
     }
 

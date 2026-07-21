@@ -1513,7 +1513,6 @@ impl RuntimeImportedViewModelInstanceContext {
 pub struct RuntimeOwnedViewModelInstance {
     pub(crate) view_model_index: usize,
     instance_identity: u64,
-    mutation_generation: u64,
     mutation_clock: Rc<RuntimeOwnedViewModelMutationClock>,
     property_names: Vec<(String, usize)>,
     numbers: Vec<RuntimeOwnedViewModelNumber>,
@@ -2667,26 +2666,6 @@ impl RuntimeOwnedViewModelListHandle {
             .collect()
     }
 
-    pub(crate) fn replace_item_context_at(
-        &self,
-        source_index: usize,
-        context: &RuntimeOwnedViewModelInstance,
-    ) -> bool {
-        let list = self.value.borrow();
-        let Some(item) = list.items.get(source_index) else {
-            return false;
-        };
-        let mut item = item.instance.borrow_mut();
-        if item.instance_identity() != context.instance_identity()
-            || item.view_model_index() != context.view_model_index()
-        {
-            return false;
-        }
-        let changed = item.mutation_generation() != context.mutation_generation();
-        *item = context.clone();
-        changed
-    }
-
     pub(crate) fn text_runs(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
         self.value
             .borrow()
@@ -3523,7 +3502,6 @@ impl RuntimeOwnedViewModelInstance {
         Self {
             view_model_index: self.view_model_index,
             instance_identity: self.instance_identity,
-            mutation_generation: self.mutation_generation,
             mutation_clock: RuntimeOwnedViewModelMutationClock::new_with_generation(
                 mutation_generation,
             ),
@@ -4116,7 +4094,6 @@ impl RuntimeOwnedViewModelViewModel {
         let mut instance = RuntimeOwnedViewModelInstance {
             view_model_index,
             instance_identity: RuntimeOwnedViewModelInstance::next_instance_identity(),
-            mutation_generation: 0,
             mutation_clock: RuntimeOwnedViewModelMutationClock::new(),
             property_names: self.property_names.clone(),
             numbers: active_values!(&self.numbers, self.imported_numbers),
@@ -6939,7 +6916,6 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     fn mark_mutated(&mut self) {
-        self.mutation_generation = self.mutation_generation.wrapping_add(1);
         RuntimeOwnedViewModelMutationClock::mark_mutated(&self.mutation_clock);
     }
 
@@ -7047,7 +7023,6 @@ impl RuntimeOwnedViewModelInstance {
             let active = source_child.materialize_active_instance()?;
             Self::overlay_active_child(target_child, &active)?;
         }
-        self.mutation_generation = 0;
         Some(())
     }
 
@@ -7170,7 +7145,6 @@ impl RuntimeOwnedViewModelInstance {
         let mut instance = Self {
             view_model_index,
             instance_identity: Self::next_instance_identity(),
-            mutation_generation: 0,
             mutation_clock: RuntimeOwnedViewModelMutationClock::new(),
             property_names: runtime_owned_view_model_property_names(file, view_model_index),
             numbers,

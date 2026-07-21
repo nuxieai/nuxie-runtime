@@ -172,6 +172,10 @@ upstream-sync-map registry).
     migrated owned scalars attach their cell to it, while compatibility kinds
     use the same engine's source/target/reconcile marks until their cells land.
     Floors: runtime lib 345, nuxie lib 132, probe 708/708.
+  - [x] (f3) unread per-instance `mutation_generation` shadow counter and the
+    zero-call list-item context replacement helper deleted. The still-live
+    shared structural clock is unchanged until list/ViewModel slots gain
+    retained dirt. Runtime lib 345/345; probe 708/708.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -569,3 +573,7 @@ Decisions log.)
 - 2026-07-21 — #RB-1 f2 deleted the graph source's copied `target_origin`;
   all source kinds now use the retained DataBind direction engine as the sole
   origin latch. Runtime lib 345/345, nuxie lib 132/132, probe 708/708.
+- 2026-07-21 — #RB-1 f3 deleted the unread instance-local mutation counter
+  and a zero-call list-context replacement helper; the shared structural
+  clock remains until retained List/ViewModel dirt lands. Runtime lib 345/345
+  and probe 708/708.

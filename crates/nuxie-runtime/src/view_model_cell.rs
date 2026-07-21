@@ -273,9 +273,668 @@ impl RuntimeViewModelCell {
     }
 }
 
+
+/// Property-slot classification, from the `ViewModelProperty*` definition
+/// object type names (C++ subclasses of `ViewModelProperty`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeViewModelCellKind {
+    Number,
+    Boolean,
+    String,
+    Color,
+    Enum,
+    Trigger,
+    SymbolListIndex,
+    AssetImage,
+    AssetFont,
+    Artboard,
+    ViewModel,
+    List,
+}
+
+impl RuntimeViewModelCellKind {
+    pub fn from_property_type_name(type_name: &str) -> Option<Self> {
+        Some(match type_name {
+            "ViewModelPropertyNumber" => Self::Number,
+            "ViewModelPropertyBoolean" => Self::Boolean,
+            "ViewModelPropertyString" => Self::String,
+            "ViewModelPropertyColor" => Self::Color,
+            "ViewModelPropertyEnum"
+            | "ViewModelPropertyEnumCustom"
+            | "ViewModelPropertyEnumSystem" => Self::Enum,
+            "ViewModelPropertyTrigger" => Self::Trigger,
+            "ViewModelPropertySymbolListIndex" => Self::SymbolListIndex,
+            "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => Self::AssetImage,
+            "ViewModelPropertyAssetFont" => Self::AssetFont,
+            "ViewModelPropertyArtboard" => Self::Artboard,
+            "ViewModelPropertyViewModel" => Self::ViewModel,
+            "ViewModelPropertyList" => Self::List,
+            _ => return None,
+        })
+    }
+
+    fn default_value(self) -> Option<RuntimeViewModelCellValue> {
+        Some(match self {
+            Self::Number => RuntimeViewModelCellValue::Number(0.0),
+            Self::Boolean => RuntimeViewModelCellValue::Boolean(false),
+            Self::String => RuntimeViewModelCellValue::String(Vec::new()),
+            Self::Color => RuntimeViewModelCellValue::Color(0),
+            Self::Enum => RuntimeViewModelCellValue::Enum(0),
+            Self::Trigger => RuntimeViewModelCellValue::Trigger(0),
+            Self::SymbolListIndex => RuntimeViewModelCellValue::SymbolListIndex(0),
+            Self::AssetImage => RuntimeViewModelCellValue::AssetImage(0),
+            Self::AssetFont => RuntimeViewModelCellValue::AssetFont(0),
+            Self::Artboard => RuntimeViewModelCellValue::Artboard(0),
+            Self::ViewModel | Self::List => return None,
+        })
+    }
+}
+
+/// One property slot of a cell-backed instance, indexed by definition-order
+/// property index (the unit of C++ property paths).
+#[derive(Clone)]
+pub enum RuntimeViewModelCellSlot {
+    Value(RuntimeViewModelCell),
+    /// Nested `ViewModelPropertyViewModel` reference; `None` when the
+    /// definition declares no referenced model or the reference is
+    /// unresolvable (C++ `referenceViewModelInstance() == nullptr`).
+    ViewModel(Option<RuntimeViewModelInstanceCells>),
+    /// `ViewModelPropertyList` items, each a retained child instance.
+    List(Vec<RuntimeViewModelInstanceCells>),
+    /// Property type this port does not model yet; lookups return `None`
+    /// exactly like C++ returns nullptr for a failed downcast.
+    Unsupported,
+}
+
+struct RuntimeViewModelInstanceCellsState {
+    view_model_index: usize,
+    slots: Vec<RuntimeViewModelCellSlot>,
+}
+
+/// A retained, shared, cell-backed view-model instance — the Rust analog of
+/// C++ `rcp<ViewModelInstance>`: cloning shares identity; every property is
+/// a shared [`RuntimeViewModelCell`] (or a retained child instance).
+#[derive(Clone)]
+pub struct RuntimeViewModelInstanceCells {
+    state: Rc<RefCell<RuntimeViewModelInstanceCellsState>>,
+}
+
+impl RuntimeViewModelInstanceCells {
+    /// C++ `File::createViewModelInstance(viewModel)`: definition defaults,
+    /// nested references instantiated recursively (cycle-guarded).
+    pub fn from_definition_defaults(
+        file: &nuxie_binary::RuntimeFile,
+        view_model_index: usize,
+    ) -> Option<Self> {
+        let mut visiting = Vec::new();
+        Self::build(file, view_model_index, None, &mut visiting)
+    }
+
+    /// C++ `File::createViewModelInstance(index, instanceIndex)` →
+    /// `copyViewModelInstance`: a retained copy of serialized instance
+    /// `instance_index`, nested instance references followed.
+    pub fn from_serialized_instance(
+        file: &nuxie_binary::RuntimeFile,
+        view_model_index: usize,
+        instance_index: usize,
+    ) -> Option<Self> {
+        let view_model = file.view_model(view_model_index)?;
+        let instance = view_model.instances.into_iter().nth(instance_index)?;
+        let mut visiting = Vec::new();
+        Self::build(file, view_model_index, Some(instance.object), &mut visiting)
+    }
+
+    fn build(
+        file: &nuxie_binary::RuntimeFile,
+        view_model_index: usize,
+        instance: Option<&nuxie_binary::RuntimeObject>,
+        visiting: &mut Vec<usize>,
+    ) -> Option<Self> {
+        if visiting.contains(&view_model_index) {
+            return None;
+        }
+        visiting.push(view_model_index);
+        let view_model = file.view_model(view_model_index);
+        let slots = view_model
+            .map(|view_model| {
+                view_model
+                    .properties
+                    .iter()
+                    .enumerate()
+                    .map(|(property_index, property)| {
+                        Self::build_slot(
+                            file,
+                            view_model_index,
+                            property_index,
+                            property.type_name,
+                            instance,
+                            visiting,
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        visiting.pop();
+        Some(Self {
+            state: Rc::new(RefCell::new(RuntimeViewModelInstanceCellsState {
+                view_model_index,
+                slots,
+            })),
+        })
+    }
+
+    fn build_slot(
+        file: &nuxie_binary::RuntimeFile,
+        view_model_index: usize,
+        property_index: usize,
+        property_type_name: &str,
+        instance: Option<&nuxie_binary::RuntimeObject>,
+        visiting: &mut Vec<usize>,
+    ) -> RuntimeViewModelCellSlot {
+        let Some(kind) = RuntimeViewModelCellKind::from_property_type_name(property_type_name)
+        else {
+            return RuntimeViewModelCellSlot::Unsupported;
+        };
+        let path = [
+            u32::try_from(view_model_index).unwrap_or(u32::MAX),
+            u32::try_from(property_index).unwrap_or(u32::MAX),
+        ];
+        let instance_value = instance.and_then(|instance| {
+            file.data_context_view_model_property_for_instance(instance, &path)
+        });
+        match kind {
+            RuntimeViewModelCellKind::ViewModel => {
+                let child = match instance {
+                    Some(instance) => file
+                        .data_context_view_model_instance_for_instance(instance, &path)
+                        .and_then(|reference| {
+                            Self::build(
+                                file,
+                                reference.view_model_index,
+                                Some(reference.object),
+                                visiting,
+                            )
+                        }),
+                    None => file
+                        .view_model(view_model_index)
+                        .and_then(|view_model| {
+                            view_model.properties.get(property_index).and_then(|property| {
+                                property.uint_property("viewModelReferenceId")
+                            })
+                        })
+                        .and_then(|reference| usize::try_from(reference).ok())
+                        .and_then(|reference| Self::build(file, reference, None, visiting)),
+                };
+                RuntimeViewModelCellSlot::ViewModel(child)
+            }
+            RuntimeViewModelCellKind::List => {
+                // Serialized list items are nested instance references; the
+                // default instance starts empty (C++ default list).
+                let items = instance_value
+                    .map(|_| Vec::new())
+                    .unwrap_or_default();
+                RuntimeViewModelCellSlot::List(items)
+            }
+            kind => {
+                let seeded = instance_value.and_then(|value| match kind {
+                    RuntimeViewModelCellKind::Number => file
+                        .view_model_instance_number_value_for_object(value)
+                        .map(RuntimeViewModelCellValue::Number),
+                    RuntimeViewModelCellKind::Boolean => file
+                        .view_model_instance_boolean_value_for_object(value)
+                        .map(RuntimeViewModelCellValue::Boolean),
+                    RuntimeViewModelCellKind::String => file
+                        .view_model_instance_string_value_bytes_for_object(value)
+                        .map(|bytes| RuntimeViewModelCellValue::String(bytes.to_vec())),
+                    RuntimeViewModelCellKind::Color => file
+                        .view_model_instance_color_value_for_object(value)
+                        .map(RuntimeViewModelCellValue::Color),
+                    RuntimeViewModelCellKind::Enum => value
+                        .uint_property("propertyValue")
+                        .and_then(|value| u32::try_from(value).ok())
+                        .map(RuntimeViewModelCellValue::Enum),
+                    RuntimeViewModelCellKind::Trigger => file
+                        .view_model_instance_trigger_count_for_object(value)
+                        .map(RuntimeViewModelCellValue::Trigger),
+                    RuntimeViewModelCellKind::SymbolListIndex => file
+                        .view_model_instance_symbol_list_index_value_for_object(value)
+                        .and_then(|index| u32::try_from(index).ok())
+                        .map(RuntimeViewModelCellValue::SymbolListIndex),
+                    RuntimeViewModelCellKind::AssetImage => file
+                        .view_model_instance_asset_index_for_object(value)
+                        .and_then(|index| u32::try_from(index).ok())
+                        .map(RuntimeViewModelCellValue::AssetImage),
+                    RuntimeViewModelCellKind::AssetFont => file
+                        .view_model_instance_font_asset_index_for_object(value)
+                        .and_then(|index| u32::try_from(index).ok())
+                        .map(RuntimeViewModelCellValue::AssetFont),
+                    RuntimeViewModelCellKind::Artboard => file
+                        .view_model_instance_artboard_index_for_object(value)
+                        .and_then(|index| u32::try_from(index).ok())
+                        .map(RuntimeViewModelCellValue::Artboard),
+                    RuntimeViewModelCellKind::ViewModel | RuntimeViewModelCellKind::List => None,
+                });
+                match seeded.or_else(|| kind.default_value()) {
+                    Some(value) => {
+                        RuntimeViewModelCellSlot::Value(RuntimeViewModelCell::new(value))
+                    }
+                    None => RuntimeViewModelCellSlot::Unsupported,
+                }
+            }
+        }
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.state, &other.state)
+    }
+
+    pub fn view_model_index(&self) -> usize {
+        self.state.borrow().view_model_index
+    }
+
+    /// The retained cell at one property index (C++
+    /// `ViewModelInstance::propertyValue(index)` downcast to a value).
+    pub fn property_cell(&self, property_index: usize) -> Option<RuntimeViewModelCell> {
+        match self.state.borrow().slots.get(property_index)? {
+            RuntimeViewModelCellSlot::Value(cell) => Some(cell.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn child_instance(&self, property_index: usize) -> Option<RuntimeViewModelInstanceCells> {
+        match self.state.borrow().slots.get(property_index)? {
+            RuntimeViewModelCellSlot::ViewModel(child) => child.clone(),
+            _ => None,
+        }
+    }
+
+    /// Walk a property path (already stripped of the leading viewModelId
+    /// segment): intermediate segments must be nested ViewModel slots, the
+    /// final segment must be a value cell — C++
+    /// `DataContext::tryGetViewModelProperty`'s loop.
+    pub fn cell_by_property_path(&self, path: &[usize]) -> Option<RuntimeViewModelCell> {
+        let (&last, rest) = path.split_last()?;
+        let mut current = self.clone();
+        for &segment in rest {
+            current = current.child_instance(segment)?;
+        }
+        current.property_cell(last)
+    }
+}
+
+struct RuntimeDataContextState {
+    instances: Vec<RuntimeViewModelInstanceCells>,
+    parent: Option<RuntimeDataContext>,
+}
+
+/// The Rust analog of C++ `DataContext` (`data_context.cpp`): a retained
+/// list of instances plus one parent link. Lookup walks own instances by
+/// `path[0] == viewModelId`, then defers to the parent — replacing the
+/// candidate-vector search entirely.
+#[derive(Clone)]
+pub struct RuntimeDataContext {
+    state: Rc<RefCell<RuntimeDataContextState>>,
+}
+
+impl RuntimeDataContext {
+    pub fn new(instance: Option<RuntimeViewModelInstanceCells>) -> Self {
+        Self {
+            state: Rc::new(RefCell::new(RuntimeDataContextState {
+                instances: instance.into_iter().collect(),
+                parent: None,
+            })),
+        }
+    }
+
+    pub fn from_instances(instances: Vec<RuntimeViewModelInstanceCells>) -> Self {
+        Self {
+            state: Rc::new(RefCell::new(RuntimeDataContextState {
+                instances,
+                parent: None,
+            })),
+        }
+    }
+
+    pub fn set_parent(&self, parent: Option<RuntimeDataContext>) {
+        self.state.borrow_mut().parent = parent;
+    }
+
+    pub fn parent(&self) -> Option<RuntimeDataContext> {
+        self.state.borrow().parent.clone()
+    }
+
+    pub fn add_instance(&self, instance: RuntimeViewModelInstanceCells) {
+        self.state.borrow_mut().instances.push(instance);
+    }
+
+    /// C++ `DataContext::getViewModelProperty(path)`: `path[0]` selects the
+    /// instance by view-model id; the rest walks nested properties; a miss
+    /// defers to the parent context.
+    pub fn view_model_property(&self, path: &[u32]) -> Option<RuntimeViewModelCell> {
+        if path.len() < 2 {
+            return None;
+        }
+        let state = self.state.borrow();
+        let view_model_id = usize::try_from(path[0]).ok()?;
+        let property_path = path[1..]
+            .iter()
+            .map(|&segment| usize::try_from(segment).ok())
+            .collect::<Option<Vec<_>>>()?;
+        for instance in &state.instances {
+            if instance.view_model_index() != view_model_id {
+                continue;
+            }
+            if let Some(cell) = instance.cell_by_property_path(&property_path) {
+                return Some(cell);
+            }
+        }
+        state
+            .parent
+            .as_ref()
+            .and_then(|parent| parent.view_model_property(path))
+    }
+
+    /// C++ `DataContext::getViewModelInstance(path)` (nested instance form).
+    pub fn view_model_instance(&self, path: &[u32]) -> Option<RuntimeViewModelInstanceCells> {
+        if path.is_empty() {
+            return None;
+        }
+        let state = self.state.borrow();
+        let view_model_id = usize::try_from(path[0]).ok()?;
+        for instance in &state.instances {
+            if instance.view_model_index() != view_model_id {
+                continue;
+            }
+            let mut current = instance.clone();
+            let mut resolved = true;
+            for &segment in &path[1..] {
+                let Some(next) = usize::try_from(segment)
+                    .ok()
+                    .and_then(|segment| current.child_instance(segment))
+                else {
+                    resolved = false;
+                    break;
+                };
+                current = next;
+            }
+            if resolved {
+                return Some(current);
+            }
+        }
+        state
+            .parent
+            .as_ref()
+            .and_then(|parent| parent.view_model_instance(path))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::properties::property_key_for_name;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+    use nuxie_schema::definition_by_name;
+
+    fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn authoring_property(
+        type_name: &str,
+        property_name: &str,
+        value: AuthoringValue,
+    ) -> AuthoringProperty {
+        AuthoringProperty {
+            key: property_key_for_name(type_name, property_name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{property_name}")),
+            value,
+        }
+    }
+
+    /// Root VM: [amount: Number, fired: Trigger, child: ViewModel->Child].
+    /// Child VM: [offset: Number]. Serialized instance 0 carries
+    /// amount=4022, child.offset=95 — the instance-0-vs-defaults shape from
+    /// the db_health_tracker scalar divergence.
+    fn cell_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            authoring_record(
+                "ViewModel",
+                vec![authoring_property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Root".to_owned()),
+                )],
+            ),
+            authoring_record(
+                "ViewModelPropertyNumber",
+                vec![authoring_property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("amount".to_owned()),
+                )],
+            ),
+            authoring_record(
+                "ViewModelPropertyTrigger",
+                vec![authoring_property(
+                    "ViewModelPropertyTrigger",
+                    "name",
+                    AuthoringValue::String("fired".to_owned()),
+                )],
+            ),
+            authoring_record(
+                "ViewModelPropertyViewModel",
+                vec![
+                    authoring_property(
+                        "ViewModelPropertyViewModel",
+                        "name",
+                        AuthoringValue::String("child".to_owned()),
+                    ),
+                    authoring_property(
+                        "ViewModelPropertyViewModel",
+                        "viewModelReferenceId",
+                        AuthoringValue::Uint(1),
+                    ),
+                ],
+            ),
+            authoring_record(
+                "ViewModel",
+                vec![authoring_property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Child".to_owned()),
+                )],
+            ),
+            authoring_record(
+                "ViewModelPropertyNumber",
+                vec![authoring_property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("offset".to_owned()),
+                )],
+            ),
+            authoring_record("Backboard", Vec::new()),
+            // Real .riv serialization places artboards before backboard-level
+            // instances; the nested-instance resolver requires that order.
+            authoring_record("Artboard", Vec::new()),
+            authoring_record(
+                "ViewModelInstance",
+                vec![
+                    authoring_property(
+                        "ViewModelInstance",
+                        "name",
+                        AuthoringValue::String("child-instance".to_owned()),
+                    ),
+                    authoring_property(
+                        "ViewModelInstance",
+                        "viewModelId",
+                        AuthoringValue::Uint(1),
+                    ),
+                ],
+            ),
+            authoring_record(
+                "ViewModelInstanceNumber",
+                vec![
+                    authoring_property(
+                        "ViewModelInstanceNumber",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    authoring_property(
+                        "ViewModelInstanceNumber",
+                        "propertyValue",
+                        AuthoringValue::Double(95.0),
+                    ),
+                ],
+            ),
+            authoring_record(
+                "ViewModelInstance",
+                vec![
+                    authoring_property(
+                        "ViewModelInstance",
+                        "name",
+                        AuthoringValue::String("root-instance".to_owned()),
+                    ),
+                    authoring_property(
+                        "ViewModelInstance",
+                        "viewModelId",
+                        AuthoringValue::Uint(0),
+                    ),
+                ],
+            ),
+            authoring_record(
+                "ViewModelInstanceNumber",
+                vec![
+                    authoring_property(
+                        "ViewModelInstanceNumber",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    authoring_property(
+                        "ViewModelInstanceNumber",
+                        "propertyValue",
+                        AuthoringValue::Double(4022.0),
+                    ),
+                ],
+            ),
+            authoring_record(
+                "ViewModelInstanceTrigger",
+                vec![authoring_property(
+                    "ViewModelInstanceTrigger",
+                    "viewModelPropertyId",
+                    AuthoringValue::Uint(1),
+                )],
+            ),
+            authoring_record(
+                "ViewModelInstanceViewModel",
+                vec![
+                    authoring_property(
+                        "ViewModelInstanceViewModel",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(2),
+                    ),
+                    authoring_property(
+                        "ViewModelInstanceViewModel",
+                        "propertyValue",
+                        AuthoringValue::Uint(0),
+                    ),
+                ],
+            ),
+        ])
+        .expect("cell fixture imports")
+    }
+
+    #[test]
+    fn definition_defaults_and_serialized_instance_seed_differently() {
+        let file = cell_fixture();
+
+        let defaults = RuntimeViewModelInstanceCells::from_definition_defaults(&file, 0)
+            .expect("defaults instance builds");
+        assert_eq!(
+            defaults.property_cell(0).expect("amount cell").value(),
+            RuntimeViewModelCellValue::Number(0.0),
+            "definition defaults zero-seed numbers"
+        );
+
+        let seeded = RuntimeViewModelInstanceCells::from_serialized_instance(&file, 0, 0)
+            .expect("serialized instance builds");
+        assert_eq!(
+            seeded.property_cell(0).expect("amount cell").value(),
+            RuntimeViewModelCellValue::Number(4022.0),
+            "instance 0 seeds the serialized value"
+        );
+        let child = seeded.child_instance(2).expect("nested child instantiates");
+        assert_eq!(child.view_model_index(), 1);
+        assert_eq!(
+            child.property_cell(0).expect("offset cell").value(),
+            RuntimeViewModelCellValue::Number(95.0),
+            "nested serialized values follow the instance reference"
+        );
+    }
+
+    #[test]
+    fn data_context_lookup_returns_the_retained_cell_by_identity() {
+        let file = cell_fixture();
+        let instance = RuntimeViewModelInstanceCells::from_serialized_instance(&file, 0, 0)
+            .expect("instance builds");
+        let context = RuntimeDataContext::new(Some(instance.clone()));
+
+        let direct = instance.property_cell(0).expect("amount cell");
+        let via_context = context
+            .view_model_property(&[0, 0])
+            .expect("context resolves [vm 0, property 0]");
+        assert!(
+            direct.ptr_eq(&via_context),
+            "the context returns the SAME retained cell, not a copy"
+        );
+
+        // Nested path [0, 2, 0] = root vm -> child slot -> offset.
+        let nested = context
+            .view_model_property(&[0, 2, 0])
+            .expect("context resolves the nested path");
+        assert_eq!(nested.value(), RuntimeViewModelCellValue::Number(95.0));
+
+        // A dependent registered through one handle observes writes made
+        // through the other — the exact propagation the compensation family
+        // reconstructed by polling.
+        let bind = RuntimeCellDirtSink::new();
+        via_context.add_dependent(&bind);
+        assert!(direct.set_value(RuntimeViewModelCellValue::Number(7.0)));
+        assert!(bind.take_dirt().contains(RuntimeCellDirt::BINDINGS));
+        assert_eq!(
+            context.view_model_property(&[0, 0]).unwrap().value(),
+            RuntimeViewModelCellValue::Number(7.0)
+        );
+    }
+
+    #[test]
+    fn data_context_defers_to_parent_and_rejects_wrong_view_model_id() {
+        let file = cell_fixture();
+        let child_instance = RuntimeViewModelInstanceCells::from_serialized_instance(&file, 1, 0)
+            .expect("child instance builds");
+        let root_instance = RuntimeViewModelInstanceCells::from_serialized_instance(&file, 0, 0)
+            .expect("root instance builds");
+
+        let parent = RuntimeDataContext::new(Some(root_instance));
+        let context = RuntimeDataContext::new(Some(child_instance));
+        context.set_parent(Some(parent));
+
+        // vm id 1 resolves locally; vm id 0 misses locally and walks the
+        // parent link (C++ getViewModelProperty parent recursion).
+        assert!(context.view_model_property(&[1, 0]).is_some());
+        let inherited = context
+            .view_model_property(&[0, 0])
+            .expect("parent resolves vm 0");
+        assert_eq!(inherited.value(), RuntimeViewModelCellValue::Number(4022.0));
+
+        // An unknown vm id resolves nowhere.
+        assert!(context.view_model_property(&[9, 0]).is_none());
+    }
 
     #[test]
     fn shared_identity_propagates_one_write_to_every_dependent_once() {

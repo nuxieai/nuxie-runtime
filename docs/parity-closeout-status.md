@@ -167,6 +167,11 @@ upstream-sync-map registry).
     or mutation-time mirror fan-out remains. The temporary shared mutation
     clock stays only for structural/list dirt until their retained-dependent
     cut lands. Runtime lib remains 345/345.
+  - [x] (f2) copied graph-source `target_origin` deleted. Every graph source
+    now owns one always-present `RuntimeRetainedDataBind` direction engine;
+    migrated owned scalars attach their cell to it, while compatibility kinds
+    use the same engine's source/target/reconcile marks until their cells land.
+    Floors: runtime lib 345, nuxie lib 132, probe 708/708.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -561,3 +566,6 @@ Decisions log.)
   mutation-time mirror fan-out. Linked properties keep their direct retained
   child and shared scalar cells; the temporary clock union remains only for
   structural/list dirt. Runtime lib stays 345/345.
+- 2026-07-21 — #RB-1 f2 deleted the graph source's copied `target_origin`;
+  all source kinds now use the retained DataBind direction engine as the sole
+  origin latch. Runtime lib 345/345, nuxie lib 132/132, probe 708/708.

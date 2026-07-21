@@ -149,6 +149,13 @@ impl RuntimeRetainedDataBind {
         self.add_dirt(RuntimeCellDirt::BINDINGS_TARGET);
     }
 
+    /// The source mutated through a non-cell compatibility seam. Slice (f)
+    /// keeps this entry point while those remaining source kinds move onto
+    /// retained cells; origin still belongs to the DataBind direction engine.
+    pub fn mark_source_changed(&mut self) {
+        self.add_dirt(RuntimeCellDirt::BINDINGS);
+    }
+
     /// C++ `DataBind::addDirt` with the origin latch: a reconcile (both
     /// bits) resolves the origin by favored direction; a one-sided change
     /// records its own side. Suppressed applies never re-dirty.
@@ -393,6 +400,11 @@ mod tests {
 
         bind.mark_target_changed();
         assert!(bind.target_origin());
+
+        // Compatibility sources that have not moved onto retained cells yet
+        // still use the same direction engine instead of a parallel flag.
+        bind.mark_source_changed();
+        assert!(!bind.target_origin());
     }
 
     #[test]

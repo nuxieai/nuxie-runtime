@@ -202,10 +202,6 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
     pub(crate) flags: u64,
     pub(crate) bound: bool,
     pub(crate) target_to_source_dirty: bool,
-    /// Direction of the change currently in flight. Mirrors C++ DataBind's
-    /// TargetOrigin flag so stateful converters keep re-dirtying the same
-    /// direction after the per-update dirt has been consumed.
-    pub(crate) target_origin: bool,
     /// Bind/rebind dirt has not yet passed through a state-machine
     /// updateDataBinds(false) equivalent. `advance_data_context` alone must
     /// not consume it; an explicit source/target mutation supersedes it.
@@ -221,12 +217,11 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
     pub(crate) default_value: RuntimeDataBindGraphValue,
     pub(crate) value: RuntimeDataBindGraphValue,
     pub(crate) view_model_instance_ids: Vec<u32>,
-    /// #RB-1 e3: on the OWNED bind path a scalar source retains the shared
-    /// view-model cell through the direction engine — `value` refreshes from
-    /// cell dirt instead of the mutation-clock value-copy rescan. `None` for
-    /// unmigrated sources (lists, view-model values, triggers, strings,
-    /// fonts, unresolved paths) and every non-owned context kind.
-    pub(crate) retained_bind: Option<RuntimeRetainedDataBind>,
+    /// Every source owns exactly one C++-shaped direction engine. Owned
+    /// scalar paths additionally attach its retained source cell; unresolved
+    /// and not-yet-migrated source kinds leave that cell empty while still
+    /// sharing the same origin/reconcile state.
+    pub(crate) retained_bind: RuntimeRetainedDataBind,
 }
 
 /// The #RB-1 e3 [`RuntimeDataBindTarget`] adapter: the retained bind's
@@ -4456,7 +4451,6 @@ impl RuntimeDataBindGraph {
             flags,
             bound: true,
             target_to_source_dirty: false,
-            target_origin: false,
             reconcile_pending: false,
             defer_source_to_target_until_next_update: false,
             source_to_target_dirty_after_immediate: false,
@@ -4466,7 +4460,7 @@ impl RuntimeDataBindGraph {
             default_value: value.clone(),
             value,
             view_model_instance_ids: Vec::new(),
-            retained_bind: None,
+            retained_bind: RuntimeRetainedDataBind::new(flags, false),
         });
         let target_handle = RuntimeDataBindGraphTargetHandle(targets.len());
         targets.push(RuntimeDataBindGraphTargetNode { target });
@@ -4780,30 +4774,29 @@ impl RuntimeDataBindGraph {
             // so it neither re-copies the value nor resets converter state —
             // cell dirt alone decides whether the value refreshes below.
             let retained_refresh = matches!(
-                (&resolved, source.retained_bind.as_ref()),
-                (Some((_, Some(cell))), Some(bind))
+                &resolved,
+                Some((_, Some(cell)))
                     if source.bound
-                        && bind.source().is_some_and(|current| current.ptr_eq(cell))
+                        && source
+                            .retained_bind
+                            .source()
+                            .is_some_and(|current| current.ptr_eq(cell))
             );
             if !retained_refresh {
+                source.retained_bind = RuntimeRetainedDataBind::new(source.flags, false);
                 match resolved {
                     Some((value, Some(cell))) => {
                         // C++ `DataBind::bind()`: retain the source, register
                         // as dependent, mark the reconcile in favor order.
-                        let mut bind = RuntimeRetainedDataBind::new(source.flags, false);
-                        bind.set_source(cell);
-                        bind.mark_rebind_reconcile();
-                        source.retained_bind = Some(bind);
+                        source.retained_bind.set_source(cell);
                         source.value = value;
                         source.bound = true;
                     }
                     Some((value, None)) => {
-                        source.retained_bind = None;
                         source.value = value;
                         source.bound = true;
                     }
                     None => {
-                        source.retained_bind = None;
                         source.bound = false;
                     }
                 }
@@ -4850,9 +4843,10 @@ impl RuntimeDataBindGraph {
     /// [`RuntimeDataBindTarget`] adapter that writes `source.value`, the
     /// seam the existing converter/target apply passes already consume.
     fn refresh_retained_source_from_cell(source: &mut RuntimeDataBindGraphSourceNode) -> bool {
-        let Some(bind) = source.retained_bind.as_mut() else {
+        let bind = &mut source.retained_bind;
+        if bind.source().is_none() {
             return false;
-        };
+        }
         // Gate on freshly cascaded SINK dirt only: the graph's own
         // `mark_reconcile_dirty` already encodes the (re)bind reconcile, so
         // the retained bind's rebind latch must not be double-consumed here
@@ -4906,7 +4900,7 @@ impl RuntimeDataBindGraph {
     /// cell registration for a live one.
     fn clear_retained_binds(&mut self) {
         for source in &mut self.sources {
-            source.retained_bind = None;
+            source.retained_bind = RuntimeRetainedDataBind::new(source.flags, false);
         }
     }
 
@@ -8071,7 +8065,7 @@ impl RuntimeDataBindGraph {
             changed |= advance.changed;
             keep_going |= advance.keep_going;
             if advance.changed {
-                if source.target_origin {
+                if source.retained_bind.target_origin() {
                     source.target_to_source_dirty = true;
                 } else {
                     source.mark_source_dirty_after_target_to_source();
@@ -9612,7 +9606,7 @@ impl RuntimeDataBindGraph {
                         | RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance
                         | RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse
                 );
-            if source.target_origin
+            if source.retained_bind.target_origin()
                 && !source.source_to_target_dirty_after_target_to_source
                 && !delayed_main_to_source_apply
                 && !delayed_view_model_apply
@@ -9772,7 +9766,7 @@ impl RuntimeDataBindGraphSourceNode {
             return;
         }
         *target_dirty = true;
-        self.target_origin = true;
+        self.retained_bind.mark_target_changed();
         if !self.source_to_target_runs_first() {
             self.source_to_target_dirty_after_target_to_source = false;
             self.defer_source_to_target_until_next_update = false;
@@ -9785,12 +9779,12 @@ impl RuntimeDataBindGraphSourceNode {
             return;
         }
         self.source_to_target_dirty_after_target_to_source = true;
-        self.target_origin = false;
+        self.retained_bind.mark_source_changed();
     }
 
     fn mark_source_dirty_after_public_target_to_source(&mut self) {
         self.source_to_target_dirty_after_target_to_source = true;
-        self.target_origin = false;
+        self.retained_bind.mark_source_changed();
         self.defer_source_to_target_until_next_update = true;
     }
 
@@ -9807,11 +9801,7 @@ impl RuntimeDataBindGraphSourceNode {
         self.source_to_target_dirty_after_immediate = target_dirty;
         self.source_to_target_dirty_after_target_to_source = source_dirty;
         self.defer_source_to_target_until_next_update = false;
-        self.target_origin = match (source_dirty, target_dirty) {
-            (true, true) => !self.source_to_target_runs_first(),
-            (false, true) => true,
-            _ => false,
-        };
+        self.retained_bind.mark_rebind_reconcile();
         self.reconcile_pending = true;
     }
 
@@ -10142,7 +10132,7 @@ impl RuntimeDataBindGraphSourceNode {
 
     fn reset_formula_random_state_for_source_change(&mut self) {
         let defer_until_next_update = matches!(self.value, RuntimeDataBindGraphValue::ViewModel(_));
-        self.target_origin = false;
+        self.retained_bind.mark_source_changed();
         self.reconcile_pending = false;
         self.defer_source_to_target_until_next_update = defer_until_next_update;
         if self.applies_source_to_target() {
@@ -10480,9 +10470,7 @@ mod tests {
         let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(3.0));
         {
             let source = &mut graph.sources[0];
-            let mut bind = RuntimeRetainedDataBind::new(source.flags, false);
-            bind.set_source(cell.clone());
-            source.retained_bind = Some(bind);
+            source.retained_bind.set_source(cell.clone());
             source.source_to_target_dirty_after_target_to_source = false;
             source.source_to_target_dirty_after_immediate = false;
             source.reconcile_pending = false;
@@ -10505,7 +10493,7 @@ mod tests {
         );
         assert!(graph.sources[0].source_to_target_dirty_after_target_to_source);
         assert!(
-            !graph.sources[0].target_origin,
+            !graph.sources[0].retained_bind.target_origin(),
             "a source write latches source origin"
         );
 
@@ -10525,9 +10513,7 @@ mod tests {
         let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(3.0));
         {
             let source = &mut graph.sources[0];
-            let mut bind = RuntimeRetainedDataBind::new(source.flags, false);
-            bind.set_source(cell.clone());
-            source.retained_bind = Some(bind);
+            source.retained_bind.set_source(cell.clone());
             source.source_to_target_dirty_after_target_to_source = false;
             source.source_to_target_dirty_after_immediate = false;
             source.reconcile_pending = false;

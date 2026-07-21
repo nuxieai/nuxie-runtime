@@ -1,4 +1,4 @@
-.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-runtime-ref-check perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke capi-smoke apple-runtime-check apple-runtime-header-smoke apple-runtime-release-panic-smoke apple-runtime-xcframework size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: fixtures schema check test inspect graph cpp-probe cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-runtime-ref-check perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke apple-runtime-check apple-runtime-header-smoke apple-runtime-release-panic-smoke apple-runtime-xcframework size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -314,6 +314,9 @@ browser-renderer-build:
 
 browser-renderer-smoke:
 	tools/browser-renderer-smoke/run.sh
+
+browser-renderer-gpu-smoke:
+	BROWSER_RENDERER_GPU_ONLY=1 tools/browser-renderer-smoke/run.sh
 
 capi-smoke: fixtures
 	cargo build --quiet -p nux-capi

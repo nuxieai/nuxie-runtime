@@ -1,11 +1,13 @@
 use crate::data_bind_graph::{
-    DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraphConverterState,
-    RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphRangeMapperProperty,
-    RuntimeKeyFrameDataBindTarget, RuntimeKeyFrameDataBindTemplate,
-    data_bind_flags_source_to_target_runs_first, runtime_data_bind_graph_convert_value,
-    runtime_data_bind_graph_converter, runtime_data_bind_graph_converter_contains_global_id,
+    DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraphConverterBuildCache,
+    RuntimeDataBindGraphConverterState, RuntimeDataBindGraphFormulaRandomSource,
+    RuntimeDataBindGraphRangeMapperProperty, RuntimeKeyFrameDataBindTarget,
+    RuntimeKeyFrameDataBindTemplate, data_bind_flags_source_to_target_runs_first,
+    runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter_contains_global_id,
     runtime_data_bind_graph_converter_contains_source_change_random,
     runtime_data_bind_graph_converter_requires_persisting_custom_property_source,
+    runtime_data_bind_graph_converter_with_cache,
+    runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_context,
     runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context,
     runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path,
 };
@@ -19,9 +21,9 @@ use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelListHandle};
 use crate::{
     ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
-    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
-    RuntimeOwnedViewModelInstance, RuntimeViewModelPointer, ScriptInstance,
-    data_bind_flags_apply_source_to_target, data_bind_flags_apply_target_to_source,
+    RuntimeDataContext, RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle,
+    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeViewModelPointer,
+    ScriptInstance, data_bind_flags_apply_source_to_target, data_bind_flags_apply_target_to_source,
 };
 use nuxie_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use nuxie_graph::ArtboardGraph;
@@ -29,9 +31,10 @@ use nuxie_schema::{FieldKind, definition_by_type_key};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
 
-pub(crate) fn build_key_frame_data_bind_templates(
-    file: &RuntimeFile,
+pub(crate) fn build_key_frame_data_bind_templates<'a>(
+    file: &'a RuntimeFile,
     artboard_index: usize,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeKeyFrameDataBindTemplate> {
     let default_instance = artboard_default_view_model_instance(file, artboard_index);
     let mut claimed_targets = BTreeSet::new();
@@ -82,7 +85,11 @@ pub(crate) fn build_key_frame_data_bind_templates(
             target: holder_target,
             path: path.to_vec(),
             flags: data_bind.object.uint_property("flags").unwrap_or(0),
-            converter: runtime_data_bind_graph_converter(file, data_bind.object),
+            converter: runtime_data_bind_graph_converter_with_cache(
+                file,
+                data_bind.object,
+                converter_cache,
+            ),
             default_value,
         });
     }
@@ -902,7 +909,12 @@ impl RuntimeArtboardDataBindSourceQueues {
                     index,
                     data_bind_index: binding.data_bind_index,
                 });
-            queues.enqueue_custom_property(index);
+            // A two-way binding initializes target from source. Only a
+            // target-to-source-only binding may seed the source from the
+            // serialized target before the target has observed its context.
+            if !data_bind_flags_apply_source_to_target(binding.flags) {
+                queues.enqueue_custom_property(index);
+            }
             if binding.converter.as_ref().is_some_and(
                 runtime_data_bind_graph_converter_requires_persisting_custom_property_source,
             ) {
@@ -1902,14 +1914,12 @@ fn runtime_artboard_convert_list_value(
     let input_was_number = matches!(converted.value, RuntimeDataBindGraphValue::Number(_));
     let input_was_list = matches!(converted.value, RuntimeDataBindGraphValue::List { .. });
     let value = runtime_data_bind_graph_convert_value(converter, &converted.value)?;
-    let generated_view_model_id = match converter {
-        RuntimeDataBindGraphConverter::NumberToList { view_model_id, .. } if input_was_number => {
-            Some(*view_model_id)
-        }
-        _ if input_was_list && matches!(value, RuntimeDataBindGraphValue::List { .. }) => {
-            converted.generated_view_model_id
-        }
-        _ => None,
+    let generated_view_model_id = if input_was_number {
+        converter.number_to_list_view_model_id()
+    } else if input_was_list && matches!(value, RuntimeDataBindGraphValue::List { .. }) {
+        converted.generated_view_model_id
+    } else {
+        None
     };
     Some(RuntimeArtboardListConvertedValue {
         value,
@@ -2158,9 +2168,10 @@ pub(super) fn build_artboard_text_list_bindings(
         .collect()
 }
 
-pub(super) fn build_artboard_list_bindings(
-    file: &RuntimeFile,
+pub(super) fn build_artboard_list_bindings<'a>(
+    file: &'a RuntimeFile,
     graph: &ArtboardGraph,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeArtboardListBindingInstance> {
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
@@ -2180,7 +2191,11 @@ pub(super) fn build_artboard_list_bindings(
                 .data_bind_is_name_based_for_object(data_bind.object)
                 .unwrap_or(false);
             let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
-            let converter = runtime_data_bind_graph_converter(file, data_bind.object);
+            let converter = runtime_data_bind_graph_converter_with_cache(
+                file,
+                data_bind.object,
+                converter_cache,
+            );
             let source = default_instance.as_ref().and_then(|default_instance| {
                 file.data_context_view_model_property_for_instance(default_instance.object, &path)
             });
@@ -2228,9 +2243,10 @@ pub(super) fn build_artboard_list_bindings(
         .collect()
 }
 
-pub(super) fn build_artboard_property_bindings(
-    file: &RuntimeFile,
+pub(super) fn build_artboard_property_bindings<'a>(
+    file: &'a RuntimeFile,
     graph: &ArtboardGraph,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeArtboardPropertyBindingInstance> {
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
@@ -2289,7 +2305,11 @@ pub(super) fn build_artboard_property_bindings(
             ) {
                 return None;
             }
-            let converter = runtime_data_bind_graph_converter(file, data_bind.object);
+            let converter = runtime_data_bind_graph_converter_with_cache(
+                file,
+                data_bind.object,
+                converter_cache,
+            );
             if matches!(converter, Some(RuntimeDataBindGraphConverter::Unsupported)) {
                 return None;
             }
@@ -2659,14 +2679,20 @@ pub(super) fn apply_artboard_name_based_color_data_bind_defaults(
     changed
 }
 
-pub(super) fn build_artboard_custom_property_bindings(
-    file: &RuntimeFile,
+pub(super) fn build_artboard_custom_property_bindings<'a>(
+    file: &'a RuntimeFile,
     graph: &ArtboardGraph,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeArtboardCustomPropertyBindingInstance> {
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
     let default_instance = artboard_default_view_model_instance(file, artboard_index);
+    let trim_start_key = runtime_data_bind_property_key_for_name("TrimPath", "start");
+    let trim_end_key = runtime_data_bind_property_key_for_name("TrimPath", "end");
+    let shape_length_key = runtime_data_bind_property_key_for_name("Shape", "length");
+    let parametric_width_key = runtime_data_bind_property_key_for_name("ParametricPath", "width");
+    let parametric_height_key = runtime_data_bind_property_key_for_name("ParametricPath", "height");
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
@@ -2729,10 +2755,34 @@ pub(super) fn build_artboard_custom_property_bindings(
                 {
                     RuntimeArtboardDataBindValueKind::Trigger
                 }
-                _ => return None,
+                _ => {
+                    let uses_specialized_numeric_source = matches!(target.type_name,
+                        "TrimPath" if [trim_start_key, trim_end_key].contains(&Some(property_key))
+                    ) || (target.type_name == "Shape"
+                        && Some(property_key) == shape_length_key)
+                        || (runtime_type_is_a(target.type_key, "ParametricPath")
+                            && [parametric_width_key, parametric_height_key]
+                                .contains(&Some(property_key)));
+                    if uses_specialized_numeric_source {
+                        return None;
+                    }
+                    match nuxie_schema::core_registry_setter_field_kind_by_property_key(
+                        property_key,
+                    )? {
+                        FieldKind::Double => RuntimeArtboardDataBindValueKind::Number,
+                        FieldKind::Bool => RuntimeArtboardDataBindValueKind::Boolean,
+                        FieldKind::String => RuntimeArtboardDataBindValueKind::String,
+                        FieldKind::Color => RuntimeArtboardDataBindValueKind::Color,
+                        _ => return None,
+                    }
+                }
             };
             let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
-            let converter = runtime_data_bind_graph_converter(file, data_bind.object);
+            let converter = runtime_data_bind_graph_converter_with_cache(
+                file,
+                data_bind.object,
+                converter_cache,
+            );
             if matches!(converter, Some(RuntimeDataBindGraphConverter::Unsupported)) {
                 return None;
             }
@@ -2838,9 +2888,10 @@ pub(super) fn build_artboard_numeric_source_bindings(
         .collect()
 }
 
-pub(super) fn build_artboard_formula_token_bindings(
-    file: &RuntimeFile,
+pub(super) fn build_artboard_formula_token_bindings<'a>(
+    file: &'a RuntimeFile,
     graph: &ArtboardGraph,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeArtboardFormulaTokenBindingInstance> {
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
@@ -2856,7 +2907,9 @@ pub(super) fn build_artboard_formula_token_bindings(
     let artboard_converters = file
         .artboard_data_binds(artboard_index)
         .into_iter()
-        .filter_map(|data_bind| runtime_data_bind_graph_converter(file, data_bind.object))
+        .filter_map(|data_bind| {
+            runtime_data_bind_graph_converter_with_cache(file, data_bind.object, converter_cache)
+        })
         .collect::<Vec<_>>();
     file.objects
         .iter()
@@ -2896,7 +2949,8 @@ pub(super) fn build_artboard_formula_token_bindings(
                 _ => return None,
             };
             let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-            let converter = runtime_data_bind_graph_converter(file, data_bind);
+            let converter =
+                runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache);
             if matches!(converter, Some(RuntimeDataBindGraphConverter::Unsupported)) {
                 return None;
             }
@@ -2934,9 +2988,10 @@ pub(super) fn build_artboard_formula_token_bindings(
         .collect()
 }
 
-pub(super) fn build_artboard_converter_property_bindings(
-    file: &RuntimeFile,
+pub(super) fn build_artboard_converter_property_bindings<'a>(
+    file: &'a RuntimeFile,
     graph: &ArtboardGraph,
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeArtboardConverterPropertyBindingInstance> {
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
@@ -2983,7 +3038,9 @@ pub(super) fn build_artboard_converter_property_bindings(
     let artboard_converters = file
         .artboard_data_binds(artboard_index)
         .into_iter()
-        .filter_map(|data_bind| runtime_data_bind_graph_converter(file, data_bind.object))
+        .filter_map(|data_bind| {
+            runtime_data_bind_graph_converter_with_cache(file, data_bind.object, converter_cache)
+        })
         .collect::<Vec<_>>();
     file.objects
         .iter()
@@ -3070,7 +3127,8 @@ pub(super) fn build_artboard_converter_property_bindings(
                 _ => return None,
             };
             let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-            let converter = runtime_data_bind_graph_converter(file, data_bind);
+            let converter =
+                runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache);
             if matches!(converter, Some(RuntimeDataBindGraphConverter::Unsupported)) {
                 return None;
             }
@@ -3589,6 +3647,11 @@ fn runtime_created_view_model_value_for_declared_property(
 }
 
 impl ArtboardInstance {
+    pub fn has_scripted_data_converter_instance_for_global(&self, global_id: u32) -> bool {
+        self.scripted_data_converter_instances_by_global
+            .contains_key(&global_id)
+    }
+
     pub fn set_scripted_data_converter_instance_for_global(
         &mut self,
         global_id: u32,
@@ -3597,34 +3660,24 @@ impl ArtboardInstance {
         let handle = RuntimeScriptInstanceHandle::new(instance);
         self.scripted_data_converter_instances_by_global
             .insert(global_id, handle.clone());
-        let mut attached = false;
-        for state in self.artboard_shared_data_bind_converter_states.values_mut() {
-            attached |= state.converter.attach_scripted_instance(global_id, &handle);
+        // A newly executable converter must replay the current source through
+        // `convert` even when an earlier inert two-way pass latched the target
+        // direction. Otherwise the placeholder target can immediately flow
+        // backward and the first scripted result is never observed.
+        for state in self
+            .artboard_shared_data_bind_converter_states
+            .values_mut()
+            .filter(|state| {
+                runtime_data_bind_graph_converter_contains_global_id(&state.converter, global_id)
+            })
+        {
+            state.target_origin = false;
         }
-        for binding in &mut self.artboard_property_bindings {
-            if let Some(converter) = binding.converter.as_mut() {
-                attached |= converter.attach_scripted_instance(global_id, &handle);
-            }
-        }
-        for binding in &mut self.artboard_custom_property_bindings {
-            if let Some(converter) = binding.converter.as_mut() {
-                attached |= converter.attach_scripted_instance(global_id, &handle);
-            }
-        }
-        for binding in &mut self.artboard_formula_token_bindings {
-            if let Some(converter) = binding.converter.as_mut() {
-                attached |= converter.attach_scripted_instance(global_id, &handle);
-            }
-        }
-        for binding in &mut self.artboard_converter_property_bindings {
-            if let Some(converter) = binding.converter.as_mut() {
-                attached |= converter.attach_scripted_instance(global_id, &handle);
-            }
-        }
-        for binding in &mut self.artboard_list_bindings {
-            if let Some(converter) = binding.converter.as_mut() {
-                attached |= converter.attach_scripted_instance(global_id, &handle);
-            }
+        let attached = self.refresh_artboard_converter_dependents(|converter| {
+            converter.attach_scripted_instance(global_id, &handle)
+        });
+        if attached {
+            self.mark_artboard_data_bind_work_dirty();
         }
         attached
     }
@@ -4161,13 +4214,11 @@ impl ArtboardInstance {
                         true,
                         allow_full_context_bindings,
                     );
-                if let Some(state_machine) = item.state_machine.as_mut() {
-                    let contexts = child_candidates
-                        .iter()
-                        .map(|candidate| {
-                            (candidate.context.clone(), candidate.context_chain.clone())
-                        })
-                        .collect::<Vec<_>>();
+                let contexts = child_candidates
+                    .iter()
+                    .map(|candidate| (candidate.context.clone(), candidate.context_chain.clone()))
+                    .collect::<Vec<_>>();
+                for state_machine in &mut item.state_machines {
                     if state_machine.bind_owned_view_model_context_chains(file, &contexts) {
                         changed = true;
                         changed |= state_machine.advance_data_context();
@@ -4229,7 +4280,9 @@ impl ArtboardInstance {
         if bind_self && rebind_self {
             changed |= self.refresh_artboard_converter_dependents(|converter| {
                 runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
-                    converter, context,
+                    converter,
+                    context,
+                    context_chain,
                 )
             });
             changed |= self.bind_owned_view_model_artboard_values(
@@ -5198,7 +5251,15 @@ impl ArtboardInstance {
                 }
             }
         }
+        let runtime_context = RuntimeDataContext::from_instance_object(file, view_model_instance);
         for binding in &mut self.artboard_list_bindings {
+            if let (Some(context), Some(converter)) =
+                (runtime_context.as_ref(), binding.converter.as_mut())
+            {
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_context(
+                    file, converter, context,
+                );
+            }
             let Some(source_value) = binding.default_value.resolve_from_view_model_instance(
                 file,
                 view_model_instance,
@@ -5225,9 +5286,10 @@ impl ArtboardInstance {
                 .and_then(RuntimeDataBindGraphConverter::number_to_list_view_model_id)
                 .is_some();
             let target_list_size = match target_value {
-                Some(RuntimeDataBindGraphValue::List { .. }) => Some(0),
+                Some(RuntimeDataBindGraphValue::List { item_count }) => Some(item_count),
                 _ => None,
             };
+            binding.default_value = source_value;
             if binding.target_list_size != target_list_size {
                 changed = true;
                 binding.target_list_size = target_list_size;
@@ -7514,6 +7576,7 @@ impl ArtboardInstance {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_bind_graph::DATA_BIND_FLAG_TWO_WAY;
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -7535,6 +7598,102 @@ mod tests {
             &numeric_default,
             FieldKind::String
         ));
+    }
+
+    #[test]
+    fn grouped_project_converter_defers_cross_kind_validation_until_context_hydration() {
+        let context_path = crate::ProjectDataValuePath::Path {
+            path: "vm.offset".to_owned(),
+            view_model_name: None,
+            is_relative: true,
+        };
+        let catalog = crate::ProjectDataConverterCatalog::compile([
+            crate::ProjectDataConverterDefinition {
+                id: "context-offset".to_owned(),
+                spec: crate::ProjectDataConverterSpec {
+                    output_type: None,
+                    kind: crate::ProjectDataConverterKind::Math {
+                        operation: crate::ProjectDataConverterMathOperation::Add,
+                        value: None,
+                        value_path: Some(context_path.clone()),
+                    },
+                },
+            },
+            crate::ProjectDataConverterDefinition {
+                id: "color-map".to_owned(),
+                spec: crate::ProjectDataConverterSpec {
+                    output_type: Some(crate::ProjectDataConverterOutputType::Color),
+                    kind: crate::ProjectDataConverterKind::Map {
+                        cases: BTreeMap::from([(
+                            "3".to_owned(),
+                            crate::ProjectDataValue::Color(0xff12_3456),
+                        )]),
+                        reverse_map: None,
+                    },
+                },
+            },
+            crate::ProjectDataConverterDefinition {
+                id: "root".to_owned(),
+                spec: crate::ProjectDataConverterSpec {
+                    output_type: Some(crate::ProjectDataConverterOutputType::Color),
+                    kind: crate::ProjectDataConverterKind::Group {
+                        items: vec!["context-offset".to_owned(), "color-map".to_owned()],
+                    },
+                },
+            },
+        ])
+        .expect("context-dependent Project converter catalog");
+        let bytes = catalog
+            .encode_program("root")
+            .expect("encode Project converter");
+        let program = crate::ProjectDataConverterProgram::decode(&bytes)
+            .expect("decode Project converter")
+            .expect("Project converter envelope");
+        assert_eq!(
+            program.output_type(),
+            Some(crate::ProjectDataConverterOutputType::Color)
+        );
+        let program = Arc::new(program);
+        let project_converter = RuntimeDataBindGraphConverter::Project {
+            global_id: 43,
+            program: Arc::clone(&program),
+            resolved_values: Vec::new(),
+            default_resolved_values: Vec::new(),
+        };
+        let converter = RuntimeDataBindGraphConverter::Group(vec![
+            RuntimeDataBindGraphConverter::PassThrough,
+            project_converter,
+        ]);
+        let numeric_default = RuntimeDataBindGraphValue::Number(1.5);
+
+        assert!(!artboard_property_binding_value_matches_kind(
+            &numeric_default,
+            FieldKind::Color
+        ));
+        assert!(!artboard_property_binding_allows_converted_default(
+            Some(&converter),
+            &numeric_default,
+            FieldKind::Color
+        ));
+        assert!(artboard_property_binding_accepts_default(
+            Some(&converter),
+            &numeric_default,
+            FieldKind::Color
+        ));
+
+        let hydrated = RuntimeDataBindGraphConverter::Group(vec![
+            RuntimeDataBindGraphConverter::PassThrough,
+            RuntimeDataBindGraphConverter::Project {
+                global_id: 43,
+                program,
+                resolved_values: vec![(context_path, crate::ProjectDataValue::Number(1.5))],
+                default_resolved_values: Vec::new(),
+            },
+        ]);
+        assert_eq!(
+            runtime_data_bind_graph_convert_value(&hydrated, &numeric_default),
+            Some(RuntimeDataBindGraphValue::Color(0xff12_3456))
+        );
     }
 
     fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
@@ -8242,7 +8401,7 @@ mod tests {
 
     #[test]
     fn source_queues_split_push_targets_from_persisting_targets() {
-        let custom_bindings = vec![
+        let mut custom_bindings = vec![
             custom_binding(0, 7, 11, None),
             custom_binding(1, 8, 12, Some(RuntimeDataBindGraphConverter::PassThrough)),
             custom_binding(
@@ -8350,6 +8509,8 @@ mod tests {
                 }),
             ),
         ];
+        custom_bindings[0].flags = DATA_BIND_FLAG_DIRECTION_TO_SOURCE;
+        custom_bindings[1].flags = DATA_BIND_FLAG_TWO_WAY;
         let layout_bindings = vec![RuntimeArtboardLayoutComputedBindingInstance {
             target_local_id: 9,
             property: RuntimeLayoutComputedProperty::WorldX,
@@ -8380,10 +8541,7 @@ mod tests {
         assert!(queues.observes_target_property(7, 11));
         assert!(!queues.observes_target_property(99, 99));
 
-        assert_eq!(
-            queues.drain_custom_property_update_indices(),
-            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-        );
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 7]);
         assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
         assert_eq!(queues.persisting_layout_computed(), &[0]);
@@ -8405,6 +8563,16 @@ mod tests {
 
         assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
+
+        queues.enqueue_target_property(8, 12, None);
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![1, 7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(8, 12, Some(1));
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(17, 18, None);
 

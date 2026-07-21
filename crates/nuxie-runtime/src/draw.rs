@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use nuxie_binary::{RuntimeFile, RuntimeObject};
+use nuxie_binary::{RuntimeFile, RuntimeFileAssetContents, RuntimeObject};
 use nuxie_graph::{
     ArtboardGraph, ClippingShapeNode, DashNode, DrawableOrderKind, DrawableOrderNode, FeatherNode,
     GradientStopNode, MeshGeometryNode, MeshVertexNode, NSlicerAxisNode, NSlicerDetailsNode,
@@ -7,6 +7,7 @@ use nuxie_graph::{
     ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
     ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
 };
+use nuxie_image_codec::{MAX_DECODED_IMAGE_BYTES, decoded_rgba_len, preflight_encoded_image};
 use nuxie_render_api::{
     Aabb as RenderAabb, BlendMode as RenderBlendMode, Factory as RenderFactory,
     FillRule as RenderFillRule, ImageDecodeError, ImageSampler as RenderImageSampler,
@@ -37,10 +38,49 @@ use crate::text::{
     RuntimeTextLayoutConstraint, StaticTextClipBounds, runtime_text_input_shape_paint_commands,
     runtime_text_shape_paint_commands, static_text_caret_geometry, static_text_clip_bounds,
     static_text_constraint_bounds, static_text_controlled_layout_bounds, static_text_hit,
-    static_text_layout_measure_bounds, static_text_selection_rects,
+    static_text_layout_measure_bounds, static_text_selection_rects, static_text_value,
     text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D, TransformProperty};
+
+// Bound all decoded image pixels retained by one artboard-tree render cache,
+// not only each individual image. Compressed assets can be tiny while their
+// canonical RGBA textures are large, so the encoded FileAsset budget cannot
+// substitute for this post-header, pre-decode reservation.
+const MAX_RETAINED_DECODED_IMAGE_BYTES: usize = MAX_DECODED_IMAGE_BYTES;
+
+struct RuntimeImageAssetCatalog<'a> {
+    globals: Vec<u32>,
+    embedded_by_global: BTreeMap<u32, &'a [u8]>,
+}
+
+impl<'a> RuntimeImageAssetCatalog<'a> {
+    fn from_runtime(runtime: &'a RuntimeFile) -> Self {
+        Self::from_entries(runtime.imported_file_assets_with_contents())
+    }
+
+    fn from_entries(entries: impl IntoIterator<Item = RuntimeFileAssetContents<'a>>) -> Self {
+        let mut globals = Vec::new();
+        let mut embedded_by_global = BTreeMap::new();
+        for entry in entries {
+            if entry.asset.type_name != "ImageAsset" {
+                continue;
+            }
+            globals.push(entry.asset.id);
+            if let Some(contents) = entry.contents {
+                embedded_by_global.insert(entry.asset.id, contents);
+            }
+        }
+        Self {
+            globals,
+            embedded_by_global,
+        }
+    }
+
+    fn embedded_bytes(&self, asset_global: u32) -> Option<&'a [u8]> {
+        self.embedded_by_global.get(&asset_global).copied()
+    }
+}
 
 // Nested-artboard cycle guard (`nested_ancestors`).
 //
@@ -577,8 +617,10 @@ impl ArtboardInstance {
         self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref())
     }
 
-    /// Settle pending writes and return visible shape locals under `point`,
-    /// from front to back, using this instance's retained file/graph context.
+    /// Settle pending writes and return visible Shape and Text locals under
+    /// `point`, from front to back, including descendants reached through
+    /// nested artboards and component-list items, using this instance's
+    /// retained file/graph context.
     pub fn geometry_hit_test(
         &mut self,
         point: RenderVec2D,
@@ -594,14 +636,49 @@ impl ArtboardInstance {
         self.geometry_hit_test_with_context(runtime, graph, point, cache)
     }
 
-    /// Settle pending writes and return visible shape local-id paths under
-    /// `point`, from front to back. A direct hit is a one-element path. A hit
-    /// inside a nested artboard is prefixed with each nested host local id.
+    /// Settle pending writes and return visible Shape and Text local-id paths
+    /// under `point`, from front to back. A direct hit is a one-element path.
+    /// A child-artboard hit is prefixed with each nested or component-list host
+    /// local id.
     pub fn geometry_hit_test_paths(
         &mut self,
         point: RenderVec2D,
         cache: &mut RuntimeGeometryCache,
     ) -> Vec<Vec<usize>> {
+        let mut seen = BTreeSet::new();
+        self.geometry_hit_test_path_segments(point, cache)
+            .into_iter()
+            .map(|path| {
+                path.into_iter()
+                    .map(|segment| segment.local_id)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|path| seen.insert(path.clone()))
+            .collect()
+    }
+
+    /// Settle pending writes and return visible Shape and Text hit paths with
+    /// the containing runtime artboard identity attached to every local id.
+    pub fn geometry_hit_test_path_segments(
+        &mut self,
+        point: RenderVec2D,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<Vec<RuntimeGeometryHitPathSegment>> {
+        let mut seen = BTreeSet::new();
+        self.geometry_hit_test_path_segments_with_bounds(point, cache)
+            .into_iter()
+            .map(|hit| hit.path)
+            .filter(|path| seen.insert(path.clone()))
+            .collect()
+    }
+
+    /// Settle pending writes and return exact hit paths together with their
+    /// concrete occurrence bounds in the root artboard's coordinate space.
+    pub fn geometry_hit_test_path_segments_with_bounds(
+        &mut self,
+        point: RenderVec2D,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<RuntimeGeometryHit> {
         self.update_pass();
         let Some(runtime) = self.runtime_file() else {
             return Vec::new();
@@ -609,7 +686,108 @@ impl ArtboardInstance {
         let Some(graph) = self.runtime_graph() else {
             return Vec::new();
         };
-        self.geometry_hit_test_paths_with_context(runtime, graph, point, cache)
+        self.geometry_hit_test_path_segments_with_context(runtime, graph, point, cache)
+    }
+
+    /// Settle pending writes and enumerate every visible Shape and Text
+    /// occurrence with bounds in the root artboard's coordinate space.
+    ///
+    /// Paths and repeated-item occurrences remain runtime-local here. The
+    /// editor application consumes them inside Rust to recover durable
+    /// ProjectDO identities; callers must not persist or expose these ids.
+    pub fn geometry_path_segments_with_bounds(
+        &mut self,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<RuntimeGeometryHit> {
+        self.update_pass();
+        let Some(runtime) = self.runtime_file() else {
+            return Vec::new();
+        };
+        let Some(graph) = self.runtime_graph() else {
+            return Vec::new();
+        };
+        cache.retain_instance(self);
+        self.geometry_path_segments_with_path_cache(
+            runtime,
+            graph,
+            None,
+            &mut cache.paths,
+            Mat2D::IDENTITY,
+            false,
+            false,
+            &[graph.global_id],
+        )
+    }
+
+    /// Settle pending writes and enumerate every retained Shape and Text
+    /// occurrence with bounds in the root artboard's coordinate space.
+    ///
+    /// Unlike [`Self::geometry_path_segments_with_bounds`], this catalogue is
+    /// stable across effective-opacity changes. It includes drawable
+    /// occurrences whose current render opacity is zero while point hit tests
+    /// and ordinary visible-geometry queries remain visibility-authoritative.
+    pub fn retained_geometry_path_segments_with_bounds(
+        &mut self,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<RuntimeGeometryHit> {
+        self.update_pass();
+        let Some(runtime) = self.runtime_file() else {
+            return Vec::new();
+        };
+        let Some(graph) = self.runtime_graph() else {
+            return Vec::new();
+        };
+        cache.retain_instance(self);
+        self.geometry_path_segments_with_path_cache(
+            runtime,
+            graph,
+            None,
+            &mut cache.paths,
+            Mat2D::IDENTITY,
+            true,
+            false,
+            &[graph.global_id],
+        )
+    }
+
+    /// Settle pending writes and enumerate every visible Text draw occurrence
+    /// with its exact resolved value and concrete root-artboard bounds.
+    ///
+    /// Runtime-local identities stay at this low-level boundary. The public
+    /// Scene facade resolves them to authored object identities before higher
+    /// application layers can observe them.
+    pub fn semantic_text_path_segments_with_bounds(
+        &mut self,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<RuntimeSemanticTextHit> {
+        self.update_pass();
+        let Some(runtime) = self.runtime_file() else {
+            return Vec::new();
+        };
+        let Some(graph) = self.runtime_graph() else {
+            return Vec::new();
+        };
+        cache.retain_instance(self);
+        self.geometry_path_segments_with_path_cache(
+            runtime,
+            graph,
+            None,
+            &mut cache.paths,
+            Mat2D::IDENTITY,
+            false,
+            true,
+            &[graph.global_id],
+        )
+        .into_iter()
+        .filter_map(|hit| {
+            Some(RuntimeSemanticTextHit {
+                path: hit.path,
+                occurrence: hit.occurrence,
+                bounds: hit.bounds,
+                value: hit.text_value?,
+            })
+        })
+        .collect()
     }
 
     fn geometry_hit_test_with_context(
@@ -619,9 +797,11 @@ impl ArtboardInstance {
         point: RenderVec2D,
         cache: &mut RuntimeGeometryCache,
     ) -> Vec<usize> {
+        let mut seen = BTreeSet::new();
         self.geometry_hit_test_paths_with_context(runtime, graph, point, cache)
             .into_iter()
             .filter_map(|path| path.into_iter().next())
+            .filter(|local_id| seen.insert(*local_id))
             .collect()
     }
 
@@ -632,6 +812,50 @@ impl ArtboardInstance {
         point: RenderVec2D,
         cache: &mut RuntimeGeometryCache,
     ) -> Vec<Vec<usize>> {
+        let mut seen = BTreeSet::new();
+        self.geometry_hit_test_path_segments_with_context(runtime, graph, point, cache)
+            .into_iter()
+            .map(|hit| {
+                hit.path
+                    .into_iter()
+                    .map(|segment| segment.local_id)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|path| seen.insert(path.clone()))
+            .collect()
+    }
+
+    fn geometry_hit_test_path_segments_with_context(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        point: RenderVec2D,
+        cache: &mut RuntimeGeometryCache,
+    ) -> Vec<RuntimeGeometryHit> {
+        cache.retain_instance(self);
+        self.geometry_path_segments_with_path_cache(
+            runtime,
+            graph,
+            Some(point),
+            &mut cache.paths,
+            Mat2D::IDENTITY,
+            false,
+            false,
+            &[graph.global_id],
+        )
+    }
+
+    fn geometry_path_segments_with_path_cache(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        point: Option<RenderVec2D>,
+        path_cache: &mut RuntimeRenderPathCache,
+        artboard_to_root: Mat2D,
+        include_invisible: bool,
+        include_text_value: bool,
+        nested_ancestors: &[u32],
+    ) -> Vec<RuntimeGeometryHit> {
         // Geometry queries live in the artboard's unshifted world space. This
         // is the same clip rectangle used by drawing when the public origin
         // transform is not applied by the renderer-facing wrapper.
@@ -644,46 +868,49 @@ impl ArtboardInstance {
                 clip_left + self.width,
                 clip_top + self.height,
             );
-            if !clip.contains(point) {
+            if point.is_some_and(|point| !clip.contains(point)) {
                 return Vec::new();
             }
         }
 
-        cache.retain_instance(self);
-        let prepared = cache
-            .paths
-            .prepared_artboard_frame(self, graph, Some(runtime));
+        let prepared = if include_invisible {
+            path_cache.retained_geometry_artboard_frame(self, graph, runtime)
+        } else {
+            path_cache.prepared_artboard_frame(self, graph, Some(runtime))
+        };
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
         let mut active_clips = Vec::new();
         let mut back_to_front_hits = Vec::new();
         for command in prepared.commands.iter() {
             match command.kind {
                 RuntimeDrawCommandKind::ClipStart => {
-                    let contains = command
-                        .clipping_shape_local
-                        .and_then(|local_id| runtime_clipping_shape(graph, local_id))
-                        .map(|clipping_shape| {
-                            if !clipping_shape.is_visible {
-                                return true;
-                            }
-                            let commands = cache.paths.clipping_shape_path_commands(
-                                self,
-                                graph,
-                                clipping_shape,
-                                layout_bounds,
-                            );
-                            runtime_path_contains(
-                                commands.as_slice(),
-                                point,
-                                runtime_geometry_fill_rule(
-                                    runtime_live_clipping_shape_fill_rule_value(
-                                        self,
-                                        clipping_shape,
+                    let contains = point.is_none_or(|point| {
+                        command
+                            .clipping_shape_local
+                            .and_then(|local_id| runtime_clipping_shape(graph, local_id))
+                            .map(|clipping_shape| {
+                                if !clipping_shape.is_visible {
+                                    return true;
+                                }
+                                let commands = path_cache.clipping_shape_path_commands(
+                                    self,
+                                    graph,
+                                    clipping_shape,
+                                    layout_bounds,
+                                );
+                                runtime_path_contains(
+                                    commands.as_slice(),
+                                    point,
+                                    runtime_geometry_fill_rule(
+                                        runtime_live_clipping_shape_fill_rule_value(
+                                            self,
+                                            clipping_shape,
+                                        ),
                                     ),
-                                ),
-                            )
-                        })
-                        .unwrap_or(true);
+                                )
+                            })
+                            .unwrap_or(true)
+                    });
                     active_clips.push(contains);
                     continue;
                 }
@@ -703,11 +930,9 @@ impl ArtboardInstance {
                     graph,
                     layout_bounds,
                 );
-                active_clips.push(runtime_path_contains(
-                    &path,
-                    point,
-                    RuntimeGeometryFillRule::Clockwise,
-                ));
+                active_clips.push(point.is_none_or(|point| {
+                    runtime_path_contains(&path, point, RuntimeGeometryFillRule::Clockwise)
+                }));
                 continue;
             }
             if command.object_kind == RuntimeDrawCommandObjectKind::LayoutComponent
@@ -733,15 +958,19 @@ impl ArtboardInstance {
                 let Some(child_graph) = nested.child.runtime_graph() else {
                     continue;
                 };
+                if nested_ancestors.contains(&child_graph.global_id) {
+                    continue;
+                }
+                let mut child_ancestors = nested_ancestors.to_vec();
+                child_ancestors.push(child_graph.global_id);
                 let host_world = match command.object_kind {
-                    RuntimeDrawCommandObjectKind::NestedArtboardLayout => {
-                        cache.paths.component_world_transform_with_bounds(
+                    RuntimeDrawCommandObjectKind::NestedArtboardLayout => path_cache
+                        .component_world_transform_with_bounds(
                             self,
                             graph,
                             host_local_id,
                             layout_bounds,
-                        )
-                    }
+                        ),
                     RuntimeDrawCommandObjectKind::NestedArtboardLeaf => {
                         match runtime_nested_artboard_leaf_world_transform(
                             self,
@@ -750,24 +979,44 @@ impl ArtboardInstance {
                             child_graph,
                             Some(nested.child.as_ref()),
                             layout_bounds,
-                            &mut cache.paths,
+                            path_cache,
                         ) {
                             Ok(transform) => transform,
                             Err(_) => continue,
                         }
                     }
-                    _ => cache.paths.component_world_transform_with_bounds(
+                    _ => path_cache.component_world_transform_with_bounds(
                         self,
                         graph,
                         host_local_id,
                         layout_bounds,
                     ),
                 };
-                let Some(inverse_host_world) = runtime_mat2d_invert(host_world) else {
-                    continue;
+                let child_point = match point {
+                    Some(point) => {
+                        let Some(inverse_host_world) = runtime_mat2d_invert(host_world) else {
+                            continue;
+                        };
+                        let (child_x, child_y) =
+                            inverse_host_world.transform_point(point.x, point.y);
+                        Some(RenderVec2D::new(child_x, child_y))
+                    }
+                    None => None,
                 };
-                let (child_x, child_y) = inverse_host_world.transform_point(point.x, point.y);
-                let child_point = RenderVec2D::new(child_x, child_y);
+                let child_to_root = artboard_to_root.multiply(host_world);
+                let cache_key = nested_render_cache_key(
+                    command.global_id,
+                    command.local_id,
+                    child_graph.global_id,
+                    nested.render_cache_revision,
+                );
+                let child_cache = path_cache
+                    .nested_artboards
+                    .get_or_insert_with(cache_key, RuntimeRenderPathCache::default);
+                // Recursive queries are already normalized front-to-back. This
+                // frame is still accumulating draw commands back-to-front, so
+                // splice the child's hits in reverse before the final boundary
+                // normalization below.
                 if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout {
                     let mut cloned = nested.child.as_ref().clone_for_transient_layout();
                     if runtime_apply_nested_artboard_layout_child_bounds(
@@ -779,25 +1028,271 @@ impl ArtboardInstance {
                     {
                         continue;
                     }
-                    for mut path in cloned.geometry_hit_test_paths_with_context(
-                        runtime,
-                        child_graph,
-                        child_point,
-                        cache,
-                    ) {
-                        path.insert(0, host_local_id);
-                        back_to_front_hits.push(path);
+                    runtime_settle_nested_artboard_layout_child(&mut cloned);
+                    for mut hit in cloned
+                        .geometry_path_segments_with_path_cache(
+                            runtime,
+                            child_graph,
+                            child_point,
+                            child_cache,
+                            child_to_root,
+                            include_invisible,
+                            include_text_value,
+                            &child_ancestors,
+                        )
+                        .into_iter()
+                        .rev()
+                    {
+                        hit.path.insert(
+                            0,
+                            RuntimeGeometryHitPathSegment {
+                                artboard_global_id: graph.global_id,
+                                local_id: host_local_id,
+                            },
+                        );
+                        back_to_front_hits.push(hit);
                     }
                 } else {
-                    for mut path in nested.child.geometry_hit_test_paths_with_context(
-                        runtime,
-                        child_graph,
-                        child_point,
-                        cache,
-                    ) {
-                        path.insert(0, host_local_id);
-                        back_to_front_hits.push(path);
+                    for mut hit in nested
+                        .child
+                        .geometry_path_segments_with_path_cache(
+                            runtime,
+                            child_graph,
+                            child_point,
+                            child_cache,
+                            child_to_root,
+                            include_invisible,
+                            include_text_value,
+                            &child_ancestors,
+                        )
+                        .into_iter()
+                        .rev()
+                    {
+                        hit.path.insert(
+                            0,
+                            RuntimeGeometryHitPathSegment {
+                                artboard_global_id: graph.global_id,
+                                local_id: host_local_id,
+                            },
+                        );
+                        back_to_front_hits.push(hit);
                     }
+                }
+                continue;
+            }
+            if command.object_kind == RuntimeDrawCommandObjectKind::ArtboardComponentList
+                && !active_clips.iter().any(|contains| !contains)
+            {
+                let Some(host_local_id) = command.local_id else {
+                    continue;
+                };
+                let Some(items) = self.component_list_items.get(&host_local_id) else {
+                    continue;
+                };
+                let host_transform_local =
+                    if crate::constraints::component_list_virtualization(self, host_local_id)
+                        .is_some()
+                    {
+                        self.component(host_local_id)
+                            .and_then(|component| component.parent_local)
+                            .unwrap_or(host_local_id)
+                    } else {
+                        host_local_id
+                    };
+                let host_world = path_cache.component_world_transform_with_bounds(
+                    self,
+                    graph,
+                    host_transform_local,
+                    layout_bounds,
+                );
+                let item_transforms = runtime_component_list_item_local_transforms(
+                    self,
+                    host_local_id,
+                    prepared
+                        .component_list_item_bounds
+                        .get(&host_local_id)
+                        .map(Vec::as_slice),
+                    prepared
+                        .component_list_layout_children
+                        .get(&host_local_id)
+                        .map(Vec::as_slice),
+                );
+                let mut item_indices = (0..items.len()).collect::<Vec<_>>();
+                let draw_indices = items
+                    .iter()
+                    .map(|item| {
+                        runtime
+                            .view_model_property_for_symbol(
+                                item.context.borrow().view_model_index(),
+                                16,
+                            )
+                            .map(|property| {
+                                property
+                                    .string_property("name")
+                                    .and_then(|name| {
+                                        item.context.borrow().number_value_by_property_name(name)
+                                    })
+                                    .filter(|value| value.is_finite())
+                                    .unwrap_or(0.0)
+                            })
+                    })
+                    .collect::<Vec<_>>();
+                let uses_draw_index_sort = self
+                    .component_list_logical_items
+                    .get(&host_local_id)
+                    .is_some_and(|logical_items| {
+                        logical_items.iter().any(|item| {
+                            runtime
+                                .view_model_property_for_symbol(
+                                    item.context.borrow().view_model_index(),
+                                    16,
+                                )
+                                .is_some()
+                        })
+                    });
+                if uses_draw_index_sort {
+                    item_indices.sort_by(|&a, &b| {
+                        draw_indices[a]
+                            .unwrap_or(0.0)
+                            .partial_cmp(&draw_indices[b].unwrap_or(0.0))
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                            .then_with(|| items[a].logical_index.cmp(&items[b].logical_index))
+                    });
+                }
+                for item_index in item_indices {
+                    let item = &items[item_index];
+                    let child = prepared
+                        .component_list_layout_children
+                        .get(&host_local_id)
+                        .and_then(|children| children.get(item_index))
+                        .unwrap_or(item.child.as_ref());
+                    let Some(child_graph) = child.runtime_graph() else {
+                        continue;
+                    };
+                    if nested_ancestors.contains(&child_graph.global_id) {
+                        continue;
+                    }
+                    let mut child_ancestors = nested_ancestors.to_vec();
+                    child_ancestors.push(child_graph.global_id);
+                    let Some(item_transform) = item_transforms.get(item_index).copied() else {
+                        continue;
+                    };
+                    let child_world = host_world.multiply(item_transform);
+                    let child_point = match point {
+                        Some(point) => {
+                            let Some(inverse_child_world) = runtime_mat2d_invert(child_world)
+                            else {
+                                continue;
+                            };
+                            let (child_x, child_y) =
+                                inverse_child_world.transform_point(point.x, point.y);
+                            Some(RenderVec2D::new(child_x, child_y))
+                        }
+                        None => None,
+                    };
+                    let cache_key = component_list_render_cache_key(
+                        command.global_id,
+                        command.local_id,
+                        child_graph.global_id,
+                        item.logical_index,
+                        item.render_cache_revision,
+                    );
+                    let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
+                    // Preserve the item's internal paint order while this frame
+                    // accumulates every list occurrence back-to-front.
+                    for mut hit in child
+                        .geometry_path_segments_with_path_cache(
+                            runtime,
+                            child_graph,
+                            child_point,
+                            child_cache,
+                            artboard_to_root.multiply(child_world),
+                            include_invisible,
+                            include_text_value,
+                            &child_ancestors,
+                        )
+                        .into_iter()
+                        .rev()
+                    {
+                        hit.path.insert(
+                            0,
+                            RuntimeGeometryHitPathSegment {
+                                artboard_global_id: graph.global_id,
+                                local_id: host_local_id,
+                            },
+                        );
+                        hit.occurrence.insert(
+                            0,
+                            RuntimeGeometryHitOccurrence {
+                                artboard_global_id: graph.global_id,
+                                host_local_id,
+                                item_index,
+                                occurrence_identity: item.occurrence_identity,
+                            },
+                        );
+                        back_to_front_hits.push(hit);
+                    }
+                }
+                continue;
+            }
+            if command.object_kind == RuntimeDrawCommandObjectKind::Text
+                && !active_clips.iter().any(|contains| !contains)
+            {
+                let Some(local_id) = command.local_id else {
+                    continue;
+                };
+                let render_opacity = self
+                    .component(local_id)
+                    .map(|component| component.transform.render_opacity)
+                    .unwrap_or(0.0);
+                if !include_invisible && (!render_opacity.is_finite() || render_opacity <= 0.0) {
+                    continue;
+                }
+                let layout_constraint =
+                    self.runtime_text_layout_constraint(local_id, layout_bounds);
+                let bounds = match layout_constraint {
+                    Some(constraint) => static_text_controlled_layout_bounds(
+                        runtime, graph, self, local_id, constraint,
+                    ),
+                    None => static_text_constraint_bounds(runtime, graph, self, local_id),
+                };
+                let Some(bounds) = bounds else {
+                    continue;
+                };
+                let text_world = command.world_transform.unwrap_or_else(|| {
+                    path_cache.component_world_transform_with_bounds(
+                        self,
+                        graph,
+                        local_id,
+                        layout_bounds,
+                    )
+                });
+                let matches_query = match point {
+                    Some(point) => {
+                        let Some(inverse_text_world) = runtime_mat2d_invert(text_world) else {
+                            continue;
+                        };
+                        let (local_x, local_y) =
+                            inverse_text_world.transform_point(point.x, point.y);
+                        runtime_rect_contains(bounds, RenderVec2D::new(local_x, local_y))
+                    }
+                    None => true,
+                };
+                if matches_query {
+                    back_to_front_hits.push(RuntimeGeometryHit {
+                        path: vec![RuntimeGeometryHitPathSegment {
+                            artboard_global_id: graph.global_id,
+                            local_id,
+                        }],
+                        occurrence: Vec::new(),
+                        bounds: runtime_transformed_rect_bounds(
+                            bounds,
+                            artboard_to_root.multiply(text_world),
+                        ),
+                        text_value: include_text_value
+                            .then(|| static_text_value(runtime, graph, self, local_id))
+                            .flatten(),
+                    });
                 }
                 continue;
             }
@@ -815,22 +1310,42 @@ impl ArtboardInstance {
                 graph,
                 command,
                 layout_bounds,
-                &mut cache.paths,
+                path_cache,
                 prepared.world_dependent,
             );
-            if command.shape_paints.iter().any(|paint| {
-                runtime_geometry_shape_paint_contains(runtime, self, paint, shape_world, point)
-            }) {
-                back_to_front_hits.push(vec![local_id]);
+            let matches_query = match point {
+                Some(point) => command.shape_paints.iter().any(|paint| {
+                    runtime_geometry_shape_paint_contains(runtime, self, paint, shape_world, point)
+                }),
+                None => {
+                    include_invisible
+                        || command.shape_paints.iter().any(|paint| {
+                            runtime_geometry_shape_paint_is_effectively_visible(self, paint)
+                        })
+                }
+            };
+            if matches_query
+                && let Some(bounds) = self.geometry_world_bounds_with_path_cache_and_transform(
+                    runtime,
+                    graph,
+                    local_id,
+                    path_cache,
+                    artboard_to_root,
+                )
+            {
+                back_to_front_hits.push(RuntimeGeometryHit {
+                    path: vec![RuntimeGeometryHitPathSegment {
+                        artboard_global_id: graph.global_id,
+                        local_id,
+                    }],
+                    occurrence: Vec::new(),
+                    bounds,
+                    text_value: None,
+                });
             }
         }
 
-        let mut seen = BTreeSet::new();
-        back_to_front_hits
-            .into_iter()
-            .rev()
-            .filter(|path| seen.insert(path.clone()))
-            .collect()
+        runtime_geometry_hits_front_to_back(back_to_front_hits)
     }
 
     /// Settle pending writes and resolve an object's layout-aware world
@@ -889,11 +1404,171 @@ impl ArtboardInstance {
         cache: &mut RuntimeGeometryCache,
     ) -> Option<RenderAabb> {
         cache.retain_instance(self);
-        let prepared = cache
-            .paths
-            .prepared_artboard_frame(self, graph, Some(runtime));
+        if self.component(local_id)?.type_name == "Image" {
+            let drawable = graph.sorted_drawable_order.iter().find(|drawable| {
+                drawable.local_id == Some(local_id) && drawable.type_name == "Image"
+            })?;
+            let asset_global = self.resolved_image_asset_global(
+                Some(local_id),
+                drawable.resolved_image_asset_global,
+            )?;
+            let (image_width, image_height, image_identity) =
+                cache.presented_image_dimensions(asset_global)?;
+            return self.geometry_image_world_bounds_with_context(
+                runtime,
+                graph,
+                local_id,
+                drawable.global_id,
+                asset_global,
+                image_identity,
+                image_width,
+                image_height,
+                &mut cache.paths,
+            );
+        }
+        self.geometry_world_bounds_with_path_cache_and_transform(
+            runtime,
+            graph,
+            local_id,
+            &mut cache.paths,
+            Mat2D::IDENTITY,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn geometry_image_world_bounds_with_context(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        image_global_id: Option<u32>,
+        image_asset_global: u32,
+        image_identity: usize,
+        image_width: u32,
+        image_height: u32,
+        path_cache: &mut RuntimeRenderPathCache,
+    ) -> Option<RenderAabb> {
+        if image_width == 0
+            || image_height == 0
+            || runtime_image_mesh(runtime, graph, local_id).is_some()
+        {
+            // A mesh can deform the source image independently of its component
+            // transform. Until that geometry is retained explicitly, returning
+            // the undecorated image rectangle would silently lie to callers.
+            return None;
+        }
+        let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
-        if self.component(local_id)?.type_name == "Text" {
+        let image_object = image_global_id.and_then(|global_id| runtime.object(global_id as usize));
+        let origin_x_key = runtime_draw_property_key_for_name("Image", "originX")?;
+        let origin_y_key = runtime_draw_property_key_for_name("Image", "originY")?;
+        let origin_x = self
+            .double_property(local_id, origin_x_key)
+            .or_else(|| {
+                image_object.and_then(|object| {
+                    runtime_object_explicit_double_property_by_key(object, origin_x_key)
+                })
+            })
+            .unwrap_or(0.5);
+        let origin_y = self
+            .double_property(local_id, origin_y_key)
+            .or_else(|| {
+                image_object.and_then(|object| {
+                    runtime_object_explicit_double_property_by_key(object, origin_y_key)
+                })
+            })
+            .unwrap_or(0.5);
+        let image_width = image_width as f32;
+        let image_height = image_height as f32;
+        let world = path_cache
+            .image_world_transform_with_dimensions(
+                runtime,
+                self,
+                graph,
+                local_id,
+                image_object,
+                Some(image_asset_global),
+                image_identity,
+                image_width,
+                image_height,
+                layout_bounds,
+                false,
+            )
+            .ok()?
+            .unwrap_or_else(|| {
+                path_cache.component_world_transform_with_bounds(
+                    self,
+                    graph,
+                    local_id,
+                    layout_bounds,
+                )
+            });
+        if ![origin_x, origin_y, image_width, image_height]
+            .into_iter()
+            .chain(world.0)
+            .all(f32::is_finite)
+        {
+            return None;
+        }
+        let bounds = runtime_transformed_rect_bounds(
+            (
+                -image_width * origin_x,
+                -image_height * origin_y,
+                image_width,
+                image_height,
+            ),
+            world,
+        );
+        [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
+            .into_iter()
+            .all(f32::is_finite)
+            .then_some(bounds)
+    }
+
+    fn geometry_world_bounds_with_path_cache_and_transform(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        path_cache: &mut RuntimeRenderPathCache,
+        artboard_to_root: Mat2D,
+    ) -> Option<RenderAabb> {
+        let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        let component = self.component(local_id)?;
+        if matches!(
+            component.type_name,
+            "NestedArtboard" | "NestedArtboardLeaf" | "NestedArtboardLayout"
+        ) {
+            let nested = self.nested_artboards.get(&local_id)?;
+            let child_graph = nested.child.runtime_graph()?;
+            let child_to_artboard = match component.type_name {
+                "NestedArtboardLeaf" => runtime_nested_artboard_leaf_world_transform(
+                    self,
+                    graph,
+                    local_id,
+                    child_graph,
+                    Some(nested.child.as_ref()),
+                    layout_bounds,
+                    path_cache,
+                )
+                .ok()?,
+                "NestedArtboard" | "NestedArtboardLayout" => path_cache
+                    .component_world_transform_with_bounds(self, graph, local_id, layout_bounds),
+                _ => unreachable!("nested-artboard type was preflighted"),
+            };
+            let content = RuntimeAabb::from_artboard_with_layout(&nested.child, child_graph);
+            return Some(runtime_transformed_rect_bounds(
+                (
+                    content.left,
+                    content.top,
+                    content.left + content.width,
+                    content.top + content.height,
+                ),
+                artboard_to_root.multiply(child_to_artboard),
+            ));
+        }
+        if component.type_name == "Text" {
             let layout_constraint = self.runtime_text_layout_constraint(local_id, layout_bounds);
             let bounds = match layout_constraint {
                 Some(constraint) => static_text_controlled_layout_bounds(
@@ -901,20 +1576,23 @@ impl ArtboardInstance {
                 )?,
                 None => static_text_constraint_bounds(runtime, graph, self, local_id)?,
             };
-            let world = cache.paths.component_world_transform_with_bounds(
+            let world = path_cache.component_world_transform_with_bounds(
                 self,
                 graph,
                 local_id,
                 layout_bounds,
             );
-            return Some(runtime_transformed_rect_bounds(bounds, world));
+            return Some(runtime_transformed_rect_bounds(
+                bounds,
+                artboard_to_root.multiply(world),
+            ));
         }
-        let commands = self.runtime_object_world_path_commands(
-            local_id,
-            graph,
-            layout_bounds,
-            &mut cache.paths,
-        )?;
+        let mut commands =
+            self.runtime_object_world_path_commands(local_id, graph, layout_bounds, path_cache)?;
+        if artboard_to_root != Mat2D::IDENTITY {
+            let [a, b, c, d, e, f] = artboard_to_root.0;
+            transform_path_commands_affine(&mut commands, a, b, c, d, e, f);
+        }
         runtime_exact_path_bounds(&commands)
     }
 
@@ -1042,6 +1720,7 @@ impl ArtboardInstance {
             layout_bounds,
             &sorted,
             &mut path_cache,
+            false,
         )
     }
 
@@ -1051,12 +1730,14 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         sorted_drawable_order: &[SortedDrawableNode],
         path_cache: &mut RuntimeRenderPathCache,
+        include_invisible: bool,
     ) -> Vec<RuntimeDrawCommand> {
         self.draw_commands_with_sorted_drawable_order_reusing(
             graph,
             layout_bounds,
             sorted_drawable_order,
             path_cache,
+            include_invisible,
             Vec::new(),
         )
     }
@@ -1071,6 +1752,7 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         sorted_drawable_order: &[SortedDrawableNode],
         path_cache: &mut RuntimeRenderPathCache,
+        include_invisible: bool,
         mut commands: Vec<RuntimeDrawCommand>,
     ) -> Vec<RuntimeDrawCommand> {
         commands.clear();
@@ -1080,7 +1762,10 @@ impl ArtboardInstance {
         for drawable in sorted_drawable_order {
             let prev_clips = empty_clips;
             empty_clips += self.runtime_empty_clip_count(drawable, graph);
-            if !self.runtime_will_draw(drawable) || empty_clips != prev_clips || empty_clips > 0 {
+            if !self.runtime_will_draw(drawable, include_invisible)
+                || empty_clips != prev_clips
+                || empty_clips > 0
+            {
                 continue;
             }
 
@@ -3168,7 +3853,7 @@ impl ArtboardInstance {
         ])
     }
 
-    fn runtime_will_draw(&self, drawable: &SortedDrawableNode) -> bool {
+    fn runtime_will_draw(&self, drawable: &SortedDrawableNode, _include_invisible: bool) -> bool {
         match drawable.kind {
             DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy => true,
             DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
@@ -3748,21 +4433,77 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Mat2D {
+        let mut visiting = BTreeSet::new();
+        self.runtime_layout_component_world_transform_with_bounds_guarded(
+            layout_local,
+            graph,
+            layout_bounds,
+            &mut visiting,
+        )
+    }
+
+    fn runtime_layout_component_world_transform_with_bounds_guarded(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        visiting: &mut BTreeSet<usize>,
+    ) -> Mat2D {
+        let stored_world = self
+            .component(layout_local)
+            .map(|component| component.transform.world_transform)
+            .unwrap_or(Mat2D::IDENTITY);
+        if !visiting.insert(layout_local) {
+            return stored_world;
+        }
         let bounds = layout_bounds
             .and_then(|bounds| bounds.get(&layout_local).copied())
             .or_else(|| self.runtime_supported_layout_component_bounds(layout_local, graph));
         if let Some(bounds) = bounds {
-            // Rust layout bounds are accumulated into artboard space when we
-            // collect them from Taffy/fallback layout passes. C++ stores Yoga's
-            // left/top parent-local and composes through parent world
-            // transforms, so apply the artboard origin exactly once here.
-            let x = bounds.x - self.width * self.origin_x;
-            let y = bounds.y - self.height * self.origin_y;
-            return Mat2D([1.0, 0.0, 0.0, 1.0, x, y]);
+            // Taffy bounds are accumulated in untransformed artboard space. A
+            // nested layout offset therefore has to be made parent-local before
+            // its affine parent is applied, matching Yoga's parent-local
+            // left/top composition in the C++ runtime.
+            let nested_translation =
+                self.component(layout_local)
+                    .and_then(|component| component.parent_local)
+                    .and_then(|parent_local| {
+                        let parent = self.component(parent_local)?;
+                        if parent.type_name != "LayoutComponent" {
+                            return None;
+                        }
+                        let parent_bounds = layout_bounds
+                            .and_then(|bounds| bounds.get(&parent_local).copied())
+                            .or_else(|| {
+                                self.runtime_supported_layout_component_bounds(parent_local, graph)
+                            })?;
+                        let parent_world = self
+                            .runtime_layout_component_world_transform_with_bounds_guarded(
+                                parent_local,
+                                graph,
+                                layout_bounds,
+                                visiting,
+                            );
+                        Some(parent_world.transform_point(
+                            bounds.x - parent_bounds.x,
+                            bounds.y - parent_bounds.y,
+                        ))
+                    });
+            let (x, y) = nested_translation.unwrap_or((
+                bounds.x - self.width * self.origin_x,
+                bounds.y - self.height * self.origin_y,
+            ));
+            let stored_world = stored_world.0;
+            return Mat2D([
+                stored_world[0],
+                stored_world[1],
+                stored_world[2],
+                stored_world[3],
+                x,
+                y,
+            ]);
         }
-        self.component(layout_local)
-            .map(|component| component.transform.world_transform)
-            .unwrap_or(Mat2D::IDENTITY)
+        stored_world
     }
 
     pub(crate) fn runtime_layout_component_bounds(
@@ -8463,22 +9204,92 @@ impl RuntimeRenderPaintCache {
 
 #[derive(Default)]
 pub struct RuntimeRenderImages {
-    images_by_global: Vec<Option<Box<dyn RenderImage>>>,
+    images_by_global: Vec<Option<RuntimeRenderImageEntry>>,
+    retained_decoded_bytes: usize,
+}
+
+struct RuntimeRenderImageEntry {
+    image: Box<dyn RenderImage>,
+    decoded_byte_length: usize,
 }
 
 impl RuntimeRenderImages {
     pub fn get(&self, global_id: u32) -> Option<&dyn RenderImage> {
         self.images_by_global
             .get(global_id as usize)
-            .and_then(|image| image.as_deref())
+            .and_then(|entry| entry.as_ref())
+            .map(|entry| entry.image.as_ref())
     }
 
     pub fn insert(&mut self, global_id: u32, image: Box<dyn RenderImage>) {
+        let Some(decoded_byte_length) = decoded_rgba_len(image.width(), image.height()) else {
+            return;
+        };
+        if self
+            .try_reserve_replacement_decoded_bytes(global_id, decoded_byte_length)
+            .is_none()
+        {
+            return;
+        }
+        self.insert_reserved(global_id, image, decoded_byte_length);
+    }
+
+    fn try_reserve_replacement_decoded_bytes(
+        &mut self,
+        global_id: u32,
+        decoded_byte_length: usize,
+    ) -> Option<usize> {
+        let replaced_decoded_byte_length = self
+            .images_by_global
+            .get(global_id as usize)
+            .and_then(|entry| entry.as_ref())
+            .map_or(0, |entry| entry.decoded_byte_length);
+        let next_retained_decoded_bytes = self
+            .retained_decoded_bytes
+            .checked_sub(replaced_decoded_byte_length)?
+            .checked_add(decoded_byte_length)?;
+        if next_retained_decoded_bytes > MAX_RETAINED_DECODED_IMAGE_BYTES {
+            return None;
+        }
+        let previous_retained_decoded_bytes = self.retained_decoded_bytes;
+        self.retained_decoded_bytes = next_retained_decoded_bytes;
+        Some(previous_retained_decoded_bytes)
+    }
+
+    fn cancel_decoded_byte_reservation(&mut self, previous_retained_decoded_bytes: usize) {
+        self.retained_decoded_bytes = previous_retained_decoded_bytes;
+    }
+
+    fn insert_reserved(
+        &mut self,
+        global_id: u32,
+        image: Box<dyn RenderImage>,
+        decoded_byte_length: usize,
+    ) {
         let slot = global_id as usize;
         if self.images_by_global.len() <= slot {
             self.images_by_global.resize_with(slot + 1, || None);
         }
-        self.images_by_global[slot] = Some(image);
+        self.images_by_global[slot] = Some(RuntimeRenderImageEntry {
+            image,
+            decoded_byte_length,
+        });
+    }
+
+    fn dimensions(&self) -> impl Iterator<Item = (u32, u32, u32, usize)> + '_ {
+        self.images_by_global
+            .iter()
+            .enumerate()
+            .filter_map(|(global_id, entry)| {
+                let global_id = u32::try_from(global_id).ok()?;
+                let image = entry.as_ref()?.image.as_ref();
+                Some((
+                    global_id,
+                    image.width(),
+                    image.height(),
+                    runtime_render_image_identity(image),
+                ))
+            })
     }
 }
 
@@ -8705,6 +9516,83 @@ pub struct RuntimeRenderPathCache {
 pub struct RuntimeGeometryCache {
     key: Option<RuntimeGeometryCacheKey>,
     paths: RuntimeRenderPathCache,
+    registered_image_dimensions: BTreeMap<u32, (u32, u32)>,
+    presented_image_dimensions: BTreeMap<u32, (u32, u32, usize)>,
+}
+
+/// A host-registered intrinsic image size disagreed with another exact source
+/// of dimensions for the same file-global image asset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeImageDimensionConflict {
+    asset_global: u32,
+    expected: (u32, u32),
+    actual: (u32, u32),
+}
+
+impl std::fmt::Display for RuntimeImageDimensionConflict {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "image asset {} has registered dimensions {}x{} but decoded dimensions are {}x{}",
+            self.asset_global, self.expected.0, self.expected.1, self.actual.0, self.actual.1,
+        )
+    }
+}
+
+impl std::error::Error for RuntimeImageDimensionConflict {}
+
+/// One exact runtime-local step in a geometry hit path.
+///
+/// Local ids are only unique within an artboard. Carrying the containing
+/// artboard graph identity keeps hits through component-list item artboards
+/// unambiguous even when several mapped artboards reuse the same local ids.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RuntimeGeometryHitPathSegment {
+    pub artboard_global_id: u32,
+    pub local_id: usize,
+}
+
+/// One repeated component-list item on the descent to a concrete hit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RuntimeGeometryHitOccurrence {
+    pub artboard_global_id: u32,
+    pub host_local_id: usize,
+    pub item_index: usize,
+    /// Stable identity of the repeated occurrence at the time of the hit.
+    /// `item_index` alone is not durable across hot list topology changes.
+    pub occurrence_identity: u64,
+}
+
+/// One concrete geometry hit. Repeated component-list items may share both an
+/// authored path and overlapping bounds, so occurrence identity is explicit.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeGeometryHit {
+    pub path: Vec<RuntimeGeometryHitPathSegment>,
+    pub occurrence: Vec<RuntimeGeometryHitOccurrence>,
+    pub bounds: RenderAabb,
+    /// Present only for opt-in semantic text enumeration. Ordinary geometry
+    /// and hit-test calls leave this empty and do not allocate text values.
+    pub text_value: Option<String>,
+}
+
+/// One exact retained Text draw occurrence with its settled resolved value.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeSemanticTextHit {
+    pub path: Vec<RuntimeGeometryHitPathSegment>,
+    pub occurrence: Vec<RuntimeGeometryHitOccurrence>,
+    pub bounds: RenderAabb,
+    pub value: String,
+}
+
+fn runtime_geometry_hits_front_to_back(
+    back_to_front_hits: Vec<RuntimeGeometryHit>,
+) -> Vec<RuntimeGeometryHit> {
+    let mut seen = BTreeSet::new();
+    back_to_front_hits
+        .into_iter()
+        .rev()
+        .filter(|hit| seen.insert((hit.path.clone(), hit.occurrence.clone())))
+        .collect()
 }
 
 impl std::fmt::Debug for RuntimeGeometryCache {
@@ -8723,7 +9611,83 @@ impl RuntimeGeometryCache {
         if self.key != Some(key) {
             self.key = Some(key);
             self.paths = RuntimeRenderPathCache::default();
+            self.registered_image_dimensions.clear();
+            self.presented_image_dimensions.clear();
         }
+    }
+
+    /// Register exact intrinsic dimensions supplied by the resource owner so
+    /// logical image geometry is available before this instance first draws.
+    #[doc(hidden)]
+    pub fn register_image_dimensions(
+        &mut self,
+        instance: &ArtboardInstance,
+        asset_global: u32,
+        width: u32,
+        height: u32,
+    ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
+        self.retain_instance(instance);
+        let actual = (width, height);
+        if let Some(expected) = self
+            .registered_image_dimensions
+            .insert(asset_global, actual)
+            .filter(|expected| *expected != actual)
+        {
+            self.registered_image_dimensions
+                .insert(asset_global, expected);
+            return Err(RuntimeImageDimensionConflict {
+                asset_global,
+                expected,
+                actual,
+            });
+        }
+        Ok(())
+    }
+
+    /// Correlate future Image geometry reads with the exact successfully
+    /// decoded resources owned by a retained presentation frame.
+    #[doc(hidden)]
+    pub fn observe_presented_images(
+        &mut self,
+        instance: &ArtboardInstance,
+        paint_cache: &RuntimeRenderPaintCache,
+    ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
+        self.retain_instance(instance);
+        for (asset_global, width, height, _) in paint_cache.images.dimensions() {
+            let actual = (width, height);
+            if let Some(expected) = self
+                .registered_image_dimensions
+                .get(&asset_global)
+                .copied()
+                .filter(|expected| *expected != actual)
+            {
+                return Err(RuntimeImageDimensionConflict {
+                    asset_global,
+                    expected,
+                    actual,
+                });
+            }
+        }
+        self.presented_image_dimensions.clear();
+        self.presented_image_dimensions.extend(
+            paint_cache
+                .images
+                .dimensions()
+                .map(|(global_id, width, height, identity)| (global_id, (width, height, identity))),
+        );
+        Ok(())
+    }
+
+    fn presented_image_dimensions(&self, global_id: u32) -> Option<(u32, u32, usize)> {
+        self.presented_image_dimensions
+            .get(&global_id)
+            .copied()
+            .or_else(|| {
+                self.registered_image_dimensions
+                    .get(&global_id)
+                    .copied()
+                    .map(|(width, height)| (width, height, global_id as usize))
+            })
     }
 }
 
@@ -9605,6 +10569,36 @@ impl RuntimeRenderPathCache {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         has_vertex_mesh: bool,
     ) -> Result<Option<RuntimeImageLayoutWorldTransform>> {
+        self.image_layout_world_transform_with_dimensions(
+            runtime,
+            instance,
+            graph,
+            local_id,
+            image_object,
+            resolved_image_asset_global,
+            runtime_render_image_identity(image),
+            image.width() as f32,
+            image.height() as f32,
+            layout_bounds,
+            has_vertex_mesh,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn image_layout_world_transform_with_dimensions(
+        &mut self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        image_object: Option<&RuntimeObject>,
+        resolved_image_asset_global: Option<u32>,
+        image_identity: usize,
+        image_width: f32,
+        image_height: f32,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        has_vertex_mesh: bool,
+    ) -> Result<Option<RuntimeImageLayoutWorldTransform>> {
         let Some(layout_bounds) = layout_bounds else {
             return Ok(None);
         };
@@ -9624,9 +10618,6 @@ impl RuntimeRenderPathCache {
             return Ok(None);
         };
 
-        let image_width = image.width() as f32;
-        let image_height = image.height() as f32;
-        let image_identity = runtime_render_image_identity(image);
         let layout_scale_separate = runtime_layout_image_uses_separate_fit_scale(
             runtime.header.major_version,
             runtime.header.minor_version,
@@ -9678,6 +10669,38 @@ impl RuntimeRenderPathCache {
             render_scale_x: state.render_scale_x,
             render_scale_y: state.render_scale_y,
         }))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn image_world_transform_with_dimensions(
+        &mut self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        image_object: Option<&RuntimeObject>,
+        resolved_image_asset_global: Option<u32>,
+        image_identity: usize,
+        image_width: f32,
+        image_height: f32,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        has_vertex_mesh: bool,
+    ) -> Result<Option<Mat2D>> {
+        Ok(self
+            .image_layout_world_transform_with_dimensions(
+                runtime,
+                instance,
+                graph,
+                local_id,
+                image_object,
+                resolved_image_asset_global,
+                image_identity,
+                image_width,
+                image_height,
+                layout_bounds,
+                has_vertex_mesh,
+            )?
+            .map(|state| state.world_transform))
     }
 
     fn image_world_transform_with_bounds(
@@ -9758,6 +10781,7 @@ impl RuntimeRenderPathCache {
                 layout_bounds.as_ref().as_ref(),
                 sorted_drawable_order.as_slice(),
                 self,
+                false,
                 reusable_commands,
             );
             let background =
@@ -9781,6 +10805,19 @@ impl RuntimeRenderPathCache {
             .as_ref()
             .expect("prepared artboard frame was just populated")
             .clone()
+    }
+
+    fn retained_geometry_artboard_frame(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        runtime: &RuntimeFile,
+    ) -> Arc<RuntimePreparedArtboardFrame> {
+        // The prepared frame deliberately retains every drawable's command
+        // topology across opacity writes. Geometry can therefore read
+        // the same immutable frame and decide effective visibility at query
+        // time without maintaining a second, divergent command cache.
+        self.prepared_artboard_frame(instance, graph, Some(runtime))
     }
 
     fn sorted_drawable_order_frame(
@@ -10363,6 +11400,31 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     )
 }
 
+/// Preallocate a complete artboard-tree render cache with host-supplied bytes
+/// for external `ImageAsset` objects.
+///
+/// The map is keyed by `FileAsset.assetId`. Embedded `FileAssetContents`
+/// remain authoritative when both are present.
+pub fn preallocate_render_paint_cache_for_artboard_tree_with_external_images(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+    external_image_bytes: &BTreeMap<u32, Arc<[u8]>>,
+) -> RuntimeRenderPaintCache {
+    preallocate_render_paint_cache_for_artboard_tree_internal(
+        runtime,
+        graph,
+        artboards,
+        Some(external_image_bytes),
+        factory,
+        false,
+        true,
+        false,
+        None,
+    )
+}
+
 pub fn preallocate_render_paint_cache_for_scripted_artboard_tree(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
@@ -10418,22 +11480,21 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     scripting_file_assets: bool,
     file_registration: Option<&mut dyn FnMut(&mut dyn RenderFactory)>,
 ) -> RuntimeRenderPaintCache {
-    let image_asset_globals = runtime
-        .file_assets()
-        .into_iter()
-        .filter(|asset| asset.type_name == "ImageAsset")
-        .map(|asset| asset.id)
-        .collect::<Vec<_>>();
+    // Import FileAssetContents once for the whole cache build. Looking up the
+    // embedded payload independently for every image rescans the complete
+    // object stream for each asset and turns a large valid file quadratic.
+    let image_assets = RuntimeImageAssetCatalog::from_runtime(runtime);
     let pre_source_image_assets = pre_source_image_asset_globals(
         runtime,
         graph,
         artboards,
-        &image_asset_globals,
+        &image_assets,
         scripting_file_assets,
     );
     let mut images = RuntimeRenderImages::default();
     let mut image_decode_error = None;
-    for asset_global in image_asset_globals
+    for asset_global in image_assets
+        .globals
         .iter()
         .copied()
         .filter(|asset_global| pre_source_image_assets.contains(asset_global))
@@ -10441,6 +11502,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         if image_decode_error.is_none() {
             image_decode_error = predecode_render_image(
                 runtime,
+                &image_assets,
                 asset_global,
                 external_images,
                 factory,
@@ -10451,7 +11513,8 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     }
     let _source_artboard_paints =
         allocate_source_paints.then(|| preallocate_render_paint_batch(runtime, factory));
-    for asset_global in image_asset_globals
+    for asset_global in image_assets
+        .globals
         .iter()
         .copied()
         .filter(|asset_global| !pre_source_image_assets.contains(asset_global))
@@ -10459,6 +11522,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         if image_decode_error.is_none() {
             image_decode_error = predecode_render_image(
                 runtime,
+                &image_assets,
                 asset_global,
                 external_images,
                 factory,
@@ -10586,21 +11650,22 @@ fn pre_source_image_asset_globals(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
-    image_asset_globals: &[u32],
+    image_assets: &RuntimeImageAssetCatalog<'_>,
     scripting_file_assets: bool,
 ) -> BTreeSet<u32> {
     let mut pre_source_assets =
-        import_stack_pre_source_image_asset_globals(runtime, scripting_file_assets)
+        import_stack_pre_source_image_asset_globals(runtime, image_assets, scripting_file_assets)
             .into_iter()
             .collect::<BTreeSet<_>>();
     let heuristic_count =
-        heuristic_pre_source_image_decode_count(graph, artboards, image_asset_globals.len());
-    pre_source_assets.extend(image_asset_globals.iter().copied().take(heuristic_count));
+        heuristic_pre_source_image_decode_count(graph, artboards, image_assets.globals.len());
+    pre_source_assets.extend(image_assets.globals.iter().copied().take(heuristic_count));
     pre_source_assets
 }
 
 fn import_stack_pre_source_image_asset_globals(
     runtime: &RuntimeFile,
+    image_assets: &RuntimeImageAssetCatalog<'_>,
     scripting_file_assets: bool,
 ) -> Vec<u32> {
     let mut pre_source_assets = Vec::new();
@@ -10615,7 +11680,7 @@ fn import_stack_pre_source_image_asset_globals(
         }
 
         if let Some(asset_global) = latest_image_asset.take()
-            && embedded_file_asset_bytes(runtime, asset_global).is_some()
+            && image_assets.embedded_bytes(asset_global).is_some()
         {
             pre_source_assets.push(asset_global);
         }
@@ -10722,12 +11787,13 @@ fn heuristic_pre_source_image_decode_count(
 
 fn predecode_render_image(
     runtime: &RuntimeFile,
+    image_assets: &RuntimeImageAssetCatalog<'_>,
     asset_global: u32,
     external_images: Option<&BTreeMap<u32, Arc<[u8]>>>,
     factory: &mut dyn RenderFactory,
     images: &mut RuntimeRenderImages,
 ) -> std::result::Result<(), ImageDecodeError> {
-    let bytes = embedded_file_asset_bytes(runtime, asset_global).or_else(|| {
+    let bytes = image_assets.embedded_bytes(asset_global).or_else(|| {
         let semantic_id = runtime
             .object(asset_global as usize)?
             .uint_property("assetId")?;
@@ -10735,34 +11801,22 @@ fn predecode_render_image(
         external_images?.get(&semantic_id).map(AsRef::as_ref)
     });
     if let Some(bytes) = bytes {
-        images.insert(asset_global, factory.decode_image(bytes)?);
+        let dimensions = preflight_encoded_image(bytes).ok_or(ImageDecodeError)?;
+        let decoded_byte_length =
+            decoded_rgba_len(dimensions.width, dimensions.height).ok_or(ImageDecodeError)?;
+        let previous_retained_decoded_bytes = images
+            .try_reserve_replacement_decoded_bytes(asset_global, decoded_byte_length)
+            .ok_or(ImageDecodeError)?;
+        let image = match factory.decode_image(bytes) {
+            Ok(image) => image,
+            Err(error) => {
+                images.cancel_decoded_byte_reservation(previous_retained_decoded_bytes);
+                return Err(error);
+            }
+        };
+        images.insert_reserved(asset_global, image, decoded_byte_length);
     }
     Ok(())
-}
-
-fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option<&[u8]> {
-    let file_asset_globals = runtime
-        .file_assets()
-        .into_iter()
-        .map(|asset| asset.id)
-        .collect::<BTreeSet<_>>();
-    let mut after_asset = false;
-    for object in runtime.objects.iter().flatten() {
-        if object.id == asset_global {
-            after_asset = true;
-            continue;
-        }
-        if !after_asset {
-            continue;
-        }
-        if file_asset_globals.contains(&object.id) {
-            return None;
-        }
-        if object.type_name == "FileAssetContents" {
-            return object.bytes_property("bytes");
-        }
-    }
-    None
 }
 
 fn write_render_buffer_bytes(buffer: &mut dyn RenderBuffer, bytes: &[u8]) {
@@ -17039,6 +18093,14 @@ fn runtime_geometry_include_point(bounds: &mut Option<RenderAabb>, point: (f32, 
 }
 
 #[allow(clippy::arithmetic_side_effects)]
+fn runtime_rect_contains(bounds: (f32, f32, f32, f32), point: RenderVec2D) -> bool {
+    let (x, y, width, height) = bounds;
+    let max_x = x + width;
+    let max_y = y + height;
+    RenderAabb::new(x.min(max_x), y.min(max_y), x.max(max_x), y.max(max_y)).contains(point)
+}
+
+#[allow(clippy::arithmetic_side_effects)]
 fn runtime_transformed_rect_bounds(bounds: (f32, f32, f32, f32), world: Mat2D) -> RenderAabb {
     let (x, y, width, height) = bounds;
     let mut transformed = None;
@@ -21239,17 +22301,67 @@ mod tests {
             .filter(|asset| asset.type_name == "ImageAsset")
             .map(|asset| asset.id)
             .collect::<Vec<_>>();
+        let image_assets = RuntimeImageAssetCatalog::from_runtime(&file);
 
         assert_eq!(image_globals.len(), 2);
         assert_eq!(
-            import_stack_pre_source_image_asset_globals(&file, false),
+            import_stack_pre_source_image_asset_globals(&file, &image_assets, false),
             vec![image_globals[0]],
             "a non-scripting importer leaves the final image pending"
         );
         assert_eq!(
-            import_stack_pre_source_image_asset_globals(&file, true),
+            import_stack_pre_source_image_asset_globals(&file, &image_assets, true),
             image_globals,
             "WITH_RIVE_SCRIPTING treats ScriptAsset as the next FileAsset importer"
+        );
+    }
+
+    #[test]
+    fn large_image_catalog_scans_entries_once_and_serves_all_embedded_lookups() {
+        const IMAGE_COUNT: usize = 4_096;
+
+        let mut records = Vec::with_capacity(IMAGE_COUNT * 2 + 2);
+        records.push(authoring_record("Backboard", Vec::new()));
+        for ordinal in 0..IMAGE_COUNT {
+            records.push(authoring_record(
+                "ImageAsset",
+                vec![authoring_property(
+                    "ImageAsset",
+                    "assetId",
+                    AuthoringValue::Uint(ordinal as u64),
+                )],
+            ));
+            records.push(authoring_record(
+                "FileAssetContents",
+                vec![authoring_property(
+                    "FileAssetContents",
+                    "bytes",
+                    AuthoringValue::Bytes(vec![(ordinal & 0xff) as u8]),
+                )],
+            ));
+        }
+        records.push(authoring_record("Artboard", Vec::new()));
+        let file = RuntimeFile::from_authoring_records(records)
+            .expect("large image catalog fixture imports");
+        let mut visited_entries = 0;
+
+        let catalog = RuntimeImageAssetCatalog::from_entries(
+            file.imported_file_assets_with_contents()
+                .into_iter()
+                .inspect(|_| visited_entries += 1),
+        );
+
+        assert_eq!(visited_entries, IMAGE_COUNT);
+        assert_eq!(catalog.globals.len(), IMAGE_COUNT);
+        for (ordinal, asset_global) in catalog.globals.iter().copied().enumerate() {
+            assert_eq!(
+                catalog.embedded_bytes(asset_global),
+                Some(&[(ordinal & 0xff) as u8][..])
+            );
+        }
+        assert_eq!(
+            visited_entries, IMAGE_COUNT,
+            "catalog lookups must not revisit the imported asset stream"
         );
     }
 
@@ -21601,6 +22713,43 @@ mod tests {
 
         assert_eq!(first_geometry, second_geometry);
         assert_ne!(first_key, second_key);
+    }
+
+    #[test]
+    fn concrete_hit_dedup_keeps_overlapping_component_list_occurrences() {
+        let hit = |item_index| RuntimeGeometryHit {
+            path: vec![
+                RuntimeGeometryHitPathSegment {
+                    artboard_global_id: 1,
+                    local_id: 4,
+                },
+                RuntimeGeometryHitPathSegment {
+                    artboard_global_id: 8,
+                    local_id: 2,
+                },
+            ],
+            occurrence: vec![RuntimeGeometryHitOccurrence {
+                artboard_global_id: 1,
+                host_local_id: 4,
+                item_index,
+                occurrence_identity: item_index as u64 + 1,
+            }],
+            bounds: RenderAabb::new(10.0, 20.0, 30.0, 40.0),
+            text_value: None,
+        };
+
+        let mut separated_paint_duplicate = hit(0);
+        separated_paint_duplicate.bounds = RenderAabb::new(100.0, 20.0, 120.0, 40.0);
+        let hits =
+            runtime_geometry_hits_front_to_back(vec![hit(0), separated_paint_duplicate, hit(1)]);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.occurrence[0].item_index)
+                .collect::<Vec<_>>(),
+            vec![1, 0],
+            "paint duplicates collapse regardless of bounds while equal-path/equal-bounds list items stay distinct",
+        );
     }
 
     #[test]
@@ -23494,6 +24643,101 @@ mod tests {
     }
 
     #[test]
+    fn settled_layout_world_transform_preserves_authored_rotation_and_scale() {
+        let bytes = synthetic_affine_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic affine layout riv imports");
+        let graphs =
+            GraphFile::from_runtime_file(&file).expect("synthetic affine layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let report = instance
+            .debug_taffy_layout_bounds_report(&file, graph)
+            .expect("fixture settles with Taffy");
+        let layout = report
+            .iter()
+            .find(|entry| entry.local_id == 3)
+            .expect("second layout component is reported");
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert_mat2d_near(layout.world_transform, [0.0, 2.0, -0.5, 0.0, 100.0, 0.0]);
+        assert_mat2d_near(
+            instance
+                .geometry_world_transform_with_context(&file, graph, 5, &mut cache)
+                .expect("child shape has a world transform")
+                .0,
+            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
+        );
+        assert_aabb_near(
+            instance
+                .geometry_world_bounds_with_context(&file, graph, 5, &mut cache)
+                .expect("child shape has geometry"),
+            RenderAabb::new(65.0, -80.0, 115.0, 120.0),
+        );
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(90.0, 20.0),
+                &mut cache,
+            ),
+            vec![5]
+        );
+    }
+
+    #[test]
+    fn nested_layout_translation_composes_through_parent_affine_transform() {
+        let bytes = synthetic_nested_affine_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic nested affine layout riv imports");
+        let graphs =
+            GraphFile::from_runtime_file(&file).expect("synthetic nested affine layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let report = instance
+            .debug_taffy_layout_bounds_report(&file, graph)
+            .expect("fixture settles with Taffy");
+        let child_layout = report
+            .iter()
+            .find(|entry| entry.local_id == 5)
+            .expect("nested layout component is reported");
+        let mut cache = RuntimeGeometryCache::default();
+
+        assert_mat2d_near(
+            child_layout.world_transform,
+            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
+        );
+        assert_mat2d_near(
+            instance
+                .runtime_layout_component_world_transform(5, graph)
+                .0,
+            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
+        );
+        assert_mat2d_near(
+            instance
+                .geometry_world_transform_with_context(&file, graph, 7, &mut cache)
+                .expect("nested child shape has a world transform")
+                .0,
+            [0.0, 2.0, -0.5, 0.0, 87.0, 30.0],
+        );
+        assert_aabb_near(
+            instance
+                .geometry_world_bounds_with_context(&file, graph, 7, &mut cache)
+                .expect("nested child shape has geometry"),
+            RenderAabb::new(79.5, -10.0, 94.5, 70.0),
+        );
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(87.0, 30.0),
+                &mut cache,
+            ),
+            vec![7]
+        );
+    }
+
+    #[test]
     fn controlled_auto_text_without_shape_uses_exact_layout_bounds_and_authored_origin() {
         let bytes = synthetic_layout_text_bounds_riv();
         let file = read_runtime_file(&bytes).expect("synthetic layout Text riv imports");
@@ -24090,6 +25334,8 @@ mod tests {
         closes: Cell<usize>,
         linear_gradients: RefCell<Vec<[f32; 4]>>,
         linear_gradient_colors: RefCell<Vec<Vec<ColorInt>>>,
+        image_decode_attempts: Cell<usize>,
+        image_decode_failures_remaining: Cell<usize>,
     }
 
     struct CountingFactory {
@@ -24385,6 +25631,25 @@ mod tests {
         }
     }
 
+    struct SizedTestRenderImage {
+        width: u32,
+        height: u32,
+    }
+
+    impl RenderImage for SizedTestRenderImage {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn width(&self) -> u32 {
+            self.width
+        }
+
+        fn height(&self) -> u32 {
+            self.height
+        }
+    }
+
     struct TestRenderPaint;
 
     impl RenderPaint for TestRenderPaint {
@@ -24478,8 +25743,217 @@ mod tests {
             &mut self,
             _data: &[u8],
         ) -> std::result::Result<Box<dyn RenderImage>, ImageDecodeError> {
+            self.stats
+                .image_decode_attempts
+                .set(self.stats.image_decode_attempts.get() + 1);
+            let failures_remaining = self.stats.image_decode_failures_remaining.get();
+            if failures_remaining != 0 {
+                self.stats
+                    .image_decode_failures_remaining
+                    .set(failures_remaining - 1);
+                return Err(ImageDecodeError);
+            }
             Ok(Box::new(TestRenderImage))
         }
+    }
+
+    fn compressed_rgba_png(width: u32, height: u32) -> Vec<u8> {
+        let decoded_byte_length = decoded_rgba_len(width, height).expect("test image is bounded");
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut encoded, width, height);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().expect("PNG header encodes");
+            writer
+                .write_image_data(&vec![0; decoded_byte_length])
+                .expect("PNG pixels encode");
+        }
+        encoded
+    }
+
+    #[test]
+    fn retained_images_reserve_one_aggregate_decoded_budget_before_decode() {
+        const WIDTH: u32 = 4_096;
+        const HEIGHT: u32 = 2_048;
+
+        let encoded = compressed_rgba_png(WIDTH, HEIGHT);
+        assert_eq!(
+            nuxie_image_codec::validate_encoded_image(&encoded),
+            Some(nuxie_image_codec::DecodedImageDimensions {
+                width: WIDTH,
+                height: HEIGHT,
+            }),
+            "the compressed regression payload must be fully valid"
+        );
+        let file = RuntimeFile::from_authoring_records(vec![
+            authoring_record("Backboard", Vec::new()),
+            authoring_record(
+                "ImageAsset",
+                vec![authoring_property(
+                    "ImageAsset",
+                    "assetId",
+                    AuthoringValue::Uint(10),
+                )],
+            ),
+            authoring_record(
+                "FileAssetContents",
+                vec![authoring_property(
+                    "FileAssetContents",
+                    "bytes",
+                    AuthoringValue::Bytes(encoded.clone()),
+                )],
+            ),
+            authoring_record(
+                "ImageAsset",
+                vec![authoring_property(
+                    "ImageAsset",
+                    "assetId",
+                    AuthoringValue::Uint(11),
+                )],
+            ),
+            authoring_record(
+                "ImageAsset",
+                vec![authoring_property(
+                    "ImageAsset",
+                    "assetId",
+                    AuthoringValue::Uint(12),
+                )],
+            ),
+            authoring_record("Artboard", Vec::new()),
+        ])
+        .expect("mixed embedded/external image fixture imports");
+        let image_globals = file
+            .file_assets()
+            .into_iter()
+            .filter(|asset| asset.type_name == "ImageAsset")
+            .map(|asset| asset.id)
+            .collect::<Vec<_>>();
+        let image_assets = RuntimeImageAssetCatalog::from_runtime(&file);
+        assert_eq!(image_globals.len(), 3);
+        let external_images = BTreeMap::from([
+            (11, Arc::<[u8]>::from(encoded.clone())),
+            (12, Arc::<[u8]>::from(encoded)),
+        ]);
+        let stats = Rc::new(CountingStats::default());
+        stats.image_decode_failures_remaining.set(1);
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut images = RuntimeRenderImages::default();
+
+        assert_eq!(
+            predecode_render_image(
+                &file,
+                &image_assets,
+                image_globals[0],
+                Some(&external_images),
+                &mut factory,
+                &mut images,
+            ),
+            Err(ImageDecodeError),
+            "a codec failure propagates"
+        );
+        assert_eq!(images.retained_decoded_bytes, 0, "failed decode rolls back");
+        predecode_render_image(
+            &file,
+            &image_assets,
+            image_globals[0],
+            Some(&external_images),
+            &mut factory,
+            &mut images,
+        )
+        .expect("embedded image retry decodes");
+        predecode_render_image(
+            &file,
+            &image_assets,
+            image_globals[1],
+            Some(&external_images),
+            &mut factory,
+            &mut images,
+        )
+        .expect("external image fills the remaining budget");
+        assert_eq!(
+            images.retained_decoded_bytes,
+            MAX_RETAINED_DECODED_IMAGE_BYTES
+        );
+        assert_eq!(
+            predecode_render_image(
+                &file,
+                &image_assets,
+                image_globals[2],
+                Some(&external_images),
+                &mut factory,
+                &mut images,
+            ),
+            Err(ImageDecodeError),
+            "the third individually valid compressed image exceeds the aggregate budget"
+        );
+        assert_eq!(
+            stats.image_decode_attempts.get(),
+            3,
+            "aggregate admission rejects before invoking the decoder"
+        );
+        assert!(images.get(image_globals[0]).is_some());
+        assert!(images.get(image_globals[1]).is_some());
+        assert!(images.get(image_globals[2]).is_none());
+    }
+
+    #[test]
+    fn retained_image_replacement_admits_net_size_and_rejects_atomically() {
+        const HALF_BUDGET_WIDTH: u32 = 4_096;
+        const HALF_BUDGET_HEIGHT: u32 = 2_048;
+
+        let mut images = RuntimeRenderImages::default();
+        for global_id in [7, 8] {
+            images.insert(
+                global_id,
+                Box::new(SizedTestRenderImage {
+                    width: HALF_BUDGET_WIDTH,
+                    height: HALF_BUDGET_HEIGHT,
+                }),
+            );
+        }
+        assert_eq!(
+            images.retained_decoded_bytes, MAX_RETAINED_DECODED_IMAGE_BYTES,
+            "two half-budget images fill the aggregate exactly",
+        );
+
+        images.insert(
+            7,
+            Box::new(SizedTestRenderImage {
+                width: 1,
+                height: 1,
+            }),
+        );
+        let replacement = images.get(7).expect("smaller replacement is retained");
+        assert_eq!((replacement.width(), replacement.height()), (1, 1));
+        let retained_after_replacement = decoded_rgba_len(HALF_BUDGET_WIDTH, HALF_BUDGET_HEIGHT)
+            .expect("half-budget dimensions are valid")
+            .checked_add(decoded_rgba_len(1, 1).expect("one pixel is valid"))
+            .expect("test dimensions fit usize");
+        assert_eq!(images.retained_decoded_bytes, retained_after_replacement);
+
+        images.insert(
+            7,
+            Box::new(SizedTestRenderImage {
+                width: 4_096,
+                height: 3_072,
+            }),
+        );
+        let retained = images
+            .get(7)
+            .expect("a rejected replacement preserves the current image");
+        assert_eq!(
+            (retained.width(), retained.height()),
+            (1, 1),
+            "the other half-budget image plus a 48 MiB replacement exceeds the aggregate",
+        );
+        assert_eq!(
+            images.retained_decoded_bytes, retained_after_replacement,
+            "a rejected replacement must not mutate aggregate accounting",
+        );
     }
 
     #[test]
@@ -25246,9 +26720,99 @@ mod tests {
         bytes.extend_from_slice(&value.to_le_bytes());
     }
 
+    fn assert_mat2d_near(actual: [f32; 6], expected: [f32; 6]) {
+        for (index, (actual, expected)) in actual.into_iter().zip(expected).enumerate() {
+            assert!(
+                (actual - expected).abs() < 1.0e-4,
+                "matrix entry {index}: expected {expected}, got {actual}"
+            );
+        }
+    }
+
+    fn assert_aabb_near(actual: RenderAabb, expected: RenderAabb) {
+        for (label, actual, expected) in [
+            ("min_x", actual.min_x, expected.min_x),
+            ("min_y", actual.min_y, expected.min_y),
+            ("max_x", actual.max_x, expected.max_x),
+            ("max_y", actual.max_y, expected.max_y),
+        ] {
+            assert!(
+                (actual - expected).abs() < 1.0e-4,
+                "bounds {label}: expected {expected}, got {actual}"
+            );
+        }
+    }
+
     // Two fixed-size layout children fill a row artboard. The queried shape is
     // authored under the second child at x=10, so its settled world x is 110.
     fn synthetic_layout_geometry_riv() -> Vec<u8> {
+        synthetic_layout_geometry_riv_with_affine(None)
+    }
+
+    fn synthetic_affine_layout_geometry_riv() -> Vec<u8> {
+        synthetic_layout_geometry_riv_with_affine(Some((std::f32::consts::FRAC_PI_2, 2.0, 0.5)))
+    }
+
+    fn synthetic_nested_affine_layout_geometry_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9651);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 300.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 4);
+            push_f32(bytes, "Node", "rotation", std::f32::consts::FRAC_PI_2);
+            push_f32(bytes, "Node", "scaleX", 2.0);
+            push_f32(bytes, "Node", "scaleY", 0.5);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+            push_f32(bytes, "LayoutComponentStyle", "paddingLeft", 10.0);
+            push_f32(bytes, "LayoutComponentStyle", "paddingTop", 20.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+            push_f32(bytes, "LayoutComponent", "width", 40.0);
+            push_f32(bytes, "LayoutComponent", "height", 30.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 6);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 5);
+            push_f32(bytes, "Node", "x", 5.0);
+            push_f32(bytes, "Node", "y", 6.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 7);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 8);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 7);
+            push_f32(bytes, "ParametricPath", "width", 20.0);
+            push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+        bytes
+    }
+
+    fn synthetic_layout_geometry_riv_with_affine(affine: Option<(f32, f32, f32)>) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"RIVE");
         push_var_uint(&mut bytes, 7);
@@ -25272,6 +26836,11 @@ mod tests {
             push_f32(bytes, "LayoutComponent", "width", 100.0);
             push_f32(bytes, "LayoutComponent", "height", 100.0);
             push_uint(bytes, "LayoutComponent", "styleId", 4);
+            if let Some((rotation, scale_x, scale_y)) = affine {
+                push_f32(bytes, "Node", "rotation", rotation);
+                push_f32(bytes, "Node", "scaleX", scale_x);
+                push_f32(bytes, "Node", "scaleY", scale_y);
+            }
         });
         push_object(&mut bytes, "LayoutComponentStyle", |_| {});
         push_object(&mut bytes, "Shape", |bytes| {
@@ -25524,6 +27093,7 @@ mod tests {
 
     fn synthetic_nested_image_nslicer_riv() -> Vec<u8> {
         let mut bytes = Vec::new();
+        let image_bytes = compressed_rgba_png(300, 300);
         bytes.extend_from_slice(b"RIVE");
         push_var_uint(&mut bytes, 7);
         push_var_uint(&mut bytes, 2);
@@ -25532,12 +27102,7 @@ mod tests {
         push_object(&mut bytes, "Backboard", |_| {});
         push_object(&mut bytes, "ImageAsset", |_| {});
         push_object(&mut bytes, "FileAssetContents", |bytes| {
-            push_bytes(
-                bytes,
-                "FileAssetContents",
-                "bytes",
-                b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\x01,\0\0\x01,",
-            );
+            push_bytes(bytes, "FileAssetContents", "bytes", &image_bytes);
         });
         push_object(&mut bytes, "Artboard", |_| {});
         push_object(&mut bytes, "NestedArtboard", |bytes| {

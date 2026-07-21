@@ -124,6 +124,23 @@ pub(crate) fn static_text_constraint_bounds(
     static_fixed_text_constraint_bounds(runtime, graph, instance, text_local, None)
 }
 
+/// Return the exact settled text rendered by one Text object.
+///
+/// This follows the same resolved-run path as shaping, including live string
+/// property writes and dynamically projected list runs. Callers opt into this
+/// allocation only for semantic text observation; ordinary geometry queries
+/// do not materialize text values.
+pub(crate) fn static_text_value(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+) -> Option<String> {
+    let slice = StaticTextSlice::from_graph(runtime, graph, text_local).ok()?;
+    let runs = slice.resolved_runs(runtime, instance).ok()?;
+    Some(runs.into_iter().map(|run| run.text).collect())
+}
+
 pub(crate) fn static_text_layout_measure_bounds(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
@@ -1477,6 +1494,10 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 || (["scaleX", "scaleY"].into_iter().any(|name| {
                     property_key_for_name("TransformComponent", name) == Some(property_key)
                 }) && data_bind.converter_type_name == Some("DataConverterSystemNormalizer"))
+                || (property_key_for_name("WorldTransformComponent", "opacity")
+                    == Some(property_key)
+                    && (data_bind.converter_global.is_none()
+                        || data_bind.converter_type_name == Some("DataConverterGroup")))
         }
         Some("Node") => {
             (["x", "y"]
@@ -1593,6 +1614,9 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                     .any(|name| property_key_for_name("Text", name) == Some(property_key))
                     && (data_bind.converter_global.is_none()
                         || data_bind.converter_type_name == Some("DataConverterFormula")))
+                || (property_key_for_name("WorldTransformComponent", "opacity")
+                    == Some(property_key)
+                    && data_bind.converter_type_name == Some("DataConverterGroup"))
         }
         Some("TextFollowPathModifier") => {
             ["start", "end", "strength", "offset"]
@@ -1607,6 +1631,31 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 }) && data_bind.converter_global.is_none())
         }
         _ => false,
+    }
+}
+
+fn static_text_data_bind_targets_subtree(
+    graph: &ArtboardGraph,
+    text_local: usize,
+    data_bind: &DataBindNode,
+) -> bool {
+    let Some(mut target_local) = data_bind.target_local else {
+        return false;
+    };
+    let mut visited = BTreeSet::new();
+    loop {
+        if target_local == text_local {
+            return true;
+        }
+        if !visited.insert(target_local) {
+            return false;
+        }
+        let Some(parent_local) =
+            component_for_local(graph, target_local).and_then(|component| component.parent_local)
+        else {
+            return false;
+        };
+        target_local = parent_local;
     }
 }
 
@@ -1713,6 +1762,7 @@ impl<'a> StaticTextSlice<'a> {
         if let Some(data_bind) = graph
             .data_binds
             .iter()
+            .filter(|data_bind| static_text_data_bind_targets_subtree(graph, text_local, data_bind))
             .find(|data_bind| !static_text_data_bind_supported(data_bind))
         {
             bail!(
@@ -1771,6 +1821,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "NestedBool"
                         | "NestedNumber"
                         | "ArtboardComponentList"
+                        | "ArtboardListMapRule"
                         | "RootBone"
                         | "Skin"
                         | "Tendon"
@@ -1812,6 +1863,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "ViewModelInstance"
                         | "ViewModelInstanceColor"
                         | "ViewModelInstanceNumber"
+                        | "ViewModelInstanceBoolean"
                         | "ViewModelInstanceString"
                         | "ViewModelInstanceList"
                         | "ViewModelInstanceListItem"
@@ -1820,6 +1872,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "ViewModelPropertyList"
                         | "ViewModelPropertyColor"
                         | "ViewModelPropertyNumber"
+                        | "ViewModelPropertyBoolean"
                         | "ViewModelPropertyString"
                         | "ViewModelPropertyTrigger"
                         | "ViewModelPropertyViewModel"
@@ -2826,10 +2879,13 @@ impl<'a> StaticTextSlice<'a> {
         runs: &[StaticResolvedRun],
         font_scale: f32,
     ) -> Result<Vec<StaticTextLineMetrics>> {
-        // Exact port of `GlyphLine::ComputeLineSpacing`. The C++ implementation
-        // computes adjusted ascent/descent per participating run, but uses the
-        // natural ascent for the very first line's baseline. Custom lineHeight
-        // is an authored absolute value and therefore does not follow the
+        // Port of `GlyphLine::ComputeLineSpacing` with CSS line-box semantics
+        // for an explicit lineHeight. CSS distributes the difference between
+        // the authored line height and the font's natural metrics equally
+        // above and below the glyph box. The first line keeps that half-leading
+        // whenever any participating run has an explicit line height; text
+        // using default font metrics retains Rive's ascent-only first line.
+        // Authored lineHeight is absolute and therefore does not follow the
         // fit-font-size scale; natural font metrics do.
         let mut metrics = Vec::with_capacity(lines.len());
         let mut cursor_y = 0.0f32;
@@ -2852,6 +2908,7 @@ impl<'a> StaticTextSlice<'a> {
             let mut natural_ascent = 0.0f32;
             let mut adjusted_ascent = 0.0f32;
             let mut adjusted_descent = 0.0f32;
+            let mut has_explicit_line_height = false;
             for style_index in style_indices {
                 let style = self
                     .styles
@@ -2879,21 +2936,20 @@ impl<'a> StaticTextSlice<'a> {
                 let (ascent_px, descent_px) = if line_height < 0.0 {
                     (natural_ascent_px, natural_descent_px)
                 } else {
+                    has_explicit_line_height = true;
                     let natural_height = natural_ascent_px + natural_descent_px;
-                    let baseline_factor = if natural_height > 0.0 {
-                        natural_ascent_px / natural_height
-                    } else {
-                        0.0
-                    };
-                    let authored_ascent = baseline_factor * line_height;
-                    (authored_ascent, line_height - authored_ascent)
+                    let half_leading = (line_height - natural_height) * 0.5;
+                    (
+                        natural_ascent_px + half_leading,
+                        natural_descent_px + half_leading,
+                    )
                 };
                 adjusted_ascent = adjusted_ascent.max(ascent_px);
                 adjusted_descent = adjusted_descent.max(descent_px);
             }
 
             let top = cursor_y;
-            let baseline = if line_index == 0 {
+            let baseline = if line_index == 0 && !has_explicit_line_height {
                 natural_ascent
             } else {
                 cursor_y + adjusted_ascent
@@ -5865,25 +5921,7 @@ fn static_text_parent_chain_supported(
 }
 
 fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option<&[u8]> {
-    let mut after_asset = false;
-    for object in runtime.objects.iter().flatten() {
-        if object.id == asset_global {
-            after_asset = true;
-            continue;
-        }
-        if !after_asset {
-            continue;
-        }
-        if object.type_name == "FileAssetContents" {
-            return object.bytes_property("bytes");
-        }
-        if definition_by_name(object.type_name)
-            .is_some_and(|definition| definition.is_a("FileAsset"))
-        {
-            return None;
-        }
-    }
-    None
+    runtime.imported_file_asset_contents(asset_global)
 }
 
 /// Resolve the effective bytes of a data-bound font value with the same
@@ -5994,14 +6032,45 @@ mod tests {
         bytes
     }
 
-    fn baseline_origin_text_runtime_with_sizing(sizing_value: u64) -> (RuntimeFile, GraphFile) {
-        baseline_origin_text_runtime_with_sizing_and_font(sizing_value, fixture_font_bytes())
+    fn baseline_origin_text_runtime_with_sizing_and_line_height(
+        sizing_value: u64,
+        line_height: Option<f32>,
+    ) -> (RuntimeFile, GraphFile) {
+        baseline_origin_text_runtime_with_sizing_line_height_and_font(
+            sizing_value,
+            line_height,
+            fixture_font_bytes(),
+        )
     }
 
     fn baseline_origin_text_runtime_with_sizing_and_font(
         sizing_value: u64,
         font_bytes: Vec<u8>,
     ) -> (RuntimeFile, GraphFile) {
+        baseline_origin_text_runtime_with_sizing_line_height_and_font(
+            sizing_value,
+            Some(40.0),
+            font_bytes,
+        )
+    }
+
+    fn baseline_origin_text_runtime_with_sizing_line_height_and_font(
+        sizing_value: u64,
+        line_height: Option<f32>,
+        font_bytes: Vec<u8>,
+    ) -> (RuntimeFile, GraphFile) {
+        let mut style_properties = vec![
+            property("TextStylePaint", "parentId", AuthoringValue::Uint(1)),
+            property("TextStylePaint", "fontSize", AuthoringValue::Double(20.0)),
+            property("TextStylePaint", "fontAssetId", AuthoringValue::Uint(0)),
+        ];
+        if let Some(line_height) = line_height {
+            style_properties.push(property(
+                "TextStylePaint",
+                "lineHeight",
+                AuthoringValue::Double(line_height),
+            ));
+        }
         let records = vec![
             authoring_record("Backboard", Vec::new()),
             authoring_record(
@@ -6040,15 +6109,7 @@ mod tests {
                     property("Text", "originY", AuthoringValue::Double(0.5)),
                 ],
             ),
-            authoring_record(
-                "TextStylePaint",
-                vec![
-                    property("TextStylePaint", "parentId", AuthoringValue::Uint(1)),
-                    property("TextStylePaint", "fontSize", AuthoringValue::Double(20.0)),
-                    property("TextStylePaint", "lineHeight", AuthoringValue::Double(40.0)),
-                    property("TextStylePaint", "fontAssetId", AuthoringValue::Uint(0)),
-                ],
-            ),
+            authoring_record("TextStylePaint", style_properties),
             authoring_record(
                 "TextValueRun",
                 vec![
@@ -6067,6 +6128,10 @@ mod tests {
         let graph =
             GraphFile::from_runtime_file(&runtime).expect("baseline-origin Text graph builds");
         (runtime, graph)
+    }
+
+    fn baseline_origin_text_runtime_with_sizing(sizing_value: u64) -> (RuntimeFile, GraphFile) {
+        baseline_origin_text_runtime_with_sizing_and_line_height(sizing_value, Some(40.0))
     }
 
     #[test]
@@ -6095,56 +6160,31 @@ mod tests {
         baseline_origin_text_runtime_with_sizing(TEXT_SIZING_FIXED)
     }
 
+    fn synthetic_data_bind(
+        target_local: usize,
+        target_global: u32,
+        target_type_name: &'static str,
+        property_key: u16,
+    ) -> DataBindNode {
+        DataBindNode {
+            global_id: 10_000,
+            type_name: "DataBind",
+            property_key: u64::from(property_key),
+            flags: 0,
+            converter_id: 0,
+            converter_global: None,
+            converter_type_name: None,
+            converter_duration: None,
+            target_global: Some(target_global),
+            target_type_name: Some(target_type_name),
+            target_local: Some(target_local),
+        }
+    }
+
     fn assert_close(actual: f32, expected: f32) {
         assert!(
             (actual - expected).abs() <= 0.001,
             "expected {expected}, got {actual}"
-        );
-    }
-
-    #[test]
-    fn quadratic_outline_conversion_precedes_glyph_mapping() {
-        let mut pen = TextOutlinePen::new(
-            0.1,
-            0.0,
-            12.3 / TEXT_SHAPE_SCALE_F32,
-            0.1,
-            0.0,
-            Mat2D::IDENTITY,
-        );
-        let start = (-2047.0, 119.0);
-        let control = (-987.0, -37.0);
-        let end = (805.0, -91.0);
-        let start_outline = TextOutlinePen::normalize_outline_point(start.0, start.1);
-        let control_outline = TextOutlinePen::normalize_outline_point(control.0, control.1);
-        let t = 2.0 / 3.0;
-        let expected_outline = (
-            start_outline.0 + (control_outline.0 - start_outline.0) * t,
-            start_outline.1 + (control_outline.1 - start_outline.1) * t,
-        );
-        let expected = pen.map_normalized(expected_outline.0, expected_outline.1);
-        let mapped_start = pen.map(start.0, start.1).0;
-        let mapped_control = pen.map(control.0, control.1).0;
-        let mapped_then_lerped = (
-            mapped_start.0 + (mapped_control.0 - mapped_start.0) * t,
-            mapped_start.1 + (mapped_control.1 - mapped_start.1) * t,
-        );
-        assert_ne!(
-            (expected.0.to_bits(), expected.1.to_bits()),
-            (
-                mapped_then_lerped.0.to_bits(),
-                mapped_then_lerped.1.to_bits()
-            )
-        );
-
-        pen.move_to(start.0, start.1);
-        pen.quad_to(control.0, control.1, end.0, end.1);
-        let RuntimePathCommand::Cubic { x1, y1, .. } = pen.commands[1] else {
-            panic!("quadratic outline did not emit a cubic command");
-        };
-        assert_eq!(
-            (x1.to_bits(), y1.to_bits()),
-            (expected.0.to_bits(), expected.1.to_bits())
         );
     }
 
@@ -6243,7 +6283,59 @@ mod tests {
     }
 
     #[test]
-    fn baseline_origin_and_raw_clip_share_authoritative_line_metrics() {
+    fn static_text_bind_validation_is_scoped_to_the_text_subtree() {
+        let (runtime, mut graphs) = baseline_origin_text_runtime();
+        let graph = graphs
+            .artboards
+            .first_mut()
+            .expect("fixture has an artboard");
+        let mut sibling = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == 1)
+            .expect("fixture Text component")
+            .clone();
+        sibling.local_id = 4;
+        sibling.global_id = 10_004;
+        sibling.type_name = "NestedArtboard";
+        sibling.parent_local = Some(0);
+        sibling.parent_global = Some(graph.global_id);
+        sibling.children.clear();
+        graph.components.push(sibling);
+        graph.data_binds.push(synthetic_data_bind(
+            4,
+            10_004,
+            "NestedArtboard",
+            property_key_for_name("WorldTransformComponent", "opacity").expect("opacity property"),
+        ));
+
+        StaticTextSlice::from_graph(&runtime, graph, 1)
+            .expect("an unrelated sibling bind cannot invalidate the Text subset");
+
+        graph.data_binds.clear();
+        graph.data_binds.push(synthetic_data_bind(
+            1,
+            graph
+                .components
+                .iter()
+                .find(|component| component.local_id == 1)
+                .expect("fixture Text component")
+                .global_id,
+            "Text",
+            property_key_for_name("Text", "sizingValue").expect("sizingValue property"),
+        ));
+
+        let Err(error) = StaticTextSlice::from_graph(&runtime, graph, 1) else {
+            panic!("unsupported Text-owned bindings must remain fail-closed");
+        };
+        assert!(
+            format!("{error:#}").contains("does not support data binding target Text"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn explicit_line_height_uses_css_half_leading_for_every_line() {
         let (runtime, graphs) = baseline_origin_text_runtime();
         let graph = graphs.artboards.first().expect("fixture has an artboard");
         let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
@@ -6258,7 +6350,9 @@ mod tests {
             .expect("half-size line metrics compute");
         let first = half_size_metrics.first().expect("first line metric");
         let second = half_size_metrics.get(1).expect("second line metric");
-        assert_close(first.baseline, 9.277344);
+        assert_close(first.bottom - first.top, 40.0);
+        assert_close(second.bottom - second.top, 40.0);
+        assert_close(first.baseline - first.top, second.baseline - second.top);
         assert_close(second.baseline - first.baseline, 40.0);
 
         let local_bounds = slice
@@ -6267,7 +6361,7 @@ mod tests {
             .expect("Text has bounds");
 
         assert_close(local_bounds.0, -20.0);
-        assert_close(local_bounds.1, -43.554688);
+        assert_close(local_bounds.1, -51.835938);
         assert_close(local_bounds.2, 80.0);
         assert_close(local_bounds.3, 50.0);
 
@@ -6290,6 +6384,74 @@ mod tests {
         assert_close(clip_top_left.1, local_bounds.1);
         assert_close(clip_bottom_right.0, local_bounds.0 + local_bounds.2);
         assert_close(clip_bottom_right.1, local_bounds.1 + local_bounds.3);
+    }
+
+    #[test]
+    fn default_line_metrics_keep_rive_first_line_ascent_behavior() {
+        let (runtime, graphs) =
+            baseline_origin_text_runtime_with_sizing_and_line_height(TEXT_SIZING_FIXED, None);
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).expect("Text slice builds");
+        let runs = slice
+            .resolved_runs(&runtime, &instance)
+            .expect("Text runs resolve");
+        let text = runs.iter().map(|run| run.text.as_str()).collect::<String>();
+        let lines = split_static_text_lines(&text);
+        let line_metrics = slice
+            .static_line_metrics(&runtime, &instance, &lines, &runs, 1.0)
+            .expect("default line metrics compute");
+        let first = line_metrics.first().expect("first line metric");
+        let second = line_metrics.get(1).expect("second line metric");
+
+        assert_close(first.baseline, 18.554688);
+        assert_close(second.baseline - first.baseline, first.bottom - first.top);
+    }
+
+    #[test]
+    fn quadratic_outline_conversion_precedes_glyph_mapping() {
+        let mut pen = TextOutlinePen::new(
+            0.1,
+            0.0,
+            12.3 / TEXT_SHAPE_SCALE_F32,
+            0.1,
+            0.0,
+            Mat2D::IDENTITY,
+        );
+        let start = (-2047.0, 119.0);
+        let control = (-987.0, -37.0);
+        let end = (805.0, -91.0);
+        let start_outline = TextOutlinePen::normalize_outline_point(start.0, start.1);
+        let control_outline = TextOutlinePen::normalize_outline_point(control.0, control.1);
+        let t = 2.0 / 3.0;
+        let expected_outline = (
+            start_outline.0 + (control_outline.0 - start_outline.0) * t,
+            start_outline.1 + (control_outline.1 - start_outline.1) * t,
+        );
+        let expected = pen.map_normalized(expected_outline.0, expected_outline.1);
+        let mapped_start = pen.map(start.0, start.1).0;
+        let mapped_control = pen.map(control.0, control.1).0;
+        let mapped_then_lerped = (
+            mapped_start.0 + (mapped_control.0 - mapped_start.0) * t,
+            mapped_start.1 + (mapped_control.1 - mapped_start.1) * t,
+        );
+        assert_ne!(
+            (expected.0.to_bits(), expected.1.to_bits()),
+            (
+                mapped_then_lerped.0.to_bits(),
+                mapped_then_lerped.1.to_bits()
+            )
+        );
+
+        pen.move_to(start.0, start.1);
+        pen.quad_to(control.0, control.1, end.0, end.1);
+        let RuntimePathCommand::Cubic { x1, y1, .. } = pen.commands[1] else {
+            panic!("quadratic outline did not emit a cubic command");
+        };
+        assert_eq!(
+            (x1.to_bits(), y1.to_bits()),
+            (expected.0.to_bits(), expected.1.to_bits())
+        );
     }
 
     #[test]

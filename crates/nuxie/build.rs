@@ -119,6 +119,35 @@ const OBJECTS: &[ObjectSpec] = &[
         is_node: true,
     },
     ObjectSpec {
+        rust_name: "ClippingShape",
+        schema_name: "ClippingShape",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "source",
+                schema_name: "sourceId",
+                declared_owner: "ClippingShape",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "fill_rule",
+                schema_name: "fillRule",
+                declared_owner: "ClippingShape",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "is_visible",
+                schema_name: "isVisible",
+                declared_owner: "ClippingShape",
+                kind: FieldKind::Bool,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
         rust_name: "NestedArtboard",
         schema_name: "NestedArtboard",
         fields: &[
@@ -325,6 +354,56 @@ const OBJECTS: &[ObjectSpec] = &[
         is_node: true,
     },
     ObjectSpec {
+        rust_name: "ArtboardComponentList",
+        schema_name: "ArtboardComponentList",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "x",
+                schema_name: "x",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "y",
+                schema_name: "y",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "opacity",
+                schema_name: "opacity",
+                declared_owner: "WorldTransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "rotation",
+                schema_name: "rotation",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_x",
+                schema_name: "scaleX",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_y",
+                schema_name: "scaleY",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
         rust_name: "Rectangle",
         schema_name: "Rectangle",
         fields: &[
@@ -382,9 +461,117 @@ const OBJECTS: &[ObjectSpec] = &[
         is_node: true,
     },
     ObjectSpec {
+        rust_name: "PointsPath",
+        schema_name: "PointsPath",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "is_closed",
+                schema_name: "isClosed",
+                declared_owner: "PointsCommonPath",
+                kind: FieldKind::Bool,
+                inherited: true,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
+        rust_name: "CubicDetachedVertex",
+        schema_name: "CubicDetachedVertex",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "x",
+                schema_name: "x",
+                declared_owner: "Vertex",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "y",
+                schema_name: "y",
+                declared_owner: "Vertex",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "in_rotation",
+                schema_name: "inRotation",
+                declared_owner: "CubicDetachedVertex",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "in_distance",
+                schema_name: "inDistance",
+                declared_owner: "CubicDetachedVertex",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "out_rotation",
+                schema_name: "outRotation",
+                declared_owner: "CubicDetachedVertex",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "out_distance",
+                schema_name: "outDistance",
+                declared_owner: "CubicDetachedVertex",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
         rust_name: "Fill",
         schema_name: "Fill",
         fields: &[NAME],
+        is_node: true,
+    },
+    ObjectSpec {
+        rust_name: "Feather",
+        schema_name: "Feather",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "space",
+                schema_name: "spaceValue",
+                declared_owner: "Feather",
+                kind: FieldKind::Uint,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "strength",
+                schema_name: "strength",
+                declared_owner: "Feather",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "offset_x",
+                schema_name: "offsetX",
+                declared_owner: "Feather",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "offset_y",
+                schema_name: "offsetY",
+                declared_owner: "Feather",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "inner",
+                schema_name: "inner",
+                declared_owner: "Feather",
+                kind: FieldKind::Bool,
+                inherited: false,
+            },
+        ],
         is_node: true,
     },
     ObjectSpec {
@@ -397,6 +584,71 @@ const OBJECTS: &[ObjectSpec] = &[
                 schema_name: "colorValue",
                 declared_owner: "SolidColor",
                 kind: FieldKind::Color,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
+        rust_name: "LinearGradient",
+        schema_name: "LinearGradient",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "start_x",
+                schema_name: "startX",
+                declared_owner: "LinearGradient",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "start_y",
+                schema_name: "startY",
+                declared_owner: "LinearGradient",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "end_x",
+                schema_name: "endX",
+                declared_owner: "LinearGradient",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "end_y",
+                schema_name: "endY",
+                declared_owner: "LinearGradient",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "opacity",
+                schema_name: "opacity",
+                declared_owner: "LinearGradient",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+        ],
+        is_node: true,
+    },
+    ObjectSpec {
+        rust_name: "GradientStop",
+        schema_name: "GradientStop",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "color",
+                schema_name: "colorValue",
+                declared_owner: "GradientStop",
+                kind: FieldKind::Color,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "position",
+                schema_name: "position",
+                declared_owner: "GradientStop",
+                kind: FieldKind::Double,
                 inherited: false,
             },
         ],
@@ -689,17 +941,58 @@ const OBJECTS: &[ObjectSpec] = &[
     },
 ];
 
-// The first cursor surface is deliberately narrower than the structural
-// NodeSpec vocabulary. Border topology (including the optional all-radii
-// block and dash children) is structural in E2 and is replaced in one scene
-// edit; it must not gain per-field Prop tokens until a presence/update policy
-// for that aggregate is pinned. Transforms, opacity, rectangle width, and
-// solid color are the current hot-write surface.
+// The cursor surface is deliberately narrower than the structural NodeSpec
+// vocabulary. Border topology (including the optional all-radii block and dash
+// children) remains structural and is replaced in one scene edit. Scalar
+// geometry on an existing rectangle, stroke, or dash is hot-writable without
+// exposing raw schema keys or weakening structure-epoch fencing.
 const PROPS: &[PropSpec] = &[
     PropSpec {
         rust_name: "PATH_WIDTH",
         schema_name: "width",
         declared_owner: "ParametricPath",
+        kind: FieldKind::Double,
+    },
+    PropSpec {
+        rust_name: "PATH_HEIGHT",
+        schema_name: "height",
+        declared_owner: "ParametricPath",
+        kind: FieldKind::Double,
+    },
+    PropSpec {
+        rust_name: "RECTANGLE_CORNER_RADIUS_TOP_LEFT",
+        schema_name: "cornerRadiusTL",
+        declared_owner: "Rectangle",
+        kind: FieldKind::Double,
+    },
+    PropSpec {
+        rust_name: "RECTANGLE_CORNER_RADIUS_TOP_RIGHT",
+        schema_name: "cornerRadiusTR",
+        declared_owner: "Rectangle",
+        kind: FieldKind::Double,
+    },
+    PropSpec {
+        rust_name: "RECTANGLE_CORNER_RADIUS_BOTTOM_RIGHT",
+        schema_name: "cornerRadiusBR",
+        declared_owner: "Rectangle",
+        kind: FieldKind::Double,
+    },
+    PropSpec {
+        rust_name: "RECTANGLE_CORNER_RADIUS_BOTTOM_LEFT",
+        schema_name: "cornerRadiusBL",
+        declared_owner: "Rectangle",
+        kind: FieldKind::Double,
+    },
+    PropSpec {
+        rust_name: "STROKE_THICKNESS",
+        schema_name: "thickness",
+        declared_owner: "Stroke",
+        kind: FieldKind::Double,
+    },
+    PropSpec {
+        rust_name: "DASH_LENGTH",
+        schema_name: "length",
+        declared_owner: "Dash",
         kind: FieldKind::Double,
     },
     PropSpec {
@@ -760,25 +1053,103 @@ fn render_scene_schema() -> String {
     let file_asset_contents = concrete_definition("FileAssetContents");
     let mesh = concrete_definition("Mesh");
     let mesh_vertex = concrete_definition("MeshVertex");
+    let layout_component = concrete_definition("LayoutComponent");
+    let layout_component_style = concrete_definition("LayoutComponentStyle");
     let linear_animation = concrete_definition("LinearAnimation");
+    let cubic_ease_interpolator = concrete_definition("CubicEaseInterpolator");
     let keyed_object = concrete_definition("KeyedObject");
     let keyed_property = concrete_definition("KeyedProperty");
     let key_frame_double = concrete_definition("KeyFrameDouble");
+    let key_frame_color = concrete_definition("KeyFrameColor");
     let event = concrete_definition("Event");
+    let custom_property_string = concrete_definition("CustomPropertyString");
     let state_machine = concrete_definition("StateMachine");
     let state_machine_trigger = concrete_definition("StateMachineTrigger");
+    let state_machine_bool = concrete_definition("StateMachineBool");
+    let state_machine_number = concrete_definition("StateMachineNumber");
+    let nested_state_machine = concrete_definition("NestedStateMachine");
+    let nested_bool = concrete_definition("NestedBool");
+    let nested_number = concrete_definition("NestedNumber");
     let state_machine_layer = concrete_definition("StateMachineLayer");
     let any_state = concrete_definition("AnyState");
     let entry_state = concrete_definition("EntryState");
     let exit_state = concrete_definition("ExitState");
     let animation_state = concrete_definition("AnimationState");
+    let blend_state_direct = concrete_definition("BlendStateDirect");
+    let blend_animation_1d = concrete_definition("BlendAnimation1D");
+    let blend_state_1d_input = concrete_definition("BlendState1DInput");
+    let blend_state_1d_view_model = concrete_definition("BlendState1DViewModel");
+    let blend_animation_direct = concrete_definition("BlendAnimationDirect");
+    let bindable_property_number = concrete_definition("BindablePropertyNumber");
+    let bindable_property_boolean = concrete_definition("BindablePropertyBoolean");
+    let bindable_property_string = concrete_definition("BindablePropertyString");
+    let bindable_property_color = concrete_definition("BindablePropertyColor");
+    let bindable_property_enum = concrete_definition("BindablePropertyEnum");
+    let bindable_property_trigger = concrete_definition("BindablePropertyTrigger");
+    let bindable_property_integer = concrete_definition("BindablePropertyInteger");
+    let bindable_property_asset = concrete_definition("BindablePropertyAsset");
     let state_transition = concrete_definition("StateTransition");
     let transition_trigger_condition = concrete_definition("TransitionTriggerCondition");
+    let transition_bool_condition = concrete_definition("TransitionBoolCondition");
+    let transition_number_condition = concrete_definition("TransitionNumberCondition");
     let state_machine_fire_event = concrete_definition("StateMachineFireEvent");
+    let state_machine_listener = concrete_definition("StateMachineListenerSingle");
+    let listener_trigger_change = concrete_definition("ListenerTriggerChange");
+    let listener_bool_change = concrete_definition("ListenerBoolChange");
+    let listener_number_change = concrete_definition("ListenerNumberChange");
+    let listener_fire_event = concrete_definition("ListenerFireEvent");
+    let listener_view_model_change = concrete_definition("ListenerViewModelChange");
     let view_model = concrete_definition("ViewModel");
     let view_model_property_number = concrete_definition("ViewModelPropertyNumber");
+    let view_model_property_string = concrete_definition("ViewModelPropertyString");
+    let view_model_property_boolean = concrete_definition("ViewModelPropertyBoolean");
+    let view_model_property_color = concrete_definition("ViewModelPropertyColor");
+    let view_model_property_image = concrete_definition("ViewModelPropertyAssetImage");
+    let view_model_property_enum = concrete_definition("ViewModelPropertyEnumCustom");
+    let view_model_property_trigger = concrete_definition("ViewModelPropertyTrigger");
+    let view_model_property_list_index = concrete_definition("ViewModelPropertySymbolListIndex");
+    let view_model_property_list = concrete_definition("ViewModelPropertyList");
+    let view_model_property_view_model = concrete_definition("ViewModelPropertyViewModel");
     let view_model_instance = concrete_definition("ViewModelInstance");
     let view_model_instance_number = concrete_definition("ViewModelInstanceNumber");
+    let view_model_instance_string = concrete_definition("ViewModelInstanceString");
+    let view_model_instance_boolean = concrete_definition("ViewModelInstanceBoolean");
+    let view_model_instance_color = concrete_definition("ViewModelInstanceColor");
+    let view_model_instance_image = concrete_definition("ViewModelInstanceAssetImage");
+    let view_model_instance_enum = concrete_definition("ViewModelInstanceEnum");
+    let view_model_instance_trigger = concrete_definition("ViewModelInstanceTrigger");
+    let view_model_instance_list_index = concrete_definition("ViewModelInstanceSymbolListIndex");
+    let view_model_instance_list = concrete_definition("ViewModelInstanceList");
+    let view_model_instance_list_item = concrete_definition("ViewModelInstanceListItem");
+    let view_model_instance_view_model = concrete_definition("ViewModelInstanceViewModel");
+    let data_enum_custom = concrete_definition("DataEnumCustom");
+    let data_enum_value = concrete_definition("DataEnumValue");
+    let artboard_list_map_rule = concrete_definition("ArtboardListMapRule");
+    let data_converter_boolean_negate = concrete_definition("DataConverterBooleanNegate");
+    let data_converter_interpolator = concrete_definition("DataConverterInterpolator");
+    let data_converter_list_to_length = concrete_definition("DataConverterListToLength");
+    let data_converter_to_number = concrete_definition("DataConverterToNumber");
+    let data_converter_to_string = concrete_definition("DataConverterToString");
+    let data_converter_rounder = concrete_definition("DataConverterRounder");
+    let data_converter_string_remove_zeros = concrete_definition("DataConverterStringRemoveZeros");
+    let data_converter_string_trim = concrete_definition("DataConverterStringTrim");
+    let data_converter_string_pad = concrete_definition("DataConverterStringPad");
+    let data_converter_operation_value = concrete_definition("DataConverterOperationValue");
+    let data_converter_operation_view_model =
+        concrete_definition("DataConverterOperationViewModel");
+    let data_converter_number_to_list = concrete_definition("DataConverterNumberToList");
+    let data_converter_range_mapper = concrete_definition("DataConverterRangeMapper");
+    let data_converter_group = concrete_definition("DataConverterGroup");
+    let data_converter_group_item = concrete_definition("DataConverterGroupItem");
+    let data_converter_formula = concrete_definition("DataConverterFormula");
+    let formula_token_argument_separator = concrete_definition("FormulaTokenArgumentSeparator");
+    let formula_token_parenthesis_close = concrete_definition("FormulaTokenParenthesisClose");
+    let formula_token_operation = concrete_definition("FormulaTokenOperation");
+    let formula_token_function = concrete_definition("FormulaTokenFunction");
+    let formula_token_value = concrete_definition("FormulaTokenValue");
+    let formula_token_parenthesis_open = concrete_definition("FormulaTokenParenthesisOpen");
+    let formula_token_input = concrete_definition("FormulaTokenInput");
+    let scripted_data_converter = concrete_definition("ScriptedDataConverter");
     let data_bind_context = concrete_definition("DataBindContext");
     let mut output =
         String::from("// @generated by crates/nuxie/build.rs from nuxie-schema; do not edit.\n\n");
@@ -809,24 +1180,143 @@ fn render_scene_schema() -> String {
     .expect("write generated source");
     for (name, definition) in [
         ("LINEAR_ANIMATION", linear_animation),
+        ("CUBIC_EASE_INTERPOLATOR", cubic_ease_interpolator),
         ("KEYED_OBJECT", keyed_object),
         ("KEYED_PROPERTY", keyed_property),
         ("KEY_FRAME_DOUBLE", key_frame_double),
+        ("KEY_FRAME_COLOR", key_frame_color),
         ("EVENT", event),
+        ("CUSTOM_PROPERTY_STRING", custom_property_string),
         ("STATE_MACHINE", state_machine),
         ("STATE_MACHINE_TRIGGER", state_machine_trigger),
+        ("STATE_MACHINE_BOOL", state_machine_bool),
+        ("STATE_MACHINE_NUMBER", state_machine_number),
+        ("NESTED_STATE_MACHINE", nested_state_machine),
+        ("NESTED_BOOL", nested_bool),
+        ("NESTED_NUMBER", nested_number),
         ("STATE_MACHINE_LAYER", state_machine_layer),
         ("ANY_STATE", any_state),
         ("ENTRY_STATE", entry_state),
         ("EXIT_STATE", exit_state),
         ("ANIMATION_STATE", animation_state),
+        ("BLEND_STATE_DIRECT", blend_state_direct),
+        ("BLEND_ANIMATION_1D", blend_animation_1d),
+        ("BLEND_STATE_1D_INPUT", blend_state_1d_input),
+        ("BLEND_STATE_1D_VIEW_MODEL", blend_state_1d_view_model),
+        ("BLEND_ANIMATION_DIRECT", blend_animation_direct),
+        ("BINDABLE_PROPERTY_NUMBER", bindable_property_number),
+        ("BINDABLE_PROPERTY_BOOLEAN", bindable_property_boolean),
+        ("BINDABLE_PROPERTY_STRING", bindable_property_string),
+        ("BINDABLE_PROPERTY_COLOR", bindable_property_color),
+        ("BINDABLE_PROPERTY_ENUM", bindable_property_enum),
+        ("BINDABLE_PROPERTY_TRIGGER", bindable_property_trigger),
+        ("BINDABLE_PROPERTY_INTEGER", bindable_property_integer),
+        ("BINDABLE_PROPERTY_ASSET", bindable_property_asset),
         ("STATE_TRANSITION", state_transition),
         ("TRANSITION_TRIGGER_CONDITION", transition_trigger_condition),
+        ("TRANSITION_BOOL_CONDITION", transition_bool_condition),
+        ("TRANSITION_NUMBER_CONDITION", transition_number_condition),
         ("STATE_MACHINE_FIRE_EVENT", state_machine_fire_event),
+        ("STATE_MACHINE_LISTENER", state_machine_listener),
+        ("LISTENER_TRIGGER_CHANGE", listener_trigger_change),
+        ("LISTENER_BOOL_CHANGE", listener_bool_change),
+        ("LISTENER_NUMBER_CHANGE", listener_number_change),
+        ("LISTENER_FIRE_EVENT", listener_fire_event),
+        ("LISTENER_VIEW_MODEL_CHANGE", listener_view_model_change),
         ("VIEW_MODEL", view_model),
         ("VIEW_MODEL_PROPERTY_NUMBER", view_model_property_number),
+        ("VIEW_MODEL_PROPERTY_STRING", view_model_property_string),
+        ("VIEW_MODEL_PROPERTY_BOOLEAN", view_model_property_boolean),
+        ("VIEW_MODEL_PROPERTY_COLOR", view_model_property_color),
+        ("VIEW_MODEL_PROPERTY_IMAGE", view_model_property_image),
+        ("VIEW_MODEL_PROPERTY_ENUM", view_model_property_enum),
+        ("VIEW_MODEL_PROPERTY_TRIGGER", view_model_property_trigger),
+        (
+            "VIEW_MODEL_PROPERTY_LIST_INDEX",
+            view_model_property_list_index,
+        ),
+        ("VIEW_MODEL_PROPERTY_LIST", view_model_property_list),
+        (
+            "VIEW_MODEL_PROPERTY_VIEW_MODEL",
+            view_model_property_view_model,
+        ),
         ("VIEW_MODEL_INSTANCE", view_model_instance),
         ("VIEW_MODEL_INSTANCE_NUMBER", view_model_instance_number),
+        ("VIEW_MODEL_INSTANCE_STRING", view_model_instance_string),
+        ("VIEW_MODEL_INSTANCE_BOOLEAN", view_model_instance_boolean),
+        ("VIEW_MODEL_INSTANCE_COLOR", view_model_instance_color),
+        ("VIEW_MODEL_INSTANCE_IMAGE", view_model_instance_image),
+        ("VIEW_MODEL_INSTANCE_ENUM", view_model_instance_enum),
+        ("VIEW_MODEL_INSTANCE_TRIGGER", view_model_instance_trigger),
+        (
+            "VIEW_MODEL_INSTANCE_LIST_INDEX",
+            view_model_instance_list_index,
+        ),
+        ("VIEW_MODEL_INSTANCE_LIST", view_model_instance_list),
+        (
+            "VIEW_MODEL_INSTANCE_LIST_ITEM",
+            view_model_instance_list_item,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_VIEW_MODEL",
+            view_model_instance_view_model,
+        ),
+        ("DATA_ENUM_CUSTOM", data_enum_custom),
+        ("DATA_ENUM_VALUE", data_enum_value),
+        ("LAYOUT_COMPONENT", layout_component),
+        ("LAYOUT_COMPONENT_STYLE", layout_component_style),
+        ("ARTBOARD_LIST_MAP_RULE", artboard_list_map_rule),
+        (
+            "DATA_CONVERTER_BOOLEAN_NEGATE",
+            data_converter_boolean_negate,
+        ),
+        ("DATA_CONVERTER_INTERPOLATOR", data_converter_interpolator),
+        (
+            "DATA_CONVERTER_LIST_TO_LENGTH",
+            data_converter_list_to_length,
+        ),
+        ("DATA_CONVERTER_TO_NUMBER", data_converter_to_number),
+        ("DATA_CONVERTER_TO_STRING", data_converter_to_string),
+        ("DATA_CONVERTER_ROUNDER", data_converter_rounder),
+        (
+            "DATA_CONVERTER_STRING_REMOVE_ZEROS",
+            data_converter_string_remove_zeros,
+        ),
+        ("DATA_CONVERTER_STRING_TRIM", data_converter_string_trim),
+        ("DATA_CONVERTER_STRING_PAD", data_converter_string_pad),
+        (
+            "DATA_CONVERTER_OPERATION_VALUE",
+            data_converter_operation_value,
+        ),
+        (
+            "DATA_CONVERTER_OPERATION_VIEW_MODEL",
+            data_converter_operation_view_model,
+        ),
+        (
+            "DATA_CONVERTER_NUMBER_TO_LIST",
+            data_converter_number_to_list,
+        ),
+        ("DATA_CONVERTER_RANGE_MAPPER", data_converter_range_mapper),
+        ("DATA_CONVERTER_GROUP", data_converter_group),
+        ("DATA_CONVERTER_GROUP_ITEM", data_converter_group_item),
+        ("DATA_CONVERTER_FORMULA", data_converter_formula),
+        (
+            "FORMULA_TOKEN_ARGUMENT_SEPARATOR",
+            formula_token_argument_separator,
+        ),
+        (
+            "FORMULA_TOKEN_PARENTHESIS_CLOSE",
+            formula_token_parenthesis_close,
+        ),
+        ("FORMULA_TOKEN_OPERATION", formula_token_operation),
+        ("FORMULA_TOKEN_FUNCTION", formula_token_function),
+        ("FORMULA_TOKEN_VALUE", formula_token_value),
+        (
+            "FORMULA_TOKEN_PARENTHESIS_OPEN",
+            formula_token_parenthesis_open,
+        ),
+        ("FORMULA_TOKEN_INPUT", formula_token_input),
+        ("SCRIPTED_DATA_CONVERTER", scripted_data_converter),
         ("DATA_BIND_CONTEXT", data_bind_context),
     ] {
         writeln!(
@@ -852,6 +1342,13 @@ fn render_scene_schema() -> String {
     }
 
     let component_name = resolve_property("Shape", NAME);
+    let custom_property_string_value = resolve_named_property(
+        "CustomPropertyString",
+        "propertyValue",
+        "CustomPropertyString",
+        FieldKind::String,
+        false,
+    );
     let parent_id = resolve_property(
         "Shape",
         FieldSpec {
@@ -875,6 +1372,34 @@ fn render_scene_schema() -> String {
         "LayoutComponent",
         FieldKind::Double,
         true,
+    );
+    let layout_component_style_id = resolve_named_property(
+        "LayoutComponent",
+        "styleId",
+        "LayoutComponent",
+        FieldKind::Uint,
+        false,
+    );
+    let layout_gap_horizontal = resolve_named_property(
+        "LayoutComponentStyle",
+        "gapHorizontal",
+        "LayoutComponentStyle",
+        FieldKind::Double,
+        false,
+    );
+    let layout_gap_vertical = resolve_named_property(
+        "LayoutComponentStyle",
+        "gapVertical",
+        "LayoutComponentStyle",
+        FieldKind::Double,
+        false,
+    );
+    let layout_flex_direction = resolve_named_property(
+        "LayoutComponentStyle",
+        "flexDirectionValue",
+        "LayoutComponentStyle",
+        FieldKind::Uint,
+        false,
     );
     let translate_x = resolve_named_property("Shape", "x", "Node", FieldKind::Double, true);
     let translate_y = resolve_named_property("Shape", "y", "Node", FieldKind::Double, true);
@@ -913,6 +1438,12 @@ fn render_scene_schema() -> String {
         FieldKind::Uint,
         false,
     );
+    let nested_artboard_data_bind_path = resolve_encoded_property(
+        "NestedArtboard",
+        "dataBindPathIds",
+        "NestedArtboard",
+        FieldKind::Bytes,
+    );
     let image_asset_id =
         resolve_named_property("Image", "assetId", "Image", FieldKind::Uint, false);
     let image_origin_x =
@@ -945,12 +1476,127 @@ fn render_scene_schema() -> String {
         FieldKind::Double,
         true,
     );
+    let points_path_is_closed = resolve_named_property(
+        "PointsPath",
+        "isClosed",
+        "PointsCommonPath",
+        FieldKind::Bool,
+        true,
+    );
+    let cubic_detached_vertex_in_rotation = resolve_named_property(
+        "CubicDetachedVertex",
+        "inRotation",
+        "CubicDetachedVertex",
+        FieldKind::Double,
+        false,
+    );
+    let cubic_detached_vertex_in_distance = resolve_named_property(
+        "CubicDetachedVertex",
+        "inDistance",
+        "CubicDetachedVertex",
+        FieldKind::Double,
+        false,
+    );
+    let cubic_detached_vertex_out_rotation = resolve_named_property(
+        "CubicDetachedVertex",
+        "outRotation",
+        "CubicDetachedVertex",
+        FieldKind::Double,
+        false,
+    );
+    let cubic_detached_vertex_out_distance = resolve_named_property(
+        "CubicDetachedVertex",
+        "outDistance",
+        "CubicDetachedVertex",
+        FieldKind::Double,
+        false,
+    );
+    let clipping_shape_source_id = resolve_named_property(
+        "ClippingShape",
+        "sourceId",
+        "ClippingShape",
+        FieldKind::Uint,
+        false,
+    );
+    let clipping_shape_fill_rule = resolve_named_property(
+        "ClippingShape",
+        "fillRule",
+        "ClippingShape",
+        FieldKind::Uint,
+        false,
+    );
+    let clipping_shape_is_visible = resolve_named_property(
+        "ClippingShape",
+        "isVisible",
+        "ClippingShape",
+        FieldKind::Bool,
+        false,
+    );
     let fill_rule = resolve_named_property("Fill", "fillRule", "Fill", FieldKind::Uint, false);
+    let feather_space =
+        resolve_named_property("Feather", "spaceValue", "Feather", FieldKind::Uint, false);
+    let feather_strength =
+        resolve_named_property("Feather", "strength", "Feather", FieldKind::Double, false);
+    let feather_offset_x =
+        resolve_named_property("Feather", "offsetX", "Feather", FieldKind::Double, false);
+    let feather_offset_y =
+        resolve_named_property("Feather", "offsetY", "Feather", FieldKind::Double, false);
+    let feather_inner =
+        resolve_named_property("Feather", "inner", "Feather", FieldKind::Bool, false);
     let color_value = resolve_named_property(
         "SolidColor",
         "colorValue",
         "SolidColor",
         FieldKind::Color,
+        false,
+    );
+    let linear_gradient_start_x = resolve_named_property(
+        "LinearGradient",
+        "startX",
+        "LinearGradient",
+        FieldKind::Double,
+        false,
+    );
+    let linear_gradient_start_y = resolve_named_property(
+        "LinearGradient",
+        "startY",
+        "LinearGradient",
+        FieldKind::Double,
+        false,
+    );
+    let linear_gradient_end_x = resolve_named_property(
+        "LinearGradient",
+        "endX",
+        "LinearGradient",
+        FieldKind::Double,
+        false,
+    );
+    let linear_gradient_end_y = resolve_named_property(
+        "LinearGradient",
+        "endY",
+        "LinearGradient",
+        FieldKind::Double,
+        false,
+    );
+    let linear_gradient_opacity = resolve_named_property(
+        "LinearGradient",
+        "opacity",
+        "LinearGradient",
+        FieldKind::Double,
+        false,
+    );
+    let gradient_stop_color_value = resolve_named_property(
+        "GradientStop",
+        "colorValue",
+        "GradientStop",
+        FieldKind::Color,
+        false,
+    );
+    let gradient_stop_position = resolve_named_property(
+        "GradientStop",
+        "position",
+        "GradientStop",
+        FieldKind::Double,
         false,
     );
     let rectangle_corner_radius_tl = resolve_named_property(
@@ -1184,11 +1830,53 @@ fn render_scene_schema() -> String {
         FieldKind::Uint,
         true,
     );
+    let key_frame_interpolator_id = resolve_named_property(
+        "KeyFrameDouble",
+        "interpolatorId",
+        "InterpolatingKeyFrame",
+        FieldKind::Uint,
+        true,
+    );
+    let cubic_ease_x1 = resolve_named_property(
+        "CubicEaseInterpolator",
+        "x1",
+        "CubicInterpolator",
+        FieldKind::Double,
+        true,
+    );
+    let cubic_ease_y1 = resolve_named_property(
+        "CubicEaseInterpolator",
+        "y1",
+        "CubicInterpolator",
+        FieldKind::Double,
+        true,
+    );
+    let cubic_ease_x2 = resolve_named_property(
+        "CubicEaseInterpolator",
+        "x2",
+        "CubicInterpolator",
+        FieldKind::Double,
+        true,
+    );
+    let cubic_ease_y2 = resolve_named_property(
+        "CubicEaseInterpolator",
+        "y2",
+        "CubicInterpolator",
+        FieldKind::Double,
+        true,
+    );
     let key_frame_double_value = resolve_named_property(
         "KeyFrameDouble",
         "value",
         "KeyFrameDouble",
         FieldKind::Double,
+        false,
+    );
+    let key_frame_color_value = resolve_named_property(
+        "KeyFrameColor",
+        "value",
+        "KeyFrameColor",
+        FieldKind::Color,
         false,
     );
     let state_machine_component_name = resolve_named_property(
@@ -1210,6 +1898,111 @@ fn render_scene_schema() -> String {
         "speed",
         "AdvanceableState",
         FieldKind::Double,
+        true,
+    );
+    let layer_state_flags = resolve_named_property(
+        "AnimationState",
+        "flags",
+        "LayerState",
+        FieldKind::Uint,
+        true,
+    );
+    let blend_animation_animation_id = resolve_named_property(
+        "BlendAnimation1D",
+        "animationId",
+        "BlendAnimation",
+        FieldKind::Uint,
+        true,
+    );
+    let blend_animation_1d_value = resolve_named_property(
+        "BlendAnimation1D",
+        "value",
+        "BlendAnimation1D",
+        FieldKind::Double,
+        false,
+    );
+    let blend_state_1d_input_id = resolve_named_property(
+        "BlendState1DInput",
+        "inputId",
+        "BlendState1DInput",
+        FieldKind::Uint,
+        false,
+    );
+    let blend_animation_direct_input_id = resolve_named_property(
+        "BlendAnimationDirect",
+        "inputId",
+        "BlendAnimationDirect",
+        FieldKind::Uint,
+        false,
+    );
+    let blend_animation_direct_mix = resolve_named_property(
+        "BlendAnimationDirect",
+        "mixValue",
+        "BlendAnimationDirect",
+        FieldKind::Double,
+        false,
+    );
+    let blend_animation_direct_source = resolve_named_property(
+        "BlendAnimationDirect",
+        "blendSource",
+        "BlendAnimationDirect",
+        FieldKind::Uint,
+        false,
+    );
+    let bindable_property_number_value = resolve_named_property(
+        "BindablePropertyNumber",
+        "propertyValue",
+        "BindablePropertyNumber",
+        FieldKind::Double,
+        false,
+    );
+    let bindable_property_boolean_value = resolve_named_property(
+        "BindablePropertyBoolean",
+        "propertyValue",
+        "BindablePropertyBoolean",
+        FieldKind::Bool,
+        false,
+    );
+    let bindable_property_string_value = resolve_named_property(
+        "BindablePropertyString",
+        "propertyValue",
+        "BindablePropertyString",
+        FieldKind::String,
+        false,
+    );
+    let bindable_property_color_value = resolve_named_property(
+        "BindablePropertyColor",
+        "propertyValue",
+        "BindablePropertyColor",
+        FieldKind::Color,
+        false,
+    );
+    let bindable_property_enum_value = resolve_named_property(
+        "BindablePropertyEnum",
+        "propertyValue",
+        "BindablePropertyEnum",
+        FieldKind::Uint,
+        false,
+    );
+    let bindable_property_trigger_value = resolve_named_property(
+        "BindablePropertyTrigger",
+        "propertyValue",
+        "BindablePropertyInteger",
+        FieldKind::Uint,
+        true,
+    );
+    let bindable_property_integer_value = resolve_named_property(
+        "BindablePropertyInteger",
+        "propertyValue",
+        "BindablePropertyInteger",
+        FieldKind::Uint,
+        false,
+    );
+    let bindable_property_asset_value = resolve_named_property(
+        "BindablePropertyAsset",
+        "propertyValue",
+        "BindablePropertyId",
+        FieldKind::Uint,
         true,
     );
     let state_to_id = resolve_named_property(
@@ -1254,6 +2047,62 @@ fn render_scene_schema() -> String {
         FieldKind::Uint,
         true,
     );
+    let state_machine_bool_value = resolve_named_property(
+        "StateMachineBool",
+        "value",
+        "StateMachineBool",
+        FieldKind::Bool,
+        false,
+    );
+    let state_machine_number_value = resolve_named_property(
+        "StateMachineNumber",
+        "value",
+        "StateMachineNumber",
+        FieldKind::Double,
+        false,
+    );
+    let nested_animation_id = resolve_named_property(
+        "NestedStateMachine",
+        "animationId",
+        "NestedAnimation",
+        FieldKind::Uint,
+        true,
+    );
+    let nested_input_id = resolve_named_property(
+        "NestedBool",
+        "inputId",
+        "NestedInput",
+        FieldKind::Uint,
+        true,
+    );
+    let nested_bool_value = resolve_serialized_property(
+        "NestedBool",
+        "nestedValue",
+        "NestedBool",
+        FieldKind::Bool,
+        false,
+    );
+    let nested_number_value = resolve_serialized_property(
+        "NestedNumber",
+        "nestedValue",
+        "NestedNumber",
+        FieldKind::Double,
+        false,
+    );
+    let transition_condition_op_value = resolve_named_property(
+        "TransitionBoolCondition",
+        "opValue",
+        "TransitionValueCondition",
+        FieldKind::Uint,
+        true,
+    );
+    let transition_number_condition_value = resolve_named_property(
+        "TransitionNumberCondition",
+        "value",
+        "TransitionNumberCondition",
+        FieldKind::Double,
+        false,
+    );
     let state_machine_event_id = resolve_named_property(
         "StateMachineFireEvent",
         "eventId",
@@ -1267,6 +2116,61 @@ fn render_scene_schema() -> String {
         "StateMachineFireAction",
         FieldKind::Uint,
         true,
+    );
+    let listener_target_id = resolve_named_property(
+        "StateMachineListenerSingle",
+        "targetId",
+        "StateMachineListener",
+        FieldKind::Uint,
+        true,
+    );
+    let listener_type_value = resolve_named_property(
+        "StateMachineListenerSingle",
+        "listenerTypeValue",
+        "StateMachineListenerSingle",
+        FieldKind::Uint,
+        false,
+    );
+    let listener_event_id = resolve_named_property(
+        "StateMachineListenerSingle",
+        "eventId",
+        "StateMachineListenerSingle",
+        FieldKind::Uint,
+        false,
+    );
+    let listener_view_model_path = resolve_encoded_property(
+        "StateMachineListenerSingle",
+        "viewModelPathIds",
+        "StateMachineListenerSingle",
+        FieldKind::Bytes,
+    );
+    let listener_input_id = resolve_named_property(
+        "ListenerTriggerChange",
+        "inputId",
+        "ListenerInputChange",
+        FieldKind::Uint,
+        true,
+    );
+    let listener_bool_value = resolve_named_property(
+        "ListenerBoolChange",
+        "value",
+        "ListenerBoolChange",
+        FieldKind::Uint,
+        false,
+    );
+    let listener_number_value = resolve_named_property(
+        "ListenerNumberChange",
+        "value",
+        "ListenerNumberChange",
+        FieldKind::Double,
+        false,
+    );
+    let listener_fire_event_id = resolve_named_property(
+        "ListenerFireEvent",
+        "eventId",
+        "ListenerFireEvent",
+        FieldKind::Uint,
+        false,
     );
     let view_model_component_name = resolve_named_property(
         "ViewModel",
@@ -1296,6 +2200,139 @@ fn render_scene_schema() -> String {
         FieldKind::Double,
         false,
     );
+    let view_model_instance_string_value = resolve_named_property(
+        "ViewModelInstanceString",
+        "propertyValue",
+        "ViewModelInstanceString",
+        FieldKind::String,
+        false,
+    );
+    let view_model_instance_boolean_value = resolve_named_property(
+        "ViewModelInstanceBoolean",
+        "propertyValue",
+        "ViewModelInstanceBoolean",
+        FieldKind::Bool,
+        false,
+    );
+    let view_model_instance_color_value = resolve_named_property(
+        "ViewModelInstanceColor",
+        "propertyValue",
+        "ViewModelInstanceColor",
+        FieldKind::Color,
+        false,
+    );
+    let view_model_instance_image_value = resolve_named_property(
+        "ViewModelInstanceAssetImage",
+        "propertyValue",
+        "ViewModelInstanceAsset",
+        FieldKind::Uint,
+        true,
+    );
+    let view_model_instance_enum_value = resolve_named_property(
+        "ViewModelInstanceEnum",
+        "propertyValue",
+        "ViewModelInstanceEnum",
+        FieldKind::Uint,
+        false,
+    );
+    let view_model_instance_trigger_value = resolve_named_property(
+        "ViewModelInstanceTrigger",
+        "propertyValue",
+        "ViewModelInstanceTrigger",
+        FieldKind::Uint,
+        false,
+    );
+    let view_model_instance_list_index_value = resolve_named_property(
+        "ViewModelInstanceSymbolListIndex",
+        "propertyValue",
+        "ViewModelInstanceSymbolListIndex",
+        FieldKind::Uint,
+        false,
+    );
+    let view_model_property_enum_id = resolve_named_property(
+        "ViewModelPropertyEnumCustom",
+        "enumId",
+        "ViewModelPropertyEnumCustom",
+        FieldKind::Uint,
+        false,
+    );
+    let view_model_property_symbol_type = resolve_named_property(
+        "ViewModelPropertySymbolListIndex",
+        "symbolTypeValue",
+        "ViewModelProperty",
+        FieldKind::Uint,
+        true,
+    );
+    let data_enum_name = resolve_named_property(
+        "DataEnumCustom",
+        "name",
+        "DataEnumCustom",
+        FieldKind::String,
+        false,
+    );
+    let data_enum_value_key = resolve_named_property(
+        "DataEnumValue",
+        "key",
+        "DataEnumValue",
+        FieldKind::String,
+        false,
+    );
+    let data_enum_value_label = resolve_named_property(
+        "DataEnumValue",
+        "value",
+        "DataEnumValue",
+        FieldKind::String,
+        false,
+    );
+    let view_model_property_view_model_reference_id = resolve_named_property(
+        "ViewModelPropertyViewModel",
+        "viewModelReferenceId",
+        "ViewModelPropertyViewModel",
+        FieldKind::Uint,
+        false,
+    );
+    let view_model_instance_view_model_value = resolve_named_property(
+        "ViewModelInstanceViewModel",
+        "propertyValue",
+        "ViewModelInstanceViewModel",
+        FieldKind::Uint,
+        false,
+    );
+    let view_model_instance_list_item_view_model_id = resolve_named_property(
+        "ViewModelInstanceListItem",
+        "viewModelId",
+        "ViewModelInstanceListItem",
+        FieldKind::Uint,
+        false,
+    );
+    let view_model_instance_list_item_instance_id = resolve_named_property(
+        "ViewModelInstanceListItem",
+        "viewModelInstanceId",
+        "ViewModelInstanceListItem",
+        FieldKind::Uint,
+        false,
+    );
+    let artboard_component_list_source = resolve_named_property(
+        "ArtboardComponentList",
+        "listSource",
+        "ArtboardComponentList",
+        FieldKind::Uint,
+        false,
+    );
+    let artboard_list_map_rule_artboard_id = resolve_named_property(
+        "ArtboardListMapRule",
+        "artboardId",
+        "ArtboardListMapRule",
+        FieldKind::Uint,
+        false,
+    );
+    let artboard_list_map_rule_view_model_id = resolve_named_property(
+        "ArtboardListMapRule",
+        "viewModelId",
+        "ArtboardListMapRule",
+        FieldKind::Uint,
+        false,
+    );
     let artboard_view_model_id = resolve_named_property(
         "Artboard",
         "viewModelId",
@@ -1303,9 +2340,204 @@ fn render_scene_schema() -> String {
         FieldKind::Uint,
         false,
     );
+    let data_converter_name = resolve_named_property(
+        "DataConverterBooleanNegate",
+        "name",
+        "DataConverter",
+        FieldKind::String,
+        true,
+    );
+    let data_converter_interpolator_duration = resolve_named_property(
+        "DataConverterInterpolator",
+        "duration",
+        "DataConverterInterpolator",
+        FieldKind::Double,
+        false,
+    );
+    let data_converter_interpolator_interpolation_type = resolve_named_property(
+        "DataConverterInterpolator",
+        "interpolationType",
+        "DataConverterInterpolator",
+        FieldKind::Uint,
+        false,
+    );
+    let data_converter_interpolator_id = resolve_named_property(
+        "DataConverterInterpolator",
+        "interpolatorId",
+        "DataConverterInterpolator",
+        FieldKind::Uint,
+        false,
+    );
+    let data_converter_to_string_flags = resolve_named_property(
+        "DataConverterToString",
+        "flags",
+        "DataConverterToString",
+        FieldKind::Uint,
+        false,
+    );
+    let data_converter_to_string_decimals = resolve_named_property(
+        "DataConverterToString",
+        "decimals",
+        "DataConverterToString",
+        FieldKind::Uint,
+        false,
+    );
+    let data_converter_to_string_color_format = resolve_named_property(
+        "DataConverterToString",
+        "colorFormat",
+        "DataConverterToString",
+        FieldKind::String,
+        false,
+    );
+    let data_converter_rounder_decimals = resolve_named_property(
+        "DataConverterRounder",
+        "decimals",
+        "DataConverterRounder",
+        FieldKind::Uint,
+        false,
+    );
+    let data_converter_string_trim_type = resolve_named_property(
+        "DataConverterStringTrim",
+        "trimType",
+        "DataConverterStringTrim",
+        FieldKind::Uint,
+        false,
+    );
+    let data_converter_string_pad_length = resolve_named_property(
+        "DataConverterStringPad",
+        "length",
+        "DataConverterStringPad",
+        FieldKind::Uint,
+        false,
+    );
+    let data_converter_string_pad_text = resolve_named_property(
+        "DataConverterStringPad",
+        "text",
+        "DataConverterStringPad",
+        FieldKind::String,
+        false,
+    );
+    let data_converter_string_pad_type = resolve_named_property(
+        "DataConverterStringPad",
+        "padType",
+        "DataConverterStringPad",
+        FieldKind::Uint,
+        false,
+    );
+    let data_converter_operation_type = resolve_named_property(
+        "DataConverterOperationValue",
+        "operationType",
+        "DataConverterOperation",
+        FieldKind::Uint,
+        true,
+    );
+    let data_converter_operation_value = resolve_named_property(
+        "DataConverterOperationValue",
+        "operationValue",
+        "DataConverterOperationValue",
+        FieldKind::Double,
+        false,
+    );
+    let data_converter_operation_view_model_source_path = resolve_encoded_property(
+        "DataConverterOperationViewModel",
+        "sourcePathIds",
+        "DataConverterOperationViewModel",
+        FieldKind::Bytes,
+    );
+    let data_converter_number_to_list_view_model_id = resolve_named_property(
+        "DataConverterNumberToList",
+        "viewModelId",
+        "DataConverterNumberToList",
+        FieldKind::Uint,
+        false,
+    );
+    let data_converter_range_flags = resolve_named_property(
+        "DataConverterRangeMapper",
+        "flags",
+        "DataConverterRangeMapper",
+        FieldKind::Uint,
+        false,
+    );
+    let data_converter_range_min_input = resolve_named_property(
+        "DataConverterRangeMapper",
+        "minInput",
+        "DataConverterRangeMapper",
+        FieldKind::Double,
+        false,
+    );
+    let data_converter_range_max_input = resolve_named_property(
+        "DataConverterRangeMapper",
+        "maxInput",
+        "DataConverterRangeMapper",
+        FieldKind::Double,
+        false,
+    );
+    let data_converter_range_min_output = resolve_named_property(
+        "DataConverterRangeMapper",
+        "minOutput",
+        "DataConverterRangeMapper",
+        FieldKind::Double,
+        false,
+    );
+    let data_converter_range_max_output = resolve_named_property(
+        "DataConverterRangeMapper",
+        "maxOutput",
+        "DataConverterRangeMapper",
+        FieldKind::Double,
+        false,
+    );
+    let data_converter_group_item_converter_id = resolve_named_property(
+        "DataConverterGroupItem",
+        "converterId",
+        "DataConverterGroupItem",
+        FieldKind::Uint,
+        false,
+    );
+    let data_converter_formula_random_mode = resolve_named_property(
+        "DataConverterFormula",
+        "randomModeValue",
+        "DataConverterFormula",
+        FieldKind::Uint,
+        false,
+    );
+    let formula_token_operation_type = resolve_named_property(
+        "FormulaTokenOperation",
+        "operationType",
+        "FormulaTokenOperation",
+        FieldKind::Uint,
+        false,
+    );
+    let formula_token_function_type = resolve_named_property(
+        "FormulaTokenFunction",
+        "functionType",
+        "FormulaTokenFunction",
+        FieldKind::Uint,
+        false,
+    );
+    let formula_token_value = resolve_named_property(
+        "FormulaTokenValue",
+        "operationValue",
+        "FormulaTokenValue",
+        FieldKind::Double,
+        false,
+    );
+    let scripted_data_converter_script_asset_id = resolve_named_property(
+        "ScriptedDataConverter",
+        "scriptAssetId",
+        "ScriptedDataConverter",
+        FieldKind::Uint,
+        false,
+    );
     let data_bind_property_key = resolve_named_property(
         "DataBindContext",
         "propertyKey",
+        "DataBind",
+        FieldKind::Uint,
+        true,
+    );
+    let data_bind_converter_id = resolve_named_property(
+        "DataBindContext",
+        "converterId",
         "DataBind",
         FieldKind::Uint,
         true,
@@ -1338,11 +2570,31 @@ fn render_scene_schema() -> String {
             "sparse authored animation lowering relies on this schema default"
         );
     }
+    assert_eq!(
+        clipping_shape_source_id.initial_value_runtime,
+        Some("-1"),
+        "typed clipping lowering always replaces Rive's missing source sentinel"
+    );
+    assert_eq!(
+        clipping_shape_fill_rule.initial_value,
+        Some("0"),
+        "sparse clipping lowering relies on non-zero winding as the schema default"
+    );
+    assert_eq!(
+        clipping_shape_is_visible.initial_value,
+        Some("true"),
+        "sparse clipping lowering relies on visible as the schema default"
+    );
     for (name, property) in [
         ("COMPONENT_NAME", component_name),
+        ("CUSTOM_PROPERTY_STRING_VALUE", custom_property_string_value),
         ("PARENT_ID", parent_id),
         ("LAYOUT_WIDTH", artboard_width),
         ("LAYOUT_HEIGHT", artboard_height),
+        ("LAYOUT_COMPONENT_STYLE_ID", layout_component_style_id),
+        ("LAYOUT_GAP_HORIZONTAL", layout_gap_horizontal),
+        ("LAYOUT_GAP_VERTICAL", layout_gap_vertical),
+        ("LAYOUT_FLEX_DIRECTION", layout_flex_direction),
         ("TRANSLATE_X", translate_x),
         ("TRANSLATE_Y", translate_y),
         ("WORLD_OPACITY", shape_opacity),
@@ -1350,6 +2602,10 @@ fn render_scene_schema() -> String {
         ("SCALE_X", scale_x),
         ("SCALE_Y", scale_y),
         ("NESTED_ARTBOARD_ID", nested_artboard_id),
+        (
+            "NESTED_ARTBOARD_DATA_BIND_PATH",
+            nested_artboard_data_bind_path,
+        ),
         ("IMAGE_ASSET_ID", image_asset_id),
         ("IMAGE_ORIGIN_X", image_origin_x),
         ("IMAGE_ORIGIN_Y", image_origin_y),
@@ -1362,8 +2618,23 @@ fn render_scene_schema() -> String {
         ),
         ("PATH_WIDTH", path_width),
         ("PATH_HEIGHT", path_height),
+        ("CLIPPING_SHAPE_SOURCE_ID", clipping_shape_source_id),
+        ("CLIPPING_SHAPE_FILL_RULE", clipping_shape_fill_rule),
+        ("CLIPPING_SHAPE_IS_VISIBLE", clipping_shape_is_visible),
         ("FILL_RULE", fill_rule),
+        ("FEATHER_SPACE", feather_space),
+        ("FEATHER_STRENGTH", feather_strength),
+        ("FEATHER_OFFSET_X", feather_offset_x),
+        ("FEATHER_OFFSET_Y", feather_offset_y),
+        ("FEATHER_INNER", feather_inner),
         ("COLOR_VALUE", color_value),
+        ("LINEAR_GRADIENT_START_X", linear_gradient_start_x),
+        ("LINEAR_GRADIENT_START_Y", linear_gradient_start_y),
+        ("LINEAR_GRADIENT_END_X", linear_gradient_end_x),
+        ("LINEAR_GRADIENT_END_Y", linear_gradient_end_y),
+        ("LINEAR_GRADIENT_OPACITY", linear_gradient_opacity),
+        ("GRADIENT_STOP_COLOR_VALUE", gradient_stop_color_value),
+        ("GRADIENT_STOP_POSITION", gradient_stop_position),
         ("RECTANGLE_CORNER_RADIUS_TL", rectangle_corner_radius_tl),
         ("RECTANGLE_CORNER_RADIUS_TR", rectangle_corner_radius_tr),
         ("RECTANGLE_CORNER_RADIUS_BR", rectangle_corner_radius_br),
@@ -1401,6 +2672,23 @@ fn render_scene_schema() -> String {
         ("MESH_TRIANGLE_INDEX_BYTES", mesh_triangle_index_bytes),
         ("VERTEX_X", vertex_x),
         ("VERTEX_Y", vertex_y),
+        ("POINTS_PATH_IS_CLOSED", points_path_is_closed),
+        (
+            "CUBIC_DETACHED_VERTEX_IN_ROTATION",
+            cubic_detached_vertex_in_rotation,
+        ),
+        (
+            "CUBIC_DETACHED_VERTEX_IN_DISTANCE",
+            cubic_detached_vertex_in_distance,
+        ),
+        (
+            "CUBIC_DETACHED_VERTEX_OUT_ROTATION",
+            cubic_detached_vertex_out_rotation,
+        ),
+        (
+            "CUBIC_DETACHED_VERTEX_OUT_DISTANCE",
+            cubic_detached_vertex_out_distance,
+        ),
         ("MESH_VERTEX_U", mesh_vertex_u),
         ("MESH_VERTEX_V", mesh_vertex_v),
         ("ANIMATION_NAME", animation_name),
@@ -1416,10 +2704,58 @@ fn render_scene_schema() -> String {
         ("KEYED_PROPERTY_KEY", keyed_property_key),
         ("KEY_FRAME", key_frame),
         ("KEY_FRAME_INTERPOLATION_TYPE", key_frame_interpolation_type),
+        ("KEY_FRAME_INTERPOLATOR_ID", key_frame_interpolator_id),
         ("KEY_FRAME_DOUBLE_VALUE", key_frame_double_value),
+        ("KEY_FRAME_COLOR_VALUE", key_frame_color_value),
+        ("CUBIC_EASE_X1", cubic_ease_x1),
+        ("CUBIC_EASE_Y1", cubic_ease_y1),
+        ("CUBIC_EASE_X2", cubic_ease_x2),
+        ("CUBIC_EASE_Y2", cubic_ease_y2),
         ("STATE_MACHINE_COMPONENT_NAME", state_machine_component_name),
         ("STATE_ANIMATION_ID", state_animation_id),
         ("STATE_SPEED", state_speed),
+        ("LAYER_STATE_FLAGS", layer_state_flags),
+        ("BLEND_ANIMATION_ANIMATION_ID", blend_animation_animation_id),
+        ("BLEND_ANIMATION_1D_VALUE", blend_animation_1d_value),
+        ("BLEND_STATE_1D_INPUT_ID", blend_state_1d_input_id),
+        (
+            "BLEND_ANIMATION_DIRECT_INPUT_ID",
+            blend_animation_direct_input_id,
+        ),
+        ("BLEND_ANIMATION_DIRECT_MIX", blend_animation_direct_mix),
+        (
+            "BLEND_ANIMATION_DIRECT_SOURCE",
+            blend_animation_direct_source,
+        ),
+        (
+            "BINDABLE_PROPERTY_NUMBER_VALUE",
+            bindable_property_number_value,
+        ),
+        (
+            "BINDABLE_PROPERTY_BOOLEAN_VALUE",
+            bindable_property_boolean_value,
+        ),
+        (
+            "BINDABLE_PROPERTY_STRING_VALUE",
+            bindable_property_string_value,
+        ),
+        (
+            "BINDABLE_PROPERTY_COLOR_VALUE",
+            bindable_property_color_value,
+        ),
+        ("BINDABLE_PROPERTY_ENUM_VALUE", bindable_property_enum_value),
+        (
+            "BINDABLE_PROPERTY_TRIGGER_VALUE",
+            bindable_property_trigger_value,
+        ),
+        (
+            "BINDABLE_PROPERTY_INTEGER_VALUE",
+            bindable_property_integer_value,
+        ),
+        (
+            "BINDABLE_PROPERTY_ASSET_VALUE",
+            bindable_property_asset_value,
+        ),
         ("STATE_TO_ID", state_to_id),
         ("STATE_TRANSITION_FLAGS", state_transition_flags),
         ("STATE_TRANSITION_DURATION", state_transition_duration),
@@ -1429,8 +2765,30 @@ fn render_scene_schema() -> String {
             state_transition_random_weight,
         ),
         ("STATE_MACHINE_INPUT_ID", state_machine_input_id),
+        ("STATE_MACHINE_BOOL_VALUE", state_machine_bool_value),
+        ("STATE_MACHINE_NUMBER_VALUE", state_machine_number_value),
+        ("NESTED_ANIMATION_ID", nested_animation_id),
+        ("NESTED_INPUT_ID", nested_input_id),
+        ("NESTED_BOOL_VALUE", nested_bool_value),
+        ("NESTED_NUMBER_VALUE", nested_number_value),
+        (
+            "TRANSITION_CONDITION_OP_VALUE",
+            transition_condition_op_value,
+        ),
+        (
+            "TRANSITION_NUMBER_CONDITION_VALUE",
+            transition_number_condition_value,
+        ),
         ("STATE_MACHINE_EVENT_ID", state_machine_event_id),
         ("STATE_MACHINE_FIRE_OCCURS", state_machine_fire_occurs),
+        ("LISTENER_TARGET_ID", listener_target_id),
+        ("LISTENER_TYPE_VALUE", listener_type_value),
+        ("LISTENER_EVENT_ID", listener_event_id),
+        ("LISTENER_VIEW_MODEL_PATH", listener_view_model_path),
+        ("LISTENER_INPUT_ID", listener_input_id),
+        ("LISTENER_BOOL_VALUE", listener_bool_value),
+        ("LISTENER_NUMBER_VALUE", listener_number_value),
+        ("LISTENER_FIRE_EVENT_ID", listener_fire_event_id),
         ("VIEW_MODEL_COMPONENT_NAME", view_model_component_name),
         (
             "VIEW_MODEL_INSTANCE_VIEW_MODEL_ID",
@@ -1444,8 +2802,166 @@ fn render_scene_schema() -> String {
             "VIEW_MODEL_INSTANCE_NUMBER_VALUE",
             view_model_instance_number_value,
         ),
+        (
+            "VIEW_MODEL_INSTANCE_STRING_VALUE",
+            view_model_instance_string_value,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_BOOLEAN_VALUE",
+            view_model_instance_boolean_value,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_COLOR_VALUE",
+            view_model_instance_color_value,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_IMAGE_VALUE",
+            view_model_instance_image_value,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_ENUM_VALUE",
+            view_model_instance_enum_value,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_TRIGGER_VALUE",
+            view_model_instance_trigger_value,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_LIST_INDEX_VALUE",
+            view_model_instance_list_index_value,
+        ),
+        ("VIEW_MODEL_PROPERTY_ENUM_ID", view_model_property_enum_id),
+        (
+            "VIEW_MODEL_PROPERTY_SYMBOL_TYPE",
+            view_model_property_symbol_type,
+        ),
+        ("DATA_ENUM_NAME", data_enum_name),
+        ("DATA_ENUM_VALUE_KEY", data_enum_value_key),
+        ("DATA_ENUM_VALUE_LABEL", data_enum_value_label),
+        (
+            "VIEW_MODEL_PROPERTY_VIEW_MODEL_REFERENCE_ID",
+            view_model_property_view_model_reference_id,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_VIEW_MODEL_VALUE",
+            view_model_instance_view_model_value,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_LIST_ITEM_VIEW_MODEL_ID",
+            view_model_instance_list_item_view_model_id,
+        ),
+        (
+            "VIEW_MODEL_INSTANCE_LIST_ITEM_INSTANCE_ID",
+            view_model_instance_list_item_instance_id,
+        ),
+        (
+            "ARTBOARD_COMPONENT_LIST_SOURCE",
+            artboard_component_list_source,
+        ),
+        (
+            "ARTBOARD_LIST_MAP_RULE_ARTBOARD_ID",
+            artboard_list_map_rule_artboard_id,
+        ),
+        (
+            "ARTBOARD_LIST_MAP_RULE_VIEW_MODEL_ID",
+            artboard_list_map_rule_view_model_id,
+        ),
         ("ARTBOARD_VIEW_MODEL_ID", artboard_view_model_id),
+        ("DATA_CONVERTER_NAME", data_converter_name),
+        (
+            "DATA_CONVERTER_INTERPOLATOR_DURATION",
+            data_converter_interpolator_duration,
+        ),
+        (
+            "DATA_CONVERTER_INTERPOLATOR_INTERPOLATION_TYPE",
+            data_converter_interpolator_interpolation_type,
+        ),
+        (
+            "DATA_CONVERTER_INTERPOLATOR_ID",
+            data_converter_interpolator_id,
+        ),
+        (
+            "DATA_CONVERTER_TO_STRING_FLAGS",
+            data_converter_to_string_flags,
+        ),
+        (
+            "DATA_CONVERTER_TO_STRING_DECIMALS",
+            data_converter_to_string_decimals,
+        ),
+        (
+            "DATA_CONVERTER_TO_STRING_COLOR_FORMAT",
+            data_converter_to_string_color_format,
+        ),
+        (
+            "DATA_CONVERTER_ROUNDER_DECIMALS",
+            data_converter_rounder_decimals,
+        ),
+        (
+            "DATA_CONVERTER_STRING_TRIM_TYPE",
+            data_converter_string_trim_type,
+        ),
+        (
+            "DATA_CONVERTER_STRING_PAD_LENGTH",
+            data_converter_string_pad_length,
+        ),
+        (
+            "DATA_CONVERTER_STRING_PAD_TEXT",
+            data_converter_string_pad_text,
+        ),
+        (
+            "DATA_CONVERTER_STRING_PAD_TYPE",
+            data_converter_string_pad_type,
+        ),
+        (
+            "DATA_CONVERTER_OPERATION_TYPE",
+            data_converter_operation_type,
+        ),
+        (
+            "DATA_CONVERTER_OPERATION_VALUE",
+            data_converter_operation_value,
+        ),
+        (
+            "DATA_CONVERTER_OPERATION_VIEW_MODEL_SOURCE_PATH",
+            data_converter_operation_view_model_source_path,
+        ),
+        (
+            "DATA_CONVERTER_NUMBER_TO_LIST_VIEW_MODEL_ID",
+            data_converter_number_to_list_view_model_id,
+        ),
+        ("DATA_CONVERTER_RANGE_FLAGS", data_converter_range_flags),
+        (
+            "DATA_CONVERTER_RANGE_MIN_INPUT",
+            data_converter_range_min_input,
+        ),
+        (
+            "DATA_CONVERTER_RANGE_MAX_INPUT",
+            data_converter_range_max_input,
+        ),
+        (
+            "DATA_CONVERTER_RANGE_MIN_OUTPUT",
+            data_converter_range_min_output,
+        ),
+        (
+            "DATA_CONVERTER_RANGE_MAX_OUTPUT",
+            data_converter_range_max_output,
+        ),
+        (
+            "DATA_CONVERTER_GROUP_ITEM_CONVERTER_ID",
+            data_converter_group_item_converter_id,
+        ),
+        (
+            "DATA_CONVERTER_FORMULA_RANDOM_MODE",
+            data_converter_formula_random_mode,
+        ),
+        ("FORMULA_TOKEN_OPERATION_TYPE", formula_token_operation_type),
+        ("FORMULA_TOKEN_FUNCTION_TYPE", formula_token_function_type),
+        ("FORMULA_TOKEN_VALUE", formula_token_value),
+        (
+            "SCRIPTED_DATA_CONVERTER_SCRIPT_ASSET_ID",
+            scripted_data_converter_script_asset_id,
+        ),
         ("DATA_BIND_PROPERTY_KEY", data_bind_property_key),
+        ("DATA_BIND_CONVERTER_ID", data_bind_converter_id),
         ("DATA_BIND_FLAGS", data_bind_flags),
         ("DATA_BIND_SOURCE_PATH", data_bind_source_path),
     ] {
@@ -1458,7 +2974,28 @@ fn render_scene_schema() -> String {
     }
 
     output.push_str(
-        "\n#[derive(Debug, Clone, Copy, PartialEq)]\n\
+        "\n#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum ArtboardComponentListAxis {\n\
+             Horizontal,\n\
+             Vertical,\n\
+         }\n\n\
+         impl ArtboardComponentListAxis {\n\
+             const fn wire_value(self, reverse: bool) -> u32 {\n\
+                 match (self, reverse) {\n\
+                     (Self::Horizontal, false) => 2,\n\
+                     (Self::Horizontal, true) => 3,\n\
+                     (Self::Vertical, false) => 0,\n\
+                     (Self::Vertical, true) => 1,\n\
+                 }\n\
+             }\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq)]\n\
+         pub struct ArtboardComponentListFlow {\n\
+             pub axis: ArtboardComponentListAxis,\n\
+             pub reverse: bool,\n\
+             pub gap: f32,\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq)]\n\
          pub struct ImageCropRect {\n\
              pub x: f32,\n\
              pub y: f32,\n\
@@ -1472,6 +3009,19 @@ fn render_scene_schema() -> String {
              pub bottom_right: f32,\n\
              pub bottom_left: f32,\n\
              pub linked: bool,\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum SceneClippingFillRule {\n\
+             NonZero,\n\
+             EvenOdd,\n\
+         }\n\n\
+         impl SceneClippingFillRule {\n\
+             const fn wire_value(self) -> u32 {\n\
+                 match self {\n\
+                     Self::NonZero => 0,\n\
+                     Self::EvenOdd => 1,\n\
+                 }\n\
+             }\n\
          }\n\n\
          #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
          pub enum SceneTextSizing {\n\
@@ -1532,6 +3082,19 @@ fn render_scene_schema() -> String {
              }\n\
          }\n\n\
          #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum SceneFeatherSpace {\n\
+             World,\n\
+             Local,\n\
+         }\n\n\
+         impl SceneFeatherSpace {\n\
+             const fn wire_value(self) -> u32 {\n\
+                 match self {\n\
+                     Self::World => 0,\n\
+                     Self::Local => 1,\n\
+                 }\n\
+             }\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
          pub enum SceneStrokeCap {\n\
              Butt,\n\
              Round,\n\
@@ -1563,12 +3126,22 @@ fn render_scene_schema() -> String {
          }\n\n",
     );
     for object in OBJECTS {
+        if object.rust_name == "ClippingShape" {
+            output.push_str(
+                "/// A Rive clipping component attached beneath the authored node whose drawable subtree is clipped.\n",
+            );
+        }
         writeln!(output, "#[derive(Debug, Clone, PartialEq)]").expect("write generated source");
         writeln!(output, "pub struct {}Spec {{", object.rust_name).expect("write generated source");
         for field in object.fields {
             let property = resolve_property(object.schema_name, *field);
             if is_rectangle_corner_radius_field(object, field) {
                 continue;
+            }
+            if object.rust_name == "ClippingShape" && field.rust_name == "source" {
+                output.push_str(
+                    "    /// Same-artboard Shape whose descendant paths form the runtime clip path.\n",
+                );
             }
             writeln!(
                 output,
@@ -1583,6 +3156,21 @@ fn render_scene_schema() -> String {
         }
         if object.rust_name == "Image" {
             output.push_str("    pub crop: Option<ImageCropRect>,\n");
+        }
+        if object.rust_name == "NestedArtboard" {
+            output.push_str("    pub view_model_source: Option<ViewModelChildSource>,\n");
+            output.push_str(
+                "    pub view_model_instance: Option<NestedArtboardViewModelInstanceSpec>,\n",
+            );
+            output.push_str("    pub state_machines: Vec<MachineId>,\n");
+            output.push_str(
+                "    pub state_machine_inputs: Vec<NestedArtboardStateMachineInputSpec>,\n",
+            );
+        }
+        if object.rust_name == "ArtboardComponentList" {
+            output.push_str("    pub flow: Option<ArtboardComponentListFlow>,\n");
+            output.push_str("    pub source: ViewModelListSource,\n");
+            output.push_str("    pub map_rules: Vec<ArtboardListMapRuleSpec>,\n");
         }
         if matches!(
             object.rust_name,
@@ -1692,12 +3280,27 @@ fn render_scene_schema() -> String {
         .expect("write generated source");
         output.push_str("    match node {\n");
         for (object, field) in &compatible {
-            writeln!(
-                output,
-                "        NodeSpec::{}(spec) => {{ spec.{} = value; Ok(()) }},",
-                object.rust_name, field.rust_name
-            )
-            .expect("write generated source");
+            if is_rectangle_corner_radius_field(object, field) {
+                let member = match field.rust_name {
+                    "corner_radius_tl" => "top_left",
+                    "corner_radius_tr" => "top_right",
+                    "corner_radius_br" => "bottom_right",
+                    "corner_radius_bl" => "bottom_left",
+                    _ => unreachable!("closed rectangle radius field catalog"),
+                };
+                writeln!(
+                    output,
+                    "        NodeSpec::Rectangle(spec) => {{\n            let radii = spec.corner_radii.get_or_insert(RectangleCornerRadii {{ top_left: 0.0, top_right: 0.0, bottom_right: 0.0, bottom_left: 0.0, linked: false }});\n            radii.{member} = value;\n            Ok(())\n        }},"
+                )
+                .expect("write generated source");
+            } else {
+                writeln!(
+                    output,
+                    "        NodeSpec::{}(spec) => {{ spec.{} = value; Ok(()) }},",
+                    object.rust_name, field.rust_name
+                )
+                .expect("write generated source");
+            }
         }
         writeln!(
             output,
@@ -1879,6 +3482,51 @@ fn resolve_named_property(
     property
 }
 
+/// Resolve a plain serialized field whose upstream C++ setter is virtual.
+///
+/// Nested input values are still stored and deserialized in the file, but
+/// their C++ schema marks the setter pure-virtual so the stricter ordinary
+/// authoring assertion is intentionally inapplicable. The pure-Rust runtime
+/// owns its typed mutation behavior after import.
+fn resolve_serialized_property(
+    target: &str,
+    name: &str,
+    declared_owner: &str,
+    expected_kind: FieldKind,
+    expected_inherited: bool,
+) -> &'static Property {
+    let target_definition = definition_by_name(target)
+        .unwrap_or_else(|| panic!("authoring target schema definition {target} must exist"));
+    let owner_definition = definition_by_name(declared_owner).unwrap_or_else(|| {
+        panic!("authoring property owner schema definition {declared_owner} must exist")
+    });
+    let property = owner_definition
+        .properties
+        .iter()
+        .find(|property| property.name == name)
+        .unwrap_or_else(|| {
+            panic!("authoring property {declared_owner}.{name} must remain directly declared")
+        });
+    assert_eq!(property.runtime_type, expected_kind);
+    assert!(
+        property.stores_data
+            && property.deserializes
+            && property.stores_field
+            && !property.encoded
+            && property.bitmask_passthrough.is_none(),
+        "authoring property {declared_owner}.{name} is no longer serialized stored data"
+    );
+    let (actual_owner, supported_property) =
+        property_by_key_in_hierarchy(target_definition.type_key.int, property.key.int)
+            .unwrap_or_else(|| {
+                panic!("authoring target {target} no longer supports {declared_owner}.{name}")
+            });
+    assert_eq!(actual_owner, declared_owner);
+    assert_eq!(supported_property.runtime_type, expected_kind);
+    assert_eq!(target != declared_owner, expected_inherited);
+    property
+}
+
 fn resolve_encoded_property(
     target: &str,
     name: &str,
@@ -2004,6 +3652,9 @@ fn public_field_rust_type(
     runtime_type: FieldKind,
 ) -> &'static str {
     match (object.rust_name, field.rust_name) {
+        ("ClippingShape", "source") => "ObjectId",
+        ("ClippingShape", "fill_rule") => "SceneClippingFillRule",
+        ("Feather", "space") => "SceneFeatherSpace",
         ("Stroke", "cap") => "SceneStrokeCap",
         ("Stroke", "join") => "SceneStrokeJoin",
         ("Text", "sizing") => "SceneTextSizing",

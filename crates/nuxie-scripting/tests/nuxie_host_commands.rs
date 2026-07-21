@@ -2,7 +2,9 @@
 
 use std::collections::BTreeMap;
 
-use nuxie_scripting::vm::{HostCommand, HostValue, ScriptResourceLimit, ScriptVm};
+use nuxie_scripting::vm::{
+    HostCommand, HostValue, ScriptExecutionLimits, ScriptResourceLimit, ScriptVm,
+};
 
 #[test]
 fn nuxie_trigger_normalizes_a_scalar_payload_and_queues_it() {
@@ -759,6 +761,107 @@ fn instruction_exhaustion_cannot_be_swallowed_to_emit_host_effects() {
     );
 
     assert!(result.is_err());
+    assert_eq!(
+        vm.terminal_resource_limit(),
+        Some(ScriptResourceLimit::Safepoints)
+    );
+    assert!(vm.drain_host_commands().is_empty());
+}
+
+#[test]
+fn configured_callback_exhaustion_cannot_be_swallowed_by_pcall() {
+    let vm = ScriptVm::new_with_execution_limits(
+        ScriptExecutionLimits::new().with_max_interrupts_per_callback(8),
+    )
+    .expect("trusted script limits");
+    vm.install_rive_globals().unwrap();
+
+    let result = vm.eval::<()>(
+        r#"
+            local nuxie = require("nuxie")
+            pcall(function()
+                while true do end
+            end)
+            nuxie.trigger("must_not_escape")
+        "#,
+    );
+
+    let error = result.expect_err("pcall must not suppress callback exhaustion");
+    assert!(
+        error
+            .to_string()
+            .contains("exceeded 8 interrupt safepoints"),
+        "{error}"
+    );
+    assert_eq!(
+        vm.terminal_resource_limit(),
+        Some(ScriptResourceLimit::Safepoints)
+    );
+    assert!(vm.drain_host_commands().is_empty());
+}
+
+#[test]
+fn configured_callback_exhaustion_cannot_be_swallowed_by_xpcall() {
+    let vm = ScriptVm::new_with_execution_limits(
+        ScriptExecutionLimits::new().with_max_interrupts_per_callback(8),
+    )
+    .expect("trusted script limits");
+    vm.install_rive_globals().unwrap();
+
+    let result = vm.eval::<()>(
+        r#"
+            local nuxie = require("nuxie")
+            xpcall(
+                function() while true do end end,
+                function()
+                    nuxie.trigger("handler_must_not_escape")
+                    return "hidden"
+                end
+            )
+            nuxie.trigger("must_not_escape")
+        "#,
+    );
+
+    let error = result.expect_err("xpcall must not suppress callback exhaustion");
+    assert!(
+        error
+            .to_string()
+            .contains("exceeded 8 interrupt safepoints"),
+        "{error}"
+    );
+    assert_eq!(
+        vm.terminal_resource_limit(),
+        Some(ScriptResourceLimit::Safepoints)
+    );
+    assert!(vm.drain_host_commands().is_empty());
+}
+
+#[test]
+fn configured_callback_exhaustion_cannot_be_swallowed_by_coroutine_resume() {
+    let vm = ScriptVm::new_with_execution_limits(
+        ScriptExecutionLimits::new().with_max_interrupts_per_callback(8),
+    )
+    .expect("trusted script limits");
+    vm.install_rive_globals().unwrap();
+
+    let result = vm.eval::<()>(
+        r#"
+            local nuxie = require("nuxie")
+            local worker = coroutine.create(function()
+                while true do end
+            end)
+            coroutine.resume(worker)
+            nuxie.trigger("must_not_escape")
+        "#,
+    );
+
+    let error = result.expect_err("coroutine.resume must not suppress callback exhaustion");
+    assert!(
+        error
+            .to_string()
+            .contains("exceeded 8 interrupt safepoints"),
+        "{error}"
+    );
     assert_eq!(
         vm.terminal_resource_limit(),
         Some(ScriptResourceLimit::Safepoints)

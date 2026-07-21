@@ -1,10 +1,15 @@
 use super::{RendererError, WebGl2Factory, WebGl2Frame, WgpuAdapterInfo, WgpuFactory, WgpuFrame};
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, RawPath,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath,
-    RenderShader, Renderer,
+    BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
+    ImageDecodeError, ImageSampler, Mat2D, RawPath, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, Renderer,
 };
-use wasm_bindgen::{Clamped, JsCast};
+use std::cell::Cell;
+use std::error::Error;
+use std::fmt;
+use std::rc::Rc;
+use wasm_bindgen::{Clamped, JsCast, JsValue};
+use wasm_bindgen_futures::JsFuture;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
 /// Browser renderer selection policy.
@@ -27,6 +32,45 @@ pub enum BrowserBackend {
     WebGl2,
 }
 
+/// Failure to retarget a browser renderer's canvas.
+///
+/// The lifecycle case is backend-independent: a resize never mutates the
+/// active frame or queues a hidden resize behind it. Callers may retry after
+/// that frame finishes while continuing to use document-side APIs.
+#[derive(Debug)]
+pub enum BrowserResizeError {
+    /// A frame created by this factory has not finished or been dropped yet.
+    FrameInFlight,
+    /// The selected renderer rejected the requested target extent.
+    Renderer(RendererError),
+}
+
+impl fmt::Display for BrowserResizeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::FrameInFlight => {
+                formatter.write_str("cannot resize while a browser frame is in flight")
+            }
+            Self::Renderer(error) => write!(formatter, "browser resize failed: {error}"),
+        }
+    }
+}
+
+impl Error for BrowserResizeError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::FrameInFlight => None,
+            Self::Renderer(error) => Some(error),
+        }
+    }
+}
+
+impl From<RendererError> for BrowserResizeError {
+    fn from(error: RendererError) -> Self {
+        Self::Renderer(error)
+    }
+}
+
 enum BrowserFactoryInner {
     WebGpu(WgpuFactory),
     WebGl2(WebGl2Factory),
@@ -37,6 +81,9 @@ pub struct BrowserFactory {
     inner: BrowserFactoryInner,
     canvas: HtmlCanvasElement,
     fallback_reason: Option<String>,
+    width: u32,
+    height: u32,
+    active_frames: Rc<Cell<u32>>,
 }
 
 impl BrowserFactory {
@@ -51,23 +98,40 @@ impl BrowserFactory {
         canvas.set_width(width);
         canvas.set_height(height);
         let (inner, fallback_reason) = match preference {
-            BrowserBackendPreference::WebGpu => (
-                BrowserFactoryInner::WebGpu(WgpuFactory::new_async(width, height).await?),
-                None,
-            ),
+            BrowserBackendPreference::WebGpu => {
+                probe_webgpu_adapter()
+                    .await
+                    .map_err(RendererError::Adapter)?;
+                (
+                    BrowserFactoryInner::WebGpu(WgpuFactory::new_async(width, height).await?),
+                    None,
+                )
+            }
             BrowserBackendPreference::WebGl2 => (
                 BrowserFactoryInner::WebGl2(WebGl2Factory::new(&canvas, width, height)?),
                 None,
             ),
-            BrowserBackendPreference::Auto => match WgpuFactory::new_async(width, height).await {
-                Ok(factory) => (BrowserFactoryInner::WebGpu(factory), None),
-                Err(webgpu_error) => {
-                    let reason = webgpu_error.to_string();
+            BrowserBackendPreference::Auto => match probe_webgpu_adapter().await {
+                Ok(()) => match WgpuFactory::new_async(width, height).await {
+                    Ok(factory) => (BrowserFactoryInner::WebGpu(factory), None),
+                    Err(webgpu_error) => {
+                        let reason = webgpu_error.to_string();
+                        let webgl2 = WebGl2Factory::new(&canvas, width, height).map_err(
+                            |webgl2_error| {
+                                RendererError::WebGl2(format!(
+                                    "automatic fallback failed; WebGPU: {reason}; WebGL2: {webgl2_error}"
+                                ))
+                            },
+                        )?;
+                        (BrowserFactoryInner::WebGl2(webgl2), Some(reason))
+                    }
+                },
+                Err(reason) => {
                     let webgl2 =
                         WebGl2Factory::new(&canvas, width, height).map_err(|webgl2_error| {
                             RendererError::WebGl2(format!(
-                            "automatic fallback failed; WebGPU: {reason}; WebGL2: {webgl2_error}"
-                        ))
+                                "automatic fallback failed; WebGPU: {reason}; WebGL2: {webgl2_error}"
+                            ))
                         })?;
                     (BrowserFactoryInner::WebGl2(webgl2), Some(reason))
                 }
@@ -77,6 +141,9 @@ impl BrowserFactory {
             inner,
             canvas,
             fallback_reason,
+            width,
+            height,
+            active_frames: Rc::new(Cell::new(0)),
         })
     }
 
@@ -101,6 +168,37 @@ impl BrowserFactory {
         }
     }
 
+    /// Returns the current physical render-target size.
+    pub fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    /// Retargets the selected renderer and canvas for future frames.
+    ///
+    /// Resizing is synchronous and never recreates the factory's device or
+    /// leaks backend selection into the caller. If a frame is in flight, this
+    /// returns [`BrowserResizeError::FrameInFlight`] without changing state;
+    /// callers may retry after frame completion.
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), BrowserResizeError> {
+        if self.active_frames.get() != 0 {
+            return Err(BrowserResizeError::FrameInFlight);
+        }
+        if (width, height) == (self.width, self.height) {
+            return Ok(());
+        }
+        match &mut self.inner {
+            BrowserFactoryInner::WebGpu(factory) => {
+                factory.resize(width, height)?;
+                self.canvas.set_width(width);
+                self.canvas.set_height(height);
+            }
+            BrowserFactoryInner::WebGl2(factory) => factory.resize(width, height)?,
+        }
+        self.width = width;
+        self.height = height;
+        Ok(())
+    }
+
     /// Begins a frame for the canvas.
     ///
     /// Only one WebGL2 frame may be active for a factory at a time.
@@ -113,11 +211,100 @@ impl BrowserFactory {
                 BrowserFrameInner::WebGl2(factory.begin_frame(clear_color)?)
             }
         };
+        self.active_frames
+            .set(self.active_frames.get().saturating_add(1));
         Ok(BrowserFrame {
             inner,
             canvas: self.canvas.clone(),
+            lease: BrowserFrameLease {
+                active_frames: Rc::clone(&self.active_frames),
+            },
         })
     }
+}
+
+/// Probes the browser API before entering wgpu's adapter future. Some WebGPU
+/// implementations resolve `GPU.requestAdapter()` with `null` when no adapter
+/// is available, while the corresponding wgpu wasm future may remain pending.
+/// Reading that result directly keeps automatic WebGL2 fallback and explicit
+/// WebGPU failure finite. Match [`WgpuFactory`] admission by trying Core first
+/// and WebGPU Compatibility second; WebGL2 is only eligible after both fail.
+async fn probe_webgpu_adapter() -> Result<(), String> {
+    let global = js_sys::global();
+    let navigator =
+        js_sys::Reflect::get(&global, &JsValue::from_str("navigator")).map_err(|error| {
+            format!(
+                "browser navigator lookup failed: {}",
+                js_value_message(error)
+            )
+        })?;
+    if navigator.is_null() || navigator.is_undefined() {
+        return Err("browser navigator is unavailable".into());
+    }
+    let gpu = js_sys::Reflect::get(&navigator, &JsValue::from_str("gpu"))
+        .map_err(|error| format!("WebGPU API lookup failed: {}", js_value_message(error)))?;
+    if gpu.is_null() || gpu.is_undefined() {
+        return Err("WebGPU API is unavailable".into());
+    }
+    let request_adapter = js_sys::Reflect::get(&gpu, &JsValue::from_str("requestAdapter"))
+        .map_err(|error| {
+            format!(
+                "WebGPU adapter probe lookup failed: {}",
+                js_value_message(error)
+            )
+        })?
+        .dyn_into::<js_sys::Function>()
+        .map_err(|_| "WebGPU requestAdapter is unavailable".to_string())?;
+    let core_error = match probe_webgpu_adapter_level(&gpu, &request_adapter, None).await {
+        Ok(()) => return Ok(()),
+        Err(error) => error,
+    };
+    probe_webgpu_adapter_level(&gpu, &request_adapter, Some("compatibility"))
+        .await
+        .map_err(|compatibility_error| {
+            format!(
+                "Core WebGPU adapter probe failed ({core_error}); Compatibility adapter probe failed ({compatibility_error})"
+            )
+        })
+}
+
+async fn probe_webgpu_adapter_level(
+    gpu: &JsValue,
+    request_adapter: &js_sys::Function,
+    feature_level: Option<&str>,
+) -> Result<(), String> {
+    let request = match feature_level {
+        Some(feature_level) => {
+            let options = js_sys::Object::new();
+            js_sys::Reflect::set(
+                &options,
+                &JsValue::from_str("featureLevel"),
+                &JsValue::from_str(feature_level),
+            )
+            .map_err(|error| {
+                format!(
+                    "WebGPU adapter probe options failed: {}",
+                    js_value_message(error)
+                )
+            })?;
+            request_adapter.call1(gpu, &options)
+        }
+        None => request_adapter.call0(gpu),
+    }
+    .map_err(|error| format!("WebGPU requestAdapter failed: {}", js_value_message(error)))?
+    .dyn_into::<js_sys::Promise>()
+    .map_err(|_| "WebGPU requestAdapter returned a non-Promise value".to_string())?;
+    let adapter = JsFuture::from(request)
+        .await
+        .map_err(|error| format!("WebGPU requestAdapter failed: {}", js_value_message(error)))?;
+    if adapter.is_null() || adapter.is_undefined() {
+        return Err("adapter is unavailable".into());
+    }
+    Ok(())
+}
+
+fn js_value_message(error: JsValue) -> String {
+    error.as_string().unwrap_or_else(|| format!("{error:?}"))
 }
 
 impl Factory for BrowserFactory {
@@ -201,6 +388,17 @@ impl Factory for BrowserFactory {
             BrowserFactoryInner::WebGl2(factory) => factory.decode_image(data),
         }
     }
+
+    fn make_gpu_canvas_image(
+        &mut self,
+        shader: &GpuCanvasShader,
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        match &mut self.inner {
+            BrowserFactoryInner::WebGpu(factory) => factory.make_gpu_canvas_image(shader, plan),
+            BrowserFactoryInner::WebGl2(factory) => factory.make_gpu_canvas_image(shader, plan),
+        }
+    }
 }
 
 enum BrowserFrameInner {
@@ -212,6 +410,18 @@ enum BrowserFrameInner {
 pub struct BrowserFrame {
     inner: BrowserFrameInner,
     canvas: HtmlCanvasElement,
+    lease: BrowserFrameLease,
+}
+
+struct BrowserFrameLease {
+    active_frames: Rc<Cell<u32>>,
+}
+
+impl Drop for BrowserFrameLease {
+    fn drop(&mut self) {
+        self.active_frames
+            .set(self.active_frames.get().saturating_sub(1));
+    }
 }
 
 impl BrowserFrame {
@@ -220,14 +430,21 @@ impl BrowserFrame {
     /// WebGPU submission and readback are asynchronous. WebGL2 flushes and
     /// reads the canvas before resolving this future.
     pub async fn finish(self) -> Result<Vec<u8>, RendererError> {
-        match self.inner {
+        let Self {
+            inner,
+            canvas,
+            lease,
+        } = self;
+        let result = match inner {
             BrowserFrameInner::WebGpu(frame) => {
                 let pixels = frame.finish_async().await?;
-                present_pixels(&self.canvas, &pixels)?;
+                present_pixels(&canvas, &pixels)?;
                 Ok(pixels)
             }
             BrowserFrameInner::WebGl2(frame) => frame.finish(),
-        }
+        };
+        drop(lease);
+        result
     }
 }
 

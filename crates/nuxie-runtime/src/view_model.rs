@@ -2582,6 +2582,20 @@ impl RuntimeOwnedViewModelListSourceHandle {
     }
 }
 
+/// Pre-resolved typed relation between one string and one boolean on every
+/// item of an owned ViewModel list.
+///
+/// The list path and item schema are validated once while resolving this
+/// handle. Applying it later performs no property-name lookup and fails closed
+/// if the list is replaced with items from a different or malformed schema.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelListStringMatchBooleanHandle {
+    list_property_path: Vec<usize>,
+    item_view_model_index: usize,
+    string_property_index: usize,
+    boolean_property_index: usize,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeOwnedViewModelListHandle {
     value: Rc<RefCell<RuntimeOwnedViewModelListValue>>,
@@ -2639,6 +2653,26 @@ impl RuntimeOwnedViewModelListHandle {
                 }
             })
             .collect()
+    }
+
+    pub(crate) fn replace_item_context_at(
+        &self,
+        source_index: usize,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        let list = self.value.borrow();
+        let Some(item) = list.items.get(source_index) else {
+            return false;
+        };
+        let mut item = item.instance.borrow_mut();
+        if item.instance_identity() != context.instance_identity()
+            || item.view_model_index() != context.view_model_index()
+        {
+            return false;
+        }
+        let changed = item.mutation_generation() != context.mutation_generation();
+        *item = context.clone();
+        changed
     }
 
     pub(crate) fn text_runs(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
@@ -2898,6 +2932,12 @@ struct RuntimeOwnedViewModelArtboard {
 struct RuntimeOwnedViewModelTrigger {
     property_index: usize,
     value: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeOwnedViewModelPropertyKind {
+    String,
+    Boolean,
 }
 
 #[derive(Debug, Clone)]
@@ -4183,6 +4223,47 @@ fn runtime_owned_view_model_property_index_by_name(
     property_names
         .iter()
         .find_map(|(name, index)| (name == property_name).then_some(*index))
+}
+
+pub(crate) fn runtime_project_name_hash(name: &str) -> u32 {
+    name.as_bytes().iter().fold(0x811c_9dc5, |hash, byte| {
+        (hash ^ u32::from(*byte)).wrapping_mul(0x0100_0193)
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RuntimeProjectNameAmbiguity;
+
+fn runtime_owned_view_model_property_index_by_project_name_hash(
+    property_names: &[(String, usize)],
+    name_hash: u32,
+) -> Result<Option<usize>, RuntimeProjectNameAmbiguity> {
+    let mut matches = property_names.iter().filter_map(|(name, index)| {
+        (runtime_project_name_hash(name) == name_hash).then_some(*index)
+    });
+    let Some(property_index) = matches.next() else {
+        return Ok(None);
+    };
+    if matches.next().is_some() {
+        return Err(RuntimeProjectNameAmbiguity);
+    }
+    Ok(Some(property_index))
+}
+
+fn runtime_owned_view_model_property_index_by_project_name(
+    property_names: &[(String, usize)],
+    property_name: &str,
+) -> Result<Option<usize>, RuntimeProjectNameAmbiguity> {
+    let mut matches = property_names
+        .iter()
+        .filter_map(|(name, index)| (name == property_name).then_some(*index));
+    let Some(property_index) = matches.next() else {
+        return Ok(None);
+    };
+    if matches.next().is_some() {
+        return Err(RuntimeProjectNameAmbiguity);
+    }
+    Ok(Some(property_index))
 }
 
 fn runtime_owned_view_model_property_names(
@@ -6077,9 +6158,55 @@ fn runtime_owned_view_model_property_children(
         .collect()
 }
 
+fn runtime_owned_list_matches_string_boolean_handle(
+    list: &RuntimeOwnedViewModelListValue,
+    handle: &RuntimeOwnedViewModelListStringMatchBooleanHandle,
+) -> bool {
+    !list.items.is_empty()
+        && list.items.iter().all(|item| {
+            let item = item.instance.borrow();
+            item.view_model_index == handle.item_view_model_index
+                && item
+                    .strings
+                    .iter()
+                    .any(|value| value.property_index == handle.string_property_index)
+                && item
+                    .booleans
+                    .iter()
+                    .any(|value| value.property_index == handle.boolean_property_index)
+        })
+}
+
 impl RuntimeOwnedViewModelInstance {
     pub fn view_model_index(&self) -> usize {
         self.view_model_index
+    }
+
+    fn unique_typed_property_index_by_name(
+        &self,
+        property_name: &str,
+        kind: RuntimeOwnedViewModelPropertyKind,
+    ) -> Option<usize> {
+        let mut matches = self
+            .property_names
+            .iter()
+            .filter(|(name, _)| name == property_name)
+            .map(|(_, property_index)| *property_index);
+        let property_index = matches.next()?;
+        if matches.next().is_some() {
+            return None;
+        }
+        let has_kind = match kind {
+            RuntimeOwnedViewModelPropertyKind::String => self
+                .strings
+                .iter()
+                .any(|value| value.property_index == property_index),
+            RuntimeOwnedViewModelPropertyKind::Boolean => self
+                .booleans
+                .iter()
+                .any(|value| value.property_index == property_index),
+        };
+        has_kind.then_some(property_index)
     }
 
     pub fn number_value_by_property_name(&self, property_name: &str) -> Option<f32> {
@@ -6340,6 +6467,83 @@ impl RuntimeOwnedViewModelInstance {
         let view_model = file.view_model(view_model_index)?;
         let instance = view_model.instances.into_iter().nth(instance_index)?;
         Self::from_view_model(file, view_model_index, Some(instance.object))
+    }
+
+    /// Instantiate one serialized default as a fully owned mutable tree.
+    ///
+    /// Unlike [`Self::from_instance`], child ViewModel pointers are detached
+    /// into generated owned contexts while preserving every serialized scalar
+    /// and list item. This is the host-facing form used when a published `.riv`
+    /// needs hot nested writes without losing its exact authored defaults.
+    pub fn from_instance_mutable(
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance_index: usize,
+    ) -> Option<Self> {
+        let source = Self::from_instance(file, view_model_index, instance_index)?;
+        let mut target = Self::new(file, view_model_index)?;
+        target.overlay_active_instance(&source)?;
+        target.detach_list_storage();
+        target.reroot_mutation_clock();
+        Some(target)
+    }
+
+    fn overlay_active_instance(&mut self, source: &Self) -> Option<()> {
+        if self.view_model_index != source.view_model_index {
+            return None;
+        }
+        self.numbers = source.numbers.clone();
+        self.booleans = source.booleans.clone();
+        self.strings = source.strings.clone();
+        self.colors = source.colors.clone();
+        self.enums = source.enums.clone();
+        self.symbol_list_indices = source.symbol_list_indices.clone();
+        self.lists = source.lists.clone();
+        self.assets = source.assets.clone();
+        self.font_assets = source.font_assets.clone();
+        self.artboards = source.artboards.clone();
+        self.triggers = source.triggers.clone();
+        for target_child in &mut self.view_models {
+            let source_child = source
+                .view_models
+                .iter()
+                .find(|child| child.property_index == target_child.property_index)?;
+            let active = source_child.materialize_active_instance()?;
+            Self::overlay_active_child(target_child, &active)?;
+        }
+        self.mutation_generation = 0;
+        Some(())
+    }
+
+    fn overlay_active_child(
+        target: &mut RuntimeOwnedViewModelViewModel,
+        source: &Self,
+    ) -> Option<()> {
+        if !matches!(target.value, RuntimeViewModelPointer::OwnedGenerated { .. })
+            || target.referenced_view_model_index != Some(source.view_model_index)
+        {
+            return None;
+        }
+        target.numbers = source.numbers.clone();
+        target.booleans = source.booleans.clone();
+        target.strings = source.strings.clone();
+        target.colors = source.colors.clone();
+        target.enums = source.enums.clone();
+        target.symbol_list_indices = source.symbol_list_indices.clone();
+        target.lists = source.lists.clone();
+        target.assets = source.assets.clone();
+        target.font_assets = source.font_assets.clone();
+        target.artboards = source.artboards.clone();
+        target.triggers = source.triggers.clone();
+        for target_child in &mut target.children {
+            let source_child = source
+                .view_models
+                .iter()
+                .find(|child| child.property_index == target_child.property_index)?;
+            let active = source_child.materialize_active_instance()?;
+            Self::overlay_active_child(target_child, &active)?;
+        }
+        Some(())
     }
 
     pub(crate) fn from_instance_object(
@@ -6886,6 +7090,19 @@ impl RuntimeOwnedViewModelInstance {
         value: &[u8],
     ) -> bool {
         self.set_string_by_property_path(&handle.property_path, value)
+    }
+
+    pub fn can_set_string_by_source_handle(
+        &self,
+        handle: &RuntimeOwnedViewModelStringSourceHandle,
+    ) -> bool {
+        self.string_value_by_property_path(&handle.property_path)
+            .is_some()
+    }
+
+    pub fn can_set_string_by_property_index(&self, property_index: usize) -> bool {
+        self.string_value_by_property_index(property_index)
+            .is_some()
     }
 
     pub fn set_string_by_property_name_path(&mut self, property_path: &str, value: &[u8]) -> bool {
@@ -7702,12 +7919,125 @@ impl RuntimeOwnedViewModelInstance {
         Some(RuntimeOwnedViewModelListSourceHandle { property_path })
     }
 
+    /// Resolve a list-item string-equality projection to an opaque typed
+    /// handle. Every current item must have one identical model schema with
+    /// the requested string and boolean properties. Empty or heterogeneous
+    /// lists therefore fail closed instead of inventing a schema.
+    pub fn list_string_match_boolean_handle_by_property_name_path(
+        &self,
+        list_path: &str,
+        string_property_name: &str,
+        boolean_property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelListStringMatchBooleanHandle> {
+        if string_property_name.is_empty() || boolean_property_name.is_empty() {
+            return None;
+        }
+        let list_names = list_path.split('/').collect::<Vec<_>>();
+        if list_names.is_empty() || list_names.iter().any(|segment| segment.is_empty()) {
+            return None;
+        }
+        let list_property_path = self.list_property_path_by_names(&list_names)?;
+        let list = self.list_handle_by_property_path(&list_property_path)?;
+        let list = list.value.borrow();
+        let first = list.items.first()?.instance.borrow();
+        let item_view_model_index = first.view_model_index;
+        let string_property_index = first.unique_typed_property_index_by_name(
+            string_property_name,
+            RuntimeOwnedViewModelPropertyKind::String,
+        )?;
+        let boolean_property_index = first.unique_typed_property_index_by_name(
+            boolean_property_name,
+            RuntimeOwnedViewModelPropertyKind::Boolean,
+        )?;
+        if !list.items.iter().all(|item| {
+            let item = item.instance.borrow();
+            item.view_model_index == item_view_model_index
+                && item.unique_typed_property_index_by_name(
+                    string_property_name,
+                    RuntimeOwnedViewModelPropertyKind::String,
+                ) == Some(string_property_index)
+                && item.unique_typed_property_index_by_name(
+                    boolean_property_name,
+                    RuntimeOwnedViewModelPropertyKind::Boolean,
+                ) == Some(boolean_property_index)
+        }) {
+            return None;
+        }
+        Some(RuntimeOwnedViewModelListStringMatchBooleanHandle {
+            list_property_path,
+            item_view_model_index,
+            string_property_index,
+            boolean_property_index,
+        })
+    }
+
+    /// Set each item boolean to whether its typed string equals `selected`.
+    ///
+    /// The entire list is revalidated before any mutation, so a stale handle
+    /// cannot partially update a heterogeneous replacement list.
+    pub fn can_apply_list_string_match_boolean(
+        &self,
+        handle: &RuntimeOwnedViewModelListStringMatchBooleanHandle,
+    ) -> bool {
+        let Some(list) = self.list_handle_by_property_path(&handle.list_property_path) else {
+            return false;
+        };
+        runtime_owned_list_matches_string_boolean_handle(&list.value.borrow(), handle)
+    }
+
+    pub fn apply_list_string_match_boolean(
+        &mut self,
+        handle: &RuntimeOwnedViewModelListStringMatchBooleanHandle,
+        selected: &[u8],
+    ) -> Option<bool> {
+        let list = self.list_handle_by_property_path(&handle.list_property_path)?;
+        let mut list = list.value.borrow_mut();
+        if !runtime_owned_list_matches_string_boolean_handle(&list, handle) {
+            return None;
+        }
+        let mut changed = false;
+        for item in &mut list.items {
+            let mut item = item.instance.borrow_mut();
+            let matches = item
+                .string_value_by_property_index(handle.string_property_index)
+                .is_some_and(|value| value == selected);
+            let item_changed =
+                item.set_boolean_by_property_index(handle.boolean_property_index, matches);
+            if item_changed {
+                changed = true;
+            }
+        }
+        drop(list);
+        Some(self.track_mutation(changed))
+    }
+
     pub fn set_list_item_count_by_source_handle(
         &mut self,
         handle: &RuntimeOwnedViewModelListSourceHandle,
         item_count: usize,
     ) -> bool {
         self.set_list_item_count_by_property_path(&handle.property_path, item_count)
+    }
+
+    /// Replace one typed list value with already-instantiated owned item
+    /// contexts. The handle keeps property lookup out of this seam; item
+    /// contexts retain their exact imported defaults while the containing
+    /// root can remain generated and therefore mutable at nested paths.
+    pub fn replace_list_items_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelListSourceHandle,
+        items: Vec<RuntimeOwnedViewModelInstance>,
+    ) -> Option<bool> {
+        let list = self.list_handle_by_property_path(&handle.property_path)?;
+        let mut list = list.value.borrow_mut();
+        let changed = !items.is_empty() || !list.items.is_empty() || list.item_count != 0;
+        list.items = items
+            .into_iter()
+            .map(|item| RuntimeOwnedViewModelListItem::new(Rc::new(RefCell::new(item))))
+            .collect();
+        list.item_count = list.items.len();
+        drop(list);
+        Some(self.track_mutation(changed))
     }
 
     pub fn set_list_item_count_by_property_name_path(
@@ -9027,6 +9357,67 @@ impl RuntimeOwnedViewModelInstance {
         view_model.active_number_value_by_property_index(*property_index)
     }
 
+    pub(crate) fn project_relative_number_value_by_context_name_hash_path(
+        &self,
+        context_path: &[usize],
+        source_path: &[u32],
+    ) -> Result<Option<f32>, RuntimeProjectNameAmbiguity> {
+        if source_path.is_empty() {
+            return Ok(None);
+        }
+        let mut property_path = context_path.to_vec();
+        for name_hash in source_path {
+            let property_names = if property_path.is_empty() {
+                self.property_names.as_slice()
+            } else {
+                let Some(view_model) = self.view_model_by_property_path(&property_path) else {
+                    return Ok(None);
+                };
+                view_model.property_names.as_slice()
+            };
+            let Some(property_index) =
+                runtime_owned_view_model_property_index_by_project_name_hash(
+                    property_names,
+                    *name_hash,
+                )?
+            else {
+                return Ok(None);
+            };
+            property_path.push(property_index);
+        }
+        Ok(self.number_value_by_property_path(&property_path))
+    }
+
+    pub(crate) fn project_relative_number_value_by_context_name_path(
+        &self,
+        context_path: &[usize],
+        source_path: &[String],
+    ) -> Result<Option<f32>, RuntimeProjectNameAmbiguity> {
+        if source_path.is_empty() {
+            return Ok(None);
+        }
+        let mut property_path = context_path.to_vec();
+        for property_name in source_path {
+            let property_names = if property_path.is_empty() {
+                self.property_names.as_slice()
+            } else {
+                let Some(view_model) = self.view_model_by_property_path(&property_path) else {
+                    return Ok(None);
+                };
+                view_model.property_names.as_slice()
+            };
+            let Some(property_index) = runtime_owned_view_model_property_index_by_project_name(
+                property_names,
+                property_name,
+            )?
+            else {
+                return Ok(None);
+            };
+            property_path.push(property_index);
+        }
+        Ok(self.number_value_by_property_path(&property_path))
+    }
+
     pub(crate) fn number_value_by_context_source_path(
         &self,
         file: &RuntimeFile,
@@ -9677,6 +10068,96 @@ impl<'a> RuntimeDataContext<'a> {
         let chain = self.instance_chain();
         self.file
             .data_context_relative_view_model_property_for_instance_chain(&chain, path)
+    }
+
+    /// Resolve legacy ProjectDO relative paths whose ids are FNV-1a hashes of
+    /// UTF-8 property names rather than Rive manifest-name ordinals.
+    ///
+    /// A hash that names more than one property is deliberately unresolved:
+    /// hash-only input cannot safely recover the original property identity.
+    pub(crate) fn project_relative_property_by_name_hash_path(
+        &self,
+        path: &[u32],
+    ) -> Option<&'a RuntimeObject> {
+        self.project_relative_property_by_name_segments(path, |name_hash, name| {
+            runtime_project_name_hash(name) == *name_hash
+        })
+    }
+
+    /// Resolve ProjectDO relative paths by their exact UTF-8 property names.
+    pub(crate) fn project_relative_property_by_name_path(
+        &self,
+        path: &[String],
+    ) -> Option<&'a RuntimeObject> {
+        self.project_relative_property_by_name_segments(path, |property_name, name| {
+            property_name == name
+        })
+    }
+
+    fn project_relative_property_by_name_segments<T>(
+        &self,
+        path: &[T],
+        matches_name: impl Fn(&T, &str) -> bool,
+    ) -> Option<&'a RuntimeObject> {
+        if path.is_empty() {
+            return None;
+        }
+        for candidate in self.instance_chain() {
+            let mut instance = candidate;
+            let mut failed = false;
+            for (index, segment) in path.iter().enumerate() {
+                let view_model_index = instance
+                    .uint_property("viewModelId")
+                    .and_then(|value| usize::try_from(value).ok());
+                let Some(view_model) =
+                    view_model_index.and_then(|index| self.file.view_model(index))
+                else {
+                    failed = true;
+                    break;
+                };
+                let mut matches = view_model.properties.iter().enumerate().filter_map(
+                    |(property_index, property)| {
+                        property
+                            .string_property("name")
+                            .is_some_and(|name| matches_name(segment, name))
+                            .then_some(property_index)
+                    },
+                );
+                let Some(property_index) = matches.next() else {
+                    failed = true;
+                    break;
+                };
+                if matches.next().is_some() {
+                    return None;
+                }
+                let Some(property_index) = u32::try_from(property_index).ok() else {
+                    failed = true;
+                    break;
+                };
+                let Some(value) = self
+                    .file
+                    .view_model_instance_value_for_property_id_object(instance, property_index)
+                else {
+                    failed = true;
+                    break;
+                };
+                if path.get(index.saturating_add(1)).is_none() {
+                    return Some(value);
+                }
+                let Some(reference) = self
+                    .file
+                    .referenced_view_model_instance_for_value_object(value)
+                else {
+                    failed = true;
+                    break;
+                };
+                instance = reference.object;
+            }
+            if !failed {
+                return None;
+            }
+        }
+        None
     }
 
     pub fn relative_property_ref(&self, path: &[u32]) -> Option<RuntimeDataContextValueRef> {
@@ -10407,6 +10888,105 @@ mod owned_context_tests {
         .expect("nested trigger fixture imports")
     }
 
+    fn mutable_list_default_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Root".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyList",
+                vec![property(
+                    "ViewModelPropertyList",
+                    "name",
+                    AuthoringValue::String("items".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Item".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("value".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![
+                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
+                    property(
+                        "ViewModelInstance",
+                        "name",
+                        AuthoringValue::String("Root Default".to_owned()),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelInstanceList",
+                vec![property(
+                    "ViewModelInstanceList",
+                    "viewModelPropertyId",
+                    AuthoringValue::Uint(0),
+                )],
+            ),
+            record(
+                "ViewModelInstance",
+                vec![
+                    property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(1)),
+                    property(
+                        "ViewModelInstance",
+                        "name",
+                        AuthoringValue::String("Item Default".to_owned()),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelInstanceNumber",
+                vec![
+                    property(
+                        "ViewModelInstanceNumber",
+                        "viewModelPropertyId",
+                        AuthoringValue::Uint(0),
+                    ),
+                    property(
+                        "ViewModelInstanceNumber",
+                        "propertyValue",
+                        AuthoringValue::Double(10.0),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelInstanceListItem",
+                vec![
+                    property(
+                        "ViewModelInstanceListItem",
+                        "viewModelId",
+                        AuthoringValue::Uint(1),
+                    ),
+                    property(
+                        "ViewModelInstanceListItem",
+                        "viewModelInstanceId",
+                        AuthoringValue::Uint(0),
+                    ),
+                ],
+            ),
+        ])
+        .expect("mutable list default fixture imports")
+    }
+
     #[test]
     fn generated_artboard_property_starts_unassigned() {
         let file = RuntimeFile::from_authoring_records(vec![
@@ -10745,6 +11325,50 @@ mod owned_context_tests {
         assert!(detached.set_number_by_property_name("value", 43.0));
         assert!(detached.mutation_generation() > source_generation);
         assert_eq!(source.mutation_generation(), source_generation);
+    }
+
+    #[test]
+    fn mutable_imported_list_items_invalidate_the_root_binding_generation() {
+        let file = mutable_list_default_fixture();
+        let target = RuntimeOwnedViewModelInstance::from_instance_mutable(&file, 0, 0)
+            .expect("mutable imported root instance");
+        let list_source = target
+            .list_source_handle_by_property_name("items")
+            .expect("root list source");
+        let list = target
+            .list_handle_by_property_path(list_source.path())
+            .expect("mutable imported list");
+        let row = list
+            .item_entries()
+            .into_iter()
+            .next()
+            .expect("imported list row");
+        let occurrence_identity = row.occurrence_identity;
+        let bound_generation = target.mutation_generation();
+
+        assert!(
+            row.instance
+                .borrow_mut()
+                .set_number_by_property_name("value", 42.0)
+        );
+
+        assert!(
+            target.mutation_generation() > bound_generation,
+            "a copied-default row mutation must invalidate the root binding key"
+        );
+        let refreshed = list
+            .item_entries()
+            .into_iter()
+            .next()
+            .expect("refreshed list row");
+        assert_eq!(refreshed.occurrence_identity, occurrence_identity);
+        assert_eq!(
+            refreshed
+                .instance
+                .borrow()
+                .number_value_by_property_name("value"),
+            Some(42.0)
+        );
     }
 
     #[test]

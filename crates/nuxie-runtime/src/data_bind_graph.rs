@@ -1,12 +1,21 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 
 use crate::draw::color_lerp;
+use crate::project_data_converter::{
+    PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS, project_data_converter_bounded_list_length,
+};
 use crate::scripting::{RuntimeScriptInstanceHandle, ScriptDataConverterMethod};
 use crate::view_model::RuntimeFontAssetValue;
 use crate::{
-    RuntimeDataContext, RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelContext,
+    ProjectDataConverterContext, ProjectDataConverterOutputType, ProjectDataConverterProgram,
+    ProjectDataConverterResolver, ProjectDataConverterState, ProjectDataValue,
+    ProjectDataValuePath, ProjectDataViewModelReference, RuntimeDataContext,
+    RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelContext,
     RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeStateMachine,
     RuntimeTransitionInterpolator, RuntimeViewModelPointer, ScriptValue,
     StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
@@ -216,6 +225,12 @@ pub(crate) enum RuntimeDataBindGraphConverter {
         global_id: u32,
         instance: Option<RuntimeScriptInstanceHandle>,
     },
+    Project {
+        global_id: u32,
+        program: Arc<ProjectDataConverterProgram>,
+        resolved_values: Vec<(ProjectDataValuePath, ProjectDataValue)>,
+        default_resolved_values: Vec<(ProjectDataValuePath, ProjectDataValue)>,
+    },
     BooleanNegate,
     TriggerIncrement,
     ToNumber,
@@ -301,6 +316,10 @@ pub(crate) fn runtime_data_bind_graph_converter_contains_global_id(
             global_id: candidate,
             ..
         }
+        | RuntimeDataBindGraphConverter::Project {
+            global_id: candidate,
+            ..
+        }
         | RuntimeDataBindGraphConverter::NumberToList {
             global_id: candidate,
             ..
@@ -371,6 +390,11 @@ impl RuntimeDataBindGraphConverter {
             // topology. Its authored input type does not constrain the value
             // its script will return.
             Self::Scripted { .. } => true,
+            // Project converters can depend on the mounted data context. The
+            // context is not hydrated while static property bindings are
+            // built, so a failed conversion of the serialized default does
+            // not disprove the program's declared (or inferred) output type.
+            Self::Project { program, .. } => program.output_type().is_some(),
             Self::Group(converters) => converters.iter().any(Self::can_change_output_kind),
             _ => false,
         }
@@ -689,6 +713,9 @@ impl RuntimeDataBindGraphConverter {
             RuntimeDataBindGraphConverter::NumberToList { view_model_id, .. } => {
                 Some(*view_model_id)
             }
+            RuntimeDataBindGraphConverter::Project { program, .. } => program
+                .number_to_list_output_view_model_index()
+                .and_then(|view_model_id| u64::try_from(view_model_id).ok()),
             RuntimeDataBindGraphConverter::Group(converters) => converters
                 .iter()
                 .find_map(RuntimeDataBindGraphConverter::number_to_list_view_model_id),
@@ -703,6 +730,7 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
     match converter {
         RuntimeDataBindGraphConverter::PassThrough
         | RuntimeDataBindGraphConverter::Scripted { .. }
+        | RuntimeDataBindGraphConverter::Project { .. }
         | RuntimeDataBindGraphConverter::BooleanNegate
         | RuntimeDataBindGraphConverter::TriggerIncrement
         | RuntimeDataBindGraphConverter::ToNumber
@@ -1238,6 +1266,15 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_number_conver
             *default_operation_value = value;
             true
         }
+        RuntimeDataBindGraphConverter::Project {
+            resolved_values,
+            default_resolved_values,
+            ..
+        } => {
+            let value = ProjectDataValue::Number(f64::from(value));
+            update_runtime_project_resolved_value(resolved_values, path, &value)
+                | update_runtime_project_resolved_value(default_resolved_values, path, &value)
+        }
         RuntimeDataBindGraphConverter::Group(converters) => {
             let mut changed = false;
             for converter in converters {
@@ -1266,6 +1303,13 @@ fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_imp
             *operation_value = value;
             true
         }
+        RuntimeDataBindGraphConverter::Project {
+            resolved_values, ..
+        } => update_runtime_project_resolved_value(
+            resolved_values,
+            path,
+            &ProjectDataValue::Number(f64::from(value)),
+        ),
         RuntimeDataBindGraphConverter::Group(converters) => {
             let mut changed = false;
             for converter in converters {
@@ -1291,6 +1335,14 @@ fn runtime_data_bind_graph_reset_operation_view_model_converter_to_default(
             *operation_value = *default_operation_value;
             true
         }
+        RuntimeDataBindGraphConverter::Project {
+            resolved_values,
+            default_resolved_values,
+            ..
+        } if resolved_values != default_resolved_values => {
+            resolved_values.clone_from(default_resolved_values);
+            true
+        }
         RuntimeDataBindGraphConverter::Group(converters) => {
             let mut changed = false;
             for converter in converters {
@@ -1304,7 +1356,7 @@ fn runtime_data_bind_graph_reset_operation_view_model_converter_to_default(
     }
 }
 
-fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_context(
+pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_context(
     file: &RuntimeFile,
     converter: &mut RuntimeDataBindGraphConverter,
     context: &RuntimeDataContext<'_>,
@@ -1325,6 +1377,16 @@ fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_c
             *operation_value = value;
             true
         }
+        RuntimeDataBindGraphConverter::Project {
+            program,
+            resolved_values,
+            ..
+        } => refresh_runtime_project_resolved_values_for_imported_context(
+            file,
+            program,
+            resolved_values,
+            context,
+        ),
         RuntimeDataBindGraphConverter::Group(converters) => {
             let mut changed = false;
             for converter in converters {
@@ -1342,6 +1404,7 @@ fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_c
 pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
     converter: &mut RuntimeDataBindGraphConverter,
     context: &RuntimeOwnedViewModelInstance,
+    context_chain: &[&[usize]],
 ) -> bool {
     match converter {
         RuntimeDataBindGraphConverter::OperationViewModel {
@@ -1357,12 +1420,22 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
             *operation_value = value;
             true
         }
+        RuntimeDataBindGraphConverter::Project {
+            program,
+            resolved_values,
+            ..
+        } => refresh_runtime_project_resolved_values_for_owned_context(
+            program,
+            resolved_values,
+            context,
+            context_chain,
+        ),
         RuntimeDataBindGraphConverter::Group(converters) => {
             let mut changed = false;
             for converter in converters {
                 changed |=
                     runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
-                        converter, context,
+                        converter, context, context_chain,
                     );
             }
             changed
@@ -1441,6 +1514,74 @@ fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_cont
         ),
         _ => false,
     }
+}
+
+fn update_runtime_project_resolved_value(
+    resolved_values: &mut Vec<(ProjectDataValuePath, ProjectDataValue)>,
+    path: &[u32],
+    value: &ProjectDataValue,
+) -> bool {
+    let Some((_, current)) = resolved_values.iter_mut().find(|(candidate, _)| {
+        runtime_project_data_value_path(candidate)
+            .is_some_and(|candidate| candidate.matches_absolute_ids(path))
+    }) else {
+        return false;
+    };
+    if current == value {
+        return false;
+    }
+    current.clone_from(value);
+    true
+}
+
+fn refresh_runtime_project_resolved_values_for_imported_context(
+    file: &RuntimeFile,
+    program: &ProjectDataConverterProgram,
+    resolved_values: &mut Vec<(ProjectDataValuePath, ProjectDataValue)>,
+    context: &RuntimeDataContext<'_>,
+) -> bool {
+    let mut next = Vec::new();
+    for path in program.value_paths() {
+        let Some(source_path) = runtime_project_data_value_path(&path) else {
+            continue;
+        };
+        let source = source_path.imported_property(context);
+        let Some(value) =
+            source.and_then(|source| file.view_model_instance_number_value_for_object(source))
+        else {
+            continue;
+        };
+        next.push((path, ProjectDataValue::Number(f64::from(value))));
+    }
+    if *resolved_values == next {
+        return false;
+    }
+    *resolved_values = next;
+    true
+}
+
+fn refresh_runtime_project_resolved_values_for_owned_context(
+    program: &ProjectDataConverterProgram,
+    resolved_values: &mut Vec<(ProjectDataValuePath, ProjectDataValue)>,
+    context: &RuntimeOwnedViewModelInstance,
+    context_chain: &[&[usize]],
+) -> bool {
+    let mut next = Vec::new();
+    for path in program.value_paths() {
+        let Some(source_path) = runtime_project_data_value_path(&path) else {
+            continue;
+        };
+        let value = source_path.owned_number_value(context, context_chain);
+        let Some(value) = value else {
+            continue;
+        };
+        next.push((path, ProjectDataValue::Number(f64::from(value))));
+    }
+    if *resolved_values == next {
+        return false;
+    }
+    *resolved_values = next;
+    true
 }
 
 fn runtime_owned_view_model_number_value_for_source_path(
@@ -1582,6 +1723,290 @@ fn runtime_data_bind_graph_scripted_convert(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RuntimeProjectDataBridgeError {
+    ArtboardHasNoProjectRepresentation,
+    NullHasNoRiveRepresentation,
+    ObjectHasNoRiveRepresentation,
+    RuntimeExecutionFailed,
+    ReverseConversionUnsupported,
+    OutputTypeMismatch {
+        output: Option<ProjectDataConverterOutputType>,
+        value: &'static str,
+    },
+}
+
+fn runtime_data_bind_graph_value_to_project(
+    value: &RuntimeDataBindGraphValue,
+) -> Result<ProjectDataValue, RuntimeProjectDataBridgeError> {
+    match value {
+        RuntimeDataBindGraphValue::Number(value) => Ok(ProjectDataValue::Number(f64::from(*value))),
+        RuntimeDataBindGraphValue::Boolean(value) => Ok(ProjectDataValue::Boolean(*value)),
+        RuntimeDataBindGraphValue::String(value) => Ok(ProjectDataValue::String(
+            String::from_utf8_lossy(value).into_owned(),
+        )),
+        RuntimeDataBindGraphValue::Color(value) => Ok(ProjectDataValue::Color(*value)),
+        RuntimeDataBindGraphValue::Enum(value) => Ok(ProjectDataValue::Enum(*value)),
+        RuntimeDataBindGraphValue::SymbolListIndex(value) => {
+            Ok(ProjectDataValue::ListIndex(*value))
+        }
+        RuntimeDataBindGraphValue::Trigger(value) => Ok(ProjectDataValue::Trigger(*value)),
+        RuntimeDataBindGraphValue::List { item_count }
+        | RuntimeDataBindGraphValue::ListLength(item_count) => {
+            let item_count = (*item_count).min(PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS);
+            Ok(ProjectDataValue::List(
+                std::iter::repeat_n(ProjectDataValue::Null, item_count).collect(),
+            ))
+        }
+        RuntimeDataBindGraphValue::Asset(value) => Ok(ProjectDataValue::Image(*value)),
+        RuntimeDataBindGraphValue::ViewModel(value) => Ok(ProjectDataValue::ViewModel(
+            project_view_model_reference_from_runtime(*value),
+        )),
+        RuntimeDataBindGraphValue::Artboard(_) => {
+            Err(RuntimeProjectDataBridgeError::ArtboardHasNoProjectRepresentation)
+        }
+    }
+}
+
+fn project_data_value_to_runtime(
+    value: ProjectDataValue,
+    output: Option<ProjectDataConverterOutputType>,
+) -> Result<RuntimeDataBindGraphValue, RuntimeProjectDataBridgeError> {
+    match output {
+        Some(ProjectDataConverterOutputType::String) => match value {
+            ProjectDataValue::String(value) => {
+                Ok(RuntimeDataBindGraphValue::String(value.into_bytes()))
+            }
+            value => Err(project_output_mismatch(output, &value)),
+        },
+        Some(ProjectDataConverterOutputType::Number) => match value {
+            ProjectDataValue::Number(value) => Ok(RuntimeDataBindGraphValue::Number(value as f32)),
+            value => Err(project_output_mismatch(output, &value)),
+        },
+        Some(ProjectDataConverterOutputType::Boolean) => match value {
+            ProjectDataValue::Boolean(value) => Ok(RuntimeDataBindGraphValue::Boolean(value)),
+            value => Err(project_output_mismatch(output, &value)),
+        },
+        Some(ProjectDataConverterOutputType::Color) => project_data_value_to_u64(&value)
+            .and_then(|value| u32::try_from(value).ok())
+            .map(RuntimeDataBindGraphValue::Color)
+            .ok_or_else(|| project_output_mismatch(output, &value)),
+        Some(ProjectDataConverterOutputType::Enum) => project_data_value_to_u64(&value)
+            .map(RuntimeDataBindGraphValue::Enum)
+            .ok_or_else(|| project_output_mismatch(output, &value)),
+        Some(ProjectDataConverterOutputType::ListIndex) => project_data_value_to_u64(&value)
+            .map(RuntimeDataBindGraphValue::SymbolListIndex)
+            .ok_or_else(|| project_output_mismatch(output, &value)),
+        Some(ProjectDataConverterOutputType::Trigger) => project_data_value_to_u64(&value)
+            .map(RuntimeDataBindGraphValue::Trigger)
+            .ok_or_else(|| project_output_mismatch(output, &value)),
+        Some(ProjectDataConverterOutputType::List) => match value {
+            ProjectDataValue::List(items) => Ok(RuntimeDataBindGraphValue::List {
+                item_count: items.len(),
+            }),
+            value => Err(project_output_mismatch(output, &value)),
+        },
+        Some(ProjectDataConverterOutputType::Image) => match value {
+            ProjectDataValue::Image(value) => Ok(RuntimeDataBindGraphValue::Asset(value)),
+            value => Err(project_output_mismatch(output, &value)),
+        },
+        Some(ProjectDataConverterOutputType::ViewModel) => match value {
+            ProjectDataValue::ViewModel(value) => Ok(RuntimeDataBindGraphValue::ViewModel(
+                runtime_view_model_pointer_from_project(value),
+            )),
+            value => Err(project_output_mismatch(output, &value)),
+        },
+        Some(ProjectDataConverterOutputType::Object) => {
+            Err(RuntimeProjectDataBridgeError::ObjectHasNoRiveRepresentation)
+        }
+        None => match value {
+            ProjectDataValue::Null => {
+                Err(RuntimeProjectDataBridgeError::NullHasNoRiveRepresentation)
+            }
+            ProjectDataValue::Boolean(value) => Ok(RuntimeDataBindGraphValue::Boolean(value)),
+            ProjectDataValue::Number(value) => Ok(RuntimeDataBindGraphValue::Number(value as f32)),
+            ProjectDataValue::String(value) => {
+                Ok(RuntimeDataBindGraphValue::String(value.into_bytes()))
+            }
+            ProjectDataValue::List(items) => Ok(RuntimeDataBindGraphValue::List {
+                item_count: items.len(),
+            }),
+            ProjectDataValue::Object(_) => {
+                Err(RuntimeProjectDataBridgeError::ObjectHasNoRiveRepresentation)
+            }
+            ProjectDataValue::Color(value) => Ok(RuntimeDataBindGraphValue::Color(value)),
+            ProjectDataValue::Enum(value) => Ok(RuntimeDataBindGraphValue::Enum(value)),
+            ProjectDataValue::ListIndex(value) => {
+                Ok(RuntimeDataBindGraphValue::SymbolListIndex(value))
+            }
+            ProjectDataValue::Trigger(value) => Ok(RuntimeDataBindGraphValue::Trigger(value)),
+            ProjectDataValue::Image(value) => Ok(RuntimeDataBindGraphValue::Asset(value)),
+            ProjectDataValue::ViewModel(value) => Ok(RuntimeDataBindGraphValue::ViewModel(
+                runtime_view_model_pointer_from_project(value),
+            )),
+        },
+    }
+}
+
+fn project_data_value_to_u64(value: &ProjectDataValue) -> Option<u64> {
+    match value {
+        ProjectDataValue::Color(value) => Some(u64::from(*value)),
+        ProjectDataValue::Enum(value)
+        | ProjectDataValue::ListIndex(value)
+        | ProjectDataValue::Trigger(value) => Some(*value),
+        ProjectDataValue::Number(value)
+            if value.is_finite() && *value >= 0.0 && value.fract() == 0.0 =>
+        {
+            let converted = *value as u64;
+            ((converted as f64) == *value).then_some(converted)
+        }
+        _ => None,
+    }
+}
+
+fn project_output_mismatch(
+    output: Option<ProjectDataConverterOutputType>,
+    value: &ProjectDataValue,
+) -> RuntimeProjectDataBridgeError {
+    RuntimeProjectDataBridgeError::OutputTypeMismatch {
+        output,
+        value: project_data_value_kind(value),
+    }
+}
+
+fn project_data_value_kind(value: &ProjectDataValue) -> &'static str {
+    match value {
+        ProjectDataValue::Null => "null",
+        ProjectDataValue::Boolean(_) => "boolean",
+        ProjectDataValue::Number(_) => "number",
+        ProjectDataValue::String(_) => "string",
+        ProjectDataValue::List(_) => "list",
+        ProjectDataValue::Object(_) => "object",
+        ProjectDataValue::Color(_) => "color",
+        ProjectDataValue::Enum(_) => "enum",
+        ProjectDataValue::ListIndex(_) => "list_index",
+        ProjectDataValue::Trigger(_) => "trigger",
+        ProjectDataValue::Image(_) => "image",
+        ProjectDataValue::ViewModel(_) => "view_model",
+    }
+}
+
+fn project_view_model_reference_from_runtime(
+    value: RuntimeViewModelPointer,
+) -> ProjectDataViewModelReference {
+    match value {
+        RuntimeViewModelPointer::Null => ProjectDataViewModelReference::Null,
+        RuntimeViewModelPointer::DataContextRoot => ProjectDataViewModelReference::DataContextRoot,
+        RuntimeViewModelPointer::OwnedGenerated {
+            view_model_index,
+            property_index,
+            path_key,
+        } => ProjectDataViewModelReference::OwnedGenerated {
+            view_model_index,
+            property_index,
+            path_key,
+        },
+        RuntimeViewModelPointer::Imported { object_id } => {
+            ProjectDataViewModelReference::Imported { object_id }
+        }
+    }
+}
+
+fn runtime_view_model_pointer_from_project(
+    value: ProjectDataViewModelReference,
+) -> RuntimeViewModelPointer {
+    match value {
+        ProjectDataViewModelReference::Null => RuntimeViewModelPointer::Null,
+        ProjectDataViewModelReference::DataContextRoot => RuntimeViewModelPointer::DataContextRoot,
+        ProjectDataViewModelReference::OwnedGenerated {
+            view_model_index,
+            property_index,
+            path_key,
+        } => RuntimeViewModelPointer::OwnedGenerated {
+            view_model_index,
+            property_index,
+            path_key,
+        },
+        ProjectDataViewModelReference::Imported { object_id } => {
+            RuntimeViewModelPointer::Imported { object_id }
+        }
+    }
+}
+
+struct RuntimeProjectDataConverterResolver<'a> {
+    values: &'a [(ProjectDataValuePath, ProjectDataValue)],
+    program: &'a ProjectDataConverterProgram,
+}
+
+impl ProjectDataConverterResolver for RuntimeProjectDataConverterResolver<'_> {
+    fn resolve_value(&mut self, path: &ProjectDataValuePath) -> Option<ProjectDataValue> {
+        self.values
+            .iter()
+            .find_map(|(candidate, value)| (candidate == path).then(|| value.clone()))
+    }
+
+    fn create_blank_view_model_instance(
+        &mut self,
+        view_model_id: &str,
+    ) -> Option<ProjectDataValue> {
+        self.program
+            .runtime_view_model_index(view_model_id)
+            .map(|_| ProjectDataValue::Object(BTreeMap::new()))
+    }
+}
+
+fn runtime_data_bind_graph_project_convert(
+    program: &ProjectDataConverterProgram,
+    state: &mut ProjectDataConverterState,
+    now_ms: f64,
+    resolved_values: &[(ProjectDataValuePath, ProjectDataValue)],
+    value: &RuntimeDataBindGraphValue,
+    reverse: bool,
+) -> Option<RuntimeDataBindGraphValue> {
+    runtime_data_bind_graph_project_convert_result(
+        program,
+        state,
+        now_ms,
+        resolved_values,
+        value,
+        reverse,
+    )
+    .ok()
+}
+
+fn runtime_data_bind_graph_project_convert_result(
+    program: &ProjectDataConverterProgram,
+    state: &mut ProjectDataConverterState,
+    now_ms: f64,
+    resolved_values: &[(ProjectDataValuePath, ProjectDataValue)],
+    value: &RuntimeDataBindGraphValue,
+    reverse: bool,
+) -> Result<RuntimeDataBindGraphValue, RuntimeProjectDataBridgeError> {
+    let value = runtime_data_bind_graph_value_to_project(value)?;
+    let mut resolver = RuntimeProjectDataConverterResolver {
+        values: resolved_values,
+        program,
+    };
+    let mut context = ProjectDataConverterContext {
+        now_ms: Some(now_ms),
+        resolver: Some(&mut resolver),
+    };
+    let value = if reverse {
+        let result = program
+            .reverse_convert(state, value, &mut context)
+            .map_err(|_| RuntimeProjectDataBridgeError::RuntimeExecutionFailed)?;
+        if !result.ok {
+            return Err(RuntimeProjectDataBridgeError::ReverseConversionUnsupported);
+        }
+        result.value
+    } else {
+        program
+            .convert(state, value, &mut context)
+            .map_err(|_| RuntimeProjectDataBridgeError::RuntimeExecutionFailed)?
+    };
+    project_data_value_to_runtime(value, program.output_type())
+}
+
 pub(crate) fn runtime_data_bind_graph_convert_value(
     converter: &RuntimeDataBindGraphConverter,
     value: &RuntimeDataBindGraphValue,
@@ -1601,6 +2026,21 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             instance,
             ScriptDataConverterMethod::Convert,
             value,
+        ),
+        (
+            RuntimeDataBindGraphConverter::Project {
+                program,
+                resolved_values,
+                ..
+            },
+            value,
+        ) => runtime_data_bind_graph_project_convert(
+            program,
+            &mut ProjectDataConverterState::default(),
+            0.0,
+            resolved_values,
+            value,
+            false,
         ),
         (
             RuntimeDataBindGraphConverter::BooleanNegate,
@@ -1669,7 +2109,7 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
                 .ok()
                 .is_some_and(|index| index < *view_model_count)
             {
-                value.floor().max(0.0) as usize
+                project_data_converter_bounded_list_length(f64::from(*value))
             } else {
                 0
             },
@@ -1914,6 +2354,21 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
             instance,
             ScriptDataConverterMethod::ReverseConvert,
             value,
+        ),
+        (
+            RuntimeDataBindGraphConverter::Project {
+                program,
+                resolved_values,
+                ..
+            },
+            value,
+        ) => runtime_data_bind_graph_project_convert(
+            program,
+            &mut ProjectDataConverterState::default(),
+            0.0,
+            resolved_values,
+            value,
+            true,
         ),
         (
             RuntimeDataBindGraphConverter::BooleanNegate,
@@ -2435,9 +2890,25 @@ pub(crate) fn runtime_data_bind_graph_converter(
     file: &RuntimeFile,
     data_bind: &RuntimeObject,
 ) -> Option<RuntimeDataBindGraphConverter> {
+    let mut cache = RuntimeDataBindGraphConverterBuildCache::default();
+    runtime_data_bind_graph_converter_with_cache(file, data_bind, &mut cache)
+}
+
+pub(crate) fn runtime_data_bind_graph_converter_with_cache<'a>(
+    file: &'a RuntimeFile,
+    data_bind: &RuntimeObject,
+    cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
+) -> Option<RuntimeDataBindGraphConverter> {
     let converter = file.resolved_data_converter_for_data_bind_object(data_bind)?;
     let flags = data_bind.uint_property("flags").unwrap_or(0);
-    runtime_data_bind_graph_converter_for_object(file, converter, &mut BTreeSet::new(), true, flags)
+    runtime_data_bind_graph_converter_for_object(
+        file,
+        converter,
+        &mut BTreeSet::new(),
+        true,
+        flags,
+        cache,
+    )
 }
 
 fn runtime_data_bind_graph_system_operation_value_converter(
@@ -2464,12 +2935,293 @@ fn runtime_data_bind_graph_system_operation_value_converter(
     }
 }
 
-fn runtime_data_bind_graph_converter_for_object(
+#[derive(Default)]
+pub(crate) struct RuntimeDataBindGraphConverterBuildCache<'a> {
+    scripting_asset_contents: Option<BTreeMap<u32, Option<&'a [u8]>>>,
+    converter_assets: BTreeMap<u32, Option<u32>>,
+    project_programs: BTreeMap<u32, Result<Option<Arc<ProjectDataConverterProgram>>, ()>>,
+    #[cfg(test)]
+    scripting_catalog_builds: usize,
+    #[cfg(test)]
+    project_program_decodes: usize,
+}
+
+impl<'a> RuntimeDataBindGraphConverterBuildCache<'a> {
+    fn project_program(
+        &mut self,
+        file: &'a RuntimeFile,
+        converter: &RuntimeObject,
+    ) -> Result<Option<Arc<ProjectDataConverterProgram>>, ()> {
+        let asset_global = match self.converter_assets.get(&converter.id) {
+            Some(asset_global) => *asset_global,
+            None => {
+                let asset_global = file
+                    .resolved_file_asset_for_referencer(converter)
+                    .map(|asset| asset.id);
+                self.converter_assets.insert(converter.id, asset_global);
+                asset_global
+            }
+        };
+        let Some(asset_global) = asset_global else {
+            return Ok(None);
+        };
+        if let Some(program) = self.project_programs.get(&asset_global) {
+            return program.clone();
+        }
+
+        let asset_contents = self.scripting_asset_contents.get_or_insert_with(|| {
+            #[cfg(test)]
+            {
+                self.scripting_catalog_builds += 1;
+            }
+            file.scripting_file_assets_with_contents()
+                .into_iter()
+                .map(|entry| (entry.asset.id, entry.contents))
+                .collect()
+        });
+        let result = match asset_contents.get(&asset_global).copied().flatten() {
+            Some(bytes) => {
+                #[cfg(test)]
+                {
+                    self.project_program_decodes += 1;
+                }
+                ProjectDataConverterProgram::decode(bytes)
+                    .map(|program| program.map(Arc::new))
+                    .map_err(|_| ())
+            }
+            None => Ok(None),
+        };
+        self.project_programs.insert(asset_global, result.clone());
+        result
+    }
+}
+
+fn runtime_project_data_converter_program<'a>(
+    file: &'a RuntimeFile,
+    converter: &RuntimeObject,
+    cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
+) -> Result<Option<Arc<ProjectDataConverterProgram>>, ()> {
+    cache.project_program(file, converter)
+}
+
+enum RuntimeProjectDataValuePathSegments {
+    Ids(Vec<u32>),
+    Names(Vec<String>),
+}
+
+struct RuntimeProjectDataValuePath {
+    segments: RuntimeProjectDataValuePathSegments,
+    is_relative: bool,
+}
+
+impl RuntimeProjectDataValuePath {
+    fn matches_absolute_ids(&self, path: &[u32]) -> bool {
+        !self.is_relative
+            && matches!(
+                &self.segments,
+                RuntimeProjectDataValuePathSegments::Ids(ids) if ids.as_slice() == path
+            )
+    }
+
+    fn imported_property<'a>(&self, context: &RuntimeDataContext<'a>) -> Option<&'a RuntimeObject> {
+        match (&self.segments, self.is_relative) {
+            (RuntimeProjectDataValuePathSegments::Ids(path), true) => {
+                context.project_relative_property_by_name_hash_path(path)
+            }
+            (RuntimeProjectDataValuePathSegments::Ids(path), false) => {
+                context.absolute_property(path)
+            }
+            (RuntimeProjectDataValuePathSegments::Names(path), true) => {
+                context.project_relative_property_by_name_path(path)
+            }
+            (RuntimeProjectDataValuePathSegments::Names(_), false) => None,
+        }
+    }
+
+    fn owned_number_value(
+        &self,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[&[usize]],
+    ) -> Option<f32> {
+        match (&self.segments, self.is_relative) {
+            (RuntimeProjectDataValuePathSegments::Ids(path), true) => {
+                for context_path in context_chain {
+                    match context
+                        .project_relative_number_value_by_context_name_hash_path(context_path, path)
+                    {
+                        Ok(Some(value)) => return Some(value),
+                        Ok(None) => {}
+                        Err(_) => return None,
+                    }
+                }
+                None
+            }
+            (RuntimeProjectDataValuePathSegments::Ids(path), false) => {
+                runtime_owned_view_model_number_value_for_source_path(context, path)
+            }
+            (RuntimeProjectDataValuePathSegments::Names(path), true) => {
+                for context_path in context_chain {
+                    match context
+                        .project_relative_number_value_by_context_name_path(context_path, path)
+                    {
+                        Ok(Some(value)) => return Some(value),
+                        Ok(None) => {}
+                        Err(_) => return None,
+                    }
+                }
+                None
+            }
+            (RuntimeProjectDataValuePathSegments::Names(_), false) => None,
+        }
+    }
+}
+
+fn runtime_project_data_value_path(
+    path: &ProjectDataValuePath,
+) -> Option<RuntimeProjectDataValuePath> {
+    match path {
+        ProjectDataValuePath::Ids {
+            path_ids,
+            is_relative,
+            ..
+        } => {
+            let path = path_ids
+                .iter()
+                .map(|value| {
+                    if !value.is_finite() || value.fract() != 0.0 {
+                        return None;
+                    }
+                    u32::try_from(*value as u64)
+                        .ok()
+                        .filter(|converted| f64::from(*converted) == *value)
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some(RuntimeProjectDataValuePath {
+                segments: RuntimeProjectDataValuePathSegments::Ids(path),
+                is_relative: *is_relative,
+            })
+        }
+        ProjectDataValuePath::Path {
+            path,
+            view_model_name,
+            is_relative,
+        } if *is_relative || view_model_name.is_none() => {
+            let path = runtime_project_named_property_path(path)?;
+            Some(RuntimeProjectDataValuePath {
+                segments: RuntimeProjectDataValuePathSegments::Names(path),
+                // A name-less path inherits the active/default binding
+                // context in ProjectDO even when its serialized isRelative
+                // bit is false. Explicitly model-qualified paths are lowered
+                // to absolute Rive ordinals by Scene authoring instead.
+                is_relative: true,
+            })
+        }
+        ProjectDataValuePath::Path { .. } => None,
+    }
+}
+
+fn runtime_project_named_property_path(path: &str) -> Option<Vec<String>> {
+    let input = path.trim();
+    if input.is_empty() {
+        return None;
+    }
+    let root_end = input
+        .char_indices()
+        .find_map(|(index, character)| matches!(character, '.' | '[').then_some(index))
+        .unwrap_or(input.len());
+    let root = &input[..root_end];
+    if !matches!(root, "vm" | "values" | "paths") {
+        let names = input.split('/').map(str::to_owned).collect::<Vec<_>>();
+        return names.iter().all(|name| !name.is_empty()).then_some(names);
+    }
+
+    let mut names = Vec::new();
+    let mut index = root_end;
+    while index < input.len() {
+        let suffix = input.get(index..)?;
+        if let Some(rest) = suffix.strip_prefix('.') {
+            let end = rest
+                .char_indices()
+                .find_map(|(offset, character)| matches!(character, '.' | '[').then_some(offset))
+                .unwrap_or(rest.len());
+            if end == 0 {
+                return None;
+            }
+            names.push(rest[..end].to_owned());
+            index = index.checked_add(1 + end)?;
+            continue;
+        }
+        let rest = suffix.strip_prefix('[')?;
+        let quote = rest.chars().next()?;
+        if !matches!(quote, '\'' | '"') {
+            return None;
+        }
+        let mut name = String::new();
+        let mut escaped = false;
+        let mut closing_quote = None;
+        for (offset, character) in rest[quote.len_utf8()..].char_indices() {
+            if escaped {
+                name.push(match character {
+                    '\'' => '\'',
+                    '"' => '"',
+                    '\\' => '\\',
+                    'b' => '\u{0008}',
+                    'f' => '\u{000c}',
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    _ => return None,
+                });
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == quote {
+                closing_quote = Some(offset + quote.len_utf8());
+                break;
+            } else {
+                name.push(character);
+            }
+        }
+        let closing_quote = closing_quote?;
+        let after_quote = rest.get(quote.len_utf8() + closing_quote..)?;
+        let after_bracket = after_quote.strip_prefix(']')?;
+        if name.is_empty() {
+            return None;
+        }
+        names.push(name);
+        index = input.len().checked_sub(after_bracket.len())?;
+    }
+    (!names.is_empty()).then_some(names)
+}
+
+fn runtime_project_default_resolved_values(
     file: &RuntimeFile,
+    program: &ProjectDataConverterProgram,
+) -> Vec<(ProjectDataValuePath, ProjectDataValue)> {
+    let default_context = file
+        .view_model_default_instance(0)
+        .and_then(|instance| RuntimeDataContext::from_instance_reference(file, instance));
+    program
+        .value_paths()
+        .into_iter()
+        .filter_map(|path| {
+            let source_path = runtime_project_data_value_path(&path)?;
+            let context = default_context.as_ref()?;
+            let source = source_path.imported_property(context);
+            let value = source
+                .and_then(|source| file.view_model_instance_number_value_for_object(source))?;
+            Some((path, ProjectDataValue::Number(f64::from(value))))
+        })
+        .collect()
+}
+
+fn runtime_data_bind_graph_converter_for_object<'a>(
+    file: &'a RuntimeFile,
     converter: &RuntimeObject,
     visiting: &mut BTreeSet<u32>,
     allow_stateful_interpolator: bool,
     data_bind_flags: u64,
+    cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeDataBindGraphConverter> {
     if !visiting.insert(converter.id) {
         return Some(RuntimeDataBindGraphConverter::Unsupported);
@@ -2488,6 +3240,7 @@ fn runtime_data_bind_graph_converter_for_object(
                                 visiting,
                                 true,
                                 data_bind_flags,
+                                cache,
                             )
                         })
                         .unwrap_or(RuntimeDataBindGraphConverter::Unsupported)
@@ -2495,10 +3248,26 @@ fn runtime_data_bind_graph_converter_for_object(
                 .collect(),
         ),
         "DataConverterOperation" => RuntimeDataBindGraphConverter::PassThrough,
-        "ScriptedDataConverter" => RuntimeDataBindGraphConverter::Scripted {
-            global_id: converter.id,
-            instance: None,
-        },
+        "ScriptedDataConverter" => {
+            match runtime_project_data_converter_program(file, converter, cache) {
+                Ok(Some(program)) => {
+                    let resolved_values = runtime_project_default_resolved_values(file, &program);
+                    RuntimeDataBindGraphConverter::Project {
+                        global_id: converter.id,
+                        program,
+                        default_resolved_values: resolved_values.clone(),
+                        resolved_values,
+                    }
+                }
+                Ok(None) => RuntimeDataBindGraphConverter::Scripted {
+                    global_id: converter.id,
+                    instance: None,
+                },
+                // A payload carrying the reserved Project envelope prefix may not
+                // silently fall back to ordinary script execution or passthrough.
+                Err(()) => RuntimeDataBindGraphConverter::Unsupported,
+            }
+        }
         "DataConverterBooleanNegate" => RuntimeDataBindGraphConverter::BooleanNegate,
         "DataConverterTrigger" => RuntimeDataBindGraphConverter::TriggerIncrement,
         "DataConverterToNumber" => RuntimeDataBindGraphConverter::ToNumber,
@@ -2691,6 +3460,10 @@ pub(crate) enum RuntimeDataBindGraphConverterState {
     None,
     Formula(RuntimeDataBindGraphFormulaState),
     Interpolator(RuntimeDataBindGraphInterpolatorState),
+    Project {
+        state: ProjectDataConverterState,
+        now_ms: f64,
+    },
     Group(Vec<RuntimeDataBindGraphConverterState>),
 }
 
@@ -2703,6 +3476,10 @@ impl RuntimeDataBindGraphConverterState {
             Some(RuntimeDataBindGraphConverter::Interpolator { .. }) => {
                 Self::Interpolator(RuntimeDataBindGraphInterpolatorState::new())
             }
+            Some(RuntimeDataBindGraphConverter::Project { .. }) => Self::Project {
+                state: ProjectDataConverterState::default(),
+                now_ms: 0.0,
+            },
             Some(RuntimeDataBindGraphConverter::Group(converters)) => Self::Group(
                 converters
                     .iter()
@@ -2745,6 +3522,21 @@ impl RuntimeDataBindGraphConverterState {
                 },
                 Self::Interpolator(state),
             ) => state.convert(*duration, *interpolator, value),
+            (
+                RuntimeDataBindGraphConverter::Project {
+                    program,
+                    resolved_values,
+                    ..
+                },
+                Self::Project { state, now_ms },
+            ) => runtime_data_bind_graph_project_convert(
+                program,
+                state,
+                *now_ms,
+                resolved_values,
+                value,
+                false,
+            ),
             (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
                 if converters.len() == states.len() =>
             {
@@ -2798,6 +3590,21 @@ impl RuntimeDataBindGraphConverterState {
                 },
                 Self::Interpolator(state),
             ) => state.convert(*duration, *interpolator, value),
+            (
+                RuntimeDataBindGraphConverter::Project {
+                    program,
+                    resolved_values,
+                    ..
+                },
+                Self::Project { state, now_ms },
+            ) => runtime_data_bind_graph_project_convert(
+                program,
+                state,
+                *now_ms,
+                resolved_values,
+                value,
+                true,
+            ),
             (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
                 if converters.len() == states.len() =>
             {
@@ -2829,6 +3636,17 @@ impl RuntimeDataBindGraphConverterState {
                 }),
                 Self::Interpolator(state),
             ) => state.advance(*duration, *interpolator, elapsed_seconds),
+            (
+                Some(RuntimeDataBindGraphConverter::Project { program, .. }),
+                Self::Project { state, now_ms },
+            ) if program.is_stateful() => {
+                let was_interpolating = state.is_interpolating();
+                *now_ms += f64::from(elapsed_seconds.max(0.0)) * 1000.0;
+                RuntimeDataBindGraphStatefulAdvance {
+                    changed: was_interpolating,
+                    keep_going: was_interpolating,
+                }
+            }
             (Some(RuntimeDataBindGraphConverter::Group(converters)), Self::Group(states))
                 if converters.len() == states.len() =>
             {
@@ -2847,6 +3665,7 @@ impl RuntimeDataBindGraphConverterState {
     pub(crate) fn is_initialized_stateful(&self) -> bool {
         match self {
             Self::Interpolator(state) => state.is_initialized(),
+            Self::Project { state, .. } => state.is_interpolating(),
             Self::Group(states) => states.iter().any(Self::is_initialized_stateful),
             Self::Formula(_) | Self::None => false,
         }
@@ -2860,7 +3679,7 @@ impl RuntimeDataBindGraphConverterState {
                     state.reset_formula_randoms();
                 }
             }
-            Self::Interpolator(_) | Self::None => {}
+            Self::Interpolator(_) | Self::Project { .. } | Self::None => {}
         }
     }
 }
@@ -3814,6 +4633,7 @@ impl RuntimeDataBindGraph {
         &mut self,
         context: &RuntimeOwnedViewModelInstance,
     ) -> bool {
+        let context_chain: [&[usize]; 1] = [&[]];
         for source in &mut self.sources {
             if let Some(value) = source
                 .value
@@ -3826,7 +4646,9 @@ impl RuntimeDataBindGraph {
             }
             if let Some(converter) = source.converter.as_mut() {
                 runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
-                    converter, context,
+                    converter,
+                    context,
+                    &context_chain,
                 );
             }
             source.reset_converter_state();
@@ -3888,7 +4710,9 @@ impl RuntimeDataBindGraph {
             }
             if let Some(converter) = source.converter.as_mut() {
                 runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
-                    converter, context,
+                    converter,
+                    context,
+                    context_chain,
                 );
             }
             source.reset_converter_state();
@@ -9442,6 +10266,8 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
 mod tests {
     use super::*;
     use crate::{ScriptError, ScriptHost, ScriptInstance, ScriptMethod};
+    use nuxie_binary::read_runtime_file_with_scripting;
+    use nuxie_schema::definition_by_name;
 
     struct DoublingConverter;
 
@@ -9625,6 +10451,392 @@ mod tests {
             runtime_data_bind_graph_convert_value(&live, &input),
             Some(RuntimeDataBindGraphValue::Number(6.0)),
             "detaching the evaluator must not alter the live converter"
+        );
+    }
+
+    fn push_test_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            bytes.push(byte);
+            if value == 0 {
+                break;
+            }
+        }
+    }
+
+    fn test_property_key(type_name: &str, property_name: &str) -> u16 {
+        let definition = definition_by_name(type_name).expect("test schema definition");
+        definition
+            .properties
+            .iter()
+            .find(|property| property.name == property_name)
+            .or_else(|| {
+                definition.ancestors.iter().find_map(|ancestor| {
+                    definition_by_name(ancestor)?
+                        .properties
+                        .iter()
+                        .find(|property| property.name == property_name)
+                })
+            })
+            .expect("test schema property")
+            .key
+            .int
+    }
+
+    fn push_test_object(
+        bytes: &mut Vec<u8>,
+        type_name: &str,
+        properties: impl FnOnce(&mut Vec<u8>),
+    ) {
+        push_test_var_uint(
+            bytes,
+            u64::from(
+                definition_by_name(type_name)
+                    .expect("test schema definition")
+                    .type_key
+                    .int,
+            ),
+        );
+        properties(bytes);
+        push_test_var_uint(bytes, 0);
+    }
+
+    fn push_test_uint_property(
+        bytes: &mut Vec<u8>,
+        type_name: &str,
+        property_name: &str,
+        value: u64,
+    ) {
+        push_test_var_uint(
+            bytes,
+            u64::from(test_property_key(type_name, property_name)),
+        );
+        push_test_var_uint(bytes, value);
+    }
+
+    fn push_test_bytes_property(
+        bytes: &mut Vec<u8>,
+        type_name: &str,
+        property_name: &str,
+        value: &[u8],
+    ) {
+        push_test_var_uint(
+            bytes,
+            u64::from(test_property_key(type_name, property_name)),
+        );
+        push_test_var_uint(bytes, value.len() as u64);
+        bytes.extend_from_slice(value);
+    }
+
+    fn exact_scripted_converter_file(payload: &[u8], converter_count: usize) -> RuntimeFile {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_test_var_uint(&mut bytes, 7);
+        push_test_var_uint(&mut bytes, 0);
+        push_test_var_uint(&mut bytes, 91_001);
+        push_test_var_uint(&mut bytes, 0);
+        push_test_object(&mut bytes, "Backboard", |_| {});
+        push_test_object(&mut bytes, "ScriptAsset", |bytes| {
+            push_test_uint_property(bytes, "ScriptAsset", "assetId", 0);
+        });
+        push_test_object(&mut bytes, "FileAssetContents", |bytes| {
+            push_test_bytes_property(bytes, "FileAssetContents", "bytes", payload);
+        });
+        for _ in 0..converter_count {
+            push_test_object(&mut bytes, "ScriptedDataConverter", |bytes| {
+                push_test_uint_property(bytes, "ScriptedDataConverter", "scriptAssetId", 0);
+            });
+        }
+
+        read_runtime_file_with_scripting(&bytes).expect("exact Project .riv import")
+    }
+
+    fn exact_scripted_converter_for_payload(payload: &[u8]) -> RuntimeDataBindGraphConverter {
+        let file = exact_scripted_converter_file(payload, 1);
+        let converter = file.data_converter(0).expect("exact Project converter");
+        assert_eq!(converter.uint_property("scriptAssetId"), Some(0));
+        assert_eq!(
+            file.file_assets()
+                .into_iter()
+                .map(|asset| asset.type_name)
+                .collect::<Vec<_>>(),
+            vec!["ScriptAsset"]
+        );
+        let asset = file
+            .resolved_file_asset_for_referencer(converter)
+            .expect("exact Project converter resolves its ScriptAsset");
+        let payload = file
+            .scripting_file_assets_with_contents()
+            .into_iter()
+            .find(|entry| entry.asset.id == asset.id)
+            .and_then(|entry| entry.contents)
+            .expect("exact Project converter resolves its framed ScriptAsset contents");
+        assert!(ProjectDataConverterProgram::is_envelope(payload));
+        let mut cache = RuntimeDataBindGraphConverterBuildCache::default();
+        runtime_data_bind_graph_converter_for_object(
+            &file,
+            converter,
+            &mut BTreeSet::new(),
+            true,
+            0,
+            &mut cache,
+        )
+        .expect("scripted converter graph")
+    }
+
+    fn exact_project_identity_payload(output_type: ProjectDataConverterOutputType) -> Vec<u8> {
+        let catalog =
+            crate::ProjectDataConverterCatalog::compile([crate::ProjectDataConverterDefinition {
+                id: "identity".into(),
+                spec: crate::ProjectDataConverterSpec {
+                    output_type: Some(output_type),
+                    kind: crate::ProjectDataConverterKind::Group { items: Vec::new() },
+                },
+            }])
+            .expect("typed identity catalog");
+        let mut payload = vec![0];
+        payload.extend(
+            catalog
+                .encode_program("identity")
+                .expect("typed identity program"),
+        );
+        payload
+    }
+
+    fn exact_project_identity_converter(
+        output_type: ProjectDataConverterOutputType,
+    ) -> RuntimeDataBindGraphConverter {
+        let payload = exact_project_identity_payload(output_type);
+        let converter = exact_scripted_converter_for_payload(&payload);
+        assert!(matches!(
+            converter,
+            RuntimeDataBindGraphConverter::Project { .. }
+        ));
+        converter
+    }
+
+    #[test]
+    fn repeated_project_converter_references_share_one_catalog_and_program_decode() {
+        let payload = exact_project_identity_payload(ProjectDataConverterOutputType::Number);
+        let file = exact_scripted_converter_file(&payload, 2);
+        let first = file.data_converter(0).expect("first scripted converter");
+        let second = file.data_converter(1).expect("second scripted converter");
+        let mut cache = RuntimeDataBindGraphConverterBuildCache::default();
+
+        let first = runtime_data_bind_graph_converter_for_object(
+            &file,
+            first,
+            &mut BTreeSet::new(),
+            true,
+            0,
+            &mut cache,
+        )
+        .expect("first converter graph");
+        let second = runtime_data_bind_graph_converter_for_object(
+            &file,
+            second,
+            &mut BTreeSet::new(),
+            true,
+            0,
+            &mut cache,
+        )
+        .expect("second converter graph");
+        let (
+            RuntimeDataBindGraphConverter::Project {
+                program: first_program,
+                ..
+            },
+            RuntimeDataBindGraphConverter::Project {
+                program: second_program,
+                ..
+            },
+        ) = (first, second)
+        else {
+            panic!("both shared-asset converters must use the Project runtime");
+        };
+
+        assert!(Arc::ptr_eq(&first_program, &second_program));
+        assert_eq!(cache.scripting_catalog_builds, 1);
+        assert_eq!(cache.project_program_decodes, 1);
+        assert_eq!(cache.converter_assets.len(), 2);
+        assert_eq!(cache.project_programs.len(), 1);
+    }
+
+    #[test]
+    fn malformed_reserved_project_program_never_falls_back_to_an_ordinary_script() {
+        let converter = exact_scripted_converter_for_payload(b"\0NUXPCV1\0{");
+        assert!(matches!(
+            converter,
+            RuntimeDataBindGraphConverter::Unsupported
+        ));
+    }
+
+    #[test]
+    fn exact_project_program_preserves_every_representable_typed_value_forward_and_reverse() {
+        let values = [
+            (
+                ProjectDataConverterOutputType::Color,
+                RuntimeDataBindGraphValue::Color(0xffab_cdef),
+            ),
+            (
+                ProjectDataConverterOutputType::Enum,
+                RuntimeDataBindGraphValue::Enum(9_007_199_254_740_993),
+            ),
+            (
+                ProjectDataConverterOutputType::ListIndex,
+                RuntimeDataBindGraphValue::SymbolListIndex(9_007_199_254_740_995),
+            ),
+            (
+                ProjectDataConverterOutputType::Trigger,
+                RuntimeDataBindGraphValue::Trigger(9_007_199_254_740_997),
+            ),
+            (
+                ProjectDataConverterOutputType::List,
+                RuntimeDataBindGraphValue::List { item_count: 3 },
+            ),
+            (
+                ProjectDataConverterOutputType::Image,
+                RuntimeDataBindGraphValue::Asset(9_007_199_254_740_999),
+            ),
+            (
+                ProjectDataConverterOutputType::ViewModel,
+                RuntimeDataBindGraphValue::ViewModel(RuntimeViewModelPointer::Imported {
+                    object_id: 73,
+                }),
+            ),
+        ];
+
+        for (output_type, value) in values {
+            let converter = exact_project_identity_converter(output_type);
+            assert_eq!(
+                runtime_data_bind_graph_convert_value(&converter, &value),
+                Some(value.clone()),
+                "{output_type:?} forward bridge"
+            );
+            assert_eq!(
+                runtime_data_bind_graph_reverse_convert_value(&converter, &value),
+                Some(value.clone()),
+                "{output_type:?} reverse bridge"
+            );
+        }
+    }
+
+    #[test]
+    fn exact_project_object_output_reports_the_unrepresentable_rive_boundary() {
+        let converter = exact_project_identity_converter(ProjectDataConverterOutputType::Object);
+        let RuntimeDataBindGraphConverter::Project {
+            program,
+            resolved_values,
+            ..
+        } = converter
+        else {
+            panic!("exact Project converter")
+        };
+        assert_eq!(
+            runtime_data_bind_graph_project_convert_result(
+                &program,
+                &mut ProjectDataConverterState::default(),
+                0.0,
+                &resolved_values,
+                &RuntimeDataBindGraphValue::Number(1.0),
+                false,
+            ),
+            Err(RuntimeProjectDataBridgeError::ObjectHasNoRiveRepresentation)
+        );
+    }
+
+    #[test]
+    fn project_bridge_bounds_compact_runtime_lists_before_materializing_them() {
+        for value in [
+            RuntimeDataBindGraphValue::List {
+                item_count: usize::MAX,
+            },
+            RuntimeDataBindGraphValue::ListLength(usize::MAX),
+        ] {
+            let ProjectDataValue::List(items) =
+                runtime_data_bind_graph_value_to_project(&value).expect("list is representable")
+            else {
+                panic!("runtime list must bridge to a project list")
+            };
+            assert_eq!(items.len(), PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS);
+        }
+    }
+
+    #[test]
+    fn number_to_list_and_group_paths_share_the_project_list_budget() {
+        let number_to_list = RuntimeDataBindGraphConverter::NumberToList {
+            global_id: 7,
+            view_model_id: 0,
+            view_model_count: 1,
+        };
+        let group = RuntimeDataBindGraphConverter::Group(vec![
+            number_to_list.clone(),
+            exact_project_identity_converter(ProjectDataConverterOutputType::List),
+        ]);
+
+        for converter in [&number_to_list, &group] {
+            assert_eq!(
+                runtime_data_bind_graph_convert_value(
+                    converter,
+                    &RuntimeDataBindGraphValue::Number(f32::MAX),
+                ),
+                Some(RuntimeDataBindGraphValue::List {
+                    item_count: PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS,
+                }),
+                "huge finite lengths clamp before any durable-list materialization"
+            );
+            for non_finite in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                assert_eq!(
+                    runtime_data_bind_graph_convert_value(
+                        converter,
+                        &RuntimeDataBindGraphValue::Number(non_finite),
+                    ),
+                    Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
+                    "non-finite lengths fail closed without allocating"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn project_number_to_list_materializes_count_when_its_durable_model_is_lowered() {
+        let catalog =
+            crate::ProjectDataConverterCatalog::compile([crate::ProjectDataConverterDefinition {
+                id: "items".to_owned(),
+                spec: crate::ProjectDataConverterSpec {
+                    output_type: None,
+                    kind: crate::ProjectDataConverterKind::NumberToList {
+                        view_model_id: "vm-item".to_owned(),
+                    },
+                },
+            }])
+            .expect("valid Project NumberToList");
+        let bytes = catalog
+            .encode_program_with_runtime_view_models(
+                "items",
+                BTreeMap::from([("vm-item".to_owned(), 3)]),
+            )
+            .expect("program encodes");
+        let program = ProjectDataConverterProgram::decode(&bytes)
+            .expect("program decodes")
+            .expect("recognized Project envelope");
+        let converter = RuntimeDataBindGraphConverter::Project {
+            global_id: 7,
+            program: Arc::new(program),
+            resolved_values: Vec::new(),
+            default_resolved_values: Vec::new(),
+        };
+
+        assert_eq!(
+            runtime_data_bind_graph_convert_value(
+                &converter,
+                &RuntimeDataBindGraphValue::Number(3.9),
+            ),
+            Some(RuntimeDataBindGraphValue::List { item_count: 3 })
         );
     }
 }

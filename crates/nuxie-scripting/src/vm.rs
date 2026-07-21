@@ -28,7 +28,7 @@ use bytecode::validate_luau_bytecode;
 use luaur_rt::ffi::lua_error;
 use luaur_rt::{
     AnyUserData, Buffer as LuaBuffer, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table,
-    UserData, UserDataFields, UserDataMethods, Value, Vector as LuaVector,
+    UserData, UserDataFields, UserDataMethods, Value, Vector as LuaVector, VmState,
 };
 use luaur_vm::functions::luau_load::luau_load;
 use mat4::install_mat4_global;
@@ -42,6 +42,8 @@ use renderer::RendererBindings;
 use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
 
 use crate::envelope::SignedContent;
+use crate::gpu_canvas::ImportedGpuCanvasInstance;
+use crate::shader_asset::decode_shader_asset;
 
 pub use host_commands::{HostCommand, HostCycleCheckpoint, HostEffectCheckpoint, HostValue};
 pub use luaur_rt::{Error, Result};
@@ -86,6 +88,81 @@ struct ScriptScopes {
     chunk_scopes: BTreeMap<String, ScopeKey>,
 }
 
+/// Default ceiling for one trusted imported File's Luau VM.
+pub const DEFAULT_SCRIPT_VM_MEMORY_BYTES: usize = 64 * 1024 * 1024;
+/// Default interrupt safepoints available to each trusted callback.
+pub const DEFAULT_SCRIPT_INTERRUPTS_PER_CALLBACK: u32 = 50_000;
+
+/// Resource limits applied to one explicitly trusted imported script VM.
+///
+/// Every host-to-Luau callback receives a fresh interrupt budget. The memory
+/// ceiling covers the entire File-owned VM, including module/protocol setup
+/// and every retained occurrence table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScriptExecutionLimits {
+    max_memory_bytes: usize,
+    max_interrupts_per_callback: u32,
+}
+
+impl ScriptExecutionLimits {
+    pub const fn new() -> Self {
+        Self {
+            max_memory_bytes: DEFAULT_SCRIPT_VM_MEMORY_BYTES,
+            max_interrupts_per_callback: DEFAULT_SCRIPT_INTERRUPTS_PER_CALLBACK,
+        }
+    }
+
+    pub const fn with_max_memory_bytes(mut self, maximum: usize) -> Self {
+        self.max_memory_bytes = maximum;
+        self
+    }
+
+    pub const fn with_max_interrupts_per_callback(mut self, maximum: u32) -> Self {
+        self.max_interrupts_per_callback = maximum;
+        self
+    }
+
+    pub const fn max_memory_bytes(self) -> usize {
+        self.max_memory_bytes
+    }
+
+    pub const fn max_interrupts_per_callback(self) -> u32 {
+        self.max_interrupts_per_callback
+    }
+
+    pub fn validate(self) -> Result<()> {
+        if self.max_memory_bytes == 0 {
+            return Err(Error::runtime(
+                "trusted script VM memory limit must be greater than zero",
+            ));
+        }
+        if self.max_interrupts_per_callback == 0 {
+            return Err(Error::runtime(
+                "trusted script callback interrupt limit must be greater than zero",
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl Default for ScriptExecutionLimits {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone)]
+struct ScriptExecutionBudget {
+    remaining: Rc<Cell<u32>>,
+    maximum: u32,
+}
+
+impl ScriptExecutionBudget {
+    fn reset(&self) {
+        self.remaining.set(self.maximum);
+    }
+}
+
 /// A booted Luau VM.
 ///
 /// Thin wrapper over [`luaur_rt::Lua`] with the Rive-specific entry points;
@@ -93,6 +170,7 @@ struct ScriptScopes {
 pub struct ScriptVm {
     lua: Lua,
     initialization_error: Option<String>,
+    execution_budget: Option<ScriptExecutionBudget>,
     rive_globals_installed: Cell<bool>,
     renderer_bindings: RendererBindings,
     view_model_frame_context: ScriptViewModelFrameContext,
@@ -102,7 +180,9 @@ pub struct ScriptVm {
     default_context_parent_view_models: Vec<ScriptViewModel>,
     host_commands: host_commands::HostCommandQueue,
     script_safepoints: Rc<Cell<usize>>,
+    host_cycle_active: Rc<Cell<bool>>,
     resource_limits: resource_limits::ResourceLimitTracker,
+    gpu_canvas_shaders: Rc<RefCell<BTreeMap<String, nuxie_render_api::GpuCanvasShader>>>,
 }
 
 /// Cloneable handle for the detached view-model roots owned by one scripting
@@ -137,6 +217,9 @@ impl std::fmt::Debug for ScriptProgram {
 /// A luaur-backed scripted object instance table.
 pub struct LuaScriptInstance {
     table: Table,
+    execution_budget: Option<ScriptExecutionBudget>,
+    script_safepoints: Option<Rc<Cell<usize>>>,
+    host_cycle_active: Option<Rc<Cell<bool>>>,
     renderer_bindings: RendererBindings,
     context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
     context: Option<AnyUserData>,
@@ -147,6 +230,8 @@ pub struct LuaScriptInstance {
     user_init_done: bool,
     init_retry_requires_recreation: bool,
     resource_limits: resource_limits::ResourceLimitTracker,
+    gpu_canvas: Option<ImportedGpuCanvasInstance>,
+    gpu_canvas_context: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
 }
 
 #[derive(Debug, Clone)]
@@ -230,6 +315,9 @@ impl LuaScriptInstance {
         let frame_context = ScriptViewModelFrameContext::for_lua(&table.lua());
         Self {
             table,
+            execution_budget: None,
+            script_safepoints: None,
+            host_cycle_active: None,
             renderer_bindings: RendererBindings::new(frame_context),
             context_view_model: Rc::new(RefCell::new(None)),
             context: None,
@@ -240,6 +328,8 @@ impl LuaScriptInstance {
             user_init_done: false,
             init_retry_requires_recreation: false,
             resource_limits: resource_limits::ResourceLimitTracker::default(),
+            gpu_canvas: None,
+            gpu_canvas_context: None,
         }
     }
 
@@ -252,9 +342,17 @@ impl LuaScriptInstance {
         context_parent_view_models: Vec<ScriptViewModel>,
         generator: Option<Function>,
         resource_limits: resource_limits::ResourceLimitTracker,
+        gpu_canvas: Option<ImportedGpuCanvasInstance>,
+        gpu_canvas_context: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
+        execution_budget: Option<ScriptExecutionBudget>,
+        script_safepoints: Option<Rc<Cell<usize>>>,
+        host_cycle_active: Option<Rc<Cell<bool>>>,
     ) -> Self {
         Self {
             table,
+            execution_budget,
+            script_safepoints,
+            host_cycle_active,
             renderer_bindings,
             context_view_model,
             context,
@@ -265,6 +363,8 @@ impl LuaScriptInstance {
             user_init_done: false,
             init_retry_requires_recreation: false,
             resource_limits,
+            gpu_canvas,
+            gpu_canvas_context,
         }
     }
 
@@ -276,7 +376,32 @@ impl LuaScriptInstance {
         tracked_script_error(error, &self.resource_limits)
     }
 
+    fn reset_execution_budget(&self) {
+        if self
+            .host_cycle_active
+            .as_ref()
+            .is_some_and(|active| !active.get())
+        {
+            self.resource_limits.begin_cycle();
+            if let Some(script_safepoints) = self.script_safepoints.as_ref() {
+                script_safepoints.set(0);
+            }
+        }
+        if let Some(budget) = self.execution_budget.as_ref() {
+            budget.reset();
+        }
+    }
+
     fn call_method_value(
+        &mut self,
+        method: ScriptMethod,
+        args: &[ScriptValue],
+    ) -> std::result::Result<Value, ScriptError> {
+        self.reset_execution_budget();
+        self.call_method_value_with_current_budget(method, args)
+    }
+
+    fn call_method_value_with_current_budget(
         &mut self,
         method: ScriptMethod,
         args: &[ScriptValue],
@@ -414,6 +539,7 @@ impl ScriptVm {
             let chunk = self
                 .load_script_asset_payload(&chunkname, payload)
                 .map_err(|error| self.script_error(error))?;
+            self.reset_execution_budget();
             let generator = self
                 .execute_loaded_module(&chunkname, chunk)
                 .map_err(|error| self.script_error(error))?;
@@ -434,14 +560,18 @@ impl ScriptVm {
             let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
             let context_missing_requested_data = Rc::new(Cell::new(false));
             let context_parent_view_models = self.default_context_parent_view_models.clone();
+            let (gpu_canvas, gpu_canvas_context) =
+                ImportedGpuCanvasInstance::new(Rc::clone(&self.gpu_canvas_shaders));
             let context = self
                 .lua
                 .create_userdata(ScriptedContext::new(
                     Rc::clone(&context_view_model),
                     context_parent_view_models.clone(),
                     Rc::clone(&context_missing_requested_data),
+                    Some(gpu_canvas_context.clone()),
                 ))
                 .map_err(|error| self.script_error(error))?;
+            self.reset_execution_budget();
             let instance: Table = self
                 .track_resource_result(program.generator.call(context.clone()))
                 .map_err(|error| self.script_error(error))?;
@@ -454,6 +584,11 @@ impl ScriptVm {
                 context_parent_view_models,
                 Some(program.generator.clone()),
                 self.resource_limits.clone(),
+                Some(gpu_canvas),
+                Some(gpu_canvas_context),
+                self.execution_budget.clone(),
+                Some(Rc::clone(&self.script_safepoints)),
+                Some(Rc::clone(&self.host_cycle_active)),
             )) as Box<dyn ScriptInstance>)
         })
     }
@@ -469,6 +604,7 @@ impl ScriptVm {
             .map(|error| format!("failed to configure the script VM memory ceiling: {error}"));
         let resource_limits = resource_limits::ResourceLimitTracker::default();
         let script_safepoints = Rc::new(Cell::new(0));
+        let host_cycle_active = Rc::new(Cell::new(false));
         let interrupt_safepoints = Rc::clone(&script_safepoints);
         let interrupt_resource_limits = resource_limits.clone();
         lua.set_interrupt(move |_| {
@@ -482,6 +618,7 @@ impl ScriptVm {
         Self {
             lua,
             initialization_error,
+            execution_budget: None,
             rive_globals_installed: Cell::new(false),
             renderer_bindings: RendererBindings::new(view_model_frame_context.clone()),
             view_model_frame_context,
@@ -491,8 +628,80 @@ impl ScriptVm {
             default_context_parent_view_models: Vec::new(),
             host_commands: host_commands::HostCommandQueue::new(resource_limits.clone()),
             script_safepoints,
+            host_cycle_active,
             resource_limits,
+            gpu_canvas_shaders: Rc::new(RefCell::new(BTreeMap::new())),
         }
+    }
+
+    /// Boot a VM whose total memory and each host-to-Luau callback are
+    /// explicitly bounded.
+    pub fn new_with_execution_limits(limits: ScriptExecutionLimits) -> Result<Self> {
+        limits.validate()?;
+        let mut vm = Self::new();
+        vm.lua.set_memory_limit(limits.max_memory_bytes())?;
+        let budget = ScriptExecutionBudget {
+            remaining: Rc::new(Cell::new(limits.max_interrupts_per_callback())),
+            maximum: limits.max_interrupts_per_callback(),
+        };
+        let interrupt_budget = budget.clone();
+        let interrupt_safepoints = Rc::clone(&vm.script_safepoints);
+        let interrupt_resource_limits = vm.resource_limits.clone();
+        vm.lua.set_interrupt(move |_| {
+            let used = interrupt_safepoints.get();
+            if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
+                return Err(interrupt_resource_limits.fail(ScriptResourceLimit::Safepoints));
+            }
+            interrupt_safepoints.set(used + 1);
+            let remaining = interrupt_budget.remaining.get();
+            if remaining == 0 {
+                return Err(interrupt_resource_limits.fail_with_message(
+                    ScriptResourceLimit::Safepoints,
+                    format!(
+                        "trusted Luau callback exceeded {} interrupt safepoints",
+                        interrupt_budget.maximum
+                    ),
+                ));
+            }
+            interrupt_budget.remaining.set(remaining - 1);
+            Ok(VmState::Continue)
+        });
+        vm.execution_budget = Some(budget);
+        Ok(vm)
+    }
+
+    fn reset_execution_budget(&self) {
+        // File/Artboard facade callbacks do not all have an explicit flow
+        // operation around them. Treat each such callback as its own bounded
+        // cycle so the cumulative main-VM ceiling cannot poison an otherwise
+        // healthy script after enough ordinary frames. Explicit flow cycles
+        // retain their aggregate command/content/safepoint budget.
+        if !self.host_cycle_active.get() {
+            self.resource_limits.begin_cycle();
+            self.script_safepoints.set(0);
+        }
+        if let Some(budget) = self.execution_budget.as_ref() {
+            budget.reset();
+        }
+    }
+
+    /// Decode and register one imported ShaderAsset before protocol generators
+    /// execute. Names are the exact `context:shader(name)` lookup keys.
+    pub fn register_gpu_canvas_shader_asset(
+        &self,
+        name: &str,
+        payload: &[u8],
+    ) -> std::result::Result<(), ScriptError> {
+        let shader =
+            decode_shader_asset(name, payload).map_err(|error| self.script_error(error))?;
+        let mut shaders = self.gpu_canvas_shaders.borrow_mut();
+        if shaders.contains_key(name) {
+            return Err(ScriptError::new(format!(
+                "ShaderAsset name '{name}' is duplicated"
+            )));
+        }
+        shaders.insert(name.to_owned(), shader);
+        Ok(())
     }
 
     /// Register the file's view-model definitions and keep `Data` current even
@@ -564,6 +773,7 @@ impl ScriptVm {
         host_commands::install_nuxie_module(&self.lua, &cache, self.host_commands.clone())?;
         self.install_require_global(cache)?;
         self.renderer_bindings.install(&self.lua)?;
+        crate::gpu_canvas::install_gpu_canvas_globals(self)?;
         view_model::install_data_global(&self.lua, &self.view_models)?;
         resource_limits::install_protected_call_guards(&self.lua, self.resource_limits.clone())?;
 
@@ -575,6 +785,7 @@ impl ScriptVm {
     /// Compile and evaluate Luau *source*, returning the chunk's results.
     pub fn eval<R: FromLuaMulti>(&self, source: &str) -> Result<R> {
         self.ensure_initialized()?;
+        self.reset_execution_budget();
         let result = self.lua.load(source).eval();
         self.track_resource_result(result)
     }
@@ -630,6 +841,7 @@ impl ScriptVm {
     /// so one ScriptAsset cannot overwrite another ScriptAsset's globals.
     pub fn run_bytecode<R: FromLuaMulti>(&self, chunk_name: &str, bytecode: &[u8]) -> Result<R> {
         let chunk = self.load_bytecode(chunk_name, bytecode)?;
+        self.reset_execution_budget();
         self.execute_loaded_module(chunk_name, chunk)
     }
 
@@ -847,6 +1059,7 @@ impl ScriptVm {
             return Ok(value);
         }
         let display = Self::readable_chunkname(name, scope);
+        self.reset_execution_budget();
         let result: Value = self.execute_loaded_module(&display, function)?;
         match &result {
             Value::Table(_) | Value::Function(_) => {}
@@ -938,6 +1151,7 @@ impl ScriptVm {
 
     /// Call a global function by name.
     pub fn call_global<R: FromLuaMulti>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R> {
+        self.reset_execution_budget();
         let function: Function = self.lua.globals().get(name)?;
         let result = function.call(args);
         self.track_resource_result(result)
@@ -951,6 +1165,7 @@ impl ScriptVm {
     /// Start a bounded unit of script work without discarding commands that
     /// the host has not drained yet.
     pub fn begin_host_cycle(&self) -> HostCycleCheckpoint {
+        self.host_cycle_active.set(true);
         self.resource_limits.begin_cycle();
         self.script_safepoints.set(0);
         self.host_commands.begin_cycle()
@@ -960,6 +1175,7 @@ impl ScriptVm {
     /// import/creation effects available for a later successful drain.
     pub fn rollback_host_cycle(&self, checkpoint: HostCycleCheckpoint) {
         self.host_commands.rollback(checkpoint);
+        self.host_cycle_active.set(false);
     }
 
     /// Mark the current host-effect queue position inside an already-bounded
@@ -983,7 +1199,9 @@ impl ScriptVm {
 
     /// Drain Nuxie-owned host effects in the exact order scripts emitted them.
     pub fn drain_host_commands(&self) -> Vec<HostCommand> {
-        self.host_commands.drain()
+        let commands = self.host_commands.drain();
+        self.host_cycle_active.set(false);
+        commands
     }
 
     pub fn script_instance_from_table(&self, table: Table) -> LuaScriptInstance {
@@ -996,6 +1214,11 @@ impl ScriptVm {
             Vec::new(),
             None,
             self.resource_limits.clone(),
+            None,
+            None,
+            self.execution_budget.clone(),
+            Some(Rc::clone(&self.script_safepoints)),
+            Some(Rc::clone(&self.host_cycle_active)),
         )
     }
 
@@ -1339,20 +1562,25 @@ impl RuntimeScriptingVm for ScriptVm {
         let chunk = self
             .load_script_asset_payload(name, payload)
             .map_err(|error| self.script_error(error))?;
+        self.reset_execution_budget();
         let generator: Function = self
             .execute_loaded_module(name, chunk)
             .map_err(|error| self.script_error(error))?;
         let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
         let context_missing_requested_data = Rc::new(Cell::new(false));
         let context_parent_view_models = self.default_context_parent_view_models.clone();
+        let (gpu_canvas, gpu_canvas_context) =
+            ImportedGpuCanvasInstance::new(Rc::clone(&self.gpu_canvas_shaders));
         let context = self
             .lua
             .create_userdata(ScriptedContext::new(
                 Rc::clone(&context_view_model),
                 context_parent_view_models.clone(),
                 Rc::clone(&context_missing_requested_data),
+                Some(gpu_canvas_context.clone()),
             ))
             .map_err(|error| self.script_error(error))?;
+        self.reset_execution_budget();
         let instance: Table = self
             .track_resource_result(generator.call(context.clone()))
             .map_err(|error| self.script_error(error))?;
@@ -1365,6 +1593,11 @@ impl RuntimeScriptingVm for ScriptVm {
             context_parent_view_models,
             Some(generator),
             self.resource_limits.clone(),
+            Some(gpu_canvas),
+            Some(gpu_canvas_context),
+            self.execution_budget.clone(),
+            Some(Rc::clone(&self.script_safepoints)),
+            Some(Rc::clone(&self.host_cycle_active)),
         )))
     }
 
@@ -1396,6 +1629,7 @@ impl ScriptInstance for LuaScriptInstance {
     }
 
     fn has_method(&self, method: ScriptMethod) -> std::result::Result<bool, ScriptError> {
+        self.reset_execution_budget();
         let value: Value = self
             .table
             .get(method.as_str())
@@ -1430,6 +1664,7 @@ impl ScriptInstance for LuaScriptInstance {
         invocation: &ScriptListenerInvocation,
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<(), ScriptError> {
+        self.reset_execution_budget();
         let function: Function = self
             .table
             .get(method.as_script_method().as_str())
@@ -1447,6 +1682,7 @@ impl ScriptInstance for LuaScriptInstance {
         name: &str,
         host: &mut dyn ScriptHost,
     ) -> std::result::Result<(), ScriptError> {
+        self.reset_execution_budget();
         let value: Value = self
             .table
             .get(name)
@@ -1494,6 +1730,7 @@ impl ScriptInstance for LuaScriptInstance {
         if self.user_init_done {
             return Ok(false);
         }
+        self.reset_execution_budget();
         let value: Value = self
             .table
             .get(ScriptMethod::Init.as_str())
@@ -1531,8 +1768,10 @@ impl ScriptInstance for LuaScriptInstance {
                         context_view_model,
                         context_parent_view_models,
                         Rc::clone(&missing_requested_data),
+                        self.gpu_canvas_context.clone(),
                     ))
                     .map_err(|error| self.script_error(error))?;
+                self.reset_execution_budget();
                 let table = generator
                     .call(context.clone())
                     .map_err(|error| self.script_error(error))?;
@@ -1553,6 +1792,7 @@ impl ScriptInstance for LuaScriptInstance {
         node: nuxie_runtime::ScriptNode,
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<nuxie_render_api::RawPath, ScriptError> {
+        self.reset_execution_budget();
         renderer::call_path_effect_update(&self.table, source, node)
             .map_err(|error| self.script_error(error))
     }
@@ -1563,6 +1803,13 @@ impl ScriptInstance for LuaScriptInstance {
         renderer: &mut dyn Renderer,
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<(), ScriptError> {
+        if let Some(gpu_canvas) = self.gpu_canvas.as_ref() {
+            self.reset_execution_budget();
+            gpu_canvas
+                .execute_draw_canvas(&self.table, factory)
+                .map_err(|error| self.script_error(error))?;
+        }
+        self.reset_execution_budget();
         self.renderer_bindings
             .call_draw(&self.table, factory, renderer)
             .map_err(|error| self.script_error(error))
@@ -1573,6 +1820,7 @@ impl ScriptInstance for LuaScriptInstance {
         method: ScriptDataConverterMethod,
         value: ScriptValue,
     ) -> std::result::Result<ScriptValue, ScriptError> {
+        self.reset_execution_budget();
         let function: Function = self
             .table
             .get(method.as_str())
@@ -1591,6 +1839,7 @@ impl ScriptInstance for LuaScriptInstance {
     }
 
     fn get_input(&self, name: &str) -> std::result::Result<ScriptValue, ScriptError> {
+        self.reset_execution_budget();
         let value: Value = self
             .table
             .get(name)
@@ -1603,6 +1852,7 @@ impl ScriptInstance for LuaScriptInstance {
         name: &str,
         value: ScriptValue,
     ) -> std::result::Result<(), ScriptError> {
+        self.reset_execution_budget();
         let lua = self.table.lua();
         self.table
             .set(name, script_value_to_lua(&lua, &value))
@@ -1614,6 +1864,7 @@ impl ScriptInstance for LuaScriptInstance {
         name: &str,
         artboard: Box<dyn ScriptArtboard>,
     ) -> std::result::Result<(), ScriptError> {
+        self.reset_execution_budget();
         let lua = self.table.lua();
         let artboard = self
             .renderer_bindings
@@ -1629,6 +1880,7 @@ impl ScriptInstance for LuaScriptInstance {
         name: &str,
         view_model: ScriptViewModel,
     ) -> std::result::Result<(), ScriptError> {
+        self.reset_execution_budget();
         let lua = self.table.lua();
         let view_model = create_scripted_view_model(&lua, view_model)
             .map_err(|error| self.script_error(error))?;
@@ -1788,6 +2040,65 @@ mod context_init_tests {
     }
 
     #[test]
+    fn trusted_callbacks_do_not_accumulate_safepoints_without_an_explicit_host_cycle() {
+        let vm = ScriptVm::new_with_execution_limits(
+            ScriptExecutionLimits::new().with_max_interrupts_per_callback(80_000),
+        )
+        .expect("trusted limits");
+        vm.eval::<()>(
+            r#"
+            function boundedWork()
+                local total = 0
+                for index = 1, 70000 do
+                    total += index
+                end
+                return total
+            end
+            "#,
+        )
+        .expect("bounded callback installs");
+
+        for _ in 0..3 {
+            vm.call_global::<f64>("boundedWork", ())
+                .expect("each ordinary callback gets a fresh cycle budget");
+        }
+        assert_eq!(vm.terminal_resource_limit(), None);
+    }
+
+    #[test]
+    fn trusted_callbacks_share_the_main_safepoint_ceiling_inside_an_explicit_host_cycle() {
+        let vm = ScriptVm::new_with_execution_limits(
+            ScriptExecutionLimits::new().with_max_interrupts_per_callback(80_000),
+        )
+        .expect("trusted limits");
+        vm.eval::<()>(
+            r#"
+            function boundedCycleWork()
+                local total = 0
+                for index = 1, 70000 do
+                    total += index
+                end
+                return total
+            end
+            "#,
+        )
+        .expect("bounded callback installs");
+
+        vm.begin_host_cycle();
+        vm.call_global::<f64>("boundedCycleWork", ())
+            .expect("first callback stays within both ceilings");
+        let error = vm
+            .call_global::<f64>("boundedCycleWork", ())
+            .expect_err("the explicit cycle keeps the cumulative main ceiling");
+
+        assert!(error.to_string().contains("100000 script safepoints"));
+        assert_eq!(
+            vm.terminal_resource_limit(),
+            Some(ScriptResourceLimit::Safepoints)
+        );
+    }
+
+    #[test]
     fn failed_init_recreates_the_script_lifetime_before_retry() {
         let lua = Lua::new();
         let frame_context = ScriptViewModelFrameContext::default();
@@ -1816,6 +2127,7 @@ mod context_init_tests {
                 Rc::clone(&context_view_model),
                 Vec::new(),
                 Rc::clone(&missing_requested_data),
+                None,
             ))
             .expect("scripted context");
         let table: Table = generator.call(context.clone()).expect("script table");
@@ -1828,6 +2140,11 @@ mod context_init_tests {
             Vec::new(),
             Some(generator),
             resource_limits::ResourceLimitTracker::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
         );
         let mut factory = NullFactory::new();
         let mut host = NoopScriptHost;
@@ -1857,5 +2174,63 @@ mod context_init_tests {
                 .expect("bound retry")
         );
         assert!(!instance.user_init_pending().expect("completed retry"));
+    }
+}
+
+#[cfg(test)]
+mod gpu_canvas_tests {
+    use super::*;
+
+    fn put_u16(bytes: &mut Vec<u8>, value: u16) {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_u32(bytes: &mut Vec<u8>, value: u32) {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_string(bytes: &mut Vec<u8>, value: &str) {
+        put_u16(bytes, value.len() as u16);
+        bytes.extend_from_slice(value.as_bytes());
+    }
+
+    fn shader_payload(fragment_color: &str) -> Vec<u8> {
+        let vertex = "#version 300 es\nvoid main() { gl_Position = vec4(0.0); }";
+        let fragment = format!(
+            "#version 300 es\nout vec4 color;\nvoid main() {{ color = {fragment_color}; }}"
+        );
+        let mut entries = vec![2];
+        for (stage, logical, source) in [(0, "vs_main", vertex), (1, "fs_main", fragment.as_str())]
+        {
+            entries.push(stage);
+            put_string(&mut entries, logical);
+            put_string(&mut entries, "main");
+            put_u32(&mut entries, source.len() as u32);
+            entries.extend_from_slice(source.as_bytes());
+        }
+
+        let mut payload = vec![0];
+        put_u32(&mut payload, 0x5253_5442);
+        put_u16(&mut payload, 4);
+        payload.extend_from_slice(&[1, 0, 1]);
+        put_u32(&mut payload, 0);
+        put_u32(&mut payload, entries.len() as u32);
+        payload.extend(entries);
+        payload
+    }
+
+    #[test]
+    fn duplicate_shader_registration_preserves_the_first_shader() {
+        let vm = ScriptVm::new();
+        vm.register_gpu_canvas_shader_asset("scene", &shader_payload("vec4(1.0)"))
+            .expect("first shader registers");
+        let first = vm.gpu_canvas_shaders.borrow()["scene"].clone();
+
+        let error = vm
+            .register_gpu_canvas_shader_asset("scene", &shader_payload("vec4(0.0)"))
+            .expect_err("duplicate shader name is rejected");
+
+        assert!(error.to_string().contains("duplicated"));
+        assert_eq!(vm.gpu_canvas_shaders.borrow()["scene"], first);
     }
 }

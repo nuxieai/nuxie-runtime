@@ -1,7 +1,7 @@
 use crate::artboard_data_bind::build_key_frame_data_bind_templates;
 use crate::data_bind_graph::{
-    RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase, RuntimeDataBindGraphTarget,
-    RuntimeKeyFrameDataBindTemplate,
+    RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase, RuntimeDataBindGraphConverterBuildCache,
+    RuntimeDataBindGraphTarget, RuntimeKeyFrameDataBindTemplate,
 };
 use crate::draw::color_lerp;
 use crate::properties::{
@@ -299,10 +299,11 @@ fn callback_event_for_keyed_property(
     ))
 }
 
-pub(crate) fn build_linear_animations(
-    file: &RuntimeFile,
+pub(crate) fn build_linear_animations<'a>(
+    file: &'a RuntimeFile,
     graph: &ArtboardGraph,
     slots: &[InstanceSlot],
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeLinearAnimation> {
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
@@ -589,7 +590,7 @@ pub(crate) fn build_linear_animations(
         }
     }
 
-    let templates = build_key_frame_data_bind_templates(file, artboard_index);
+    let templates = build_key_frame_data_bind_templates(file, artboard_index, converter_cache);
     if !templates.is_empty() {
         for animation in &mut animations {
             let key_frame_ids = animation

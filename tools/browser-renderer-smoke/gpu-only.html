@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
+    <title>Nuxie imported GPU-canvas browser smoke</title>
+  </head>
+  <body>
+    <pre id="status">running</pre>
+    <script type="module">
+      import init, {
+        assert_direct_gpu_canvas_image,
+        assert_imported_gpu_canvas,
+        assert_imported_gpu_canvas_stress,
+        assert_webgl2_gpu_canvas_rejects_invalid_interface,
+        assert_webgl2_imported_gpu_canvas_uniform_animation,
+        assert_webgpu_gpu_canvas_rejects_invalid_interface,
+        assert_webgpu_uniform_limit_rejection,
+      } from "./pkg/browser_renderer_smoke.js";
+
+      const status = document.querySelector("#status");
+      const results = [];
+      const measureImportedWebgl2Allocations = async (callback) => {
+        const originalGetContext = HTMLCanvasElement.prototype.getContext;
+        const originalCreateProgram = WebGL2RenderingContext.prototype.createProgram;
+        const originalCreateVertexArray = WebGL2RenderingContext.prototype.createVertexArray;
+        const originalCreateBuffer = WebGL2RenderingContext.prototype.createBuffer;
+        const webgl2Contexts = new Set();
+        let importedContext;
+        let programs = 0;
+        let vertexArrays = 0;
+        let buffers = 0;
+        HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+          const context = originalGetContext.call(this, type, ...args);
+          if (type === "webgl2" && context && !webgl2Contexts.has(context)) {
+            webgl2Contexts.add(context);
+            if (webgl2Contexts.size === 2) importedContext = context;
+          }
+          return context;
+        };
+        WebGL2RenderingContext.prototype.createProgram = function(...args) {
+          if (this === importedContext) programs += 1;
+          return originalCreateProgram.apply(this, args);
+        };
+        WebGL2RenderingContext.prototype.createVertexArray = function(...args) {
+          if (this === importedContext) vertexArrays += 1;
+          return originalCreateVertexArray.apply(this, args);
+        };
+        WebGL2RenderingContext.prototype.createBuffer = function(...args) {
+          if (this === importedContext) buffers += 1;
+          return originalCreateBuffer.apply(this, args);
+        };
+        try {
+          return {
+            result: await callback(),
+            contexts: webgl2Contexts.size,
+            programs,
+            vertexArrays,
+            buffers,
+          };
+        } finally {
+          HTMLCanvasElement.prototype.getContext = originalGetContext;
+          WebGL2RenderingContext.prototype.createProgram = originalCreateProgram;
+          WebGL2RenderingContext.prototype.createVertexArray = originalCreateVertexArray;
+          WebGL2RenderingContext.prototype.createBuffer = originalCreateBuffer;
+        }
+      };
+      const run = async (label, callback) => {
+        console.log(`gpu-smoke:start:${label}`);
+        const result = await callback();
+        results.push(result);
+        console.log(`gpu-smoke:passed:${label}:${result}`);
+      };
+      try {
+        await init();
+        await run("direct-webgpu", () => assert_direct_gpu_canvas_image(document.createElement("canvas"), "webgpu"));
+        await run("direct-webgl2", () => assert_direct_gpu_canvas_image(document.createElement("canvas"), "webgl2"));
+        await run("imported-webgpu", () => assert_imported_gpu_canvas(document.createElement("canvas"), "webgpu"));
+        await run("imported-webgl2", () => assert_imported_gpu_canvas(document.createElement("canvas"), "webgl2"));
+        await run("synchronous-webgpu-interface-rejection", () => assert_webgpu_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));
+        await run("synchronous-webgl2-interface-rejection", () => assert_webgl2_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));
+        await run("webgl2-uniform-animation", async () => {
+          const measured = await measureImportedWebgl2Allocations(
+            () => assert_webgl2_imported_gpu_canvas_uniform_animation(document.createElement("canvas")),
+          );
+          if (measured.contexts !== 2 || measured.programs !== 1 || measured.vertexArrays !== 1 || measured.buffers !== 3) {
+            throw new Error(`WebGL2 uniform animation allocated contexts=${measured.contexts} programs=${measured.programs} vaos=${measured.vertexArrays} buffers=${measured.buffers}; expected 2/1/1/3`);
+          }
+          return `${measured.result} programs=${measured.programs} vaos=${measured.vertexArrays} buffers=${measured.buffers} contexts=${measured.contexts}`;
+        });
+        await run("synchronous-webgpu-uniform-limit-rejection", () => assert_webgpu_uniform_limit_rejection(document.createElement("canvas")));
+        await run("retained-webgl2-imported-context", async () => {
+          const measured = await measureImportedWebgl2Allocations(
+            () => assert_imported_gpu_canvas_stress(document.createElement("canvas")),
+          );
+          if (measured.contexts !== 2 || measured.programs !== 2 || measured.vertexArrays !== 2 || measured.buffers !== 0) {
+            throw new Error(`WebGL2 stress allocated contexts=${measured.contexts} programs=${measured.programs} vaos=${measured.vertexArrays} buffers=${measured.buffers}; expected 2/2/2/0`);
+          }
+          return `${measured.result} programs=${measured.programs} vaos=${measured.vertexArrays} buffers=${measured.buffers} contexts=${measured.contexts}`;
+        });
+        window.__rendererSmoke = { status: "passed", results };
+        status.textContent = `passed\n${results.join("\n")}`;
+        document.body.dataset.status = "passed";
+      } catch (error) {
+        const message = error?.stack || String(error);
+        window.__rendererSmoke = { status: "failed", error: message, results };
+        status.textContent = `failed\n${results.join("\n")}\n${message}`;
+        document.body.dataset.status = "failed";
+      }
+    </script>
+  </body>
+</html>

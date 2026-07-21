@@ -13,4 +13,10 @@
 pub mod envelope;
 
 #[cfg(feature = "luau")]
+pub mod gpu_canvas;
+
+#[cfg(feature = "luau")]
+mod shader_asset;
+
+#[cfg(feature = "luau")]
 pub mod vm;

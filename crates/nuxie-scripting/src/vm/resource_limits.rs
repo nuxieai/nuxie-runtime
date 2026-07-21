@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use luaur_rt::{Error, Function, Lua, MultiValue, Result, Table, Value};
@@ -56,11 +56,13 @@ impl ScriptResourceLimit {
 #[derive(Clone, Default)]
 pub(super) struct ResourceLimitTracker {
     tripped: Rc<Cell<Option<ScriptResourceLimit>>>,
+    message: Rc<RefCell<Option<String>>>,
 }
 
 impl ResourceLimitTracker {
     pub(super) fn begin_cycle(&self) {
         self.tripped.set(None);
+        self.message.borrow_mut().take();
     }
 
     pub(super) fn terminal_limit(&self) -> Option<ScriptResourceLimit> {
@@ -69,7 +71,30 @@ impl ResourceLimitTracker {
 
     pub(super) fn fail(&self, limit: ScriptResourceLimit) -> Error {
         let terminal = self.record(limit);
-        resource_limit_error(terminal)
+        self.error(terminal)
+    }
+
+    pub(super) fn fail_with_message(
+        &self,
+        limit: ScriptResourceLimit,
+        message: impl Into<String>,
+    ) -> Error {
+        let terminal = match self.tripped.get() {
+            Some(terminal) => terminal,
+            None => {
+                self.tripped.set(Some(limit));
+                *self.message.borrow_mut() = Some(message.into());
+                limit
+            }
+        };
+        self.error(terminal)
+    }
+
+    fn error(&self, limit: ScriptResourceLimit) -> Error {
+        match self.message.borrow().as_ref() {
+            Some(message) => Error::runtime(message.clone()),
+            None => resource_limit_error(limit),
+        }
     }
 
     pub(super) fn observe_vm_error(&self, error: &Error) {
@@ -86,6 +111,7 @@ impl ResourceLimitTracker {
         match self.tripped.get() {
             Some(terminal) => terminal,
             None => {
+                self.message.borrow_mut().take();
                 self.tripped.set(Some(limit));
                 limit
             }
@@ -94,7 +120,7 @@ impl ResourceLimitTracker {
 
     pub(super) fn reject_if_tripped(&self) -> Result<()> {
         match self.tripped.get() {
-            Some(limit) => Err(resource_limit_error(limit)),
+            Some(limit) => Err(self.error(limit)),
             None => Ok(()),
         }
     }

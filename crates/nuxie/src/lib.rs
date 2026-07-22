@@ -73,6 +73,7 @@ pub use nuxie_renderer::{
 pub use nuxie_renderer::{
     WgpuFactory as DefaultRendererFactory, WgpuFrame as DefaultRendererFrame,
 };
+use nuxie_runtime::RuntimeFileViewModelInstanceCatalog;
 pub use nuxie_runtime::{
     ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, ProjectDataConverterCatalog,
     ProjectDataConverterCompileError, ProjectDataConverterContext, ProjectDataConverterDefinition,
@@ -946,11 +947,12 @@ impl FileScriptArtboard {
             ))
         })?;
         let external_font_assets = file.external_font_assets.snapshot();
-        let instance = RuntimeArtboardInstance::from_graph_with_artboards_and_external_fonts(
+        let instance = RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_view_model_instances(
             &file.runtime,
             graph,
             &file.graph.artboards,
             &external_font_assets,
+            file.file_view_model_instances.clone(),
         )
         .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
         let state_machine_index = file
@@ -1585,6 +1587,7 @@ fn queue_root_script_advance(
 /// Imported Rive file plus its runtime graph projection.
 pub struct File {
     runtime: Arc<RuntimeFile>,
+    file_view_model_instances: RuntimeFileViewModelInstanceCatalog,
     graph: Arc<GraphFile>,
     external_image_assets: BTreeMap<u32, Arc<[u8]>>,
     external_font_assets: ExternalFontAssetStore,
@@ -1921,6 +1924,7 @@ impl Clone for File {
         };
         Self {
             runtime,
+            file_view_model_instances: self.file_view_model_instances.clone(),
             graph,
             external_image_assets: self.external_image_assets.clone(),
             external_font_assets: self.external_font_assets.clone(),
@@ -2105,6 +2109,7 @@ impl File {
             "embedded FontAsset bytes are not a valid font"
         );
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
+        let file_view_model_instances = RuntimeFileViewModelInstanceCatalog::new(&runtime);
         Ok(Self {
             #[cfg(feature = "scripting")]
             scripts: RefCell::new(FileScriptRuntime::import(
@@ -2113,6 +2118,7 @@ impl File {
                 execution_limits,
             )),
             runtime: Arc::new(runtime),
+            file_view_model_instances,
             graph: Arc::new(graph),
             external_image_assets: BTreeMap::new(),
             external_font_assets: ExternalFontAssetStore::default(),
@@ -2357,11 +2363,12 @@ impl<'a> Artboard<'a> {
 
     pub fn instantiate(self) -> Result<ArtboardInstance<'a>> {
         let external_font_assets = self.file.external_font_assets.snapshot();
-        let raw = RuntimeArtboardInstance::from_graph_with_artboards_and_external_fonts(
+        let raw = RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_view_model_instances(
             &self.file.runtime,
             self.graph(),
             &self.file.graph.artboards,
             &external_font_assets,
+            self.file.file_view_model_instances.clone(),
         )
         .with_context(|| {
             format!(
@@ -3007,11 +3014,12 @@ impl OwnedArtboardInstance {
             let artboard = file
                 .artboard(artboard_index)
                 .with_context(|| format!("artboard index {artboard_index} out of range"))?;
-            RuntimeArtboardInstance::from_graph_with_artboards_and_external_fonts(
+            RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_view_model_instances(
                 &file.runtime,
                 artboard.graph(),
                 &file.graph.artboards,
                 &external_font_assets,
+                file.file_view_model_instances.clone(),
             )
             .with_context(|| {
                 format!(

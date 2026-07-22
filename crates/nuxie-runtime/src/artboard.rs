@@ -73,9 +73,11 @@ use crate::state_machine::{
     build_state_machines,
 };
 use crate::view_model::{
-    RuntimeFontAssetValue, RuntimeOwnedViewModelListHandle, RuntimeOwnedViewModelListItemEntry,
+    RuntimeFontAssetValue, RuntimeImportedViewModelInstanceContext,
+    RuntimeOwnedViewModelListHandle, RuntimeOwnedViewModelListItemEntry,
     set_component_list_item_index,
 };
+use crate::view_model_cell::RuntimeFileViewModelInstanceCatalog;
 use crate::{
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance,
@@ -582,6 +584,7 @@ fn component_list_contexts_retain_same_handles(
 #[derive(Debug, Clone)]
 struct RuntimeArtboardBuildContext {
     file: Arc<RuntimeFile>,
+    file_view_model_instances: RuntimeFileViewModelInstanceCatalog,
     artboards: Arc<Vec<ArtboardGraph>>,
     artboard_index_by_global: Arc<Vec<Option<usize>>>,
     nested_structure_epoch: Arc<AtomicU64>,
@@ -786,9 +789,23 @@ impl ArtboardInstance {
     }
 
     pub fn from_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Result<Self> {
+        Self::from_graph_with_file_view_model_instances(
+            file,
+            graph,
+            RuntimeFileViewModelInstanceCatalog::new(file),
+        )
+    }
+
+    #[doc(hidden)]
+    pub fn from_graph_with_file_view_model_instances(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        file_view_model_instances: RuntimeFileViewModelInstanceCatalog,
+    ) -> Result<Self> {
         let artboards = vec![graph.clone()];
         let context = RuntimeArtboardBuildContext {
             file: Arc::new(file.clone()),
+            file_view_model_instances,
             artboards: Arc::new(artboards.clone()),
             artboard_index_by_global: Arc::new(build_artboard_index_by_global(&artboards)),
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
@@ -821,8 +838,26 @@ impl ArtboardInstance {
         artboards: &[ArtboardGraph],
         external_font_assets: &BTreeMap<u32, Arc<[u8]>>,
     ) -> Result<Self> {
+        Self::from_graph_with_artboards_external_fonts_and_file_view_model_instances(
+            file,
+            graph,
+            artboards,
+            external_font_assets,
+            RuntimeFileViewModelInstanceCatalog::new(file),
+        )
+    }
+
+    #[doc(hidden)]
+    pub fn from_graph_with_artboards_external_fonts_and_file_view_model_instances(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        external_font_assets: &BTreeMap<u32, Arc<[u8]>>,
+        file_view_model_instances: RuntimeFileViewModelInstanceCatalog,
+    ) -> Result<Self> {
         let context = RuntimeArtboardBuildContext {
             file: Arc::new(file.clone()),
+            file_view_model_instances,
             artboards: Arc::new(artboards.to_vec()),
             artboard_index_by_global: Arc::new(build_artboard_index_by_global(artboards)),
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
@@ -1636,6 +1671,34 @@ impl ArtboardInstance {
         self.build_context
             .as_ref()
             .map(|context| Arc::clone(&context.file))
+    }
+
+    pub(crate) fn runtime_file_view_model_instances(
+        &self,
+    ) -> Option<RuntimeFileViewModelInstanceCatalog> {
+        self.build_context
+            .as_ref()
+            .map(|context| context.file_view_model_instances.clone())
+    }
+
+    /// Construct an imported context already attached to this artboard's
+    /// canonical file occurrence. Trigger writes made before state-machine
+    /// binding therefore mutate the same retained C++ instance immediately.
+    pub fn imported_view_model_instance_context(
+        &self,
+        view_model_index: usize,
+        instance_index: usize,
+    ) -> Option<RuntimeImportedViewModelInstanceContext> {
+        let context = self.build_context.as_ref()?;
+        let instance = context
+            .file_view_model_instances
+            .instance(view_model_index, instance_index)?;
+        RuntimeImportedViewModelInstanceContext::from_file_trigger_instance(
+            context.file.as_ref(),
+            view_model_index,
+            instance_index,
+            instance,
+        )
     }
 
     pub(crate) fn nested_structure_epoch(&self) -> Option<u64> {

@@ -13,7 +13,9 @@ use crate::project_data_converter::{
 use crate::retained_data_bind::{RuntimeDataBindTarget, RuntimeRetainedDataBind};
 use crate::scripting::{RuntimeScriptInstanceHandle, ScriptDataConverterMethod};
 use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelStructuralSource};
-use crate::view_model_cell::{RuntimeCellDirt, RuntimeViewModelCell, RuntimeViewModelCellValue};
+use crate::view_model_cell::{
+    RuntimeCellDirt, RuntimeViewModelCell, RuntimeViewModelCellValue, RuntimeViewModelInstanceCells,
+};
 use crate::{
     ProjectDataConverterContext, ProjectDataConverterOutputType, ProjectDataConverterProgram,
     ProjectDataConverterResolver, ProjectDataConverterState, ProjectDataValue,
@@ -94,6 +96,17 @@ pub(crate) enum RuntimeDataBindGraphContextKind {
 pub(crate) struct RuntimeImportedViewModelContextKey {
     pub(crate) view_model_index: usize,
     pub(crate) instance_index: usize,
+    pub(crate) trigger_owner_identity: u64,
+}
+
+impl RuntimeImportedViewModelContextKey {
+    fn from_context(context: &RuntimeImportedViewModelInstanceContext) -> Self {
+        Self {
+            view_model_index: context.view_model_index,
+            instance_index: context.instance_index,
+            trigger_owner_identity: context.trigger_owner_identity(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -4812,23 +4825,18 @@ impl RuntimeDataBindGraph {
         file: &RuntimeFile,
         view_model_index: usize,
         instance_index: usize,
+        instance_cells: &RuntimeViewModelInstanceCells,
     ) -> bool {
-        let context = RuntimeImportedViewModelInstanceContext {
-            view_model_index,
-            instance_index,
-            number_overrides: BTreeMap::new(),
-            boolean_overrides: BTreeMap::new(),
-            string_overrides: BTreeMap::new(),
-            color_overrides: BTreeMap::new(),
-            enum_overrides: BTreeMap::new(),
-            symbol_list_index_overrides: BTreeMap::new(),
-            asset_overrides: BTreeMap::new(),
-            artboard_overrides: BTreeMap::new(),
-            trigger_overrides: BTreeMap::new(),
-            list_overrides: BTreeMap::new(),
-            view_model_overrides: BTreeMap::new(),
+        let Some(context) =
+            RuntimeImportedViewModelInstanceContext::new(file, view_model_index, instance_index)
+        else {
+            return false;
         };
-        self.bind_imported_view_model_context(file, &context)
+        let changed = self.bind_imported_view_model_context(file, &context);
+        if changed {
+            self.bind_retained_trigger_sources(|path| instance_cells.cell_for_source_path(path));
+        }
+        changed
     }
 
     pub(crate) fn bind_imported_view_model_context(
@@ -4906,10 +4914,13 @@ impl RuntimeDataBindGraph {
                         .map(RuntimeDataBindGraphValue::Artboard)
                         .unwrap_or(value),
                     RuntimeDataBindGraphValue::Trigger(_) => context
-                        .trigger_overrides
-                        .get(&source.path)
-                        .copied()
-                        .map(RuntimeDataBindGraphValue::Trigger)
+                        .trigger_cell_for_source_path(&source.path)
+                        .and_then(|cell| match cell.value() {
+                            RuntimeViewModelCellValue::Trigger(value) => {
+                                Some(RuntimeDataBindGraphValue::Trigger(value))
+                            }
+                            _ => None,
+                        })
                         .unwrap_or(value),
                     RuntimeDataBindGraphValue::List { .. } => context
                         .list_overrides
@@ -4949,11 +4960,10 @@ impl RuntimeDataBindGraph {
             source.reset_converter_state();
             source.mark_reconcile_dirty();
         }
+        self.bind_retained_trigger_sources(|path| context.trigger_cell_for_source_path(path));
         self.context_kind = RuntimeDataBindGraphContextKind::ImportedViewModel;
-        self.imported_view_model_context = Some(RuntimeImportedViewModelContextKey {
-            view_model_index,
-            instance_index,
-        });
+        self.imported_view_model_context =
+            Some(RuntimeImportedViewModelContextKey::from_context(context));
         self.mark_default_view_model_bindings_dirty();
         true
     }
@@ -4989,6 +4999,7 @@ impl RuntimeDataBindGraph {
             source.reset_converter_state();
             source.mark_reconcile_dirty();
         }
+        self.bind_retained_trigger_sources(|path| context.cell_for_source_path(path));
         self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
         self.imported_view_model_context = None;
         self.mark_default_view_model_bindings_dirty();
@@ -5031,6 +5042,11 @@ impl RuntimeDataBindGraph {
             source.reset_converter_state();
             source.mark_reconcile_dirty();
         }
+        self.bind_retained_trigger_sources(|path| {
+            context_chain
+                .iter()
+                .find_map(|context_path| context.cell_for_scoped_source_path(context_path, path))
+        });
         self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
         self.imported_view_model_context = None;
         self.mark_default_view_model_bindings_dirty();
@@ -5116,10 +5132,7 @@ impl RuntimeDataBindGraph {
     /// Fold retained property dirt into owned sources during an advance —
     /// the direction-engine replacement for mutation-clock value-copy
     /// refresh.
-    pub(crate) fn collect_retained_owned_source_dirt(&mut self) -> bool {
-        if self.context_kind != RuntimeDataBindGraphContextKind::OwnedViewModel {
-            return false;
-        }
+    pub(crate) fn collect_retained_source_dirt(&mut self) -> bool {
         let mut changed = false;
         for source in &mut self.sources {
             changed |= Self::refresh_retained_source_from_cell(source);
@@ -5227,6 +5240,60 @@ impl RuntimeDataBindGraph {
                 converter.clear_retained_owned_operands();
             }
         }
+    }
+
+    /// Bind every trigger-valued DataBind to the exact property cell owned by
+    /// the instantiated context occurrence. C++ `DataBindContext` retains
+    /// that `ViewModelInstanceTrigger`; no trigger counter is copied into a
+    /// parallel source record (`data_bind_context.cpp:56-85`,
+    /// `data_bind.cpp:210-240`).
+    fn bind_retained_trigger_sources(
+        &mut self,
+        mut resolve: impl FnMut(&[u32]) -> Option<RuntimeViewModelCell>,
+    ) {
+        for source in &mut self.sources {
+            if !matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_)) {
+                continue;
+            }
+            if !source.bound {
+                source.retained_bind.clear_source();
+                continue;
+            }
+            let Some(cell) = resolve(&source.path)
+                .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Trigger(_)))
+            else {
+                source.retained_bind.clear_source();
+                source.bound = false;
+                continue;
+            };
+            if let RuntimeViewModelCellValue::Trigger(value) = cell.value() {
+                source.value = RuntimeDataBindGraphValue::Trigger(value);
+            }
+            source.retained_bind.set_source(cell);
+        }
+    }
+
+    pub(crate) fn bind_file_view_model_trigger_sources(
+        &mut self,
+        context: &RuntimeViewModelInstanceCells,
+    ) {
+        self.bind_retained_trigger_sources(|path| context.cell_for_source_path(path));
+    }
+
+    /// Fold the suppressed trigger-zero cascade after `DataContext::advanced`
+    /// through the ordinary retained source dirt path. The cached graph value
+    /// is only a downstream projection; the cell remains canonical.
+    pub(crate) fn collect_retained_trigger_source_dirt(&mut self) -> bool {
+        let mut changed = false;
+        for source in &mut self.sources {
+            if matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_)) {
+                changed |= Self::refresh_retained_source_from_cell(source);
+            }
+        }
+        if changed {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        changed
     }
 
     pub(crate) fn reset_converter_states(&mut self) {
@@ -5459,7 +5526,7 @@ impl RuntimeDataBindGraph {
         // owning binds. Fold that dirt now so a listener-originated write is
         // visible to the same frame's `updateDataBinds`, matching C++'s
         // synchronous DependencyHelper cascade.
-        self.collect_retained_owned_source_dirt();
+        self.collect_retained_source_dirt();
         self.mark_default_view_model_bindings_dirty();
         true
     }
@@ -6398,54 +6465,17 @@ impl RuntimeDataBindGraph {
         true
     }
 
-    pub(crate) fn set_default_view_model_trigger_source_for_data_bind(
-        &mut self,
+    pub(crate) fn default_view_model_trigger_source_path_for_data_bind(
+        &self,
         data_bind_index: usize,
-        value: u64,
-    ) -> bool {
-        let Some(path) = self
-            .default_view_model_bindings
+    ) -> Option<Vec<u32>> {
+        self.default_view_model_bindings
             .iter()
             .find(|binding| binding.data_bind_index == data_bind_index)
             .map(|binding| binding.source)
             .and_then(|source| self.sources.get(source.0))
+            .filter(|source| matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_)))
             .map(|source| source.path.clone())
-        else {
-            return false;
-        };
-
-        self.set_default_view_model_trigger_source_for_path(&path, value)
-    }
-
-    pub(crate) fn set_default_view_model_trigger_source_for_path(
-        &mut self,
-        path: &[u32],
-        value: u64,
-    ) -> bool {
-        let default_context_bound = self.default_view_model_source_context_bound();
-        let mut changed = false;
-        for source in self.sources.iter_mut().filter(|source| source.path == path) {
-            let RuntimeDataBindGraphValue::Trigger(current) = &mut source.default_value else {
-                continue;
-            };
-            if *current == value {
-                continue;
-            }
-            *current = value;
-            if default_context_bound {
-                source.value = RuntimeDataBindGraphValue::Trigger(value);
-                source.bound = true;
-            }
-            source.reset_formula_random_state_for_source_change();
-            changed = true;
-        }
-        if !changed {
-            return false;
-        }
-        if default_context_bound {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        true
     }
 
     pub(crate) fn set_default_view_model_list_source_item_count_for_data_bind(
@@ -6678,10 +6708,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         if self.imported_view_model_context
-            != Some(RuntimeImportedViewModelContextKey {
-                view_model_index: context.view_model_index,
-                instance_index: context.instance_index,
-            })
+            != Some(RuntimeImportedViewModelContextKey::from_context(context))
         {
             return false;
         }
@@ -6763,10 +6790,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         if self.imported_view_model_context
-            != Some(RuntimeImportedViewModelContextKey {
-                view_model_index: context.view_model_index,
-                instance_index: context.instance_index,
-            })
+            != Some(RuntimeImportedViewModelContextKey::from_context(context))
         {
             return false;
         }
@@ -6827,10 +6851,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         if self.imported_view_model_context
-            != Some(RuntimeImportedViewModelContextKey {
-                view_model_index: context.view_model_index,
-                instance_index: context.instance_index,
-            })
+            != Some(RuntimeImportedViewModelContextKey::from_context(context))
         {
             return false;
         }
@@ -6890,10 +6911,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         if self.imported_view_model_context
-            != Some(RuntimeImportedViewModelContextKey {
-                view_model_index: context.view_model_index,
-                instance_index: context.instance_index,
-            })
+            != Some(RuntimeImportedViewModelContextKey::from_context(context))
         {
             return false;
         }
@@ -6957,10 +6975,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         if self.imported_view_model_context
-            != Some(RuntimeImportedViewModelContextKey {
-                view_model_index: context.view_model_index,
-                instance_index: context.instance_index,
-            })
+            != Some(RuntimeImportedViewModelContextKey::from_context(context))
         {
             return false;
         }
@@ -7020,10 +7035,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         if self.imported_view_model_context
-            != Some(RuntimeImportedViewModelContextKey {
-                view_model_index: context.view_model_index,
-                instance_index: context.instance_index,
-            })
+            != Some(RuntimeImportedViewModelContextKey::from_context(context))
         {
             return false;
         }
@@ -7083,10 +7095,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         if self.imported_view_model_context
-            != Some(RuntimeImportedViewModelContextKey {
-                view_model_index: context.view_model_index,
-                instance_index: context.instance_index,
-            })
+            != Some(RuntimeImportedViewModelContextKey::from_context(context))
         {
             return false;
         }
@@ -7446,10 +7455,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         if self.imported_view_model_context
-            != Some(RuntimeImportedViewModelContextKey {
-                view_model_index: context.view_model_index,
-                instance_index: context.instance_index,
-            })
+            != Some(RuntimeImportedViewModelContextKey::from_context(context))
         {
             return false;
         }
@@ -7506,10 +7512,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         if self.imported_view_model_context
-            != Some(RuntimeImportedViewModelContextKey {
-                view_model_index: context.view_model_index,
-                instance_index: context.instance_index,
-            })
+            != Some(RuntimeImportedViewModelContextKey::from_context(context))
         {
             return false;
         }
@@ -7575,10 +7578,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         if self.imported_view_model_context
-            != Some(RuntimeImportedViewModelContextKey {
-                view_model_index: context.view_model_index,
-                instance_index: context.instance_index,
-            })
+            != Some(RuntimeImportedViewModelContextKey::from_context(context))
         {
             return false;
         }
@@ -7597,34 +7597,13 @@ impl RuntimeDataBindGraph {
             return false;
         }
         let path = source.path.clone();
-        let context_changed = context.trigger_overrides.get(&path) != Some(&value);
-
-        let source_changed = self.sources.iter().any(|source| {
-            source.path == path
-                && matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_))
-                && (!source.bound
-                    || !matches!(&source.value, RuntimeDataBindGraphValue::Trigger(current) if *current == value))
-        });
-
-        if !source_changed && !context_changed {
+        let Some(cell) = context.trigger_cell_for_source_path(&path) else {
+            return false;
+        };
+        if !cell.set_value(RuntimeViewModelCellValue::Trigger(value)) {
             return false;
         }
-
-        for source in self.sources.iter_mut().filter(|source| {
-            source.path == path
-                && matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_))
-        }) {
-            let changed = !source.bound
-                || !matches!(&source.value, RuntimeDataBindGraphValue::Trigger(current) if *current == value);
-            source.value = RuntimeDataBindGraphValue::Trigger(value);
-            source.bound = true;
-            if changed {
-                source.reset_formula_random_state_for_source_change();
-            }
-        }
-
-        context.trigger_overrides.insert(path, value);
-        self.mark_default_view_model_bindings_dirty();
+        self.collect_retained_source_dirt();
         true
     }
 
@@ -7638,10 +7617,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         if self.imported_view_model_context
-            != Some(RuntimeImportedViewModelContextKey {
-                view_model_index: context.view_model_index,
-                instance_index: context.instance_index,
-            })
+            != Some(RuntimeImportedViewModelContextKey::from_context(context))
         {
             return false;
         }
@@ -8102,12 +8078,13 @@ impl RuntimeDataBindGraph {
             .iter()
             .find(|binding| binding.data_bind_index == data_bind_index)?;
         let source = self.sources.get(binding.source.0)?;
-        let RuntimeDataBindGraphValue::Trigger(value) = source.value else {
-            return None;
-        };
-        Some(value)
+        match source.value {
+            RuntimeDataBindGraphValue::Trigger(value) => Some(value),
+            _ => None,
+        }
     }
 
+    #[cfg(test)]
     pub(crate) fn default_view_model_trigger_source_property_id_for_data_bind(
         &self,
         data_bind_index: usize,
@@ -8289,71 +8266,6 @@ impl RuntimeDataBindGraph {
             return None;
         };
         Some(global_id)
-    }
-
-    pub(crate) fn default_view_model_trigger_target_global_ids_for_source_path(
-        &self,
-        path: &[u32],
-    ) -> Vec<u32> {
-        self.default_view_model_bindings
-            .iter()
-            .filter_map(|binding| {
-                let source = self.sources.get(binding.source.0)?;
-                if source.path != path
-                    || !matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_))
-                {
-                    return None;
-                }
-                let target = self.targets.get(binding.target.0)?;
-                let RuntimeDataBindGraphTarget::Trigger { global_id } = target.target else {
-                    return None;
-                };
-                Some(global_id)
-            })
-            .collect()
-    }
-
-    pub(crate) fn reset_bound_trigger_sources(&mut self) -> bool {
-        if !self.default_view_model_context_bound() {
-            return false;
-        }
-        let default_context_bound = self.default_view_model_source_context_bound();
-        let mut changed = false;
-        for source in &mut self.sources {
-            if !source.bound {
-                continue;
-            }
-            let RuntimeDataBindGraphValue::Trigger(value) = &mut source.value else {
-                continue;
-            };
-            let mut source_reset_changed = false;
-            if *value != 0 {
-                changed = true;
-                source_reset_changed = true;
-            }
-            *value = 0;
-            if default_context_bound {
-                let RuntimeDataBindGraphValue::Trigger(default_value) = &mut source.default_value
-                else {
-                    continue;
-                };
-                if *default_value != 0 {
-                    changed = true;
-                    source_reset_changed = true;
-                }
-                *default_value = 0;
-            }
-            if source_reset_changed {
-                source.reset_formula_random_state_for_source_change();
-                if source.applies_source_to_target() {
-                    source.source_to_target_dirty_after_target_to_source = true;
-                }
-            }
-        }
-        if changed {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        changed
     }
 
     pub(crate) fn advance_stateful_converters(
@@ -9569,24 +9481,7 @@ impl RuntimeDataBindGraph {
             let Some(value) = source.trigger_target_to_source_value(value) else {
                 continue;
             };
-            let RuntimeDataBindGraphValue::Trigger(value) = value else {
-                continue;
-            };
-            let RuntimeDataBindGraphValue::Trigger(source_value) = &mut source.value else {
-                continue;
-            };
-            if *source_value != value {
-                *source_value = value;
-                changed = true;
-            }
-            let RuntimeDataBindGraphValue::Trigger(default_value) = &mut source.default_value
-            else {
-                continue;
-            };
-            if *default_value != value {
-                *default_value = value;
-                changed = true;
-            }
+            changed |= source.write_retained_trigger_source(value);
         }
 
         if changed {
@@ -9639,28 +9534,10 @@ impl RuntimeDataBindGraph {
 
         let mut changed = false;
         for (origin_source_index, path, value) in updates {
-            let mut source_changed_for_path = false;
-            for source in &mut self.sources {
-                if !source.bound || source.path != path {
-                    continue;
-                }
-                let (
-                    RuntimeDataBindGraphValue::Trigger(source_value),
-                    RuntimeDataBindGraphValue::Trigger(default_value),
-                    RuntimeDataBindGraphValue::Trigger(value),
-                ) = (&mut source.value, &mut source.default_value, &value)
-                else {
-                    continue;
-                };
-                if *source_value != *value {
-                    *source_value = *value;
-                    source_changed_for_path = true;
-                }
-                if *default_value != *value {
-                    *default_value = *value;
-                    source_changed_for_path = true;
-                }
-            }
+            let source_changed_for_path = self
+                .sources
+                .get_mut(origin_source_index)
+                .is_some_and(|source| source.write_retained_trigger_source(value));
             if source_changed_for_path {
                 self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
                 changed = true;
@@ -9832,6 +9709,10 @@ impl RuntimeDataBindGraph {
                 continue;
             }
             if source.applies_source_to_target() {
+                // The shared cell already cascaded this sibling's dirt. Fold
+                // its read-model cache now, but keep the public-update defer
+                // so C++ does not apply the observer in the origin pass.
+                Self::refresh_retained_source_from_cell(source);
                 source.mark_source_dirty_after_public_target_to_source();
             }
         }
@@ -10423,6 +10304,24 @@ impl RuntimeDataBindGraphSourceNode {
         }
     }
 
+    fn write_retained_trigger_source(&mut self, value: RuntimeDataBindGraphValue) -> bool {
+        if !matches!(value, RuntimeDataBindGraphValue::Trigger(_))
+            || self.retained_bind.source().is_none()
+        {
+            return false;
+        }
+        let cache_changed = self.value != value;
+        self.value = value;
+        let source_value = self.retained_bind.source().map(RuntimeViewModelCell::value);
+        let mut target = RuntimeGraphSourceValueTarget {
+            value: &mut self.value,
+            source_value,
+            changed: false,
+        };
+        let cell_changed = self.retained_bind.update_source_binding(&mut target);
+        cell_changed || cache_changed
+    }
+
     fn supports_direct_view_model_target_to_source(&self) -> bool {
         self.applies_target_to_source()
             && self.converter.is_none()
@@ -10787,7 +10686,7 @@ mod tests {
         }
 
         // No dirt: nothing refreshes, nothing schedules.
-        assert!(!graph.collect_retained_owned_source_dirt());
+        assert!(!graph.collect_retained_source_dirt());
         assert_eq!(
             graph.sources[0].value,
             RuntimeDataBindGraphValue::Number(3.0)
@@ -10796,7 +10695,7 @@ mod tests {
         // A shared-cell write cascades dirt; the collect refreshes the copy
         // and marks source-originated apply dirt (C++ addDirt(Bindings)).
         assert!(cell.set_value(RuntimeViewModelCellValue::Number(8.0)));
-        assert!(graph.collect_retained_owned_source_dirt());
+        assert!(graph.collect_retained_source_dirt());
         assert_eq!(
             graph.sources[0].value,
             RuntimeDataBindGraphValue::Number(8.0)
@@ -10808,7 +10707,7 @@ mod tests {
         );
 
         // The dirt was consumed: a second collect is a no-op.
-        assert!(!graph.collect_retained_owned_source_dirt());
+        assert!(!graph.collect_retained_source_dirt());
     }
 
     /// #RB-1 f10: C++ retains an operation-ViewModel operand as its exact
@@ -10847,10 +10746,10 @@ mod tests {
             Some(RuntimeDataBindGraphValue::Number(12.0)),
             "conversion reads the retained cell rather than the bind-time snapshot"
         );
-        assert!(graph.collect_retained_owned_source_dirt());
-        assert!(!graph.collect_retained_owned_source_dirt());
-        assert!(cloned.collect_retained_owned_source_dirt());
-        assert!(!cloned.collect_retained_owned_source_dirt());
+        assert!(graph.collect_retained_source_dirt());
+        assert!(!graph.collect_retained_source_dirt());
+        assert!(cloned.collect_retained_source_dirt());
+        assert!(!cloned.collect_retained_source_dirt());
     }
 
     #[test]
@@ -10885,11 +10784,11 @@ mod tests {
 
         assert!(old_operand.set_value(RuntimeViewModelCellValue::Number(3.0)));
         assert!(
-            !occurrence.collect_retained_owned_source_dirt(),
+            !occurrence.collect_retained_source_dirt(),
             "the occurrence unsubscribed from the departed operand"
         );
         assert!(new_operand.set_value(RuntimeViewModelCellValue::Number(7.0)));
-        assert!(occurrence.collect_retained_owned_source_dirt());
+        assert!(occurrence.collect_retained_source_dirt());
         assert_eq!(
             runtime_data_bind_graph_convert_value(
                 occurrence.sources[0]
@@ -10961,8 +10860,8 @@ mod tests {
             ),
             Some(RuntimeDataBindGraphValue::Number(15.0))
         );
-        assert!(graph.collect_retained_owned_source_dirt());
-        assert!(!graph.collect_retained_owned_source_dirt());
+        assert!(graph.collect_retained_source_dirt());
+        assert!(!graph.collect_retained_source_dirt());
     }
 
     /// #RB-1 e3: a to-source-only migrated bind never applies source→target,
@@ -10984,7 +10883,7 @@ mod tests {
         }
 
         assert!(cell.set_value(RuntimeViewModelCellValue::Number(42.0)));
-        assert!(graph.collect_retained_owned_source_dirt());
+        assert!(graph.collect_retained_source_dirt());
         assert_eq!(
             graph.sources[0].value,
             RuntimeDataBindGraphValue::Number(42.0)
@@ -11012,7 +10911,7 @@ mod tests {
         string_graph.sources[0].source_to_target_dirty_after_immediate = false;
         string_graph.sources[0].reconcile_pending = false;
         assert!(string_cell.set_value(RuntimeViewModelCellValue::String(Arc::from(&b"new"[..]))));
-        assert!(string_graph.collect_retained_owned_source_dirt());
+        assert!(string_graph.collect_retained_source_dirt());
         assert_eq!(
             string_graph.sources[0].value,
             RuntimeDataBindGraphValue::String(b"new".to_vec())
@@ -11035,7 +10934,7 @@ mod tests {
         let mut font_value = RuntimeFontAssetValue::default();
         assert!(font_value.set_live_font_bytes(Some(Arc::clone(&live_font))));
         assert!(font_cell.set_value(RuntimeViewModelCellValue::AssetFont(font_value)));
-        assert!(font_graph.collect_retained_owned_source_dirt());
+        assert!(font_graph.collect_retained_source_dirt());
         assert_eq!(
             font_graph.sources[0].value,
             RuntimeDataBindGraphValue::Asset(RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX)

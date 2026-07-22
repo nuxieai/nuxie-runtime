@@ -294,7 +294,6 @@ pub(crate) struct RuntimeBindableBooleanDefaultViewModelSource {
 pub(crate) struct RuntimeViewModelTrigger {
     pub(crate) global_id: u32,
     pub(crate) view_model_property_id: u32,
-    pub(crate) value: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -2035,7 +2034,7 @@ pub(crate) fn runtime_default_view_model_triggers(
         .values
         .into_iter()
         .filter_map(|value| {
-            let value_count = file.view_model_instance_trigger_count_for_object(value.object)?;
+            file.view_model_instance_trigger_count_for_object(value.object)?;
             let view_model_property_id = value
                 .object
                 .uint_property("viewModelPropertyId")
@@ -2043,7 +2042,6 @@ pub(crate) fn runtime_default_view_model_triggers(
             Some(RuntimeViewModelTrigger {
                 global_id: value.object.id,
                 view_model_property_id,
-                value: value_count,
             })
         })
         .collect()

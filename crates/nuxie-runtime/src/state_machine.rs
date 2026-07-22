@@ -27,20 +27,19 @@ pub(crate) use bindables::{
     RuntimeBindableAssetValue, RuntimeBindableBoolean, RuntimeBindableColor, RuntimeBindableEnum,
     RuntimeBindableInteger, RuntimeBindableList, RuntimeBindableNumber,
     RuntimeBindableNumberDefaultViewModelSource, RuntimeBindableString, RuntimeBindableTrigger,
-    RuntimeBindableTriggerSource, RuntimeBindableViewModel, RuntimeViewModelTrigger,
-    StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
-    StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
-    StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
-    StateMachineBindableListInstance, StateMachineBindableNumberInstance,
-    StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
-    StateMachineBindableViewModelInstance, bindable_artboard_value, bindable_asset_value,
-    bindable_boolean_value, bindable_color_value, bindable_enum_value, bindable_integer_value,
-    bindable_number_value, bindable_string_value, bindable_trigger_source_global_id,
-    bindable_trigger_value, bindable_view_model_value, runtime_bindable_artboards,
-    runtime_bindable_assets, runtime_bindable_booleans, runtime_bindable_colors,
-    runtime_bindable_enums, runtime_bindable_integers, runtime_bindable_lists,
-    runtime_bindable_numbers, runtime_bindable_strings, runtime_bindable_triggers,
-    runtime_bindable_view_models, runtime_default_view_model_triggers,
+    RuntimeBindableViewModel, RuntimeViewModelTrigger, StateMachineBindableArtboardInstance,
+    StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
+    StateMachineBindableColorInstance, StateMachineBindableEnumInstance,
+    StateMachineBindableIntegerInstance, StateMachineBindableListInstance,
+    StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
+    StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
+    bindable_artboard_value, bindable_asset_value, bindable_boolean_value, bindable_color_value,
+    bindable_enum_value, bindable_integer_value, bindable_number_value, bindable_string_value,
+    bindable_trigger_source_global_id, bindable_trigger_value, bindable_view_model_value,
+    runtime_bindable_artboards, runtime_bindable_assets, runtime_bindable_booleans,
+    runtime_bindable_colors, runtime_bindable_enums, runtime_bindable_integers,
+    runtime_bindable_lists, runtime_bindable_numbers, runtime_bindable_strings,
+    runtime_bindable_triggers, runtime_bindable_view_models, runtime_default_view_model_triggers,
     runtime_number_default_view_model_source_for_instance,
 };
 pub use instance::StateMachineInstance;
@@ -2536,32 +2535,26 @@ impl StateMachineInputInstance {
 pub(crate) struct StateMachineViewModelTriggerInstance {
     global_id: u32,
     view_model_property_id: u32,
-    source: StateMachineViewModelTriggerSource,
-}
-
-#[derive(Debug, Clone)]
-enum StateMachineViewModelTriggerSource {
-    /// Default/imported contexts are still compatibility snapshots. f12B
-    /// will give those file-owned instances canonical retained cells.
-    Copied {
-        value: u64,
-        changed: bool,
-        used_layers: Vec<u64>,
-    },
-    /// Owned contexts retain the exact `ViewModelInstanceTrigger` analog.
-    Retained(RuntimeViewModelCell),
+    /// Exact `ViewModelInstanceTrigger` analog owned by the instantiated
+    /// context occurrence. Metadata never carries a parallel value/change
+    /// snapshot (`data_bind_context.cpp:56-85`, `data_bind.cpp:210-240`).
+    cell: Option<RuntimeViewModelCell>,
 }
 
 impl StateMachineViewModelTriggerInstance {
-    pub(crate) fn new(global_id: u32, view_model_property_id: u32, value: u64) -> Self {
+    pub(crate) fn new(global_id: u32, view_model_property_id: u32) -> Self {
         Self {
             global_id,
             view_model_property_id,
-            source: StateMachineViewModelTriggerSource::Copied {
-                value,
-                changed: false,
-                used_layers: Vec::new(),
-            },
+            cell: None,
+        }
+    }
+
+    pub(crate) fn unbound(&self) -> Self {
+        Self {
+            global_id: self.global_id,
+            view_model_property_id: self.view_model_property_id,
+            cell: None,
         }
     }
 
@@ -2570,113 +2563,43 @@ impl StateMachineViewModelTriggerInstance {
     }
 
     pub(crate) fn increment(&mut self) {
-        match &mut self.source {
-            StateMachineViewModelTriggerSource::Copied { value, changed, .. } => {
-                *value = value.saturating_add(1);
-                *changed = true;
-            }
-            StateMachineViewModelTriggerSource::Retained(cell) => {
-                cell.fire_trigger();
-            }
-        }
-    }
-
-    pub(crate) fn set_value(&mut self, value: u64) -> bool {
-        match &mut self.source {
-            StateMachineViewModelTriggerSource::Copied {
-                value: current,
-                changed,
-                ..
-            } => {
-                if *current == value {
-                    return false;
-                }
-                *current = value;
-                *changed = true;
-                true
-            }
-            StateMachineViewModelTriggerSource::Retained(cell) => {
-                cell.set_value(RuntimeViewModelCellValue::Trigger(value))
-            }
-        }
-    }
-
-    pub(crate) fn replace_value(&mut self, value: u64) {
-        self.source = StateMachineViewModelTriggerSource::Copied {
-            value,
-            changed: false,
-            used_layers: Vec::new(),
-        };
-    }
-
-    pub(crate) fn reset(&mut self) {
-        self.replace_value(0);
-    }
-
-    /// C++ `ViewModelInstance::advanced()` acknowledges the retained source;
-    /// `ViewModelInstanceTrigger::advanced()` additionally zeroes the counter
-    /// under `SuppressDelegation`. Copied fallbacks preserve that contract.
-    pub(crate) fn advanced(&mut self) {
-        match &mut self.source {
-            StateMachineViewModelTriggerSource::Copied {
-                value,
-                changed,
-                used_layers,
-            } => {
-                *value = 0;
-                *changed = false;
-                used_layers.clear();
-            }
-            StateMachineViewModelTriggerSource::Retained(cell) => cell.advanced(),
+        if let Some(cell) = &self.cell {
+            cell.fire_trigger();
         }
     }
 
     pub(crate) fn is_fireable_for_layer(&self, layer_id: u64) -> bool {
-        match &self.source {
-            StateMachineViewModelTriggerSource::Copied {
-                changed,
-                used_layers,
-                ..
-            } => *changed && !used_layers.contains(&layer_id),
-            StateMachineViewModelTriggerSource::Retained(cell) => {
-                cell.is_changed_for_layer(layer_id)
-            }
-        }
+        self.cell
+            .as_ref()
+            .is_some_and(|cell| cell.is_changed_for_layer(layer_id))
     }
 
     pub(crate) fn use_in_layer(&mut self, layer_id: u64) {
-        match &mut self.source {
-            StateMachineViewModelTriggerSource::Copied { used_layers, .. } => {
-                if !used_layers.contains(&layer_id) {
-                    used_layers.push(layer_id);
-                }
-            }
-            StateMachineViewModelTriggerSource::Retained(cell) => cell.use_in_layer(layer_id),
+        if let Some(cell) = &self.cell {
+            cell.use_in_layer(layer_id);
         }
     }
 
     pub(crate) fn value(&self) -> u64 {
-        match &self.source {
-            StateMachineViewModelTriggerSource::Copied { value, .. } => *value,
-            StateMachineViewModelTriggerSource::Retained(cell) => match cell.value() {
-                RuntimeViewModelCellValue::Trigger(value) => value,
-                _ => 0,
-            },
+        match self.cell.as_ref().map(RuntimeViewModelCell::value) {
+            Some(RuntimeViewModelCellValue::Trigger(value)) => value,
+            _ => 0,
         }
     }
 
     pub(crate) fn bind_cell(&mut self, cell: RuntimeViewModelCell) {
-        if matches!(
-            &self.source,
-            StateMachineViewModelTriggerSource::Retained(current) if current.ptr_eq(&cell)
-        ) {
+        if self
+            .cell
+            .as_ref()
+            .is_some_and(|current| current.ptr_eq(&cell))
+        {
             return;
         }
         debug_assert!(matches!(
             cell.value(),
             RuntimeViewModelCellValue::Trigger(_)
         ));
-        self.source = StateMachineViewModelTriggerSource::Retained(cell);
+        self.cell = Some(cell);
     }
 
     pub(crate) fn view_model_property_id(&self) -> u32 {
@@ -4248,5 +4171,15 @@ mod tests {
         let ordinary = StateMachineReportedEvent::from_runtime_event(8, ordinary);
         assert_eq!(ordinary.url(), None);
         assert_eq!(ordinary.target(), None);
+    }
+
+    #[test]
+    fn unbound_view_model_trigger_cannot_fire() {
+        let mut trigger = StateMachineViewModelTriggerInstance::new(7, 3);
+        trigger.increment();
+        assert_eq!(trigger.value(), 0);
+        assert!(!trigger.is_fireable_for_layer(11));
+        trigger.use_in_layer(11);
+        assert!(!trigger.is_fireable_for_layer(11));
     }
 }

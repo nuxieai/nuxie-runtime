@@ -14,11 +14,13 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 393/393, nuxie lib 140/140,
-C++ probe 714/714, both runtime golden gates 317/317 exact / 647/647 segments;
-ordinary has zero failures and scripted has only the two permitted verification
-names (`data_viz_demo`, `db_health_tracker`). The workspace push gate is green
-as of 2026-07-22. Review
+Regression floor (must stay green): runtime lib 399/399, nuxie lib 140/140,
+C++ probe 721/721, both runtime golden gates 317/317 exact / 647/647 segments;
+ordinary and scripted both have zero failures. The workspace push gate is green
+as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
+the 721/721 probe run rather than silently skipping it. Every remaining RB-1
+cut and every RB-1 push must run `make scripted-golden-compare` in addition to
+the ordinary gate. Review
 of e5(A) restored the distinction between raw `StateMachineInstance::advance`
 and the full `advanceAndApply` facade: the facade forces zero-second returns
 true and includes pending reports (`state_machine_instance.cpp:2608-2613,
@@ -401,6 +403,37 @@ upstream-sync-map registry).
     names (`data_viz_demo`, `db_health_tracker`). C API smoke and the full
     workspace are green. Standards and Spec re-reviews are clean.
     Renderer goldens are not applicable because no renderer/draw code changed.
+  - [x] (f12B) default and imported trigger bindings now retain canonical
+    file-owned cells instead of copied compatibility state. One serialized
+    instance catalog belongs to each loaded `nuxie::File` and is passed into
+    every root/nested `RuntimeArtboardBuildContext`; standalone raw constructors
+    create an explicit fresh occurrence. Machines in one file occurrence share
+    the exact graph/transition trigger cells. The artboard occurrence factory
+    creates imported contexts already attached to those cells, so pre-bind
+    writes from multiple contexts preserve one C++ mutation order; detached
+    compatibility contexts adopt on bind and reject pre-bind trigger writes.
+    Context clones copy serialized trigger payload but not dynamic changed,
+    used-layer, or dependent-dirt state, while state-machine clones deep-copy
+    and rebind their catalog to preserve snapshot semantics. This
+    follows the pinned probe's direct `ViewModel::instance(index)` retention
+    (`tools/cpp-probe/main.cpp:1267-1300,4683-4721`) and C++ transition use of
+    the DataBind's retained source (`transition_viewmodel_condition.cpp:49-60`;
+    `transition_property_viewmodel_comparator.cpp:50-67`). The copied/retained
+    trigger-source enum, imported trigger overrides, default-trigger mirrors,
+    `sync_default_view_model_triggers_from_active`,
+    `reset_bound_trigger_sources`, and `reset_active_view_model_triggers` are
+    gone; file reset advances each precomputed unique trigger cell once,
+    including nested/list topology and cycles, while owned-context reset walks
+    live list storage so inserted rows participate and removed rows do not.
+    Missing paths are explicitly unbound. The
+    zero-second `advanceAndApply` forcing, pending-report return term, and
+    next-frame `applyEvents` chained drain remain unchanged. Evidence: runtime
+    lib 399/399, nuxie lib 140/140, probe 721/721, both corpus summaries
+    317/317 entries and 647/647 exact segments with zero failures, C API smoke
+    and workspace green. The workspace target builds the probe and exports
+    `RIVE_CPP_PROBE`; every further RB-1 cut must run the scripted gate before
+    push.
+    Renderer goldens are not applicable.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -495,22 +528,13 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RB-1 data-binding foundation rebuild (map Phase RB; user-directed
-   2026-07-21) — port C++'s retained-identity model (retained
-   `ViewModelInstanceValue` cells, `DependencyHelper` dependent dirt,
-   parent-linked `DataContext`, retained DataBind/listener/converter
-   lifecycle) and DELETE the compensation family (mutation clocks,
-   candidate vectors, listener rescans, alias mirrors, Scene-wide rebind
-   bit). Floors are the harness; the four red scripted entries are
-   expected to close as a byproduct (their point-fix chase is STOPPED —
-   full evidence trail retained below for cross-checking the rebuild).
-   Editor-team changes to this layer are frozen until it lands. A final
-   supporting fact from the bind-table diff: the pre-rebase machinery
-   never rewrote graph sources from the owned context in the runner flow
-   at all (empty bind log at `a159897f`), while the candidate binder
-   rewrites every source from instance-0 values ([4,0]→95, [3,0]→40,
-   [2,4]→1.0667) — the two designs disagree even about WHEN binding
-   happens, which is exactly why point-fixing inside them cannot converge.
+1. #RB-1 final deletion/closure audit — the f12B closeout repair restored both
+   corpus floors to 317/317 entries and 647/647 exact segments with zero
+   failures. Audit `docs/rb1-compensation-inventory.md`, prove every deletion-
+   checklist symbol is gone, and run the full battery plus independent
+   Standards/Spec review before closing #RB-1. Run
+   `make scripted-golden-compare` before every further deletion cut is pushed;
+   a red scripted floor stops the cut.
 2. ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
    entries broken by concurrent main `c7d48ca0` (`db_health_tracker`,
@@ -960,3 +984,37 @@ Decisions log.)
   at 317/317 entries plus 647/647 exact segments, scripted limited to
   `data_viz_demo` and `db_health_tracker`, C API smoke green, and the full
   workspace green. Renderer goldens are not applicable.
+- 2026-07-22 — #RB-1 f12B canonicalized default/imported trigger ownership.
+  A loaded-file catalog now supplies the exact serialized-instance cells to
+  every root/nested artboard's graph sources and transition metadata; explicit
+  imported contexts created by the artboard occurrence retain those cells
+  immediately, while state-machine clones detach and rebind their catalog for
+  snapshot isolation. Multiple pre-bind contexts therefore mutate one
+  canonical occurrence in call order. Detached compatibility contexts adopt
+  only on bind and reject pre-bind trigger writes. Adoption validates and
+  preserves nested/list aliases and cycles transactionally; context clones
+  copy payload but not C++ dynamic changed/use/dirt state. Missing paths remain
+  unbound. The copied trigger variant, imported trigger
+  overrides, default mirrors, and sync/reset compensation helpers are deleted.
+  The user-corrected zero-second facade forcing, pending-report return, and
+  next-frame `applyEvents` semantics remain unchanged. Full evidence is runtime
+  lib 399/399, nuxie lib 140/140, C++ probe 721/721, ordinary and scripted
+  corpus summaries 317/317 entries plus 647/647 exact segments, scripted
+  limited to `data_viz_demo` and `db_health_tracker`, C API smoke and workspace
+  green. Renderer goldens are not applicable.
+- 2026-07-22 — #RB-1 f12B closeout repair restored the scripted floor before
+  any further deletion cut. `f8422eec` had filtered imported
+  converter-property DataBinds through the outer artboard authored-occurrence
+  table, so converter-owned RangeMapper/Interpolator/OperationValue chains
+  never received their subordinate source updates. The repair keeps those
+  bindings in the converter's own path-driven queue, matching
+  `data_bind.cpp:94-100` and `data_bind_container.cpp:86-112`; an outer
+  `data_bind_index` can no longer enqueue them. Focused `data_viz_demo` and
+  `db_health_tracker` comparison is exact. Full evidence is runtime lib
+  399/399, nuxie lib 140/140, C++ probe 721/721, ordinary and scripted goldens
+  317/317 entries plus 647/647 exact segments with zero failures, C API smoke,
+  and the full workspace green. `cpp-oracle-workspace-tests` now depends on
+  `cpp-probe`, exports `RIVE_CPP_PROBE`, and its own log proves the 721-test
+  suite ran. The zero-second facade return and next-frame chained
+  `applyEvents` assertions remain unchanged. Renderer goldens are not
+  applicable because no renderer/draw code changed.

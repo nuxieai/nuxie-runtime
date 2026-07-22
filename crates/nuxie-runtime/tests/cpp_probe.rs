@@ -68277,6 +68277,423 @@ fn state_machine_imported_viewmodel_trigger_source_mutation_is_shared_across_sta
 }
 
 #[test]
+fn state_machine_imported_viewmodel_trigger_source_prebind_mutation_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_trigger_source_prebind_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_trigger_shared_mutation(9338);
+    let value = 3_u64;
+    let property_name = "fire";
+    let args = [
+        "--runtime-set-view-model-instance-source-trigger-by-name".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        property_name.to_owned(),
+        value.to_string(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+    let mut imported_context = rust
+        .imported_view_model_instance_context(0, 0)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(
+        imported_context.set_trigger_by_property_name(&runtime, property_name, value),
+        "{label} failed to mutate the imported trigger before binding"
+    );
+    assert!(state_machine_a.bind_imported_view_model_context(&runtime, &imported_context));
+    assert!(state_machine_b.bind_imported_view_model_context(&runtime, &imported_context));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine_b, 0.0);
+
+    let cpp_state_machine = cpp
+        .artboards
+        .first()
+        .and_then(|artboard| artboard.runtime_state_machine_advances.first())
+        .unwrap_or_else(|| panic!("missing C++ state-machine advance for {label}"));
+    compare_state_machine_advance(cpp_state_machine, &state_machine_b, advanced, label);
+    compare_state_machine_trigger_binding(cpp_state_machine, &state_machine_b, 0, label);
+}
+
+#[test]
+fn state_machine_imported_viewmodel_trigger_source_prebind_round_trip_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_trigger_source_prebind_round_trip_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_trigger_shared_mutation(9340);
+    let property_name = "fire";
+    let args = [
+        "--runtime-set-view-model-instance-source-trigger-by-name".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        property_name.to_owned(),
+        "3".to_owned(),
+        "--runtime-set-view-model-instance-source-trigger-by-name".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        property_name.to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut imported_context = rust
+        .imported_view_model_instance_context(0, 0)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(imported_context.set_trigger_by_property_name(&runtime, property_name, 3));
+    assert!(imported_context.set_trigger_by_property_name(&runtime, property_name, 0));
+    assert!(state_machine.bind_imported_view_model_context(&runtime, &imported_context));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+
+    let cpp_state_machine = cpp
+        .artboards
+        .first()
+        .and_then(|artboard| artboard.runtime_state_machine_advances.first())
+        .unwrap_or_else(|| panic!("missing C++ state-machine advance for {label}"));
+    compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, label);
+    compare_state_machine_trigger_binding(cpp_state_machine, &state_machine, 0, label);
+}
+
+#[test]
+fn state_machine_imported_viewmodel_trigger_source_interleaved_prebind_writes_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_trigger_source_interleaved_prebind_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_trigger_shared_mutation(9344);
+    let property_name = "fire";
+    let args = [
+        "--runtime-set-view-model-instance-source-trigger-by-name".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        property_name.to_owned(),
+        "3".to_owned(),
+        "--runtime-set-view-model-instance-source-trigger-by-name".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        property_name.to_owned(),
+        "5".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context_b = rust
+        .imported_view_model_instance_context(0, 0)
+        .unwrap_or_else(|| panic!("missing second imported view-model context for {label}"));
+    let mut context_a = rust
+        .imported_view_model_instance_context(0, 0)
+        .unwrap_or_else(|| panic!("missing first imported view-model context for {label}"));
+
+    assert!(context_b.set_trigger_by_property_name(&runtime, property_name, 3));
+    assert!(context_a.set_trigger_by_property_name(&runtime, property_name, 5));
+    assert!(state_machine.bind_imported_view_model_context(&runtime, &context_b));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+
+    let cpp_state_machine = cpp
+        .artboards
+        .first()
+        .and_then(|artboard| artboard.runtime_state_machine_advances.first())
+        .unwrap_or_else(|| panic!("missing C++ state-machine advance for {label}"));
+    compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, label);
+    compare_state_machine_trigger_binding(cpp_state_machine, &state_machine, 0, label);
+}
+
+#[test]
+fn state_machine_fresh_imported_context_does_not_reset_shared_trigger_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_fresh_imported_context_shared_trigger_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_trigger_shared_mutation(9341);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-view-model-instance-source-trigger".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "3".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+    let mut first_context = rust
+        .imported_view_model_instance_context(0, 0)
+        .unwrap_or_else(|| panic!("missing first imported view-model context for {label}"));
+    let fresh_context = rust
+        .imported_view_model_instance_context(0, 0)
+        .unwrap_or_else(|| panic!("missing fresh imported view-model context for {label}"));
+
+    assert!(state_machine_a.bind_imported_view_model_context(&runtime, &first_context));
+    assert!(
+        state_machine_a.set_imported_view_model_context_trigger_source_for_data_bind(
+            &mut first_context,
+            0,
+            3,
+        )
+    );
+    assert!(state_machine_b.bind_imported_view_model_context(&runtime, &fresh_context));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine_b, 0.0);
+
+    let cpp_state_machine = cpp
+        .artboards
+        .first()
+        .and_then(|artboard| artboard.runtime_state_machine_advances.first())
+        .unwrap_or_else(|| panic!("missing C++ state-machine advance for {label}"));
+    compare_state_machine_advance(cpp_state_machine, &state_machine_b, advanced, label);
+    compare_state_machine_trigger_binding(cpp_state_machine, &state_machine_b, 0, label);
+}
+
+#[test]
+fn state_machine_fresh_imported_context_replays_clear_against_live_trigger_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_fresh_imported_context_live_trigger_clear_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_trigger_shared_mutation(9343);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-view-model-instance-source-trigger".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "3".to_owned(),
+        "--runtime-set-view-model-instance-source-trigger-by-name".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "fire".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+    let mut first_context = rust
+        .imported_view_model_instance_context(0, 0)
+        .unwrap_or_else(|| panic!("missing first imported view-model context for {label}"));
+    let mut fresh_context = rust
+        .imported_view_model_instance_context(0, 0)
+        .unwrap_or_else(|| panic!("missing fresh imported view-model context for {label}"));
+
+    assert!(state_machine_a.bind_imported_view_model_context(&runtime, &first_context));
+    assert!(
+        state_machine_a.set_imported_view_model_context_trigger_source_for_data_bind(
+            &mut first_context,
+            0,
+            3,
+        )
+    );
+    assert!(
+        fresh_context.set_trigger_by_property_name(&runtime, "fire", 0),
+        "the second occurrence context must clear the shared live trigger"
+    );
+    assert!(state_machine_b.bind_imported_view_model_context(&runtime, &fresh_context));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine_b, 0.0);
+
+    let cpp_state_machine = cpp
+        .artboards
+        .first()
+        .and_then(|artboard| artboard.runtime_state_machine_advances.first())
+        .unwrap_or_else(|| panic!("missing C++ state-machine advance for {label}"));
+    compare_state_machine_advance(cpp_state_machine, &state_machine_b, advanced, label);
+    compare_state_machine_trigger_binding(cpp_state_machine, &state_machine_b, 0, label);
+}
+
+#[test]
+fn state_machine_quiescent_adopted_context_clone_does_not_fire_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_quiescent_imported_context_clone_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_trigger_shared_mutation(9342);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+    let imported_context = rust
+        .imported_view_model_instance_context(0, 0)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(state_machine_a.bind_imported_view_model_context(&runtime, &imported_context));
+    let cloned_context = imported_context.clone();
+    assert!(state_machine_b.bind_imported_view_model_context(&runtime, &cloned_context));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine_b, 0.0);
+
+    let cpp_state_machine = cpp
+        .artboards
+        .first()
+        .and_then(|artboard| artboard.runtime_state_machine_advances.first())
+        .unwrap_or_else(|| panic!("missing C++ state-machine advance for {label}"));
+    compare_state_machine_advance(cpp_state_machine, &state_machine_b, advanced, label);
+    compare_state_machine_trigger_binding(cpp_state_machine, &state_machine_b, 0, label);
+}
+
+#[test]
+fn state_machine_default_viewmodel_trigger_source_is_shared_across_state_machines_matches_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_trigger_source_shared_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_trigger_shared_mutation(9337);
+    let value = 3_u64;
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-default-view-model-source-trigger".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        value.to_string(),
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine_a.bind_default_view_model_context(),
+        "{label} failed to bind first default view-model context"
+    );
+    assert!(
+        state_machine_a.set_default_view_model_trigger_source_for_data_bind(0, value),
+        "{label} failed to mutate the shared default trigger source"
+    );
+    assert!(
+        state_machine_b.bind_default_view_model_context(),
+        "{label} failed to bind second default view-model context"
+    );
+    let advanced = rust.advance_state_machine_instance(&mut state_machine_b, 0.0);
+
+    let cpp_state_machine = cpp
+        .artboards
+        .first()
+        .and_then(|artboard| artboard.runtime_state_machine_advances.first())
+        .unwrap_or_else(|| panic!("missing C++ state-machine advance for {label}"));
+    compare_state_machine_advance(cpp_state_machine, &state_machine_b, advanced, label);
+    compare_state_machine_trigger_binding(cpp_state_machine, &state_machine_b, 0, label);
+}
+
+#[test]
 fn state_machine_imported_viewmodel_trigger_source_name_mutation_is_shared_across_state_machines_matches_cpp_probe()
  {
     let Some(probe) = probe_path() else {
@@ -68316,7 +68733,8 @@ fn state_machine_imported_viewmodel_trigger_source_name_mutation_is_shared_acros
     let mut state_machine_b = rust
         .state_machine_instance(1)
         .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
-    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 0)
+    let mut imported_context = rust
+        .imported_view_model_instance_context(0, 0)
         .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
 
     assert!(
@@ -68434,12 +68852,14 @@ fn state_machine_imported_viewmodel_trigger_source_handle_mutation_is_shared_acr
     let mut state_machine_b = rust
         .state_machine_instance(1)
         .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
-    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 0)
+    let mut imported_context = rust
+        .imported_view_model_instance_context(0, 0)
         .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
     let handle = imported_context
         .trigger_source_handle_by_property_name(&runtime, property_name)
         .unwrap_or_else(|| panic!("missing imported trigger source handle for {label}"));
-    let mut alternate_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 1)
+    let mut alternate_context = rust
+        .imported_view_model_instance_context(0, 1)
         .unwrap_or_else(|| panic!("missing alternate imported view-model context for {label}"));
 
     assert_eq!(handle.view_model_index(), 0, "{label} handle view model");

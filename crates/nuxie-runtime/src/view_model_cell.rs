@@ -18,6 +18,7 @@
 //! re-entrancy-free while those actions later mutate other cells.
 
 use std::cell::{Cell, RefCell};
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
@@ -430,6 +431,19 @@ impl RuntimeViewModelCell {
         }
     }
 
+    fn detached_clone(&self) -> Self {
+        let state = self.state.borrow();
+        Self {
+            state: Rc::new(RefCell::new(RuntimeViewModelCellState {
+                value: state.value.clone(),
+                value_changed: false,
+                used_layers: Vec::new(),
+                suppress_depth: 0,
+                dependents: Vec::new(),
+            })),
+        }
+    }
+
     /// Shared-identity check: two handles retain the same C++ object.
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.state, &other.state)
@@ -442,6 +456,12 @@ impl RuntimeViewModelCell {
     /// C++ `ViewModelInstanceValue::hasChanged` (`ValueFlags::valueChanged`).
     pub fn has_changed(&self) -> bool {
         self.state.borrow().value_changed
+    }
+
+    fn replace_trigger_payload_for_clone(&self, value: u64) {
+        let mut state = self.state.borrow_mut();
+        debug_assert!(matches!(state.value, RuntimeViewModelCellValue::Trigger(_)));
+        state.value = RuntimeViewModelCellValue::Trigger(value);
     }
 
     /// C++ `ViewModelInstanceValue` inherits `Triggerable`, so the changed
@@ -718,6 +738,16 @@ pub struct RuntimeViewModelInstanceCells {
     state: Rc<RefCell<RuntimeViewModelInstanceCellsState>>,
 }
 
+impl std::fmt::Debug for RuntimeViewModelInstanceCells {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let state = self.state.borrow();
+        f.debug_struct("RuntimeViewModelInstanceCells")
+            .field("view_model_index", &state.view_model_index)
+            .field("property_count", &state.slots.len())
+            .finish_non_exhaustive()
+    }
+}
+
 impl RuntimeViewModelInstanceCells {
     /// C++ `File::createViewModelInstance(viewModel)`: definition defaults,
     /// nested references instantiated recursively (cycle-guarded).
@@ -726,7 +756,13 @@ impl RuntimeViewModelInstanceCells {
         view_model_index: usize,
     ) -> Option<Self> {
         let mut visiting = Vec::new();
-        Self::build(file, view_model_index, None, &mut visiting)
+        Self::build(
+            file,
+            view_model_index,
+            None,
+            &mut visiting,
+            &mut BTreeMap::new(),
+        )
     }
 
     /// C++ `File::createViewModelInstance(index, instanceIndex)` →
@@ -740,7 +776,13 @@ impl RuntimeViewModelInstanceCells {
         let view_model = file.view_model(view_model_index)?;
         let instance = view_model.instances.into_iter().nth(instance_index)?;
         let mut visiting = Vec::new();
-        Self::build(file, view_model_index, Some(instance.object), &mut visiting)
+        Self::build(
+            file,
+            view_model_index,
+            Some(instance.object),
+            &mut visiting,
+            &mut BTreeMap::new(),
+        )
     }
 
     fn build(
@@ -748,38 +790,47 @@ impl RuntimeViewModelInstanceCells {
         view_model_index: usize,
         instance: Option<&nuxie_binary::RuntimeObject>,
         visiting: &mut Vec<usize>,
+        instances: &mut BTreeMap<u32, RuntimeViewModelInstanceCells>,
     ) -> Option<Self> {
-        if visiting.contains(&view_model_index) {
-            return None;
+        if let Some(instance) = instance {
+            if let Some(existing) = instances.get(&instance.id) {
+                return Some(existing.clone());
+            }
+        } else {
+            if visiting.contains(&view_model_index) {
+                return None;
+            }
+            visiting.push(view_model_index);
         }
-        visiting.push(view_model_index);
-        let view_model = file.view_model(view_model_index);
-        let slots = view_model
-            .map(|view_model| {
-                view_model
-                    .properties
-                    .iter()
-                    .enumerate()
-                    .map(|(property_index, property)| {
-                        Self::build_slot(
-                            file,
-                            view_model_index,
-                            property_index,
-                            property.type_name,
-                            instance,
-                            visiting,
-                        )
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        visiting.pop();
-        Some(Self {
+        let built = Self {
             state: Rc::new(RefCell::new(RuntimeViewModelInstanceCellsState {
                 view_model_index,
-                slots,
+                slots: Vec::new(),
             })),
-        })
+        };
+        if let Some(instance) = instance {
+            instances.insert(instance.id, built.clone());
+        }
+        let mut slots = Vec::new();
+        if let Some(view_model) = file.view_model(view_model_index) {
+            slots.reserve(view_model.properties.len());
+            for (property_index, property) in view_model.properties.iter().enumerate() {
+                slots.push(Self::build_slot(
+                    file,
+                    view_model_index,
+                    property_index,
+                    property.type_name,
+                    instance,
+                    visiting,
+                    instances,
+                ));
+            }
+        }
+        built.state.borrow_mut().slots = slots;
+        if instance.is_none() {
+            visiting.pop();
+        }
+        Some(built)
     }
 
     fn build_slot(
@@ -789,6 +840,7 @@ impl RuntimeViewModelInstanceCells {
         property_type_name: &str,
         instance: Option<&nuxie_binary::RuntimeObject>,
         visiting: &mut Vec<usize>,
+        instances: &mut BTreeMap<u32, RuntimeViewModelInstanceCells>,
     ) -> RuntimeViewModelCellSlot {
         let Some(kind) = RuntimeViewModelCellKind::from_property_type_name(property_type_name)
         else {
@@ -812,6 +864,7 @@ impl RuntimeViewModelInstanceCells {
                                 reference.view_model_index,
                                 Some(reference.object),
                                 visiting,
+                                instances,
                             )
                         }),
                     None => file
@@ -823,14 +876,36 @@ impl RuntimeViewModelInstanceCells {
                                 .and_then(|property| property.uint_property("viewModelReferenceId"))
                         })
                         .and_then(|reference| usize::try_from(reference).ok())
-                        .and_then(|reference| Self::build(file, reference, None, visiting)),
+                        .and_then(|reference| {
+                            Self::build(file, reference, None, visiting, instances)
+                        }),
                 };
                 RuntimeViewModelCellSlot::ViewModel(child)
             }
             RuntimeViewModelCellKind::List => {
-                // Serialized list items are nested instance references; the
-                // default instance starts empty (C++ default list).
-                let items = instance_value.map(|_| Vec::new()).unwrap_or_default();
+                // Serialized list items retain the same authored instance
+                // objects as direct ViewModel properties. Building through
+                // the shared object-id map preserves aliases across both edge
+                // kinds, matching `File::completeViewModelInstance`.
+                let items = match instance_value
+                    .and_then(|value| file.view_model_instance_source_data_value_for_object(value))
+                {
+                    Some(nuxie_binary::RuntimeDataValue::List(items)) => items
+                        .into_iter()
+                        .filter_map(|item| {
+                            let reference =
+                                file.referenced_view_model_instance_for_list_item_object(item)?;
+                            Self::build(
+                                file,
+                                reference.view_model_index,
+                                Some(reference.object),
+                                visiting,
+                                instances,
+                            )
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                };
                 RuntimeViewModelCellSlot::List(items)
             }
             kind => {
@@ -890,6 +965,10 @@ impl RuntimeViewModelInstanceCells {
         Rc::ptr_eq(&self.state, &other.state)
     }
 
+    pub(crate) fn allocation_identity(&self) -> u64 {
+        Rc::as_ptr(&self.state) as usize as u64
+    }
+
     pub fn view_model_index(&self) -> usize {
         self.state.borrow().view_model_index
     }
@@ -921,6 +1000,307 @@ impl RuntimeViewModelInstanceCells {
             current = current.child_instance(segment)?;
         }
         current.property_cell(last)
+    }
+
+    pub(crate) fn cell_for_source_path(&self, path: &[u32]) -> Option<RuntimeViewModelCell> {
+        let (&view_model_index, property_path) = path.split_first()?;
+        if usize::try_from(view_model_index).ok()? != self.view_model_index() {
+            return None;
+        }
+        let property_path = property_path
+            .iter()
+            .map(|index| usize::try_from(*index).ok())
+            .collect::<Option<Vec<_>>>()?;
+        self.cell_by_property_path(&property_path)
+    }
+
+    pub(crate) fn copy_all_trigger_values_into(&self, target: &Self) -> bool {
+        let mut source_to_target = BTreeMap::new();
+        let mut target_to_source = BTreeMap::new();
+        let mut writes = Vec::new();
+        if !self.collect_trigger_value_writes(
+            target,
+            &mut source_to_target,
+            &mut target_to_source,
+            &mut writes,
+        ) {
+            return false;
+        }
+        for (target, value) in writes {
+            // C++ ViewModelInstance::clone copies serialized payload but not
+            // dynamic m_changeFlags, used-layer state, or dependent dirt.
+            target.replace_trigger_payload_for_clone(value);
+        }
+        true
+    }
+
+    fn collect_trigger_value_writes(
+        &self,
+        target: &Self,
+        source_to_target: &mut BTreeMap<u64, u64>,
+        target_to_source: &mut BTreeMap<u64, u64>,
+        writes: &mut Vec<(RuntimeViewModelCell, u64)>,
+    ) -> bool {
+        let source_identity = self.allocation_identity();
+        let target_identity = target.allocation_identity();
+        if let Some(existing_target) = source_to_target.get(&source_identity) {
+            return *existing_target == target_identity;
+        }
+        if let Some(existing_source) = target_to_source.get(&target_identity) {
+            return *existing_source == source_identity;
+        }
+        source_to_target.insert(source_identity, target_identity);
+        target_to_source.insert(target_identity, source_identity);
+
+        let (source_view_model_index, source_slots) = {
+            let state = self.state.borrow();
+            (state.view_model_index, state.slots.clone())
+        };
+        let (target_view_model_index, target_slots) = {
+            let state = target.state.borrow();
+            (state.view_model_index, state.slots.clone())
+        };
+        if source_view_model_index != target_view_model_index
+            || source_slots.len() != target_slots.len()
+        {
+            return false;
+        }
+
+        for (source, target) in source_slots.into_iter().zip(target_slots) {
+            match (source, target) {
+                (
+                    RuntimeViewModelCellSlot::Value(source),
+                    RuntimeViewModelCellSlot::Value(target),
+                ) => {
+                    let source_value = source.value();
+                    let target_value = target.value();
+                    if !source_value.same_kind(&target_value) {
+                        return false;
+                    }
+                    if let RuntimeViewModelCellValue::Trigger(value) = source_value {
+                        writes.push((target, value));
+                    }
+                }
+                (
+                    RuntimeViewModelCellSlot::ViewModel(Some(source)),
+                    RuntimeViewModelCellSlot::ViewModel(Some(target)),
+                ) => {
+                    if !source.collect_trigger_value_writes(
+                        &target,
+                        source_to_target,
+                        target_to_source,
+                        writes,
+                    ) {
+                        return false;
+                    }
+                }
+                (
+                    RuntimeViewModelCellSlot::ViewModel(None),
+                    RuntimeViewModelCellSlot::ViewModel(None),
+                )
+                | (RuntimeViewModelCellSlot::Unsupported, RuntimeViewModelCellSlot::Unsupported) => {
+                }
+                (
+                    RuntimeViewModelCellSlot::List(source),
+                    RuntimeViewModelCellSlot::List(target),
+                ) => {
+                    if source.len() != target.len() {
+                        return false;
+                    }
+                    for (source, target) in source.into_iter().zip(target) {
+                        if !source.collect_trigger_value_writes(
+                            &target,
+                            source_to_target,
+                            target_to_source,
+                            writes,
+                        ) {
+                            return false;
+                        }
+                    }
+                }
+                _ => return false,
+            }
+        }
+        true
+    }
+
+    pub(crate) fn detached_clone(&self) -> Self {
+        self.detached_clone_with_instances(&mut BTreeMap::new())
+    }
+
+    fn detached_clone_with_instances(
+        &self,
+        instances: &mut BTreeMap<u64, RuntimeViewModelInstanceCells>,
+    ) -> Self {
+        let identity = self.allocation_identity();
+        if let Some(existing) = instances.get(&identity) {
+            return existing.clone();
+        }
+        let state = self.state.borrow();
+        let cloned = Self {
+            state: Rc::new(RefCell::new(RuntimeViewModelInstanceCellsState {
+                view_model_index: state.view_model_index,
+                slots: Vec::new(),
+            })),
+        };
+        instances.insert(identity, cloned.clone());
+        let slots = state
+            .slots
+            .iter()
+            .map(|slot| match slot {
+                RuntimeViewModelCellSlot::Value(cell) => {
+                    RuntimeViewModelCellSlot::Value(cell.detached_clone())
+                }
+                RuntimeViewModelCellSlot::ViewModel(child) => RuntimeViewModelCellSlot::ViewModel(
+                    child
+                        .as_ref()
+                        .map(|child| child.detached_clone_with_instances(instances)),
+                ),
+                RuntimeViewModelCellSlot::List(items) => RuntimeViewModelCellSlot::List(
+                    items
+                        .iter()
+                        .map(|item| item.detached_clone_with_instances(instances))
+                        .collect(),
+                ),
+                RuntimeViewModelCellSlot::Unsupported => RuntimeViewModelCellSlot::Unsupported,
+            })
+            .collect();
+        drop(state);
+        cloned.state.borrow_mut().slots = slots;
+        cloned
+    }
+
+    fn collect_trigger_cells(
+        &self,
+        visited: &mut BTreeSet<u64>,
+        trigger_cells: &mut Vec<RuntimeViewModelCell>,
+    ) {
+        if !visited.insert(self.allocation_identity()) {
+            return;
+        }
+        let state = self.state.borrow();
+        for slot in &state.slots {
+            match slot {
+                RuntimeViewModelCellSlot::Value(cell) => {
+                    if matches!(cell.value(), RuntimeViewModelCellValue::Trigger(_)) {
+                        trigger_cells.push(cell.clone());
+                    }
+                }
+                RuntimeViewModelCellSlot::ViewModel(Some(child)) => {
+                    child.collect_trigger_cells(visited, trigger_cells)
+                }
+                RuntimeViewModelCellSlot::List(items) => {
+                    for item in items {
+                        item.collect_trigger_cells(visited, trigger_cells);
+                    }
+                }
+                RuntimeViewModelCellSlot::ViewModel(None)
+                | RuntimeViewModelCellSlot::Unsupported => {}
+            }
+        }
+    }
+}
+
+/// Mutable authored ViewModel instances owned by one loaded runtime file.
+///
+/// C++ bare default/serialized binds retain `ViewModel::instance(index)`
+/// directly. Every artboard occurrence created from the same runtime build
+/// context therefore sees the same property cells, while a separate
+#[derive(Debug, Clone)]
+#[doc(hidden)]
+pub struct RuntimeFileViewModelInstanceCatalog {
+    instances: Arc<Vec<Vec<RuntimeViewModelInstanceCells>>>,
+    trigger_cells: Arc<Vec<Vec<Vec<RuntimeViewModelCell>>>>,
+}
+
+impl RuntimeFileViewModelInstanceCatalog {
+    #[doc(hidden)]
+    pub fn new(file: &nuxie_binary::RuntimeFile) -> Self {
+        let mut instances_by_object = BTreeMap::new();
+        let mut instances = Vec::new();
+        for (view_model_index, view_model) in file.view_models().into_iter().enumerate() {
+            let mut view_model_instances = Vec::with_capacity(view_model.instances.len());
+            for instance in view_model.instances {
+                let mut visiting = Vec::new();
+                if let Some(instance) = RuntimeViewModelInstanceCells::build(
+                    file,
+                    view_model_index,
+                    Some(instance.object),
+                    &mut visiting,
+                    &mut instances_by_object,
+                ) {
+                    view_model_instances.push(instance);
+                }
+            }
+            instances.push(view_model_instances);
+        }
+        let trigger_cells = Self::collect_trigger_cells(&instances);
+        Self {
+            instances: Arc::new(instances),
+            trigger_cells: Arc::new(trigger_cells),
+        }
+    }
+
+    pub(crate) fn instance(
+        &self,
+        view_model_index: usize,
+        instance_index: usize,
+    ) -> Option<RuntimeViewModelInstanceCells> {
+        self.instances
+            .get(view_model_index)?
+            .get(instance_index)
+            .cloned()
+    }
+
+    pub(crate) fn detached_clone(&self) -> Self {
+        let mut clones = BTreeMap::new();
+        let instances = self
+            .instances
+            .iter()
+            .map(|instances| {
+                instances
+                    .iter()
+                    .map(|instance| instance.detached_clone_with_instances(&mut clones))
+                    .collect()
+            })
+            .collect::<Vec<Vec<_>>>();
+        let trigger_cells = Self::collect_trigger_cells(&instances);
+        Self {
+            instances: Arc::new(instances),
+            trigger_cells: Arc::new(trigger_cells),
+        }
+    }
+
+    fn collect_trigger_cells(
+        instances: &[Vec<RuntimeViewModelInstanceCells>],
+    ) -> Vec<Vec<Vec<RuntimeViewModelCell>>> {
+        instances
+            .iter()
+            .map(|instances| {
+                instances
+                    .iter()
+                    .map(|instance| {
+                        let mut trigger_cells = Vec::new();
+                        instance.collect_trigger_cells(&mut BTreeSet::new(), &mut trigger_cells);
+                        trigger_cells
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    pub(crate) fn advance_instance(&self, view_model_index: usize, instance_index: usize) -> bool {
+        let Some(trigger_cells) = self
+            .trigger_cells
+            .get(view_model_index)
+            .and_then(|instances| instances.get(instance_index))
+        else {
+            return false;
+        };
+        for trigger in trigger_cells {
+            trigger.advanced();
+        }
+        true
     }
 }
 
@@ -1445,6 +1825,135 @@ mod tests {
         assert!(
             cell.is_changed_for_layer(first_machine_layer),
             "ViewModelInstanceValue::advanced clears the retained source's used-layer set for the next frame (viewmodel_instance_value.cpp:131-135)"
+        );
+    }
+
+    fn list_trigger_topology(value: u64) -> (RuntimeViewModelInstanceCells, RuntimeViewModelCell) {
+        let trigger = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(value));
+        let child = RuntimeViewModelInstanceCells {
+            state: Rc::new(RefCell::new(RuntimeViewModelInstanceCellsState {
+                view_model_index: 1,
+                slots: vec![RuntimeViewModelCellSlot::Value(trigger.clone())],
+            })),
+        };
+        let root = RuntimeViewModelInstanceCells {
+            state: Rc::new(RefCell::new(RuntimeViewModelInstanceCellsState {
+                view_model_index: 0,
+                slots: vec![RuntimeViewModelCellSlot::List(vec![child])],
+            })),
+        };
+        (root, trigger)
+    }
+
+    #[test]
+    fn full_trigger_snapshot_includes_list_items_without_spurious_change() {
+        let (source, source_trigger) = list_trigger_topology(0);
+        let (target, target_trigger) = list_trigger_topology(0);
+
+        assert!(source.copy_all_trigger_values_into(&target));
+        assert!(
+            !target_trigger.has_changed(),
+            "a quiescent adopted-context clone must not invent valueChanged"
+        );
+
+        assert!(source_trigger.set_value(RuntimeViewModelCellValue::Trigger(3)));
+        assert!(source.copy_all_trigger_values_into(&target));
+        assert_eq!(
+            target_trigger.value(),
+            RuntimeViewModelCellValue::Trigger(3)
+        );
+        assert!(
+            !target_trigger.has_changed(),
+            "C++ clone copies the trigger payload but not dynamic valueChanged state (viewmodel_instance.cpp:262-279; generated/viewmodel_instance_trigger_base.hpp:55-59; generated/viewmodel_instance_value_base.hpp:53-57)"
+        );
+    }
+
+    #[test]
+    fn full_trigger_snapshot_copies_zero_payload_without_dynamic_changed_state() {
+        let (source, source_trigger) = list_trigger_topology(0);
+        let (target, target_trigger) = list_trigger_topology(0);
+
+        assert!(source_trigger.set_value(RuntimeViewModelCellValue::Trigger(3)));
+        assert!(source_trigger.set_value(RuntimeViewModelCellValue::Trigger(0)));
+        assert!(source.copy_all_trigger_values_into(&target));
+        assert_eq!(
+            target_trigger.value(),
+            RuntimeViewModelCellValue::Trigger(0)
+        );
+        assert!(
+            !target_trigger.has_changed(),
+            "C++ ViewModelInstance::clone copies serialized payload, not valueChanged (viewmodel_instance.cpp:262-279; generated/viewmodel_instance_trigger_base.hpp:55-59; generated/viewmodel_instance_value_base.hpp:53-57)"
+        );
+    }
+
+    #[test]
+    fn full_trigger_snapshot_rejects_distinct_sources_collapsing_to_one_target_alias() {
+        let source_a = RuntimeViewModelInstanceCells {
+            state: Rc::new(RefCell::new(RuntimeViewModelInstanceCellsState {
+                view_model_index: 1,
+                slots: vec![RuntimeViewModelCellSlot::Value(RuntimeViewModelCell::new(
+                    RuntimeViewModelCellValue::Trigger(1),
+                ))],
+            })),
+        };
+        let source_b = RuntimeViewModelInstanceCells {
+            state: Rc::new(RefCell::new(RuntimeViewModelInstanceCellsState {
+                view_model_index: 1,
+                slots: vec![RuntimeViewModelCellSlot::Value(RuntimeViewModelCell::new(
+                    RuntimeViewModelCellValue::Trigger(2),
+                ))],
+            })),
+        };
+        let source = RuntimeViewModelInstanceCells {
+            state: Rc::new(RefCell::new(RuntimeViewModelInstanceCellsState {
+                view_model_index: 0,
+                slots: vec![RuntimeViewModelCellSlot::List(vec![source_a, source_b])],
+            })),
+        };
+        let target_trigger = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(0));
+        let target_child = RuntimeViewModelInstanceCells {
+            state: Rc::new(RefCell::new(RuntimeViewModelInstanceCellsState {
+                view_model_index: 1,
+                slots: vec![RuntimeViewModelCellSlot::Value(target_trigger.clone())],
+            })),
+        };
+        let target = RuntimeViewModelInstanceCells {
+            state: Rc::new(RefCell::new(RuntimeViewModelInstanceCellsState {
+                view_model_index: 0,
+                slots: vec![RuntimeViewModelCellSlot::List(vec![
+                    target_child.clone(),
+                    target_child,
+                ])],
+            })),
+        };
+
+        assert!(!source.copy_all_trigger_values_into(&target));
+        assert_eq!(
+            target_trigger.value(),
+            RuntimeViewModelCellValue::Trigger(0)
+        );
+        assert!(
+            !target_trigger.has_changed(),
+            "validation must be transactional"
+        );
+    }
+
+    #[test]
+    fn full_snapshot_does_not_renotify_an_already_changed_canonical_trigger() {
+        let (source, source_trigger) = list_trigger_topology(0);
+        let (target, target_trigger) = list_trigger_topology(0);
+        assert!(source_trigger.set_value(RuntimeViewModelCellValue::Trigger(3)));
+        assert!(target_trigger.set_value(RuntimeViewModelCellValue::Trigger(3)));
+        let queue = RuntimeCellNotificationQueue::default();
+        let listener = RuntimeCellDirtSink::reporting_listener(&queue, 7);
+        target_trigger.add_dependent(&listener);
+
+        assert!(source.copy_all_trigger_values_into(&target));
+        let mut reports = Vec::new();
+        queue.swap_into(&mut reports);
+        assert!(
+            reports.is_empty(),
+            "binding an adopted clone to the same changed C++ cell is a no-op"
         );
     }
 

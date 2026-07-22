@@ -699,3 +699,10 @@ rules exist so a reviewer can cite the violated rule behind every finding.
   call sites. Adding refresh/rebind passes at points where C++ has none
   (facade-wide dirty bits, rebind-before-every-advance) is a violation
   even if idempotent.
+- **AF-8 nested-container corollary.** A C++ object that is itself a
+  `DataBindContainer` owns the DataBinds targeting it. In particular, a bind
+  whose target is a `DataConverter` is subordinate to that converter; it is
+  not an occurrence in the enclosing artboard's authored DataBind list
+  (`data_bind.cpp:94-100`, `data_bind_container.cpp:86-112`). Rust may
+  devirtualize the target kind, but must keep subordinate binds on their own
+  source-path queue rather than assigning them an outer occurrence index.

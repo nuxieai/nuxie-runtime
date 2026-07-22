@@ -1094,7 +1094,6 @@ pub(super) struct RuntimeArtboardDataBindTargetQueues {
     by_data_bind_index: Vec<Vec<RuntimeArtboardDataBindTargetRef>>,
     property_by_data_bind_index: Vec<Option<usize>>,
     image_asset_by_data_bind_index: Vec<Option<usize>>,
-    converter_property_by_data_bind_index: Vec<Option<usize>>,
     list_by_data_bind_index: Vec<Option<usize>>,
     dirty_properties: Vec<usize>,
     dirty_property_flags: Vec<bool>,
@@ -1168,22 +1167,6 @@ impl RuntimeArtboardDataBindTargetQueues {
                 .entry(binding.path.clone())
                 .or_default()
                 .push(target);
-            if queues.by_data_bind_index.len() <= binding.data_bind_index {
-                queues
-                    .by_data_bind_index
-                    .resize_with(binding.data_bind_index + 1, Vec::new);
-            }
-            queues.by_data_bind_index[binding.data_bind_index].push(target);
-            if queues.converter_property_by_data_bind_index.len() <= binding.data_bind_index {
-                queues
-                    .converter_property_by_data_bind_index
-                    .resize(binding.data_bind_index + 1, None);
-            }
-            // One authored occurrence has one converter-property target in
-            // imported files. Keep the first defensively for synthetic
-            // fixtures that place several adapters on the same occurrence.
-            queues.converter_property_by_data_bind_index[binding.data_bind_index]
-                .get_or_insert(index);
             queues.enqueue_converter_property(index);
         }
         for (index, binding) in list_bindings.iter().enumerate() {
@@ -1207,13 +1190,6 @@ impl RuntimeArtboardDataBindTargetQueues {
 
     fn image_asset_index_for_data_bind(&self, data_bind_index: usize) -> Option<usize> {
         self.image_asset_by_data_bind_index
-            .get(data_bind_index)
-            .copied()
-            .flatten()
-    }
-
-    fn converter_property_index_for_data_bind(&self, data_bind_index: usize) -> Option<usize> {
-        self.converter_property_by_data_bind_index
             .get(data_bind_index)
             .copied()
             .flatten()
@@ -1880,7 +1856,6 @@ pub(super) enum RuntimeArtboardFormulaBindingTarget {
 
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardConverterPropertyBindingInstance {
-    data_bind_index: usize,
     target: RuntimeArtboardConverterPropertyBindingTarget,
     path: Vec<u32>,
     converter: Option<RuntimeDataBindGraphConverter>,
@@ -3667,18 +3642,15 @@ pub(super) fn build_artboard_converter_property_bindings<'a>(
             runtime_data_bind_graph_converter_with_cache(file, data_bind.object, converter_cache)
         })
         .collect::<Vec<_>>();
-    let data_bind_indices = file
-        .artboard_data_binds(artboard_index)
-        .into_iter()
-        .enumerate()
-        .map(|(data_bind_index, data_bind)| (data_bind.object.id, data_bind_index))
-        .collect::<BTreeMap<_, _>>();
     file.objects
         .iter()
         .flatten()
         .filter(|object| object.type_name == "DataBindContext")
         .filter_map(|data_bind| {
-            let data_bind_index = *data_bind_indices.get(&data_bind.id)?;
+            // A bind targeting a DataConverter belongs to that converter's
+            // subordinate DataBindContainer, not the outer artboard's authored
+            // DataBind list (`data_bind.cpp:94-100`; the container binds and
+            // immediately updates it in `data_bind_container.cpp:86-112`).
             let data_bind_id = usize::try_from(data_bind.id).ok()?;
             if file.import_status(data_bind_id) != Some(nuxie_binary::RuntimeImportStatus::Imported)
             {
@@ -3817,7 +3789,6 @@ pub(super) fn build_artboard_converter_property_bindings<'a>(
             }
 
             Some(RuntimeArtboardConverterPropertyBindingInstance {
-                data_bind_index,
                 target,
                 path,
                 converter_state: RuntimeDataBindGraphConverterState::for_converter(
@@ -6885,7 +6856,9 @@ impl ArtboardInstance {
             })
         {
             if state.converter.set_formula_token_value(token_id, value) {
-                state.converter_state.reset_formula_randoms();
+                state
+                    .converter_state
+                    .reset_source_change_formula_randoms(&state.converter);
                 shared_changed.push(data_bind_index);
                 changed = true;
             }
@@ -6959,7 +6932,9 @@ impl ArtboardInstance {
             })
         {
             if state.converter.set_operation_value(target_global_id, value) {
-                state.converter_state.reset_formula_randoms();
+                state
+                    .converter_state
+                    .reset_source_change_formula_randoms(&state.converter);
                 shared_changed.push(data_bind_index);
                 changed = true;
             }
@@ -7368,22 +7343,6 @@ impl ArtboardInstance {
                 );
                 return;
             }
-            if let Some(converter_index) = self
-                .artboard_data_bind_target_queues
-                .converter_property_index_for_data_bind(data_bind_index)
-                && let Some(binding) = self
-                    .artboard_converter_property_bindings
-                    .get_mut(converter_index)
-                && binding
-                    .converter
-                    .as_ref()
-                    .is_some_and(runtime_data_bind_graph_converter_contains_source_change_random)
-            {
-                binding.converter_state.reset_source_change_formula_randoms(
-                    binding.converter.as_ref().expect("checked converter"),
-                );
-                return;
-            }
             return;
         };
         let Some(binding) = self.artboard_property_bindings.get_mut(property_index) else {
@@ -7453,6 +7412,18 @@ impl ArtboardInstance {
         // clears sourceChange randoms (`data_converter_formula.cpp:526-543`).
         for binding in self.artboard_formula_token_bindings.iter_mut() {
             if binding.path.as_ref() == path
+                && binding
+                    .converter
+                    .as_ref()
+                    .is_some_and(runtime_data_bind_graph_converter_contains_source_change_random)
+            {
+                binding.converter_state.reset_source_change_formula_randoms(
+                    binding.converter.as_ref().expect("checked converter"),
+                );
+            }
+        }
+        for binding in &mut self.artboard_converter_property_bindings {
+            if binding.path == path
                 && binding
                     .converter
                     .as_ref()
@@ -8915,7 +8886,7 @@ mod tests {
     }
 
     #[test]
-    fn converter_property_formula_reset_uses_exact_authored_occurrence_registry() {
+    fn subordinate_converter_property_formula_resets_on_its_primary_path_change() {
         fn random_formula() -> RuntimeDataBindGraphConverter {
             RuntimeDataBindGraphConverter::Formula {
                 tokens: vec![RuntimeDataBindGraphFormulaToken::Function {
@@ -8950,7 +8921,6 @@ mod tests {
 
         let converter = random_formula();
         let converter_property = RuntimeArtboardConverterPropertyBindingInstance {
-            data_bind_index: 3,
             target: RuntimeArtboardConverterPropertyBindingTarget::ToStringDecimals {
                 global_id: 91,
             },
@@ -8965,12 +8935,6 @@ mod tests {
             &[],
             &artboard.artboard_converter_property_bindings,
             &[],
-        );
-        assert_eq!(
-            artboard
-                .artboard_data_bind_target_queues
-                .converter_property_index_for_data_bind(3),
-            Some(0)
         );
         artboard
             .artboard_formula_random_source
@@ -8987,7 +8951,11 @@ mod tests {
                 0.1
             );
         }
-        artboard.reset_artboard_property_formula_random_state_for_data_bind(3);
+        // Converter-property binds are separate C++ DataBinds owned by the
+        // converter's DataBindContainer, so their primary path resets them;
+        // they are not outer authored occurrences (`data_bind.cpp:94-100`,
+        // `data_bind_container.cpp:86-112`).
+        artboard.reset_artboard_property_formula_random_state_for_path(&[3]);
         {
             let binding = &mut artboard.artboard_converter_property_bindings[0];
             assert_eq!(
@@ -8997,7 +8965,7 @@ mod tests {
                     &mut artboard.artboard_formula_random_source,
                 ),
                 0.2,
-                "the converter-property adapter is reset through its exact authored occurrence"
+                "the subordinate converter-property adapter resets through its source path"
             );
         }
     }
@@ -10698,7 +10666,6 @@ mod tests {
         target: RuntimeArtboardConverterPropertyBindingTarget,
     ) -> RuntimeArtboardConverterPropertyBindingInstance {
         RuntimeArtboardConverterPropertyBindingInstance {
-            data_bind_index: 0,
             target,
             path,
             converter: None,
@@ -10972,7 +10939,9 @@ mod tests {
 
     #[test]
     fn target_queues_seed_and_dirty_converter_property_bindings() {
-        let property_bindings = Vec::new();
+        let mut outer_property = property_binding(0, 0);
+        outer_property.path = vec![9];
+        let property_bindings = vec![outer_property];
         let image_asset_bindings = Vec::new();
         let converter_property_bindings = vec![
             converter_property_binding(
@@ -11016,6 +10985,15 @@ mod tests {
         assert_eq!(
             queues.drain_dirty_converter_properties(),
             Vec::<usize>::new()
+        );
+        assert_eq!(queues.drain_dirty_properties(), vec![0]);
+
+        assert_eq!(queues.enqueue_data_bind_index(0), Some(0));
+        assert_eq!(queues.drain_dirty_properties(), vec![0]);
+        assert_eq!(
+            queues.drain_dirty_converter_properties(),
+            Vec::<usize>::new(),
+            "outer authored-occurrence dirt must not enqueue a converter-owned subordinate DataBind"
         );
 
         queues.enqueue_path(&[2], None);

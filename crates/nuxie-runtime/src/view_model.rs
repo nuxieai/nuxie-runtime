@@ -1,4 +1,4 @@
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
@@ -366,10 +366,16 @@ impl RuntimeImportedViewModelViewModelSourceHandle {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RuntimeImportedViewModelInstanceContext {
     pub(crate) view_model_index: usize,
     pub(crate) instance_index: usize,
+    /// Contexts constructed by an artboard occurrence retain its canonical
+    /// file-owned cells immediately. Detached compatibility contexts adopt
+    /// those cells on bind; cloning preserves the public value-copy boundary.
+    trigger_instance: RefCell<crate::view_model_cell::RuntimeViewModelInstanceCells>,
+    adopted_trigger_owner_identity: Cell<Option<u64>>,
+    adopt_full_trigger_snapshot: Cell<bool>,
     pub(crate) number_overrides: BTreeMap<Vec<u32>, f32>,
     pub(crate) boolean_overrides: BTreeMap<Vec<u32>, bool>,
     pub(crate) string_overrides: BTreeMap<Vec<u32>, Vec<u8>>,
@@ -378,18 +384,51 @@ pub struct RuntimeImportedViewModelInstanceContext {
     pub(crate) symbol_list_index_overrides: BTreeMap<Vec<u32>, u64>,
     pub(crate) asset_overrides: BTreeMap<Vec<u32>, u64>,
     pub(crate) artboard_overrides: BTreeMap<Vec<u32>, u64>,
-    pub(crate) trigger_overrides: BTreeMap<Vec<u32>, u64>,
     pub(crate) list_overrides: BTreeMap<Vec<u32>, usize>,
     pub(crate) view_model_overrides: BTreeMap<Vec<u32>, RuntimeViewModelPointer>,
+}
+
+impl Clone for RuntimeImportedViewModelInstanceContext {
+    fn clone(&self) -> Self {
+        let adopt_full_trigger_snapshot = self.adopted_trigger_owner_identity.get().is_some()
+            || self.adopt_full_trigger_snapshot.get();
+        let trigger_instance = self.trigger_instance.borrow().detached_clone();
+        Self {
+            view_model_index: self.view_model_index,
+            instance_index: self.instance_index,
+            trigger_instance: RefCell::new(trigger_instance),
+            adopted_trigger_owner_identity: Cell::new(None),
+            adopt_full_trigger_snapshot: Cell::new(adopt_full_trigger_snapshot),
+            number_overrides: self.number_overrides.clone(),
+            boolean_overrides: self.boolean_overrides.clone(),
+            string_overrides: self.string_overrides.clone(),
+            color_overrides: self.color_overrides.clone(),
+            enum_overrides: self.enum_overrides.clone(),
+            symbol_list_index_overrides: self.symbol_list_index_overrides.clone(),
+            asset_overrides: self.asset_overrides.clone(),
+            artboard_overrides: self.artboard_overrides.clone(),
+            list_overrides: self.list_overrides.clone(),
+            view_model_overrides: self.view_model_overrides.clone(),
+        }
+    }
 }
 
 impl RuntimeImportedViewModelInstanceContext {
     pub fn new(file: &RuntimeFile, view_model_index: usize, instance_index: usize) -> Option<Self> {
         let view_model = file.view_model(view_model_index)?;
         view_model.instances.into_iter().nth(instance_index)?;
+        let trigger_instance =
+            crate::view_model_cell::RuntimeViewModelInstanceCells::from_serialized_instance(
+                file,
+                view_model_index,
+                instance_index,
+            )?;
         Some(Self {
             view_model_index,
             instance_index,
+            trigger_instance: RefCell::new(trigger_instance),
+            adopted_trigger_owner_identity: Cell::new(None),
+            adopt_full_trigger_snapshot: Cell::new(false),
             number_overrides: BTreeMap::new(),
             boolean_overrides: BTreeMap::new(),
             string_overrides: BTreeMap::new(),
@@ -398,7 +437,6 @@ impl RuntimeImportedViewModelInstanceContext {
             symbol_list_index_overrides: BTreeMap::new(),
             asset_overrides: BTreeMap::new(),
             artboard_overrides: BTreeMap::new(),
-            trigger_overrides: BTreeMap::new(),
             list_overrides: BTreeMap::new(),
             view_model_overrides: BTreeMap::new(),
         })
@@ -410,6 +448,58 @@ impl RuntimeImportedViewModelInstanceContext {
 
     pub fn instance_index(&self) -> usize {
         self.instance_index
+    }
+
+    pub(crate) fn trigger_owner_identity(&self) -> u64 {
+        self.trigger_instance.borrow().allocation_identity()
+    }
+
+    pub(crate) fn from_file_trigger_instance(
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance_index: usize,
+        trigger_instance: crate::view_model_cell::RuntimeViewModelInstanceCells,
+    ) -> Option<Self> {
+        let context = Self::new(file, view_model_index, instance_index)?;
+        let owner_identity = trigger_instance.allocation_identity();
+        *context.trigger_instance.borrow_mut() = trigger_instance;
+        context
+            .adopted_trigger_owner_identity
+            .set(Some(owner_identity));
+        Some(context)
+    }
+
+    pub(crate) fn trigger_cell_for_source_path(
+        &self,
+        path: &[u32],
+    ) -> Option<RuntimeViewModelCell> {
+        let cell = self.trigger_instance.borrow().cell_for_source_path(path)?;
+        matches!(cell.value(), RuntimeViewModelCellValue::Trigger(_)).then_some(cell)
+    }
+
+    pub(crate) fn adopt_file_trigger_instance(
+        &self,
+        instance: crate::view_model_cell::RuntimeViewModelInstanceCells,
+    ) -> bool {
+        let owner_identity = instance.allocation_identity();
+        if let Some(adopted_identity) = self.adopted_trigger_owner_identity.get() {
+            return adopted_identity == owner_identity;
+        }
+        let copied = if self.adopt_full_trigger_snapshot.get() {
+            self.trigger_instance
+                .borrow()
+                .copy_all_trigger_values_into(&instance)
+        } else {
+            true
+        };
+        if !copied {
+            return false;
+        }
+        *self.trigger_instance.borrow_mut() = instance;
+        self.adopted_trigger_owner_identity
+            .set(Some(owner_identity));
+        self.adopt_full_trigger_snapshot.set(false);
+        true
     }
 
     pub fn number_source_handle_by_property_name(
@@ -1286,27 +1376,18 @@ impl RuntimeImportedViewModelInstanceContext {
 
     fn set_trigger_by_resolved_property_path(
         &mut self,
-        file: &RuntimeFile,
+        _file: &RuntimeFile,
         path: Vec<u32>,
         value: u64,
     ) -> bool {
-        let Some(view_model) = file.view_model(self.view_model_index) else {
-            return false;
-        };
-        let Some(instance) = view_model.instances.into_iter().nth(self.instance_index) else {
-            return false;
-        };
-        let current = self.trigger_overrides.get(&path).copied().or_else(|| {
-            let source =
-                file.data_context_view_model_property_for_instance(instance.object, &path)?;
-            file.view_model_instance_trigger_count_for_object(source)
-        });
-        if current == Some(value) {
+        if self.adopted_trigger_owner_identity.get().is_none() {
+            // A detached compatibility context has no file occurrence and
+            // cannot reproduce C++ mutation order. Construct it through the
+            // owning RuntimeArtboardInstance when pre-bind writes are needed.
             return false;
         }
-
-        self.trigger_overrides.insert(path, value);
-        true
+        self.trigger_cell_for_source_path(&path)
+            .is_some_and(|cell| cell.set_value(RuntimeViewModelCellValue::Trigger(value)))
     }
 
     pub fn list_source_handle_by_property_name(
@@ -1535,6 +1616,88 @@ pub struct RuntimeOwnedViewModelInstance {
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
     view_models: Vec<RuntimeOwnedViewModelViewModel>,
+}
+
+/// The retained trigger-valued portion of one bound C++ `DataContext`.
+///
+/// Compatibility entrypoints accept a borrowed owned instance, so the state
+/// machine cannot retain the Rust root itself. Retaining every exact trigger
+/// cell reached from that root preserves the observable
+/// `ViewModelInstance::advanced()` walk, including unreferenced nested and
+/// list-item triggers, without copying payloads or inventing source cells.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeOwnedViewModelAdvanceContext {
+    visited_instances: BTreeSet<u64>,
+    trigger_cells: Vec<RuntimeViewModelCell>,
+    list_values: Vec<Rc<RefCell<RuntimeOwnedViewModelListValue>>>,
+}
+
+impl RuntimeOwnedViewModelAdvanceContext {
+    pub(crate) fn extend(&mut self, instance: &RuntimeOwnedViewModelInstance) {
+        if !self.visited_instances.insert(instance.allocation_identity) {
+            return;
+        }
+        self.trigger_cells
+            .extend(instance.triggers.iter().map(|trigger| trigger.cell.clone()));
+        self.extend_lists(&instance.lists);
+        for child in &instance.view_models {
+            self.extend_view_model(child);
+        }
+    }
+
+    fn extend_lists(&mut self, lists: &[RuntimeOwnedViewModelList]) {
+        for list in lists {
+            self.list_values.push(Rc::clone(&list.value));
+        }
+    }
+
+    fn extend_view_model(&mut self, child: &RuntimeOwnedViewModelViewModel) {
+        if let Some(linked) = child.endpoint.linked_instance() {
+            if let Ok(linked) = linked.try_borrow() {
+                self.extend(&linked);
+            }
+            return;
+        }
+        match child.endpoint.value() {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                self.trigger_cells
+                    .extend(child.triggers.iter().map(|trigger| trigger.cell.clone()));
+                self.extend_lists(&child.lists);
+                for grandchild in &child.children {
+                    self.extend_view_model(grandchild);
+                }
+            }
+            RuntimeViewModelPointer::Imported { object_id } => {
+                if let Some(triggers) = child.imported_triggers.get(&object_id) {
+                    self.trigger_cells
+                        .extend(triggers.iter().map(|trigger| trigger.cell.clone()));
+                }
+                if let Some(lists) = child.imported_lists.get(&object_id) {
+                    self.extend_lists(lists);
+                }
+                if let Some(children) = child.imported_children.get(&object_id) {
+                    for grandchild in children {
+                        self.extend_view_model(grandchild);
+                    }
+                }
+            }
+            RuntimeViewModelPointer::Null
+            | RuntimeViewModelPointer::DataContextRoot
+            | RuntimeViewModelPointer::Retained { .. } => {}
+        }
+    }
+
+    pub(crate) fn advanced(&self) {
+        for trigger in &self.trigger_cells {
+            trigger.advanced();
+        }
+        for list in &self.list_values {
+            let list = list.borrow();
+            for item in &list.items {
+                item.instance.borrow_mut().advanced_data_context();
+            }
+        }
+    }
 }
 
 /// Retained structural-parent topology matching C++ `ViewModelInstance::m_parents`.
@@ -3177,6 +3340,15 @@ fn collect_runtime_owned_list_children(
     }
 }
 
+fn advance_runtime_owned_list_children(lists: &[RuntimeOwnedViewModelList]) {
+    for list in lists {
+        let value = list.value.borrow();
+        for item in &value.items {
+            item.instance.borrow_mut().advanced_data_context();
+        }
+    }
+}
+
 fn bind_owned_view_model_list_parent_relays(
     lists: &mut [RuntimeOwnedViewModelList],
     parent: &Rc<RuntimeOwnedViewModelParentRelay>,
@@ -3417,6 +3589,10 @@ impl RuntimeOwnedViewModelTrigger {
     fn set_value(&mut self, value: u64) -> bool {
         self.cell
             .set_value(RuntimeViewModelCellValue::Trigger(value))
+    }
+
+    fn advanced(&self) {
+        self.cell.advanced();
     }
 }
 
@@ -4606,6 +4782,42 @@ impl RuntimeOwnedViewModelViewModel {
             RuntimeViewModelPointer::Null
             | RuntimeViewModelPointer::DataContextRoot
             | RuntimeViewModelPointer::Retained { .. } => false,
+        }
+    }
+
+    fn advanced_data_context(&mut self) {
+        if let Some(linked) = self.endpoint.linked_instance() {
+            linked.borrow_mut().advanced_data_context();
+            return;
+        }
+        match self.endpoint.value() {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                for trigger in &self.triggers {
+                    trigger.advanced();
+                }
+                advance_runtime_owned_list_children(&self.lists);
+                for child in &mut self.children {
+                    child.advanced_data_context();
+                }
+            }
+            RuntimeViewModelPointer::Imported { object_id } => {
+                if let Some(triggers) = self.imported_triggers.get(&object_id) {
+                    for trigger in triggers {
+                        trigger.advanced();
+                    }
+                }
+                if let Some(lists) = self.imported_lists.get(&object_id) {
+                    advance_runtime_owned_list_children(lists);
+                }
+                if let Some(children) = self.imported_children.get_mut(&object_id) {
+                    for child in children {
+                        child.advanced_data_context();
+                    }
+                }
+            }
+            RuntimeViewModelPointer::Null
+            | RuntimeViewModelPointer::DataContextRoot
+            | RuntimeViewModelPointer::Retained { .. } => {}
         }
     }
 
@@ -7303,6 +7515,16 @@ impl RuntimeOwnedViewModelInstance {
             changed |= view_model.advance_script_frame(&mut shared_children);
         }
         (changed, shared_children)
+    }
+
+    pub(crate) fn advanced_data_context(&mut self) {
+        for trigger in &self.triggers {
+            trigger.advanced();
+        }
+        advance_runtime_owned_list_children(&self.lists);
+        for view_model in &mut self.view_models {
+            view_model.advanced_data_context();
+        }
     }
 
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
@@ -12005,6 +12227,72 @@ mod owned_context_tests {
             ),
         ])
         .expect("mutable list default fixture imports")
+    }
+
+    fn mutable_list_trigger_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Root".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyList",
+                vec![property(
+                    "ViewModelPropertyList",
+                    "name",
+                    AuthoringValue::String("items".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Item".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyTrigger",
+                vec![property(
+                    "ViewModelPropertyTrigger",
+                    "name",
+                    AuthoringValue::String("fire".to_owned()),
+                )],
+            ),
+        ])
+        .expect("mutable list trigger fixture imports")
+    }
+
+    #[test]
+    fn owned_advance_context_tracks_live_list_insertion_and_removal() {
+        let file = mutable_list_trigger_fixture();
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("root"),
+        );
+        let row = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("row"),
+        );
+        let mut advance_context = RuntimeOwnedViewModelAdvanceContext::default();
+        advance_context.extend(&root.borrow());
+
+        assert!(root.insert_list_item_by_property_name_path("items", 0, &row));
+        assert!(row.borrow_mut().set_trigger_by_property_name("fire", 1));
+        advance_context.advanced();
+        assert_eq!(row.borrow().trigger_value_by_property_name("fire"), Some(0));
+
+        assert!(row.borrow_mut().set_trigger_by_property_name("fire", 1));
+        assert!(root.remove_list_item_by_property_name_path("items", 0));
+        advance_context.advanced();
+        assert_eq!(
+            row.borrow().trigger_value_by_property_name("fire"),
+            Some(1),
+            "a removed row is no longer part of C++ DataContext::advanced"
+        );
     }
 
     fn list_row_relink_fixture() -> RuntimeFile {

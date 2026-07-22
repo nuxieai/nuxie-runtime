@@ -151,3 +151,5 @@ pub(crate) use view_model::{
     runtime_default_view_model_view_model_property_path_for_name_path,
     runtime_view_model_view_model_property_path_for_name_path,
 };
+#[doc(hidden)]
+pub use view_model_cell::RuntimeFileViewModelInstanceCatalog;

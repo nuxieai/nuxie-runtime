@@ -7,13 +7,15 @@ The family was inventoried because it emulated C++
 `DataBindContainer`/`DataContext` change-propagation *by polling*. The five
 public seams that originally fanned into it:
 
-- `StateMachineInstance::bind_owned_view_model_contexts` / `::advance_data_context` (`crates/nuxie-runtime/src/state_machine/instance.rs:5121`, `:5316`)
-- `ArtboardInstance::bind_owned_view_model_artboard_contexts` / `::advance_artboard_data_binds[_with_elapsed]` (`crates/nuxie-runtime/src/artboard_data_bind.rs:4225`, `:5534`, `:5690`)
+- `StateMachineInstance::bind_owned_view_model_contexts` / `::advance_data_context` (`crates/nuxie-runtime/src/state_machine/instance.rs:5083`, `:5277`)
+- `ArtboardInstance::bind_owned_view_model_artboard_contexts` / `::advance_artboard_data_binds[_with_elapsed]` (`crates/nuxie-runtime/src/artboard_data_bind.rs:4963`, `:6223`, `:6391`)
 - Authored-instance overlay constructor (retired): the duplicate mutable API
   and its facade methods were removed. The one canonical constructor now
   matches C++ clone + `completeViewModelInstance` behavior.
-- `Scene::{advance, try_advance_with_factory, pointer_*}` -> `flush_view_model` (`crates/nuxie/src/scene.rs:5389`)
-- `File::advance_with_state_machines_and_view_model` family (`crates/nuxie/src/lib.rs:2714`, `:2813`, `:3402`, `:3497`)
+- `Scene::{advance, try_advance_with_factory, pointer_*}` (the former
+  `flush_view_model` compensation is deleted; surviving seams are
+  `crates/nuxie/src/scene.rs:15217-15455`)
+- `File::advance_with_state_machines_and_view_model` family (`crates/nuxie/src/lib.rs:2756`, `:2859`, `:3453`, `:3552`)
 
 ## Item 1 - Mutation clocks / generations
 
@@ -216,17 +218,50 @@ public seams that originally fanned into it:
 ## Item 7 - Trigger observed/rescan state
 
 - [x] f12A removed the owned-context trigger copy. The adapter now stores
-  metadata plus `StateMachineViewModelTriggerSource::{Retained,Copied}`; owned
-  bindings select the exact `RuntimeViewModelCell`, whose state owns both
+  metadata plus the selected `RuntimeViewModelCell`; owned bindings select
+  the exact retained cell, whose state owns both
   `ValueFlags::valueChanged` and the per-layer use set. Layer keys are unique
   per state-machine layer occurrence (and refreshed on clone), matching C++'s
   `StateMachineLayerInstance*` keys rather than colliding on a shared numeric
   layer index (`viewmodel_instance_value.cpp:59-62,131-135,176-179`;
   `state_machine_input_instance.hpp:78-102`;
   `transition_viewmodel_condition.cpp:49-60`;
-  `transition_property_viewmodel_comparator.cpp:50-67`). Default/imported
-  contexts still use the explicit copied variant until f12B establishes their
-  file-level canonical cell owner.
+  `transition_property_viewmodel_comparator.cpp:50-67`). f12B subsequently
+  removed the temporary copied compatibility variant for default/imported
+  contexts.
+- [x] f12B established one serialized-instance cell catalog per loaded
+  `nuxie::File`, passed into every root/nested `RuntimeArtboardBuildContext`.
+  Standalone raw constructors create a fresh file occurrence, with a hidden
+  bridge for callers that already own the shared catalog. Bare default and
+  imported bindings attach
+  both transition-trigger metadata and graph trigger sources to the exact
+  file-owned instance cell. An imported context created through the artboard
+  occurrence factory retains that same occurrence immediately, so writes made
+  before machine binding preserve canonical C++ call order. A detached
+  compatibility context adopts on bind and rejects pre-bind trigger writes.
+  Machines built in one runtime occurrence
+  therefore observe one counter/change/use state. Context clones copy the
+  serialized payload without dynamic changed/use/dirt state, while public
+  state-machine clones deep-copy the catalog and rebind their internal sources
+  to preserve snapshot isolation. This matches the probe retaining
+  `ViewModel::instance(index)` directly (`tools/cpp-probe/main.cpp:1267-1300,
+  4683-4721`) and C++ transition evaluation using the DataBind's retained
+  source (`transition_viewmodel_condition.cpp:49-60`;
+  `transition_property_viewmodel_comparator.cpp:50-67`). The
+  `StateMachineViewModelTriggerSource::{Retained,Copied}` split,
+  `trigger_overrides`, default-trigger mirrors,
+  `sync_default_view_model_triggers_from_active`,
+  `reset_bound_trigger_sources`, and `reset_active_view_model_triggers` are
+  deleted. File reset uses a build-time, cycle-safe unique trigger-cell set for
+  the complete nested/list owner; owned reset walks live list storage so row
+  insertion/removal is observed. Missing paths stay explicitly unbound.
+  Evidence: runtime lib 399/399, nuxie lib 140/140, C++ probe 721/721,
+  ordinary and scripted goldens 317/317 entries plus 647/647 exact segments;
+  both have zero failures after restoring converter-owned subordinate DataBind
+  discovery. C API smoke and the full workspace are green, and the workspace
+  target now builds/exports the C++ probe so the 721 tests cannot silently
+  skip.
+  Renderer goldens are not applicable because no renderer/draw code changed.
 - Instance fields `default_view_model_triggers` and `view_model_triggers`
   remain as metadata/source-handle vectors; transition evaluation and fire
   actions still thread them through the state-machine call tree. Input-trigger
@@ -234,23 +269,22 @@ public seams that originally fanned into it:
 - `bind_active_owned_view_model_triggers_for_candidates` remains for identity
   and structural rebind. [x] f9 deleted
   `refresh_active_owned_view_model_triggers_for_candidates`; a retained trigger
-  cell supplies steady-frame change state. f12B still owns
-  `sync_default_view_model_triggers_from_active`, `reset_bound_trigger_sources`,
-  default/imported canonical cells, context-chain binders, and
-  `reset_active_view_model_triggers`.
-- PUBLIC trigger reads (survive): `view_model_trigger_count` `instance.rs:5486`, `view_model_trigger_value_count` `:5510`, `view_model_trigger_property_id` `:5514`.
+  cell supplies steady-frame change state. [x] f12B deleted the remaining
+  default/imported sync, mirror, copied-source, and reset helpers after binding
+  those modes to their canonical file-owned cells.
+- PUBLIC trigger reads (survive): `view_model_trigger_count` `instance.rs:5528`, `view_model_trigger_value_count` `:5567`, `view_model_trigger_property_id` `:5571`.
 
 ## Public API surface that must keep working
 
-- StateMachineInstance: `bind_owned_view_model_contexts` `:5121`; `bind_owned_view_model_context` `:4800` / `_handle` `:4812` / `_context_handle` `:4817` / `_mut` `:4851`; `bind_default_view_model_context` `:4711`; `bind_view_model_instance_context` `:4737`; `bind_imported_view_model_context` `:4764`; `advance_data_context` `:5316`; `update_data_binds_apply_target_to_source` `:5403`; `set_bindable_*_for_data_bind` `:2557-2782`; `set_default/owned/imported_view_model_*_source_*` + `relink_*` `:2806-4679`; trigger reads `:5486,5510,5514`; `pointer_*_with_owned_view_model_context*` `:1244-1862`.
-- ArtboardInstance: `bind_owned_view_model_artboard_contexts` `:4225`; `_context` `:4172` / `_handle` `:4188` / `_context_handle` `:4199`; `bind_default_view_model_artboard_list_context` `:4157`; `bind_owned_view_model_nested_artboard_contexts` `:4434`; `advance_artboard_data_binds` `:5534` / `_with_elapsed` `:5690`; `owned_view_model_context` `artboard.rs:2328`; composite advances `artboard.rs:3008,:3068`; script VM writes `:1498,:1521`; `artboard_list_binding_*_for_data_bind` `:7748-7788`.
+- StateMachineInstance: `bind_owned_view_model_contexts` `instance.rs:5083`; `bind_owned_view_model_context` `:4794` / `_handle` `:4806` / `_context_handle` `:4811` / `_mut` `:4840`; `bind_default_view_model_context` `:4676`; `bind_view_model_instance_context` `:4710`; `bind_imported_view_model_context` `:4751`; `advance_data_context` `:5277`; `update_data_binds_apply_target_to_source` `:5415`; `set_bindable_*_for_data_bind` `:2684-2882`; `set_default/owned/imported_view_model_*_source_*` + `relink_*` `:2808-4642`; trigger reads `:5528,5567,5571`; `pointer_*_with_owned_view_model_context*` `:1326-1820`.
+- ArtboardInstance: `bind_owned_view_model_artboard_contexts` `artboard_data_bind.rs:4963`; `_context` `:4910` / `_handle` `:4926` / `_context_handle` `:4937`; `bind_default_view_model_artboard_list_context` `:4895`; `bind_owned_view_model_nested_artboard_contexts` `:5193`; `advance_artboard_data_binds` `:6223` / `_with_elapsed` `:6391`; `owned_view_model_context` `artboard.rs:2417`; composite advances `artboard.rs:2999,3100-3108`; script ViewModel writes `artboard.rs:1559,1582`; `artboard_list_binding_*_for_data_bind` `artboard_data_bind.rs:8596-8644`.
 - File/facade: `instantiate_view_model`; canonical
   `instantiate_view_model_instance`; `bind_view_model`;
   `owned_view_model_context`; `view_model_index`;
   `advance_with_state_machines_and_view_model`; `try_advance_...factory`;
   `ViewModelInstance::{raw,raw_mut,handle}`;
   `RuntimeOwnedViewModelInstance::{new,from_instance,from_instance_name,detached_graph,list_items_by_property_name_path}`.
-- Scene: `advance` `:15516`; `try_advance_with_factory` `:15582`; `pointer_down/move/up/exit` `:15277,:15334,:15380,:15436`; `view_models` `:8472`; `create_view_model_listener` `:12872`; `add_listener_view_model_*_action` `:13058-13182`; `add_view_model_trigger_condition` `:13645`; `scrub` `:15474`; `instantiate` `:6859`.
+- Scene: `advance` `scene.rs:15390`; `try_advance_with_factory` `:15455`; `pointer_down/move/up/exit` `:15217,:15254,:15284,:15320`; `view_models` `:8428`; `create_view_model_listener` `:12828`; `add_listener_view_model_*_action` `:13014-13138`; `add_view_model_trigger_condition` `:13601`; `scrub` `:15348`; `instantiate` `:6830`.
 - FlowSession: delegates to Scene; no direct family reach.
 
 ## Deletion-gate checklist (f)
@@ -259,14 +293,14 @@ Still queued once the remaining public seams are re-implemented (zero non-test,
 non-family callers): `rebind_owned_view_model_context_candidates`,
 `refresh_owned_view_model_candidates`,
 `owned_view_model_context_candidates_for_nested_host`,
-`bind_active_owned_view_model_triggers_for_candidates`,
-`sync_default_view_model_triggers_from_active`,
-and `reset_bound_trigger_sources`. Already deleted:
+and `bind_active_owned_view_model_triggers_for_candidates`. Already deleted:
 `refresh_owned_view_model_artboard_context_if_mutated`,
 `RuntimeArtboardOwnedContextKey` + `matches_candidate*`, the complete
 `mutation_generation` clock family,
 `owned_view_model_candidate_generations`,
 `refresh_active_owned_view_model_triggers_for_candidates`, and
+`sync_default_view_model_triggers_from_active`,
+`reset_bound_trigger_sources`, and
 `linked_aliases`/`synchronize_linked_aliases`.
 
 ## Test-rewrite counts

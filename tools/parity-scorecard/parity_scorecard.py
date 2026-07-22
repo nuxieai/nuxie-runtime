@@ -25,7 +25,7 @@ GATE_COMMANDS = {
     "golden-compare": ("make", "golden-compare"),
     "scripted-golden-compare": ("make", "scripted-golden-compare"),
     "renderer-golden": ("make", "renderer-golden"),
-    "cargo-test-workspace": ("cargo", "test", "--workspace"),
+    "cargo-test-workspace": ("make", "cpp-oracle-workspace-tests"),
     "capi-smoke": ("make", "capi-smoke"),
     "size-report": ("make", "size-report"),
 }

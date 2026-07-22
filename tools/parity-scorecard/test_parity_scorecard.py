@@ -18,7 +18,7 @@ GATE_COMMANDS = {
     "golden-compare": ["make", "golden-compare"],
     "scripted-golden-compare": ["make", "scripted-golden-compare"],
     "renderer-golden": ["make", "renderer-golden"],
-    "cargo-test-workspace": ["cargo", "test", "--workspace"],
+    "cargo-test-workspace": ["make", "cpp-oracle-workspace-tests"],
     "capi-smoke": ["make", "capi-smoke"],
     "size-report": ["make", "size-report"],
 }
@@ -43,6 +43,28 @@ def size_summary(off=7534056, on=8335288, budget=8388608):
 
 
 class ParityScorecardCliTests(unittest.TestCase):
+    def test_workspace_floor_cannot_silently_skip_the_pinned_cpp_oracle(self):
+        workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+        trusted_workflow = (
+            REPO_ROOT / ".github" / "workflows" / "_trusted-macos.yml"
+        ).read_text()
+        makefile = (REPO_ROOT / "Makefile").read_text()
+
+        self.assertEqual(
+            GATE_COMMANDS["cargo-test-workspace"],
+            ["make", "cpp-oracle-workspace-tests"],
+        )
+        self.assertRegex(
+            makefile,
+            re.compile(
+                r"cpp-oracle-workspace-tests: fixtures golden-runner\s+"
+                r'@test -x "\$\(GOLDEN_RUNNER\)"[\s\S]{0,300}'
+                r'RIVE_GOLDEN_RUNNER="\$\(GOLDEN_RUNNER\)" cargo test --workspace'
+            ),
+        )
+        self.assertIn("-- make cpp-oracle-workspace-tests", workflow)
+        self.assertIn("run: make cpp-oracle-workspace-tests", trusted_workflow)
+
     def test_ci_records_static_renderer_floor_and_keeps_same_runner_separate(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 

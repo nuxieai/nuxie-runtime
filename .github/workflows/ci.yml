@@ -124,7 +124,7 @@ jobs:
           python3 tools/parity-scorecard/parity_scorecard.py record \
             --gate cargo-test-workspace \
             --output target/parity-scorecard/evidence/cargo-test-workspace.json \
-            -- cargo test --workspace
+            -- make cpp-oracle-workspace-tests
 
       - name: Record C API smoke floor
         if: always()

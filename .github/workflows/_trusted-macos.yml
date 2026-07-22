@@ -68,9 +68,9 @@ jobs:
         working-directory: ${{ github.workspace }}/rive-rust
         run: make scripted-golden-compare
 
-      - name: Run Rust workspace tests
+      - name: Run Rust workspace tests with the pinned C++ oracle
         working-directory: ${{ github.workspace }}/rive-rust
-        run: cargo test --workspace
+        run: make cpp-oracle-workspace-tests
 
   capi-smoke:
     name: C ABI smoke test

@@ -817,3 +817,31 @@ fn public_api_artboard_view_model_binding_leaves_global_completion_to_state_mach
          global completion belongs to StateMachineInstance binding"
     );
 }
+
+#[test]
+fn borrowed_view_model_advance_facade_forces_zero_seconds_true() {
+    let bytes = external_fixture("global_viewmodels_test.riv");
+    let file = File::import(&bytes).expect("import file");
+    let mut instance = file
+        .default_artboard()
+        .expect("default artboard")
+        .instantiate()
+        .expect("instantiate artboard");
+    let mut view_model = instance
+        .instantiate_view_model()
+        .expect("default artboard view model");
+    let mut state_machine = instance
+        .default_state_machine_instance()
+        .expect("default state machine");
+
+    assert!(instance.advance_with_state_machines_and_view_model(
+        std::slice::from_mut(&mut state_machine),
+        0.0,
+        &mut view_model,
+    ));
+    assert!(instance.advance_with_state_machines_and_view_model(
+        std::slice::from_mut(&mut state_machine),
+        0.0,
+        &mut view_model,
+    ));
+}

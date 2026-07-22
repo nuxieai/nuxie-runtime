@@ -14,18 +14,17 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 345/345, nuxie lib 132/132,
+Regression floor (must stay green): runtime lib 346/346, nuxie lib 132/132,
 C++ probe 708/708, both runtime golden gates 317/317 exact / 647/647 segments
-with zero failures. The workspace push gate has three stale Scene integration
-assertions awaiting the required user decision after e5(A):
-`authored_event_and_view_model_listeners_export_typed_sources_and_view_model_actions_execute`
-expects a chained event-listener ViewModel write on the event-creation frame,
-while `authored_listener_fire_event_survives_until_the_next_frame_report` and
-`typed_vertical_component_list_exports_imports_advances_and_draws_two_view_model_items`
-require `advance() == true` for listener-event-only delivery. Pinned C++ and
-the focused probe require the write on the next ordinary frame and return
-false for listener-only notification. Do not edit those expectations without
-approval.
+with zero failures. The workspace push gate is green as of 2026-07-21. Review
+of e5(A) restored the distinction between raw `StateMachineInstance::advance`
+and the full `advanceAndApply` facade: the facade forces zero-second returns
+true and includes pending reports (`state_machine_instance.cpp:2608-2613,
+2663-2665`). The two zero-second Scene assertions remain unchanged. The one
+event-listener ViewModel assertion now records the exact `applyEvents` timing:
+an event created during layer advance is delivered at the next frame start,
+where chained notifications drain to completion (`state_machine_instance.cpp:
+2320-2343`).
 NOTE: the `RIVE_RUNTIME_DIR` checkout governs probe/runner builds — it must
 be at pin `d788e8ec`; unpinned checkouts poisoned two earlier floor runs.
 
@@ -142,7 +141,10 @@ upstream-sync-map registry).
         advancing data binds/layers, without the compensating zero-time
         layer advance (`state_machine_instance.cpp:2320-2335,2555-2584`).
         `echo_show_demo` is exact; focused C++ probe coverage raises the
-        probe floor to 708/708.
+        probe floor to 708/708. Closeout review added independent host-report
+        and listener-delivery lifetimes, so `FlowSession` may drain a report
+        before advance without suppressing next-frame `applyEvents`; the full
+        facade retains C++'s zero-second forcing and pending-report return.
       - [x] (B) `list_index_script_access` closes exact at 33,432 bytes.
         Nested scripted drawables now initialize only after component-list
         mounting, retain each row's occurrence-scoped context, and pull that
@@ -577,3 +579,13 @@ Decisions log.)
   and a zero-call list-context replacement helper; the shared structural
   clock remains until retained List/ViewModel dirt lands. Runtime lib 345/345
   and probe 708/708.
+- 2026-07-21 — e5(A) review correction landed in code, not expectations: raw
+  state-machine advance keeps its C++ return, while all borrowed/owned/factory
+  `advanceAndApply` facades force zero-second `true` and retain the pending-
+  report term. Public reports and next-frame listener delivery now have
+  independent lifetimes across `FlowSession::take_reported_events`. The two
+  zero-return assertions are untouched; the third test cites `applyEvents`
+  lines 2320-2343 and expects the listener write on the next frame. Full
+  evidence: runtime lib 346/346, nuxie lib 132/132, probe 708/708, both golden
+  gates 317/317 entries and 647/647 segments with zero failures, capi smoke
+  green, and `cargo test --workspace` green; scripted failure list is empty.

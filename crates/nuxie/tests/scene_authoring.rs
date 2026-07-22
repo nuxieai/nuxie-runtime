@@ -6125,13 +6125,23 @@ fn authored_event_and_view_model_listeners_export_typed_sources_and_view_model_a
     let mut events = Vec::new();
     assert!(scene.frame().advance(instance, 0.0, &mut events));
     assert_eq!(scene.frame().get(opacity)?, 0.8);
-    assert_eq!(scene.frame().get_vm_string(label)?, "reported");
+    assert_eq!(
+        scene.frame().get_vm_string(label)?,
+        "idle",
+        "the transition reports its event during layer advance, after this frame's applyEvents"
+    );
     assert_eq!(
         events.len(),
         1,
         "the source event remains externally visible once"
     );
-    scene.frame().advance(instance, 0.0, &mut events);
+    // C++ `StateMachineInstance::applyEvents` runs at the NEXT frame start
+    // and drains chained notifications to completion in that same call
+    // (`state_machine_instance.cpp:2320-2343`). The event-listener write is
+    // therefore visible after this one advance, while the source report is
+    // not externally replayed.
+    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert_eq!(scene.frame().get_vm_string(label)?, "reported");
     assert!(
         events.is_empty(),
         "Event-listener delivery does not replay the source"

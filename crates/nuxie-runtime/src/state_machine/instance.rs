@@ -67,6 +67,16 @@ pub struct StateMachineInstance {
     transition_durations: Vec<StateMachineTransitionDurationInstance>,
     layers: Vec<StateMachineLayerInstance>,
     reported_events: Vec<StateMachineReportedEvent>,
+    /// Prefix of `reported_events` already consumed by C++ `applyEvents`.
+    /// Public reports remain frame-visible after listener delivery, so this
+    /// cursor keeps the two lifetimes distinct without replaying listeners.
+    reported_event_listener_index: usize,
+    /// Prefix of `reported_events` already returned through Rust's draining
+    /// host seam. The core queue remains intact until `applyEvents`, like C++.
+    host_reported_event_index: usize,
+    /// Retained C++ `m_reportingEvents` analog used while notifications may
+    /// enqueue the next batch into `reported_events`.
+    reporting_events: Vec<StateMachineReportedEvent>,
     pending_listener_events: Vec<StateMachineReportedEvent>,
     changed_state_count: usize,
     needs_advance: bool,
@@ -563,6 +573,9 @@ impl Clone for StateMachineInstance {
             transition_durations: self.transition_durations.clone(),
             layers: self.layers.clone(),
             reported_events: self.reported_events.clone(),
+            reported_event_listener_index: self.reported_event_listener_index,
+            host_reported_event_index: self.host_reported_event_index,
+            reporting_events: self.reporting_events.clone(),
             pending_listener_events: self.pending_listener_events.clone(),
             changed_state_count: self.changed_state_count,
             needs_advance: self.needs_advance,
@@ -948,6 +961,9 @@ impl StateMachineInstance {
             transition_durations,
             layers,
             reported_events: Vec::new(),
+            reported_event_listener_index: 0,
+            host_reported_event_index: 0,
+            reporting_events: Vec::new(),
             pending_listener_events: Vec::new(),
             changed_state_count: 0,
             needs_advance: false,
@@ -2191,7 +2207,9 @@ impl StateMachineInstance {
             // (`state_machine_instance.cpp:2320-2335`). Layer advancement is
             // deliberately left to the caller's single ordinary advance.
             self.update_data_binds_false();
-            let events = self.reported_events[next_event_index..].to_vec();
+            let mut events = std::mem::take(&mut self.reporting_events);
+            events.clear();
+            events.extend_from_slice(&self.reported_events[next_event_index..]);
             next_event_index = self.reported_events.len();
             let notified = self.notify_events_with_context(
                 artboard,
@@ -2199,6 +2217,7 @@ impl StateMachineInstance {
                 &events,
                 owned_context.as_deref_mut(),
             );
+            self.reporting_events = events;
             changed |= notified;
             if !notified {
                 continue;
@@ -2210,6 +2229,7 @@ impl StateMachineInstance {
             self.reported_events
                 .append(&mut self.pending_listener_events);
         }
+        self.reported_event_listener_index = next_event_index.min(self.reported_events.len());
         changed
     }
 
@@ -5615,9 +5635,27 @@ impl StateMachineInstance {
         self.reported_events.get(index)
     }
 
+    pub(crate) fn next_unapplied_reported_event_index(&self) -> usize {
+        self.reported_event_listener_index
+            .min(self.reported_events.len())
+    }
+
+    pub(crate) fn discard_reported_event_prefix(&mut self, count: usize) {
+        let count = count.min(self.reported_events.len());
+        self.reported_events.drain(..count);
+        self.reported_event_listener_index =
+            self.reported_event_listener_index.saturating_sub(count);
+        self.host_reported_event_index = self.host_reported_event_index.saturating_sub(count);
+    }
+
     /// Drain reported events at a host operation seam without advancing.
     pub fn take_reported_events(&mut self) -> Vec<StateMachineReportedEvent> {
-        std::mem::take(&mut self.reported_events)
+        let start = self
+            .host_reported_event_index
+            .min(self.reported_events.len());
+        let events = self.reported_events[start..].to_vec();
+        self.host_reported_event_index = self.reported_events.len();
+        events
     }
 
     pub fn view_model_trigger_count(&self, index: usize) -> Option<u64> {
@@ -5679,31 +5717,6 @@ impl StateMachineInstance {
             .map(StateMachineViewModelTriggerInstance::view_model_property_id)
     }
 
-    pub(crate) fn advance(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        state_machine: &RuntimeStateMachine,
-        elapsed_seconds: f32,
-    ) -> bool {
-        self.try_advance_with_script_host(
-            artboard,
-            state_machine,
-            elapsed_seconds,
-            &mut NoopScriptHost,
-        )
-        .unwrap_or(false)
-    }
-
-    pub(crate) fn try_advance_with_script_host(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        state_machine: &RuntimeStateMachine,
-        elapsed_seconds: f32,
-        host: &mut dyn ScriptHost,
-    ) -> Result<bool, ScriptError> {
-        self.advance_with_report_mode(artboard, state_machine, elapsed_seconds, true, None, host)
-    }
-
     pub(crate) fn advance_with_owned_view_model_context(
         &mut self,
         artboard: &mut ArtboardInstance,
@@ -5716,7 +5729,6 @@ impl StateMachineInstance {
             artboard,
             state_machine,
             elapsed_seconds,
-            true,
             Some(context),
             &mut NoopScriptHost,
         )
@@ -5734,7 +5746,6 @@ impl StateMachineInstance {
             artboard,
             state_machine,
             elapsed_seconds,
-            false,
             owned_context,
             &mut NoopScriptHost,
         )
@@ -5753,7 +5764,6 @@ impl StateMachineInstance {
                 artboard,
                 state_machine,
                 elapsed_seconds,
-                false,
                 None,
                 &mut NoopScriptHost,
             )
@@ -5893,7 +5903,6 @@ impl StateMachineInstance {
         artboard: &mut ArtboardInstance,
         state_machine: &RuntimeStateMachine,
         elapsed_seconds: f32,
-        clear_reported_events: bool,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
@@ -5907,9 +5916,6 @@ impl StateMachineInstance {
         // frames. Refresh it before the clean-frame fast path so the new
         // generation schedules the ordinary updateDataBinds(false) work.
         self.refresh_owned_view_model_candidates();
-        if clear_reported_events {
-            self.reported_events.clear();
-        }
         self.reported_events
             .append(&mut self.pending_listener_events);
         if self.has_advanced_once
@@ -5917,9 +5923,6 @@ impl StateMachineInstance {
             && !self.needs_advance
             && self.scripted_instances_by_global.is_empty()
         {
-            if clear_reported_events {
-                self.reported_events.clear();
-            }
             self.changed_state_count = 0;
             return Ok(false);
         }
@@ -6035,8 +6038,10 @@ impl StateMachineInstance {
         {
             self.sync_default_view_model_triggers_from_active();
         }
-        self.needs_advance =
-            data_bind_advance.keep_going || keep_going || !self.reported_events.is_empty();
+        self.needs_advance = data_bind_advance.keep_going
+            || keep_going
+            || !self.reported_events.is_empty()
+            || !self.pending_listener_events.is_empty();
         Ok(self.needs_advance)
     }
 
@@ -6366,6 +6371,30 @@ mod scripted_listener_action_tests {
 
     fn scripted_listener_machine() -> StateMachineInstance {
         scripted_listener_artboard_and_machine().1
+    }
+
+    #[test]
+    fn draining_public_reports_leaves_the_core_queue_for_apply_events() {
+        let mut machine = scripted_listener_machine();
+        let event = StateMachineReportedEvent {
+            event_local_index: 7,
+            event_core_type: 128,
+            name: Some("next-frame".to_owned()),
+            url: None,
+            target: None,
+            string_properties: Vec::new(),
+            seconds_delay: 0.0,
+            context: None,
+        };
+        machine.reported_events.push(event.clone());
+
+        let drained = machine.take_reported_events();
+
+        assert_eq!(drained.len(), 1);
+        assert_eq!(drained[0].event_local_index(), event.event_local_index());
+        assert!(machine.take_reported_events().is_empty());
+        assert_eq!(machine.reported_event_count(), 1);
+        assert_eq!(machine.next_unapplied_reported_event_index(), 0);
     }
 
     fn script(

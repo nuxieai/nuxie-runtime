@@ -88,6 +88,23 @@ pub use nuxie_runtime::{
     StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
 };
 
+fn advance_and_apply_keep_going(
+    changed: bool,
+    elapsed_seconds: f32,
+    state_machines: &[StateMachineInstance],
+) -> bool {
+    // C++ `advanceAndApply` forces zero-second frames to keep going and
+    // includes reports created by this frame in the facade return
+    // (`state_machine_instance.cpp:2608-2613,2663-2665`). Raw
+    // `StateMachineInstance::advance` deliberately retains its own return
+    // semantics for callers that do not run the full apply pipeline.
+    changed
+        || elapsed_seconds == 0.0
+        || state_machines
+            .iter()
+            .any(|instance| instance.reported_event_count() != 0)
+}
+
 #[cfg(feature = "scripting")]
 use nuxie_scripting::vm::{
     HostCommand as LuaHostCommand, HostCycleCheckpoint, HostValue as LuaHostValue, ScriptProgram,
@@ -2706,7 +2723,7 @@ impl<'a> ArtboardInstance<'a> {
         {
             changed |= self.file.advance_detached_view_models();
         }
-        changed
+        advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
     }
 
     /// Advance retained machines while allowing listener actions to mutate
@@ -2743,7 +2760,7 @@ impl<'a> ArtboardInstance<'a> {
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
-        changed
+        advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
     }
 
     /// Factory-bearing mirror of [`Self::advance_with_state_machine`].
@@ -2805,7 +2822,11 @@ impl<'a> ArtboardInstance<'a> {
         {
             changed |= self.file.advance_detached_view_models();
         }
-        Ok(changed)
+        Ok(advance_and_apply_keep_going(
+            changed,
+            elapsed_seconds,
+            state_machines,
+        ))
     }
 
     /// Factory-bearing mirror of
@@ -2858,7 +2879,11 @@ impl<'a> ArtboardInstance<'a> {
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
         changed |= self.raw.update_pass();
-        Ok(changed)
+        Ok(advance_and_apply_keep_going(
+            changed,
+            elapsed_seconds,
+            state_machines,
+        ))
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {
@@ -3394,7 +3419,7 @@ impl OwnedArtboardInstance {
         {
             changed |= self.file.advance_detached_view_models();
         }
-        changed
+        advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
     }
 
     /// Owning mirror of
@@ -3427,7 +3452,7 @@ impl OwnedArtboardInstance {
             .raw
             .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         changed |= self.raw.update_pass();
-        changed
+        advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
     }
 
     /// Owning mirror of
@@ -3489,7 +3514,11 @@ impl OwnedArtboardInstance {
         {
             changed |= self.file.advance_detached_view_models();
         }
-        Ok(changed)
+        Ok(advance_and_apply_keep_going(
+            changed,
+            elapsed_seconds,
+            state_machines,
+        ))
     }
 
     /// Owning mirror of
@@ -3540,7 +3569,11 @@ impl OwnedArtboardInstance {
         #[cfg(not(feature = "scripting"))]
         let _ = factory;
         changed |= self.raw.update_pass();
-        Ok(changed)
+        Ok(advance_and_apply_keep_going(
+            changed,
+            elapsed_seconds,
+            state_machines,
+        ))
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {

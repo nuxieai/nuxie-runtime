@@ -2919,14 +2919,17 @@ impl ArtboardInstance {
             return false;
         };
         let mut owned_context = owned_context;
-        // C++ consumes events at the start of a new frame, before data binds
-        // and layers advance (`state_machine_instance.cpp:2555-2565`). Events
-        // reported by those layers therefore remain queued until the next
-        // ordinary frame instead of notifying listeners in the firing frame.
-        // Like C++ `advance()`, queued listener changes do not contribute to
-        // this frame's return value; only the ensuing data-bind/layer advance
-        // does (`state_machine_instance.cpp:2555-2584`).
-        instance.apply_local_event_listeners(self, 0, owned_context.as_deref_mut());
+        // C++ `applyEvents()` consumes only reports not delivered to
+        // listeners yet, at new-frame start, and loops chained reports before
+        // layer advance (`state_machine_instance.cpp:2320-2343,2555-2565`).
+        // Keep processed reports publicly visible for this frame while the
+        // listener cursor prevents replay; reports created by the layer pass
+        // remain pending for the next frame's `applyEvents()`.
+        let previous_report_count = instance.reported_event_count();
+        let next_event_index = instance.next_unapplied_reported_event_index();
+        instance.apply_local_event_listeners(self, next_event_index, owned_context.as_deref_mut());
+        instance.discard_reported_event_prefix(previous_report_count);
+
         match owned_context.as_deref_mut() {
             Some(context) => instance.advance_with_owned_view_model_context(
                 self,
@@ -2934,7 +2937,12 @@ impl ArtboardInstance {
                 elapsed_seconds,
                 context,
             ),
-            None => instance.advance(self, state_machine, elapsed_seconds),
+            None => instance.advance_preserving_reported_events(
+                self,
+                state_machine,
+                elapsed_seconds,
+                None,
+            ),
         }
     }
 

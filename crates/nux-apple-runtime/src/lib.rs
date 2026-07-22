@@ -26,7 +26,7 @@ use artifact::{
 use nuxie::{
     ApplePresentationCompletion, AppleSurface, ArtboardRenderCache, File, Mat2D, RenderMode,
     Renderer, SurfaceDisposition, WgpuFactory,
-    flow_session::{FlowSession, FlowSessionConfig, FlowSessionErrorKind},
+    flow_session::{FlowPlayerSelector, FlowSession, FlowSessionConfig, FlowSessionErrorKind},
 };
 #[cfg(feature = "apple-product")]
 use std::{
@@ -39,7 +39,7 @@ use std::{
 };
 
 pub const NUX_RUNTIME_ABI_MAJOR: u16 = 1;
-pub const NUX_RUNTIME_ABI_MINOR: u16 = 5;
+pub const NUX_RUNTIME_ABI_MINOR: u16 = 6;
 const MINIMUM_SUPPORTED_ABI_MINOR: u16 = 1;
 
 const MAX_ARTIFACT_BYTE_LENGTH: usize = 67_108_864;
@@ -736,7 +736,7 @@ impl WorkerState {
             Arc::clone(&self.file),
             FlowSessionConfig {
                 artboard_name,
-                player_name: state_machine_name,
+                player: state_machine_name.map(FlowPlayerSelector::StateMachine),
             },
             factory.as_mut(),
         )
@@ -2916,7 +2916,8 @@ mod tests {
         assert_eq!(nux_runtime_require_abi(1, 3), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 4), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 5), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(1, 6), NuxStatus::AbiMismatch);
+        assert_eq!(nux_runtime_require_abi(1, 6), NuxStatus::Ok);
+        assert_eq!(nux_runtime_require_abi(1, 7), NuxStatus::AbiMismatch);
     }
 
     #[cfg(feature = "apple-product")]
@@ -3497,8 +3498,8 @@ mod tests {
             "\"schemaVersion\":1",
             "\"runtimeVersion\"",
             "\"runtimeAbiMajor\":1",
-            "\"runtimeAbiMinor\":5",
-            "\"flowSessionAbiMinor\":5",
+            "\"runtimeAbiMinor\":6",
+            "\"flowSessionAbiMinor\":6",
             "\"sourceRevision\"",
             "\"target\"",
             "\"profile\"",

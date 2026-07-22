@@ -1733,9 +1733,7 @@ impl FileImportLimits {
             max_total_file_asset_content_bytes: Some(
                 Self::DEFAULT_MAX_TOTAL_FILE_ASSET_CONTENT_BYTES,
             ),
-            max_retained_decoded_image_bytes: Some(
-                Self::DEFAULT_MAX_RETAINED_DECODED_IMAGE_BYTES,
-            ),
+            max_retained_decoded_image_bytes: Some(Self::DEFAULT_MAX_RETAINED_DECODED_IMAGE_BYTES),
         }
     }
 
@@ -2322,6 +2320,17 @@ impl<'a> Artboard<'a> {
         self.graph().animations.len()
     }
 
+    /// Name of the linear animation at `index`, when it has one.
+    pub fn animation_name(self, index: usize) -> Option<&'a str> {
+        self.graph().animations.get(index)?.name.as_deref()
+    }
+
+    /// First authored linear-animation index with an exact matching name.
+    /// Mirrors C++ `Artboard::animation(const std::string&)`.
+    pub fn animation_index_named(self, name: &str) -> Option<usize> {
+        (0..self.animation_count()).find(|index| self.animation_name(*index) == Some(name))
+    }
+
     pub fn state_machine_count(self) -> usize {
         self.graph().state_machines.len()
     }
@@ -2329,6 +2338,12 @@ impl<'a> Artboard<'a> {
     /// Name of the state machine at `index`, when it has one.
     pub fn state_machine_name(self, index: usize) -> Option<&'a str> {
         self.graph().state_machines.get(index)?.name.as_deref()
+    }
+
+    /// First authored state-machine index with an exact matching name.
+    /// Mirrors C++ `Artboard::stateMachine(const std::string&)`.
+    pub fn state_machine_index_named(self, name: &str) -> Option<usize> {
+        (0..self.state_machine_count()).find(|index| self.state_machine_name(*index) == Some(name))
     }
 
     /// Index of the state machine flagged as the artboard default in the
@@ -2579,8 +2594,26 @@ impl<'a> ArtboardInstance<'a> {
             .geometry_text_selection_rects(local_id, range, &mut self.geometry)
     }
 
+    pub fn linear_animation_instance(&self, index: usize) -> Option<LinearAnimationInstance> {
+        self.raw.linear_animation_instance(index)
+    }
+
+    /// Instantiate the first exact-name linear animation, mirroring C++
+    /// `ArtboardInstance::animationNamed` without cross-kind fallback.
+    pub fn linear_animation_instance_named(&self, name: &str) -> Option<LinearAnimationInstance> {
+        let index = self.artboard().animation_index_named(name)?;
+        self.linear_animation_instance(index)
+    }
+
     pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
         self.raw.state_machine_instance(index)
+    }
+
+    /// Instantiate the first exact-name state machine, mirroring C++
+    /// `ArtboardInstance::stateMachineNamed` without cross-kind fallback.
+    pub fn state_machine_instance_named(&self, name: &str) -> Option<StateMachineInstance> {
+        let index = self.artboard().state_machine_index_named(name)?;
+        self.state_machine_instance(index)
     }
 
     /// Instantiate the artboard's default state machine: the one flagged in
@@ -3306,8 +3339,24 @@ impl OwnedArtboardInstance {
             .geometry_text_selection_rects(local_id, range, &mut self.geometry)
     }
 
+    pub fn linear_animation_instance(&self, index: usize) -> Option<LinearAnimationInstance> {
+        self.raw.linear_animation_instance(index)
+    }
+
+    /// Owning mirror of [`ArtboardInstance::linear_animation_instance_named`].
+    pub fn linear_animation_instance_named(&self, name: &str) -> Option<LinearAnimationInstance> {
+        let index = self.artboard().animation_index_named(name)?;
+        self.linear_animation_instance(index)
+    }
+
     pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
         self.raw.state_machine_instance(index)
+    }
+
+    /// Owning mirror of [`ArtboardInstance::state_machine_instance_named`].
+    pub fn state_machine_instance_named(&self, name: &str) -> Option<StateMachineInstance> {
+        let index = self.artboard().state_machine_index_named(name)?;
+        self.state_machine_instance(index)
     }
 
     /// See [`ArtboardInstance::default_state_machine_instance`].

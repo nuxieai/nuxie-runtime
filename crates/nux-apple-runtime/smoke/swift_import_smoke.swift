@@ -4,6 +4,11 @@ func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
     _ = nux_runtime_abi_major()
     _ = nux_runtime_abi_minor()
     _ = nux_runtime_require_abi(1, 5)
+    _ = nux_runtime_require_abi(1, 6)
+    _ = NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT
+    _ = NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE
+    _ = NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION
+    _ = NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION
 
     let byteView = NuxByteView(data: bytes, len: count)
     _ = NuxFlowImportRequest(
@@ -60,9 +65,10 @@ func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
     _ = NuxFlowConfiguredSessionDescriptor(
         struct_size: UInt32(MemoryLayout<NuxFlowConfiguredSessionDescriptor>.size),
         required_abi_major: 1,
-        minimum_abi_minor: 5,
+        minimum_abi_minor: 6,
         artboard_name: NuxByteView(data: nil, len: 0),
-        player_name: NuxByteView(data: nil, len: 0)
+        player_name: NuxByteView(data: nil, len: 0),
+        player_kind: UInt32(NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT)
     )
     _ = NuxFlowValueNode(
         struct_size: UInt32(MemoryLayout<NuxFlowValueNode>.size),

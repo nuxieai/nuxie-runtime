@@ -57,7 +57,7 @@ fn catalog_describes_enum_labels_and_referenced_view_model_schemas() {
         reference_file,
         FlowSessionConfig {
             artboard_name: Some("Artboard".to_owned()),
-            player_name: None,
+            player: None,
         },
     )
     .expect("create reference flow");
@@ -150,7 +150,7 @@ fn list_index_properties_round_trip_without_becoming_enums() {
         file,
         FlowSessionConfig {
             artboard_name: Some("Item".to_owned()),
-            player_name: None,
+            player: None,
         },
     )
     .expect("create item flow");
@@ -205,7 +205,7 @@ fn nested_view_model_replacement_preserves_instance_identity_and_is_atomic() {
         file,
         FlowSessionConfig {
             artboard_name: Some("Artboard".to_owned()),
-            player_name: None,
+            player: None,
         },
     )
     .expect("create replacement flow");

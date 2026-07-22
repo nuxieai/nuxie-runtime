@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 _Static_assert(NUX_RUNTIME_ABI_MAJOR == 1, "unexpected runtime ABI major");
-_Static_assert(NUX_RUNTIME_ABI_MINOR == 5, "unexpected runtime ABI minor");
-_Static_assert(NUX_FLOW_SESSION_ABI_MINOR == 5,
+_Static_assert(NUX_RUNTIME_ABI_MINOR == 6, "unexpected runtime ABI minor");
+_Static_assert(NUX_FLOW_SESSION_ABI_MINOR == 6,
                "unexpected flow-session ABI minor");
 _Static_assert(NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY == 1,
                "script authorization values are part of the ABI");
@@ -39,6 +39,14 @@ _Static_assert(NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE == 1,
                "player-selection branches are part of the ABI");
 _Static_assert(NUX_FLOW_PLAYER_SELECTION_STATIC == 5,
                "player-selection branches are part of the ABI");
+_Static_assert(NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION == 6,
+               "player-selection branches are part of the ABI");
+_Static_assert(NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT == 0,
+               "player-selector kinds are part of the ABI");
+_Static_assert(NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE == 1,
+               "player-selector kinds are part of the ABI");
+_Static_assert(NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION == 2,
+               "player-selector kinds are part of the ABI");
 _Static_assert(sizeof(NuxStatus) == sizeof(uint32_t),
                "NuxStatus must remain a 32-bit ABI value");
 _Static_assert(sizeof(NuxSurfaceDisposition) == sizeof(uint32_t),
@@ -86,13 +94,19 @@ _Static_assert(offsetof(struct NuxFrameOperation, completion_context) == 24,
 _Static_assert(offsetof(struct NuxFrameOperation, completion_callback) == 32,
                "unexpected NuxFrameOperation.completion_callback offset");
 
-/* ABI 1.5 retains every ABI 1.4 caller-owned prefix while adding the semantic
- * root TextValueRun batch to the configured operation. */
-_Static_assert(sizeof(struct NuxFlowConfiguredSessionDescriptor) == 40,
+/* ABI 1.6 retains the exact 40-byte ABI 1.5 configured-session prefix and
+ * appends a typed player selector. */
+_Static_assert(sizeof(struct NuxFlowConfiguredSessionDescriptor) == 48,
                "unexpected NuxFlowConfiguredSessionDescriptor layout");
 _Static_assert(offsetof(struct NuxFlowConfiguredSessionDescriptor,
                         artboard_name) == 8,
                "unexpected configured artboard-name offset");
+_Static_assert(offsetof(struct NuxFlowConfiguredSessionDescriptor,
+                        player_name) == 24,
+               "unexpected configured player-name offset");
+_Static_assert(offsetof(struct NuxFlowConfiguredSessionDescriptor,
+                        player_kind) == 40,
+               "unexpected configured player-kind offset");
 _Static_assert(sizeof(struct NuxFlowValueNode) == 88,
                "unexpected NuxFlowValueNode layout");
 _Static_assert(offsetof(struct NuxFlowValueNode, instance_id) == 40,

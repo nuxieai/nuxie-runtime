@@ -31,13 +31,24 @@ pub const MAX_VALUE_EDGES: usize = 16 * 1024;
 pub const MAX_VALUE_DEPTH: usize = 32;
 pub const MAX_ENCODED_PAYLOAD_BYTES: usize = 4 * 1024 * 1024;
 
+/// Explicit named-player operation requested when creating a flow session.
+///
+/// These variants deliberately mirror C++ `ArtboardInstance::stateMachineNamed`
+/// and `ArtboardInstance::animationNamed`. The namespaces stay separate even
+/// when a state machine and a linear animation have the same authored name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FlowPlayerSelector {
+    StateMachine(String),
+    LinearAnimation(String),
+}
+
 /// Selection requested when creating a flow session.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FlowSessionConfig {
     pub artboard_name: Option<String>,
-    /// An explicit player name selects a state machine. Linear animations are
-    /// only selected by the deterministic fallback policy.
-    pub player_name: Option<String>,
+    /// `None` mirrors C++ `defaultScene`; `Some` invokes exactly one typed
+    /// named-player operation without cross-kind fallback.
+    pub player: Option<FlowPlayerSelector>,
 }
 
 /// Machine-readable category for a rejected flow operation.
@@ -138,6 +149,7 @@ pub enum FlowPlayerSelection {
     FirstStateMachine,
     FirstAnimation,
     Static,
+    ExplicitLinearAnimation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -618,7 +630,15 @@ impl FlowSession {
         config: FlowSessionConfig,
     ) -> Result<(Self, FlowBootstrap), FlowSessionError> {
         validate_optional_selector(config.artboard_name.as_deref(), "artboard name")?;
-        validate_optional_selector(config.player_name.as_deref(), "player name")?;
+        if let Some(selector) = config.player.as_ref() {
+            let (name, label) = match selector {
+                FlowPlayerSelector::StateMachine(name) => (name.as_str(), "state machine name"),
+                FlowPlayerSelector::LinearAnimation(name) => {
+                    (name.as_str(), "linear animation name")
+                }
+            };
+            validate_optional_selector(Some(name), label)?;
+        }
         // A File owns lazy script-module registration and its VM. Cloning at
         // this deep-module boundary makes session isolation unconditional for
         // every host, not merely a convention that individual facades must
@@ -673,8 +693,7 @@ impl FlowSession {
         if let Some(view_model) = root_view_model.as_ref() {
             let _ = instance.bind_view_model(view_model);
         }
-        let (player_metadata, player) =
-            select_player(artboard, &instance, config.player_name.as_deref())?;
+        let (player_metadata, player) = select_player(artboard, &instance, config.player.as_ref())?;
 
         let (x, y, width, height) = instance.artboard_bounds();
         if !x.is_finite()
@@ -4280,32 +4299,58 @@ fn validate_optional_selector(value: Option<&str>, label: &str) -> Result<(), Fl
 fn select_player(
     artboard: crate::Artboard<'_>,
     instance: &OwnedArtboardInstance,
-    explicit_name: Option<&str>,
+    explicit: Option<&FlowPlayerSelector>,
 ) -> Result<(FlowPlayerMetadata, FlowPlayer), FlowSessionError> {
-    if let Some(name) = explicit_name {
-        let index = (0..artboard.state_machine_count())
-            .find(|index| artboard.state_machine_name(*index) == Some(name))
-            .ok_or_else(|| {
+    match explicit {
+        Some(FlowPlayerSelector::StateMachine(name)) => {
+            let index = artboard.state_machine_index_named(name).ok_or_else(|| {
                 FlowSessionError::new(
                     FlowSessionErrorKind::NotFound,
                     format!("state machine '{name}' was not found"),
                 )
             })?;
-        let machine = instance.state_machine_instance(index).ok_or_else(|| {
-            FlowSessionError::new(
-                FlowSessionErrorKind::Runtime,
-                "selected state machine could not be instantiated",
-            )
-        })?;
-        return Ok((
-            FlowPlayerMetadata {
-                kind: FlowPlayerKind::StateMachine,
-                selection: FlowPlayerSelection::ExplicitStateMachine,
-                index: Some(index),
-                name: Some(name.to_owned()),
-            },
-            FlowPlayer::StateMachine(Box::new(machine)),
-        ));
+            let machine = instance.state_machine_instance_named(name).ok_or_else(|| {
+                FlowSessionError::new(
+                    FlowSessionErrorKind::Runtime,
+                    "selected state machine could not be instantiated",
+                )
+            })?;
+            return Ok((
+                FlowPlayerMetadata {
+                    kind: FlowPlayerKind::StateMachine,
+                    selection: FlowPlayerSelection::ExplicitStateMachine,
+                    index: Some(index),
+                    name: Some(name.clone()),
+                },
+                FlowPlayer::StateMachine(Box::new(machine)),
+            ));
+        }
+        Some(FlowPlayerSelector::LinearAnimation(name)) => {
+            let index = artboard.animation_index_named(name).ok_or_else(|| {
+                FlowSessionError::new(
+                    FlowSessionErrorKind::NotFound,
+                    format!("linear animation '{name}' was not found"),
+                )
+            })?;
+            let animation = instance
+                .linear_animation_instance_named(name)
+                .ok_or_else(|| {
+                    FlowSessionError::new(
+                        FlowSessionErrorKind::Runtime,
+                        "selected linear animation could not be instantiated",
+                    )
+                })?;
+            return Ok((
+                FlowPlayerMetadata {
+                    kind: FlowPlayerKind::LinearAnimation,
+                    selection: FlowPlayerSelection::ExplicitLinearAnimation,
+                    index: Some(index),
+                    name: Some(name.clone()),
+                },
+                FlowPlayer::Animation(animation),
+            ));
+        }
+        None => {}
     }
 
     if let Some(index) = artboard.default_state_machine_index()
@@ -4774,7 +4819,9 @@ mod tests {
             file,
             FlowSessionConfig {
                 artboard_name: Some("artboard to nest".to_owned()),
-                player_name: Some("State Machine 1".to_owned()),
+                player: Some(FlowPlayerSelector::StateMachine(
+                    "State Machine 1".to_owned(),
+                )),
             },
         )
         .expect("create SMI session")
@@ -4864,6 +4911,39 @@ mod tests {
                 .join(relative),
         )
         .expect("read external fixture")
+    }
+
+    fn replace_fixture_string(mut bytes: Vec<u8>, from: &str, to: &str) -> Vec<u8> {
+        assert!(from.len() < 0x80);
+        assert!(to.len() < 0x80);
+        let mut encoded_from = vec![from.len() as u8];
+        encoded_from.extend_from_slice(from.as_bytes());
+        let mut encoded_to = vec![to.len() as u8];
+        encoded_to.extend_from_slice(to.as_bytes());
+        let mut replacements = 0;
+        let mut cursor = 0;
+        while let Some(offset) = bytes[cursor..]
+            .windows(encoded_from.len())
+            .position(|candidate| candidate == encoded_from)
+        {
+            let start = cursor + offset;
+            let end = start + encoded_from.len();
+            bytes.splice(start..end, encoded_to.iter().copied());
+            cursor = start + encoded_to.len();
+            replacements += 1;
+        }
+        assert_eq!(replacements, 2, "fixture string occurrence count changed");
+        bytes
+    }
+
+    fn same_name_player_fixture() -> (Arc<File>, Vec<u8>) {
+        let bytes = replace_fixture_string(
+            replace_fixture_string(SMI_FIXTURE.to_vec(), "Timeline 1", "Shared Player"),
+            "State Machine 1",
+            "Shared Player",
+        );
+        let file = Arc::new(File::import(&bytes).expect("import same-name player fixture"));
+        (file, bytes)
     }
 
     fn arena_number(
@@ -5093,12 +5173,103 @@ mod tests {
             file,
             FlowSessionConfig {
                 artboard_name: Some("definitely-missing".to_owned()),
-                player_name: None,
+                player: None,
             },
         )
         .expect_err("an explicit missing artboard must not fall back");
 
         assert_eq!(error.kind(), FlowSessionErrorKind::NotFound);
+    }
+
+    #[test]
+    fn named_player_selectors_match_cpp_lookup_namespaces_and_collisions() {
+        let (file, bytes) = same_name_player_fixture();
+        let create = |selector| {
+            FlowSession::create(
+                Arc::clone(&file),
+                FlowSessionConfig {
+                    artboard_name: Some("artboard to nest".to_owned()),
+                    player: Some(selector),
+                },
+            )
+        };
+
+        let (_, state_machine) =
+            create(FlowPlayerSelector::StateMachine("Shared Player".to_owned()))
+                .expect("C++ stateMachineNamed finds its same-name state machine");
+        assert_eq!(state_machine.player.kind, FlowPlayerKind::StateMachine);
+        assert_eq!(
+            state_machine.player.selection,
+            FlowPlayerSelection::ExplicitStateMachine
+        );
+        assert_eq!(state_machine.player.name.as_deref(), Some("Shared Player"));
+
+        let (_, animation) = create(FlowPlayerSelector::LinearAnimation(
+            "Shared Player".to_owned(),
+        ))
+        .expect("C++ animationNamed finds its same-name linear animation");
+        assert_eq!(animation.player.kind, FlowPlayerKind::LinearAnimation);
+        assert_eq!(
+            animation.player.selection,
+            FlowPlayerSelection::ExplicitLinearAnimation
+        );
+        assert_eq!(animation.player.name.as_deref(), Some("Shared Player"));
+
+        for (selector, expected) in [
+            (
+                FlowPlayerSelector::StateMachine("missing".to_owned()),
+                "state machine 'missing' was not found",
+            ),
+            (
+                FlowPlayerSelector::LinearAnimation("missing".to_owned()),
+                "linear animation 'missing' was not found",
+            ),
+        ] {
+            let error = create(selector).expect_err("an explicit missing name must not fall back");
+            assert_eq!(error.kind(), FlowSessionErrorKind::NotFound);
+            assert_eq!(error.to_string(), expected);
+        }
+
+        let Some(cpp_runner) = std::env::var_os("RIVE_GOLDEN_RUNNER") else {
+            eprintln!("skipping C++ named-player lookup differential; set RIVE_GOLDEN_RUNNER");
+            return;
+        };
+        let fixture_path = std::env::temp_dir().join(format!(
+            "nuxie-named-player-collision-{}.riv",
+            std::process::id()
+        ));
+        std::fs::write(&fixture_path, bytes).expect("write same-name C++ fixture");
+        for selector_args in [
+            ["--state-machine", "Shared Player"],
+            ["--animation", "Shared Player"],
+        ] {
+            let output = std::process::Command::new(&cpp_runner)
+                .args(["--file"])
+                .arg(&fixture_path)
+                .args(["--artboard", "artboard to nest", "--samples", "0"])
+                .args(selector_args)
+                .output()
+                .expect("run pinned C++ named-player selector");
+            assert!(
+                output.status.success(),
+                "pinned C++ rejected {selector_args:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        for selector_args in [["--state-machine", "missing"], ["--animation", "missing"]] {
+            let output = std::process::Command::new(&cpp_runner)
+                .args(["--file"])
+                .arg(&fixture_path)
+                .args(["--artboard", "artboard to nest", "--samples", "0"])
+                .args(selector_args)
+                .output()
+                .expect("run pinned C++ missing-player selector");
+            assert!(
+                !output.status.success(),
+                "pinned C++ unexpectedly accepted {selector_args:?}"
+            );
+        }
+        let _ = std::fs::remove_file(fixture_path);
     }
 
     #[test]
@@ -5109,7 +5280,7 @@ mod tests {
             file,
             FlowSessionConfig {
                 artboard_name: Some("Two".to_owned()),
-                player_name: None,
+                player: None,
             },
         )
         .expect("fall back to a static artboard");
@@ -5128,7 +5299,9 @@ mod tests {
             file,
             FlowSessionConfig {
                 artboard_name: Some("Two".to_owned()),
-                player_name: Some("Auto Generated State Machine".to_owned()),
+                player: Some(FlowPlayerSelector::StateMachine(
+                    "Auto Generated State Machine".to_owned(),
+                )),
             },
         )
         .expect_err("an explicit uninstantiable state machine must fail");
@@ -5926,7 +6099,7 @@ mod tests {
             file,
             FlowSessionConfig {
                 artboard_name: Some(name),
-                player_name: None,
+                player: None,
             },
         )
         .expect("create nonzero-origin session");

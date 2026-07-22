@@ -75,6 +75,7 @@ struct Options
     std::string file;
     std::string artboard;
     std::string stateMachine;
+    std::string animation;
     std::string inputScript;
     std::string viewModelScript;
     std::vector<float> samples = {0.0f};
@@ -85,7 +86,8 @@ std::string usage()
 {
     return "usage: rive_golden_runner [--smoke]\n"
            "       rive_golden_runner --file <path> [--artboard <name>]\n"
-           "           [--state-machine <name>] [--samples <t0,t1,...>]\n"
+           "           [--state-machine <name> | --animation <name>]\n"
+           "           [--samples <t0,t1,...>]\n"
            "           [--input-script <path>] [--benchmark]\n"
            "           [--benchmark-repeat N]\n"
            "\n"
@@ -346,6 +348,10 @@ Options parseOptions(int argc, char** argv)
         {
             options.stateMachine = requireValue(arg);
         }
+        else if (arg == "--animation")
+        {
+            options.animation = requireValue(arg);
+        }
         else if (arg == "--samples")
         {
             options.samples = parseSamples(requireValue(arg));
@@ -381,6 +387,11 @@ Options parseOptions(int argc, char** argv)
         {
             throw CliError("unexpected positional argument: " + arg);
         }
+    }
+
+    if (!options.stateMachine.empty() && !options.animation.empty())
+    {
+        throw CliError("--state-machine and --animation are mutually exclusive");
     }
 
     for (size_t index = 0; index < options.samples.size(); index++)
@@ -594,6 +605,7 @@ public:
     RIVLoader(const std::vector<uint8_t>& rivBytes,
               const std::string& artboardName,
               const std::string& stateMachineName,
+              const std::string& animationName,
               rive::Factory* factory)
     {
         rive::ImportResult importResult = rive::ImportResult::success;
@@ -633,6 +645,20 @@ public:
         if (!stateMachineName.empty())
         {
             m_scene = m_artboard->stateMachineNamed(stateMachineName);
+            if (m_scene == nullptr)
+            {
+                throw std::runtime_error("state machine '" + stateMachineName +
+                                         "' was not found");
+            }
+        }
+        else if (!animationName.empty())
+        {
+            m_scene = m_artboard->animationNamed(animationName);
+            if (m_scene == nullptr)
+            {
+                throw std::runtime_error("linear animation '" + animationName +
+                                         "' was not found");
+            }
         }
         else
         {
@@ -720,6 +746,7 @@ BenchmarkTimings runBenchmarkPass(const Options& options, bool collectPhases)
     RIVLoader loader(stripAbortingAssetContents(readFile(options.file)),
                      options.artboard,
                      options.stateMachine,
+                     options.animation,
                      &nullFactory);
     rive::Scene* scene = loader.scene();
     auto renderer = nullFactory.makeRenderer();
@@ -837,6 +864,7 @@ int runFile(const Options& options)
     RIVLoader loader(stripAbortingAssetContents(readFile(options.file)),
                      options.artboard,
                      options.stateMachine,
+                     options.animation,
                      factory);
     rive::Scene* scene = loader.scene();
     auto renderer = options.benchmark ? nullFactory.makeRenderer()

@@ -35,11 +35,11 @@
 
 #define NUX_FLOW_MAX_VALUE_EDGE_COUNT 16384
 
-#define NUX_FLOW_SESSION_ABI_MINOR 5
+#define NUX_FLOW_SESSION_ABI_MINOR 6
 
 #define NUX_RUNTIME_ABI_MAJOR 1
 
-#define NUX_RUNTIME_ABI_MINOR 5
+#define NUX_RUNTIME_ABI_MINOR 6
 
 /**
  * Opaque C handle. It retains the logical render session across detach.
@@ -118,10 +118,18 @@ typedef struct NuxFlowSessionDescriptor {
 } NuxFlowSessionDescriptor;
 
 /**
- * ABI 1.5 configured-session descriptor. `minimum_abi_minor` must be 5 for
- * this surface. A null `artboard_name` selects the default artboard. A null
- * `player_name` uses the authored fallback policy; a nonempty UTF-8 name
- * explicitly selects a state machine. Linear animations are fallback-only.
+ * Stable-width explicit player-selector kind. `DEFAULT` mirrors C++
+ * `defaultScene`; the named variants mirror the two independent named lookup
+ * operations on `ArtboardInstance`.
+ */
+typedef uint32_t NuxFlowPlayerSelectorKind;
+
+/**
+ * Configured-session descriptor. ABI 1.5 callers provide the 40-byte prefix:
+ * a null `player_name` uses the authored fallback policy and a nonempty name
+ * explicitly selects a state machine. ABI 1.6 callers provide the full
+ * structure and use `player_kind` to select the default scene, a named state
+ * machine, or a named linear animation without cross-kind fallback.
  */
 typedef struct NuxFlowConfiguredSessionDescriptor {
   uint32_t struct_size;
@@ -129,6 +137,7 @@ typedef struct NuxFlowConfiguredSessionDescriptor {
   uint16_t minimum_abi_minor;
   struct NuxByteView artboard_name;
   struct NuxByteView player_name;
+  NuxFlowPlayerSelectorKind player_kind;
 } NuxFlowConfiguredSessionDescriptor;
 
 /**
@@ -344,9 +353,10 @@ typedef struct NuxFlowTextRunBatch {
 } NuxFlowTextRunBatch;
 
 /**
- * ABI 1.5 tagged generic operation. `required_abi_major` and
- * `minimum_abi_minor` must be exactly 1 and 5. Exactly the pointer selected by
- * `kind` must be non-null and the other payload pointers must be null.
+ * ABI 1.5+ tagged generic operation. `required_abi_major` must be 1 and
+ * `minimum_abi_minor` must name a supported configured-session ABI (currently
+ * 5 or 6). Exactly the pointer selected by `kind` must be non-null and the
+ * other payload pointers must be null.
  */
 typedef struct NuxFlowSessionOperation {
   uint32_t struct_size;
@@ -730,6 +740,8 @@ typedef uint32_t NuxScriptAuthorization;
 
 #define NUX_FLOW_PLAYER_SELECTION_AUTHORED_DEFAULT_STATE_MACHINE 2
 
+#define NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION 6
+
 #define NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE 1
 
 #define NUX_FLOW_PLAYER_SELECTION_FIRST_ANIMATION 4
@@ -737,6 +749,12 @@ typedef uint32_t NuxScriptAuthorization;
 #define NUX_FLOW_PLAYER_SELECTION_FIRST_STATE_MACHINE 3
 
 #define NUX_FLOW_PLAYER_SELECTION_STATIC 5
+
+#define NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT 0
+
+#define NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION 2
+
+#define NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE 1
 
 #define NUX_FLOW_POINTER_EVENT_KIND_CANCEL 4
 
@@ -994,8 +1012,9 @@ NuxStatus nux_flow_render_session_create(const struct NuxFlowRuntimeContext *con
                                          struct NuxOperationResult **out_result);
 
 /**
- * Creates one independent screen session using the ABI 1.5 player-selection
- * and bootstrap-result contract. Creation never performs an observable
+ * Creates one independent screen session using the versioned ABI 1.5+
+ * player-selection contract and ABI 1.5 bootstrap-result contract. Creation
+ * never performs an observable
  * advance. Authenticated script initialization may return ordered cycle-zero
  * host-work outputs. The returned result owns those outputs, player metadata,
  * bounds, catalog, and bootstrap value views until explicitly freed.
@@ -1022,7 +1041,7 @@ NuxStatus nux_flow_render_session_create_configured(const struct NuxFlowRuntimeC
 void nux_flow_render_session_free(struct NuxFlowRenderSession *session);
 
 /**
- * Performs one fully copied ABI 1.5 operation on the session's pinned worker.
+ * Performs one fully copied ABI 1.5+ operation on the session's pinned worker.
  * Rust never calls Swift reentrantly; ordered outputs are returned in the owned
  * result. State batches are atomic and pointer batches preserve immediate
  * subcycles inside their returned `cycle` values.

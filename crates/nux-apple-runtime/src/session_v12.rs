@@ -1,4 +1,4 @@
-//! ABI 1.5's bounded, coarse flow-session protocol.
+//! ABI 1.5+ bounded, coarse flow-session protocol.
 //!
 //! The C layouts in this module are deliberately independent from the Rust
 //! session model. Every caller-owned view is validated and copied before the
@@ -9,7 +9,8 @@
 use super::*;
 use std::{collections::HashSet, ffi::c_void, ptr, slice};
 
-pub const NUX_FLOW_SESSION_ABI_MINOR: u16 = 5;
+pub const NUX_FLOW_SESSION_ABI_MINOR: u16 = 6;
+const NUX_FLOW_SESSION_MINIMUM_ABI_MINOR: u16 = 5;
 
 pub const NUX_FLOW_MAX_ID_BYTE_LENGTH: u64 = 4_096;
 pub const NUX_FLOW_MAX_PATH_BYTE_LENGTH: u64 = 4_096;
@@ -35,6 +36,15 @@ pub const NUX_FLOW_PLAYER_KIND_STATE_MACHINE: NuxFlowPlayerKind = 1;
 pub const NUX_FLOW_PLAYER_KIND_LINEAR_ANIMATION: NuxFlowPlayerKind = 2;
 pub const NUX_FLOW_PLAYER_KIND_STATIC: NuxFlowPlayerKind = 3;
 
+/// Stable-width explicit player-selector kind. `DEFAULT` mirrors C++
+/// `defaultScene`; the named variants mirror the two independent named lookup
+/// operations on `ArtboardInstance`.
+pub type NuxFlowPlayerSelectorKind = u32;
+
+pub const NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT: NuxFlowPlayerSelectorKind = 0;
+pub const NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE: NuxFlowPlayerSelectorKind = 1;
+pub const NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION: NuxFlowPlayerSelectorKind = 2;
+
 /// Stable-width branch used by deterministic player selection.
 pub type NuxFlowPlayerSelection = u32;
 
@@ -43,6 +53,7 @@ pub const NUX_FLOW_PLAYER_SELECTION_AUTHORED_DEFAULT_STATE_MACHINE: NuxFlowPlaye
 pub const NUX_FLOW_PLAYER_SELECTION_FIRST_STATE_MACHINE: NuxFlowPlayerSelection = 3;
 pub const NUX_FLOW_PLAYER_SELECTION_FIRST_ANIMATION: NuxFlowPlayerSelection = 4;
 pub const NUX_FLOW_PLAYER_SELECTION_STATIC: NuxFlowPlayerSelection = 5;
+pub const NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION: NuxFlowPlayerSelection = 6;
 
 /// Stable-width state-machine input kind returned by a player-input query.
 pub type NuxFlowPlayerInputKind = u32;
@@ -157,10 +168,11 @@ pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_OBJECT: NuxFlowSchemaPropertyKind = 10;
 pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_NULL: NuxFlowSchemaPropertyKind = 11;
 pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX: NuxFlowSchemaPropertyKind = 12;
 
-/// ABI 1.5 configured-session descriptor. `minimum_abi_minor` must be 5 for
-/// this surface. A null `artboard_name` selects the default artboard. A null
-/// `player_name` uses the authored fallback policy; a nonempty UTF-8 name
-/// explicitly selects a state machine. Linear animations are fallback-only.
+/// Configured-session descriptor. ABI 1.5 callers provide the 40-byte prefix:
+/// a null `player_name` uses the authored fallback policy and a nonempty name
+/// explicitly selects a state machine. ABI 1.6 callers provide the full
+/// structure and use `player_kind` to select the default scene, a named state
+/// machine, or a named linear animation without cross-kind fallback.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxFlowConfiguredSessionDescriptor {
@@ -169,6 +181,17 @@ pub struct NuxFlowConfiguredSessionDescriptor {
     pub minimum_abi_minor: u16,
     pub artboard_name: NuxByteView,
     pub player_name: NuxByteView,
+    pub player_kind: NuxFlowPlayerSelectorKind,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct NuxFlowConfiguredSessionDescriptorV15 {
+    struct_size: u32,
+    required_abi_major: u16,
+    minimum_abi_minor: u16,
+    artboard_name: NuxByteView,
+    player_name: NuxByteView,
 }
 
 /// One node in a caller-owned recursive value arena. Array elements require
@@ -355,9 +378,10 @@ pub struct NuxFlowQueryBatch {
     pub query_count: u64,
 }
 
-/// ABI 1.5 tagged generic operation. `required_abi_major` and
-/// `minimum_abi_minor` must be exactly 1 and 5. Exactly the pointer selected by
-/// `kind` must be non-null and the other payload pointers must be null.
+/// ABI 1.5+ tagged generic operation. `required_abi_major` must be 1 and
+/// `minimum_abi_minor` must name a supported configured-session ABI (currently
+/// 5 or 6). Exactly the pointer selected by `kind` must be non-null and the
+/// other payload pointers must be null.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxFlowSessionOperation {
@@ -548,10 +572,16 @@ struct OwnedValueArena {
     edges: Vec<OwnedValueEdge>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct OwnedConfiguredSessionDescriptor {
     artboard_name: Option<String>,
-    player_name: Option<String>,
+    player: Option<OwnedPlayerSelector>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum OwnedPlayerSelector {
+    StateMachine(String),
+    LinearAnimation(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -656,8 +686,11 @@ impl PayloadBudget {
     }
 }
 
-fn validate_v15_version(required_major: u16, minimum_minor: u16) -> Result<(), NuxStatus> {
-    if required_major == NUX_RUNTIME_ABI_MAJOR && minimum_minor == NUX_FLOW_SESSION_ABI_MINOR {
+fn validate_flow_session_version(required_major: u16, minimum_minor: u16) -> Result<(), NuxStatus> {
+    if required_major == NUX_RUNTIME_ABI_MAJOR
+        && (NUX_FLOW_SESSION_MINIMUM_ABI_MINOR..=NUX_FLOW_SESSION_ABI_MINOR)
+            .contains(&minimum_minor)
+    {
         Ok(())
     } else {
         Err(NuxStatus::AbiMismatch)
@@ -736,31 +769,50 @@ unsafe fn copy_configured_session_descriptor(
         return Err(NuxStatus::NullArgument);
     }
     let struct_size = unsafe { read_struct_size(descriptor) };
-    if struct_size < size_u32::<NuxFlowConfiguredSessionDescriptor>() {
+    if struct_size < size_u32::<NuxFlowConfiguredSessionDescriptorV15>() {
         return Err(NuxStatus::InvalidArgument);
     }
-    let descriptor = unsafe { descriptor.read() };
-    validate_v15_version(descriptor.required_abi_major, descriptor.minimum_abi_minor)?;
+    let prefix = unsafe {
+        descriptor
+            .cast::<NuxFlowConfiguredSessionDescriptorV15>()
+            .read()
+    };
+    validate_flow_session_version(prefix.required_abi_major, prefix.minimum_abi_minor)?;
     let mut budget = PayloadBudget::default();
     let artboard_name = copy_optional_utf8(
-        descriptor.artboard_name,
+        prefix.artboard_name,
         NUX_FLOW_MAX_ID_BYTE_LENGTH,
         &mut budget,
     )?
     .map(String::from_utf8)
     .transpose()
     .map_err(|_| NuxStatus::InvalidArgument)?;
-    let player_name = copy_optional_utf8(
-        descriptor.player_name,
-        NUX_FLOW_MAX_ID_BYTE_LENGTH,
-        &mut budget,
-    )?
-    .map(String::from_utf8)
-    .transpose()
-    .map_err(|_| NuxStatus::InvalidArgument)?;
+    let player_name =
+        copy_optional_utf8(prefix.player_name, NUX_FLOW_MAX_ID_BYTE_LENGTH, &mut budget)?
+            .map(String::from_utf8)
+            .transpose()
+            .map_err(|_| NuxStatus::InvalidArgument)?;
+    let player = if prefix.minimum_abi_minor == 5 {
+        player_name.map(OwnedPlayerSelector::StateMachine)
+    } else {
+        if struct_size < size_u32::<NuxFlowConfiguredSessionDescriptor>() {
+            return Err(NuxStatus::InvalidArgument);
+        }
+        let descriptor = unsafe { descriptor.read() };
+        match (descriptor.player_kind, player_name) {
+            (NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT, None) => None,
+            (NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE, Some(name)) if !name.is_empty() => {
+                Some(OwnedPlayerSelector::StateMachine(name))
+            }
+            (NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION, Some(name)) if !name.is_empty() => {
+                Some(OwnedPlayerSelector::LinearAnimation(name))
+            }
+            _ => return Err(NuxStatus::InvalidArgument),
+        }
+    };
     Ok(OwnedConfiguredSessionDescriptor {
         artboard_name,
-        player_name,
+        player,
     })
 }
 
@@ -1488,7 +1540,7 @@ unsafe fn copy_session_operation(
         return Err(NuxStatus::InvalidArgument);
     }
     let operation = unsafe { operation.read() };
-    validate_v15_version(operation.required_abi_major, operation.minimum_abi_minor)?;
+    validate_flow_session_version(operation.required_abi_major, operation.minimum_abi_minor)?;
     let selected_payload_count = [
         !operation.state_batch.is_null(),
         !operation.pointer_batch.is_null(),
@@ -1792,7 +1844,8 @@ impl FlowSessionResultHandle {
                     metadata.kind == NUX_FLOW_PLAYER_KIND_STATE_MACHINE
                         && metadata.player_index.is_some()
                 }
-                NUX_FLOW_PLAYER_SELECTION_FIRST_ANIMATION => {
+                NUX_FLOW_PLAYER_SELECTION_FIRST_ANIMATION
+                | NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION => {
                     metadata.kind == NUX_FLOW_PLAYER_KIND_LINEAR_ANIMATION
                         && metadata.player_index.is_some()
                 }
@@ -2552,9 +2605,15 @@ mod configured_session_seam {
         state: &mut WorkerState,
         descriptor: OwnedConfiguredSessionDescriptor,
     ) -> Result<(SessionId, FlowSessionResultHandle), RuntimeFailure> {
+        let player = descriptor.player.map(|selector| match selector {
+            OwnedPlayerSelector::StateMachine(name) => core::FlowPlayerSelector::StateMachine(name),
+            OwnedPlayerSelector::LinearAnimation(name) => {
+                core::FlowPlayerSelector::LinearAnimation(name)
+            }
+        });
         let config = core::FlowSessionConfig {
             artboard_name: descriptor.artboard_name,
-            player_name: descriptor.player_name,
+            player,
         };
         let mut factory = state.make_session_factory()?;
         let renderer_generation = state.gpu_generation;
@@ -3178,6 +3237,9 @@ mod configured_session_seam {
             }
             core::FlowPlayerSelection::FirstAnimation => NUX_FLOW_PLAYER_SELECTION_FIRST_ANIMATION,
             core::FlowPlayerSelection::Static => NUX_FLOW_PLAYER_SELECTION_STATIC,
+            core::FlowPlayerSelection::ExplicitLinearAnimation => {
+                NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION
+            }
         }
     }
 
@@ -3822,8 +3884,9 @@ mod configured_session_seam {
 
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
-/// Creates one independent screen session using the ABI 1.5 player-selection
-/// and bootstrap-result contract. Creation never performs an observable
+/// Creates one independent screen session using the versioned ABI 1.5+
+/// player-selection contract and ABI 1.5 bootstrap-result contract. Creation
+/// never performs an observable
 /// advance. Authenticated script initialization may return ordered cycle-zero
 /// host-work outputs. The returned result owns those outputs, player metadata,
 /// bounds, catalog, and bootstrap value views until explicitly freed.
@@ -3862,7 +3925,7 @@ pub unsafe extern "C" fn nux_flow_render_session_create_configured(
                         out_result,
                         status,
                         if status == NuxStatus::AbiMismatch {
-                            "configured session requires ABI 1.5"
+                            "configured session requires ABI 1.5 or 1.6"
                         } else {
                             "configured session descriptor is malformed or oversized"
                         },
@@ -3888,7 +3951,7 @@ pub unsafe extern "C" fn nux_flow_render_session_create_configured(
 
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
-/// Performs one fully copied ABI 1.5 operation on the session's pinned worker.
+/// Performs one fully copied ABI 1.5+ operation on the session's pinned worker.
 /// Rust never calls Swift reentrantly; ordered outputs are returned in the owned
 /// result. State batches are atomic and pointer batches preserve immediate
 /// subcycles inside their returned `cycle` values.
@@ -3921,7 +3984,7 @@ pub unsafe extern "C" fn nux_flow_render_session_perform(
                         out_result,
                         status,
                         if status == NuxStatus::AbiMismatch {
-                            "session operation requires ABI 1.5"
+                            "session operation requires ABI 1.5 or 1.6"
                         } else {
                             "session operation is malformed or exceeds a published bound"
                         },
@@ -5098,9 +5161,10 @@ mod tests {
         NuxFlowConfiguredSessionDescriptor {
             struct_size: size_u32::<NuxFlowConfiguredSessionDescriptor>(),
             required_abi_major: 1,
-            minimum_abi_minor: 5,
+            minimum_abi_minor: 6,
             artboard_name: NuxByteView::default(),
             player_name: NuxByteView::default(),
+            player_kind: NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT,
         }
     }
 
@@ -5108,7 +5172,7 @@ mod tests {
         NuxFlowSessionOperation {
             struct_size: size_u32::<NuxFlowSessionOperation>(),
             required_abi_major: 1,
-            minimum_abi_minor: 5,
+            minimum_abi_minor: 6,
             kind,
             state_batch: ptr::null(),
             pointer_batch: ptr::null(),
@@ -5485,26 +5549,36 @@ mod tests {
     }
 
     #[test]
-    fn abi_15_handshake_preserves_structurally_valid_abi_11_through_14_compatibility() {
+    fn abi_16_handshake_preserves_structurally_valid_abi_11_through_15_compatibility() {
         assert_eq!(NUX_RUNTIME_ABI_MAJOR, 1);
-        assert_eq!(NUX_RUNTIME_ABI_MINOR, 5);
-        assert_eq!(NUX_FLOW_SESSION_ABI_MINOR, 5);
+        assert_eq!(NUX_RUNTIME_ABI_MINOR, 6);
+        assert_eq!(NUX_FLOW_SESSION_ABI_MINOR, 6);
+        assert_eq!(NUX_FLOW_SESSION_MINIMUM_ABI_MINOR, 5);
         assert_eq!(MINIMUM_SUPPORTED_ABI_MINOR, 1);
         assert_eq!(nux_runtime_require_abi(1, 1), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 2), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 3), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 4), NuxStatus::Ok);
         assert_eq!(nux_runtime_require_abi(1, 5), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(1, 6), NuxStatus::AbiMismatch);
+        assert_eq!(nux_runtime_require_abi(1, 6), NuxStatus::Ok);
+        assert_eq!(nux_runtime_require_abi(1, 7), NuxStatus::AbiMismatch);
         assert_eq!(nux_runtime_require_abi(2, 1), NuxStatus::AbiMismatch);
     }
 
     #[test]
-    fn abi_15_layouts_add_the_text_run_batch_after_abi_14_prefixes() {
+    fn abi_16_layouts_append_the_typed_selector_after_the_abi_15_prefix() {
         assert_eq!(std::mem::size_of::<NuxFlowSessionDescriptor>(), 40);
         assert_eq!(std::mem::size_of::<NuxFrameOperation>(), 40);
         assert_eq!(
             std::mem::size_of::<NuxFlowConfiguredSessionDescriptor>(),
+            48
+        );
+        assert_eq!(
+            std::mem::size_of::<NuxFlowConfiguredSessionDescriptorV15>(),
+            40
+        );
+        assert_eq!(
+            std::mem::offset_of!(NuxFlowConfiguredSessionDescriptor, player_kind),
             40
         );
         assert_eq!(std::mem::size_of::<NuxFlowValueNode>(), 88);
@@ -5940,39 +6014,48 @@ mod tests {
     #[test]
     fn configured_descriptor_rejects_wrong_versions_and_malformed_selectors() {
         let mut descriptor = configured_descriptor();
-        descriptor.minimum_abi_minor = 1;
-        assert!(matches!(
-            unsafe { copy_configured_session_descriptor(&descriptor) },
-            Err(NUX_STATUS_ABI_MISMATCH)
-        ));
-        descriptor.minimum_abi_minor = 2;
-        assert!(matches!(
-            unsafe { copy_configured_session_descriptor(&descriptor) },
-            Err(NUX_STATUS_ABI_MISMATCH)
-        ));
-        descriptor.minimum_abi_minor = 3;
-        assert!(matches!(
-            unsafe { copy_configured_session_descriptor(&descriptor) },
-            Err(NUX_STATUS_ABI_MISMATCH)
-        ));
-        descriptor.minimum_abi_minor = 4;
+        for unsupported_minor in 1..=4 {
+            descriptor.minimum_abi_minor = unsupported_minor;
+            assert!(matches!(
+                unsafe { copy_configured_session_descriptor(&descriptor) },
+                Err(NUX_STATUS_ABI_MISMATCH)
+            ));
+        }
+        descriptor.minimum_abi_minor = 7;
         assert!(matches!(
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
         descriptor.minimum_abi_minor = 6;
-        assert!(matches!(
-            unsafe { copy_configured_session_descriptor(&descriptor) },
-            Err(NUX_STATUS_ABI_MISMATCH)
-        ));
-        descriptor.minimum_abi_minor = 5;
-        assert!(unsafe { copy_configured_session_descriptor(&descriptor) }.is_ok());
         descriptor.required_abi_major = 2;
         assert!(matches!(
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
         descriptor.required_abi_major = 1;
+        descriptor.player_kind = u32::MAX;
+        assert!(matches!(
+            unsafe { copy_configured_session_descriptor(&descriptor) },
+            Err(NUX_STATUS_INVALID_ARGUMENT)
+        ));
+        descriptor.player_kind = NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT;
+        descriptor.player_name = bytes(b"named");
+        assert!(matches!(
+            unsafe { copy_configured_session_descriptor(&descriptor) },
+            Err(NUX_STATUS_INVALID_ARGUMENT)
+        ));
+        descriptor.player_name = NuxByteView::default();
+        for named_kind in [
+            NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE,
+            NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION,
+        ] {
+            descriptor.player_kind = named_kind;
+            assert!(matches!(
+                unsafe { copy_configured_session_descriptor(&descriptor) },
+                Err(NUX_STATUS_INVALID_ARGUMENT)
+            ));
+        }
+        descriptor.player_kind = NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE;
         descriptor.player_name = NuxByteView {
             data: ptr::dangling(),
             len: 0,
@@ -5981,10 +6064,67 @@ mod tests {
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_INVALID_ARGUMENT)
         ));
+
+        descriptor.player_name = bytes(b"Machine");
+        assert_eq!(
+            unsafe { copy_configured_session_descriptor(&descriptor) }
+                .expect("copy ABI 1.6 state-machine selector")
+                .player,
+            Some(OwnedPlayerSelector::StateMachine("Machine".to_owned()))
+        );
+        descriptor.player_kind = NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION;
+        assert_eq!(
+            unsafe { copy_configured_session_descriptor(&descriptor) }
+                .expect("copy ABI 1.6 animation selector")
+                .player,
+            Some(OwnedPlayerSelector::LinearAnimation("Machine".to_owned()))
+        );
+
+        descriptor.struct_size = size_u32::<NuxFlowConfiguredSessionDescriptorV15>();
+        assert!(matches!(
+            unsafe { copy_configured_session_descriptor(&descriptor) },
+            Err(NUX_STATUS_INVALID_ARGUMENT)
+        ));
     }
 
     #[test]
-    fn session_operation_requires_the_exact_abi_15_handshake() {
+    fn abi_15_descriptor_prefix_keeps_nonempty_player_name_as_state_machine() {
+        let legacy_name = b"State Machine 1";
+        let legacy = NuxFlowConfiguredSessionDescriptorV15 {
+            struct_size: size_u32::<NuxFlowConfiguredSessionDescriptorV15>(),
+            required_abi_major: 1,
+            minimum_abi_minor: 5,
+            artboard_name: NuxByteView::default(),
+            player_name: bytes(legacy_name),
+        };
+        let copied = unsafe {
+            copy_configured_session_descriptor(
+                (&raw const legacy).cast::<NuxFlowConfiguredSessionDescriptor>(),
+            )
+        }
+        .expect("copy the exact ABI 1.5 descriptor prefix");
+        assert_eq!(
+            copied.player,
+            Some(OwnedPlayerSelector::StateMachine(
+                "State Machine 1".to_owned()
+            ))
+        );
+
+        let legacy_default = NuxFlowConfiguredSessionDescriptorV15 {
+            player_name: NuxByteView::default(),
+            ..legacy
+        };
+        let copied = unsafe {
+            copy_configured_session_descriptor(
+                (&raw const legacy_default).cast::<NuxFlowConfiguredSessionDescriptor>(),
+            )
+        }
+        .expect("copy ABI 1.5 default-scene selection");
+        assert_eq!(copied.player, None);
+    }
+
+    #[test]
+    fn session_operation_accepts_abi_15_and_16_handshakes() {
         let advance = NuxFlowAdvanceOperation {
             struct_size: size_u32::<NuxFlowAdvanceOperation>(),
             timestamp_seconds: 0.0,
@@ -6006,12 +6146,17 @@ mod tests {
             unsafe { copy_session_operation(&request) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
-        request.minimum_abi_minor = 6;
+        request.minimum_abi_minor = 5;
+        assert!(matches!(
+            unsafe { copy_session_operation(&request) },
+            Ok(OwnedSessionOperation::Advance(_))
+        ));
+        request.minimum_abi_minor = 7;
         assert!(matches!(
             unsafe { copy_session_operation(&request) },
             Err(NUX_STATUS_ABI_MISMATCH)
         ));
-        request.minimum_abi_minor = 5;
+        request.minimum_abi_minor = 6;
         request.required_abi_major = 2;
         assert!(matches!(
             unsafe { copy_session_operation(&request) },
@@ -7716,6 +7861,116 @@ mod tests {
 
     #[cfg(feature = "apple-product")]
     #[test]
+    fn configured_player_selection_preserves_abi_15_and_adds_typed_abi_16_animation() {
+        const FIXTURE: &[u8] = include_bytes!("../../../fixtures/animation/smi_test.riv");
+        let worker = match RuntimeWorker::spawn(FIXTURE.to_vec()) {
+            Ok(worker) => worker,
+            Err(_) => panic!("import player fixture"),
+        };
+        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle { worker }))
+            .cast::<NuxFlowRuntimeContext>();
+
+        let legacy = NuxFlowConfiguredSessionDescriptorV15 {
+            struct_size: size_u32::<NuxFlowConfiguredSessionDescriptorV15>(),
+            required_abi_major: 1,
+            minimum_abi_minor: 5,
+            artboard_name: bytes(b"artboard to nest"),
+            player_name: bytes(b"State Machine 1"),
+        };
+        let mut session = ptr::null_mut();
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_flow_render_session_create_configured(
+                    context,
+                    (&raw const legacy).cast::<NuxFlowConfiguredSessionDescriptor>(),
+                    &mut session,
+                    &mut result,
+                )
+            },
+            NuxStatus::Ok
+        );
+        let mut metadata: NuxFlowPlayerMetadataView = unsafe { std::mem::zeroed() };
+        metadata.struct_size = size_u32::<NuxFlowPlayerMetadataView>();
+        assert_eq!(
+            unsafe { nux_flow_session_result_player_metadata(result, &mut metadata) },
+            NuxStatus::Ok
+        );
+        assert_eq!(metadata.kind, NUX_FLOW_PLAYER_KIND_STATE_MACHINE);
+        assert_eq!(
+            metadata.selection,
+            NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE
+        );
+        unsafe {
+            nux_flow_session_result_free(result);
+            nux_flow_render_session_free(session);
+        }
+
+        let mut descriptor = configured_descriptor();
+        descriptor.artboard_name = bytes(b"artboard to nest");
+        descriptor.player_kind = NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION;
+        descriptor.player_name = bytes(b"Timeline 1");
+        session = ptr::null_mut();
+        result = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_flow_render_session_create_configured(
+                    context,
+                    &descriptor,
+                    &mut session,
+                    &mut result,
+                )
+            },
+            NuxStatus::Ok
+        );
+        metadata.struct_size = size_u32::<NuxFlowPlayerMetadataView>();
+        assert_eq!(
+            unsafe { nux_flow_session_result_player_metadata(result, &mut metadata) },
+            NuxStatus::Ok
+        );
+        assert_eq!(metadata.kind, NUX_FLOW_PLAYER_KIND_LINEAR_ANIMATION);
+        assert_eq!(
+            metadata.selection,
+            NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION
+        );
+        assert_eq!(copied_byte_view(metadata.player_name), b"Timeline 1");
+        unsafe {
+            nux_flow_session_result_free(result);
+            nux_flow_render_session_free(session);
+        }
+
+        descriptor.player_name = bytes(b"missing");
+        for player_kind in [
+            NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE,
+            NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION,
+        ] {
+            descriptor.player_kind = player_kind;
+            session = ptr::null_mut();
+            result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_flow_render_session_create_configured(
+                        context,
+                        &descriptor,
+                        &mut session,
+                        &mut result,
+                    )
+                },
+                NuxStatus::NotFound
+            );
+            assert!(session.is_null());
+            assert_eq!(
+                unsafe { nux_flow_session_result_status(result) },
+                NuxStatus::NotFound
+            );
+            unsafe { nux_flow_session_result_free(result) };
+        }
+
+        unsafe { nux_flow_runtime_context_free(context) };
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
     fn configured_create_bootstrap_and_query_round_trip_use_the_real_flow_session() {
         const FIXTURE: &[u8] = include_bytes!("../../../fixtures/animation/smi_test.riv");
         let worker = match RuntimeWorker::spawn(FIXTURE.to_vec()) {
@@ -7727,6 +7982,7 @@ mod tests {
         let mut descriptor = configured_descriptor();
         descriptor.artboard_name = bytes(b"artboard to nest");
         descriptor.player_name = bytes(b"State Machine 1");
+        descriptor.player_kind = NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE;
         let mut session = ptr::null_mut();
         let mut create_result = ptr::null_mut();
         assert_eq!(

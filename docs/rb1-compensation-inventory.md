@@ -34,15 +34,37 @@ public seams that originally fanned into it:
 - `RuntimeOwnedViewModelBindingCandidate` remains as the ordered DataContext
   lookup/listener-addressing carrier. f9 deleted its `mutation_generation`
   accessor; constructors and path/context helpers remain.
-- Ctor call sites: `artboard.rs:2692,2744,5577,10097,10391-10392,10693,10728-10729` (last four tests); `instance.rs:4822,5127,5130`; `artboard_data_bind.rs:4204,4232,4241,4311,4317,4378,4382,4411,4461,4556,5358,5596,7663,7667`.
+- Ctor call sites: `artboard.rs:2778,2837,3402,10518,10770-10771,
+  11122,11157-11158` (last four groups are tests); `instance.rs:4821,
+  5099,5102`; `artboard_data_bind.rs:4942,4970,4979,5067,5073,5134,
+  5138,5167,8511,8515,9690` (last is a test).
 - SM retained vector `owned_view_model_candidates` remains for deterministic
   own/parent candidate order, key-frame graphs, listener writes, and public
   compatibility seams. It no longer has a parallel generation vector or
   participates in a steady-frame generation comparison.
-- Artboard retained vector `artboard_owned_view_model_candidates` `artboard.rs:267`; init `:1019,6667`; rw `artboard.rs:2316-2318,2668,2743-2745`; `artboard_data_bind.rs:4265,4363-4368,4460-4473,5400,5580-5603,5695-5705,5750,6000,6483,6936,7089,7591-7596`.
-- `bind_owned_view_model_context_candidates` (SM) `instance.rs:5168-5224`; graph-level `data_bind_graph.rs:4658-4683`; callers `instance.rs:5076,5078,5132,5188,5395`; `artboard.rs:2317,2706,2776,5585`; `artboard_data_bind.rs:4424`; tests `artboard.rs:10099,10101,10697,10699,10732,10734`.
-- `rebind_owned_view_model_context_candidates` `instance.rs:5069-5085`; callers `:5107,:5188,:2257`.
-- `owned_view_model_context_candidates_for_nested_host` `artboard_data_bind.rs:5321-5365`; callers `:4299,4366,7596`.
+- Artboard retained vector `artboard_owned_view_model_candidates`
+  `artboard.rs:269`; init `:1078,6775`; artboard reads/writes
+  `:2405-2407,2755,2836-2838,3394`; data-bind reads/writes
+  `artboard_data_bind.rs:4649,5000-5019,5119-5124,5219-5227,5335,
+  5361,6087,6273-6296,6396-6411,6463,8439`.
+- `bind_owned_view_model_context_candidates` (SM)
+  `instance.rs:5133-5176`; graph-level `data_bind_graph.rs:5056-5129`;
+  callers `instance.rs:4820,5104`; `artboard.rs:2406,2798,2869,3418,
+  5683`; `artboard_data_bind.rs:5183`; tests
+  `artboard.rs:10520,10774,11126,11161`.
+- [x] f13 deleted the two listener-write callers that rebound every graph
+  source after mutating one retained cell. C++ `ListenerViewModelChange`
+  updates the exact source bind and dirties its paired target bind; it never
+  binds the whole DataContext again (`listener_viewmodel_change.cpp:42-80`;
+  `viewmodel_instance_number.cpp:10-19`; `data_bind.cpp:502-546`). The
+  surviving explicit-bind and pushed structural-relink operation is now named
+  `bind_owned_data_binds_from_candidates`, matching
+  `DataBindContainer::bindDataBindsFromContext` rather than the deleted
+  compensation lifecycle (`state_machine_instance.cpp:2901-2913`;
+  `data_bind_container.cpp:25-35`; `data_bind_context.cpp:56-89`). Its unused
+  trigger-sync parameter and branch were also deleted.
+- `owned_view_model_context_candidates_for_nested_host`
+  `artboard_data_bind.rs:5999-6043`; callers `:5055,5122,8444`.
 
 ## Item 3 - Listener observed-copy rescans
 
@@ -165,10 +187,12 @@ public seams that originally fanned into it:
 
 - [x] e5(C) deleted Scene's `dirty` bit, `flush_view_model`, advance-time
   flush, and pointer-time rebinds.
-- [x] f9 changed state-machine `refresh_owned_view_model_candidates` from a
-  candidate-generation poll/full rebind into retained per-source dirt
-  collection plus one pushed structural-rebind sink. The helper name remains
-  because its callers still need to collect source dirt before the frame.
+- [x] f9 changed state-machine candidate refresh from a generation poll/full
+  rebind into retained per-source dirt collection plus one pushed structural-
+  rebind sink. f13 deleted the stale polling-era symbol by renaming the
+  surviving operation `collect_retained_owned_view_model_dirt`; its callers
+  still fold exact source dirt before the frame and consume the pushed
+  structural-relink request.
 - [x] f11 replaced the artboard analog with
   `refresh_retained_owned_view_model_artboard_sources`: scalar/source dirt
   drains exact retained occurrences from the container queue, while only
@@ -290,10 +314,13 @@ public seams that originally fanned into it:
 ## Deletion-gate checklist (f)
 
 Still queued once the remaining public seams are re-implemented (zero non-test,
-non-family callers): `rebind_owned_view_model_context_candidates`,
-`refresh_owned_view_model_candidates`,
-`owned_view_model_context_candidates_for_nested_host`,
-and `bind_active_owned_view_model_triggers_for_candidates`. Already deleted:
+non-family callers): `owned_view_model_context_candidates_for_nested_host`
+and `bind_active_owned_view_model_triggers_for_candidates`. f13 deleted the
+listener-triggered whole-context rebind compensation, the dead trigger-sync
+branch, and the obsolete `rebind_owned_view_model_context_candidates` /
+`refresh_owned_view_model_candidates` symbols while retaining their legitimate
+explicit-bind, pushed-structural-relink, and exact-dirt collection operations
+under C++-shaped names. Already deleted:
 `refresh_owned_view_model_artboard_context_if_mutated`,
 `RuntimeArtboardOwnedContextKey` + `matches_candidate*`, the complete
 `mutation_generation` clock family,

@@ -14,7 +14,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 399/399, nuxie lib 140/140,
+Regression floor (must stay green): runtime lib 401/401, nuxie lib 140/140,
 C++ probe 721/721, both runtime golden gates 317/317 exact / 647/647 segments;
 ordinary and scripted both have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
@@ -434,6 +434,23 @@ upstream-sync-map registry).
     `RIVE_CPP_PROBE`; every further RB-1 cut must run the scripted gate before
     push.
     Renderer goldens are not applicable.
+  - [x] (f13) listener ViewModel changes no longer rebind every owned
+    candidate graph source after mutating one retained cell. The exact source
+    cell now carries dirt into the next `updateDataBinds(false)` batch, matching
+    `ListenerViewModelChange::perform` and `DataBind` propagation
+    (`listener_viewmodel_change.cpp:42-80`; `data_bind.cpp:502-546`) without
+    spuriously reconciling unrelated two-way binds. Explicit DataContext bind
+    and pushed structural replacement still run the legitimate aggregate bind
+    operation (`state_machine_instance.cpp:2901-2913`;
+    `data_bind_container.cpp:25-35`; `data_bind_context.cpp:56-89`). The dead
+    trigger-sync branch and the stale `rebind_owned_view_model_context_candidates`
+    / `refresh_owned_view_model_candidates` symbols are deleted. Full evidence:
+    runtime lib 401/401, nuxie lib 140/140, C++ probe 721/721, ordinary and
+    scripted goldens 317/317 entries plus 647/647 exact segments with zero
+    failures, C API smoke and the CI-shaped full workspace green. Candidate
+    vectors, the nested-host flattening helper, and the active-trigger shadow
+    path remain queued for the atomic parent-linked DataContext/source-path
+    migration. Renderer goldens are not applicable.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -1018,3 +1035,12 @@ Decisions log.)
   suite ran. The zero-second facade return and next-frame chained
   `applyEvents` assertions remain unchanged. Renderer goldens are not
   applicable because no renderer/draw code changed.
+- 2026-07-22 — #RB-1 f13 removed listener-triggered whole-context rebinding.
+  Retained listener writes now dirty only their exact source/paired target;
+  explicit DataContext binds and pushed structural relinks keep the aggregate
+  bind path. The dead trigger-sync branch and both stale polling/rebind helper
+  names are gone. Full evidence is runtime lib 401/401, nuxie lib 140/140,
+  C++ probe 721/721, ordinary and scripted goldens 317/317 entries plus
+  647/647 exact segments with zero failures, C API smoke and the CI-shaped
+  workspace green. The remaining RB-1 cut is the parent-linked owned
+  DataContext plus canonical transition/fire-trigger source path.

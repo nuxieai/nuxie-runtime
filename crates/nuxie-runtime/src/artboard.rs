@@ -9526,7 +9526,13 @@ mod tests {
     }
 
     fn synthetic_owned_view_model_action_riv(file_id: u64, listener_action: bool) -> Vec<u8> {
-        synthetic_owned_view_model_action_riv_with_options(file_id, listener_action, false, false)
+        synthetic_owned_view_model_action_riv_with_options(
+            file_id,
+            listener_action,
+            false,
+            false,
+            false,
+        )
     }
 
     fn synthetic_owned_view_model_action_riv_with_options(
@@ -9534,6 +9540,7 @@ mod tests {
         listener_action: bool,
         cross_model_trigger_action: bool,
         listener_cascade: bool,
+        unrelated_two_way_bind: bool,
     ) -> Vec<u8> {
         synthetic_riv(file_id, |bytes| {
             push_synthetic_object(bytes, "FontAsset", &[("assetId", 17)]);
@@ -9749,7 +9756,7 @@ mod tests {
                     push_owned_trigger_change_action_with_flags(bytes, 2, 2, STATE_AT_START);
                 }
             }
-            push_owned_font_bind(bytes);
+            push_owned_font_bind(bytes, unrelated_two_way_bind.then_some(1 << 1));
             push_synthetic_object(bytes, "ExitState", &[]);
         })
     }
@@ -10001,7 +10008,7 @@ mod tests {
         push_synthetic_object(bytes, "ListenerViewModelChange", &[("flags", flags)]);
     }
 
-    fn push_owned_font_bind(bytes: &mut Vec<u8>) {
+    fn push_owned_font_bind(bytes: &mut Vec<u8>, flags: Option<u64>) {
         push_synthetic_object(
             bytes,
             "BindablePropertyAsset",
@@ -10021,6 +10028,9 @@ mod tests {
                 )),
             );
             push_synthetic_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path);
+            if let Some(flags) = flags {
+                push_synthetic_uint_property(bytes, "DataBindContext", "flags", flags);
+            }
         });
     }
 
@@ -10045,6 +10055,28 @@ mod tests {
             );
             assert_eq!(runtime_state_machine.listeners[0].listener_actions.len(), 2);
         }
+        let state_machine = artboard
+            .state_machine_instance(0)
+            .expect("fixture has a state machine");
+        (file, artboard, state_machine)
+    }
+
+    fn owned_view_model_action_fixture_with_unrelated_two_way_bind(
+        file_id: u64,
+        listener_action: bool,
+    ) -> (RuntimeFile, ArtboardInstance, StateMachineInstance) {
+        let bytes = synthetic_owned_view_model_action_riv_with_options(
+            file_id,
+            listener_action,
+            false,
+            false,
+            true,
+        );
+        let file = read_runtime_file(&bytes).expect("two-way listener fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
+        let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
+        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+            .expect("fixture artboard instantiates");
         let state_machine = artboard
             .state_machine_instance(0)
             .expect("fixture has a state machine");
@@ -10088,7 +10120,8 @@ mod tests {
     fn owned_view_model_action_fixture_with_cross_model_trigger(
         file_id: u64,
     ) -> (RuntimeFile, ArtboardInstance, StateMachineInstance) {
-        let bytes = synthetic_owned_view_model_action_riv_with_options(file_id, true, true, false);
+        let bytes =
+            synthetic_owned_view_model_action_riv_with_options(file_id, true, true, false, false);
         let file = read_runtime_file(&bytes).expect("owned ViewModel action fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
         let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
@@ -10106,7 +10139,8 @@ mod tests {
     fn owned_view_model_listener_cascade_fixture(
         file_id: u64,
     ) -> (RuntimeFile, ArtboardInstance, StateMachineInstance) {
-        let bytes = synthetic_owned_view_model_action_riv_with_options(file_id, true, false, true);
+        let bytes =
+            synthetic_owned_view_model_action_riv_with_options(file_id, true, false, true, false);
         let file = read_runtime_file(&bytes).expect("listener cascade fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
         let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
@@ -10341,6 +10375,55 @@ mod tests {
                 .and_then(|input| input.number_value()),
             Some(9.0),
             "first-class retained candidates must drain the same applyEvents queue",
+        );
+    }
+
+    #[test]
+    fn retained_state_action_does_not_rebind_an_unrelated_two_way_data_bind() {
+        let (file, mut artboard, mut state_machine) =
+            owned_view_model_action_fixture_with_unrelated_two_way_bind(9730, false);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has an owned ViewModel context"),
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        let bind_count = state_machine.owned_data_bind_context_bind_count();
+        assert!(artboard.advance_state_machine_instance(&mut state_machine, 0.0));
+        assert_eq!(
+            context.borrow().number_value_by_property_path(&[1]),
+            Some(42.0),
+            "the state-entry ListenerViewModelChange must still reach its exact source",
+        );
+        assert_eq!(
+            state_machine.owned_data_bind_context_bind_count(),
+            bind_count,
+            "an exact listener write must not reconcile the fixture's unrelated two-way bind",
+        );
+    }
+
+    #[test]
+    fn retained_listener_report_does_not_rebind_an_unrelated_two_way_data_bind() {
+        let (file, mut artboard, mut state_machine) =
+            owned_view_model_action_fixture_with_unrelated_two_way_bind(9731, true);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has an owned ViewModel context"),
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        let bind_count = state_machine.owned_data_bind_context_bind_count();
+        assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
+        assert!(artboard.advance_state_machine_instance(&mut state_machine, 0.0));
+        assert_eq!(
+            context.borrow().number_value_by_property_path(&[1]),
+            Some(42.0),
+            "the queued ListenerViewModelChange must still reach its exact source",
+        );
+        assert_eq!(
+            state_machine.owned_data_bind_context_bind_count(),
+            bind_count,
+            "a queued exact listener write must not reconcile the fixture's unrelated two-way bind",
         );
     }
 
@@ -10919,7 +11002,8 @@ mod tests {
 
     #[test]
     fn retained_state_action_preserves_declared_trigger_slot_identity() {
-        let bytes = synthetic_owned_view_model_action_riv_with_options(9704, false, true, false);
+        let bytes =
+            synthetic_owned_view_model_action_riv_with_options(9704, false, true, false, false);
         let file = read_runtime_file(&bytes).expect("state trigger action fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
         let artboard_graph = graph.artboards.first().expect("fixture has an artboard");

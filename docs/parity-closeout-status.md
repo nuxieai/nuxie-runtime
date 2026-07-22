@@ -100,10 +100,13 @@ upstream-sync-map registry).
       identity (C++ rcp semantics) with Clone porting copyViewModelInstance's
       instancesMap dedupe so sharing topology survives inside deep copies;
       alias-mirror bodies reduced to forwarding + debug_assert of shared
-      identity (signatures/call sites intact for slice f). Boundaries kept
-      as-is: overlay/from_instance_mutable/detach_list_storage stay
-      boundary deep-copies; top-level fonts keep their pre-existing
-      no-mirror asymmetry (revisit at e3/f).
+      identity (signatures/call sites intact for slice f). At the e2 landing,
+      the overlay, duplicate mutable authored-instance constructor, and list
+      detachment still formed boundary deep-copies; the later canonical
+      constructor parity slice removed that compensation. Authored instances
+      now always follow C++ clone + `completeViewModelInstance`, including one
+      shared source-instance map across ViewModel and list edges. Top-level
+      fonts kept their pre-existing no-mirror asymmetry (revisit at e3/f).
     - [x] e3 landed via lane, orchestrator-verified (rt lib 343, nuxie
       132, probe 707/707, golden 317/317, scripted main 317/317 + exactly
       the four known reds — zero corpus movement): owned-candidate graph

@@ -2648,32 +2648,16 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     /// Instantiate this artboard's view model from the source instance at
-    /// `instance_index` (the order the instances appear in the file). Returns
-    /// `None` when the artboard has no view model or the index is out of range.
+    /// `instance_index` (the order the instances appear in the file), cloning
+    /// and completing nested ViewModel/list references like C++
+    /// `ViewModelRuntime::createInstanceFromIndex`. Returns `None` when the
+    /// artboard has no view model or the index is out of range.
     pub fn instantiate_view_model_instance(
         &self,
         instance_index: usize,
     ) -> Option<ViewModelInstance> {
         let view_model_index = self.view_model_index()?;
         let raw = RuntimeOwnedViewModelInstance::from_instance(
-            &self.file.runtime,
-            view_model_index,
-            instance_index,
-        )?;
-        Some(ViewModelInstance {
-            raw: RuntimeOwnedViewModelHandle::new(raw),
-        })
-    }
-
-    /// Instantiate a serialized ViewModel default as a fully owned mutable
-    /// tree, preserving nested scalars and lists while allowing hot writes at
-    /// every generated child path.
-    pub fn instantiate_mutable_view_model_instance(
-        &self,
-        instance_index: usize,
-    ) -> Option<ViewModelInstance> {
-        let view_model_index = self.view_model_index()?;
-        let raw = RuntimeOwnedViewModelInstance::from_instance_mutable(
             &self.file.runtime,
             view_model_index,
             instance_index,
@@ -3391,22 +3375,6 @@ impl OwnedArtboardInstance {
     ) -> Option<ViewModelInstance> {
         let view_model_index = self.view_model_index()?;
         let raw = RuntimeOwnedViewModelInstance::from_instance(
-            &self.file.runtime,
-            view_model_index,
-            instance_index,
-        )?;
-        Some(ViewModelInstance {
-            raw: RuntimeOwnedViewModelHandle::new(raw),
-        })
-    }
-
-    /// See [`ArtboardInstance::instantiate_mutable_view_model_instance`].
-    pub fn instantiate_mutable_view_model_instance(
-        &self,
-        instance_index: usize,
-    ) -> Option<ViewModelInstance> {
-        let view_model_index = self.view_model_index()?;
-        let raw = RuntimeOwnedViewModelInstance::from_instance_mutable(
             &self.file.runtime,
             view_model_index,
             instance_index,

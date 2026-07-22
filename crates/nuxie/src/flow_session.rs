@@ -1589,28 +1589,15 @@ impl FlowSession {
         #[cfg(feature = "scripting")]
         self.flush_flow_listener_bindings()?;
 
-        let pending_events = match &mut self.player {
+        // Pointer callbacks can report events synchronously before the
+        // ordinary new-frame advance. Capture only the host-visible suffix
+        // now; the runtime keeps its independent listener cursor so C++
+        // `applyEvents` semantics still consume this queue during advance.
+        let mut pending_events = match &mut self.player {
             FlowPlayer::StateMachine(machine) => machine.take_reported_events(),
             FlowPlayer::Animation(_) => std::mem::take(&mut self.pending_animation_events),
             FlowPlayer::Static => Vec::new(),
         };
-        if pending_events.len() > MAX_BATCH_ITEMS {
-            return Err(FlowSessionError::new(
-                FlowSessionErrorKind::LimitExceeded,
-                format!("runtime emitted more than {MAX_BATCH_ITEMS} events"),
-            ));
-        }
-
-        let mut reported_payloads = Vec::with_capacity(pending_events.len());
-        for event in pending_events {
-            if !event.seconds_delay().is_finite() || event.seconds_delay() < 0.0 {
-                return Err(FlowSessionError::new(
-                    FlowSessionErrorKind::Runtime,
-                    "runtime emitted an event with an invalid delay",
-                ));
-            }
-            reported_payloads.push(self.event_payload(event)?);
-        }
         let changed = match &mut self.player {
             FlowPlayer::StateMachine(machine) => {
                 let changed = if let Some(factory) = factory.as_deref_mut() {
@@ -1660,6 +1647,45 @@ impl FlowSession {
                 }
             }
         };
+
+        // Match C++ `StateMachineInstance::advance`: listener work retained
+        // from the prior frame is applied at the start of advance, while
+        // reports produced by this advance are visible when it returns.
+        // Reference: rive-runtime
+        // `d788e8ec6e8b598526607d6a1e8818e8b637b60c`,
+        // `src/animation/state_machine_instance.cpp:2320-2335,2546-2584`.
+        let produced_events = match &mut self.player {
+            FlowPlayer::StateMachine(machine) => machine.take_reported_events(),
+            FlowPlayer::Animation(_) => std::mem::take(&mut self.pending_animation_events),
+            FlowPlayer::Static => Vec::new(),
+        };
+        let event_count = pending_events
+            .len()
+            .checked_add(produced_events.len())
+            .ok_or_else(|| {
+                FlowSessionError::new(
+                    FlowSessionErrorKind::LimitExceeded,
+                    "runtime event count overflow",
+                )
+            })?;
+        if event_count > MAX_BATCH_ITEMS {
+            return Err(FlowSessionError::new(
+                FlowSessionErrorKind::LimitExceeded,
+                format!("runtime emitted more than {MAX_BATCH_ITEMS} events"),
+            ));
+        }
+        pending_events.extend(produced_events);
+
+        let mut reported_payloads = Vec::with_capacity(event_count);
+        for event in pending_events {
+            if !event.seconds_delay().is_finite() || event.seconds_delay() < 0.0 {
+                return Err(FlowSessionError::new(
+                    FlowSessionErrorKind::Runtime,
+                    "runtime emitted an event with an invalid delay",
+                ));
+            }
+            reported_payloads.push(self.event_payload(event)?);
+        }
 
         let mut result = FlowResult::idle(false);
         result.dirty = changed;
@@ -3472,20 +3498,17 @@ fn instantiate_named_view_model(
             )
         })?;
     let raw = if let Some(name) = authored_name {
-        let reference = file
+        if file
             .runtime()
             .view_model_instance_named(view_model_index, name)
-            .ok_or_else(|| {
-                FlowSessionError::new(
-                    FlowSessionErrorKind::NotFound,
-                    format!("authored instance '{name}' was not found in schema '{schema_name}'"),
-                )
-            })?;
-        RuntimeOwnedViewModelInstance::from_instance(
-            file.runtime(),
-            view_model_index,
-            reference.instance_index,
-        )
+            .is_none()
+        {
+            return Err(FlowSessionError::new(
+                FlowSessionErrorKind::NotFound,
+                format!("authored instance '{name}' was not found in schema '{schema_name}'"),
+            ));
+        }
+        RuntimeOwnedViewModelInstance::from_instance_name(file.runtime(), view_model_index, name)
     } else {
         RuntimeOwnedViewModelInstance::new(file.runtime(), view_model_index)
     }
@@ -4828,7 +4851,7 @@ mod tests {
         .0
     }
 
-    fn text_run_record(
+    fn authoring_record(
         type_name: &str,
         properties: Vec<(&str, AuthoringValue)>,
     ) -> AuthoringRecord {
@@ -4857,8 +4880,8 @@ mod tests {
 
     fn text_run_session() -> FlowSession {
         let runtime = RuntimeFile::from_authoring_records(vec![
-            text_run_record("Backboard", Vec::new()),
-            text_run_record(
+            authoring_record("Backboard", Vec::new()),
+            authoring_record(
                 "Artboard",
                 vec![
                     ("name", AuthoringValue::String("Root".to_owned())),
@@ -4866,11 +4889,11 @@ mod tests {
                     ("height", AuthoringValue::Double(100.0)),
                 ],
             ),
-            text_run_record(
+            authoring_record(
                 "Text",
                 vec![("name", AuthoringValue::String("Text".to_owned()))],
             ),
-            text_run_record(
+            authoring_record(
                 "TextValueRun",
                 vec![
                     ("parentId", AuthoringValue::Uint(1)),
@@ -4878,7 +4901,7 @@ mod tests {
                     ("text", AuthoringValue::String("initial".to_owned())),
                 ],
             ),
-            text_run_record(
+            authoring_record(
                 "TextValueRun",
                 vec![
                     ("parentId", AuthoringValue::Uint(1)),
@@ -4886,7 +4909,7 @@ mod tests {
                     ("text", AuthoringValue::String("duplicate".to_owned())),
                 ],
             ),
-            text_run_record(
+            authoring_record(
                 "TextValueRun",
                 vec![
                     ("parentId", AuthoringValue::Uint(1)),
@@ -4900,6 +4923,80 @@ mod tests {
         FlowSession::create(file, FlowSessionConfig::default())
             .expect("create text-run session")
             .0
+    }
+
+    fn authored_nested_view_model_session() -> (FlowSession, FlowBootstrap) {
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            authoring_record("Backboard", Vec::new()),
+            authoring_record(
+                "ViewModel",
+                vec![("name", AuthoringValue::String("Root".to_owned()))],
+            ),
+            authoring_record(
+                "ViewModelInstance",
+                vec![
+                    ("name", AuthoringValue::String("Root defaults".to_owned())),
+                    ("viewModelId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            authoring_record(
+                "ViewModelInstanceViewModel",
+                vec![
+                    ("viewModelPropertyId", AuthoringValue::Uint(0)),
+                    ("propertyValue", AuthoringValue::Uint(0)),
+                ],
+            ),
+            authoring_record(
+                "ViewModelPropertyViewModel",
+                vec![
+                    ("name", AuthoringValue::String("paywall".to_owned())),
+                    ("viewModelReferenceId", AuthoringValue::Uint(1)),
+                ],
+            ),
+            authoring_record(
+                "ViewModel",
+                vec![("name", AuthoringValue::String("Paywall".to_owned()))],
+            ),
+            authoring_record(
+                "ViewModelInstance",
+                vec![
+                    (
+                        "name",
+                        AuthoringValue::String("Paywall defaults".to_owned()),
+                    ),
+                    ("viewModelId", AuthoringValue::Uint(1)),
+                ],
+            ),
+            authoring_record(
+                "ViewModelInstanceString",
+                vec![
+                    ("viewModelPropertyId", AuthoringValue::Uint(0)),
+                    ("propertyValue", AuthoringValue::String("pro".to_owned())),
+                ],
+            ),
+            authoring_record(
+                "ViewModelPropertyString",
+                vec![(
+                    "name",
+                    AuthoringValue::String("selectedProductId".to_owned()),
+                )],
+            ),
+            authoring_record(
+                "Artboard",
+                vec![
+                    ("name", AuthoringValue::String("Projection".to_owned())),
+                    ("width", AuthoringValue::Double(100.0)),
+                    ("height", AuthoringValue::Double(100.0)),
+                    ("viewModelId", AuthoringValue::Uint(0)),
+                ],
+            ),
+        ])
+        .expect("build authored nested view-model fixture");
+        let file = Arc::new(
+            File::from_runtime(runtime).expect("import authored nested view-model fixture"),
+        );
+        FlowSession::create(file, FlowSessionConfig::default())
+            .expect("create authored nested view-model session")
     }
 
     fn external_fixture(relative: &str) -> Vec<u8> {
@@ -4959,6 +5056,26 @@ mod tests {
         let value_id = edges.iter().find(|(property, _)| property == name)?.1;
         let value = arena.nodes.iter().find(|node| node.id == value_id)?;
         let FlowValue::Number(value) = value.value else {
+            return None;
+        };
+        Some(value)
+    }
+
+    fn arena_string_path<'a>(
+        arena: &'a FlowValueArena,
+        instance_id: FlowInstanceId,
+        path: &str,
+    ) -> Option<&'a str> {
+        let mut value_id = arena.roots.iter().find(|(id, _)| *id == instance_id)?.1;
+        for segment in path.split('/') {
+            let node = arena.nodes.iter().find(|node| node.id == value_id)?;
+            let FlowValue::ViewModel(edges) = &node.value else {
+                return None;
+            };
+            value_id = edges.iter().find(|(property, _)| property == segment)?.1;
+        }
+        let node = arena.nodes.iter().find(|node| node.id == value_id)?;
+        let FlowValue::String(value) = &node.value else {
             return None;
         };
         Some(value)
@@ -6211,7 +6328,48 @@ mod tests {
     }
 
     #[test]
-    fn events_produced_by_advance_are_drained_before_the_next_advance() {
+    fn authored_default_nested_values_are_mutable_like_cpp_create_instance_from_index() {
+        let (mut session, bootstrap) = authored_nested_view_model_session();
+        let root = bootstrap
+            .catalog
+            .root_instance_id
+            .expect("root instance identity");
+        assert_eq!(
+            arena_string_path(&bootstrap.values, root, "paywall/selectedProductId",),
+            Some("pro"),
+        );
+
+        // C++ `ViewModelRuntime::createInstanceFromIndex` clones the authored
+        // root and calls `File::completeViewModelInstance` before exposing it
+        // (`src/viewmodel/runtime/viewmodel_runtime.cpp:111-120`,
+        // `src/file.cpp:864-941`). The sibling C++ oracle test pins that this
+        // makes nested authored scalars writable; FlowSession must create its
+        // default through the equivalent completed path.
+        session
+            .perform(FlowOperation::StateBatch(FlowStateBatch {
+                host_mutation_id: None,
+                mutations: vec![FlowStateMutation::SetValue {
+                    instance: FlowInstanceRef::Existing(root),
+                    path: "paywall/selectedProductId".to_owned(),
+                    value: FlowScalarValue::String("basic".to_owned()),
+                }],
+                new_instances: Vec::new(),
+            }))
+            .expect("write nested authored value");
+
+        let values = session
+            .perform(FlowOperation::Query(FlowQuery::Values))
+            .expect("query nested authored value")
+            .values
+            .expect("value arena");
+        assert_eq!(
+            arena_string_path(&values, root, "paywall/selectedProductId"),
+            Some("basic"),
+        );
+    }
+
+    #[test]
+    fn events_produced_by_advance_are_returned_in_that_advance_and_do_not_replay() {
         let file = Arc::new(
             File::import(&external_fixture("events_on_states.riv")).expect("import event fixture"),
         );
@@ -6225,44 +6383,34 @@ mod tests {
                 render: false,
             }))
             .expect("first advance");
-        assert!(
-            !first
-                .outputs
-                .iter()
-                .any(|output| output.phase == FlowOutputPhase::ReportedEvents)
-        );
-        assert_eq!(first.wake_after_seconds, Some(0.0));
-        assert!(!first.settled);
-
-        let second = session
-            .perform(FlowOperation::Advance(FlowAdvance {
-                timestamp_seconds: 0.0,
-                delta_seconds: 0.0,
-                render: false,
-            }))
-            .expect("second advance");
-        let event_position = second
+        // C++ `StateMachineInstance::advance` applies the prior listener queue
+        // first, then reports transitions produced during this call and
+        // returns with those reports visible (`state_machine_instance.cpp:
+        // 2519-2557`). The sibling C++ oracle pins exact 0,1,0 report counts
+        // around trigger + advance(0); the FlowSession cycle must preserve
+        // that same boundary.
+        let event_position = first
             .outputs
             .iter()
             .position(|output| output.phase == FlowOutputPhase::ReportedEvents)
             .expect("event produced by first advance");
-        let advance_position = second
+        let advance_position = first
             .outputs
             .iter()
             .position(|output| output.phase == FlowOutputPhase::RuntimeAdvance)
-            .expect("second runtime advance");
+            .expect("first runtime advance");
         assert!(event_position < advance_position);
         assert_eq!(
-            second.outputs[event_position].cycle,
-            second.outputs[advance_position].cycle
+            first.outputs[event_position].cycle,
+            first.outputs[advance_position].cycle
         );
         assert!(
-            !second
+            !first
                 .outputs
                 .iter()
                 .any(|output| { output.phase == FlowOutputPhase::DelayedEventCallbacks })
         );
-        let mut reported = second
+        let mut reported = first
             .outputs
             .iter()
             .filter_map(|output| match &output.payload {
@@ -6272,6 +6420,21 @@ mod tests {
                 _ => None,
             })
             .collect::<Vec<_>>();
+
+        let second = session
+            .perform(FlowOperation::Advance(FlowAdvance {
+                timestamp_seconds: 0.0,
+                delta_seconds: 0.0,
+                render: false,
+            }))
+            .expect("second advance");
+        assert!(
+            !second
+                .outputs
+                .iter()
+                .any(|output| output.phase == FlowOutputPhase::ReportedEvents),
+            "the next advance must not replay the prior cycle's reports",
+        );
         for (timestamp_seconds, delta_seconds) in [(1.0, 1.0), (2.0, 1.0), (2.0, 0.0)] {
             let result = session
                 .perform(FlowOperation::Advance(FlowAdvance {
@@ -6303,6 +6466,128 @@ mod tests {
     }
 
     #[test]
+    fn synchronous_pointer_events_survive_the_followup_advance_once_in_authored_order() {
+        let file = Arc::new(
+            File::import(&external_fixture("event_on_listener.riv"))
+                .expect("import listener event fixture"),
+        );
+        let (mut session, _) =
+            FlowSession::create(file, FlowSessionConfig::default()).expect("create event session");
+        session
+            .perform(FlowOperation::Advance(FlowAdvance::default()))
+            .expect("prime listener hit targets");
+
+        // The C++ reference fixture test reports exactly Footstep then Event 3
+        // from pointer callbacks, before its next `advance(0)`, and that
+        // advance consumes the listener queue (`tests/unit_tests/runtime/
+        // state_machine_event_test.cpp`). FlowSession follows every Down/Up
+        // callback with an advance, so it must retain the host-visible prefix
+        // while appending any reports produced by that advance.
+        let click = session
+            .perform(FlowOperation::PointerBatch(FlowPointerBatch {
+                events: vec![
+                    FlowPointerEvent {
+                        kind: FlowPointerKind::Down,
+                        pointer_id: 1,
+                        x: 343.0,
+                        y: 116.0,
+                        timestamp_seconds: 0.0,
+                    },
+                    FlowPointerEvent {
+                        kind: FlowPointerKind::Up,
+                        pointer_id: 1,
+                        x: 343.0,
+                        y: 116.0,
+                        timestamp_seconds: 0.0,
+                    },
+                ],
+            }))
+            .expect("click listener target");
+        let names = click
+            .outputs
+            .iter()
+            .filter_map(|output| match &output.payload {
+                FlowOutputPayload::ReportedEvent { name, .. } => name.as_deref(),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["Footstep", "Event 3"]);
+
+        let next = session
+            .perform(FlowOperation::Advance(FlowAdvance::default()))
+            .expect("advance after click reports");
+        assert!(
+            !next
+                .outputs
+                .iter()
+                .any(|output| output.phase == FlowOutputPhase::ReportedEvents),
+            "synchronous pointer reports must not replay",
+        );
+    }
+
+    #[test]
+    fn synchronous_and_advance_events_share_one_cycle_in_cpp_order_without_replay() {
+        let file = Arc::new(
+            File::import(&external_fixture("events_on_states.riv"))
+                .expect("import combined listener/state event fixture"),
+        );
+        let (mut session, _) = FlowSession::create(file, FlowSessionConfig::default())
+            .expect("create combined event session");
+        session
+            .perform(FlowOperation::Advance(FlowAdvance::default()))
+            .expect("prime state and listener hit targets");
+
+        // This fixture's listener synchronously reports Third, First. Its
+        // two-second state advance then reports Second, Third. The reference
+        // sequence is pinned by the sibling C++ probe against rive-runtime
+        // `d788e8ec6e8b598526607d6a1e8818e8b637b60c`. C++ consumes the former
+        // queue in `applyEvents` before advancing layers and producing the
+        // latter (`state_machine_instance.cpp:2320-2335,2546-2584`).
+        session
+            .apply_pointer_event(FlowPointerEvent {
+                kind: FlowPointerKind::Down,
+                pointer_id: 1,
+                x: 343.0,
+                y: 116.0,
+                timestamp_seconds: 0.0,
+            })
+            .expect("pointer down");
+        session
+            .apply_pointer_event(FlowPointerEvent {
+                kind: FlowPointerKind::Up,
+                pointer_id: 1,
+                x: 343.0,
+                y: 116.0,
+                timestamp_seconds: 0.0,
+            })
+            .expect("pointer up");
+
+        let combined = session
+            .run_player_cycle(2.0, false, None)
+            .expect("advance with synchronous reports pending");
+        let names = combined
+            .outputs
+            .iter()
+            .filter_map(|output| match &output.payload {
+                FlowOutputPayload::ReportedEvent { name, .. } => name.as_deref(),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["Third", "First", "Second", "Third"]);
+
+        let next = session
+            .run_player_cycle(0.0, false, None)
+            .expect("advance after combined reports");
+        assert!(
+            !next
+                .outputs
+                .iter()
+                .any(|output| output.phase == FlowOutputPhase::ReportedEvents),
+            "neither the synchronous prefix nor post-advance suffix may replay",
+        );
+    }
+
+    #[test]
     fn event_seconds_delay_is_immediate_overshoot_metadata_not_a_deadline() {
         let file = Arc::new(
             File::import(&external_fixture("timeline_event_test.riv"))
@@ -6326,17 +6611,7 @@ mod tests {
                 render: false,
             }))
             .expect("cross event keyframe");
-        assert_eq!(produced.wake_after_seconds, Some(0.0));
-        assert!(!produced.settled);
-
-        let drained = session
-            .perform(FlowOperation::Advance(FlowAdvance {
-                timestamp_seconds: 0.6,
-                delta_seconds: 0.0,
-                render: false,
-            }))
-            .expect("drain report before advancing");
-        let reported = drained
+        let reported = produced
             .outputs
             .iter()
             .find_map(|output| match &output.payload {
@@ -6347,16 +6622,32 @@ mod tests {
                 } if name.as_deref() == Some("Half") => Some((*delay_seconds, output.phase)),
                 _ => None,
             })
-            .expect("half event report");
+            .expect("half event report from the crossing advance");
         assert!((reported.0 - 0.1).abs() < 0.0001);
         assert_eq!(reported.1, FlowOutputPhase::ReportedEvents);
         assert!(
-            !drained
+            !produced
                 .outputs
                 .iter()
                 .any(|output| { output.phase == FlowOutputPhase::DelayedEventCallbacks })
         );
-        assert_ne!(drained.wake_after_seconds, Some(reported.0));
+        assert_ne!(produced.wake_after_seconds, Some(reported.0));
+
+        let next = session
+            .perform(FlowOperation::Advance(FlowAdvance {
+                timestamp_seconds: 0.6,
+                delta_seconds: 0.0,
+                render: false,
+            }))
+            .expect("advance after report");
+        assert!(
+            !next.outputs.iter().any(|output| matches!(
+                &output.payload,
+                FlowOutputPayload::ReportedEvent { name, .. }
+                    if name.as_deref() == Some("Half")
+            )),
+            "the next advance must not replay Half",
+        );
     }
 
     #[test]

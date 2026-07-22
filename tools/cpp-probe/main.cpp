@@ -247,6 +247,7 @@ size_t randomProviderTotalCalls();
 #include "rive/viewmodel/runtime/viewmodel_instance_number_runtime.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_string_runtime.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_trigger_runtime.hpp"
+#include "rive/viewmodel/runtime/viewmodel_runtime.hpp"
 #include "rive/viewmodel/viewmodel_property_enum.hpp"
 #include "rive/viewmodel/viewmodel_property.hpp"
 #include "rive/viewmodel/viewmodel_property_viewmodel.hpp"
@@ -323,6 +324,8 @@ struct RuntimeAnimationAdvanceReport
 enum class RuntimeStateMachineActionKind
 {
     Advance,
+    PointerDown,
+    PointerUp,
     AdvanceDataContext,
     UpdateDataBindsApplyTargetToSource,
     SetBool,
@@ -446,6 +449,8 @@ struct RuntimeStateMachineAction
     float seconds;
     bool boolValue;
     float numberValue;
+    float x = 0.0f;
+    float y = 0.0f;
     uint32_t uintValue = 0;
     std::string stringValue;
     std::string valueString;
@@ -592,6 +597,21 @@ struct RuntimeStateMachineAdvanceReport
     std::vector<RuntimeStateMachineListBindingReport> listBindings;
 };
 
+struct RuntimeViewModelInstanceStringMutation
+{
+    size_t viewModelIndex;
+    size_t instanceIndex;
+    bool selectByName = false;
+    std::string instanceName;
+    std::string propertyPath;
+    std::string observedPropertyPath;
+    bool observeListItem = false;
+    std::string observedListPath;
+    size_t observedListItemIndex = 0;
+    std::string observedListItemPropertyPath;
+    std::string value;
+};
+
 class RuntimeAnimationEventReporter : public rive::KeyedCallbackReporter
 {
 public:
@@ -655,6 +675,8 @@ struct ProbeOptions
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
     std::vector<RuntimeAnimationAdvance> runtimeAnimationAdvances;
     std::vector<RuntimeStateMachineAction> runtimeStateMachineActions;
+    std::vector<RuntimeViewModelInstanceStringMutation>
+        runtimeViewModelInstanceStringMutations;
     bool runtimeRandomProviderReset = false;
     std::vector<float> runtimeRandomProviderValues;
     bool completeViewModelProperties = false;
@@ -6234,7 +6256,15 @@ apply_runtime_state_machine_advances(rive::File* file,
         }
 
         bool advanced = false;
-        if (action.kind == RuntimeStateMachineActionKind::AdvanceDataContext)
+        if (action.kind == RuntimeStateMachineActionKind::PointerDown)
+        {
+            stateMachine->pointerDown(rive::Vec2D(action.x, action.y));
+        }
+        else if (action.kind == RuntimeStateMachineActionKind::PointerUp)
+        {
+            stateMachine->pointerUp(rive::Vec2D(action.x, action.y));
+        }
+        else if (action.kind == RuntimeStateMachineActionKind::AdvanceDataContext)
         {
             stateMachine->advancedDataContext();
         }
@@ -11104,6 +11134,119 @@ void write_data_context_lookups(std::ostream& out,
     out << ']';
 }
 
+void write_runtime_view_model_instance_string_mutations(
+    std::ostream& out,
+    rive::File* file,
+    const ProbeOptions& options)
+{
+    out << ",\"runtimeViewModelInstanceStringMutations\":[";
+    for (size_t index = 0;
+         index < options.runtimeViewModelInstanceStringMutations.size();
+         ++index)
+    {
+        if (index != 0)
+        {
+            out << ',';
+        }
+        const auto& mutation =
+            options.runtimeViewModelInstanceStringMutations[index];
+        auto viewModel = file->viewModel(mutation.viewModelIndex);
+        rive::rcp<rive::ViewModelInstanceRuntime> instance = nullptr;
+        if (viewModel != nullptr)
+        {
+            rive::ViewModelRuntime runtime(viewModel, file);
+            instance = mutation.selectByName
+                           ? runtime.createInstanceFromName(mutation.instanceName)
+                           : runtime.createInstanceFromIndex(mutation.instanceIndex);
+        }
+        auto property = instance == nullptr
+                            ? nullptr
+                            : instance->propertyString(mutation.propertyPath);
+        rive::rcp<rive::ViewModelInstanceRuntime> observedListItem = nullptr;
+        rive::ViewModelInstanceStringRuntime* observedProperty = nullptr;
+        if (instance != nullptr && mutation.observeListItem)
+        {
+            auto list = instance->propertyList(mutation.observedListPath);
+            if (list != nullptr)
+            {
+                observedListItem = list->instanceAt(
+                    static_cast<int>(mutation.observedListItemIndex));
+                if (observedListItem != nullptr)
+                {
+                    observedProperty = observedListItem->propertyString(
+                        mutation.observedListItemPropertyPath);
+                }
+            }
+        }
+        else if (instance != nullptr)
+        {
+            observedProperty =
+                instance->propertyString(mutation.observedPropertyPath);
+        }
+
+        out << "{\"viewModelIndex\":" << mutation.viewModelIndex;
+        out << ",\"instanceIndex\":" << mutation.instanceIndex;
+        out << ",\"instanceName\":";
+        if (mutation.selectByName)
+        {
+            write_json_string(out, mutation.instanceName);
+        }
+        else
+        {
+            out << "null";
+        }
+        out << ",\"propertyPath\":";
+        write_json_string(out, mutation.propertyPath);
+        out << ",\"observedPropertyPath\":";
+        write_json_string(out, mutation.observedPropertyPath);
+        out << ",\"created\":" << (instance != nullptr ? "true" : "false");
+        out << ",\"propertyFound\":"
+            << (property != nullptr ? "true" : "false");
+        out << ",\"before\":";
+        if (property == nullptr)
+        {
+            out << "null";
+        }
+        else
+        {
+            write_json_string(out, property->value());
+        }
+        out << ",\"observedBefore\":";
+        if (observedProperty == nullptr)
+        {
+            out << "null";
+        }
+        else
+        {
+            write_json_string(out, observedProperty->value());
+        }
+        if (property != nullptr)
+        {
+            property->value(mutation.value);
+        }
+        out << ",\"after\":";
+        if (property == nullptr)
+        {
+            out << "null";
+        }
+        else
+        {
+            write_json_string(out, property->value());
+        }
+        out << ",\"observedAfter\":";
+        if (observedProperty == nullptr)
+        {
+            out << "null";
+        }
+        else
+        {
+            write_json_string(out, observedProperty->value());
+        }
+        out << '}';
+    }
+    out << ']';
+}
+
 void write_artboard_reference_or_null(std::ostream& out,
                                       rive::File* file,
                                       rive::Artboard* artboard)
@@ -11663,6 +11806,7 @@ void write_file(std::ostream& out,
     }
     out << ']';
     write_data_context_lookups(out, file, options);
+    write_runtime_view_model_instance_string_mutations(out, file, options);
     out << ",\"artboards\":[";
 
     for (size_t i = 0; i < file->artboardCount(); ++i)
@@ -15863,6 +16007,122 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-pointer-down-state-machine") ||
+            is_arg(argv[i], "--runtime-pointer-up-state-machine"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << argv[i] << " requires stateMachineIndex x y\n";
+                return 2;
+            }
+            const bool pointerDown =
+                is_arg(argv[i], "--runtime-pointer-down-state-machine");
+            RuntimeStateMachineAction action;
+            action.kind = pointerDown
+                              ? RuntimeStateMachineActionKind::PointerDown
+                              : RuntimeStateMachineActionKind::PointerUp;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.x = std::strtof(argv[++i], nullptr);
+            action.y = std::strtof(argv[++i], nullptr);
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-mutate-view-model-instance-string"))
+        {
+            if (i + 4 >= argc)
+            {
+                std::cerr << "--runtime-mutate-view-model-instance-string requires viewModelIndex instanceIndex propertyPath value\n";
+                return 2;
+            }
+            RuntimeViewModelInstanceStringMutation mutation;
+            mutation.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.instanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.propertyPath = argv[++i];
+            mutation.observedPropertyPath = mutation.propertyPath;
+            mutation.value = argv[++i];
+            options.runtimeViewModelInstanceStringMutations.push_back(mutation);
+            continue;
+        }
+
+        if (is_arg(argv[i],
+                   "--runtime-mutate-view-model-instance-string-by-name"))
+        {
+            if (i + 4 >= argc)
+            {
+                std::cerr << "--runtime-mutate-view-model-instance-string-by-name requires viewModelIndex instanceName propertyPath value\n";
+                return 2;
+            }
+            RuntimeViewModelInstanceStringMutation mutation;
+            mutation.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.instanceIndex = 0;
+            mutation.selectByName = true;
+            mutation.instanceName = argv[++i];
+            mutation.propertyPath = argv[++i];
+            mutation.observedPropertyPath = mutation.propertyPath;
+            mutation.value = argv[++i];
+            options.runtimeViewModelInstanceStringMutations.push_back(mutation);
+            continue;
+        }
+
+        if (is_arg(argv[i],
+                   "--runtime-mutate-view-model-instance-string-observe"))
+        {
+            if (i + 5 >= argc)
+            {
+                std::cerr << "--runtime-mutate-view-model-instance-string-observe requires viewModelIndex instanceIndex propertyPath observedPropertyPath value\n";
+                return 2;
+            }
+            RuntimeViewModelInstanceStringMutation mutation;
+            mutation.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.instanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.propertyPath = argv[++i];
+            mutation.observedPropertyPath = argv[++i];
+            mutation.value = argv[++i];
+            options.runtimeViewModelInstanceStringMutations.push_back(mutation);
+            continue;
+        }
+
+        if (is_arg(
+                argv[i],
+                "--runtime-mutate-view-model-instance-string-observe-list-item"))
+        {
+            if (i + 7 >= argc)
+            {
+                std::cerr << "--runtime-mutate-view-model-instance-string-observe-list-item requires viewModelIndex instanceIndex propertyPath listPath listItemIndex listItemPropertyPath value\n";
+                return 2;
+            }
+            RuntimeViewModelInstanceStringMutation mutation;
+            mutation.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.instanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.propertyPath = argv[++i];
+            mutation.observedListPath = argv[++i];
+            mutation.observedListItemIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.observedListItemPropertyPath = argv[++i];
+            mutation.observedPropertyPath =
+                mutation.observedListPath + "[" +
+                std::to_string(mutation.observedListItemIndex) + "]/" +
+                mutation.observedListItemPropertyPath;
+            mutation.observeListItem = true;
+            mutation.value = argv[++i];
+            options.runtimeViewModelInstanceStringMutations.push_back(mutation);
+            continue;
+        }
+
         if (is_arg(argv[i], "--complete-view-model-properties"))
         {
             options.completeViewModelProperties = true;
@@ -15896,6 +16156,8 @@ int main(int argc, const char* argv[])
         std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--runtime-layout-bounds] [--runtime-golden-scene-advance seconds] [--instance-artboards] [--runtime-bind-default-view-model-artboard-context] [--runtime-update-artboard-data-binds] [--runtime-advance-artboard-after-bind] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-set-artboard-size width height] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-advance-state-machine-data-context stateMachineIndex] [--runtime-update-state-machine-data-binds stateMachineIndex] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-bool stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-integer stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-color stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-string stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-enum stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-asset stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-artboard stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-list stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-viewmodel stateMachineIndex dataBindIndex referencedInstanceIndex] [--runtime-set-default-view-model-source-number stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-bool stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-string stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-color stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-enum stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-asset stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-artboard stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-trigger stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-list stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-bind-default-view-model-state-machine-context stateMachineIndex] [--runtime-bind-view-model-instance-state-machine-context stateMachineIndex viewModelIndex instanceIndex] [--runtime-bind-owned-view-model-number-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-bool-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-string-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-color-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-enum-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-asset-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-artboard-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-trigger-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-state-machine-context stateMachineIndex viewModelIndex propertyIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-pointer-down-state-machine stateMachineIndex x y\n";
+        std::cerr << "additional runtime flag: --runtime-pointer-up-state-machine stateMachineIndex x y\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-default-state-machine-context stateMachineIndex viewModelIndex propertyIndex\n";
         std::cerr << "additional runtime flag: --runtime-set-default-view-model-source-symbol-list-index stateMachineIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-number-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";

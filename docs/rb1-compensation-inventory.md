@@ -8,7 +8,9 @@ change-propagation *by polling*. The five public seams that fan into it:
 
 - `StateMachineInstance::bind_owned_view_model_contexts` / `::advance_data_context` (`crates/nuxie-runtime/src/state_machine/instance.rs:5121`, `:5316`)
 - `ArtboardInstance::bind_owned_view_model_artboard_contexts` / `::advance_artboard_data_binds[_with_elapsed]` (`crates/nuxie-runtime/src/artboard_data_bind.rs:4225`, `:5534`, `:5690`)
-- `File::from_instance_mutable` (`crates/nuxie-runtime/src/view_model.rs:6486`, re-exposed `crates/nuxie/src/lib.rs:2620`, `:3329`)
+- Authored-instance overlay constructor (retired): the duplicate mutable API
+  and its facade methods were removed. The one canonical constructor now
+  matches C++ clone + `completeViewModelInstance` behavior.
 - `Scene::{advance, try_advance_with_factory, pointer_*}` -> `flush_view_model` (`crates/nuxie/src/scene.rs:5389`)
 - `File::advance_with_state_machines_and_view_model` family (`crates/nuxie/src/lib.rs:2714`, `:2813`, `:3402`, `:3497`)
 
@@ -119,7 +121,11 @@ change-propagation *by polling*. The five public seams that fan into it:
   `remove_linked_alias`, and `synchronize_linked_aliases`. Linked scalar
   properties share retained cells by identity; deep-copy `Clone` remains the
   observable detached-tree contract.
-- `from_instance_mutable` `view_model.rs:6486-6497` (PUBLIC; callers `crates/nuxie/src/lib.rs:2625,3334`; test `:11341` — API survives, internals replaced); `overlay_active_instance` `:6499+` (only `:6493`); `detach_list_storage` `:6418-6421` (callers `:3012,:3492,:6494`).
+- [x] The duplicate mutable authored-instance API and
+  `overlay_active_instance` compensation were removed. Existing callers use
+  the canonical `from_instance`, whose one source map preserves shared
+  identity across ViewModel properties and list items like C++
+  `File::completeViewModelInstance`.
 
 - [x] f9 retained structural source dirt and removed the state-machine
   candidate-generation poll. `List`, `ListLength`, and `ViewModel` source
@@ -208,7 +214,12 @@ change-propagation *by polling*. The five public seams that fan into it:
 
 - StateMachineInstance: `bind_owned_view_model_contexts` `:5121`; `bind_owned_view_model_context` `:4800` / `_handle` `:4812` / `_context_handle` `:4817` / `_mut` `:4851`; `bind_default_view_model_context` `:4711`; `bind_view_model_instance_context` `:4737`; `bind_imported_view_model_context` `:4764`; `advance_data_context` `:5316`; `update_data_binds_apply_target_to_source` `:5403`; `set_bindable_*_for_data_bind` `:2557-2782`; `set_default/owned/imported_view_model_*_source_*` + `relink_*` `:2806-4679`; trigger reads `:5486,5510,5514`; `pointer_*_with_owned_view_model_context*` `:1244-1862`.
 - ArtboardInstance: `bind_owned_view_model_artboard_contexts` `:4225`; `_context` `:4172` / `_handle` `:4188` / `_context_handle` `:4199`; `bind_default_view_model_artboard_list_context` `:4157`; `bind_owned_view_model_nested_artboard_contexts` `:4434`; `advance_artboard_data_binds` `:5534` / `_with_elapsed` `:5690`; `owned_view_model_context` `artboard.rs:2328`; composite advances `artboard.rs:3008,:3068`; script VM writes `:1498,:1521`; `artboard_list_binding_*_for_data_bind` `:7748-7788`.
-- File/facade: `instantiate_view_model` `:2591/3304`; `instantiate_view_model_instance` `:2602/3313`; `instantiate_mutable_view_model_instance` `:2620/3329`; `bind_view_model` `:2646/3345`; `owned_view_model_context` `:2658/3356`; `view_model_index` `:2578/3294`; `advance_with_state_machines_and_view_model` `:2714/3402`; `try_advance_...factory` `:2813/3497`; `ViewModelInstance::{raw,raw_mut,handle}` `:3637-3647`; `RuntimeOwnedViewModelInstance::{new,from_instance,from_instance_mutable,detached_graph,list_items_by_property_name_path}`.
+- File/facade: `instantiate_view_model`; canonical
+  `instantiate_view_model_instance`; `bind_view_model`;
+  `owned_view_model_context`; `view_model_index`;
+  `advance_with_state_machines_and_view_model`; `try_advance_...factory`;
+  `ViewModelInstance::{raw,raw_mut,handle}`;
+  `RuntimeOwnedViewModelInstance::{new,from_instance,from_instance_name,detached_graph,list_items_by_property_name_path}`.
 - Scene: `advance` `:15516`; `try_advance_with_factory` `:15582`; `pointer_down/move/up/exit` `:15277,:15334,:15380,:15436`; `view_models` `:8472`; `create_view_model_listener` `:12872`; `add_listener_view_model_*_action` `:13058-13182`; `add_view_model_trigger_condition` `:13645`; `scrub` `:15474`; `instantiate` `:6859`.
 - FlowSession: delegates to Scene; no direct family reach.
 
@@ -231,7 +242,7 @@ non-family callers): `rebind_owned_view_model_context_candidates`,
 
 mutation_generation ~9 test sites (rewrite); candidates ~12 (rewrite to new
 context type); listener cap 1 (rewritten in f4 to the C++ batch cap);
-from_instance_mutable 1 (API
-survives); alias sharing 1 (observable contract, keep); Scene dirty 0
+duplicate mutable authored-instance API 1 (removed; test migrated to the
+canonical constructor); alias sharing 1 (observable contract, keep); Scene dirty 0
 (integration coverage remains); per-source copied state: rewrite at graph
 API level; triggers: public read API survives, internal rescan tests delete.

@@ -3256,6 +3256,7 @@ impl Drop for RuntimeOwnedViewModelListValue {
 struct RuntimeOwnedViewModelListItem {
     occurrence_identity: u64,
     instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    authored_source_object_id: Option<u32>,
     child_relay: Rc<RuntimeOwnedViewModelParentRelay>,
     parent_registered: bool,
 }
@@ -3326,9 +3327,19 @@ impl RuntimeOwnedViewModelListItem {
         Self {
             occurrence_identity: NEXT_OCCURRENCE_IDENTITY.fetch_add(1, Ordering::Relaxed),
             instance,
+            authored_source_object_id: None,
             child_relay,
             parent_registered: false,
         }
+    }
+
+    fn from_authored(
+        instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+        source_object_id: u32,
+    ) -> Self {
+        let mut item = Self::new(instance);
+        item.authored_source_object_id = Some(source_object_id);
+        item
     }
 
     fn copy_identity_from(
@@ -3339,6 +3350,7 @@ impl RuntimeOwnedViewModelListItem {
         Self {
             occurrence_identity: source.occurrence_identity,
             instance,
+            authored_source_object_id: source.authored_source_object_id,
             child_relay,
             parent_registered: false,
         }
@@ -6455,10 +6467,11 @@ fn runtime_owned_view_model_lists_for_instance(
                                                 item,
                                             )?;
                                         runtime_owned_view_model_list_item_instance(file, reference)
-                                            .map(|instance| {
-                                                RuntimeOwnedViewModelListItem::new(Rc::new(
-                                                    RefCell::new(instance),
-                                                ))
+                                            .map(|(instance, source_object_id)| {
+                                                RuntimeOwnedViewModelListItem::from_authored(
+                                                    Rc::new(RefCell::new(instance)),
+                                                    source_object_id,
+                                                )
                                             })
                                     })
                                     .collect::<Vec<_>>();
@@ -6484,7 +6497,7 @@ fn runtime_owned_view_model_lists_for_instance(
 fn runtime_owned_view_model_list_item_instance(
     file: &RuntimeFile,
     reference: RuntimeViewModelInstanceReference<'_>,
-) -> Option<RuntimeOwnedViewModelInstance> {
+) -> Option<(RuntimeOwnedViewModelInstance, u32)> {
     thread_local! {
         static HYDRATING: RefCell<BTreeSet<(usize, usize)>> = RefCell::new(BTreeSet::new());
     }
@@ -6492,11 +6505,12 @@ fn runtime_owned_view_model_list_item_instance(
     if !HYDRATING.with(|hydrating| hydrating.borrow_mut().insert(key)) {
         return None;
     }
-    let instance = RuntimeOwnedViewModelInstance::from_instance(
+    let instance = RuntimeOwnedViewModelInstance::from_imported_instance(
         file,
         reference.view_model_index,
         reference.instance_index,
-    );
+    )
+    .map(|instance| (instance, reference.object.id));
     HYDRATING.with(|hydrating| {
         hydrating.borrow_mut().remove(&key);
     });
@@ -7470,7 +7484,39 @@ impl RuntimeOwnedViewModelInstance {
         Self::from_view_model(file, view_model_index, None)
     }
 
+    /// Clone and complete one authored instance exactly like C++
+    /// `ViewModelRuntime::createInstanceFromIndex`: nested ViewModel and list
+    /// references become retained mutable instances, and one source-instance
+    /// map preserves aliases across both kinds of edge.
+    ///
+    /// Reference: rive-runtime `d788e8ec6e8b598526607d6a1e8818e8b637b60c`,
+    /// `src/viewmodel/runtime/viewmodel_runtime.cpp:124-133` and
+    /// `src/file.cpp:898-983`.
     pub fn from_instance(
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance_index: usize,
+    ) -> Option<Self> {
+        let mut instance = Self::from_imported_instance(file, view_model_index, instance_index)?;
+        Self::complete_imported_view_model_links(&mut instance, &mut BTreeMap::new())?;
+        instance.reroot_mutation_clock();
+        Some(instance)
+    }
+
+    /// Named counterpart to [`Self::from_instance`], matching C++
+    /// `ViewModelRuntime::createInstanceFromName` at rive-runtime
+    /// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`,
+    /// `src/viewmodel/runtime/viewmodel_runtime.cpp:145-154`.
+    pub fn from_instance_name(
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance_name: &str,
+    ) -> Option<Self> {
+        let reference = file.view_model_instance_named(view_model_index, instance_name)?;
+        Self::from_instance(file, view_model_index, reference.instance_index)
+    }
+
+    fn from_imported_instance(
         file: &RuntimeFile,
         view_model_index: usize,
         instance_index: usize,
@@ -7480,81 +7526,89 @@ impl RuntimeOwnedViewModelInstance {
         Self::from_view_model(file, view_model_index, Some(instance.object))
     }
 
-    /// Instantiate one serialized default as a fully owned mutable tree.
-    ///
-    /// Unlike [`Self::from_instance`], child ViewModel pointers are detached
-    /// into generated owned contexts while preserving every serialized scalar
-    /// and list item. This is the host-facing form used when a published `.riv`
-    /// needs hot nested writes without losing its exact authored defaults.
-    pub fn from_instance_mutable(
-        file: &RuntimeFile,
-        view_model_index: usize,
-        instance_index: usize,
-    ) -> Option<Self> {
-        let source = Self::from_instance(file, view_model_index, instance_index)?;
-        let mut target = Self::new(file, view_model_index)?;
-        target.overlay_active_instance(&source)?;
-        target.detach_list_storage();
-        target.reroot_mutation_clock();
-        Some(target)
-    }
-
-    fn overlay_active_instance(&mut self, source: &Self) -> Option<()> {
-        if self.view_model_index != source.view_model_index {
-            return None;
-        }
-        self.numbers = source.numbers.clone();
-        self.booleans = source.booleans.clone();
-        self.strings = source.strings.clone();
-        self.colors = source.colors.clone();
-        self.enums = source.enums.clone();
-        self.symbol_list_indices = source.symbol_list_indices.clone();
-        self.lists = source.lists.clone();
-        self.assets = source.assets.clone();
-        self.font_assets = source.font_assets.clone();
-        self.artboards = source.artboards.clone();
-        self.triggers = source.triggers.clone();
-        for target_child in &mut self.view_models {
-            let source_child = source
-                .view_models
-                .iter()
-                .find(|child| child.property_index == target_child.property_index)?;
-            let active = source_child.materialize_active_instance()?;
-            Self::overlay_active_child(target_child, &active)?;
-        }
-        Some(())
-    }
-
-    fn overlay_active_child(
-        target: &mut RuntimeOwnedViewModelViewModel,
-        source: &Self,
+    fn complete_imported_view_model_links(
+        instance: &mut Self,
+        instances_map: &mut BTreeMap<u32, Rc<RefCell<Self>>>,
     ) -> Option<()> {
-        if !matches!(
-            target.endpoint.value(),
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) || target.referenced_view_model_index != Some(source.view_model_index)
-        {
-            return None;
+        for child in &mut instance.view_models {
+            let RuntimeViewModelPointer::Imported { object_id } = child.endpoint.value() else {
+                continue;
+            };
+            let linked = if let Some(linked) = instances_map.get(&object_id) {
+                Rc::clone(linked)
+            } else {
+                let active = child.materialize_active_instance()?;
+                let linked = Rc::new(RefCell::new(active));
+                instances_map.insert(object_id, Rc::clone(&linked));
+                {
+                    let mut linked_instance = linked.try_borrow_mut().ok()?;
+                    Self::complete_imported_view_model_links(&mut linked_instance, instances_map)?;
+                }
+                linked
+            };
+            child.endpoint.set_linked_instance_silent(Some(linked));
         }
-        target.numbers = source.numbers.clone();
-        target.booleans = source.booleans.clone();
-        target.strings = source.strings.clone();
-        target.colors = source.colors.clone();
-        target.enums = source.enums.clone();
-        target.symbol_list_indices = source.symbol_list_indices.clone();
-        target.lists = source.lists.clone();
-        target.assets = source.assets.clone();
-        target.font_assets = source.font_assets.clone();
-        target.artboards = source.artboards.clone();
-        target.triggers = source.triggers.clone();
-        for target_child in &mut target.children {
-            let source_child = source
-                .view_models
-                .iter()
-                .find(|child| child.property_index == target_child.property_index)?;
-            let active = source_child.materialize_active_instance()?;
-            Self::overlay_active_child(target_child, &active)?;
+
+        let parent_relay = Rc::clone(&instance.parent_relay);
+        for list in &mut instance.lists {
+            let (item_count, source_items) = {
+                let value = list.value.borrow();
+                let items = value
+                    .items
+                    .iter()
+                    .map(|item| {
+                        (
+                            item.occurrence_identity,
+                            item.authored_source_object_id,
+                            Rc::clone(&item.instance),
+                            item.parent_registered,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                (value.item_count, items)
+            };
+            let mut items = Vec::with_capacity(source_items.len());
+            for (occurrence_identity, source_object_id, source_instance, parent_registered) in
+                source_items
+            {
+                let linked = if let Some(source_object_id) = source_object_id {
+                    if let Some(linked) = instances_map.get(&source_object_id) {
+                        Rc::clone(linked)
+                    } else {
+                        instances_map.insert(source_object_id, Rc::clone(&source_instance));
+                        {
+                            let mut linked_instance = source_instance.try_borrow_mut().ok()?;
+                            Self::complete_imported_view_model_links(
+                                &mut linked_instance,
+                                instances_map,
+                            )?;
+                        }
+                        source_instance
+                    }
+                } else {
+                    source_instance
+                };
+                let child_relay = Rc::clone(&linked.try_borrow().ok()?.parent_relay);
+                let mut item = RuntimeOwnedViewModelListItem {
+                    occurrence_identity,
+                    instance: linked,
+                    authored_source_object_id: source_object_id,
+                    child_relay,
+                    parent_registered: false,
+                };
+                if parent_registered {
+                    item.attach_parent(&parent_relay);
+                }
+                items.push(item);
+            }
+            list.value = Rc::new(RefCell::new(RuntimeOwnedViewModelListValue {
+                parent_relay: Rc::downgrade(&parent_relay),
+                item_count,
+                items,
+            }));
+            list.cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::List);
         }
+        instance.bind_structural_ownership();
         Some(())
     }
 
@@ -13536,7 +13590,7 @@ mod owned_context_tests {
     #[test]
     fn mutable_imported_list_items_keep_row_local_binding_generation() {
         let file = mutable_list_default_fixture();
-        let target = RuntimeOwnedViewModelInstance::from_instance_mutable(&file, 0, 0)
+        let target = RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
             .expect("mutable imported root instance");
         let list_source = target
             .list_source_handle_by_property_name("items")

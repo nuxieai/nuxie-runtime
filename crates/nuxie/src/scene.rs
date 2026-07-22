@@ -24060,7 +24060,7 @@ mod tests {
     fn fresh_component_list_draw(file: &Arc<File>, item: &ViewModelInstance) -> Result<String> {
         let mut instance = OwnedArtboardInstance::instantiate(Arc::clone(file), 0)?;
         let mut root = instance
-            .instantiate_mutable_view_model_instance(0)
+            .instantiate_view_model_instance(0)
             .context("mutable root context")?;
         let source = root
             .raw()
@@ -24078,7 +24078,7 @@ mod tests {
         let b = component_list_context(&file, 2, 0)?;
         let mut instance = OwnedArtboardInstance::instantiate(Arc::clone(&file), 0)?;
         let mut root = instance
-            .instantiate_mutable_view_model_instance(0)
+            .instantiate_view_model_instance(0)
             .context("mutable root context")?;
         let source = root
             .raw()
@@ -24402,7 +24402,7 @@ mod tests {
                 .index();
             let mut runtime = OwnedArtboardInstance::instantiate(file, root_index)?;
             let root = runtime
-                .instantiate_mutable_view_model_instance(0)
+                .instantiate_view_model_instance(0)
                 .context("root default ViewModel")?;
             assert!(runtime.bind_view_model(&root));
             runtime.advance(0.0);
@@ -24432,7 +24432,7 @@ mod tests {
         let a_hidden = component_list_context(&file, 1, 1)?;
         let mut instance = OwnedArtboardInstance::instantiate(Arc::clone(&file), 0)?;
         let mut root = instance
-            .instantiate_mutable_view_model_instance(0)
+            .instantiate_view_model_instance(0)
             .context("mutable root context")?;
         let source = root
             .raw()
@@ -26239,7 +26239,7 @@ mod tests {
         let file = Arc::new(File::import(&bytes)?);
         let mut instance = OwnedArtboardInstance::instantiate(Arc::clone(&file), 0)?;
         let mut root = instance
-            .instantiate_mutable_view_model_instance(0)
+            .instantiate_view_model_instance(0)
             .context("mutable root ViewModel")?;
         assert!(instance.bind_view_model(&root));
         instance.advance(0.0);
@@ -30174,7 +30174,7 @@ mod tests {
             .index();
         let mut runtime = OwnedArtboardInstance::instantiate(file, parent_index)?;
         let mut root = runtime
-            .instantiate_mutable_view_model_instance(0)
+            .instantiate_view_model_instance(0)
             .expect("parent defaults instantiate as owned runtime state");
         assert!(root.set_number("sourceOpacity", 0.8));
         assert!(runtime.bind_view_model(&root));
@@ -30355,7 +30355,7 @@ mod tests {
             .index();
         let mut runtime = OwnedArtboardInstance::instantiate(file, parent_index)?;
         let mut root = runtime
-            .instantiate_mutable_view_model_instance(0)
+            .instantiate_view_model_instance(0)
             .context("parent default ViewModel")?;
         assert!(runtime.bind_view_model(&root));
         runtime.advance(0.0);
@@ -30629,7 +30629,7 @@ mod tests {
             .index();
         let mut runtime = OwnedArtboardInstance::instantiate(file, parent_index)?;
         let mut root = runtime
-            .instantiate_mutable_view_model_instance(0)
+            .instantiate_view_model_instance(0)
             .context("parent default ViewModel")?;
         assert!(runtime.bind_view_model(&root));
         runtime.advance(0.0);

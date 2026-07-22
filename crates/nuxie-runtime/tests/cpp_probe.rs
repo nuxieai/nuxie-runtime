@@ -45,6 +45,40 @@ fn probe_path() -> Option<PathBuf> {
     path.exists().then_some(path)
 }
 
+fn cpp_runtime_fixture(relative: &str) -> PathBuf {
+    let root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    PathBuf::from(root)
+        .join("tests/unit_tests/assets")
+        .join(relative)
+}
+
+fn read_cpp_probe_fixture_with_args(
+    probe: &Path,
+    relative: &str,
+    extra_args: &[String],
+) -> CppProbeFile {
+    let fixture = cpp_runtime_fixture(relative);
+    let output = Command::new(probe)
+        .arg("--instance-artboards")
+        .arg("--runtime-update")
+        .args(extra_args)
+        .arg("--file")
+        .arg(&fixture)
+        .output()
+        .unwrap_or_else(|err| panic!("failed to run {}: {err}", probe.display()));
+    assert!(
+        output.status.success(),
+        "C++ probe failed for {}\nstatus: {}\nstdout:\n{}\nstderr:\n{}",
+        fixture.display(),
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|err| panic!("invalid probe JSON for {}: {err}", fixture.display()))
+}
+
 fn assert_formula_random_call_count(
     state_machine: &StateMachineInstance,
     expected: usize,
@@ -1427,6 +1461,43 @@ fn synthetic_state_machine_fire_events(file_id: u64) -> Vec<u8> {
     })
 }
 
+fn synthetic_state_machine_trigger_done_event(file_id: u64) -> Vec<u8> {
+    const DONE_EVENT: u64 = 2;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "Event", |bytes| {
+            push_string_property(bytes, "Event", "name", "Done");
+        });
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineTrigger", |bytes| {
+            push_string_property(bytes, "StateMachineTrigger", "name", "Activate");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_synthetic_transition_condition(bytes, SyntheticInputTransitionKind::Trigger);
+        push_state_machine_fire_event(bytes, DONE_EVENT, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_fire_event_listener_input_change(file_id: u64) -> Vec<u8> {
     const AT_START: u64 = 0;
     const REPORTED_EVENT: u64 = 2;
@@ -2209,6 +2280,7 @@ fn synthetic_state_machine_imported_nested_viewmodel_number_shared_mutation(
 
 fn synthetic_publisher_era_nested_viewmodel_values(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
         });
@@ -2303,7 +2375,122 @@ fn synthetic_publisher_era_nested_viewmodel_values(file_id: u64) -> Vec<u8> {
         push_object_with_properties(bytes, "ViewModelPropertyString", |bytes| {
             push_string_property(bytes, "ViewModelPropertyString", "name", "label");
         });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+    })
+}
+
+fn synthetic_shared_authored_nested_viewmodel_values(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        for property_index in 0..2 {
+            push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "ViewModelInstanceViewModel",
+                    "viewModelPropertyId",
+                    property_index,
+                );
+                push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+            });
+        }
+        for property_name in ["child1", "child2"] {
+            push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+                push_string_property(bytes, "ViewModelPropertyViewModel", "name", property_name);
+                push_uint_property(
+                    bytes,
+                    "ViewModelPropertyViewModel",
+                    "viewModelReferenceId",
+                    1,
+                );
+            });
+        }
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Child");
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "shared");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceString", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceString", "viewModelPropertyId", 0);
+            push_string_property(
+                bytes,
+                "ViewModelInstanceString",
+                "propertyValue",
+                "shared value",
+            );
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyString", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyString", "name", "label");
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+    })
+}
+
+fn synthetic_shared_authored_property_and_list_item(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceList", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceList", "viewModelPropertyId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceListItem", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceListItem", "viewModelId", 1);
+            push_uint_property(bytes, "ViewModelInstanceListItem", "viewModelInstanceId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "child");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                1,
+            );
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyList", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyList", "name", "items");
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Child");
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "shared");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceString", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceString", "viewModelPropertyId", 0);
+            push_string_property(
+                bytes,
+                "ViewModelInstanceString",
+                "propertyValue",
+                "shared value",
+            );
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyString", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyString", "name", "label");
+        });
         push_object_with_properties(bytes, "Artboard", |_| {});
     })
 }
@@ -18390,6 +18577,133 @@ fn state_machine_fire_events_match_cpp_probe() {
 }
 
 #[test]
+fn state_machine_trigger_event_is_reported_by_the_advance_that_fires_it() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_trigger_done_event_cpp.riv";
+    let bytes = synthetic_state_machine_trigger_done_event(9500);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+        "--runtime-fire-state-machine-trigger".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let cpp_reports = &cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"))
+        .runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), 3);
+    assert_eq!(cpp_reports[0].reported_event_count, 0);
+    assert_eq!(cpp_reports[1].reported_event_count, 1);
+    assert_eq!(cpp_reports[1].reported_events.len(), 1);
+    assert_eq!(
+        cpp_reports[1].reported_events[0].event_name.as_deref(),
+        Some("Done")
+    );
+    assert_close(
+        cpp_reports[1].reported_events[0].seconds_delay,
+        0.0,
+        &format!("{label} Done secondsDelay"),
+    );
+    assert_eq!(cpp_reports[2].reported_event_count, 0);
+
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut rust_reports = Vec::new();
+    for action in [(0.5, false), (0.0, true), (0.0, false)] {
+        if action.1 {
+            assert!(state_machine.fire_trigger(0));
+        }
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, action.0);
+        rust_reports.push((advanced, state_machine.clone()));
+    }
+    let report = rust.update_components();
+
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_reports.iter().zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn cpp_pointer_and_advance_event_boundaries_pin_flow_session_order() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-pointer-down-state-machine".to_owned(),
+        "0".to_owned(),
+        "343".to_owned(),
+        "116".to_owned(),
+        "--runtime-pointer-up-state-machine".to_owned(),
+        "0".to_owned(),
+        "343".to_owned(),
+        "116".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "2".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_fixture_with_args(&probe, "events_on_states.riv", &args);
+    let reports = &cpp
+        .artboards
+        .first()
+        .expect("C++ events fixture artboard")
+        .runtime_state_machine_advances;
+    assert_eq!(reports.len(), 5);
+
+    let names = |report: &CppRuntimeStateMachineAdvance| {
+        report
+            .reported_events
+            .iter()
+            .filter_map(|event| event.event_name.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(names(&reports[0]), ["First"]);
+    assert_eq!(names(&reports[1]), ["First", "Third", "First"]);
+    assert_eq!(names(&reports[2]), ["First", "Third", "First"]);
+    let synchronous_suffix = names(&reports[1])[names(&reports[0]).len()..].to_vec();
+    assert_eq!(synchronous_suffix, ["Third", "First"]);
+    assert_eq!(names(&reports[3]), ["Second", "Third"]);
+    assert!(names(&reports[4]).is_empty());
+
+    // This is the exact queue boundary implemented by rive-runtime
+    // `d788e8ec6e8b598526607d6a1e8818e8b637b60c`:
+    // `StateMachineInstance::applyEvents` consumes the pre-existing listener
+    // reports before layer advance produces the post-advance reports
+    // (`state_machine_instance.cpp:2320-2335,2546-2584`). FlowSession exposes
+    // those two C++ batches as one host cycle without reordering either batch.
+    let combined = synchronous_suffix
+        .into_iter()
+        .chain(names(&reports[3]))
+        .collect::<Vec<_>>();
+    assert_eq!(combined, ["Third", "First", "Second", "Third"]);
+}
+
+#[test]
 fn state_machine_fire_event_listeners_apply_on_the_next_frame() {
     let label = "synthetic/runtime_state_machine_fire_event_listener_input_change.riv";
     let bytes = synthetic_state_machine_fire_event_listener_input_change(8921);
@@ -19487,6 +19801,221 @@ fn owned_view_model_from_publisher_era_instance_uses_nested_serialized_values() 
         context
             .string_value_by_property_name_path("container/input/label")
             .is_some_and(|value| value.as_ref() == "publisher value".as_bytes())
+    );
+}
+
+#[test]
+fn mutable_authored_view_model_instance_matches_cpp_create_instance_from_index() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_mutable_authored_nested_values_cpp.riv";
+    let bytes = synthetic_publisher_era_nested_viewmodel_values(9501);
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-mutate-view-model-instance-string".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "container/input/label".to_owned(),
+            "basic".to_owned(),
+        ],
+    );
+    let cpp_mutation = cpp
+        .runtime_view_model_instance_string_mutations
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ view-model mutation report for {label}"));
+    assert_eq!(cpp.runtime_view_model_instance_string_mutations.len(), 1);
+    assert_eq!(cpp_mutation.view_model_index, 0);
+    assert_eq!(cpp_mutation.instance_index, 0);
+    assert_eq!(cpp_mutation.instance_name, None);
+    assert_eq!(cpp_mutation.property_path, "container/input/label");
+    assert_eq!(cpp_mutation.observed_property_path, "container/input/label");
+    assert!(cpp_mutation.created);
+    assert!(cpp_mutation.property_found);
+    assert_eq!(cpp_mutation.before.as_deref(), Some("publisher value"));
+    assert_eq!(cpp_mutation.after.as_deref(), Some("basic"));
+    assert_eq!(
+        cpp_mutation.observed_before.as_deref(),
+        Some("publisher value")
+    );
+    assert_eq!(cpp_mutation.observed_after.as_deref(), Some("basic"));
+
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    let mut rust = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing Rust authored instance for {label}"));
+    assert!(
+        rust.string_value_by_property_name_path("container/input/label")
+            .is_some_and(|value| value.as_ref() == b"publisher value")
+    );
+    assert!(rust.set_string_by_property_name_path("container/input/label", b"basic"));
+    assert!(
+        rust.string_value_by_property_name_path("container/input/label")
+            .is_some_and(|value| value.as_ref() == b"basic")
+    );
+}
+
+#[test]
+fn authored_view_model_instance_name_matches_cpp_create_instance_from_name() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_named_mutable_authored_nested_values_cpp.riv";
+    let bytes = synthetic_publisher_era_nested_viewmodel_values(9503);
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-mutate-view-model-instance-string-by-name".to_owned(),
+            "0".to_owned(),
+            "root".to_owned(),
+            "container/input/label".to_owned(),
+            "named update".to_owned(),
+        ],
+    );
+    let cpp_mutation = cpp
+        .runtime_view_model_instance_string_mutations
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ named mutation report for {label}"));
+    assert_eq!(cpp.runtime_view_model_instance_string_mutations.len(), 1);
+    assert_eq!(cpp_mutation.instance_name.as_deref(), Some("root"));
+    assert!(cpp_mutation.created);
+    assert!(cpp_mutation.property_found);
+    assert_eq!(cpp_mutation.before.as_deref(), Some("publisher value"));
+    assert_eq!(cpp_mutation.after.as_deref(), Some("named update"));
+    assert_eq!(cpp_mutation.observed_after.as_deref(), Some("named update"));
+
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    let mut rust = RuntimeOwnedViewModelInstance::from_instance_name(&runtime, 0, "root")
+        .unwrap_or_else(|| panic!("missing Rust named authored instance for {label}"));
+    assert!(rust.set_string_by_property_name_path("container/input/label", b"named update"));
+    assert!(
+        rust.string_value_by_property_name_path("container/input/label")
+            .is_some_and(|value| value.as_ref() == b"named update")
+    );
+}
+
+#[test]
+fn authored_instance_preserves_cpp_shared_nested_view_model_identity() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_shared_authored_nested_values_cpp.riv";
+    let bytes = synthetic_shared_authored_nested_viewmodel_values(9502);
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-mutate-view-model-instance-string-observe".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "child1/label".to_owned(),
+            "child2/label".to_owned(),
+            "updated".to_owned(),
+        ],
+    );
+    let cpp_mutation = cpp
+        .runtime_view_model_instance_string_mutations
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ shared mutation report for {label}"));
+    assert_eq!(cpp.runtime_view_model_instance_string_mutations.len(), 1);
+    assert_eq!(cpp_mutation.instance_name, None);
+    assert_eq!(cpp_mutation.property_path, "child1/label");
+    assert_eq!(cpp_mutation.observed_property_path, "child2/label");
+    assert!(cpp_mutation.created);
+    assert!(cpp_mutation.property_found);
+    assert_eq!(cpp_mutation.before.as_deref(), Some("shared value"));
+    assert_eq!(
+        cpp_mutation.observed_before.as_deref(),
+        Some("shared value")
+    );
+    assert_eq!(cpp_mutation.after.as_deref(), Some("updated"));
+    assert_eq!(cpp_mutation.observed_after.as_deref(), Some("updated"));
+
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    let mut rust = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing Rust authored instance for {label}"));
+    assert!(rust.set_string_by_property_name_path("child1/label", b"updated"));
+    assert!(
+        rust.string_value_by_property_name_path("child2/label")
+            .is_some_and(|value| value.as_ref() == b"updated"),
+        "two authored properties that reference one source instance must retain one mutable child"
+    );
+}
+
+#[test]
+fn authored_instance_preserves_cpp_identity_across_property_and_list_item() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_shared_authored_property_and_list_cpp.riv";
+    let bytes = synthetic_shared_authored_property_and_list_item(9504);
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-mutate-view-model-instance-string-observe-list-item".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "child/label".to_owned(),
+            "items".to_owned(),
+            "0".to_owned(),
+            "label".to_owned(),
+            "updated".to_owned(),
+        ],
+    );
+    let cpp_mutation = cpp
+        .runtime_view_model_instance_string_mutations
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ property/list mutation report for {label}"));
+    assert!(cpp_mutation.created);
+    assert!(cpp_mutation.property_found);
+    assert_eq!(cpp_mutation.before.as_deref(), Some("shared value"));
+    assert_eq!(
+        cpp_mutation.observed_before.as_deref(),
+        Some("shared value")
+    );
+    assert_eq!(cpp_mutation.after.as_deref(), Some("updated"));
+    assert_eq!(cpp_mutation.observed_after.as_deref(), Some("updated"));
+
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+            .unwrap_or_else(|| panic!("missing Rust authored instance for {label}")),
+    );
+    let child = root
+        .linked_view_model_by_property_name_path("child")
+        .expect("completed child property");
+    let list_item = root
+        .list_items_by_property_name_path("items")
+        .and_then(|items| items.into_iter().next())
+        .expect("completed authored list item");
+    assert!(
+        child.ptr_eq(&list_item),
+        "one source instance referenced by a property and list item must remain one retained child"
+    );
+    assert!(
+        root.borrow_mut()
+            .set_string_by_property_name_path("child/label", b"updated")
+    );
+    assert!(
+        list_item
+            .borrow()
+            .string_value_by_property_name("label")
+            .is_some_and(|value| value.as_ref() == b"updated")
     );
 }
 
@@ -76185,6 +76714,31 @@ struct CppProbeFile {
     artboards: Vec<CppArtboard>,
     #[serde(default, rename = "dataContextLookups")]
     data_context_lookups: Vec<CppDataContextLookup>,
+    #[serde(default, rename = "runtimeViewModelInstanceStringMutations")]
+    runtime_view_model_instance_string_mutations: Vec<CppRuntimeViewModelInstanceStringMutation>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeViewModelInstanceStringMutation {
+    #[serde(rename = "viewModelIndex")]
+    view_model_index: usize,
+    #[serde(rename = "instanceIndex")]
+    instance_index: usize,
+    #[serde(rename = "instanceName")]
+    instance_name: Option<String>,
+    #[serde(rename = "propertyPath")]
+    property_path: String,
+    #[serde(rename = "observedPropertyPath")]
+    observed_property_path: String,
+    created: bool,
+    #[serde(rename = "propertyFound")]
+    property_found: bool,
+    before: Option<String>,
+    after: Option<String>,
+    #[serde(rename = "observedBefore")]
+    observed_before: Option<String>,
+    #[serde(rename = "observedAfter")]
+    observed_after: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

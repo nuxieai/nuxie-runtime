@@ -749,10 +749,9 @@ impl RuntimeOwnedViewModelBindingCandidate {
     /// The #RB-1 e3 resolution: exactly `resolve_value_for_source_path`'s
     /// coverage (same candidate path walk, same value-kind matrix), PLUS the
     /// retained scalar cell backing the resolved value when the source is a
-    /// migratable scalar kind. The cell is `None` for lists, list lengths,
-    /// view-model values, strings and fonts (payload mirrors beside the cell
-    /// keep the slot setter as the only writer) — those sources stay on the
-    /// copied-value machinery.
+    /// migrated scalar kind. String and AssetFont participate now that their
+    /// complete payload lives in the retained cell; only structural
+    /// list/list-length/view-model sources remain on copied-value machinery.
     pub(crate) fn resolve_value_and_cell_for_source_path(
         &self,
         value: &RuntimeDataBindGraphValue,
@@ -773,6 +772,9 @@ impl RuntimeOwnedViewModelBindingCandidate {
                         RuntimeViewModelCellValue::Boolean(_),
                         RuntimeDataBindGraphValue::Boolean(_)
                     ) | (
+                        RuntimeViewModelCellValue::String(_),
+                        RuntimeDataBindGraphValue::String(_)
+                    ) | (
                         RuntimeViewModelCellValue::Color(_),
                         RuntimeDataBindGraphValue::Color(_)
                     ) | (
@@ -783,6 +785,9 @@ impl RuntimeOwnedViewModelBindingCandidate {
                         RuntimeDataBindGraphValue::SymbolListIndex(_)
                     ) | (
                         RuntimeViewModelCellValue::AssetImage(_),
+                        RuntimeDataBindGraphValue::Asset(_)
+                    ) | (
+                        RuntimeViewModelCellValue::AssetFont(_),
                         RuntimeDataBindGraphValue::Asset(_)
                     ) | (
                         RuntimeViewModelCellValue::Artboard(_),
@@ -1952,9 +1957,7 @@ fn runtime_owned_view_model_font_value_for_candidates(
                 path_is_name_based,
                 scripting_manifest,
             )?;
-            context
-                .font_asset_value_by_property_path(&source_path)
-                .cloned()
+            context.font_asset_value_by_property_path(&source_path)
         })
     })
 }
@@ -8051,6 +8054,68 @@ mod tests {
             ),
         ])
         .expect("list binding fixture imports")
+    }
+
+    #[test]
+    fn owned_string_and_font_candidates_retain_the_exact_typed_cells() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Values".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyString",
+                vec![property(
+                    "ViewModelPropertyString",
+                    "name",
+                    AuthoringValue::String("label".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyAssetFont",
+                vec![property(
+                    "ViewModelPropertyAssetFont",
+                    "name",
+                    AuthoringValue::String("font".to_owned()),
+                )],
+            ),
+        ])
+        .expect("typed cell fixture imports");
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("generated Values instance"),
+        );
+        let candidate = RuntimeOwnedViewModelBindingCandidate::root_handle(&context);
+
+        let (_, string_cell) = candidate
+            .resolve_value_and_cell_for_source_path(
+                &RuntimeDataBindGraphValue::String(Vec::new()),
+                &[0, 0],
+            )
+            .expect("string source resolves");
+        let (_, font_cell) = candidate
+            .resolve_value_and_cell_for_source_path(
+                &RuntimeDataBindGraphValue::Asset(RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX),
+                &[0, 1],
+            )
+            .expect("font source resolves");
+        let context = context.borrow();
+        assert!(
+            string_cell
+                .as_ref()
+                .zip(context.cell_by_property_path(&[0]).as_ref())
+                .is_some_and(|(retained, source)| retained.ptr_eq(source))
+        );
+        assert!(
+            font_cell
+                .as_ref()
+                .zip(context.cell_by_property_path(&[1]).as_ref())
+                .is_some_and(|(retained, source)| retained.ptr_eq(source))
+        );
     }
 
     fn font_binding_fixture() -> RuntimeFile {

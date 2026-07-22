@@ -234,6 +234,7 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
 /// unmigrated kinds simply return `None`).
 struct RuntimeGraphSourceValueTarget<'a> {
     value: &'a mut RuntimeDataBindGraphValue,
+    source_value: Option<RuntimeViewModelCellValue>,
     changed: bool,
 }
 
@@ -249,7 +250,7 @@ impl RuntimeDataBindTarget for RuntimeGraphSourceValueTarget<'_> {
     }
 
     fn read_target(&mut self) -> Option<RuntimeViewModelCellValue> {
-        runtime_cell_value_from_graph_value(self.value)
+        runtime_cell_value_from_graph_value(self.value, self.source_value.as_ref())
     }
 }
 
@@ -267,6 +268,9 @@ fn runtime_graph_value_from_cell_value(
         (RuntimeViewModelCellValue::Boolean(value), RuntimeDataBindGraphValue::Boolean(_)) => {
             RuntimeDataBindGraphValue::Boolean(*value)
         }
+        (RuntimeViewModelCellValue::String(value), RuntimeDataBindGraphValue::String(_)) => {
+            RuntimeDataBindGraphValue::String(value.to_vec())
+        }
         (RuntimeViewModelCellValue::Color(value), RuntimeDataBindGraphValue::Color(_)) => {
             RuntimeDataBindGraphValue::Color(*value)
         }
@@ -279,6 +283,9 @@ fn runtime_graph_value_from_cell_value(
         ) => RuntimeDataBindGraphValue::SymbolListIndex(u64::from(*value)),
         (RuntimeViewModelCellValue::AssetImage(value), RuntimeDataBindGraphValue::Asset(_)) => {
             RuntimeDataBindGraphValue::Asset(u64::from(*value))
+        }
+        (RuntimeViewModelCellValue::AssetFont(value), RuntimeDataBindGraphValue::Asset(_)) => {
+            RuntimeDataBindGraphValue::Asset(value.file_asset_index())
         }
         (RuntimeViewModelCellValue::Artboard(value), RuntimeDataBindGraphValue::Artboard(_)) => {
             RuntimeDataBindGraphValue::Artboard(u64::from(*value))
@@ -294,6 +301,7 @@ fn runtime_graph_value_from_cell_value(
 /// owned slot setters' u32 saturation.
 fn runtime_cell_value_from_graph_value(
     value: &RuntimeDataBindGraphValue,
+    source_value: Option<&RuntimeViewModelCellValue>,
 ) -> Option<RuntimeViewModelCellValue> {
     fn u32_payload(value: u64) -> u32 {
         u32::try_from(value).unwrap_or(u32::MAX)
@@ -301,6 +309,9 @@ fn runtime_cell_value_from_graph_value(
     Some(match value {
         RuntimeDataBindGraphValue::Number(value) => RuntimeViewModelCellValue::Number(*value),
         RuntimeDataBindGraphValue::Boolean(value) => RuntimeViewModelCellValue::Boolean(*value),
+        RuntimeDataBindGraphValue::String(value) => {
+            RuntimeViewModelCellValue::String(Arc::from(value.as_slice()))
+        }
         RuntimeDataBindGraphValue::Color(value) => RuntimeViewModelCellValue::Color(*value),
         RuntimeDataBindGraphValue::Enum(value) => {
             RuntimeViewModelCellValue::Enum(u32_payload(*value))
@@ -308,9 +319,14 @@ fn runtime_cell_value_from_graph_value(
         RuntimeDataBindGraphValue::SymbolListIndex(value) => {
             RuntimeViewModelCellValue::SymbolListIndex(u32_payload(*value))
         }
-        RuntimeDataBindGraphValue::Asset(value) => {
-            RuntimeViewModelCellValue::AssetImage(u32_payload(*value))
-        }
+        RuntimeDataBindGraphValue::Asset(value) => match source_value {
+            Some(RuntimeViewModelCellValue::AssetFont(current)) => {
+                let mut next = current.clone();
+                next.set_file_asset_index(*value);
+                RuntimeViewModelCellValue::AssetFont(next)
+            }
+            _ => RuntimeViewModelCellValue::AssetImage(u32_payload(*value)),
+        },
         RuntimeDataBindGraphValue::Artboard(value) => {
             RuntimeViewModelCellValue::Artboard(u32_payload(*value))
         }
@@ -1696,10 +1712,10 @@ fn runtime_owned_view_model_color_value_for_source_path(
     context.color_value_by_property_path(&property_path)
 }
 
-fn runtime_owned_view_model_string_value_for_source_path<'a>(
-    context: &'a RuntimeOwnedViewModelInstance,
+fn runtime_owned_view_model_string_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
     source_path: &[u32],
-) -> Option<&'a [u8]> {
+) -> Option<Arc<[u8]>> {
     let property_path =
         runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
     context.string_value_by_property_path(&property_path)
@@ -4859,6 +4875,7 @@ impl RuntimeDataBindGraph {
         let (applied_changed, unapplied_cell_value) = {
             let mut target = RuntimeGraphSourceValueTarget {
                 value: &mut source.value,
+                source_value: bind.source().map(|cell| cell.value()),
                 changed: false,
             };
             bind.update(&mut target);
@@ -5468,7 +5485,7 @@ impl RuntimeDataBindGraph {
         else {
             return false;
         };
-        let context_changed = current_context_value != value;
+        let context_changed = current_context_value.as_ref() != value;
         let source_changed = self.sources.iter().any(|source| {
             source.path == path
                 && matches!(source.default_value, RuntimeDataBindGraphValue::String(_))
@@ -10529,6 +10546,58 @@ mod tests {
             !graph.sources[0].source_to_target_dirty_after_target_to_source,
             "a to-source-only bind schedules no source→target apply"
         );
+    }
+
+    #[test]
+    fn retained_string_and_font_sources_refresh_from_complete_cell_payloads() {
+        use crate::view_model_cell::{RuntimeFontAssetValue, RuntimeViewModelCell};
+
+        let mut string_graph = graph_with_number_binding(0);
+        string_graph.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        string_graph.sources[0].default_value = RuntimeDataBindGraphValue::String(b"old".to_vec());
+        string_graph.sources[0].value = RuntimeDataBindGraphValue::String(b"old".to_vec());
+        let string_cell =
+            RuntimeViewModelCell::new(RuntimeViewModelCellValue::String(Arc::from(&b"old"[..])));
+        string_graph.sources[0]
+            .retained_bind
+            .set_source(string_cell.clone());
+        string_graph.sources[0].source_to_target_dirty_after_target_to_source = false;
+        string_graph.sources[0].source_to_target_dirty_after_immediate = false;
+        string_graph.sources[0].reconcile_pending = false;
+        assert!(string_cell.set_value(RuntimeViewModelCellValue::String(Arc::from(&b"new"[..]))));
+        assert!(string_graph.collect_retained_owned_source_dirt());
+        assert_eq!(
+            string_graph.sources[0].value,
+            RuntimeDataBindGraphValue::String(b"new".to_vec())
+        );
+
+        let mut font_graph = graph_with_number_binding(0);
+        font_graph.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        font_graph.sources[0].default_value = RuntimeDataBindGraphValue::Asset(3);
+        font_graph.sources[0].value = RuntimeDataBindGraphValue::Asset(3);
+        let font_cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::AssetFont(
+            RuntimeFontAssetValue::from_file_asset_index(3),
+        ));
+        font_graph.sources[0]
+            .retained_bind
+            .set_source(font_cell.clone());
+        font_graph.sources[0].source_to_target_dirty_after_target_to_source = false;
+        font_graph.sources[0].source_to_target_dirty_after_immediate = false;
+        font_graph.sources[0].reconcile_pending = false;
+        let live_font: Arc<[u8]> = vec![1, 2, 3].into();
+        let mut font_value = RuntimeFontAssetValue::default();
+        assert!(font_value.set_live_font_bytes(Some(Arc::clone(&live_font))));
+        assert!(font_cell.set_value(RuntimeViewModelCellValue::AssetFont(font_value)));
+        assert!(font_graph.collect_retained_owned_source_dirt());
+        assert_eq!(
+            font_graph.sources[0].value,
+            RuntimeDataBindGraphValue::Asset(RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX)
+        );
+        assert!(font_cell.value().eq(&RuntimeViewModelCellValue::AssetFont({
+            let mut value = RuntimeFontAssetValue::default();
+            value.set_live_font_bytes(Some(live_font));
+            value
+        })));
     }
 
     fn graph_with_trigger_binding(path: &[u32]) -> RuntimeDataBindGraph {

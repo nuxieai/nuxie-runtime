@@ -5280,7 +5280,7 @@ impl StateMachineInstance {
         context: &RuntimeOwnedViewModelInstance,
     ) {
         self.sync_bindable_font_assets(|source| {
-            runtime_owned_font_asset_value_for_state_machine_source(context, &source.path).cloned()
+            runtime_owned_font_asset_value_for_state_machine_source(context, &source.path)
         });
     }
 
@@ -5292,14 +5292,12 @@ impl StateMachineInstance {
     ) {
         self.sync_bindable_font_assets(|source| {
             context_chain.iter().find_map(|context_path| {
-                context
-                    .font_asset_value_by_context_source_path(
-                        file,
-                        context_path,
-                        &source.path,
-                        false,
-                    )
-                    .cloned()
+                context.font_asset_value_by_context_source_path(
+                    file,
+                    context_path,
+                    &source.path,
+                    false,
+                )
             })
         });
     }
@@ -5315,7 +5313,6 @@ impl StateMachineInstance {
                     .context
                     .borrow()
                     .font_asset_value_by_property_path(&property_path)
-                    .cloned()
             })
         });
     }
@@ -6140,10 +6137,10 @@ impl StateMachineInstance {
     }
 }
 
-fn runtime_owned_font_asset_value_for_state_machine_source<'a>(
-    context: &'a RuntimeOwnedViewModelInstance,
+fn runtime_owned_font_asset_value_for_state_machine_source(
+    context: &RuntimeOwnedViewModelInstance,
     source_path: &[u32],
-) -> Option<&'a RuntimeFontAssetValue> {
+) -> Option<RuntimeFontAssetValue> {
     if source_path.len() < 2 || usize::try_from(source_path[0]).ok()? != context.view_model_index {
         return None;
     }

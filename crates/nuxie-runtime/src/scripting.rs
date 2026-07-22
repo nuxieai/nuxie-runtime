@@ -621,7 +621,7 @@ impl ScriptViewModel {
             .root_handle()
             .borrow()
             .string_value_by_property_path(&path)
-            .map(|value| String::from_utf8_lossy(value).into_owned())
+            .map(|value| String::from_utf8_lossy(value.as_ref()).into_owned())
     }
 
     pub fn set_string(&self, name: &str, value: &str) -> bool {

@@ -15,8 +15,8 @@ mod text;
 mod view_model;
 // #RB-1: retained-identity view-model core (map Phase RB). Additive while
 // consumers migrate; the compensation family deletes when migration ends.
-pub mod view_model_cell;
 pub mod retained_data_bind;
+pub mod view_model_cell;
 
 pub use animation::{
     LinearAnimationInstance, RuntimeKeyFrameBool, RuntimeKeyFrameCallback, RuntimeKeyFrameColor,
@@ -106,23 +106,25 @@ pub use view_model::{
     RuntimeDefaultViewModelEnumSourceHandle, RuntimeDefaultViewModelListSourceHandle,
     RuntimeDefaultViewModelNumberSourceHandle, RuntimeDefaultViewModelStringSourceHandle,
     RuntimeDefaultViewModelSymbolListIndexSourceHandle, RuntimeDefaultViewModelTriggerSourceHandle,
-    RuntimeDefaultViewModelViewModelSourceHandle, RuntimeImportedViewModelArtboardSourceHandle,
-    RuntimeImportedViewModelAssetSourceHandle, RuntimeImportedViewModelBooleanSourceHandle,
-    RuntimeImportedViewModelColorSourceHandle, RuntimeImportedViewModelEnumSourceHandle,
-    RuntimeImportedViewModelInstanceContext, RuntimeImportedViewModelListSourceHandle,
-    RuntimeImportedViewModelNumberSourceHandle, RuntimeImportedViewModelStringSourceHandle,
+    RuntimeDefaultViewModelViewModelSourceHandle, RuntimeFontAssetValue,
+    RuntimeImportedViewModelArtboardSourceHandle, RuntimeImportedViewModelAssetSourceHandle,
+    RuntimeImportedViewModelBooleanSourceHandle, RuntimeImportedViewModelColorSourceHandle,
+    RuntimeImportedViewModelEnumSourceHandle, RuntimeImportedViewModelInstanceContext,
+    RuntimeImportedViewModelListSourceHandle, RuntimeImportedViewModelNumberSourceHandle,
+    RuntimeImportedViewModelStringSourceHandle,
     RuntimeImportedViewModelSymbolListIndexSourceHandle,
     RuntimeImportedViewModelTriggerSourceHandle, RuntimeImportedViewModelViewModelSourceHandle,
     RuntimeOwnedViewModelArtboardSourceHandle, RuntimeOwnedViewModelAssetSourceHandle,
     RuntimeOwnedViewModelBooleanSourceHandle, RuntimeOwnedViewModelColorSourceHandle,
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle,
-    RuntimeOwnedViewModelEnumSourceHandle, RuntimeOwnedViewModelHandle,
-    RuntimeOwnedViewModelInstance, RuntimeOwnedViewModelListSourceHandle,
-    RuntimeOwnedViewModelListStringMatchBooleanHandle, RuntimeOwnedViewModelNumberSourceHandle,
-    RuntimeOwnedViewModelStringSourceHandle, RuntimeOwnedViewModelSymbolListIndexSourceHandle,
-    RuntimeOwnedViewModelTriggerSourceHandle, RuntimeOwnedViewModelViewModelSourceHandle,
-    RuntimeViewModelLinkError, runtime_data_context_lookup_reports,
-    runtime_global_view_model_indices, runtime_global_view_model_names,
+    RuntimeOwnedViewModelEnumSourceHandle, RuntimeOwnedViewModelFontAssetSourceHandle,
+    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelListStringMatchBooleanHandle,
+    RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
+    RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTriggerSourceHandle,
+    RuntimeOwnedViewModelViewModelSourceHandle, RuntimeViewModelLinkError,
+    runtime_data_context_lookup_reports, runtime_global_view_model_indices,
+    runtime_global_view_model_names,
 };
 pub(crate) use view_model::{
     RuntimeViewModelPointer, runtime_default_view_model_artboard_property_path_for_name,

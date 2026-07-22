@@ -8,6 +8,7 @@ use nuxie_binary::{
     RuntimeViewModelInstanceReference,
 };
 
+pub use crate::view_model_cell::RuntimeFontAssetValue;
 use crate::view_model_cell::{RuntimeViewModelCell, RuntimeViewModelCellValue};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1714,9 +1715,9 @@ impl RuntimeOwnedViewModelHandle {
 
     /// Re-bind mirror STRUCTURE for linked children before exposing this
     /// instance. Scalar values need no refresh — mirrors share the linked
-    /// instance's cells by identity (#RB-1 e2b) — but a structural push
-    /// (children/list topology, string/font payload snapshots) from
-    /// `mark_mutated` can be deferred while an owner is already borrowed.
+    /// instance's complete typed cells by identity (#RB-1 f7B) — but a
+    /// structural push (children/list topology) from `mark_mutated` can be
+    /// deferred while an owner is already borrowed.
     /// Retrying at the next handle borrow makes that deferral durable.
     fn refresh_linked_mirrors(&self) {
         let links = {
@@ -2937,16 +2938,12 @@ impl Clone for RuntimeOwnedViewModelBoolean {
     }
 }
 
-/// String slot: the cell is authoritative for change propagation, while
-/// `bytes` mirrors the cell so the reference-returning public getters
-/// (`Option<&[u8]>`) keep their signatures. The owning slot's setter is the
-/// only writer of either half; a `share()` view snapshots `bytes` and is
-/// re-snapshotted at every mirror rebind, so a shared cell and its byte
-/// mirror re-agree exactly where the old copy-based mirrors did.
+/// One retained C++ `ViewModelInstanceString`: the cell owns the complete
+/// payload as well as changed state and dependents. Alias mirrors clone only
+/// the cell handle, while `Clone` creates a fresh cell with copied bytes.
 #[derive(Debug)]
 struct RuntimeOwnedViewModelString {
     property_index: usize,
-    bytes: Vec<u8>,
     cell: RuntimeViewModelCell,
 }
 
@@ -2954,35 +2951,31 @@ impl RuntimeOwnedViewModelString {
     fn new(property_index: usize, value: Vec<u8>) -> Self {
         Self {
             property_index,
-            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::String(value.clone())),
-            bytes: value,
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::String(value.into())),
         }
     }
 
-    fn value(&self) -> &[u8] {
-        &self.bytes
+    fn value(&self) -> Arc<[u8]> {
+        match self.cell.value() {
+            RuntimeViewModelCellValue::String(value) => value,
+            _ => unreachable!("string slot must retain a string cell"),
+        }
     }
 
     fn set_value(&mut self, value: &[u8]) -> bool {
-        if self.bytes == value {
+        if self.value().as_ref() == value {
             return false;
         }
-        self.bytes = value.to_vec();
         self.cell
-            .set_value(RuntimeViewModelCellValue::String(self.bytes.clone()));
-        true
+            .set_value(RuntimeViewModelCellValue::String(Arc::from(value)))
     }
 }
 
 impl RuntimeOwnedViewModelString {
-    /// Identity-sharing view of the same retained cell. The borrowed-getter
-    /// byte mirror is snapshotted from the source slot and re-snapshotted by
-    /// every mirror rebind (link, synchronize, handle-borrow refresh), the
-    /// same points that refreshed it before cells were shared.
+    /// Identity-sharing view of the same retained C++ value object.
     fn share(&self) -> Self {
         Self {
             property_index: self.property_index,
-            bytes: self.bytes.clone(),
             cell: self.cell.clone(),
         }
     }
@@ -2990,7 +2983,7 @@ impl RuntimeOwnedViewModelString {
 
 impl Clone for RuntimeOwnedViewModelString {
     fn clone(&self) -> Self {
-        Self::new(self.property_index, self.bytes.clone())
+        Self::new(self.property_index, self.value().to_vec())
     }
 }
 
@@ -3488,213 +3481,60 @@ impl Clone for RuntimeOwnedViewModelAsset {
     }
 }
 
-/// The two-part value stored by C++ `ViewModelInstanceAssetFont`.
-///
-/// `file_asset_index` is the serialized `propertyValue` and names a dense
-/// file-asset entry. `live_font_bytes` is the private runtime-only FontAsset
-/// used when that index does not resolve to a file FontAsset. Assigning a live
-/// font sets the index to the C++ missing-id sentinel; assigning a file index
-/// deliberately preserves the private value, matching the upstream object.
-#[derive(Debug, Clone)]
-pub struct RuntimeFontAssetValue {
-    file_asset_index: u64,
-    live_font_bytes: Option<Arc<[u8]>>,
-}
-
-impl RuntimeFontAssetValue {
-    pub const MISSING_FILE_ASSET_INDEX: u64 = u32::MAX as u64;
-
-    pub fn from_file_asset_index(file_asset_index: u64) -> Self {
-        Self {
-            file_asset_index,
-            live_font_bytes: None,
-        }
-    }
-
-    pub fn file_asset_index(&self) -> u64 {
-        self.file_asset_index
-    }
-
-    pub fn live_font_bytes(&self) -> Option<&[u8]> {
-        self.live_font_bytes.as_deref()
-    }
-
-    pub fn live_font_bytes_arc(&self) -> Option<&Arc<[u8]>> {
-        self.live_font_bytes.as_ref()
-    }
-
-    pub(crate) fn same_runtime_value(&self, value: &Self) -> bool {
-        if self.file_asset_index != value.file_asset_index {
-            return false;
-        }
-        match (&self.live_font_bytes, &value.live_font_bytes) {
-            (Some(current), Some(next)) => Arc::ptr_eq(current, next),
-            (None, None) => true,
-            _ => false,
-        }
-    }
-
-    pub(crate) fn set_file_asset_index(&mut self, file_asset_index: u64) -> bool {
-        if self.file_asset_index == file_asset_index {
-            return false;
-        }
-        self.file_asset_index = file_asset_index;
-        true
-    }
-
-    pub(crate) fn set_live_font_bytes(&mut self, font_bytes: Option<Arc<[u8]>>) -> bool {
-        let same_live_font = match (&self.live_font_bytes, &font_bytes) {
-            (Some(current), Some(next)) => Arc::ptr_eq(current, next),
-            (None, None) => true,
-            _ => false,
-        };
-        let was_missing = self.file_asset_index == Self::MISSING_FILE_ASSET_INDEX;
-        self.file_asset_index = Self::MISSING_FILE_ASSET_INDEX;
-        if same_live_font {
-            return !was_missing;
-        }
-        self.live_font_bytes = font_bytes;
-        true
-    }
-
-    /// Apply the complete value carried by a font data bind.
-    ///
-    /// This deliberately differs from [`Self::set_file_asset_index`]. A
-    /// public `propertyValue` write preserves the private live font in C++,
-    /// while `ViewModelInstanceAssetFont::applyValue(DataValueInteger*)`
-    /// first applies (and therefore clears or replaces) the retained Font
-    /// payload before falling back to the serialized file-asset index.
-    pub(crate) fn apply_data_bind_value(&mut self, value: &Self) -> bool {
-        if self.same_runtime_value(value) {
-            return false;
-        }
-        self.file_asset_index = value.file_asset_index;
-        self.live_font_bytes = value.live_font_bytes.clone();
-        true
-    }
-}
-
-impl Default for RuntimeFontAssetValue {
-    fn default() -> Self {
-        Self::from_file_asset_index(Self::MISSING_FILE_ASSET_INDEX)
-    }
-}
-
-/// Font slot: the cell carries change identity while the slot keeps the
-/// actual two-part payload (file-asset index + retained live Font bytes),
-/// because `font_asset_value_by_property_*` returns `&RuntimeFontAssetValue`
-/// borrowed from this storage. The cell's `AssetFont` payload mirrors the
-/// file-asset index plus a monotonic `live_identity` stamp bumped exactly
-/// when the retained bytes change identity (`Arc::ptr_eq` semantics), so a
-/// retained dependent observes precisely the changes the slot reports. The
-/// slot's methods are the only writers of either half.
+/// One retained C++ `ViewModelInstanceAssetFont`: the cell owns both the
+/// serialized index and private live Font payload. Alias mirrors clone only
+/// this cell handle, eliminating the old index/stamp plus payload snapshot.
 #[derive(Debug)]
 struct RuntimeOwnedViewModelFontAsset {
     property_index: usize,
-    value: RuntimeFontAssetValue,
     cell: RuntimeViewModelCell,
-}
-
-fn same_live_font_identity(current: Option<&Arc<[u8]>>, next: Option<&Arc<[u8]>>) -> bool {
-    match (current, next) {
-        (Some(current), Some(next)) => Arc::ptr_eq(current, next),
-        (None, None) => true,
-        _ => false,
-    }
-}
-
-/// Monotonic change-identity stamp for retained live Font bytes. Two stamps
-/// are equal only when the bytes' identity has not changed since the last
-/// cell write, preserving `Arc::ptr_eq` change semantics at the cell layer.
-fn next_live_font_identity() -> u64 {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static NEXT: AtomicU64 = AtomicU64::new(1);
-    NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
 impl RuntimeOwnedViewModelFontAsset {
     fn new(property_index: usize, value: RuntimeFontAssetValue) -> Self {
-        let live_identity = if value.live_font_bytes_arc().is_some() {
-            next_live_font_identity()
-        } else {
-            0
-        };
-        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::AssetFont {
-            asset_index: owned_scalar_u32_payload(value.file_asset_index()),
-            live_identity,
-        });
         Self {
             property_index,
-            value,
-            cell,
+            cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::AssetFont(value)),
+        }
+    }
+
+    fn value(&self) -> RuntimeFontAssetValue {
+        match self.cell.value() {
+            RuntimeViewModelCellValue::AssetFont(value) => value,
+            _ => unreachable!("font slot must retain an AssetFont cell"),
         }
     }
 
     fn set_file_asset_index(&mut self, file_asset_index: u64) -> bool {
-        let changed = self.value.set_file_asset_index(file_asset_index);
-        if changed {
-            self.write_cell(false);
-        }
-        changed
+        self.cell.set_font_asset_index(file_asset_index)
     }
 
     fn set_live_font_bytes(&mut self, font_bytes: Option<Arc<[u8]>>) -> bool {
-        let bytes_changed =
-            !same_live_font_identity(self.value.live_font_bytes_arc(), font_bytes.as_ref());
-        let changed = self.value.set_live_font_bytes(font_bytes);
-        if changed {
-            self.write_cell(bytes_changed);
-        }
-        changed
+        self.cell.set_live_font_bytes(font_bytes)
     }
 
     fn apply_data_bind_value(&mut self, value: &RuntimeFontAssetValue) -> bool {
-        let bytes_changed = !same_live_font_identity(
-            self.value.live_font_bytes_arc(),
-            value.live_font_bytes_arc(),
-        );
-        let changed = self.value.apply_data_bind_value(value);
-        if changed {
-            self.write_cell(bytes_changed);
-        }
-        changed
-    }
-
-    /// Mirror the slot payload into the cell after a change the payload
-    /// already reported. The cell write is 1:1 with the slot's change
-    /// contract: an index change alters `asset_index`, a bytes-identity
-    /// change bumps `live_identity`, and a bytes write that only clears the
-    /// index sentinel alters `asset_index` alone.
-    fn write_cell(&self, bytes_changed: bool) {
-        let live_identity = if bytes_changed {
-            next_live_font_identity()
-        } else {
-            match self.cell.value() {
-                RuntimeViewModelCellValue::AssetFont { live_identity, .. } => live_identity,
-                _ => 0,
-            }
-        };
-        self.cell.set_value(RuntimeViewModelCellValue::AssetFont {
-            asset_index: owned_scalar_u32_payload(self.value.file_asset_index()),
-            live_identity,
-        });
+        self.cell.apply_font_asset_data_bind_value(value)
     }
 }
 
 impl Clone for RuntimeOwnedViewModelFontAsset {
     fn clone(&self) -> Self {
-        Self::new(self.property_index, self.value.clone())
+        // Pinned C++ `ViewModelInstanceAssetFont::clone` copies serialized
+        // base fields into a fresh object but does not copy its private
+        // `m_fontAsset` (`viewmodel_instance_asset_font.cpp:78-86`).
+        Self::new(
+            self.property_index,
+            RuntimeFontAssetValue::from_file_asset_index(self.value().file_asset_index()),
+        )
     }
 }
 
 impl RuntimeOwnedViewModelFontAsset {
-    /// Identity-sharing view of the same retained cell; the payload half is
-    /// snapshotted like the string byte mirror and re-snapshotted on every
-    /// mirror rebind.
+    /// Identity-sharing view of the same retained C++ value object.
     fn share(&self) -> Self {
         Self {
             property_index: self.property_index,
-            value: self.value.clone(),
             cell: self.cell.clone(),
         }
     }
@@ -4105,11 +3945,10 @@ impl RuntimeOwnedViewModelViewModel {
     /// Bind this slot's active storage to the linked instance's retained
     /// cells BY IDENTITY (C++ `ViewModelInstanceViewModel` holds an
     /// `rcp<ViewModelInstance>`; two parents referencing one child share it
-    /// live). After this rebind, scalar values never need copying between
-    /// the mirror and the linked instance — writes land in the shared cells.
-    /// Re-running it only forwards *structure* (children/list topology) and
-    /// re-snapshots the string/font payload mirrors that back the
-    /// borrowed-reference getters.
+    /// live). After this rebind, typed values never need copying between the
+    /// mirror and linked instance — String and Font payloads also live in the
+    /// shared cell. Re-running it forwards only structure (children/list
+    /// topology).
     fn mirror_linked_instance(&mut self, source: &RuntimeOwnedViewModelInstance) {
         macro_rules! replace_active_values {
             ($owned:ident, $imported:ident) => {
@@ -4249,14 +4088,14 @@ impl RuntimeOwnedViewModelViewModel {
         }
     }
 
-    fn string_value_by_property_index(&self, property_index: usize) -> Option<&[u8]> {
+    fn string_value_by_property_index(&self, property_index: usize) -> Option<Arc<[u8]>> {
         self.strings
             .iter()
             .find(|string| string.property_index == property_index)
             .map(|string| string.value())
     }
 
-    fn active_string_value_by_property_index(&self, property_index: usize) -> Option<&[u8]> {
+    fn active_string_value_by_property_index(&self, property_index: usize) -> Option<Arc<[u8]>> {
         match self.value {
             RuntimeViewModelPointer::OwnedGenerated { .. } => {
                 self.string_value_by_property_index(property_index)
@@ -4527,17 +4366,17 @@ impl RuntimeOwnedViewModelViewModel {
     fn font_asset_value_by_property_index(
         &self,
         property_index: usize,
-    ) -> Option<&RuntimeFontAssetValue> {
+    ) -> Option<RuntimeFontAssetValue> {
         self.font_assets
             .iter()
             .find(|asset| asset.property_index == property_index)
-            .map(|asset| &asset.value)
+            .map(RuntimeOwnedViewModelFontAsset::value)
     }
 
     fn active_font_asset_value_by_property_index(
         &self,
         property_index: usize,
-    ) -> Option<&RuntimeFontAssetValue> {
+    ) -> Option<RuntimeFontAssetValue> {
         match self.value {
             RuntimeViewModelPointer::OwnedGenerated { .. } => {
                 self.font_asset_value_by_property_index(property_index)
@@ -4550,7 +4389,7 @@ impl RuntimeOwnedViewModelViewModel {
                         .iter()
                         .find(|asset| asset.property_index == property_index)
                 })
-                .map(|asset| &asset.value),
+                .map(RuntimeOwnedViewModelFontAsset::value),
             _ => None,
         }
     }
@@ -7178,7 +7017,7 @@ impl RuntimeOwnedViewModelInstance {
         self.numbers.get(number_slot).map(|number| number.value())
     }
 
-    pub fn string_value_by_property_name(&self, property_name: &str) -> Option<&[u8]> {
+    pub fn string_value_by_property_name(&self, property_name: &str) -> Option<Arc<[u8]>> {
         let property_index = self.property_index_by_name(property_name)?;
         self.string_value_by_property_index(property_index)
     }
@@ -7203,7 +7042,7 @@ impl RuntimeOwnedViewModelInstance {
         self.boolean_value_by_property_path(source.path())
     }
 
-    pub fn string_value_by_property_name_path(&self, property_path: &str) -> Option<&[u8]> {
+    pub fn string_value_by_property_name_path(&self, property_path: &str) -> Option<Arc<[u8]>> {
         let source = self.string_source_handle_by_property_name_path(property_path)?;
         self.string_value_by_property_path(source.path())
     }
@@ -7990,6 +7829,13 @@ impl RuntimeOwnedViewModelInstance {
         value: &[u8],
     ) -> bool {
         self.set_string_by_property_path(&handle.property_path, value)
+    }
+
+    pub fn string_value_by_source_handle(
+        &self,
+        handle: &RuntimeOwnedViewModelStringSourceHandle,
+    ) -> Option<Arc<[u8]>> {
+        self.string_value_by_property_path(&handle.property_path)
     }
 
     pub fn can_set_string_by_source_handle(
@@ -8863,7 +8709,7 @@ impl RuntimeOwnedViewModelInstance {
             let mut item = item.instance.borrow_mut();
             let matches = item
                 .string_value_by_property_index(handle.string_property_index)
-                .is_some_and(|value| value == selected);
+                .is_some_and(|value| value.as_ref() == selected);
             let item_changed =
                 item.set_boolean_by_property_index(handle.boolean_property_index, matches);
             if item_changed {
@@ -9147,7 +8993,7 @@ impl RuntimeOwnedViewModelInstance {
     pub fn font_asset_value_by_property_name(
         &self,
         property_name: &str,
-    ) -> Option<&RuntimeFontAssetValue> {
+    ) -> Option<RuntimeFontAssetValue> {
         let property_index = self.property_index_by_name(property_name)?;
         self.font_asset_value_by_property_index(property_index)
     }
@@ -9237,6 +9083,13 @@ impl RuntimeOwnedViewModelInstance {
         file_asset_index: u64,
     ) -> bool {
         self.set_font_asset_index_by_property_path(&handle.property_path, file_asset_index)
+    }
+
+    pub fn font_asset_value_by_source_handle(
+        &self,
+        handle: &RuntimeOwnedViewModelFontAssetSourceHandle,
+    ) -> Option<RuntimeFontAssetValue> {
+        self.font_asset_value_by_property_path(&handle.property_path)
     }
 
     pub fn set_live_font_bytes_by_source_handle(
@@ -10444,14 +10297,17 @@ impl RuntimeOwnedViewModelInstance {
         }
     }
 
-    fn string_value_by_property_index(&self, property_index: usize) -> Option<&[u8]> {
+    fn string_value_by_property_index(&self, property_index: usize) -> Option<Arc<[u8]>> {
         self.strings
             .iter()
             .find(|string| string.property_index == property_index)
             .map(|string| string.value())
     }
 
-    pub(crate) fn string_value_by_property_path(&self, property_path: &[usize]) -> Option<&[u8]> {
+    pub(crate) fn string_value_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<Arc<[u8]>> {
         if property_path.len() == 1 {
             return self.string_value_by_property_index(property_path[0]);
         }
@@ -10466,7 +10322,7 @@ impl RuntimeOwnedViewModelInstance {
         context_path: &[usize],
         source_path: &[u32],
         name_based: bool,
-    ) -> Option<&[u8]> {
+    ) -> Option<Arc<[u8]>> {
         if name_based {
             let property_path =
                 self.property_path_for_context_source_path(file, context_path, source_path, true)?;
@@ -10689,17 +10545,17 @@ impl RuntimeOwnedViewModelInstance {
     fn font_asset_value_by_property_index(
         &self,
         property_index: usize,
-    ) -> Option<&RuntimeFontAssetValue> {
+    ) -> Option<RuntimeFontAssetValue> {
         self.font_assets
             .iter()
             .find(|asset| asset.property_index == property_index)
-            .map(|asset| &asset.value)
+            .map(RuntimeOwnedViewModelFontAsset::value)
     }
 
     pub(crate) fn font_asset_value_by_property_path(
         &self,
         property_path: &[usize],
-    ) -> Option<&RuntimeFontAssetValue> {
+    ) -> Option<RuntimeFontAssetValue> {
         if property_path.len() == 1 {
             return self.font_asset_value_by_property_index(property_path[0]);
         }
@@ -10714,7 +10570,7 @@ impl RuntimeOwnedViewModelInstance {
         context_path: &[usize],
         source_path: &[u32],
         name_based: bool,
-    ) -> Option<&RuntimeFontAssetValue> {
+    ) -> Option<RuntimeFontAssetValue> {
         if name_based {
             let property_path =
                 self.property_path_for_context_source_path(file, context_path, source_path, true)?;
@@ -11646,6 +11502,7 @@ fn runtime_object_u32_property(object: &RuntimeObject, property: &str) -> u32 {
 mod owned_context_tests {
     use super::*;
     use crate::properties::property_key_for_name;
+    use crate::view_model_cell::{RuntimeCellDirtSink, RuntimeCellNotificationQueue};
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
     use nuxie_schema::definition_by_name;
 
@@ -12174,7 +12031,7 @@ mod owned_context_tests {
         assert_eq!(
             context
                 .font_asset_value_by_property_name("font")
-                .map(RuntimeFontAssetValue::file_asset_index),
+                .map(|value| value.file_asset_index()),
             Some(0)
         );
         assert!(
@@ -12560,12 +12417,12 @@ mod owned_context_tests {
             "the second slot on the writing owner shares the same child"
         );
 
-        // AssetFont carries a retained live payload in addition to its scalar
-        // cell. C++ stores the child as one `rcp<ViewModelInstance>`
-        // (`viewmodel_instance_viewmodel.hpp:19-39`). Rust shares the exact
-        // retained cell and refreshes its payload snapshot at each handle
-        // borrow; nested writes must therefore target the child before that
-        // refresh instead of mutating only the parent's snapshot.
+        // AssetFont's complete two-part payload lives on the one retained
+        // cell, matching C++'s retained child plus
+        // `ViewModelInstanceAssetFont` (`viewmodel_instance_viewmodel.hpp:
+        // 19-39`, `viewmodel_instance_asset_font.cpp:13-75`). A parent borrow
+        // held across a direct child write must therefore re-read it live.
+        let held_owner_a = owner_a.borrow();
         let child_live: Arc<[u8]> = vec![1, 2, 3, 4].into();
         assert!(
             child
@@ -12573,12 +12430,12 @@ mod owned_context_tests {
                 .set_live_font_bytes_by_property_name("font", Some(Arc::clone(&child_live)))
         );
         assert!(
-            owner_a
-                .borrow()
+            held_owner_a
                 .font_asset_value_by_property_path(&[0, 1])
-                .and_then(RuntimeFontAssetValue::live_font_bytes_arc)
-                .is_some_and(|value| Arc::ptr_eq(value, &child_live))
+                .and_then(|value| value.live_font_bytes_arc().cloned())
+                .is_some_and(|value| Arc::ptr_eq(&value, &child_live))
         );
+        drop(held_owner_a);
 
         let owner_live: Arc<[u8]> = vec![5, 6, 7, 8].into();
         assert!(
@@ -12590,8 +12447,8 @@ mod owned_context_tests {
             child
                 .borrow()
                 .font_asset_value_by_property_name("font")
-                .and_then(RuntimeFontAssetValue::live_font_bytes_arc)
-                .is_some_and(|value| Arc::ptr_eq(value, &owner_live))
+                .and_then(|value| value.live_font_bytes_arc().cloned())
+                .is_some_and(|value| Arc::ptr_eq(&value, &owner_live))
         );
         assert!(
             owner_b
@@ -12602,22 +12459,22 @@ mod owned_context_tests {
             child
                 .borrow()
                 .font_asset_value_by_property_name("font")
-                .map(RuntimeFontAssetValue::file_asset_index),
+                .map(|value| value.file_asset_index()),
             Some(7),
         );
         assert!(
             child
                 .borrow()
                 .font_asset_value_by_property_name("font")
-                .and_then(RuntimeFontAssetValue::live_font_bytes_arc)
-                .is_some_and(|value| Arc::ptr_eq(value, &owner_live)),
+                .and_then(|value| value.live_font_bytes_arc().cloned())
+                .is_some_and(|value| Arc::ptr_eq(&value, &owner_live)),
             "a propertyValue write preserves C++'s private live-Font fallback"
         );
         assert_eq!(
             owner_a
                 .borrow()
                 .font_asset_value_by_property_path(&[0, 1])
-                .map(RuntimeFontAssetValue::file_asset_index),
+                .map(|value| value.file_asset_index()),
             Some(7),
         );
 
@@ -12633,8 +12490,8 @@ mod owned_context_tests {
             child
                 .borrow()
                 .font_asset_value_by_property_name("font")
-                .and_then(RuntimeFontAssetValue::live_font_bytes_arc)
-                .is_some_and(|value| Arc::ptr_eq(value, &bind_live)),
+                .and_then(|value| value.live_font_bytes_arc().cloned())
+                .is_some_and(|value| Arc::ptr_eq(&value, &bind_live)),
             "target-to-source application mutates the retained child payload"
         );
 
@@ -12673,6 +12530,99 @@ mod owned_context_tests {
                 .number_value_by_property_name_path("child2/value"),
             Some(99.0),
             "the second slot observes the shared copied child"
+        );
+        assert!(
+            cloned_child
+                .borrow()
+                .font_asset_value_by_property_name("font")
+                .is_some_and(|value| value.live_font_bytes_arc().is_none()),
+            "pinned C++ Font clone constructs a fresh empty private FontAsset"
+        );
+    }
+
+    #[test]
+    fn string_endpoint_shares_identity_while_clone_copies_bytes() {
+        let source = RuntimeOwnedViewModelString::new(0, b"initial".to_vec());
+        let mut shared = source.share();
+        assert!(source.cell.ptr_eq(&shared.cell));
+        assert!(shared.set_value(b"linked"));
+        assert_eq!(source.value().as_ref(), b"linked");
+
+        let mut cloned = source.clone();
+        assert!(!source.cell.ptr_eq(&cloned.cell));
+        assert_eq!(cloned.value().as_ref(), b"linked");
+        assert!(cloned.set_value(b"copy"));
+        assert_eq!(source.value().as_ref(), b"linked");
+    }
+
+    #[test]
+    fn font_endpoint_preserves_pinned_setter_dirt_multiplicity() {
+        fn observed_font(
+            index: u64,
+        ) -> (
+            RuntimeOwnedViewModelFontAsset,
+            RuntimeCellNotificationQueue,
+            RuntimeCellDirtSink,
+        ) {
+            let font = RuntimeOwnedViewModelFontAsset::new(
+                0,
+                RuntimeFontAssetValue::from_file_asset_index(index),
+            );
+            let queue = RuntimeCellNotificationQueue::default();
+            let sink = RuntimeCellDirtSink::reporting_listener(&queue, 0);
+            font.cell.add_dependent(&sink);
+            (font, queue, sink)
+        }
+
+        fn drain(queue: &RuntimeCellNotificationQueue) -> usize {
+            let mut reports = Vec::new();
+            queue.swap_into(&mut reports);
+            reports.len()
+        }
+
+        let first: Arc<[u8]> = vec![1].into();
+        let second: Arc<[u8]> = vec![2].into();
+
+        // `value(Font*)` early-return path: the same pointer only forces the
+        // sentinel, so it reports once from a non-sentinel index and zero
+        // times when already sentinel (asset_font.cpp:29-34).
+        let (mut same, same_queue, _same_sink) = observed_font(7);
+        assert!(same.set_live_font_bytes(Some(Arc::clone(&first))));
+        drain(&same_queue);
+        assert!(same.set_file_asset_index(7));
+        drain(&same_queue);
+        assert!(same.set_live_font_bytes(Some(Arc::clone(&first))));
+        assert_eq!(drain(&same_queue), 1);
+        assert!(!same.set_live_font_bytes(Some(Arc::clone(&first))));
+        assert_eq!(drain(&same_queue), 0);
+
+        // A different pointer from a non-sentinel index reports once for
+        // propertyValue(-1) and once for the unconditional live-Font dirt;
+        // from the sentinel it reports only the latter (lines 35-61).
+        assert!(same.set_file_asset_index(7));
+        drain(&same_queue);
+        assert!(same.set_live_font_bytes(Some(Arc::clone(&second))));
+        assert_eq!(drain(&same_queue), 2);
+        assert!(same.set_live_font_bytes(Some(Arc::clone(&first))));
+        assert_eq!(drain(&same_queue), 1);
+
+        // Null DataValueAssetFont applies value(nullptr) and then the index,
+        // preserving both transient sentinel reports even when the final
+        // payload equals the start (lines 64-75).
+        let (mut null_apply, null_queue, _null_sink) = observed_font(7);
+        let null_value = RuntimeFontAssetValue::from_file_asset_index(7);
+        assert!(null_apply.apply_data_bind_value(&null_value));
+        assert_eq!(drain(&null_queue), 2);
+        assert_eq!(null_apply.value().file_asset_index(), 7);
+
+        let (mut live_apply, live_queue, _live_sink) = observed_font(7);
+        let mut live_value = RuntimeFontAssetValue::default();
+        assert!(live_value.set_live_font_bytes(Some(Arc::clone(&first))));
+        assert!(live_apply.apply_data_bind_value(&live_value));
+        assert_eq!(drain(&live_queue), 2);
+        assert_eq!(
+            live_apply.value().file_asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
         );
     }
 

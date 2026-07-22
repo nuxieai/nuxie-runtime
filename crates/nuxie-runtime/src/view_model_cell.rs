@@ -19,6 +19,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
 /// Retained mutation-order notification queue used by ViewModel listeners.
 ///
@@ -169,7 +170,7 @@ struct RuntimeCellDependent {
 pub enum RuntimeViewModelCellValue {
     Number(f32),
     Boolean(bool),
-    String(Vec<u8>),
+    String(Arc<[u8]>),
     Color(u32),
     Enum(u32),
     /// Fired-counter semantics: the value is the cumulative fire count while
@@ -178,14 +179,107 @@ pub enum RuntimeViewModelCellValue {
     Trigger(u64),
     SymbolListIndex(u32),
     AssetImage(u32),
-    /// Two-part font value (C++ `ViewModelInstanceAssetFont`): the serialized
-    /// file-asset index plus a change-identity stamp for the retained live
-    /// Font bytes. The bytes themselves stay in the owning slot
-    /// (`RuntimeFontAssetValue`); `live_identity` is a monotonic stamp bumped
-    /// exactly when the retained bytes change identity (`Arc::ptr_eq`
-    /// semantics), so cell-level change detection matches the payload.
-    AssetFont { asset_index: u32, live_identity: u64 },
+    /// Complete two-part C++ `ViewModelInstanceAssetFont` value. The cell is
+    /// the sole owner of both the serialized file-asset index and retained
+    /// live Font identity, so every alias retains one exact source object.
+    AssetFont(RuntimeFontAssetValue),
     Artboard(u32),
+}
+
+/// The two-part value stored by C++ `ViewModelInstanceAssetFont`.
+///
+/// `file_asset_index` is the serialized `propertyValue`. `live_font_bytes`
+/// is the private runtime-only Font retained alongside it. Equality follows
+/// the C++ setters: the index compares by value and the live Font compares by
+/// retained pointer identity, not byte content.
+#[derive(Debug, Clone)]
+pub struct RuntimeFontAssetValue {
+    file_asset_index: u64,
+    live_font_bytes: Option<Arc<[u8]>>,
+}
+
+impl PartialEq for RuntimeFontAssetValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.same_runtime_value(other)
+    }
+}
+
+impl RuntimeFontAssetValue {
+    pub const MISSING_FILE_ASSET_INDEX: u64 = u32::MAX as u64;
+
+    pub fn from_file_asset_index(file_asset_index: u64) -> Self {
+        Self {
+            file_asset_index,
+            live_font_bytes: None,
+        }
+    }
+
+    pub fn file_asset_index(&self) -> u64 {
+        self.file_asset_index
+    }
+
+    pub fn live_font_bytes(&self) -> Option<&[u8]> {
+        self.live_font_bytes.as_deref()
+    }
+
+    pub fn live_font_bytes_arc(&self) -> Option<&Arc<[u8]>> {
+        self.live_font_bytes.as_ref()
+    }
+
+    pub(crate) fn same_runtime_value(&self, value: &Self) -> bool {
+        if self.file_asset_index != value.file_asset_index {
+            return false;
+        }
+        match (&self.live_font_bytes, &value.live_font_bytes) {
+            (Some(current), Some(next)) => Arc::ptr_eq(current, next),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+
+    pub(crate) fn set_file_asset_index(&mut self, file_asset_index: u64) -> bool {
+        if self.file_asset_index == file_asset_index {
+            return false;
+        }
+        self.file_asset_index = file_asset_index;
+        true
+    }
+
+    pub(crate) fn set_live_font_bytes(&mut self, font_bytes: Option<Arc<[u8]>>) -> bool {
+        let same_live_font = match (&self.live_font_bytes, &font_bytes) {
+            (Some(current), Some(next)) => Arc::ptr_eq(current, next),
+            (None, None) => true,
+            _ => false,
+        };
+        let was_missing = self.file_asset_index == Self::MISSING_FILE_ASSET_INDEX;
+        self.file_asset_index = Self::MISSING_FILE_ASSET_INDEX;
+        if same_live_font {
+            return !was_missing;
+        }
+        self.live_font_bytes = font_bytes;
+        true
+    }
+
+    /// Apply the complete value carried by a font data bind.
+    ///
+    /// A public `propertyValue` write preserves the private live Font in C++,
+    /// while `ViewModelInstanceAssetFont::applyValue(DataValueInteger*)`
+    /// first applies the retained Font payload and only falls back to the
+    /// serialized file-asset index.
+    pub(crate) fn apply_data_bind_value(&mut self, value: &Self) -> bool {
+        if self.same_runtime_value(value) {
+            return false;
+        }
+        self.file_asset_index = value.file_asset_index;
+        self.live_font_bytes = value.live_font_bytes.clone();
+        true
+    }
+}
+
+impl Default for RuntimeFontAssetValue {
+    fn default() -> Self {
+        Self::from_file_asset_index(Self::MISSING_FILE_ASSET_INDEX)
+    }
 }
 
 impl RuntimeViewModelCellValue {
@@ -321,6 +415,71 @@ impl RuntimeViewModelCell {
         true
     }
 
+    /// C++ setters may report another `Bindings` cascade after an earlier
+    /// property setter already stored the final payload. AssetFont's
+    /// `value(Font*)` does this when changing a live Font from a non-sentinel
+    /// file index (`viewmodel_instance_asset_font.cpp:29-61`). Preserve that
+    /// observable dependent/listener multiplicity without inventing a
+    /// second payload write.
+    pub(crate) fn notify_bindings_value_changed(&self) {
+        let mut state = self.state.borrow_mut();
+        if state.suppress_depth == 0 {
+            state.value_changed = true;
+        }
+        state.cascade(RuntimeCellDirt::BINDINGS);
+    }
+
+    /// C++ `ViewModelInstanceAssetFont::propertyValue(uint32_t)`: update the
+    /// serialized file index while preserving the private live Font.
+    pub(crate) fn set_font_asset_index(&self, file_asset_index: u64) -> bool {
+        let RuntimeViewModelCellValue::AssetFont(mut value) = self.value() else {
+            debug_assert!(false, "set_font_asset_index on non-font cell");
+            return false;
+        };
+        if !value.set_file_asset_index(file_asset_index) {
+            return false;
+        }
+        self.set_value(RuntimeViewModelCellValue::AssetFont(value))
+    }
+
+    /// C++ `ViewModelInstanceAssetFont::value(Font*)` including its distinct
+    /// pointer-equality early return, sentinel write, and second dirt cascade
+    /// for a changed live Font (`viewmodel_instance_asset_font.cpp:29-61`).
+    pub(crate) fn set_live_font_bytes(&self, font_bytes: Option<Arc<[u8]>>) -> bool {
+        let RuntimeViewModelCellValue::AssetFont(mut value) = self.value() else {
+            debug_assert!(false, "set_live_font_bytes on non-font cell");
+            return false;
+        };
+        let same_live_font = match (value.live_font_bytes_arc(), font_bytes.as_ref()) {
+            (Some(current), Some(next)) => Arc::ptr_eq(current, next),
+            (None, None) => true,
+            _ => false,
+        };
+        let index_was_not_sentinel =
+            value.file_asset_index() != RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX;
+        if !value.set_live_font_bytes(font_bytes) {
+            return false;
+        }
+        let changed = self.set_value(RuntimeViewModelCellValue::AssetFont(value));
+        if !same_live_font && index_was_not_sentinel {
+            self.notify_bindings_value_changed();
+        }
+        changed
+    }
+
+    /// C++ `ViewModelInstanceAssetFont::applyValue(DataValueInteger*)`: a
+    /// non-null live Font returns after `value(font)`; null first applies
+    /// `value(nullptr)` and then falls through to the serialized index setter
+    /// (`viewmodel_instance_asset_font.cpp:64-75`).
+    pub(crate) fn apply_font_asset_data_bind_value(&self, value: &RuntimeFontAssetValue) -> bool {
+        if let Some(font) = value.live_font_bytes_arc() {
+            return self.set_live_font_bytes(Some(Arc::clone(font)));
+        }
+        let mut changed = self.set_live_font_bytes(None);
+        changed |= self.set_font_asset_index(value.file_asset_index());
+        changed
+    }
+
     /// C++ `ViewModelInstanceTrigger::trigger()` analog: increment the fire
     /// counter. Cascades like any other write.
     pub fn fire_trigger(&self) -> bool {
@@ -374,7 +533,6 @@ impl RuntimeViewModelCell {
     }
 }
 
-
 /// Property-slot classification, from the `ViewModelProperty*` definition
 /// object type names (C++ subclasses of `ViewModelProperty`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -418,16 +576,15 @@ impl RuntimeViewModelCellKind {
         Some(match self {
             Self::Number => RuntimeViewModelCellValue::Number(0.0),
             Self::Boolean => RuntimeViewModelCellValue::Boolean(false),
-            Self::String => RuntimeViewModelCellValue::String(Vec::new()),
+            Self::String => RuntimeViewModelCellValue::String(Arc::from([])),
             Self::Color => RuntimeViewModelCellValue::Color(0),
             Self::Enum => RuntimeViewModelCellValue::Enum(0),
             Self::Trigger => RuntimeViewModelCellValue::Trigger(0),
             Self::SymbolListIndex => RuntimeViewModelCellValue::SymbolListIndex(0),
             Self::AssetImage => RuntimeViewModelCellValue::AssetImage(0),
-            Self::AssetFont => RuntimeViewModelCellValue::AssetFont {
-                asset_index: 0,
-                live_identity: 0,
-            },
+            Self::AssetFont => RuntimeViewModelCellValue::AssetFont(
+                RuntimeFontAssetValue::from_file_asset_index(0),
+            ),
             Self::Artboard => RuntimeViewModelCellValue::Artboard(0),
             Self::ViewModel | Self::List => return None,
         })
@@ -562,9 +719,10 @@ impl RuntimeViewModelInstanceCells {
                     None => file
                         .view_model(view_model_index)
                         .and_then(|view_model| {
-                            view_model.properties.get(property_index).and_then(|property| {
-                                property.uint_property("viewModelReferenceId")
-                            })
+                            view_model
+                                .properties
+                                .get(property_index)
+                                .and_then(|property| property.uint_property("viewModelReferenceId"))
                         })
                         .and_then(|reference| usize::try_from(reference).ok())
                         .and_then(|reference| Self::build(file, reference, None, visiting)),
@@ -574,9 +732,7 @@ impl RuntimeViewModelInstanceCells {
             RuntimeViewModelCellKind::List => {
                 // Serialized list items are nested instance references; the
                 // default instance starts empty (C++ default list).
-                let items = instance_value
-                    .map(|_| Vec::new())
-                    .unwrap_or_default();
+                let items = instance_value.map(|_| Vec::new()).unwrap_or_default();
                 RuntimeViewModelCellSlot::List(items)
             }
             kind => {
@@ -589,7 +745,7 @@ impl RuntimeViewModelInstanceCells {
                         .map(RuntimeViewModelCellValue::Boolean),
                     RuntimeViewModelCellKind::String => file
                         .view_model_instance_string_value_bytes_for_object(value)
-                        .map(|bytes| RuntimeViewModelCellValue::String(bytes.to_vec())),
+                        .map(|bytes| RuntimeViewModelCellValue::String(Arc::from(bytes))),
                     RuntimeViewModelCellKind::Color => file
                         .view_model_instance_color_value_for_object(value)
                         .map(RuntimeViewModelCellValue::Color),
@@ -611,9 +767,10 @@ impl RuntimeViewModelInstanceCells {
                     RuntimeViewModelCellKind::AssetFont => file
                         .view_model_instance_font_asset_index_for_object(value)
                         .and_then(|index| u32::try_from(index).ok())
-                        .map(|asset_index| RuntimeViewModelCellValue::AssetFont {
-                            asset_index,
-                            live_identity: 0,
+                        .map(|asset_index| {
+                            RuntimeViewModelCellValue::AssetFont(
+                                RuntimeFontAssetValue::from_file_asset_index(asset_index.into()),
+                            )
                         }),
                     RuntimeViewModelCellKind::Artboard => file
                         .view_model_instance_artboard_index_for_object(value)
@@ -877,11 +1034,7 @@ mod tests {
                         "name",
                         AuthoringValue::String("child-instance".to_owned()),
                     ),
-                    authoring_property(
-                        "ViewModelInstance",
-                        "viewModelId",
-                        AuthoringValue::Uint(1),
-                    ),
+                    authoring_property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(1)),
                 ],
             ),
             authoring_record(
@@ -907,11 +1060,7 @@ mod tests {
                         "name",
                         AuthoringValue::String("root-instance".to_owned()),
                     ),
-                    authoring_property(
-                        "ViewModelInstance",
-                        "viewModelId",
-                        AuthoringValue::Uint(0),
-                    ),
+                    authoring_property("ViewModelInstance", "viewModelId", AuthoringValue::Uint(0)),
                 ],
             ),
             authoring_record(

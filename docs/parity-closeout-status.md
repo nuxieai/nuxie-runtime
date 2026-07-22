@@ -241,6 +241,26 @@ upstream-sync-map registry).
     segments with zero failures. C API smoke and `cargo test --workspace` are
     green; Standards and Spec re-reviews are clean. Renderer goldens are not
     applicable because the slice changes no renderer/draw code.
+  - [x] (f7B) owned String and Font payloads now live in their retained typed
+    cells instead of parallel slot snapshots. String reads return shared
+    immutable bytes; Font reads return the complete file-index/live-Font value,
+    while aliases and graph candidates retain the exact source cell. This
+    matches String's content-checked setter/deep clone
+    (`viewmodel_instance_string_base.hpp:33-55`;
+    `viewmodel_instance_string.cpp:10-25`), Font's two-part setter and clone
+    (`viewmodel_instance_asset_font.cpp:13-86`), and DataBind's retained source
+    (`data_bind.cpp:210-216`). Font tests pin the non-sentinel/sentinel and
+    same/different live-pointer dirt multiplicity, data-bind null/live paths,
+    and clone clearing of the private live Font. Scene no longer keeps a
+    nested String payload cache. The scope is owned retained contexts;
+    imported overrides, artboard target/cache values, converter operands, and
+    the remaining direct-property clock union are later cuts. Fast and corpus
+    evidence: runtime lib 361/361, nuxie lib 132/132, probe 708/708, ordinary
+    and scripted goldens 317/317 entries / 647/647 segments with zero failures,
+    C API smoke green, and `cargo test --workspace` green. Standards review
+    found and fixed one unchanged-String allocation before the equality
+    early-out; Standards and Spec re-reviews are clean. Renderer goldens are
+    not applicable because this slice changes no renderer/draw code.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -689,3 +709,17 @@ Decisions log.)
   317/317 entries plus 647/647 exact segments with zero failures. The scripted
   failure list is empty, C API smoke and the workspace suite are green, and
   both re-reviews are clean. Renderer goldens are not applicable.
+- 2026-07-21 — #RB-1 f7B moved the complete owned String and Font payloads
+  into their retained typed cells. Parent aliases and graph candidates now
+  observe direct child writes without a borrow-time mirror refresh; Scene's
+  nested String cache was deleted. Font mutation tests pin the C++ setter's
+  one- versus two-report cases and its clone rule that preserves the file
+  index while clearing the private live Font. Runtime lib is 361/361, nuxie
+  lib 132/132, the C++ probe 708/708, ordinary and scripted goldens 317/317
+  entries plus 647/647 exact segments with zero failures, and C API smoke is
+  green. Renderer goldens are not applicable. Imported overrides, artboard
+  target/cache payloads, converter operands, and the direct-property clock
+  union remain explicit future cuts. The full workspace is green. Standards
+  review found one steady-frame allocation before String's equality early-out;
+  the allocation now occurs only after the C++-matching content comparison,
+  and both Standards and Spec re-reviews are clean.

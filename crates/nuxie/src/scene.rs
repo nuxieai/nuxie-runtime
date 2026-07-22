@@ -4745,7 +4745,6 @@ struct RetainedNestedViewModelString {
     authored_instance: ViewModelInstanceId,
     id: ViewModelStringId,
     source: RuntimeOwnedViewModelStringSourceHandle,
-    value: Vec<u8>,
     overridden: bool,
 }
 
@@ -7150,7 +7149,7 @@ impl Scene {
             .ok_or(ResolveError::UnknownViewModelInstance)?;
         let root_authored_instance = default.authored_instance;
 
-        let (target_model_index, target_instance_index) =
+        let (target_model_index, _target_instance_index) =
             authored_view_model_instance_location(&self.definitions, authored_instance)
                 .ok_or(ResolveError::UnknownViewModelInstance)?;
         let (string_model_index, string_definition) = self
@@ -7213,15 +7212,6 @@ impl Scene {
                 .ok_or(ResolveError::UnknownViewModelInstance)?;
         names.push(string_definition.spec.name.clone());
         let path = names.join("/");
-        let initial_value = self
-            .definitions
-            .view_models
-            .get(target_model_index)
-            .and_then(|model| model.instances.get(target_instance_index))
-            .and_then(|target| target.strings.get(&string))
-            .cloned()
-            .unwrap_or_default()
-            .into_bytes();
         let retained = self
             .instances
             .get_mut(instance_slot)
@@ -7244,7 +7234,6 @@ impl Scene {
                 authored_instance,
                 id: string,
                 source,
-                value: initial_value,
                 overridden: false,
             });
             slot
@@ -14634,7 +14623,12 @@ impl Frame<'_> {
                         && string.id == cursor.string
                 })
                 .ok_or(StaleCursor)?;
-            return String::from_utf8(string.value.clone()).map_err(|_| StaleCursor);
+            let value = retained
+                .value
+                .raw()
+                .string_value_by_source_handle(&string.source)
+                .ok_or(StaleCursor)?;
+            return String::from_utf8(value.to_vec()).map_err(|_| StaleCursor);
         }
         if !retained
             .strings
@@ -14874,10 +14868,6 @@ impl Frame<'_> {
             let changed = retained_value
                 .raw_mut()
                 .set_string_by_source_handle(&string.source, value.as_bytes());
-            if string.value.as_slice() != value.as_bytes() {
-                string.value.clear();
-                string.value.extend_from_slice(value.as_bytes());
-            }
             string.overridden = true;
             return Ok(changed);
         }
@@ -15008,10 +14998,6 @@ impl Frame<'_> {
                     .raw_mut()
                     .set_string_by_source_handle(&source, value.as_bytes());
                 if let Some(string) = retained.nested_strings.get_mut(slot) {
-                    if string.value.as_slice() != value.as_bytes() {
-                        string.value.clear();
-                        string.value.extend_from_slice(value.as_bytes());
-                    }
                     string.overridden = true;
                 }
                 changed
@@ -26877,6 +26863,30 @@ mod tests {
             scene.frame().get_vm_string(title_cursor),
             Ok("Nested title".to_string())
         );
+        let nested_source = scene.instances[title_cursor.instance_slot]
+            .as_ref()
+            .and_then(|instance| instance.view_model.as_ref())
+            .and_then(|retained| {
+                title_cursor
+                    .nested_slot
+                    .and_then(|slot| retained.nested_strings.get(slot))
+            })
+            .map(|string| string.source.clone())
+            .expect("nested string cursor retains its runtime endpoint");
+        assert!(
+            scene.instances[title_cursor.instance_slot]
+                .as_mut()
+                .and_then(|instance| instance.view_model.as_mut())
+                .expect("mounted view model")
+                .value
+                .raw_mut()
+                .set_string_by_source_handle(&nested_source, b"External title")
+        );
+        assert_eq!(
+            scene.frame().get_vm_string(title_cursor),
+            Ok("External title".to_string()),
+            "the public cursor re-reads the retained endpoint after an external write"
+        );
         assert_eq!(scene.frame().set_vm_boolean(beta_cursor, false), Ok(true));
         assert_eq!(scene.frame().set_vm(dim_cursor, 0.75), Ok(true));
         assert_eq!(
@@ -27296,9 +27306,11 @@ mod tests {
         let view_model = instance
             .instantiate_view_model_instance(0)
             .context("exact .riv retains the artboard default instance")?;
-        assert_eq!(
-            view_model.raw().string_value_by_property_name("name"),
-            Some("Nuxie Pro".as_bytes())
+        assert!(
+            view_model
+                .raw()
+                .string_value_by_property_name("name")
+                .is_some_and(|value| value.as_ref() == "Nuxie Pro".as_bytes())
         );
         Ok(())
     }

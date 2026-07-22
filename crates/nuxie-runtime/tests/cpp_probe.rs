@@ -19483,9 +19483,10 @@ fn owned_view_model_from_publisher_era_instance_uses_nested_serialized_values() 
         context.boolean_value_by_property_name_path("container/input/enabled"),
         Some(true)
     );
-    assert_eq!(
-        context.string_value_by_property_name_path("container/input/label"),
-        Some("publisher value".as_bytes())
+    assert!(
+        context
+            .string_value_by_property_name_path("container/input/label")
+            .is_some_and(|value| value.as_ref() == "publisher value".as_bytes())
     );
 }
 
@@ -54123,20 +54124,22 @@ fn owned_view_model_links_expose_shared_string_state_through_the_parent_path() {
             .borrow_mut()
             .set_string_by_property_name_path("label", b"shared")
     );
-    assert_eq!(
+    assert!(
         owner
             .borrow()
-            .string_value_by_property_name_path("child/label"),
-        Some(&b"shared"[..])
+            .string_value_by_property_name_path("child/label")
+            .is_some_and(|value| value.as_ref() == b"shared")
     );
     assert!(
         owner
             .borrow_mut()
             .set_string_by_property_name_path("child/label", b"parent-write")
     );
-    assert_eq!(
-        child.borrow().string_value_by_property_name_path("label"),
-        Some(&b"parent-write"[..])
+    assert!(
+        child
+            .borrow()
+            .string_value_by_property_name_path("label")
+            .is_some_and(|value| value.as_ref() == b"parent-write")
     );
     let held_owner = owner.borrow();
     assert!(
@@ -54144,16 +54147,18 @@ fn owned_view_model_links_expose_shared_string_state_through_the_parent_path() {
             .borrow_mut()
             .set_string_by_property_name_path("label", b"deferred")
     );
-    assert_eq!(
-        held_owner.string_value_by_property_name_path("child/label"),
-        Some(&b"parent-write"[..])
+    assert!(
+        held_owner
+            .string_value_by_property_name_path("child/label")
+            .is_some_and(|value| value.as_ref() == b"deferred"),
+        "a held parent borrow re-reads the retained child endpoint"
     );
     drop(held_owner);
-    assert_eq!(
+    assert!(
         owner
             .borrow()
-            .string_value_by_property_name_path("child/label"),
-        Some(&b"deferred"[..])
+            .string_value_by_property_name_path("child/label")
+            .is_some_and(|value| value.as_ref() == b"deferred")
     );
 
     let detached = RuntimeOwnedViewModelHandle::detached_graph(&[owner.clone(), child.clone()]);
@@ -54167,17 +54172,17 @@ fn owned_view_model_links_expose_shared_string_state_through_the_parent_path() {
             .borrow_mut()
             .set_string_by_property_name_path("label", b"detached")
     );
-    assert_eq!(
+    assert!(
         detached[0]
             .borrow()
-            .string_value_by_property_name_path("child/label"),
-        Some(&b"detached"[..])
+            .string_value_by_property_name_path("child/label")
+            .is_some_and(|value| value.as_ref() == b"detached")
     );
-    assert_eq!(
+    assert!(
         owner
             .borrow()
-            .string_value_by_property_name_path("child/label"),
-        Some(&b"deferred"[..])
+            .string_value_by_property_name_path("child/label")
+            .is_some_and(|value| value.as_ref() == b"deferred")
     );
 }
 

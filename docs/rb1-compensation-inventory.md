@@ -56,6 +56,24 @@ change-propagation *by polling*. The five public seams that fan into it:
   child mutation stays stale until the next handle borrow. The typed Font
   endpoint must remove that boundary before the direct-property clock union
   deletes.
+- [x] f7B removed that owned String/Font payload snapshot boundary. String
+  cells now own `Arc<[u8]>`, Font cells own the complete file-index/live-Font
+  value, and every retained alias/source candidate points at that one typed
+  endpoint. Owned reads return an `Arc`/value copy because a borrowed payload
+  guard cannot remain live across an aliased mutation without also blocking
+  that mutation. String keeps content equality and deep-copy clone semantics
+  (`include/rive/generated/viewmodel/viewmodel_instance_string_base.hpp:33-55`;
+  `src/viewmodel/viewmodel_instance_string.cpp:10-25`). Font preserves the
+  pinned index/live setter ordering, including the possible two dependent
+  cascades for a changed live pointer, and deep clones retain the file index
+  but clear the private live Font
+  (`src/viewmodel/viewmodel_instance_asset_font.cpp:13-86`). Candidate graphs
+  retain the exact String/Font source cell, as C++ retains the source value
+  and registers the bind on it (`src/data_bind/data_bind.cpp:210-216`). Scene's
+  nested String cache is gone; public cursors reread the retained endpoint.
+  This slice covers owned retained contexts. Imported override storage,
+  artboard target/cache values, converter operands, and the remaining direct-
+  property mutation-clock union are separate cuts and remain inventoried.
 - [x] f1 deleted `linked_aliases`, `add_linked_alias`,
   `remove_linked_alias`, and `synchronize_linked_aliases`. Linked scalar
   properties share retained cells by identity; deep-copy `Clone` remains the

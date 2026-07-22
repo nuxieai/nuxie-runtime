@@ -23437,6 +23437,11 @@ fn node_record(
     artboard_indices: &BTreeMap<ArtboardId, u32>,
     nested_artboard_data_bind_path: Option<&[u32]>,
 ) -> std::result::Result<ExportedRecord, EditReason> {
+    // Rive C++ d788e8ec: dev/defs/shapes/image.json generates
+    // ImageBase::m_OriginX/Y with 0.5f. Export is sparse relative to that
+    // schema default, not relative to Scene's authored coordinate convention.
+    const RIVE_IMAGE_ORIGIN_DEFAULT: f32 = 0.5;
+
     let parent_id = u32::try_from(parent_id).map_err(|_| EditReason::CapacityExceeded)?;
     let mut properties = Vec::new();
     if parent_id != 0 {
@@ -23536,10 +23541,10 @@ fn node_record(
             if spec.scale_y != 1.0 {
                 properties.push(ExportedProperty::ScaleY(spec.scale_y));
             }
-            if spec.origin_x != 0.0 {
+            if spec.origin_x != RIVE_IMAGE_ORIGIN_DEFAULT {
                 properties.push(ExportedProperty::ImageOriginX(spec.origin_x));
             }
-            if spec.origin_y != 0.0 {
+            if spec.origin_y != RIVE_IMAGE_ORIGIN_DEFAULT {
                 properties.push(ExportedProperty::ImageOriginY(spec.origin_y));
             }
             if spec.fit != 0 {
@@ -23783,7 +23788,7 @@ mod tests {
     use nuxie_binary::{
         RuntimeConvertedDataValue, RuntimeDataConverterInterpolatorState, RuntimeDataValue,
     };
-    use nuxie_render_stream::RenderStream;
+    use nuxie_render_stream::{Command, RenderStream};
     use nuxie_runtime::RuntimeOwnedViewModelListSourceHandle;
 
     use super::*;
@@ -24580,6 +24585,115 @@ mod tests {
             push_var_uint(&mut bytes, 0);
         }
         bytes
+    }
+
+    #[test]
+    fn authored_top_left_image_origin_matches_cpp_after_exact_riv_round_trip() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let image = tx.create_image_asset(ImageAssetSpec {
+                name: "Top-left image".into(),
+                bytes: fixture_40_by_20_png(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Top-left artboard".into(),
+                width: 80.0,
+                height: 40.0,
+            })?;
+            tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Image(ImageSpec {
+                    name: "Top-left image".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 2.0,
+                    scale_y: 2.0,
+                    image,
+                    origin_x: 0.0,
+                    origin_y: 0.0,
+                    fit: 0,
+                    alignment_x: 0.0,
+                    alignment_y: 0.0,
+                    crop: None,
+                }),
+            )?;
+            Ok(())
+        })?;
+
+        let exported = scene.export_records();
+        let image = exported
+            .records()
+            .iter()
+            .find(|record| record.kind == ExportedObjectKind::Image)
+            .context("authored Image record")?;
+        assert!(
+            image
+                .properties
+                .contains(&ExportedProperty::ImageOriginX(0.0))
+                && image
+                    .properties
+                    .contains(&ExportedProperty::ImageOriginY(0.0)),
+            // C++ oracle d788e8ec: dev/defs/shapes/image.json and generated
+            // image_base.hpp initialize omitted Image origins to 0.5.
+            "top-left origin must be explicit against the C++ schema default"
+        );
+
+        let bytes = encode_authoring_records(exported.into_authoring_records());
+        let file = Arc::new(File::import(&bytes)?);
+        let mut rust = OwnedArtboardInstance::instantiate(file, 0)?;
+        let rust_stream = parse_single_frame(&owned_draw_stream(&mut rust)?)?;
+
+        let Some(cpp_runner) = std::env::var_os("RIVE_GOLDEN_RUNNER") else {
+            eprintln!(
+                "skipping C++ top-left Image oracle; set RIVE_GOLDEN_RUNNER to the pinned golden runner"
+            );
+            return Ok(());
+        };
+        let fixture_path = std::env::temp_dir().join(format!(
+            "nuxie-top-left-image-origin-parity-{}.riv",
+            std::process::id()
+        ));
+        std::fs::write(&fixture_path, &bytes)?;
+        let output = std::process::Command::new(cpp_runner)
+            .args(["--file"])
+            .arg(&fixture_path)
+            .args(["--artboard", "Top-left artboard", "--samples", "0"])
+            .output()
+            .context("run pinned C++ top-left Image oracle")?;
+        let _ = std::fs::remove_file(&fixture_path);
+        assert!(
+            output.status.success(),
+            "pinned C++ rejected the exact authored fixture: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let cpp_stream = RenderStream::parse(&String::from_utf8(output.stdout)?)?;
+        let image_pipeline = |stream: &RenderStream| {
+            stream
+                .frames
+                .first()
+                .into_iter()
+                .flat_map(|frame| frame.commands.iter())
+                .filter(|command| {
+                    matches!(
+                        command,
+                        Command::Transform(_)
+                            | Command::DrawImage { .. }
+                            | Command::DrawImageMesh { .. }
+                    )
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(cpp_stream.frame_size, Some((80, 40)));
+        assert_eq!(rust_stream.resources, cpp_stream.resources);
+        assert_eq!(
+            image_pipeline(&rust_stream),
+            image_pipeline(&cpp_stream),
+            "the exact authored .riv must place and draw the Image identically in Rust and pinned C++"
+        );
+        Ok(())
     }
 
     #[test]

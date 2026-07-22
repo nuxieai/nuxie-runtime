@@ -313,11 +313,43 @@ public seams that originally fanned into it:
 
 ## Deletion-gate checklist (f)
 
-Still queued once the remaining public seams are re-implemented (zero non-test,
-non-family callers): `owned_view_model_context_candidates_for_nested_host`
-and `bind_active_owned_view_model_triggers_for_candidates`. f13 deleted the
-listener-triggered whole-context rebind compensation, the dead trigger-sync
-branch, and the obsolete `rebind_owned_view_model_context_candidates` /
+Remaining work is now explicitly split into f14 (one atomic code landing) and
+f15 (closure evidence):
+
+- [ ] f14A: add the production owned `DataContext` carrier: ordered local
+  retained handles/scopes, optional parent, actual-instance-id resolution,
+  exact property/structural source lookup, and context identity. Slot keys are
+  placement metadata only, matching `data_context.hpp:37-61,104-124` and
+  `data_context.cpp:166-261,397-506`; delete candidate path rewriting rather
+  than transplanting it into the new type.
+- [ ] f14B: migrate all candidate consumers in `artboard.rs`,
+  `artboard_data_bind.rs`, `data_bind_graph.rs`, and
+  `state_machine/instance.rs`. Nested artboards and component-list rows build
+  local-plus-parent contexts instead of prefixing child scope paths into every
+  inherited candidate. Listener cell binding/writes, converter operands,
+  font sync, trigger/reset advance coverage, public bind seams, clone/reset,
+  and pushed structural relink must all use the same retained context.
+- [ ] f14C: transition trigger compare/use obtains the source cell from the
+  bindable target's retained `DataBind`; fire-trigger actions retain the
+  authored path and resolve it from the live context at perform time. Delete
+  the active trigger-cell vector and the call-tree parameters that carry it.
+- [ ] f14D: zero production occurrences of
+  `RuntimeOwnedViewModelBindingCandidate`, `owned_view_model_candidates`,
+  `artboard_owned_view_model_candidates`,
+  `owned_view_model_context_candidates_for_nested_host`,
+  `bind_active_owned_view_model_triggers_for_candidates`, and the active
+  `StateMachineViewModelTriggerInstance` cell-shadow mechanism. Roughly twelve
+  candidate tests migrate to direct parent/local-context contracts; public
+  trigger inspection survives through immutable metadata plus the canonical
+  retained source.
+- [ ] f15: repeat this inventory, run every Phase-RB floor (including scripted
+  immediately before push and the 1,468 renderer rows), and obtain clean
+  independent Standards/Spec reviews. Only then close the parent (f) and
+  #RB-1 boxes.
+
+f13 already deleted the listener-triggered whole-context rebind compensation,
+the dead trigger-sync branch, and the obsolete
+`rebind_owned_view_model_context_candidates` /
 `refresh_owned_view_model_candidates` symbols while retaining their legitimate
 explicit-bind, pushed-structural-relink, and exact-dirt collection operations
 under C++-shaped names. Already deleted:

@@ -451,6 +451,59 @@ upstream-sync-map registry).
     vectors, the nested-host flattening helper, and the active-trigger shadow
     path remain queued for the atomic parent-linked DataContext/source-path
     migration. Renderer goldens are not applicable.
+  - [ ] (f14) replace the last candidate/shadow layer with the production
+    parent-linked owned `DataContext`. This is one atomic landing; the labels
+    below are implementation checkpoints, not independently pushable
+    half-migrations:
+    - [ ] (f14A) finish the owned production context carrier. It retains an
+      ordered local main/global instance list plus one parent link, resolves
+      properties/instances/structural sources locally before parent fallback,
+      and owns exact-source listener/write/advance/rebind lookup. Global slot
+      keys control placement only; resolution compares the occupying
+      instance's actual view-model id and never rewrites authored paths
+      (`data_context.hpp:23-61,90-135`; `data_context.cpp:185-261,397-506`).
+      The additive `view_model_cell::RuntimeDataContext` proves the lookup
+      shape for file-owned cells but is not yet the production owned-context
+      carrier; f14A must bridge retained `RuntimeOwnedViewModelHandle` /
+      scoped-child identity without copying the owned graph.
+    - [ ] (f14B) migrate every state-machine, artboard, graph, converter,
+      listener, font, advance, and structural-relink consumer from
+      `RuntimeOwnedViewModelBindingCandidate` slices to that context. Nested
+      artboards and component-list rows create a local context whose parent is
+      the complete owning context; a nested host with no local instance/globals
+      passes the parent through unchanged (`artboard.cpp:2551-2567,2694-2707`;
+      `nested_artboard.cpp:885-939`). This removes path-prefix flattening and
+      preserves local-main, local-global, then parent resolution order.
+    - [ ] (f14C) delete the active ViewModel-trigger shadow route. Transition
+      trigger compare/use reads the exact source retained by the bindable
+      property's `DataBind`; `StateMachineFireTrigger` retains its authored
+      path and resolves it against the current `DataContext` at perform time
+      (`transition_viewmodel_condition.cpp:49-60`;
+      `transition_property_viewmodel_comparator.cpp:50-67`;
+      `state_machine_fire_trigger.cpp:7-18`). Remove the active trigger-cell
+      vector and the signatures that thread it through layer/transition/fire
+      evaluation; keep only immutable imported metadata needed by public
+      inspection APIs.
+    - [ ] (f14D) deletion proof: no production occurrence of
+      `RuntimeOwnedViewModelBindingCandidate`, `owned_view_model_candidates`,
+      `artboard_owned_view_model_candidates`,
+      `owned_view_model_context_candidates_for_nested_host`,
+      `bind_active_owned_view_model_triggers_for_candidates`, or the active
+      `StateMachineViewModelTriggerInstance` cell shadow remains. Migrate the
+      approximately twelve candidate-contract tests to parent/local-context
+      contracts and add probe coverage for local-vs-parent order, cross-model
+      global-slot resolution, nested/component-list parent fallback,
+      structural relink, listener writes, transition-trigger consumption, and
+      fire-trigger live-context resolution.
+  - [ ] (f15) close the overall deletion gate. Re-audit this checklist and
+    `docs/rb1-compensation-inventory.md` with zero family survivors; run
+    runtime/nuxie libs, the 721+ C++ probe, ordinary and scripted 317/317 /
+    647/647 zero-failure goldens, C API smoke, the probe-armed CI-shaped
+    workspace, and the 1,468-row renderer floor required by the Phase-RB exit
+    gate. Run independent Standards and Spec reviews, fix/re-review every
+    finding, run `make scripted-golden-compare` again immediately before the
+    RB-1 push, then check the parent (f) and #RB-1 boxes. Until f15 is green,
+    RB-1 is not complete and #RD-1 remains blocked.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -545,14 +598,16 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RB-1 final deletion/closure audit — the f12B closeout repair restored both
-   corpus floors to 317/317 entries and 647/647 exact segments with zero
-   failures. Audit `docs/rb1-compensation-inventory.md`, prove every deletion-
-   checklist symbol is gone, and run the full battery plus independent
-   Standards/Spec review before closing #RB-1. Run
-   `make scripted-golden-compare` before every further deletion cut is pushed;
+1. #RB-1 f14 production DataContext/source-path migration — execute f14A-D as
+   one atomic landing: parent-linked owned context, every candidate consumer,
+   canonical transition/fire-trigger source routing, then candidate/shadow
+   deletion. The current floor is 401/140/721 and 317/647 in both golden modes
+   with zero failures. Run `make scripted-golden-compare` before any f14 push;
    a red scripted floor stops the cut.
-2. ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
+2. #RB-1 f15 deletion/closure audit — prove the inventory empty, run every
+   Phase-RB floor including the 1,468 renderer rows and probe-armed workspace,
+   obtain clean independent Standards/Spec reviews, and only then close #RB-1.
+3. ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
    entries broken by concurrent main `c7d48ca0` (`db_health_tracker`,
    `echo_show_demo`, `list_index_script_access`, `superbowl`: wild
@@ -623,15 +678,15 @@ upstream-sync-map registry).
    drifted `ba2b6434`, and CI's `cargo test --workspace` skips the probe
    suite when `RIVE_CPP_PROBE` is unset, so main went red silently — the
    same class as the five `974aab66` component-list regressions.
-3. #B-1 port — execute the approved S3-1 (TextInput) + S3-3 (static linking)
+4. #B-1 port — execute the approved S3-1 (TextInput) + S3-3 (static linking)
    port per `docs/upstream-sync-map.md`; advance `LAST_SYNCED_SHA` to
    `b73bc675` on a green ratchet. (Text-input code is outside the #RB-1
    layer; may proceed in a lane while #RB-1 holds the spine.)
-4. #B-5 editor-cutover parity audit — classify every runtime-behavior hunk
+5. #B-5 editor-cutover parity audit — classify every runtime-behavior hunk
    of `974aab66`/`c7d48ca0` (see Ticket checklist); most (b)/(c) rows are
    expected to dissolve into #RB-1's deletion gate.
-5. #OR-1 — side-channel spec + C++ emit once the floor is restored.
-6. #FT-TEXT — unblocked by the #B-1 approval; starts after the port lands.
+6. #OR-1 — side-channel spec + C++ emit once the floor is restored.
+7. #FT-TEXT — unblocked by the #B-1 approval; starts after the port lands.
 
 ## Pending USER-GATEs
 
@@ -1044,3 +1099,21 @@ Decisions log.)
   647/647 exact segments with zero failures, C API smoke and the CI-shaped
   workspace green. The remaining RB-1 cut is the parent-linked owned
   DataContext plus canonical transition/fire-trigger source path.
+- 2026-07-22 — #RB-1 remainder audit mapped the ambiguous final cut into f14
+  (one atomic production DataContext/source-path migration with A-D internal
+  checkpoints) and f15 (the actual deletion/evidence closure gate). Code
+  inventory confirms every prior compensation family is absent; the remaining
+  production surface is candidate/context routing in `artboard.rs`,
+  `artboard_data_bind.rs`, `data_bind_graph.rs`, and
+  `state_machine/instance.rs`, plus the active ViewModel-trigger cell route in
+  `state_machine.rs`, `state_machine/transition_conditions.rs`, and
+  `state_machine/instance.rs`. The converter-chain repair and probe-armed
+  workspace target had landed after the reported red range in `74b6e1fb`.
+  Current-head verification re-ran the two f8422eec regression entries
+  individually exact, then completed
+  `make scripted-golden-compare` at 317/317 entries and 647/647 segments with
+  zero failures. `make cpp-oracle-workspace-tests` also passed and its log
+  explicitly ran all 721 C++ probe tests. The complete battery also passed at
+  runtime 401/401, nuxie 140/140, ordinary 317/647, renderer 1,468/1,468,
+  C API smoke, and the full workspace. RB-1 remains open until f14 and f15 are
+  complete.

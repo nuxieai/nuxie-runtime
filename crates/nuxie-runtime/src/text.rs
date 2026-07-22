@@ -1790,6 +1790,12 @@ impl<'a> StaticTextSlice<'a> {
                         | "CubicInterpolatorComponent"
                         | "Shape"
                         | "Image"
+                        // C++ `Artboard::drawInternal` dispatches Text and Image as
+                        // independent sibling Drawables; an Image-owned crop Mesh
+                        // (`src/shapes/mesh.cpp::Mesh::draw`) does not narrow the
+                        // supported Text subtree.
+                        | "Mesh"
+                        | "MeshVertex"
                         | "PointsPath"
                         | "StraightVertex"
                         | "CubicDetachedVertex"

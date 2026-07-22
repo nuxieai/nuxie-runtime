@@ -10460,11 +10460,32 @@ impl RuntimeOwnedViewModelInstance {
         self.cell_by_property_path(&property_path)
     }
 
-    pub(crate) fn project_relative_number_value_by_context_name_hash_path(
+    /// Resolve an absolute authored source path against one instance in a
+    /// compatibility context chain. The first source segment names the view
+    /// model at `context_path`; the remaining segments walk that retained
+    /// instance to the exact property cell.
+    pub(crate) fn cell_for_scoped_source_path(
+        &self,
+        context_path: &[usize],
+        path: &[u32],
+    ) -> Option<RuntimeViewModelCell> {
+        let (&view_model_index, property_path) = path.split_first()?;
+        if property_path.is_empty() {
+            return None;
+        }
+        let view_model_index = usize::try_from(view_model_index).ok()?;
+        let property_path = property_path
+            .iter()
+            .map(|&segment| usize::try_from(segment).ok())
+            .collect::<Option<Vec<_>>>()?;
+        self.cell_by_scoped_property_path(context_path, view_model_index, &property_path)
+    }
+
+    pub(crate) fn project_relative_cell_by_context_name_hash_path(
         &self,
         context_path: &[usize],
         source_path: &[u32],
-    ) -> Result<Option<f32>, RuntimeProjectNameAmbiguity> {
+    ) -> Result<Option<RuntimeViewModelCell>, RuntimeProjectNameAmbiguity> {
         if source_path.is_empty() {
             return Ok(None);
         }
@@ -10488,14 +10509,16 @@ impl RuntimeOwnedViewModelInstance {
             };
             property_path.push(property_index);
         }
-        Ok(self.number_value_by_property_path(&property_path))
+        Ok(self
+            .cell_by_property_path(&property_path)
+            .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Number(_))))
     }
 
-    pub(crate) fn project_relative_number_value_by_context_name_path(
+    pub(crate) fn project_relative_cell_by_context_name_path(
         &self,
         context_path: &[usize],
         source_path: &[String],
-    ) -> Result<Option<f32>, RuntimeProjectNameAmbiguity> {
+    ) -> Result<Option<RuntimeViewModelCell>, RuntimeProjectNameAmbiguity> {
         if source_path.is_empty() {
             return Ok(None);
         }
@@ -10518,7 +10541,9 @@ impl RuntimeOwnedViewModelInstance {
             };
             property_path.push(property_index);
         }
-        Ok(self.number_value_by_property_path(&property_path))
+        Ok(self
+            .cell_by_property_path(&property_path)
+            .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Number(_))))
     }
 
     pub(crate) fn number_value_by_context_source_path(

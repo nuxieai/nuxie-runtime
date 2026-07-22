@@ -409,12 +409,11 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
         let graph_changed = self
             .data_bind_graph
             .set_active_view_model_source_for_data_bind(data_bind_index, graph_value);
-        if let RuntimeListenerViewModelChangeValue::Number(value) = value {
-            self.data_bind_graph
-                .refresh_operation_view_model_number_dependents_for_owned_context_path(
-                    &source_path,
-                    *value,
-                );
+        if matches!(value, RuntimeListenerViewModelChangeValue::Number(_)) {
+            // The listener wrote the retained cell above. Its owning binds,
+            // including converter-operand dependencies, are already dirty;
+            // fold that pushed dirt before this frame's data-bind pass.
+            self.data_bind_graph.collect_retained_owned_source_dirt();
         }
         context_changed || graph_changed
     }

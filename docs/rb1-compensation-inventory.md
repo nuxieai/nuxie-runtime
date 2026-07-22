@@ -17,9 +17,10 @@ change-propagation *by polling*. The five public seams that fan into it:
 - `mutation_generation`: the root clock and its artboard readers remain in
   `view_model.rs`, `artboard.rs`, and `artboard_data_bind.rs`. f9 deleted the
   state-machine candidate projection and the candidate accessor; state-machine
-  steady frames no longer sample this clock. Remaining consumers are artboard
-  target/cache refresh and converter operands, plus their clock-lifecycle
-  tests.
+  steady frames no longer sample this clock. f10 moved owned converter
+  operands to retained exact-cell dependents, so remaining consumers are the
+  artboard primary target/cache refresh, the structural key, and their
+  clock-lifecycle tests.
 - `RuntimeArtboardOwnedContextKey` (VM structure epoch, NOT render-cache): struct `artboard_data_bind.rs:507`, instance key `:511-518`; ctors/comparators `:521,:539,:557,:575,:594`; field set/cleared `:4576,4583,4638-4639,5398`; users `retain_owned_view_model_context_candidates` `:4627-4640`, `refresh_owned_view_model_artboard_context_if_mutated` `:5694-5697`, `:5890`.
 - [x] f9 deleted `owned_view_model_candidate_generations` and every
   state-machine read/write/clone/reset site.
@@ -103,7 +104,7 @@ change-propagation *by polling*. The five public seams that fan into it:
   directly, while inactive authored/generated compatibility storage remains
   untouched and becomes visible again if authored selection replaces the
   explicit link. The direct-property clock union remains only for unmigrated
-  artboard target/cache and converter consumers. Direct
+  artboard target/cache consumers. Direct
   reassignment of the same retained child also runs the lifecycle and returns
   success; the prior `Ok(false)` equality shortcut was absent from C++.
   Selecting an authored instance after an explicit link detaches that link and
@@ -145,7 +146,8 @@ change-propagation *by polling*. The five public seams that fan into it:
   for deterministic context resolution. Linked-child read models use a
   clone-fresh allocation identity, not the semantic instance ID, so detached
   graphs retain C++ pointer-key inequality. The artboard structural key, root
-  clock, target/cache values, and converter operands remain inventoried.
+  clock, and target/cache values remain inventoried; f10 supersedes the
+  converter-operand entry below.
   Evidence: runtime lib 363/363, nuxie lib 133/133, C++ probe 708/708,
   ordinary and scripted goldens 317/317 entries plus 647/647 exact segments
   with zero failures, C API smoke and workspace green; Standards and Spec
@@ -170,7 +172,21 @@ change-propagation *by polling*. The five public seams that fan into it:
   Their graph values remain derived read models rather than cell payloads;
   wakeup identity is the property cell and structural relinking is pushed, so
   no candidate-generation rebind is required. Artboard target/cache storage
-  and project-converter operands remain separate consumers of copied values.
+  remains a separate copied-value consumer.
+- [x] f10 migrated owned `OperationViewModel` and Project converter operands
+  from copied snapshots/rescans to exact retained Number cells. State-machine
+  operands register on their source node's existing
+  `RuntimeRetainedDataBind` sink, matching C++ registering the outer
+  `DataBind*` (`data_converter_operation_viewmodel.cpp:8-27,48-59`). Project
+  conversion resolves the live cell value on demand; its serialized
+  `resolved_values` vector is now default/imported compatibility state only.
+  Artboard's still-split authored-bind records use fresh per-occurrence sinks.
+  Shared/property/converter-property records route directly; formula/list
+  records wake their existing bounded active pass. This is an explicit
+  transitional adapter until the next slice reunifies one shared retained
+  state per authored `data_bind_index`. The old owned operand snapshot builders and
+  listener-write path scanners are deleted. Remaining clock-driven copied
+  state is artboard primary target/cache projection plus the structural key.
 - `default_value` fields `:74` (target), `:219` (source); copies `:987-992,:4270,:4318-4322,:4427,:4637,:4666,:4747,:4781`; whole `:4744-6262` block is per-type default_value rw.
 - `target_origin` field `:206`; set/cleared `:4356,7846,9387,9547,9560,9565,9582,9917`.
 - `mark_reconcile_dirty` `:9569-9588`; callers `:4294,4331,4433,4580,4614,4650,4677`.

@@ -364,6 +364,14 @@ pub struct RuntimeViewModelCell {
     state: Rc<RefCell<RuntimeViewModelCellState>>,
 }
 
+impl PartialEq for RuntimeViewModelCell {
+    fn eq(&self, other: &Self) -> bool {
+        self.ptr_eq(other)
+    }
+}
+
+impl Eq for RuntimeViewModelCell {}
+
 impl std::fmt::Debug for RuntimeViewModelCell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let state = self.state.borrow();

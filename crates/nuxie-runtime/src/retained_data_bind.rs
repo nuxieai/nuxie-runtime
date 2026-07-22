@@ -44,6 +44,13 @@ pub struct RuntimeRetainedDataBind {
     binds_once: bool,
     sink: RuntimeCellDirtSink,
     source: Option<RuntimeViewModelCell>,
+    /// Converter operands that dirty this SAME owning bind. C++
+    /// `DataConverterOperationViewModel::bindFromContext` registers the
+    /// outer `DataBind*` directly on its operand value
+    /// (`data_converter_operation_viewmodel.cpp:48-59`); these cells
+    /// therefore share `sink` with the primary source instead of owning
+    /// independently drained notification state.
+    additional_sources: Vec<RuntimeViewModelCell>,
     /// C++ `Flag::TargetOrigin`: which side the latched dirt came from.
     target_origin: bool,
     /// C++ `Flag::SuppressDirt`.
@@ -74,6 +81,7 @@ impl Clone for RuntimeRetainedDataBind {
         if let Some(source) = &self.source {
             cloned.set_source(source.clone());
         }
+        cloned.set_additional_sources(self.additional_sources.clone());
         cloned.target_origin = self.target_origin;
         cloned.dirt = self.dirt;
         cloned
@@ -87,6 +95,7 @@ impl RuntimeRetainedDataBind {
             binds_once,
             sink: RuntimeCellDirtSink::new(),
             source: None,
+            additional_sources: Vec::new(),
             target_origin: false,
             suppress_dirt: false,
             dirt: RuntimeCellDirt::NONE,
@@ -109,24 +118,69 @@ impl RuntimeRetainedDataBind {
         self.source.as_ref()
     }
 
-    /// C++ `DataBind::source(value)`: retain the cell, register as a
-    /// dependent unless the bind binds once.
-    pub fn set_source(&mut self, cell: RuntimeViewModelCell) {
-        self.clear_source();
-        if !self.binds_once {
-            cell.add_dependent(&self.sink);
-        }
-        self.source = Some(cell);
+    pub(crate) fn has_sources(&self) -> bool {
+        self.source.is_some() || !self.additional_sources.is_empty()
     }
 
-    /// C++ `DataBind::clearSource()`.
-    pub fn clear_source(&mut self) {
-        if let Some(source) = self.source.take()
+    fn unregister_sources(&self) {
+        if let Some(source) = &self.source
             && !self.binds_once
         {
             source.remove_dependent(&self.sink);
         }
+        for source in &self.additional_sources {
+            source.remove_dependent(&self.sink);
+        }
+    }
+
+    fn register_sources(&self) {
+        if let Some(source) = &self.source
+            && !self.binds_once
+        {
+            source.add_dependent(&self.sink);
+        }
+        // Converter operands register the outer DataBind even when the
+        // primary bind is `bindsOnce`
+        // (`data_converter_operation_viewmodel.cpp:48-59`).
+        for source in &self.additional_sources {
+            source.add_dependent(&self.sink);
+        }
+    }
+
+    /// C++ `DataBind::source(value)`: retain the cell, register as a
+    /// dependent unless the bind binds once.
+    pub fn set_source(&mut self, cell: RuntimeViewModelCell) {
+        self.unregister_sources();
+        self.source = Some(cell);
+        self.register_sources();
+        self.sink.take_dirt();
+    }
+
+    /// C++ `DataBind::clearSource()`.
+    pub fn clear_source(&mut self) {
+        self.unregister_sources();
+        self.source = None;
+        self.register_sources();
         // Any latched source dirt refers to the departed cell.
+        self.sink.take_dirt();
+    }
+
+    /// Replace the converter-operand registrations owned by this bind.
+    /// Duplicate cells are harmless: `RuntimeViewModelCell::add_dependent`
+    /// deduplicates the shared sink by identity.
+    pub(crate) fn set_additional_sources(&mut self, sources: Vec<RuntimeViewModelCell>) {
+        if self.additional_sources.len() == sources.len()
+            && self
+                .additional_sources
+                .iter()
+                .zip(&sources)
+                .all(|(current, next)| current.ptr_eq(next))
+        {
+            return;
+        }
+        self.unregister_sources();
+        self.additional_sources = sources;
+        self.register_sources();
         self.sink.take_dirt();
     }
 
@@ -326,6 +380,29 @@ mod tests {
         assert!(
             bind.pending_dirt().is_empty(),
             "bindsOnce receives no cascade"
+        );
+    }
+
+    #[test]
+    fn binds_once_still_observes_converter_operand_cells() {
+        let primary = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(2.0));
+        let mut bind = RuntimeRetainedDataBind::new(TO_TARGET, true);
+        bind.set_source(primary.clone());
+        bind.set_additional_sources(vec![operand.clone()]);
+
+        primary.set_value(RuntimeViewModelCellValue::Number(9.0));
+        bind.collect_source_dirt();
+        assert!(
+            bind.pending_dirt().is_empty(),
+            "bindsOnce skips only the primary source registration"
+        );
+
+        operand.set_value(RuntimeViewModelCellValue::Number(7.0));
+        bind.collect_source_dirt();
+        assert!(
+            bind.pending_dirt().contains(RuntimeCellDirt::BINDINGS),
+            "C++ OperationViewModel registers its outer DataBind even when the primary bind is bindsOnce"
         );
     }
 

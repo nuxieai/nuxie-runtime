@@ -14,7 +14,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 363/363, nuxie lib 133/133,
+Regression floor (must stay green): runtime lib 370/370, nuxie lib 134/134,
 C++ probe 708/708, both runtime golden gates 317/317 exact / 647/647 segments
 with zero failures. The workspace push gate is green as of 2026-07-22. Review
 of e5(A) restored the distinction between raw `StateMachineInstance::advance`
@@ -303,6 +303,33 @@ upstream-sync-map registry).
     runtime lib 363/363, nuxie lib 133/133, probe 708/708, ordinary and
     scripted goldens 317/317 entries and 647/647 exact segments with zero
     failures, C API smoke and workspace green; Standards and Spec re-reviews
+    clean. Renderer goldens are not applicable because no renderer/draw code
+    changed.
+  - [x] (f10) owned converter operands retain their exact Number cells and
+    push dirt into the bind that owns the converter. `OperationViewModel`
+    reads its retained operand at conversion time; Project converter value
+    paths do the same instead of rebuilding `resolved_values` snapshots.
+    State-machine graph sources register operand cells on the SAME retained
+    bind sink as their primary source. Artboard authored binds are not yet
+    reunified, so each split converter occurrence temporarily owns a fresh
+    sink; shared/property/converter-property records route directly, while
+    formula/list records wake their existing bounded active pass. Clones
+    register independent sinks against the shared cells. This follows C++'s
+    retained converter source and outer-DataBind
+    dependent registration (`data_converter_operation_viewmodel.cpp:8-27,
+    48-59`), conversion-time read (`data_converter.cpp:34-55`), and queued
+    bind traversal (`data_bind_container.cpp:115-203`). The old owned-context
+    operand snapshot refreshers and listener-write path scanners are deleted;
+    serialized snapshots remain only for default/imported contexts. The
+    artboard structural key/root mutation clock still serves primary
+    target/cache refresh and is the next deletion slice, together with
+    reunifying all execution records for one authored DataBind. Focused
+    evidence: runtime lib 370/370, nuxie lib 134/134, C++ probe 708/708,
+    ordinary and scripted goldens 317/317 entries and 647/647 exact segments
+    with zero failures, C API smoke green, and `cargo test --workspace` green.
+    Review corrections covered source-origin routing, key-frame converter
+    subscription rewiring, steady-frame operand rescans/allocations, and exact
+    nested compatibility-context resolution; Standards and Spec re-reviews are
     clean. Renderer goldens are not applicable because no renderer/draw code
     changed.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
@@ -814,3 +841,17 @@ Decisions log.)
   with zero failures, C API smoke and workspace green; Standards and Spec
   re-reviews clean. Renderer goldens are not applicable because the slice
   changes no renderer/draw code.
+- 2026-07-22 — #RB-1 f10 replaced owned converter-operand snapshots and
+  write-path rescans with retained exact-cell dependencies. Operation-ViewModel
+  and Project value-path conversion read live Number cells; state-machine
+  operands share their owning bind's dirt sink, while artboard's transitional
+  split records use occurrence-owned sinks with clone-independent
+  subscriptions (formula/list wake their existing active pass). The artboard
+  target/cache clock and structural key remain for the next authored-bind
+  reunification/deletion slice. Review corrections fixed source-origin
+  routing, key-frame converter subscription rewiring, steady-frame operand
+  rescans/allocations, and exact nested compatibility-context resolution;
+  Standards and Spec re-reviews are clean. Full evidence is runtime lib
+  370/370, nuxie lib 134/134, C++ probe 708/708, ordinary and scripted goldens
+  317/317 entries plus 647/647 exact segments with zero failures, C API smoke
+  green, and the full workspace green. Renderer goldens are not applicable.

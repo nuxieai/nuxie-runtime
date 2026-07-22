@@ -3,6 +3,7 @@ use crate::data_bind_graph::{
     RuntimeDataBindGraphConverterState, RuntimeDataBindGraphFormulaRandomSource,
     RuntimeDataBindGraphRangeMapperProperty, RuntimeKeyFrameDataBindTarget,
     RuntimeKeyFrameDataBindTemplate, data_bind_flags_source_to_target_runs_first,
+    runtime_data_bind_graph_bind_owned_converter_operands_for_candidates,
     runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter_contains_global_id,
     runtime_data_bind_graph_converter_contains_source_change_random,
     runtime_data_bind_graph_converter_requires_persisting_custom_property_source,
@@ -21,7 +22,9 @@ use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::{
     RuntimeFontAssetValue, RuntimeOwnedViewModelListHandle, RuntimeOwnedViewModelStructuralSource,
 };
-use crate::view_model_cell::{RuntimeViewModelCell, RuntimeViewModelCellValue};
+use crate::view_model_cell::{
+    RuntimeCellDirt, RuntimeCellDirtSink, RuntimeViewModelCell, RuntimeViewModelCellValue,
+};
 use crate::{
     ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
     RuntimeDataContext, RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle,
@@ -504,6 +507,64 @@ struct RuntimeStatefulViewModelUpdate {
     view_model_index: usize,
     property_path: Vec<usize>,
     value: RuntimeStatefulViewModelValueUpdate,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RuntimeArtboardRetainedConverterOwner {
+    Shared(usize),
+    Property(usize),
+    CustomProperty,
+    FormulaToken,
+    ConverterProperty(usize),
+    List,
+}
+
+#[derive(Debug)]
+pub(super) struct RuntimeArtboardRetainedConverterOperands {
+    owner: RuntimeArtboardRetainedConverterOwner,
+    cells: Vec<RuntimeViewModelCell>,
+    sink: RuntimeCellDirtSink,
+}
+
+impl RuntimeArtboardRetainedConverterOperands {
+    fn new(
+        owner: RuntimeArtboardRetainedConverterOwner,
+        converter: &RuntimeDataBindGraphConverter,
+    ) -> Option<Self> {
+        let mut cells = Vec::new();
+        converter.retained_operand_cells(&mut cells);
+        if cells.is_empty() {
+            return None;
+        }
+        let sink = RuntimeCellDirtSink::new();
+        for cell in &cells {
+            // C++ converter operands register the owning DataBind itself
+            // (`data_converter_operation_viewmodel.cpp:48-59`). Artboard's
+            // authored-bind state is still split across execution records;
+            // this owner tag routes the shared pushed dirt to that exact
+            // record until the next deletion slice reunifies it.
+            cell.add_dependent(&sink);
+        }
+        Some(Self { owner, cells, sink })
+    }
+
+    fn take_dirt(&self) -> bool {
+        self.sink.take_dirt().contains(RuntimeCellDirt::BINDINGS)
+    }
+}
+
+impl Clone for RuntimeArtboardRetainedConverterOperands {
+    fn clone(&self) -> Self {
+        let sink = RuntimeCellDirtSink::new();
+        for cell in &self.cells {
+            cell.add_dependent(&sink);
+        }
+        Self {
+            owner: self.owner,
+            cells: self.cells.clone(),
+            sink,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1783,63 +1844,6 @@ fn runtime_owned_view_model_value_for_candidates(
             )
         })
     })
-}
-
-pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
-    converter: &mut RuntimeDataBindGraphConverter,
-    candidates: &[RuntimeOwnedViewModelBindingCandidate],
-) -> bool {
-    match converter {
-        RuntimeDataBindGraphConverter::OperationViewModel {
-            operation_value,
-            source_path: Some(source_path),
-            ..
-        } => {
-            let value = candidates
-                .iter()
-                .find_map(|candidate| {
-                    let context = candidate.context.borrow();
-                    candidate.context_chain.iter().find_map(|context_path| {
-                        let source_path = candidate.source_path_for_context_path(
-                            &context,
-                            context_path,
-                            source_path,
-                            false,
-                        )?;
-                        let property_path =
-                            RuntimeOwnedViewModelContextPathStorage::from_context_source_path(
-                                &context,
-                                context_path,
-                                source_path.as_ref(),
-                            )?;
-                        context.number_value_by_property_path(property_path.as_slice())
-                    })
-                })
-                .unwrap_or(0.0);
-            if *operation_value == value {
-                return false;
-            }
-            *operation_value = value;
-            true
-        }
-        RuntimeDataBindGraphConverter::Project {
-            program,
-            resolved_values,
-            ..
-        } => crate::data_bind_graph::refresh_runtime_project_resolved_values_for_owned_candidates(
-            program,
-            resolved_values,
-            candidates,
-        ),
-        RuntimeDataBindGraphConverter::Group(converters) => {
-            converters.iter_mut().fold(false, |changed, converter| {
-                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
-                    converter, candidates,
-                ) || changed
-            })
-        }
-        _ => false,
-    }
 }
 
 fn runtime_owned_view_model_binding_value_for_property_path(
@@ -4382,7 +4386,7 @@ impl ArtboardInstance {
         }
         let mut changed = if bind_self && rebind_self {
             let mut changed = self.refresh_artboard_converter_dependents(|converter| {
-                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
+                runtime_data_bind_graph_bind_owned_converter_operands_for_candidates(
                     converter, candidates,
                 )
             });
@@ -4391,6 +4395,7 @@ impl ArtboardInstance {
                 candidates,
                 allow_full_context_bindings,
             );
+            self.retain_artboard_owned_converter_operands();
             self.artboard_data_bind_source_queues
                 .enqueue_numeric_push_sources();
             changed
@@ -4603,6 +4608,7 @@ impl ArtboardInstance {
                 context_chain,
                 allow_full_context_bindings,
             );
+            self.retain_artboard_owned_converter_operands();
             self.artboard_data_bind_source_queues
                 .enqueue_numeric_push_sources();
         }
@@ -5506,6 +5512,7 @@ impl ArtboardInstance {
         self.artboard_owned_view_model_context = None;
         self.artboard_owned_view_model_candidates.clear();
         self.artboard_owned_view_model_handle = None;
+        self.clear_artboard_owned_converter_operands();
         let mut changed = false;
         let paths = self
             .artboard_property_bindings
@@ -5711,6 +5718,13 @@ impl ArtboardInstance {
             if let Some(file) = self.runtime_file_arc() {
                 self.bind_owned_view_model_target_to_source_bindings(&file, &candidates, true);
             }
+            self.refresh_artboard_converter_dependents(|converter| {
+                runtime_data_bind_graph_bind_owned_converter_operands_for_candidates(
+                    converter,
+                    &candidates,
+                )
+            });
+            self.retain_artboard_owned_converter_operands();
         }
 
         for nested in self.nested_artboards.values_mut() {
@@ -5833,14 +5847,19 @@ impl ArtboardInstance {
         // touches an unprojected list row or child. The retained invalidation
         // must be consumed exactly once by this artboard.
         let mut changed = true;
-        changed |= self.refresh_artboard_converter_dependents(|converter| {
-            runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
-                converter,
-                &candidates,
-            )
-        });
+        let operands_rebound = structural_rebind
+            && self.refresh_artboard_converter_dependents(|converter| {
+                runtime_data_bind_graph_bind_owned_converter_operands_for_candidates(
+                    converter,
+                    &candidates,
+                )
+            });
+        changed |= operands_rebound;
         changed |=
             self.bind_owned_view_model_artboard_values_for_candidates(&file, &candidates, true);
+        if structural_rebind || operands_rebound {
+            self.retain_artboard_owned_converter_operands();
+        }
         self.artboard_data_bind_source_queues
             .enqueue_numeric_push_sources();
         changed
@@ -5866,7 +5885,15 @@ impl ArtboardInstance {
         {
             return false;
         }
-        let refreshed_owned_context = self.refresh_owned_view_model_artboard_context_if_mutated();
+        // Operand cells push dirt directly into the exact converter
+        // occurrence. Drain them before the compatibility root-clock refresh
+        // can rebuild subscriptions; otherwise a direct cell write that
+        // bypasses that clock could be lost. C++'s DataBindContainer likewise
+        // consumes its dirty queue before applying the bind
+        // (`data_bind_container.cpp:115-147,156-203`).
+        let retained_converter_dirt = self.collect_artboard_owned_converter_operand_dirt();
+        let refreshed_owned_context =
+            self.refresh_owned_view_model_artboard_context_if_mutated() || retained_converter_dirt;
         if elapsed_seconds == 0.0
             && root_transform == Mat2D::IDENTITY
             && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
@@ -6821,6 +6848,162 @@ impl ArtboardInstance {
         update: impl FnMut(&mut RuntimeDataBindGraphConverter) -> bool,
     ) -> bool {
         self.refresh_artboard_converter_dependents_with_suppressed_data_bind(None, update)
+    }
+
+    fn retain_artboard_owned_converter_operands(&mut self) {
+        let mut retained = Vec::new();
+        for (data_bind_index, state) in &self.artboard_shared_data_bind_converter_states {
+            if let Some(operands) = RuntimeArtboardRetainedConverterOperands::new(
+                RuntimeArtboardRetainedConverterOwner::Shared(*data_bind_index),
+                &state.converter,
+            ) {
+                retained.push(operands);
+            }
+        }
+        for (index, binding) in self.artboard_property_bindings.iter().enumerate() {
+            if self
+                .artboard_shared_data_bind_converter_states
+                .contains_key(&binding.data_bind_index)
+            {
+                continue;
+            }
+            if let Some(operands) = binding.converter.as_ref().and_then(|converter| {
+                RuntimeArtboardRetainedConverterOperands::new(
+                    RuntimeArtboardRetainedConverterOwner::Property(index),
+                    converter,
+                )
+            }) {
+                retained.push(operands);
+            }
+        }
+        for binding in &self.artboard_custom_property_bindings {
+            if self
+                .artboard_shared_data_bind_converter_states
+                .contains_key(&binding.data_bind_index)
+            {
+                continue;
+            }
+            if let Some(operands) = binding.converter.as_ref().and_then(|converter| {
+                RuntimeArtboardRetainedConverterOperands::new(
+                    RuntimeArtboardRetainedConverterOwner::CustomProperty,
+                    converter,
+                )
+            }) {
+                retained.push(operands);
+            }
+        }
+        for binding in &self.artboard_formula_token_bindings {
+            if let Some(operands) = binding.converter.as_ref().and_then(|converter| {
+                RuntimeArtboardRetainedConverterOperands::new(
+                    RuntimeArtboardRetainedConverterOwner::FormulaToken,
+                    converter,
+                )
+            }) {
+                retained.push(operands);
+            }
+        }
+        for (index, binding) in self.artboard_converter_property_bindings.iter().enumerate() {
+            if let Some(operands) = binding.converter.as_ref().and_then(|converter| {
+                RuntimeArtboardRetainedConverterOperands::new(
+                    RuntimeArtboardRetainedConverterOwner::ConverterProperty(index),
+                    converter,
+                )
+            }) {
+                retained.push(operands);
+            }
+        }
+        for binding in &self.artboard_list_bindings {
+            if let Some(operands) = binding.converter.as_ref().and_then(|converter| {
+                RuntimeArtboardRetainedConverterOperands::new(
+                    RuntimeArtboardRetainedConverterOwner::List,
+                    converter,
+                )
+            }) {
+                retained.push(operands);
+            }
+        }
+        self.artboard_retained_converter_operands = retained;
+    }
+
+    fn clear_artboard_owned_converter_operands(&mut self) {
+        self.artboard_retained_converter_operands.clear();
+        for state in self.artboard_shared_data_bind_converter_states.values_mut() {
+            state.converter.clear_retained_owned_operands();
+        }
+        for converter in self
+            .artboard_property_bindings
+            .iter_mut()
+            .filter_map(|binding| binding.converter.as_mut())
+            .chain(
+                self.artboard_custom_property_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+            .chain(
+                self.artboard_formula_token_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+            .chain(
+                self.artboard_converter_property_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+            .chain(
+                self.artboard_list_bindings
+                    .iter_mut()
+                    .filter_map(|binding| binding.converter.as_mut()),
+            )
+        {
+            converter.clear_retained_owned_operands();
+        }
+    }
+
+    fn collect_artboard_owned_converter_operand_dirt(&mut self) -> bool {
+        let mut changed = false;
+        for index in 0..self.artboard_retained_converter_operands.len() {
+            let owner = {
+                let operands = &self.artboard_retained_converter_operands[index];
+                operands.take_dirt().then_some(operands.owner)
+            };
+            let Some(owner) = owner else {
+                continue;
+            };
+            changed = true;
+            match owner {
+                RuntimeArtboardRetainedConverterOwner::Shared(data_bind_index) => {
+                    if let Some(state) = self
+                        .artboard_shared_data_bind_converter_states
+                        .get_mut(&data_bind_index)
+                    {
+                        // Operand cells cascade source-originated Bindings
+                        // dirt. C++ `DataBind::addDirt` therefore clears
+                        // TargetOrigin before the outer bind is queued
+                        // (`data_bind.cpp:502-529`).
+                        state.target_origin = false;
+                    }
+                    self.enqueue_artboard_shared_converter_direction(data_bind_index);
+                }
+                RuntimeArtboardRetainedConverterOwner::Property(index) => {
+                    self.enqueue_artboard_property_binding_target(index);
+                }
+                RuntimeArtboardRetainedConverterOwner::ConverterProperty(index) => {
+                    self.artboard_data_bind_target_queues
+                        .enqueue_converter_property(index);
+                }
+                // A pure target-to-source bind receives the operand's
+                // Bindings dirt but has no source-to-target apply. Do not
+                // invent a BindingsTarget pull from its stale target.
+                RuntimeArtboardRetainedConverterOwner::CustomProperty
+                | RuntimeArtboardRetainedConverterOwner::FormulaToken
+                | RuntimeArtboardRetainedConverterOwner::List => {}
+            }
+        }
+        if !changed {
+            return false;
+        }
+        self.mark_artboard_data_bind_work_dirty();
+        true
     }
 
     fn refresh_artboard_converter_dependents_with_suppressed_data_bind(
@@ -7918,6 +8101,102 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
+    /// #RB-1 f10: artboard authored binds are still split across execution
+    /// records, so each occurrence temporarily owns a routed sink. The sink
+    /// nevertheless retains the exact converter operand cell and clones must
+    /// consume shared-cell dirt independently, like cloned C++ DataBinds.
+    #[test]
+    fn retained_artboard_converter_operands_clone_with_independent_sinks() {
+        let operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(2.0));
+        let converter = RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_type: 2,
+            operation_value: 2.0,
+            default_operation_value: 2.0,
+            source_path: Some(vec![1]),
+            retained_operation_value: Some(operand.clone()),
+        };
+        let retained = RuntimeArtboardRetainedConverterOperands::new(
+            RuntimeArtboardRetainedConverterOwner::Property(0),
+            &converter,
+        )
+        .expect("retained operand");
+        let cloned = retained.clone();
+
+        assert!(operand.set_value(RuntimeViewModelCellValue::Number(7.0)));
+        assert!(retained.take_dirt());
+        assert!(!retained.take_dirt());
+        assert!(cloned.take_dirt());
+        assert!(!cloned.take_dirt());
+    }
+
+    #[test]
+    fn retained_shared_operand_dirt_resets_target_origin_before_routing() {
+        let file = font_binding_fixture();
+        let graphs = nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph");
+        let graph = graphs.artboards.first().expect("fixture artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard");
+        let operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(2.0));
+        let converter = RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_type: 2,
+            operation_value: 2.0,
+            default_operation_value: 2.0,
+            source_path: Some(vec![1]),
+            retained_operation_value: Some(operand.clone()),
+        };
+        let mut property = property_binding(7, DATA_BIND_FLAG_TWO_WAY);
+        property.converter = Some(converter.clone());
+        property.converter_state =
+            RuntimeDataBindGraphConverterState::for_converter(property.converter.as_ref());
+        let mut reverse = custom_binding(
+            7,
+            property.target_local_id,
+            property.property_key,
+            Some(converter),
+        );
+        reverse.flags = property.flags;
+        let properties = vec![property];
+        let custom = vec![reverse];
+        let shared = build_artboard_shared_data_bind_converter_states(&properties, &custom);
+        assert!(shared[&7].target_origin, "fixture starts target-originated");
+
+        artboard.artboard_data_bind_target_queues =
+            RuntimeArtboardDataBindTargetQueues::new(&properties, &[], &[]);
+        artboard.artboard_data_bind_source_queues =
+            RuntimeArtboardDataBindSourceQueues::new(&custom, &[], &[], &[]);
+        artboard.artboard_property_bindings = properties;
+        artboard.artboard_custom_property_bindings = custom;
+        artboard.artboard_shared_data_bind_converter_states = shared;
+        artboard.retain_artboard_owned_converter_operands();
+        assert_eq!(
+            artboard
+                .artboard_data_bind_target_queues
+                .drain_dirty_properties(),
+            vec![0]
+        );
+        assert!(
+            !artboard
+                .artboard_data_bind_source_queues
+                .has_custom_property_update_indices()
+        );
+
+        assert!(operand.set_value(RuntimeViewModelCellValue::Number(4.0)));
+        assert!(artboard.collect_artboard_owned_converter_operand_dirt());
+        assert!(!artboard.artboard_shared_data_bind_converter_states[&7].target_origin);
+        assert_eq!(
+            artboard
+                .artboard_data_bind_target_queues
+                .drain_dirty_properties(),
+            vec![0],
+            "source-originated operand dirt queues source-to-target"
+        );
+        assert!(
+            !artboard
+                .artboard_data_bind_source_queues
+                .has_custom_property_update_indices(),
+            "operand Bindings dirt must not invent a target-to-source pull"
+        );
+    }
+
     #[test]
     fn scripted_converter_defers_default_output_kind_validation() {
         let converter = RuntimeDataBindGraphConverter::Scripted {
@@ -7996,6 +8275,8 @@ mod tests {
             program: Arc::clone(&program),
             resolved_values: Vec::new(),
             default_resolved_values: Vec::new(),
+            retained_resolved_values: Vec::new(),
+            retained_values_bound: false,
         };
         let converter = RuntimeDataBindGraphConverter::Group(vec![
             RuntimeDataBindGraphConverter::PassThrough,
@@ -8025,6 +8306,8 @@ mod tests {
                 program,
                 resolved_values: vec![(context_path, crate::ProjectDataValue::Number(1.5))],
                 default_resolved_values: Vec::new(),
+                retained_resolved_values: Vec::new(),
+                retained_values_bound: false,
             },
         ]);
         assert_eq!(
@@ -9009,6 +9292,7 @@ mod tests {
                     operation_value: 3.0,
                     default_operation_value: 3.0,
                     source_path: Some(vec![1]),
+                    retained_operation_value: None,
                 }),
             ),
             custom_binding(

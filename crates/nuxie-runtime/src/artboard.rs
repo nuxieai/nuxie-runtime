@@ -21,19 +21,19 @@ use crate::artboard_data_bind::{
     RuntimeArtboardImageAssetBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
     RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
     RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardOwnedContextKey,
-    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardSharedDataBindConverterState,
-    RuntimeArtboardSoloBindingInstance, RuntimeArtboardSoloSourceBindingInstance,
-    RuntimeArtboardTextListBindingInstance, RuntimeNestedChildContextUpdate,
-    RuntimeOwnedViewModelBindingCandidate, apply_artboard_name_based_color_data_bind_defaults,
-    build_artboard_converter_property_bindings, build_artboard_custom_property_bindings,
-    build_artboard_default_view_model_values, build_artboard_formula_token_bindings,
-    build_artboard_image_asset_bindings, build_artboard_layout_computed_bindings,
-    build_artboard_list_bindings, build_artboard_nested_host_bindings,
-    build_artboard_numeric_source_bindings, build_artboard_property_bindings,
-    build_artboard_shared_data_bind_converter_states, build_artboard_solo_bindings,
-    build_artboard_solo_source_bindings, build_artboard_text_list_bindings,
-    build_nested_host_data_bind_source_local_slots, build_nested_host_data_bind_source_locals,
-    build_nested_host_view_model_instance_locals,
+    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardRetainedConverterOperands,
+    RuntimeArtboardSharedDataBindConverterState, RuntimeArtboardSoloBindingInstance,
+    RuntimeArtboardSoloSourceBindingInstance, RuntimeArtboardTextListBindingInstance,
+    RuntimeNestedChildContextUpdate, RuntimeOwnedViewModelBindingCandidate,
+    apply_artboard_name_based_color_data_bind_defaults, build_artboard_converter_property_bindings,
+    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
+    build_artboard_formula_token_bindings, build_artboard_image_asset_bindings,
+    build_artboard_layout_computed_bindings, build_artboard_list_bindings,
+    build_artboard_nested_host_bindings, build_artboard_numeric_source_bindings,
+    build_artboard_property_bindings, build_artboard_shared_data_bind_converter_states,
+    build_artboard_solo_bindings, build_artboard_solo_source_bindings,
+    build_artboard_text_list_bindings, build_nested_host_data_bind_source_local_slots,
+    build_nested_host_data_bind_source_locals, build_nested_host_view_model_instance_locals,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -272,6 +272,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_data_bind_source_queues: RuntimeArtboardDataBindSourceQueues,
     pub(crate) artboard_shared_data_bind_converter_states:
         BTreeMap<usize, RuntimeArtboardSharedDataBindConverterState>,
+    pub(crate) artboard_retained_converter_operands: Vec<RuntimeArtboardRetainedConverterOperands>,
     pub(crate) artboard_data_bind_suppressed_target_data_bind: Option<usize>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
     pub(crate) artboard_layout_computed_bindings: Vec<RuntimeArtboardLayoutComputedBindingInstance>,
@@ -1038,6 +1039,7 @@ impl ArtboardInstance {
             artboard_data_bind_target_queues,
             artboard_data_bind_source_queues,
             artboard_shared_data_bind_converter_states,
+            artboard_retained_converter_operands: Vec::new(),
             artboard_data_bind_suppressed_target_data_bind: None,
             artboard_custom_property_bindings,
             artboard_layout_computed_bindings,
@@ -6704,6 +6706,7 @@ mod tests {
             artboard_data_bind_target_queues: RuntimeArtboardDataBindTargetQueues::default(),
             artboard_data_bind_source_queues: RuntimeArtboardDataBindSourceQueues::default(),
             artboard_shared_data_bind_converter_states: BTreeMap::new(),
+            artboard_retained_converter_operands: Vec::new(),
             artboard_data_bind_suppressed_target_data_bind: None,
             artboard_custom_property_bindings: Vec::new(),
             artboard_layout_computed_bindings: Vec::new(),
@@ -10100,6 +10103,44 @@ mod tests {
             root.number_value_by_property_path(&[1, 1]),
             Some(0.0),
             "an immutable context-chain bind cannot receive ViewModel writes"
+        );
+    }
+
+    #[test]
+    fn compatibility_context_chain_converter_retains_the_nested_operand_cell() {
+        let (file, _, _) = owned_view_model_action_fixture(9683, true);
+        let mut root = RuntimeOwnedViewModelInstance::new(&file, 0)
+            .expect("fixture has a nested owned ViewModel context");
+        assert!(root.set_number_by_property_path(&[1, 0], 4.0));
+        let mut converter = RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_type: 2,
+            operation_value: 0.0,
+            default_operation_value: 0.0,
+            source_path: Some(vec![1, 0]),
+            retained_operation_value: None,
+        };
+
+        assert!(
+            crate::data_bind_graph::runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
+                &mut converter,
+                &root,
+                &[&[1]],
+            )
+        );
+        let RuntimeDataBindGraphConverter::OperationViewModel {
+            retained_operation_value: Some(retained),
+            ..
+        } = &converter
+        else {
+            panic!("nested operation operand must retain its exact cell")
+        };
+        assert!(retained.ptr_eq(&root.cell_by_property_path(&[1, 0]).expect("nested cell")));
+        assert_eq!(
+            crate::data_bind_graph::runtime_data_bind_graph_convert_value(
+                &converter,
+                &RuntimeDataBindGraphValue::Number(3.0),
+            ),
+            Some(RuntimeDataBindGraphValue::Number(12.0))
         );
     }
 

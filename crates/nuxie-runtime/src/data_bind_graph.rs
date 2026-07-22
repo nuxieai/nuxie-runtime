@@ -5,10 +5,7 @@ use std::{
 
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 
-use crate::artboard_data_bind::{
-    RuntimeOwnedViewModelBindingCandidate,
-    runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates,
-};
+use crate::artboard_data_bind::RuntimeOwnedViewModelBindingCandidate;
 use crate::draw::color_lerp;
 use crate::project_data_converter::{
     PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS, project_data_converter_bounded_list_length,
@@ -16,7 +13,7 @@ use crate::project_data_converter::{
 use crate::retained_data_bind::{RuntimeDataBindTarget, RuntimeRetainedDataBind};
 use crate::scripting::{RuntimeScriptInstanceHandle, ScriptDataConverterMethod};
 use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelStructuralSource};
-use crate::view_model_cell::{RuntimeCellDirt, RuntimeViewModelCellValue};
+use crate::view_model_cell::{RuntimeCellDirt, RuntimeViewModelCell, RuntimeViewModelCellValue};
 use crate::{
     ProjectDataConverterContext, ProjectDataConverterOutputType, ProjectDataConverterProgram,
     ProjectDataConverterResolver, ProjectDataConverterState, ProjectDataValue,
@@ -351,6 +348,11 @@ pub(crate) enum RuntimeDataBindGraphConverter {
         program: Arc<ProjectDataConverterProgram>,
         resolved_values: Vec<(ProjectDataValuePath, ProjectDataValue)>,
         default_resolved_values: Vec<(ProjectDataValuePath, ProjectDataValue)>,
+        /// Owned contexts retain the exact input cells. The durable
+        /// `resolved_values` vector remains only for default/imported
+        /// contexts, whose serialized values are not cell-backed yet.
+        retained_resolved_values: Vec<(ProjectDataValuePath, RuntimeViewModelCell)>,
+        retained_values_bound: bool,
     },
     BooleanNegate,
     TriggerIncrement,
@@ -377,6 +379,10 @@ pub(crate) enum RuntimeDataBindGraphConverter {
         operation_value: f32,
         default_operation_value: f32,
         source_path: Option<Vec<u32>>,
+        /// C++ `DataConverterOperationViewModel::m_source` is a retained
+        /// `ViewModelInstanceNumber*` read at conversion time
+        /// (`data_converter_operation_viewmodel.cpp:8-27,48-59`).
+        retained_operation_value: Option<RuntimeViewModelCell>,
     },
     SystemOperationValue {
         global_id: u32,
@@ -843,6 +849,71 @@ impl RuntimeDataBindGraphConverter {
             _ => None,
         }
     }
+
+    /// Collect the exact owned ViewModel cells used by converter operands.
+    /// The owning DataBind registers its existing dirt sink on these cells,
+    /// matching C++'s converter-to-parent dependency edge rather than
+    /// polling/copying operand values.
+    pub(crate) fn retained_operand_cells(&self, cells: &mut Vec<RuntimeViewModelCell>) {
+        match self {
+            Self::OperationViewModel {
+                retained_operation_value: Some(cell),
+                ..
+            } => cells.push(cell.clone()),
+            Self::Project {
+                retained_resolved_values,
+                retained_values_bound: true,
+                ..
+            } => cells.extend(
+                retained_resolved_values
+                    .iter()
+                    .map(|(_, cell)| cell.clone()),
+            ),
+            Self::Group(converters) => {
+                for converter in converters {
+                    converter.retained_operand_cells(cells);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn clear_retained_owned_operands(&mut self) {
+        match self {
+            Self::OperationViewModel {
+                retained_operation_value,
+                ..
+            } => {
+                *retained_operation_value = None;
+            }
+            Self::Project {
+                retained_resolved_values,
+                retained_values_bound,
+                ..
+            } => {
+                retained_resolved_values.clear();
+                *retained_values_bound = false;
+            }
+            Self::Group(converters) => {
+                for converter in converters {
+                    converter.clear_retained_owned_operands();
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn runtime_data_bind_graph_operation_view_model_value(
+    operation_value: f32,
+    retained_operation_value: Option<&RuntimeViewModelCell>,
+) -> f32 {
+    retained_operation_value
+        .and_then(|cell| match cell.value() {
+            RuntimeViewModelCellValue::Number(value) => Some(value),
+            _ => None,
+        })
+        .unwrap_or(operation_value)
 }
 
 pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_property_source(
@@ -1379,8 +1450,10 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_number_conver
             operation_value,
             default_operation_value,
             source_path: Some(source_path),
+            retained_operation_value,
             ..
         } if source_path.as_slice() == path
+            && retained_operation_value.is_none()
             && (*operation_value != value || *default_operation_value != value) =>
         {
             *operation_value = value;
@@ -1390,6 +1463,7 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_number_conver
         RuntimeDataBindGraphConverter::Project {
             resolved_values,
             default_resolved_values,
+            retained_values_bound: false,
             ..
         } => {
             let value = ProjectDataValue::Number(f64::from(value));
@@ -1419,13 +1493,19 @@ fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_imp
         RuntimeDataBindGraphConverter::OperationViewModel {
             operation_value,
             source_path: Some(source_path),
+            retained_operation_value,
             ..
-        } if source_path.as_slice() == path && *operation_value != value => {
+        } if source_path.as_slice() == path
+            && retained_operation_value.is_none()
+            && *operation_value != value =>
+        {
             *operation_value = value;
             true
         }
         RuntimeDataBindGraphConverter::Project {
-            resolved_values, ..
+            resolved_values,
+            retained_values_bound: false,
+            ..
         } => update_runtime_project_resolved_value(
             resolved_values,
             path,
@@ -1451,17 +1531,26 @@ fn runtime_data_bind_graph_reset_operation_view_model_converter_to_default(
         RuntimeDataBindGraphConverter::OperationViewModel {
             operation_value,
             default_operation_value,
+            retained_operation_value,
             ..
-        } if *operation_value != *default_operation_value => {
+        } if *operation_value != *default_operation_value || retained_operation_value.is_some() => {
             *operation_value = *default_operation_value;
+            *retained_operation_value = None;
             true
         }
         RuntimeDataBindGraphConverter::Project {
             resolved_values,
             default_resolved_values,
+            retained_resolved_values,
+            retained_values_bound,
             ..
-        } if resolved_values != default_resolved_values => {
+        } if resolved_values != default_resolved_values
+            || *retained_values_bound
+            || !retained_resolved_values.is_empty() =>
+        {
             resolved_values.clone_from(default_resolved_values);
+            retained_resolved_values.clear();
+            *retained_values_bound = false;
             true
         }
         RuntimeDataBindGraphConverter::Group(converters) => {
@@ -1482,6 +1571,7 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
     converter: &mut RuntimeDataBindGraphConverter,
     context: &RuntimeDataContext<'_>,
 ) -> bool {
+    converter.clear_retained_owned_operands();
     match converter {
         RuntimeDataBindGraphConverter::OperationViewModel {
             operation_value,
@@ -1531,26 +1621,52 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
         RuntimeDataBindGraphConverter::OperationViewModel {
             operation_value,
             source_path: Some(source_path),
+            retained_operation_value,
             ..
         } => {
-            let value = runtime_owned_view_model_number_value_for_source_path(context, source_path)
+            let retained = context_chain
+                .iter()
+                .find_map(|context_path| {
+                    context.cell_for_scoped_source_path(context_path, source_path)
+                })
+                .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Number(_)));
+            let changed = retained_operation_value.as_ref() != retained.as_ref();
+            let value = retained
+                .as_ref()
+                .and_then(|cell| match cell.value() {
+                    RuntimeViewModelCellValue::Number(value) => Some(value),
+                    _ => None,
+                })
                 .unwrap_or(0.0);
-            if *operation_value == value {
-                return false;
-            }
             *operation_value = value;
-            true
+            *retained_operation_value = retained;
+            changed
         }
         RuntimeDataBindGraphConverter::Project {
             program,
             resolved_values,
+            retained_resolved_values,
+            retained_values_bound,
             ..
-        } => refresh_runtime_project_resolved_values_for_owned_context(
-            program,
-            resolved_values,
-            context,
-            context_chain,
-        ),
+        } => {
+            let mut retained = Vec::new();
+            for path in program.value_paths() {
+                let Some(source_path) = runtime_project_data_value_path(&path) else {
+                    continue;
+                };
+                let Some(cell) = source_path.owned_number_cell(context, context_chain) else {
+                    continue;
+                };
+                retained.push((path, cell));
+            }
+            let changed = *retained_resolved_values != retained || !resolved_values.is_empty();
+            retained_resolved_values.clone_from(&retained);
+            *retained_values_bound = true;
+            // Owned conversion reads the retained cells directly. Clear the
+            // old snapshot so diagnostics cannot mistake it for live state.
+            resolved_values.clear();
+            changed
+        }
         RuntimeDataBindGraphConverter::Group(converters) => {
             let mut changed = false;
             for converter in converters {
@@ -1558,6 +1674,91 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
                     runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
                         converter, context, context_chain,
                     );
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+/// Bind converter operands to the exact owned cells selected by the same
+/// ordered DataContext candidate walk as the primary source. C++ passes the
+/// owning `DataBind*` to every operation-ViewModel operand
+/// (`data_converter_operation_viewmodel.cpp:48-59`); callers register the
+/// returned cells on that bind's existing sink.
+pub(crate) fn runtime_data_bind_graph_bind_owned_converter_operands_for_candidates(
+    converter: &mut RuntimeDataBindGraphConverter,
+    candidates: &[RuntimeOwnedViewModelBindingCandidate],
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            source_path: Some(source_path),
+            retained_operation_value,
+            ..
+        } => {
+            let retained = candidates.iter().find_map(|candidate| {
+                candidate
+                    .resolve_value_and_cell_for_source_path(
+                        &RuntimeDataBindGraphValue::Number(0.0),
+                        source_path,
+                    )
+                    .and_then(|(_, cell, _)| cell)
+            });
+            let changed = retained_operation_value.as_ref() != retained.as_ref();
+            *operation_value = retained
+                .as_ref()
+                .and_then(|cell| match cell.value() {
+                    RuntimeViewModelCellValue::Number(value) => Some(value),
+                    _ => None,
+                })
+                .unwrap_or(0.0);
+            *retained_operation_value = retained;
+            changed
+        }
+        RuntimeDataBindGraphConverter::Project {
+            program,
+            resolved_values,
+            retained_resolved_values,
+            retained_values_bound,
+            ..
+        } => {
+            let mut retained = Vec::new();
+            for path in program.value_paths() {
+                let Some(source_path) = runtime_project_data_value_path(&path) else {
+                    continue;
+                };
+                let cell = candidates.iter().find_map(|candidate| {
+                    let context = candidate.context.borrow();
+                    if source_path.is_relative {
+                        let context_chain = candidate.context_chain();
+                        return source_path.owned_number_cell(&context, &context_chain);
+                    }
+                    let RuntimeProjectDataValuePathSegments::Ids(path) = &source_path.segments
+                    else {
+                        return None;
+                    };
+                    let property_path = candidate.property_path_for_source_path(path)?;
+                    context
+                        .cell_by_property_path(&property_path)
+                        .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Number(_)))
+                });
+                if let Some(cell) = cell {
+                    retained.push((path, cell));
+                }
+            }
+            let changed = *retained_resolved_values != retained || !resolved_values.is_empty();
+            retained_resolved_values.clone_from(&retained);
+            *retained_values_bound = true;
+            resolved_values.clear();
+            changed
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            let mut changed = false;
+            for converter in converters {
+                changed |= runtime_data_bind_graph_bind_owned_converter_operands_for_candidates(
+                    converter, candidates,
+                );
             }
             changed
         }
@@ -1598,68 +1799,6 @@ fn refresh_runtime_project_resolved_values_for_imported_context(
         let Some(value) =
             source.and_then(|source| file.view_model_instance_number_value_for_object(source))
         else {
-            continue;
-        };
-        next.push((path, ProjectDataValue::Number(f64::from(value))));
-    }
-    if *resolved_values == next {
-        return false;
-    }
-    *resolved_values = next;
-    true
-}
-
-fn refresh_runtime_project_resolved_values_for_owned_context(
-    program: &ProjectDataConverterProgram,
-    resolved_values: &mut Vec<(ProjectDataValuePath, ProjectDataValue)>,
-    context: &RuntimeOwnedViewModelInstance,
-    context_chain: &[&[usize]],
-) -> bool {
-    let mut next = Vec::new();
-    for path in program.value_paths() {
-        let Some(source_path) = runtime_project_data_value_path(&path) else {
-            continue;
-        };
-        let value = source_path.owned_number_value(context, context_chain);
-        let Some(value) = value else {
-            continue;
-        };
-        next.push((path, ProjectDataValue::Number(f64::from(value))));
-    }
-    if *resolved_values == next {
-        return false;
-    }
-    *resolved_values = next;
-    true
-}
-
-pub(crate) fn refresh_runtime_project_resolved_values_for_owned_candidates(
-    program: &ProjectDataConverterProgram,
-    resolved_values: &mut Vec<(ProjectDataValuePath, ProjectDataValue)>,
-    candidates: &[RuntimeOwnedViewModelBindingCandidate],
-) -> bool {
-    let mut next = Vec::new();
-    for path in program.value_paths() {
-        let Some(source_path) = runtime_project_data_value_path(&path) else {
-            continue;
-        };
-        let value = candidates.iter().find_map(|candidate| {
-            if source_path.is_relative {
-                let context = candidate.context.borrow();
-                let context_chain = candidate.context_chain();
-                source_path.owned_number_value(&context, &context_chain)
-            } else {
-                let RuntimeProjectDataValuePathSegments::Ids(path) = &source_path.segments else {
-                    return None;
-                };
-                let property_path = candidate.property_path_for_source_path(path)?;
-                candidate
-                    .context
-                    .borrow()
-                    .number_value_by_property_path(&property_path)
-            }
-        });
-        let Some(value) = value else {
             continue;
         };
         next.push((path, ProjectDataValue::Number(f64::from(value))));
@@ -2032,11 +2171,26 @@ fn runtime_view_model_pointer_from_project(
 
 struct RuntimeProjectDataConverterResolver<'a> {
     values: &'a [(ProjectDataValuePath, ProjectDataValue)],
+    retained_values: &'a [(ProjectDataValuePath, RuntimeViewModelCell)],
+    retained_values_bound: bool,
     program: &'a ProjectDataConverterProgram,
 }
 
 impl ProjectDataConverterResolver for RuntimeProjectDataConverterResolver<'_> {
     fn resolve_value(&mut self, path: &ProjectDataValuePath) -> Option<ProjectDataValue> {
+        if self.retained_values_bound {
+            return self.retained_values.iter().find_map(|(candidate, cell)| {
+                if candidate != path {
+                    return None;
+                }
+                match cell.value() {
+                    RuntimeViewModelCellValue::Number(value) => {
+                        Some(ProjectDataValue::Number(f64::from(value)))
+                    }
+                    _ => None,
+                }
+            });
+        }
         self.values
             .iter()
             .find_map(|(candidate, value)| (candidate == path).then(|| value.clone()))
@@ -2057,6 +2211,8 @@ fn runtime_data_bind_graph_project_convert(
     state: &mut ProjectDataConverterState,
     now_ms: f64,
     resolved_values: &[(ProjectDataValuePath, ProjectDataValue)],
+    retained_values: &[(ProjectDataValuePath, RuntimeViewModelCell)],
+    retained_values_bound: bool,
     value: &RuntimeDataBindGraphValue,
     reverse: bool,
 ) -> Option<RuntimeDataBindGraphValue> {
@@ -2065,6 +2221,8 @@ fn runtime_data_bind_graph_project_convert(
         state,
         now_ms,
         resolved_values,
+        retained_values,
+        retained_values_bound,
         value,
         reverse,
     )
@@ -2076,12 +2234,16 @@ fn runtime_data_bind_graph_project_convert_result(
     state: &mut ProjectDataConverterState,
     now_ms: f64,
     resolved_values: &[(ProjectDataValuePath, ProjectDataValue)],
+    retained_values: &[(ProjectDataValuePath, RuntimeViewModelCell)],
+    retained_values_bound: bool,
     value: &RuntimeDataBindGraphValue,
     reverse: bool,
 ) -> Result<RuntimeDataBindGraphValue, RuntimeProjectDataBridgeError> {
     let value = runtime_data_bind_graph_value_to_project(value)?;
     let mut resolver = RuntimeProjectDataConverterResolver {
         values: resolved_values,
+        retained_values,
+        retained_values_bound,
         program,
     };
     let mut context = ProjectDataConverterContext {
@@ -2128,6 +2290,8 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphConverter::Project {
                 program,
                 resolved_values,
+                retained_resolved_values,
+                retained_values_bound,
                 ..
             },
             value,
@@ -2136,6 +2300,8 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             &mut ProjectDataConverterState::default(),
             0.0,
             resolved_values,
+            retained_resolved_values,
+            *retained_values_bound,
             value,
             false,
         ),
@@ -2289,13 +2455,17 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphConverter::OperationViewModel {
                 operation_type,
                 operation_value,
+                retained_operation_value,
                 ..
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
             runtime_data_bind_graph_convert_operation_value(
                 *value,
-                *operation_value,
+                runtime_data_bind_graph_operation_view_model_value(
+                    *operation_value,
+                    retained_operation_value.as_ref(),
+                ),
                 *operation_type,
             ),
         )),
@@ -2303,13 +2473,17 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphConverter::OperationViewModel {
                 operation_type,
                 operation_value,
+                retained_operation_value,
                 ..
             },
             RuntimeDataBindGraphValue::SymbolListIndex(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
             runtime_data_bind_graph_convert_operation_value(
                 *value as f32,
-                *operation_value,
+                runtime_data_bind_graph_operation_view_model_value(
+                    *operation_value,
+                    retained_operation_value.as_ref(),
+                ),
                 *operation_type,
             ),
         )),
@@ -2456,6 +2630,8 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
             RuntimeDataBindGraphConverter::Project {
                 program,
                 resolved_values,
+                retained_resolved_values,
+                retained_values_bound,
                 ..
             },
             value,
@@ -2464,6 +2640,8 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
             &mut ProjectDataConverterState::default(),
             0.0,
             resolved_values,
+            retained_resolved_values,
+            *retained_values_bound,
             value,
             true,
         ),
@@ -2531,13 +2709,17 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
             RuntimeDataBindGraphConverter::OperationViewModel {
                 operation_type,
                 operation_value,
+                retained_operation_value,
                 ..
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
             runtime_data_bind_graph_reverse_convert_operation_value(
                 *value,
-                *operation_value,
+                runtime_data_bind_graph_operation_view_model_value(
+                    *operation_value,
+                    retained_operation_value.as_ref(),
+                ),
                 *operation_type,
             ),
         )),
@@ -3135,33 +3317,31 @@ impl RuntimeProjectDataValuePath {
         }
     }
 
-    fn owned_number_value(
+    fn owned_number_cell(
         &self,
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &[&[usize]],
-    ) -> Option<f32> {
+    ) -> Option<RuntimeViewModelCell> {
         match (&self.segments, self.is_relative) {
             (RuntimeProjectDataValuePathSegments::Ids(path), true) => {
                 for context_path in context_chain {
                     match context
-                        .project_relative_number_value_by_context_name_hash_path(context_path, path)
+                        .project_relative_cell_by_context_name_hash_path(context_path, path)
                     {
-                        Ok(Some(value)) => return Some(value),
+                        Ok(Some(cell)) => return Some(cell),
                         Ok(None) => {}
                         Err(_) => return None,
                     }
                 }
                 None
             }
-            (RuntimeProjectDataValuePathSegments::Ids(path), false) => {
-                runtime_owned_view_model_number_value_for_source_path(context, path)
-            }
+            (RuntimeProjectDataValuePathSegments::Ids(path), false) => context
+                .cell_for_source_path(path)
+                .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Number(_))),
             (RuntimeProjectDataValuePathSegments::Names(path), true) => {
                 for context_path in context_chain {
-                    match context
-                        .project_relative_number_value_by_context_name_path(context_path, path)
-                    {
-                        Ok(Some(value)) => return Some(value),
+                    match context.project_relative_cell_by_context_name_path(context_path, path) {
+                        Ok(Some(cell)) => return Some(cell),
                         Ok(None) => {}
                         Err(_) => return None,
                     }
@@ -3354,6 +3534,8 @@ fn runtime_data_bind_graph_converter_for_object<'a>(
                         program,
                         default_resolved_values: resolved_values.clone(),
                         resolved_values,
+                        retained_resolved_values: Vec::new(),
+                        retained_values_bound: false,
                     }
                 }
                 Ok(None) => RuntimeDataBindGraphConverter::Scripted {
@@ -3401,6 +3583,7 @@ fn runtime_data_bind_graph_converter_for_object<'a>(
                     .map(|operand| operand.value)
                     .unwrap_or(0.0),
                 source_path: operand.map(|operand| operand.path),
+                retained_operation_value: None,
             }
         }
         "DataConverterSystemDegsToRads" | "DataConverterSystemNormalizer" => {
@@ -3623,6 +3806,8 @@ impl RuntimeDataBindGraphConverterState {
                 RuntimeDataBindGraphConverter::Project {
                     program,
                     resolved_values,
+                    retained_resolved_values,
+                    retained_values_bound,
                     ..
                 },
                 Self::Project { state, now_ms },
@@ -3631,6 +3816,8 @@ impl RuntimeDataBindGraphConverterState {
                 state,
                 *now_ms,
                 resolved_values,
+                retained_resolved_values,
+                *retained_values_bound,
                 value,
                 false,
             ),
@@ -3691,6 +3878,8 @@ impl RuntimeDataBindGraphConverterState {
                 RuntimeDataBindGraphConverter::Project {
                     program,
                     resolved_values,
+                    retained_resolved_values,
+                    retained_values_bound,
                     ..
                 },
                 Self::Project { state, now_ms },
@@ -3699,6 +3888,8 @@ impl RuntimeDataBindGraphConverterState {
                 state,
                 *now_ms,
                 resolved_values,
+                retained_resolved_values,
+                *retained_values_bound,
                 value,
                 true,
             ),
@@ -4451,6 +4642,11 @@ impl RuntimeDataBindGraph {
             if source.converter != prototype_source.converter {
                 source.converter = prototype_source.converter.clone();
                 source.reset_converter_state();
+                let mut operand_cells = Vec::new();
+                if let Some(converter) = source.converter.as_ref() {
+                    converter.retained_operand_cells(&mut operand_cells);
+                }
+                source.retained_bind.set_additional_sources(operand_cells);
             }
             if source_changed {
                 source.reset_formula_random_state_for_source_change();
@@ -4743,6 +4939,11 @@ impl RuntimeDataBindGraph {
                     &context_chain,
                 );
             }
+            let mut operand_cells = Vec::new();
+            if let Some(converter) = source.converter.as_ref() {
+                converter.retained_operand_cells(&mut operand_cells);
+            }
+            source.retained_bind.set_additional_sources(operand_cells);
             source.reset_converter_state();
             source.mark_reconcile_dirty();
         }
@@ -4780,6 +4981,11 @@ impl RuntimeDataBindGraph {
                     context_chain,
                 );
             }
+            let mut operand_cells = Vec::new();
+            if let Some(converter) = source.converter.as_ref() {
+                converter.retained_operand_cells(&mut operand_cells);
+            }
+            source.retained_bind.set_additional_sources(operand_cells);
             source.reset_converter_state();
             source.mark_reconcile_dirty();
         }
@@ -4838,10 +5044,15 @@ impl RuntimeDataBindGraph {
                 source.retained_structural_source = structural_source.clone();
             }
             if let Some(converter) = source.converter.as_mut() {
-                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
+                runtime_data_bind_graph_bind_owned_converter_operands_for_candidates(
                     converter, candidates,
                 );
             }
+            let mut operand_cells = Vec::new();
+            if let Some(converter) = source.converter.as_ref() {
+                converter.retained_operand_cells(&mut operand_cells);
+            }
+            source.retained_bind.set_additional_sources(operand_cells);
             if retained_refresh {
                 Self::refresh_retained_source_from_cell(source);
                 // An explicit bindFromContext is still C++ `DataBind::bind()`
@@ -4884,7 +5095,7 @@ impl RuntimeDataBindGraph {
     /// seam the existing converter/target apply passes already consume.
     fn refresh_retained_source_from_cell(source: &mut RuntimeDataBindGraphSourceNode) -> bool {
         let bind = &mut source.retained_bind;
-        if bind.source().is_none() {
+        if !bind.has_sources() {
             return false;
         }
         // Gate on freshly cascaded SINK dirt only: the graph's own
@@ -4970,6 +5181,9 @@ impl RuntimeDataBindGraph {
         for source in &mut self.sources {
             source.retained_bind = RuntimeRetainedDataBind::new(source.flags, false);
             source.retained_structural_source = None;
+            if let Some(converter) = source.converter.as_mut() {
+                converter.clear_retained_owned_operands();
+            }
         }
     }
 
@@ -5136,27 +5350,6 @@ impl RuntimeDataBindGraph {
         changed
     }
 
-    pub(crate) fn refresh_operation_view_model_number_dependents_for_owned_context_path(
-        &mut self,
-        path: &[u32],
-        value: f32,
-    ) -> bool {
-        let mut changed = false;
-        for source in &mut self.sources {
-            let Some(converter) = source.converter.as_mut() else {
-                continue;
-            };
-            if !runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_imported_context_path(
-                converter, path, value,
-            ) {
-                continue;
-            }
-            source.source_to_target_dirty_after_target_to_source = true;
-            changed = true;
-        }
-        changed
-    }
-
     pub(crate) fn set_owned_view_model_context_number_source_for_data_bind(
         &mut self,
         context: &mut RuntimeOwnedViewModelInstance,
@@ -5220,7 +5413,11 @@ impl RuntimeDataBindGraph {
             }
         }
 
-        self.refresh_operation_view_model_number_dependents_for_owned_context_path(&path, value);
+        // The exact source/operand cells already pushed dirt into their
+        // owning binds. Fold that dirt now so a listener-originated write is
+        // visible to the same frame's `updateDataBinds`, matching C++'s
+        // synchronous DependencyHelper cascade.
+        self.collect_retained_owned_source_dirt();
         self.mark_default_view_model_bindings_dirty();
         true
     }
@@ -10570,6 +10767,160 @@ mod tests {
         assert!(!graph.collect_retained_owned_source_dirt());
     }
 
+    /// #RB-1 f10: C++ retains an operation-ViewModel operand as its exact
+    /// Number cell and registers the owning DataBind as dependent
+    /// (`data_converter_operation_viewmodel.cpp:8-27,48-59`). A clone must
+    /// subscribe independently even though both converters read that same
+    /// shared cell.
+    #[test]
+    fn retained_operation_operand_reads_live_cell_and_dirties_each_graph_clone_once() {
+        use crate::view_model_cell::RuntimeViewModelCell;
+
+        let operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(2.0));
+        let mut graph = graph_with_number_binding(0);
+        graph.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        graph.sources[0].converter = Some(RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_type: 2,
+            operation_value: 2.0,
+            default_operation_value: 2.0,
+            source_path: Some(vec![9]),
+            retained_operation_value: Some(operand.clone()),
+        });
+        graph.sources[0]
+            .retained_bind
+            .set_additional_sources(vec![operand.clone()]);
+        graph.sources[0].source_to_target_dirty_after_target_to_source = false;
+        graph.sources[0].source_to_target_dirty_after_immediate = false;
+        graph.sources[0].reconcile_pending = false;
+        let mut cloned = graph.clone();
+
+        assert!(operand.set_value(RuntimeViewModelCellValue::Number(4.0)));
+        assert_eq!(
+            runtime_data_bind_graph_convert_value(
+                graph.sources[0].converter.as_ref().expect("converter"),
+                &RuntimeDataBindGraphValue::Number(3.0),
+            ),
+            Some(RuntimeDataBindGraphValue::Number(12.0)),
+            "conversion reads the retained cell rather than the bind-time snapshot"
+        );
+        assert!(graph.collect_retained_owned_source_dirt());
+        assert!(!graph.collect_retained_owned_source_dirt());
+        assert!(cloned.collect_retained_owned_source_dirt());
+        assert!(!cloned.collect_retained_owned_source_dirt());
+    }
+
+    #[test]
+    fn key_frame_source_sync_relinks_clone_to_the_prototype_operand_cell() {
+        use crate::view_model_cell::RuntimeViewModelCell;
+
+        let old_operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(2.0));
+        let new_operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(5.0));
+        let mut prototype = graph_with_number_binding(0);
+        prototype.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        prototype.sources[0].converter = Some(RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_type: 2,
+            operation_value: 2.0,
+            default_operation_value: 2.0,
+            source_path: Some(vec![9]),
+            retained_operation_value: Some(old_operand.clone()),
+        });
+        prototype.sources[0]
+            .retained_bind
+            .set_additional_sources(vec![old_operand.clone()]);
+        let mut occurrence = prototype.clone_for_key_frame_instance();
+
+        prototype.sources[0].converter = Some(RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_type: 2,
+            operation_value: 5.0,
+            default_operation_value: 2.0,
+            source_path: Some(vec![9]),
+            retained_operation_value: Some(new_operand.clone()),
+        });
+        prototype.key_frame_source_revision += 1;
+        occurrence.sync_key_frame_sources_from(&prototype);
+
+        assert!(old_operand.set_value(RuntimeViewModelCellValue::Number(3.0)));
+        assert!(
+            !occurrence.collect_retained_owned_source_dirt(),
+            "the occurrence unsubscribed from the departed operand"
+        );
+        assert!(new_operand.set_value(RuntimeViewModelCellValue::Number(7.0)));
+        assert!(occurrence.collect_retained_owned_source_dirt());
+        assert_eq!(
+            runtime_data_bind_graph_convert_value(
+                occurrence.sources[0]
+                    .converter
+                    .as_ref()
+                    .expect("synced converter"),
+                &RuntimeDataBindGraphValue::Number(3.0),
+            ),
+            Some(RuntimeDataBindGraphValue::Number(21.0))
+        );
+    }
+
+    /// #RB-1 f10: Project converter value paths are the same converter-owned
+    /// dependency shape as operation-ViewModel operands. Owned conversion
+    /// reads the retained Number cell on demand; serialized snapshots remain
+    /// only for default/imported contexts.
+    #[test]
+    fn retained_project_operand_reads_live_cell_and_pushes_owning_bind_dirt() {
+        use crate::view_model_cell::RuntimeViewModelCell;
+
+        let value_path = crate::ProjectDataValuePath::Path {
+            path: "operand".to_owned(),
+            view_model_name: None,
+            is_relative: true,
+        };
+        let catalog =
+            crate::ProjectDataConverterCatalog::compile([crate::ProjectDataConverterDefinition {
+                id: "multiply".to_owned(),
+                spec: crate::ProjectDataConverterSpec {
+                    output_type: Some(crate::ProjectDataConverterOutputType::Number),
+                    kind: crate::ProjectDataConverterKind::Math {
+                        operation: crate::ProjectDataConverterMathOperation::Multiply,
+                        value: None,
+                        value_path: Some(value_path.clone()),
+                    },
+                },
+            }])
+            .expect("valid Project converter");
+        let program = crate::ProjectDataConverterProgram::decode(
+            &catalog
+                .encode_program("multiply")
+                .expect("Project program encodes"),
+        )
+        .expect("Project program decodes")
+        .expect("Project envelope");
+        let operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(2.0));
+        let mut graph = graph_with_number_binding(0);
+        graph.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        graph.sources[0].converter = Some(RuntimeDataBindGraphConverter::Project {
+            global_id: 17,
+            program: Arc::new(program),
+            resolved_values: Vec::new(),
+            default_resolved_values: Vec::new(),
+            retained_resolved_values: vec![(value_path, operand.clone())],
+            retained_values_bound: true,
+        });
+        graph.sources[0]
+            .retained_bind
+            .set_additional_sources(vec![operand.clone()]);
+        graph.sources[0].source_to_target_dirty_after_target_to_source = false;
+        graph.sources[0].source_to_target_dirty_after_immediate = false;
+        graph.sources[0].reconcile_pending = false;
+
+        assert!(operand.set_value(RuntimeViewModelCellValue::Number(5.0)));
+        assert_eq!(
+            runtime_data_bind_graph_convert_value(
+                graph.sources[0].converter.as_ref().expect("converter"),
+                &RuntimeDataBindGraphValue::Number(3.0),
+            ),
+            Some(RuntimeDataBindGraphValue::Number(15.0))
+        );
+        assert!(graph.collect_retained_owned_source_dirt());
+        assert!(!graph.collect_retained_owned_source_dirt());
+    }
+
     /// #RB-1 e3: a to-source-only migrated bind never applies source→target,
     /// but the graph copy is also the READ MODEL of the retained source
     /// (C++ reads `m_Source` directly), so it still refreshes on cell dirt.
@@ -11138,6 +11489,8 @@ mod tests {
                 &mut ProjectDataConverterState::default(),
                 0.0,
                 &resolved_values,
+                &[],
+                false,
                 &RuntimeDataBindGraphValue::Number(1.0),
                 false,
             ),
@@ -11225,6 +11578,8 @@ mod tests {
             program: Arc::new(program),
             resolved_values: Vec::new(),
             default_resolved_values: Vec::new(),
+            retained_resolved_values: Vec::new(),
+            retained_values_bound: false,
         };
 
         assert_eq!(

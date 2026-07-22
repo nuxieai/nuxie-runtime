@@ -670,11 +670,35 @@ rules exist so a reviewer can cite the violated rule behind every finding.
   mutable object, Rust retains a shared handle (`Rc<RefCell<..>>` or arena
   id) to ONE object. Copying the value into a record and re-syncing later
   is a violation, regardless of test results.
+- **AF-1 retained-cell corollary.** A C++ `ViewModelInstanceValue` is itself
+  the retained, reference-counted property cell and dependency source; a
+  `DataBind` keeps that same cell as `m_Source` rather than copying its payload
+  (`include/rive/viewmodel/viewmodel_instance_value.hpp:34-71,88-97`,
+  `src/viewmodel/viewmodel_instance_value.cpp:93-105`,
+  `src/data_bind/data_bind.cpp:210-240`). The faithful Rust idiom is
+  `RuntimeViewModelCell` shared identity plus
+  `RuntimeOwnedViewModelHandle` graph identity
+  (`crates/nuxie-runtime/src/view_model_cell.rs:400-450,482-530`,
+  `crates/nuxie-runtime/src/view_model.rs:1781-1817,10390-10441`); source
+  resolution returns the cell alongside any projected value
+  (`crates/nuxie-runtime/src/artboard_data_bind.rs:1110-1150`). A copied scalar
+  may be an application payload, but it must never replace the retained source
+  cell used by binds, listeners, converters, or nested ViewModel links.
 - **AF-2 Push, never reconstruct.** Where C++ registers a dependent or
   property observer, Rust registers a dependent (weak dirt-sink). Polling,
   generation counters, epoch comparisons, observed-value diffing, and
   rescan loops that exist to DISCOVER a change C++ would have been TOLD
   about are violations.
+- **AF-2 weak-dirt-sink corollary.** C++ stores dependent pointers, registers
+  them explicitly, cascades dirt synchronously, and unregisters them when the
+  source is cleared (`include/rive/dependency_helper.hpp:19-60`,
+  `src/viewmodel/viewmodel_instance_value.cpp:93-105`,
+  `src/data_bind/data_bind.cpp:210-240`). Rust maps that lifetime asymmetry to a
+  consumer-owned `RuntimeCellDirtSink`; the cell retains only its downgraded
+  `RuntimeCellDependent`, and dead weak entries are discarded during dirt
+  delivery (`crates/nuxie-runtime/src/view_model_cell.rs:108-220,482-530`). The
+  source must not strongly own the bind/listener/converter, and a mutation must
+  push dirt through this sink rather than wait for a generation poll or rescan.
 - **AF-3 Poll only where C++ polls.** The inverse also binds: where C++
   itself indexes by time/id with no observer (keyed animation binary
   search, `resolve(objectId())`), a Rust loop/lookup is correct.
@@ -706,3 +730,21 @@ rules exist so a reviewer can cite the violated rule behind every finding.
   (`data_bind.cpp:94-100`, `data_bind_container.cpp:86-112`). Rust may
   devirtualize the target kind, but must keep subordinate binds on their own
   source-path queue rather than assigning them an outer occurrence index.
+- **AF-9 DataContext lookup is local-then-parent and occupant-typed.** C++
+  tests each locally retained instance in order, accepts an instance only when
+  its actual `viewModelId` matches the authored path, and recurses to the parent
+  only after every local attempt fails
+  (`src/data_bind/data_context.cpp:265-297,397-418`; instance lookup follows the
+  same rule at `src/data_bind/data_context.cpp:335-363,464-483`). Therefore a
+  same-model local instance that lacks an intermediate or final property does
+  **not** shadow a complete parent instance: resolution continues. Global slot
+  keys control placement/replacement only; the occupant's actual ViewModel
+  identity controls lookup (`include/rive/data_bind/data_context.hpp:37-61,
+  105-112`). The faithful Rust path is `RuntimeOwnedDataContext::resolve` plus
+  `resolved_property_path`/`resolved_property_path_with_manifest`
+  (`crates/nuxie-runtime/src/artboard_data_bind.rs:807-964,1035-1079`), with the
+  occupant identity check in
+  `RuntimeOwnedViewModelContextPathStorage::from_context_source_path`
+  (`crates/nuxie-runtime/src/artboard_data_bind.rs:2561-2572`). Candidate-vector
+  precedence, slot-key path rewriting, or stopping at a partial same-model
+  match is architecture drift even when a sampled value happens to agree.

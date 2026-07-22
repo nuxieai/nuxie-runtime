@@ -406,6 +406,9 @@ fn run() -> Result<String> {
     }
 
     let mut path_cache = RuntimeRenderPathCache::default();
+    if rd1_live_traversal_spike_enabled() {
+        path_cache.enable_rd1_live_traversal_spike();
+    }
     let mut renderer = factory.make_renderer();
 
     let artboard_object = runtime
@@ -683,6 +686,10 @@ fn write_benchmark_repeat_report(
     ))
 }
 
+fn rd1_live_traversal_spike_enabled() -> bool {
+    std::env::var_os("NUXIE_RD1_LIVE_TRAVERSAL_SPIKE").is_some_and(|value| value == "1")
+}
+
 fn run_benchmark_repeat_pass(
     options: &Options,
     runtime: &RuntimeFile,
@@ -719,6 +726,9 @@ fn run_benchmark_repeat_pass(
         &mut factory,
     );
     let mut path_cache = RuntimeRenderPathCache::default();
+    if rd1_live_traversal_spike_enabled() {
+        path_cache.enable_rd1_live_traversal_spike();
+    }
     // C++ constructs retained render objects while the artboard instance is
     // loaded, before the benchmark clock starts. Prime Rust's lazy retained
     // topology at the same lifecycle boundary; the first timed advance still

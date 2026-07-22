@@ -3747,7 +3747,15 @@ impl ArtboardInstance {
             renderer.transform(self.artboard_origin_transform());
         }
 
-        let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let spike_prepared;
+        let cached_prepared;
+        let prepared = if path_cache.rd1_live_traversal_spike {
+            spike_prepared = path_cache.rd1_live_traversal_spike_frame(self, graph, Some(runtime));
+            &spike_prepared
+        } else {
+            cached_prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
+            cached_prepared.as_ref()
+        };
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
         let component_list_item_bounds = prepared.component_list_item_bounds.as_ref();
         let component_list_layout_children = prepared.component_list_layout_children.as_ref();
@@ -9515,6 +9523,10 @@ impl RuntimePaintPreparationFrame {
 
 #[derive(Default)]
 pub struct RuntimeRenderPathCache {
+    // RD-1 measured-spike switch. This bypasses only the retained scene
+    // command frame: sorted drawable topology and object render resources stay
+    // retained so the spike isolates per-frame live-feed traversal cost.
+    rd1_live_traversal_spike: bool,
     prepared_artboard: Option<Arc<RuntimePreparedArtboardFrame>>,
     sorted_drawable_order: Option<RuntimeSortedDrawableOrderFrame>,
     layout_bounds: Option<RuntimeLayoutBoundsFrame>,
@@ -10458,6 +10470,15 @@ fn runtime_nested_preparation_command(
 }
 
 impl RuntimeRenderPathCache {
+    /// Enable RD-1's temporary live-feed timing spike.
+    ///
+    /// Exposed only so the golden runner can select the measured path; normal
+    /// runtime and host draws keep the established prepared-frame feed.
+    #[doc(hidden)]
+    pub fn enable_rd1_live_traversal_spike(&mut self) {
+        self.rd1_live_traversal_spike = true;
+    }
+
     fn component_world_transform_with_bounds(
         &mut self,
         instance: &ArtboardInstance,
@@ -10840,6 +10861,59 @@ impl RuntimeRenderPathCache {
             .as_ref()
             .expect("prepared artboard frame was just populated")
             .clone()
+    }
+
+    fn rd1_live_traversal_spike_frame(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
+    ) -> RuntimePreparedArtboardFrame {
+        let (mounted_component_list_layout_revision, mounted_component_list_prepared_revision) =
+            runtime_mounted_component_list_revisions(instance);
+        let layout_frame = self.layout_bounds_frame(
+            instance,
+            graph,
+            runtime,
+            mounted_component_list_layout_revision,
+        );
+        let layout_bounds = layout_frame.bounds.clone();
+        let sorted_drawable_order = self.sorted_drawable_order_frame(instance, graph);
+        // C++ retains m_FirstDrawable but walks it every frame. Keep the
+        // established order list for this spike and reify each live node on
+        // every draw rather than replaying the retained scene command frame.
+        let commands = instance.draw_commands_with_sorted_drawable_order_reusing(
+            graph,
+            layout_bounds.as_ref().as_ref(),
+            sorted_drawable_order.as_slice(),
+            self,
+            true,
+            Vec::new(),
+        );
+        let background =
+            runtime_prepared_background_frame(instance, graph, layout_bounds.as_ref().as_ref());
+        let component_list_layout_children = Arc::new(runtime_component_list_layout_children(
+            instance,
+            layout_frame.component_list_item_bounds.as_ref(),
+        ));
+        let world_dependent = runtime_command_frame_requires_world_epoch(graph);
+        RuntimePreparedArtboardFrame {
+            key: RuntimePreparedArtboardCacheKey {
+                graph_global_id: graph.global_id,
+                command_epoch: instance.command_epoch(),
+                world_epoch: world_dependent
+                    .then(|| instance.prepared_epoch())
+                    .unwrap_or_default(),
+                mounted_component_list_layout_revision,
+                mounted_component_list_prepared_revision,
+            },
+            world_dependent,
+            layout_bounds,
+            component_list_item_bounds: layout_frame.component_list_item_bounds,
+            component_list_layout_children,
+            background,
+            commands: Arc::new(commands),
+        }
     }
 
     fn retained_geometry_artboard_frame(
@@ -14880,7 +14954,9 @@ fn runtime_draw_component_list(
             item.logical_index,
             item.render_cache_revision,
         );
+        let rd1_live_traversal_spike = path_cache.rd1_live_traversal_spike;
         let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
+        child_cache.rd1_live_traversal_spike = rd1_live_traversal_spike;
         let child = component_list_layout_children
             .get(&local_id)
             .and_then(|children| children.get(item_index))
@@ -15116,7 +15192,9 @@ fn runtime_draw_nested_artboard(
         referenced_artboard_global,
         nested_instance.map_or(0, |nested| nested.render_cache_revision),
     );
+    let rd1_live_traversal_spike = path_cache.rd1_live_traversal_spike;
     let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
+    child_cache.rd1_live_traversal_spike = rd1_live_traversal_spike;
 
     if let Some(child) = persistent_child {
         let layout_child;

@@ -4,7 +4,8 @@ configurations({ 'debug', 'release' })
 local rive_runtime = os.getenv('RIVE_RUNTIME_DIR') or '/Users/levi/dev/oss/rive-runtime'
 local dep_cache = rive_runtime .. '/dependencies/' .. os.host() .. '/cache'
 local with_scripting = os.getenv('RIVE_GOLDEN_WITH_SCRIPTING') == '1'
-local scripting_libdir = os.getenv('RIVE_GOLDEN_SCRIPTING_LIBDIR')
+local runtime_libdir = os.getenv('RIVE_GOLDEN_RUNTIME_LIBDIR') or
+    (rive_runtime .. '/out/%{cfg.buildcfg}')
 local decoders_libdir = os.getenv('RIVE_GOLDEN_DECODERS_LIBDIR')
 local obj_suffix = with_scripting and '/scripting' or ''
 local runner_name = os.getenv('RIVE_GOLDEN_RUNNER_NAME') or 'rive_golden_runner'
@@ -75,17 +76,13 @@ if with_scripting then
 end
 
 local lib_dirs = {
-    rive_runtime .. '/tests/out/%{cfg.buildcfg}',
-    rive_runtime .. '/out/%{cfg.buildcfg}',
+    runtime_libdir,
     rive_runtime .. '/build/%{cfg.system}/bin/%{cfg.buildcfg}',
     dep_cache .. '/bin/%{cfg.buildcfg}',
     '/usr/local/lib',
     '/usr/lib',
 }
 
-if with_scripting and scripting_libdir then
-    table.insert(lib_dirs, 1, scripting_libdir)
-end
 if with_scripting and decoders_libdir then
     table.insert(lib_dirs, 1, decoders_libdir)
 end

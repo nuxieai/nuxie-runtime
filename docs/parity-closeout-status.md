@@ -547,6 +547,13 @@ upstream-sync-map registry).
   gate. The ~60-70 #B-6 Family B rows re-open and close for good at that
   gate. RD-1a's file-corresponding lane map and exact retention boundary are
   fixed in `docs/rd1-renderer-feed-map.md`; no production code preceded it.
+  RD-1b's non-default measured spike is complete and stopped at the mandatory
+  user checkpoint: live per-frame command materialization measured 5.866x
+  prepared Rust (+486.6%) on the seven-segment shape/image/nested slice.
+  The user accepted that temporary-seam cost and authorized RD-1b2 plus
+  RD-C1/RD-C2. A second measured user checkpoint is binding after C1/C2 remove
+  command materialization and before any scene-cache deletion; demolition
+  cannot self-clear that checkpoint.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -606,12 +613,14 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-1b measured renderer-feed spike — RD-1a's mini-map is committed first;
-   add a non-default live traversal for a representative shape/image/nested
-   slice without deleting caches, run `r4-timing-gate` and `perf-hot-loop`,
-   commit the numbers, then stop for the user's perf-delta checkpoint. Only
-   after that checkpoint may RD-1b2's rulebook stress test and the C1-C7
-   demolition sequence proceed.
+1. #RD-1b2 renderer-feed rulebook and dual-translation stress test. The user
+   accepted RD-1b's 5.866x temporary command-materialization result and
+   authorized work to proceed. `r4-timing-gate` ran four unchanged-threshold
+   brackets, all invalidated by its host-idle-spread fence, so no R4 ratio is
+   claimed; a follow-up run is explicitly deferred to a quiet host with the
+   12% fence intact. A second USER CHECKPOINT follows RD-C1/RD-C2 seam removal and
+   blocks every scene-cache deletion until the new delta is reported and
+   reviewed.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -757,6 +766,34 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-22 — #RD-1b measured a non-default live per-frame traversal without
+  deleting any retained scene layer. Across five animated-shape samples, one
+  image sample, and one nested-artboard sample, aggregate Rust hot-loop minimum
+  rose from 11.533543 ms prepared to 67.659043 ms live: 5.866x, or +486.6%.
+  The slice remained exact at 3/3 entries and 7/7 segments; runtime lib is
+  399/399 and scripted goldens are 317/317 plus 647/647 with zero failures.
+  Four `r4-timing-gate` brackets failed closed at the unchanged host-load
+  fence. The rebuilt pinned Dawn live reference then passed the same-runner
+  renderer corpus at 1,468/1,468 with zero divergences and zero gated cases.
+  Full evidence is in `docs/rd1-measured-spike-2026-07-22.md`. Work stopped
+  here for the binding user checkpoint; RD-1b2 and all demolition remained
+  untouched until the user's proceed decision.
+
+- 2026-07-22 — The user accepted RD-1b's 5.866x delta as temporary command-
+  materialization overhead and authorized RD-1b2 plus RD-C1/RD-C2. A second
+  measured performance checkpoint is now binding after that seam is removed
+  and before scene-cache deletion. The prior seven-entry ordinary-golden
+  record was traced to a `CPP_CONFIG=release` C++ runner linked against a
+  differently featured `tests/out/release/librive.a`; checked-in default debug
+  is 317/317 entries and 647/647 segments with zero divergences. The golden
+  runner now requires pinned-SHA, exact-feature provenance for its archive.
+  R4 remains explicitly deferred to a quiet host; its 12% idle-spread fence is
+  unchanged. Local closeout is green: runtime 399/399, nuxie 140/140, pinned
+  probe 721/721, ordinary and scripted goldens 317/317 plus 647/647 with zero
+  divergences, renderer 1,468/1,468 with zero divergences/gated cases, C API
+  smoke, and the probe-armed full workspace. Size is 8,267,064 bytes without
+  scripting and 9,184,664 bytes with scripting, both within 9,437,184 bytes.
 
 - 2026-07-22 — #RD-1a fixed the renderer-feed restoration sequence before
   production changes. `docs/rd1-renderer-feed-map.md` maps the pinned C++

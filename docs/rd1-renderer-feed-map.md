@@ -33,7 +33,11 @@ the per-frame rendering feed.
    and `src/artboard.cpp:1606-1698` twice: once rulebook-strict and once as a
    senior Rust engineer.  Diff them, turn every disagreement into an explicit
    rule, and discard both translations before implementation fans out.
-4. Execute RD-C1 through RD-C7 in order.  C2 and C3 may investigate in parallel
+4. **RD-C1/RD-C2 performance checkpoint.** Remove the temporary command-
+   materialization seam, rerun the measured comparison, and report the delta
+   to the user before any scene-cache deletion.  This checkpoint cannot be
+   self-cleared; scene-cache demolition remains blocked until user review.
+5. Execute RD-C1 through RD-C7 in order.  C2 and C3 may investigate in parallel
    after C1's interfaces settle, but production edits in the monolithic Rust draw
    path serialize.  No adjacent lane may hide attribution by landing concurrently.
 
@@ -48,7 +52,7 @@ them to `faithful`.
 | Lane | Pinned C++ draw/traversal sources | Rust landing area | Retention boundary crossed | Dependency / merge condition |
 |---|---|---|---|---|
 | **RD-C1: live drawable and order foundation** | `include/rive/drawable.hpp`, `src/drawable.cpp`; `src/draw_target.cpp`; `src/draw_rules.cpp`; `src/artboard.cpp:429-840,1159-1169` | retained runtime drawable handles/list links; live hidden/`willDraw` state; target placement; clip proxies and save elision; graph order only as construction seed | prepared/sorted-order frames and draw-order epochs -> object-owned linked draw order updated by ordinary `ComponentDirt::DrawOrder` | First implementation lane. Establishes the live interfaces required by every drawable family. |
-| **RD-C2: Shape, paths, and paints** | `include/rive/shapes/shape.hpp`, `src/shapes/shape.cpp`; `src/shapes/path_composer.cpp`; `src/shapes/paint/shape_paint_path.cpp`; `src/shapes/paint/shape_paint.cpp`; `solid_color.cpp`, `linear_gradient.cpp`, `radial_gradient.cpp`, `stroke.cpp`, `fill.cpp`, `clipping_shape.cpp` | Shape-owned composer and local/world paths; paint-owned render paint; retained shape-paint paths; live Shape draw/`willDraw` | globally keyed path/paint/configuration caches -> per-object `RenderPath`/`RenderPaint` mutated in place under component dirt | Depends on C1. Freeze the retained path/paint interface before Text begins. |
+| **RD-C2: Shape, paths, and paints** | `include/rive/shapes/shape.hpp`, `src/shapes/shape.cpp`; `src/shapes/path_composer.cpp`; `src/shapes/paint/shape_paint_path.cpp`; `src/shapes/paint/shape_paint.cpp`; `solid_color.cpp`, `linear_gradient.cpp`, `radial_gradient.cpp`, `stroke.cpp`, `fill.cpp`, `clipping_shape.cpp` | Shape-owned composer and local/world paths; paint-owned render paint; retained shape-paint paths; live Shape draw/`willDraw` | globally keyed path/paint/configuration caches -> per-object `RenderPath`/`RenderPaint` mutated in place under component dirt | Depends on C1. Freeze the retained path/paint interface before Text begins. Removing the command-materialization seam triggers the second user performance checkpoint; no scene-cache deletion may precede its review. |
 | **RD-C3: Image and mesh** | `include/rive/assets/image_asset.hpp`, `src/assets/image_asset.cpp`; `src/shapes/image.cpp`; `src/shapes/mesh.cpp`; `src/shapes/slice_mesh.cpp` | asset-owned `RenderImage`; live Image draw/`willDraw`; object-owned mesh/slice buffers | central render-image and mesh slots -> live Image/ImageAsset/mesh resource ownership | Depends on C1. May be investigated beside C2, but shared draw/resource edits serialize. |
 | **RD-C4: Text and TextInput** | `src/text/text.cpp:620-742,845-875`; `src/text/text_style_paint.cpp`; `src/text/text_input_drawable.cpp`; supporting `raw_text.cpp` and `raw_text_input.cpp` paths reached by those files | Text-owned shaped lines, style paths, pools, clip path, emoji cache, and `m_drawCommands`; live TextInput paths | epoch-keyed scene text reconstruction and generic text command replay -> Text-owned retained commands and style resources | Depends on C2. Preserve the C++ per-object `m_drawCommands` cache; it is not scene replay. |
 | **RD-C5: layout and nested traversal** | `src/layout_component.cpp:317-374`; `src/foreground_layout_drawable.cpp`; `src/nested_artboard_leaf.cpp`; `src/nested_artboard_layout.cpp`; `src/nested_artboard.cpp:491-508` | live layout proxy/background/foreground drawing; mounted child identity; direct recursive child `drawInternal` | layout/nested prepared frames and cloned child snapshots -> mounted child object plus ordinary per-object layout paths and direct recursion | Depends on C1/C2 and the live traversal interface. Do not remove non-render geometry-query state merely because it shares an epoch name. |
@@ -108,4 +112,6 @@ and both ordinary and scripted golden gates at zero failures.  Renderer pixels
 referee every RD merge; no tolerance, exclusion, or gate may be loosened.  Run
 `make scripted-golden-compare` explicitly before every RD cut.  RD-C7 also runs
 the full workspace/C API/probe floors, the #B-6 renderer audit, and both size
-variants under the fixed 9 MiB (9,437,184 byte) limit.
+variants under the fixed 9 MiB (9,437,184 byte) limit.  After RD-C1/RD-C2
+remove the materialization seam, a second measured performance report and user
+review are mandatory before any scene-cache deletion.

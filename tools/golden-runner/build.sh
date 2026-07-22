@@ -4,6 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 rive_runtime="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}"
 runner_name="${RIVE_GOLDEN_RUNNER_NAME:-rive_golden_runner}"
+provenance="$script_dir/runtime-provenance.sh"
 
 config="${1:-debug}"
 if [[ "$config" == "clean" ]]; then
@@ -19,11 +20,28 @@ if [[ "$config" != "debug" && "$config" != "release" ]]; then
 fi
 
 jobs="$(sysctl -n hw.logicalcpu 2>/dev/null || nproc)"
+"$provenance" source "$rive_runtime"
 
 if [[ "${RIVE_GOLDEN_WITH_SCRIPTING:-0}" == "1" ]]; then
+    runtime_mode="scripted"
     runtime_out="${RIVE_GOLDEN_SCRIPTING_OUT:-out/rive-rust-golden-scripting-$config}"
     decoders_out="${RIVE_GOLDEN_DECODERS_OUT:-out/rive-rust-golden-scripting-$config}"
-    echo "==== Building scripted librive ($config) ===="
+    runtime_premake_flags=(--with_rive_text --with_rive_layout --with_rive_scripting)
+    runtime_targets=(rive rive_harfbuzz rive_sheenbidi rive_yoga luau_vm)
+else
+    runtime_mode="ordinary"
+    runtime_out="${RIVE_GOLDEN_RUNTIME_OUT:-out/rive-rust-golden-$config}"
+    runtime_premake_flags=(--with_rive_text --with_rive_layout)
+    runtime_targets=(rive rive_harfbuzz rive_sheenbidi rive_yoga)
+fi
+
+runtime_libdir="$rive_runtime/$runtime_out"
+runtime_archive="$runtime_libdir/librive.a"
+runtime_makefile="$runtime_libdir/rive.make"
+runtime_stamp="$runtime_archive.provenance"
+
+if ! "$provenance" verify "$rive_runtime" "$runtime_archive" "$runtime_makefile" "$runtime_stamp" "$config" "$runtime_mode" >/dev/null 2>&1; then
+    echo "==== Building provenance-bound $runtime_mode librive ($config) ===="
     (
         cd "$rive_runtime"
         PREMAKE_PATH="$rive_runtime/build${PREMAKE_PATH:+:$PREMAKE_PATH}" \
@@ -31,13 +49,17 @@ if [[ "${RIVE_GOLDEN_WITH_SCRIPTING:-0}" == "1" ]]; then
             --file=premake5_v2.lua \
             --config="$config" \
             --out="$runtime_out" \
-            --with_rive_text \
-            --with_rive_layout \
-            --with_rive_scripting
-        make -C "$runtime_out" -j"$jobs" \
-            rive rive_harfbuzz rive_sheenbidi rive_yoga luau_vm
+            "${runtime_premake_flags[@]}"
+        make -C "$runtime_out" clean
+        make -C "$runtime_out" -j"$jobs" "${runtime_targets[@]}"
     )
-    export RIVE_GOLDEN_SCRIPTING_LIBDIR="$rive_runtime/$runtime_out"
+    "$provenance" write "$rive_runtime" "$runtime_archive" "$runtime_makefile" "$runtime_stamp" "$config" "$runtime_mode"
+fi
+"$provenance" verify "$rive_runtime" "$runtime_archive" "$runtime_makefile" "$runtime_stamp" "$config" "$runtime_mode"
+export RIVE_GOLDEN_RUNTIME_LIBDIR="$runtime_libdir"
+echo "golden runner librive provenance: $runtime_stamp"
+
+if [[ "$runtime_mode" == "scripted" ]]; then
     echo "==== Building scripted rive_decoders ($config) ===="
     (
         cd "$rive_runtime/decoders"

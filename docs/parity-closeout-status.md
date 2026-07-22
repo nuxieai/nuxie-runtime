@@ -545,7 +545,8 @@ upstream-sync-map registry).
   Phase RD: measured spike, then lane-by-lane live-traversal migration
   with the pixel corpus as referee, ending in the scene-cache deletion
   gate. The ~60-70 #B-6 Family B rows re-open and close for good at that
-  gate.
+  gate. RD-1a's file-corresponding lane map and exact retention boundary are
+  fixed in `docs/rd1-renderer-feed-map.md`; no production code preceded it.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -605,10 +606,12 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-1 renderer-feed restoration — RB-1's retained data-binding foundation
-   and deletion gate are complete, so execute the measured spike and then the
-   lane-by-lane live-traversal migration in Phase RD. Do not begin demolition
-   until its spike has pinned the present renderer-feed boundaries.
+1. #RD-1b measured renderer-feed spike — RD-1a's mini-map is committed first;
+   add a non-default live traversal for a representative shape/image/nested
+   slice without deleting caches, run `r4-timing-gate` and `perf-hot-loop`,
+   commit the numbers, then stop for the user's perf-delta checkpoint. Only
+   after that checkpoint may RD-1b2's rulebook stress test and the C1-C7
+   demolition sequence proceed.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -754,6 +757,14 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-22 — #RD-1a fixed the renderer-feed restoration sequence before
+  production changes. `docs/rd1-renderer-feed-map.md` maps the pinned C++
+  draw/traversal files to RD-C1..C7, records the ownership move from prepared
+  scene replay to an Artboard live list with object-owned render resources,
+  separates legitimate per-object caches from the deletion inventory, and
+  binds every lane to renderer pixels plus both zero-failure golden gates.
+  Next is the no-demolition measured spike and its mandatory user checkpoint.
 
 - 2026-07-20 — #B-1 triage submitted for all 3 commits at `b73bc675`; pinned
   and candidate runtime ratchets localized exactly, and the session stopped

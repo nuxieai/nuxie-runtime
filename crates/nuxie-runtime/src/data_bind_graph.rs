@@ -5,7 +5,7 @@ use std::{
 
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 
-use crate::artboard_data_bind::RuntimeOwnedViewModelBindingCandidate;
+use crate::artboard_data_bind::RuntimeOwnedDataContext;
 use crate::draw::color_lerp;
 use crate::project_data_converter::{
     PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS, project_data_converter_bounded_list_length,
@@ -1707,13 +1707,13 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
 }
 
 /// Bind converter operands to the exact owned cells selected by the same
-/// ordered DataContext candidate walk as the primary source. C++ passes the
+/// ordered DataContext walk as the primary source. C++ passes the
 /// owning `DataBind*` to every operation-ViewModel operand
 /// (`data_converter_operation_viewmodel.cpp:48-59`); callers register the
 /// returned cells on that bind's existing sink.
-pub(crate) fn runtime_data_bind_graph_bind_owned_converter_operands_for_candidates(
+pub(crate) fn runtime_data_bind_graph_bind_owned_converter_operands_for_data_context(
     converter: &mut RuntimeDataBindGraphConverter,
-    candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    data_context: &RuntimeOwnedDataContext,
 ) -> bool {
     match converter {
         RuntimeDataBindGraphConverter::OperationViewModel {
@@ -1722,14 +1722,12 @@ pub(crate) fn runtime_data_bind_graph_bind_owned_converter_operands_for_candidat
             retained_operation_value,
             ..
         } => {
-            let retained = candidates.iter().find_map(|candidate| {
-                candidate
-                    .resolve_value_and_cell_for_source_path(
-                        &RuntimeDataBindGraphValue::Number(0.0),
-                        source_path,
-                    )
-                    .and_then(|(_, cell, _)| cell)
-            });
+            let retained = data_context
+                .resolve_value_and_cell_for_source_path(
+                    &RuntimeDataBindGraphValue::Number(0.0),
+                    source_path,
+                )
+                .and_then(|(_, cell, _)| cell);
             let changed = retained_operation_value.as_ref() != retained.as_ref();
             *operation_value = retained
                 .as_ref()
@@ -1753,20 +1751,8 @@ pub(crate) fn runtime_data_bind_graph_bind_owned_converter_operands_for_candidat
                 let Some(source_path) = runtime_project_data_value_path(&path) else {
                     continue;
                 };
-                let cell = candidates.iter().find_map(|candidate| {
-                    let context = candidate.context.borrow();
-                    if source_path.is_relative {
-                        let context_chain = candidate.context_chain();
-                        return source_path.owned_number_cell(&context, &context_chain);
-                    }
-                    let RuntimeProjectDataValuePathSegments::Ids(path) = &source_path.segments
-                    else {
-                        return None;
-                    };
-                    let property_path = candidate.property_path_for_source_path(path)?;
-                    context
-                        .cell_by_property_path(&property_path)
-                        .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Number(_)))
+                let cell = data_context.resolve_instance(&mut |_, context, scope_path| {
+                    source_path.owned_number_cell(context, &[scope_path])
                 });
                 if let Some(cell) = cell {
                     retained.push((path, cell));
@@ -1781,8 +1767,9 @@ pub(crate) fn runtime_data_bind_graph_bind_owned_converter_operands_for_candidat
         RuntimeDataBindGraphConverter::Group(converters) => {
             let mut changed = false;
             for converter in converters {
-                changed |= runtime_data_bind_graph_bind_owned_converter_operands_for_candidates(
-                    converter, candidates,
+                changed |= runtime_data_bind_graph_bind_owned_converter_operands_for_data_context(
+                    converter,
+                    data_context,
                 );
             }
             changed
@@ -5053,17 +5040,16 @@ impl RuntimeDataBindGraph {
         true
     }
 
-    pub(crate) fn bind_owned_view_model_context_candidates(
+    pub(crate) fn bind_owned_view_model_data_context(
         &mut self,
-        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        data_context: &RuntimeOwnedDataContext,
     ) -> bool {
         for source in &mut self.sources {
             // Same walk and kind matrix as before (#RB-1 e3): the first
-            // candidate producing a kind-matched value wins; the resolution
+            // context instance producing a kind-matched value wins; the resolution
             // additionally yields the retained cell for migratable scalars.
-            let resolved = candidates.iter().find_map(|candidate| {
-                candidate.resolve_value_and_cell_for_source_path(&source.value, &source.path)
-            });
+            let resolved =
+                data_context.resolve_value_and_cell_for_source_path(&source.value, &source.path);
             // A source already bound to the SAME retained cell is
             // dirt-driven: the (re)bind is not a new C++ `DataBind::bind()`,
             // so it neither re-copies the value nor resets converter state —
@@ -5102,8 +5088,9 @@ impl RuntimeDataBindGraph {
                 source.retained_structural_source = structural_source.clone();
             }
             if let Some(converter) = source.converter.as_mut() {
-                runtime_data_bind_graph_bind_owned_converter_operands_for_candidates(
-                    converter, candidates,
+                runtime_data_bind_graph_bind_owned_converter_operands_for_data_context(
+                    converter,
+                    data_context,
                 );
             }
             let mut operand_cells = Vec::new();
@@ -5229,7 +5216,7 @@ impl RuntimeDataBindGraph {
         value_changed
     }
 
-    /// Migrated sources exist only on the owned candidates path; every other
+    /// Migrated sources exist only on the owned DataContext path; every other
     /// context bind drops them so a later owned bind cannot mistake a stale
     /// cell registration for a live one.
     fn clear_retained_binds(&mut self) {
@@ -8268,6 +8255,50 @@ impl RuntimeDataBindGraph {
         Some(global_id)
     }
 
+    pub(crate) fn retained_trigger_source_for_bindable_target(
+        &self,
+        bindable_global_id: u32,
+    ) -> Option<RuntimeViewModelCell> {
+        let binding = self
+            .default_view_model_bindings
+            .iter()
+            .rev()
+            .find(|binding| {
+                let Some(source) = self.sources.get(binding.source.0) else {
+                    return false;
+                };
+                if source.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0 {
+                    return false;
+                }
+                self.targets.get(binding.target.0).is_some_and(|target| {
+                    matches!(
+                        target.target,
+                        RuntimeDataBindGraphTarget::Trigger { global_id }
+                            if global_id == bindable_global_id
+                    )
+                })
+            })?;
+        self.sources
+            .get(binding.source.0)?
+            .retained_bind
+            .source()
+            .cloned()
+    }
+
+    pub(crate) fn fire_retained_trigger_for_source_path(&self, source_path: &[u32]) -> bool {
+        let Some(cell) = self
+            .sources
+            .iter()
+            .find(|source| source.path == source_path)
+            .and_then(|source| source.retained_bind.source())
+            .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Trigger(_)))
+        else {
+            return false;
+        };
+        cell.fire_trigger();
+        true
+    }
+
     pub(crate) fn advance_stateful_converters(
         &mut self,
         elapsed_seconds: f32,
@@ -10972,6 +11003,66 @@ mod tests {
             imported_view_model_overrides: BTreeMap::new(),
             key_frame_source_revision: 0,
         }
+    }
+
+    fn append_trigger_binding(
+        graph: &mut RuntimeDataBindGraph,
+        data_bind_index: usize,
+        flags: u64,
+        source: Option<RuntimeViewModelCell>,
+    ) {
+        let source_handle = RuntimeDataBindGraph::push_default_view_model_binding(
+            &mut graph.sources,
+            &mut graph.targets,
+            &mut graph.default_view_model_bindings,
+            data_bind_index,
+            &[0, 0],
+            flags,
+            None,
+            RuntimeDataBindGraphTarget::Trigger { global_id: 7 },
+            RuntimeDataBindGraphValue::Trigger(0),
+        );
+        if let Some(source) = source {
+            graph.sources[source_handle.0]
+                .retained_bind
+                .set_source(source);
+        }
+    }
+
+    #[test]
+    fn transition_trigger_uses_last_non_to_source_data_bind_for_target() {
+        let first = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(1));
+        let last_to_target = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(2));
+        let later_to_source = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(3));
+        let mut graph = graph_with_trigger_binding(&[0, 0]);
+        graph.sources[0].retained_bind.set_source(first);
+        append_trigger_binding(&mut graph, 1, 0, Some(last_to_target.clone()));
+        append_trigger_binding(
+            &mut graph,
+            2,
+            DATA_BIND_FLAG_DIRECTION_TO_SOURCE,
+            Some(later_to_source),
+        );
+
+        let selected = graph
+            .retained_trigger_source_for_bindable_target(7)
+            .expect("last source-to-target bind retains its trigger source");
+        assert!(selected.ptr_eq(&last_to_target));
+    }
+
+    #[test]
+    fn unresolved_last_transition_trigger_bind_does_not_fall_back() {
+        let first = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(1));
+        let mut graph = graph_with_trigger_binding(&[0, 0]);
+        graph.sources[0].retained_bind.set_source(first);
+        append_trigger_binding(&mut graph, 1, 0, None);
+
+        assert!(
+            graph
+                .retained_trigger_source_for_bindable_target(7)
+                .is_none(),
+            "C++ bindableDataBindToTarget keeps the selected DataBind even when its source is unresolved (state_machine_instance.cpp:1754-1804,3212-3221)"
+        );
     }
 
     #[test]

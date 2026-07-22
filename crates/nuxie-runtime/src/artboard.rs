@@ -24,7 +24,7 @@ use crate::artboard_data_bind::{
     RuntimeArtboardPropertyBindingInstance, RuntimeArtboardRetainedSubordinateConverterOperands,
     RuntimeArtboardSoloBindingInstance, RuntimeArtboardSoloSourceBindingInstance,
     RuntimeArtboardTextListBindingInstance, RuntimeNestedChildContextUpdate,
-    RuntimeOwnedViewModelBindingCandidate, apply_artboard_name_based_color_data_bind_defaults,
+    RuntimeOwnedDataContext, apply_artboard_name_based_color_data_bind_defaults,
     build_artboard_authored_data_bind_states, build_artboard_converter_property_bindings,
     build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
     build_artboard_formula_token_bindings, build_artboard_image_asset_bindings,
@@ -266,7 +266,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_data_bind_values: BTreeMap<Arc<[u32]>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
     pub(crate) artboard_owned_view_model_context: Option<RuntimeOwnedViewModelContext>,
-    pub(crate) artboard_owned_view_model_candidates: Vec<RuntimeOwnedViewModelBindingCandidate>,
+    pub(crate) artboard_owned_data_context: Option<RuntimeOwnedDataContext>,
     pub(crate) artboard_owned_view_model_handle: Option<RuntimeOwnedViewModelContextHandle>,
     pub(crate) artboard_authored_data_bind_states: RuntimeArtboardAuthoredDataBindStates,
     /// Structural ViewModel replacement pushes a relink request just as C++
@@ -1075,7 +1075,7 @@ impl ArtboardInstance {
             artboard_data_bind_values,
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_owned_view_model_context: None,
-            artboard_owned_view_model_candidates: Vec::new(),
+            artboard_owned_data_context: None,
             artboard_owned_view_model_handle: None,
             artboard_authored_data_bind_states,
             artboard_owned_view_model_rebind_sink: crate::view_model_cell::RuntimeCellDirtSink::new(
@@ -2402,10 +2402,8 @@ impl ArtboardInstance {
         let mut instance = StateMachineInstance::new(index, state_machine, self);
         if let Some(context) = self.artboard_owned_view_model_handle.as_ref() {
             instance.bind_owned_view_model_context_handle(context);
-        } else if !self.artboard_owned_view_model_candidates.is_empty() {
-            instance.bind_owned_view_model_context_candidates(
-                &self.artboard_owned_view_model_candidates,
-            );
+        } else if let Some(data_context) = self.artboard_owned_data_context.as_ref() {
+            instance.bind_owned_view_model_data_context(data_context);
         } else if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
             instance.bind_owned_view_model_contexts(context);
         }
@@ -2752,7 +2750,7 @@ impl ArtboardInstance {
             .remove(&list_local_id)
             .unwrap_or_default();
         let mut reusable_items = previous_items.into_iter().map(Some).collect::<Vec<_>>();
-        let parent_candidates = self.artboard_owned_view_model_candidates.clone();
+        let parent_data_context = self.artboard_owned_data_context.clone().unwrap_or_default();
         let mut item_context_changed = false;
         let mut items = Vec::with_capacity(desired.len());
         for (logical_index, virtualized_position) in desired {
@@ -2771,21 +2769,17 @@ impl ArtboardInstance {
                     item.context = context.clone();
                     item.context_rebind_sink = crate::view_model_cell::RuntimeCellDirtSink::new();
                     context.add_rebind_dependent(&item.context_rebind_sink);
-                    item.child
-                        .bind_owned_view_model_artboard_handle(file, &context);
-                    let mut child_candidates = Vec::with_capacity(parent_candidates.len() + 1);
-                    child_candidates
-                        .push(RuntimeOwnedViewModelBindingCandidate::root_handle(&context));
-                    child_candidates.extend(parent_candidates.iter().cloned());
-                    item.child
-                        .bind_owned_view_model_artboard_context_candidates(
-                            file,
-                            &child_candidates,
-                            true,
-                            true,
-                        );
-                    // `bind_owned_view_model_artboard_context_candidates`
-                    // installs the row-first composite graph and clears the
+                    let child_data_context = RuntimeOwnedDataContext::with_local_handles(
+                        [context.clone()],
+                        Some(&parent_data_context),
+                    );
+                    item.child.bind_owned_view_model_artboard_data_context(
+                        file,
+                        &child_data_context,
+                        true,
+                        true,
+                    );
+                    // The row-first DataContext bind clears the
                     // public facade while doing so. Restore the facade after
                     // the bind so scripting observes the same row main that
                     // C++ installs in `ArtboardComponentList::bindArtboard`
@@ -2794,9 +2788,7 @@ impl ArtboardInstance {
                         RuntimeOwnedViewModelContext::from_main_handle(context.clone()),
                     );
                     for state_machine in &mut item.state_machines {
-                        state_machine.bind_owned_view_model_handle(&context);
-                        if state_machine.bind_owned_view_model_context_candidates(&child_candidates)
-                        {
+                        if state_machine.bind_owned_view_model_data_context(&child_data_context) {
                             state_machine.advance_data_context();
                         }
                     }
@@ -2831,14 +2823,13 @@ impl ArtboardInstance {
             ) else {
                 continue;
             };
-            child.bind_owned_view_model_artboard_handle(file, &context);
-            let mut child_candidates =
-                Vec::with_capacity(self.artboard_owned_view_model_candidates.len() + 1);
-            child_candidates.push(RuntimeOwnedViewModelBindingCandidate::root_handle(&context));
-            child_candidates.extend(self.artboard_owned_view_model_candidates.iter().cloned());
-            child.bind_owned_view_model_artboard_context_candidates(
+            let child_data_context = RuntimeOwnedDataContext::with_local_handles(
+                [context.clone()],
+                Some(&parent_data_context),
+            );
+            child.bind_owned_view_model_artboard_data_context(
                 file,
-                &child_candidates,
+                &child_data_context,
                 true,
                 true,
             );
@@ -2866,7 +2857,7 @@ impl ArtboardInstance {
                 else {
                     continue;
                 };
-                state_machine.bind_owned_view_model_context_candidates(&child_candidates);
+                state_machine.bind_owned_view_model_data_context(&child_data_context);
                 // C++ `ArtboardComponentList::linkStateMachineToArtboard`
                 // installs the row DataContext and immediately runs
                 // `updateDataBinds(false)` before the first state advance.
@@ -3391,32 +3382,28 @@ impl ArtboardInstance {
             }
         }
         let mut component_list_source_changed = false;
-        let parent_candidates = self.artboard_owned_view_model_candidates.clone();
+        let parent_data_context = self.artboard_owned_data_context.clone().unwrap_or_default();
         for items in self.component_list_items.values_mut() {
             for item in items {
                 let mut row_changed = false;
                 if !item.context_is_current(&item.context)
                     && let Some(file) = item.child.runtime_file_arc()
                 {
-                    let mut child_candidates = Vec::with_capacity(parent_candidates.len() + 1);
-                    child_candidates.push(RuntimeOwnedViewModelBindingCandidate::root_handle(
-                        &item.context,
-                    ));
-                    child_candidates.extend(parent_candidates.iter().cloned());
-                    row_changed |= item
-                        .child
-                        .bind_owned_view_model_artboard_context_candidates(
-                            &file,
-                            &child_candidates,
-                            true,
-                            true,
-                        );
+                    let child_data_context = RuntimeOwnedDataContext::with_local_handles(
+                        [item.context.clone()],
+                        Some(&parent_data_context),
+                    );
+                    row_changed |= item.child.bind_owned_view_model_artboard_data_context(
+                        &file,
+                        &child_data_context,
+                        true,
+                        true,
+                    );
                     item.child.artboard_owned_view_model_context = Some(
                         RuntimeOwnedViewModelContext::from_main_handle(item.context.clone()),
                     );
                     for state_machine in &mut item.state_machines {
-                        if state_machine.bind_owned_view_model_context_candidates(&child_candidates)
-                        {
+                        if state_machine.bind_owned_view_model_data_context(&child_data_context) {
                             row_changed = true;
                             row_changed |= state_machine.advance_data_context();
                         }
@@ -5670,9 +5657,9 @@ impl RuntimeNestedArtboardInstance {
         changed
     }
 
-    pub(crate) fn bind_owned_view_model_animation_context_candidates(
+    pub(crate) fn bind_owned_view_model_animation_data_context(
         &mut self,
-        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        data_context: &RuntimeOwnedDataContext,
     ) -> bool {
         let mut changed = false;
         for animation in &mut self.animations {
@@ -5680,7 +5667,7 @@ impl RuntimeNestedArtboardInstance {
             else {
                 continue;
             };
-            if state_machine.bind_owned_view_model_context_candidates(candidates) {
+            if state_machine.bind_owned_view_model_data_context(data_context) {
                 changed = true;
                 changed |= state_machine.advance_data_context();
             }
@@ -6772,7 +6759,7 @@ mod tests {
             artboard_data_bind_values: BTreeMap::new(),
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_owned_view_model_context: None,
-            artboard_owned_view_model_candidates: Vec::new(),
+            artboard_owned_data_context: None,
             artboard_owned_view_model_handle: None,
             artboard_authored_data_bind_states: RuntimeArtboardAuthoredDataBindStates::default(),
             artboard_owned_view_model_rebind_sink: crate::view_model_cell::RuntimeCellDirtSink::new(
@@ -10359,7 +10346,7 @@ mod tests {
     }
 
     #[test]
-    fn retained_candidate_listener_cascade_drains_in_one_apply_events_frame() {
+    fn retained_data_context_listener_cascade_drains_in_one_apply_events_frame() {
         let (file, mut artboard, mut state_machine) =
             owned_view_model_listener_cascade_fixture(9702);
         let context = RuntimeOwnedViewModelHandle::new(
@@ -10374,7 +10361,7 @@ mod tests {
                 .input(0)
                 .and_then(|input| input.number_value()),
             Some(9.0),
-            "first-class retained candidates must drain the same applyEvents queue",
+            "the retained DataContext must drain the same applyEvents queue",
         );
     }
 
@@ -10428,14 +10415,14 @@ mod tests {
     }
 
     #[test]
-    fn retained_candidate_listener_queues_each_mutation_until_next_frame() {
+    fn retained_data_context_listener_queues_each_mutation_until_next_frame() {
         let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9720, true);
         let context = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 1)
                 .expect("fixture has an owned ViewModel context"),
         );
 
-        // Binding the candidates path registers the listener condition as a
+        // Binding the DataContext registers the listener condition as a
         // dependent on the retained cell it reads (#RB-1 e4).
         assert!(state_machine.bind_owned_view_model_handle(&context));
         let condition_cell = context
@@ -10444,7 +10431,7 @@ mod tests {
             .expect("condition property has a retained cell");
         let bound_cell = state_machine
             .view_model_listener_condition_cell(0)
-            .expect("candidates bind migrates the scalar condition");
+            .expect("DataContext bind migrates the scalar condition");
         assert!(
             bound_cell.ptr_eq(&condition_cell),
             "the listener must observe the SAME retained cell the context owns"
@@ -10500,7 +10487,7 @@ mod tests {
     }
 
     #[test]
-    fn retained_candidate_listener_apply_events_cap_leaves_batch_101_pending() {
+    fn retained_data_context_listener_apply_events_cap_leaves_batch_101_pending() {
         const LISTENER_CAP: usize = 100;
         let bytes = synthetic_owned_view_model_listener_chain_riv(9705, LISTENER_CAP + 1, false);
         let file = read_runtime_file(&bytes).expect("listener boundary fixture imports");
@@ -10515,9 +10502,9 @@ mod tests {
             RuntimeOwnedViewModelInstance::new(&file, 0)
                 .expect("fixture has an owned ViewModel context"),
         );
-        let candidates = [RuntimeOwnedViewModelBindingCandidate::root_handle(&context)];
+        let data_context = RuntimeOwnedDataContext::from_root_handle(context.clone());
 
-        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        assert!(state_machine.bind_owned_view_model_data_context(&data_context));
         assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
         artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
@@ -10546,7 +10533,7 @@ mod tests {
     }
 
     #[test]
-    fn retained_candidate_listener_cycle_settles_without_replaying() {
+    fn retained_data_context_listener_cycle_settles_without_replaying() {
         let bytes = synthetic_owned_view_model_listener_chain_riv(9706, 2, true);
         let file = read_runtime_file(&bytes).expect("listener cycle fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
@@ -10579,7 +10566,7 @@ mod tests {
     }
 
     #[test]
-    fn retained_candidate_listener_live_cycle_stays_pending_at_apply_events_cap() {
+    fn retained_data_context_listener_live_cycle_stays_pending_at_apply_events_cap() {
         let bytes = synthetic_owned_view_model_listener_live_cycle_riv(9707);
         let file = read_runtime_file(&bytes).expect("listener live-cycle fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
@@ -10657,11 +10644,6 @@ mod tests {
         );
 
         assert!(state_machine.bind_owned_view_model_contexts(&context));
-        assert_eq!(
-            state_machine.active_view_model_trigger_count(0),
-            Some(3),
-            "the default trigger must bind from declared slot 1, not a same-shaped main model"
-        );
         assert!(
             authored_global
                 .borrow_mut()
@@ -10689,7 +10671,7 @@ mod tests {
     }
 
     #[test]
-    fn listener_write_addresses_declared_global_slot_with_cross_model_override() {
+    fn listener_write_rejects_cross_model_global_slot_occupant() {
         let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9690, true);
         let main = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0)
@@ -10714,14 +10696,9 @@ mod tests {
 
         assert!(state_machine.bind_owned_view_model_contexts(&context));
         assert_eq!(
-            state_machine.active_view_model_trigger_count(0),
-            Some(3),
-            "declared slot 1 may be occupied by a compatible cross-model override"
-        );
-        assert_eq!(
             state_machine.bindable_asset_value_for_data_bind(1),
-            Some(7),
-            "font synchronization must use the same declared-slot semantics as the data-bind graph"
+            Some(RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX),
+            "font synchronization must reject the same wrong-model occupant as the data-bind graph"
         );
         assert!(
             override_instance
@@ -10733,81 +10710,20 @@ mod tests {
             state_machine
                 .input(0)
                 .and_then(|input| input.number_value()),
-            Some(7.0)
+            Some(0.0),
+            "C++ DataContext rejects the wrong-model occupant before listener dispatch (data_context.cpp:397-506)"
         );
         assert_eq!(
             state_machine.default_view_model_number_source_value_for_data_bind(0),
-            Some(42.0),
-            "the bound graph source must resolve through declared slot 1, not the occupant's ViewModel identity"
+            Some(0.0),
+            "the authored source remains unresolved against a wrong-model slot occupant"
         );
         assert_eq!(
             override_instance
                 .borrow()
                 .number_value_by_property_path(&[1]),
-            Some(42.0),
-            "writes to global slot 1 must reach its occupant even when that instance has another ViewModel type"
-        );
-    }
-
-    #[test]
-    fn candidate_context_trigger_binding_skips_same_shaped_wrong_view_model() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9692, true);
-        let wrong_model = RuntimeOwnedViewModelHandle::new(
-            RuntimeOwnedViewModelInstance::new(&file, 2)
-                .expect("fixture has a same-shaped wrong ViewModel"),
-        );
-        let default_model = RuntimeOwnedViewModelHandle::new(
-            RuntimeOwnedViewModelInstance::new(&file, 1)
-                .expect("fixture has the default ViewModel"),
-        );
-        assert!(wrong_model.borrow_mut().set_trigger_by_property_index(2, 9));
-        assert!(
-            default_model
-                .borrow_mut()
-                .set_trigger_by_property_index(2, 4)
-        );
-        let candidates = vec![
-            RuntimeOwnedViewModelBindingCandidate::root_handle(&wrong_model),
-            RuntimeOwnedViewModelBindingCandidate::root_handle(&default_model),
-        ];
-
-        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
-        assert_eq!(
-            state_machine.active_view_model_trigger_count(0),
-            Some(4),
-            "candidate selection must continue past a compatible property path owned by another ViewModel"
-        );
-    }
-
-    #[test]
-    fn retained_scoped_trigger_binding_and_refresh_reject_wrong_view_model() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9693, true);
-        let root = RuntimeOwnedViewModelHandle::new(
-            RuntimeOwnedViewModelInstance::new(&file, 0)
-                .expect("fixture has a nested owned ViewModel context"),
-        );
-        assert!(root.borrow_mut().set_trigger_by_property_path(&[2, 2], 9));
-        let scoped = RuntimeOwnedViewModelContextHandle::root(&file, root.clone())
-            .scoped(vec![2])
-            .expect("fixture's same-shaped wrong-model child resolves");
-
-        assert!(state_machine.bind_owned_view_model_context_handle(&scoped));
-        assert_eq!(state_machine.active_view_model_trigger_count(0), Some(0));
-        assert_eq!(
-            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
-            Some(false)
-        );
-
-        assert!(root.borrow_mut().set_trigger_by_property_path(&[2, 2], 10));
-        assert!(state_machine.advance_data_context());
-        assert_eq!(
-            state_machine.active_view_model_trigger_count(0),
-            Some(0),
-            "retained refresh must not adopt a same-shaped trigger from the wrong scoped ViewModel"
-        );
-        assert_eq!(
-            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
-            Some(false)
+            Some(0.0),
+            "listener writes must not be redirected through the slot key"
         );
     }
 
@@ -10849,79 +10765,6 @@ mod tests {
             Some(64.0),
             "a non-default global number action must retain its schema-backed source and reach the declared slot"
         );
-        assert_eq!(
-            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
-            Some(false),
-            "a colliding property id in another ViewModel must not fire the default ViewModel transition trigger"
-        );
-    }
-
-    #[test]
-    fn rebinding_same_retained_handle_preserves_new_trigger_as_fireable() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9695, false);
-        let context = RuntimeOwnedViewModelHandle::new(
-            RuntimeOwnedViewModelInstance::new(&file, 1)
-                .expect("fixture has the default ViewModel"),
-        );
-
-        assert!(state_machine.bind_owned_view_model_handle(&context));
-        assert!(context.borrow_mut().set_trigger_by_property_index(2, 1));
-        assert!(state_machine.bind_owned_view_model_handle(&context));
-        assert_eq!(state_machine.active_view_model_trigger_count(0), Some(1));
-        assert_eq!(
-            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
-            Some(true),
-            "a frame-level rebind of the same retained identity must refresh, not baseline, a host-fired trigger"
-        );
-    }
-
-    #[test]
-    fn retained_owned_trigger_is_live_and_acknowledged_through_its_source_cell() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9721, false);
-        let context = RuntimeOwnedViewModelHandle::new(
-            RuntimeOwnedViewModelInstance::new(&file, 1)
-                .expect("fixture has the default ViewModel"),
-        );
-
-        assert!(state_machine.bind_owned_view_model_handle(&context));
-        assert!(context.borrow_mut().set_trigger_by_property_index(2, 1));
-        assert_eq!(
-            state_machine.active_view_model_trigger_count(0),
-            Some(1),
-            "the machine must read the retained trigger source without a candidate rebind"
-        );
-        assert_eq!(
-            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
-            Some(true)
-        );
-
-        state_machine.reset_advanced_data_context();
-        assert_eq!(
-            context.borrow().trigger_value_by_property_path(&[2]),
-            Some(0)
-        );
-        assert_eq!(state_machine.active_view_model_trigger_count(0), Some(0));
-        assert_eq!(
-            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
-            Some(false),
-            "acknowledging the machine frame must acknowledge the retained source cell"
-        );
-    }
-
-    #[test]
-    fn direct_owned_context_trigger_binding_retains_the_exact_source_cell() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9722, false);
-        let mut context = RuntimeOwnedViewModelInstance::new(&file, 1)
-            .expect("fixture has the default ViewModel");
-
-        assert!(state_machine.bind_owned_view_model_context_mut(&mut context));
-        assert!(context.set_trigger_by_property_index(2, 1));
-        assert_eq!(state_machine.active_view_model_trigger_count(0), Some(1));
-        assert_eq!(
-            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
-            Some(true),
-            "C++ transition evaluation follows the DataBind to the exact retained ViewModelInstanceValue source (transition_viewmodel_condition.cpp:49-60)"
-        );
     }
 
     #[test]
@@ -10960,7 +10803,7 @@ mod tests {
     }
 
     #[test]
-    fn retained_composite_routes_state_action_and_refreshes_alias_on_next_advance() {
+    fn retained_composite_does_not_route_authored_path_through_cross_model_slot() {
         let (file, mut artboard, state_machine) = owned_view_model_action_fixture(9697, false);
         let main = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0)
@@ -10978,8 +10821,8 @@ mod tests {
         assert!(artboard.advance_state_machine_instances_with_nested(&mut state_machines, 0.0));
         assert_eq!(
             global_override.borrow().number_value_by_property_path(&[1]),
-            Some(42.0),
-            "the state-entry listener action must write through the retained declared global slot"
+            Some(0.0),
+            "slot keys only place globals; C++ lookup compares the actual occupant viewModelId (data_context.cpp:397-506)"
         );
 
         assert!(
@@ -10990,8 +10833,8 @@ mod tests {
         let _ = artboard.advance_state_machine_instances_with_nested(&mut state_machines, 0.0);
         assert_eq!(
             state_machines[0].default_view_model_number_source_value_for_data_bind(0),
-            Some(17.0),
-            "a mutation through a retained composite alias must refresh before the clean-frame fast path"
+            Some(0.0),
+            "the unresolved authored source must remain at its default"
         );
         assert_eq!(
             global_override.borrow().number_value_by_property_path(&[1]),
@@ -11001,7 +10844,7 @@ mod tests {
     }
 
     #[test]
-    fn retained_state_action_preserves_declared_trigger_slot_identity() {
+    fn retained_state_action_rejects_slot_without_matching_actual_model() {
         let bytes =
             synthetic_owned_view_model_action_riv_with_options(9704, false, true, false, false);
         let file = read_runtime_file(&bytes).expect("state trigger action fixture imports");
@@ -11030,19 +10873,14 @@ mod tests {
             slot_two_occupant
                 .borrow()
                 .trigger_value_by_property_path(&[2]),
-            Some(1),
-            "the state action must write the declared global slot even when its occupant has the default model type",
+            Some(0),
+            "same-model locals are resolved in DataContext order, not by slot key (data_context.cpp:397-506)",
         );
         assert_eq!(main.borrow().trigger_value_by_property_path(&[2]), Some(0));
-        assert_eq!(
-            state_machines[0].active_view_model_trigger_is_fireable_for_layer(0, 0),
-            Some(false),
-            "a global trigger action with a colliding property ordinal must not fire the local transition trigger",
-        );
     }
 
     #[test]
-    fn artboard_created_machine_retains_declared_global_slot_and_alias_refresh() {
+    fn artboard_created_machine_rejects_cross_model_global_occupant() {
         let (file, mut artboard, _) = owned_view_model_action_fixture(9698, false);
         let main = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0)
@@ -11062,8 +10900,8 @@ mod tests {
         assert!(artboard.advance_state_machine_instance(&mut state_machine, 0.0));
         assert_eq!(
             global_override.borrow().number_value_by_property_path(&[1]),
-            Some(42.0),
-            "state-entry action must retain the authored global slot through artboard-created machine binding",
+            Some(0.0),
+            "artboard-created machines inherit actual-id DataContext resolution (data_context.cpp:397-506)",
         );
 
         assert!(
@@ -11074,8 +10912,8 @@ mod tests {
         let _ = artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine.default_view_model_number_source_value_for_data_bind(0),
-            Some(17.0),
-            "the machine must refresh the retained global occupant through its alias",
+            Some(0.0),
+            "the wrong-model global occupant must remain unresolved",
         );
         assert_eq!(
             global_override.borrow().number_value_by_property_path(&[1]),
@@ -11110,7 +10948,7 @@ mod tests {
     }
 
     #[test]
-    fn nested_candidate_context_chain_bind_dispatches_view_model_listeners() {
+    fn scoped_data_context_bind_dispatches_view_model_listeners() {
         let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9685, true);
         let main = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0)
@@ -11119,11 +10957,9 @@ mod tests {
         let scoped = RuntimeOwnedViewModelContextHandle::root(&file, main.clone())
             .scoped(vec![1])
             .expect("fixture child scope resolves");
-        let candidates = vec![RuntimeOwnedViewModelBindingCandidate::context_handle(
-            &scoped,
-        )];
+        let data_context = RuntimeOwnedDataContext::from_context_handle(&scoped);
 
-        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        assert!(state_machine.bind_owned_view_model_data_context(&data_context));
         assert!(main.borrow_mut().set_number_by_property_path(&[1, 0], 1.0));
         artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
@@ -11131,21 +10967,21 @@ mod tests {
                 .input(0)
                 .and_then(|input| input.number_value()),
             Some(7.0),
-            "candidate artboard contexts must dispatch their ViewModel listener"
+            "scoped DataContexts must dispatch their ViewModel listener"
         );
         assert_eq!(
             main.borrow().number_value_by_property_path(&[1, 1]),
             Some(42.0),
-            "listener ViewModel writes must reach the retained nested candidate path"
+            "listener ViewModel writes must reach the retained scoped path"
         );
     }
 
     #[test]
-    fn later_candidate_context_chain_owns_listener_observation_and_writes() {
+    fn later_local_data_context_instance_owns_listener_observation_and_writes() {
         let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9686, true);
         let root = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0)
-                .expect("fixture has nested candidate contexts"),
+                .expect("fixture has nested DataContext instances"),
         );
         let invalid_first = RuntimeOwnedViewModelContextHandle::root(&file, root.clone())
             .scoped(vec![2])
@@ -11153,12 +10989,12 @@ mod tests {
         let resolved_later = RuntimeOwnedViewModelContextHandle::root(&file, root.clone())
             .scoped(vec![1])
             .expect("fixture has the matching child");
-        let candidates = vec![
-            RuntimeOwnedViewModelBindingCandidate::context_handle(&invalid_first),
-            RuntimeOwnedViewModelBindingCandidate::context_handle(&resolved_later),
-        ];
+        let data_context = RuntimeOwnedDataContext::with_local_context_handles(
+            [invalid_first, resolved_later],
+            None,
+        );
 
-        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        assert!(state_machine.bind_owned_view_model_data_context(&data_context));
         assert!(root.borrow_mut().set_number_by_property_path(&[1, 0], 1.0));
         artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
@@ -11166,17 +11002,17 @@ mod tests {
                 .input(0)
                 .and_then(|input| input.number_value()),
             Some(7.0),
-            "listener observation must fall through an invalid first candidate"
+            "listener observation must fall through an invalid first local instance"
         );
         assert_eq!(
             root.borrow().number_value_by_property_path(&[1, 1]),
             Some(42.0),
-            "listener writes must follow the data-bind source into the later candidate"
+            "listener writes must follow the data-bind source into the later local instance"
         );
         assert_eq!(
             root.borrow().number_value_by_property_path(&[2, 1]),
             Some(0.0),
-            "the unresolved first candidate must remain untouched"
+            "the unresolved first local instance must remain untouched"
         );
     }
 
@@ -11289,7 +11125,7 @@ mod tests {
     }
 
     #[test]
-    fn component_list_machine_retains_inherited_declared_global_slot() {
+    fn component_list_machine_rejects_inherited_cross_model_global_slot() {
         let (file, child, state_machine) = owned_view_model_action_fixture(9703, false);
         let row = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 2)
@@ -11331,8 +11167,8 @@ mod tests {
         assert!(parent.advance_nested_artboards(0.0));
         assert_eq!(
             global_override.borrow().number_value_by_property_path(&[1]),
-            Some(42.0),
-            "the row machine must route its state action through inherited declared global slot 1",
+            Some(0.0),
+            "row parent fallback still resolves by actual viewModelId, never the inherited slot key (data_context.cpp:397-506)",
         );
         assert_eq!(
             row.borrow().number_value_by_property_path(&[1]),

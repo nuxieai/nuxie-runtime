@@ -1,10 +1,9 @@
 use super::{
-    StateMachineBindableIntegerInstance, StateMachineBindableNumberInstance,
-    StateMachineBindableTriggerInstance, StateMachineInputInstance,
-    StateMachineViewModelTriggerInstance, TransitionEvaluationContext, bindable_artboard_value,
-    bindable_asset_value, bindable_boolean_value, bindable_color_value, bindable_enum_value,
-    bindable_integer_value, bindable_number_value, bindable_string_value,
-    bindable_trigger_source_global_id, bindable_trigger_value, bindable_view_model_value,
+    RuntimeScheduledListenerActionExecutor, StateMachineBindableIntegerInstance,
+    StateMachineBindableNumberInstance, StateMachineInputInstance, TransitionEvaluationContext,
+    bindable_artboard_value, bindable_asset_value, bindable_boolean_value, bindable_color_value,
+    bindable_enum_value, bindable_integer_value, bindable_number_value, bindable_string_value,
+    bindable_trigger_value, bindable_view_model_value,
 };
 use crate::ArtboardInstance;
 use crate::components::TransformProperty;
@@ -981,7 +980,7 @@ impl RuntimeTransitionCondition {
         context: &TransitionEvaluationContext<'_>,
         artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
-        view_model_triggers: &[StateMachineViewModelTriggerInstance],
+        executor: &dyn RuntimeScheduledListenerActionExecutor,
     ) -> bool {
         let &TransitionEvaluationContext {
             scripted_instances,
@@ -997,7 +996,6 @@ impl RuntimeTransitionCondition {
             bindable_view_models,
             bindable_booleans,
             data_context_present,
-            data_context_view_model_bound,
             layer_index,
             view_model_trigger_layer_id,
         } = context;
@@ -1225,20 +1223,12 @@ impl RuntimeTransitionCondition {
                 op.compare_u64_equal_only(left, right)
             }
             Self::ViewModelTrigger { bindable_global_id } => {
-                if !data_context_present || !data_context_view_model_bound {
+                if !data_context_present {
                     return false;
                 }
-                let Some(trigger_global_id) =
-                    bindable_trigger_source_global_id(bindable_triggers, *bindable_global_id)
-                else {
-                    return false;
-                };
-                view_model_triggers
-                    .iter()
-                    .find(|trigger| trigger.global_id() == trigger_global_id)
-                    .is_some_and(|trigger| {
-                        trigger.is_fireable_for_layer(view_model_trigger_layer_id)
-                    })
+                executor
+                    .retained_view_model_trigger_source(*bindable_global_id)
+                    .is_some_and(|cell| cell.is_changed_for_layer(view_model_trigger_layer_id))
             }
             Self::ViewModelPointer {
                 left_bindable_global_id,
@@ -1466,9 +1456,8 @@ impl RuntimeTransitionCondition {
 
     pub(super) fn use_input(
         &self,
+        executor: &dyn RuntimeScheduledListenerActionExecutor,
         inputs: &mut [StateMachineInputInstance],
-        bindable_triggers: &[StateMachineBindableTriggerInstance],
-        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         layer_index: usize,
         view_model_trigger_layer_id: u64,
     ) {
@@ -1479,14 +1468,8 @@ impl RuntimeTransitionCondition {
                 }
             }
             Self::ViewModelTrigger { bindable_global_id } => {
-                let Some(trigger_global_id) =
-                    bindable_trigger_source_global_id(bindable_triggers, *bindable_global_id)
-                else {
-                    return;
-                };
-                if let Some(trigger) = view_model_triggers
-                    .iter_mut()
-                    .find(|trigger| trigger.global_id() == trigger_global_id)
+                if let Some(trigger) =
+                    executor.retained_view_model_trigger_source(*bindable_global_id)
                 {
                     trigger.use_in_layer(view_model_trigger_layer_id);
                 }

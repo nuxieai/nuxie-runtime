@@ -230,14 +230,7 @@ pub(crate) struct RuntimeBindableTrigger {
     pub(crate) global_id: u32,
     pub(crate) data_bind_indices: Vec<usize>,
     pub(crate) value: u64,
-    pub(crate) source: RuntimeBindableTriggerSource,
     pub(crate) default_view_model_sources: Vec<RuntimeBindableTriggerDefaultViewModelSource>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RuntimeBindableTriggerSource {
-    None,
-    DefaultViewModelTrigger { trigger_global_id: u32 },
 }
 
 #[derive(Debug, Clone)]
@@ -292,7 +285,6 @@ pub(crate) struct RuntimeBindableBooleanDefaultViewModelSource {
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeViewModelTrigger {
-    pub(crate) global_id: u32,
     pub(crate) view_model_property_id: u32,
 }
 
@@ -605,7 +597,6 @@ pub(crate) struct StateMachineBindableTriggerInstance {
     pub(crate) global_id: u32,
     pub(crate) data_bind_indices: Vec<usize>,
     pub(crate) value: u64,
-    pub(crate) source: RuntimeBindableTriggerSource,
 }
 
 impl StateMachineBindableTriggerInstance {
@@ -614,7 +605,6 @@ impl StateMachineBindableTriggerInstance {
             global_id: bindable_trigger.global_id,
             data_bind_indices: bindable_trigger.data_bind_indices.clone(),
             value: bindable_trigger.value,
-            source: bindable_trigger.source,
         }
     }
 
@@ -639,21 +629,6 @@ pub(crate) fn bindable_trigger_value(
         .iter()
         .find(|bindable_trigger| bindable_trigger.global_id == global_id)
         .map(|bindable_trigger| bindable_trigger.value)
-}
-
-pub(crate) fn bindable_trigger_source_global_id(
-    bindable_triggers: &[StateMachineBindableTriggerInstance],
-    global_id: u32,
-) -> Option<u32> {
-    bindable_triggers
-        .iter()
-        .find(|bindable_trigger| bindable_trigger.global_id == global_id)
-        .and_then(|bindable_trigger| match bindable_trigger.source {
-            RuntimeBindableTriggerSource::DefaultViewModelTrigger { trigger_global_id } => {
-                Some(trigger_global_id)
-            }
-            RuntimeBindableTriggerSource::None => None,
-        })
 }
 
 #[derive(Debug, Clone)]
@@ -1729,20 +1704,17 @@ pub(crate) fn runtime_bindable_triggers<'a>(
         if target.type_name != "BindablePropertyTrigger" {
             continue;
         }
-        let source = runtime_bindable_trigger_source(file, data_bind, default_instance);
         let value = target.uint_property("propertyValue").unwrap_or(0);
         values
             .entry(target.id)
             .and_modify(|bindable_trigger| {
                 bindable_trigger.data_bind_indices.push(data_bind_index);
                 bindable_trigger.value = value;
-                bindable_trigger.source = source;
             })
             .or_insert_with(|| RuntimeBindableTrigger {
                 global_id: target.id,
                 data_bind_indices: vec![data_bind_index],
                 value,
-                source,
                 default_view_model_sources: Vec::new(),
             });
         if let Some(default_source) = runtime_bindable_trigger_default_view_model_source(
@@ -1779,23 +1751,24 @@ fn runtime_bindable_trigger_unresolved_view_model_source<'a>(
     target_value: u64,
     converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableTriggerDefaultViewModelSource> {
-    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
-    if property_key_for_name("BindablePropertyTrigger", "propertyValue") != Some(property_key) {
+    let property_key = data_bind
+        .uint_property("propertyKey")
+        .and_then(|property_key| u16::try_from(property_key).ok());
+    if property_key.is_some_and(|property_key| property_key != 0)
+        && property_key_for_name("BindablePropertyTrigger", "propertyValue") != property_key
+    {
         return None;
     }
-    let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    (runtime_view_model_property_at_path(file, &path)?.type_name == "ViewModelPropertyTrigger")
-        .then(|| RuntimeBindableTriggerDefaultViewModelSource {
-            data_bind_index,
-            path: path.to_vec(),
-            flags: data_bind.uint_property("flags").unwrap_or(0),
-            converter: runtime_data_bind_graph_converter_with_cache(
-                file,
-                data_bind,
-                converter_cache,
-            ),
-            value: target_value,
-        })
+    let path = file
+        .data_bind_context_source_path_ids_for_object(data_bind)
+        .or_else(|| data_bind.id_list_property("sourcePathIds"))?;
+    (!path.is_empty()).then(|| RuntimeBindableTriggerDefaultViewModelSource {
+        data_bind_index,
+        path,
+        flags: data_bind.uint_property("flags").unwrap_or(0),
+        converter: runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache),
+        value: target_value,
+    })
 }
 
 fn runtime_bindable_trigger_default_view_model_source<'a>(
@@ -1805,11 +1778,17 @@ fn runtime_bindable_trigger_default_view_model_source<'a>(
     default_instance: Option<&RuntimeObject>,
     converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableTriggerDefaultViewModelSource> {
-    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
-    if property_key_for_name("BindablePropertyTrigger", "propertyValue") != Some(property_key) {
+    let property_key = data_bind
+        .uint_property("propertyKey")
+        .and_then(|property_key| u16::try_from(property_key).ok());
+    if property_key.is_some_and(|property_key| property_key != 0)
+        && property_key_for_name("BindablePropertyTrigger", "propertyValue") != property_key
+    {
         return None;
     }
-    let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+    let path = file
+        .data_bind_context_source_path_ids_for_object(data_bind)
+        .or_else(|| data_bind.id_list_property("sourcePathIds"))?;
     let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
     let value = file.view_model_instance_trigger_count_for_object(source)?;
     Some(RuntimeBindableTriggerDefaultViewModelSource {
@@ -1819,33 +1798,6 @@ fn runtime_bindable_trigger_default_view_model_source<'a>(
         converter: runtime_data_bind_graph_converter_with_cache(file, data_bind, converter_cache),
         value,
     })
-}
-
-fn runtime_bindable_trigger_source(
-    file: &RuntimeFile,
-    data_bind: &RuntimeObject,
-    default_instance: Option<&RuntimeObject>,
-) -> RuntimeBindableTriggerSource {
-    let Some(path) = file.data_bind_context_source_path_ids_for_object(data_bind) else {
-        return RuntimeBindableTriggerSource::None;
-    };
-    let Some(default_instance) = default_instance else {
-        return RuntimeBindableTriggerSource::None;
-    };
-    let Some(target) = file.data_context_view_model_property_for_instance(default_instance, &path)
-    else {
-        return RuntimeBindableTriggerSource::None;
-    };
-    if file
-        .view_model_instance_trigger_count_for_object(target)
-        .is_none()
-    {
-        return RuntimeBindableTriggerSource::None;
-    }
-
-    RuntimeBindableTriggerSource::DefaultViewModelTrigger {
-        trigger_global_id: target.id,
-    }
 }
 
 pub(crate) fn runtime_bindable_view_models<'a>(
@@ -2040,7 +1992,6 @@ pub(crate) fn runtime_default_view_model_triggers(
                 .uint_property("viewModelPropertyId")
                 .and_then(|id| u32::try_from(id).ok())?;
             Some(RuntimeViewModelTrigger {
-                global_id: value.object.id,
                 view_model_property_id,
             })
         })

@@ -8,7 +8,7 @@ use crate::data_bind_graph::{
 use crate::focus::RuntimeFocusTree;
 use crate::properties::{artboard_index_for_graph, property_key_for_name};
 use crate::scripting::{RuntimeScriptInstanceHandle, ScriptError, ScriptListenerActionDefinition};
-use crate::view_model_cell::{RuntimeViewModelCell, RuntimeViewModelCellValue};
+use crate::view_model_cell::RuntimeViewModelCell;
 use crate::{
     ArtboardInstance, RuntimeGeometryHit, RuntimeGeometryHitOccurrence,
     RuntimeGeometryHitPathSegment,
@@ -35,11 +35,11 @@ pub(crate) use bindables::{
     StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
     bindable_artboard_value, bindable_asset_value, bindable_boolean_value, bindable_color_value,
     bindable_enum_value, bindable_integer_value, bindable_number_value, bindable_string_value,
-    bindable_trigger_source_global_id, bindable_trigger_value, bindable_view_model_value,
-    runtime_bindable_artboards, runtime_bindable_assets, runtime_bindable_booleans,
-    runtime_bindable_colors, runtime_bindable_enums, runtime_bindable_integers,
-    runtime_bindable_lists, runtime_bindable_numbers, runtime_bindable_strings,
-    runtime_bindable_triggers, runtime_bindable_view_models, runtime_default_view_model_triggers,
+    bindable_trigger_value, bindable_view_model_value, runtime_bindable_artboards,
+    runtime_bindable_assets, runtime_bindable_booleans, runtime_bindable_colors,
+    runtime_bindable_enums, runtime_bindable_integers, runtime_bindable_lists,
+    runtime_bindable_numbers, runtime_bindable_strings, runtime_bindable_triggers,
+    runtime_bindable_view_models, runtime_default_view_model_triggers,
     runtime_number_default_view_model_source_for_instance,
 };
 pub use instance::StateMachineInstance;
@@ -664,18 +664,6 @@ impl RuntimeListenerType {
                 | Self::Drag
         )
     }
-
-    pub(crate) fn script_pointer_kind(self) -> Option<crate::ScriptPointerEventKind> {
-        match self {
-            Self::Enter => Some(crate::ScriptPointerEventKind::Enter),
-            Self::Exit => Some(crate::ScriptPointerEventKind::Exit),
-            Self::Down => Some(crate::ScriptPointerEventKind::Down),
-            Self::Up => Some(crate::ScriptPointerEventKind::Up),
-            Self::Move => Some(crate::ScriptPointerEventKind::Move),
-            Self::Click => Some(crate::ScriptPointerEventKind::Click),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -1141,15 +1129,13 @@ impl RuntimeLayerState {
     fn perform_fire_actions(
         &self,
         occurrence: StateMachineFireOccurrence,
-        data_context_view_model_bound: bool,
-        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
+        executor: &mut dyn RuntimeScheduledListenerActionExecutor,
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) {
         perform_state_machine_fire_actions(
             &self.fire_actions,
             occurrence,
-            data_context_view_model_bound,
-            view_model_triggers,
+            executor,
             reported_events,
         );
     }
@@ -1209,7 +1195,6 @@ pub(crate) struct TransitionEvaluationContext<'a> {
     bindable_view_models: &'a [StateMachineBindableViewModelInstance],
     bindable_booleans: &'a [StateMachineBindableBooleanInstance],
     data_context_present: bool,
-    data_context_view_model_bound: bool,
     layer_index: usize,
     view_model_trigger_layer_id: u64,
 }
@@ -1234,11 +1219,11 @@ impl RuntimeStateTransition {
         context: &TransitionEvaluationContext<'_>,
         artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
-        view_model_triggers: &[StateMachineViewModelTriggerInstance],
+        executor: &dyn RuntimeScheduledListenerActionExecutor,
         animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
     ) -> TransitionAllowance {
         for condition in &self.conditions {
-            if !condition.evaluate(context, artboard, inputs, view_model_triggers) {
+            if !condition.evaluate(context, artboard, inputs, executor) {
                 return TransitionAllowance::No;
             }
         }
@@ -1304,15 +1289,13 @@ impl RuntimeStateTransition {
     fn perform_fire_actions(
         &self,
         occurrence: StateMachineFireOccurrence,
-        data_context_view_model_bound: bool,
-        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
+        executor: &mut dyn RuntimeScheduledListenerActionExecutor,
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) {
         perform_state_machine_fire_actions(
             &self.fire_actions,
             occurrence,
-            data_context_view_model_bound,
-            view_model_triggers,
+            executor,
             reported_events,
         );
     }
@@ -1376,13 +1359,12 @@ impl RuntimeStateTransition {
         &self,
         context: &TransitionEvaluationContext<'_>,
         inputs: &mut [StateMachineInputInstance],
-        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
+        executor: &dyn RuntimeScheduledListenerActionExecutor,
     ) {
         for condition in &self.conditions {
             condition.use_input(
+                executor,
                 inputs,
-                context.bindable_triggers,
-                view_model_triggers,
                 context.layer_index,
                 context.view_model_trigger_layer_id,
             );
@@ -1430,8 +1412,15 @@ pub(crate) enum RuntimeStateMachineFireAction {
     },
     Trigger {
         occurs_value: u64,
-        target_global_id: Option<u32>,
+        path: Option<RuntimeStateMachineFireTriggerPath>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeStateMachineFireTriggerPath {
+    file: Arc<RuntimeFile>,
+    source_path: Vec<u32>,
+    is_relative: bool,
 }
 
 impl RuntimeStateMachineFireAction {
@@ -1450,7 +1439,7 @@ impl RuntimeStateMachineFireAction {
             }
             "StateMachineFireTrigger" => Some(Self::Trigger {
                 occurs_value,
-                target_global_id: runtime_fire_trigger_target_global(file, action.object),
+                path: runtime_fire_trigger_path(file, action.object),
             }),
             _ => None,
         }
@@ -2010,8 +1999,7 @@ struct BlendAnimationDirectInstance {
 pub(crate) fn perform_state_machine_fire_actions(
     fire_actions: &[RuntimeStateMachineFireAction],
     occurrence: StateMachineFireOccurrence,
-    data_context_view_model_bound: bool,
-    view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
+    executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     reported_events: &mut Vec<StateMachineReportedEvent>,
 ) {
     for action in fire_actions {
@@ -2022,17 +2010,11 @@ pub(crate) fn perform_state_machine_fire_actions(
             } if *occurs_value == occurrence.value() => {
                 reported_events.push(event.clone());
             }
-            RuntimeStateMachineFireAction::Trigger {
-                occurs_value,
-                target_global_id,
-            } if *occurs_value == occurrence.value() && data_context_view_model_bound => {
-                if let Some(target_global_id) = target_global_id {
-                    if let Some(trigger) = view_model_triggers
-                        .iter_mut()
-                        .find(|trigger| trigger.global_id() == *target_global_id)
-                    {
-                        trigger.increment();
-                    }
+            RuntimeStateMachineFireAction::Trigger { occurs_value, path }
+                if *occurs_value == occurrence.value() =>
+            {
+                if let Some(path) = path {
+                    executor.fire_view_model_trigger(path);
                 }
             }
             _ => {}
@@ -2040,23 +2022,21 @@ pub(crate) fn perform_state_machine_fire_actions(
     }
 }
 
-fn runtime_fire_trigger_target_global(file: &RuntimeFile, object: &RuntimeObject) -> Option<u32> {
+fn runtime_fire_trigger_path(
+    file: &RuntimeFile,
+    object: &RuntimeObject,
+) -> Option<RuntimeStateMachineFireTriggerPath> {
     let data_bind_path = file.data_bind_path_for_referencer_object(object)?;
     let is_relative = data_bind_path
         .object
         .and_then(|path_object| path_object.bool_property("isRelative"))
         .or_else(|| object.bool_property("isDataBindPathRelative"))
         .unwrap_or(false);
-    if is_relative {
-        return None;
-    }
-    let default_instance = file.view_model_default_instance(0)?;
-    let target = file.data_context_view_model_property_for_instance(
-        default_instance.object,
-        &data_bind_path.resolved_path_ids,
-    )?;
-    file.view_model_instance_trigger_count_for_object(target)?;
-    Some(target.id)
+    Some(RuntimeStateMachineFireTriggerPath {
+        file: Arc::new(file.clone()),
+        source_path: data_bind_path.resolved_path_ids,
+        is_relative,
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -2115,7 +2095,6 @@ pub(crate) struct RuntimeScheduledListenerActionTargetsMut<'a> {
     pub(crate) bindable_triggers: &'a mut [StateMachineBindableTriggerInstance],
     pub(crate) bindable_view_models: &'a mut [StateMachineBindableViewModelInstance],
     pub(crate) bindable_booleans: &'a mut [StateMachineBindableBooleanInstance],
-    pub(crate) view_model_triggers: &'a mut [StateMachineViewModelTriggerInstance],
     pub(crate) transition_durations: &'a mut [StateMachineTransitionDurationInstance],
 }
 
@@ -2135,13 +2114,23 @@ impl RuntimeScheduledListenerActionTargetsMut<'_> {
             bindable_triggers: &mut *self.bindable_triggers,
             bindable_view_models: &mut *self.bindable_view_models,
             bindable_booleans: &mut *self.bindable_booleans,
-            view_model_triggers: &mut *self.view_model_triggers,
             transition_durations: &mut *self.transition_durations,
         }
     }
 }
 
 pub(crate) trait RuntimeScheduledListenerActionExecutor {
+    fn retained_view_model_trigger_source(
+        &self,
+        _bindable_global_id: u32,
+    ) -> Option<RuntimeViewModelCell> {
+        None
+    }
+
+    fn fire_view_model_trigger(&mut self, _path: &RuntimeStateMachineFireTriggerPath) -> bool {
+        false
+    }
+
     fn perform_instance_action(
         &mut self,
         artboard: &mut ArtboardInstance,
@@ -2532,82 +2521,6 @@ impl StateMachineInputInstance {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct StateMachineViewModelTriggerInstance {
-    global_id: u32,
-    view_model_property_id: u32,
-    /// Exact `ViewModelInstanceTrigger` analog owned by the instantiated
-    /// context occurrence. Metadata never carries a parallel value/change
-    /// snapshot (`data_bind_context.cpp:56-85`, `data_bind.cpp:210-240`).
-    cell: Option<RuntimeViewModelCell>,
-}
-
-impl StateMachineViewModelTriggerInstance {
-    pub(crate) fn new(global_id: u32, view_model_property_id: u32) -> Self {
-        Self {
-            global_id,
-            view_model_property_id,
-            cell: None,
-        }
-    }
-
-    pub(crate) fn unbound(&self) -> Self {
-        Self {
-            global_id: self.global_id,
-            view_model_property_id: self.view_model_property_id,
-            cell: None,
-        }
-    }
-
-    pub(crate) fn global_id(&self) -> u32 {
-        self.global_id
-    }
-
-    pub(crate) fn increment(&mut self) {
-        if let Some(cell) = &self.cell {
-            cell.fire_trigger();
-        }
-    }
-
-    pub(crate) fn is_fireable_for_layer(&self, layer_id: u64) -> bool {
-        self.cell
-            .as_ref()
-            .is_some_and(|cell| cell.is_changed_for_layer(layer_id))
-    }
-
-    pub(crate) fn use_in_layer(&mut self, layer_id: u64) {
-        if let Some(cell) = &self.cell {
-            cell.use_in_layer(layer_id);
-        }
-    }
-
-    pub(crate) fn value(&self) -> u64 {
-        match self.cell.as_ref().map(RuntimeViewModelCell::value) {
-            Some(RuntimeViewModelCellValue::Trigger(value)) => value,
-            _ => 0,
-        }
-    }
-
-    pub(crate) fn bind_cell(&mut self, cell: RuntimeViewModelCell) {
-        if self
-            .cell
-            .as_ref()
-            .is_some_and(|current| current.ptr_eq(&cell))
-        {
-            return;
-        }
-        debug_assert!(matches!(
-            cell.value(),
-            RuntimeViewModelCellValue::Trigger(_)
-        ));
-        self.cell = Some(cell);
-    }
-
-    pub(crate) fn view_model_property_id(&self) -> u32 {
-        self.view_model_property_id
-    }
-}
-
-#[derive(Debug, Clone)]
 pub(crate) struct StateMachineLayerInstance {
     /// C++ keys trigger consumption by `StateMachineLayerInstance*`. A fresh
     /// monotonic token gives every Rust layer occurrence the same identity
@@ -2896,8 +2809,6 @@ impl StateMachineLayerInstance {
         bindable_booleans: &mut [StateMachineBindableBooleanInstance],
         transition_durations: &mut [StateMachineTransitionDurationInstance],
         data_context_present: bool,
-        data_context_view_model_bound: bool,
-        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     ) -> Result<StateMachineLayerAdvance, ScriptError> {
@@ -2928,10 +2839,8 @@ impl StateMachineLayerInstance {
                 bindable_triggers: &mut *bindable_triggers,
                 bindable_view_models: &mut *bindable_view_models,
                 bindable_booleans: &mut *bindable_booleans,
-                view_model_triggers: &mut *view_model_triggers,
                 transition_durations: &mut *transition_durations,
             },
-            data_context_view_model_bound,
             executor,
         )?;
         self.advance_transition_source_animation(
@@ -2964,8 +2873,6 @@ impl StateMachineLayerInstance {
                 bindable_booleans,
                 transition_durations,
                 data_context_present,
-                data_context_view_model_bound,
-                view_model_triggers,
                 reported_events,
                 executor,
             )? {
@@ -3005,8 +2912,6 @@ impl StateMachineLayerInstance {
         bindable_booleans: &mut [StateMachineBindableBooleanInstance],
         transition_durations: &mut [StateMachineTransitionDurationInstance],
         data_context_present: bool,
-        data_context_view_model_bound: bool,
-        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     ) -> Result<bool, ScriptError> {
@@ -3033,8 +2938,6 @@ impl StateMachineLayerInstance {
             bindable_booleans,
             transition_durations,
             data_context_present,
-            data_context_view_model_bound,
-            view_model_triggers,
             reported_events,
             executor,
         )? {
@@ -3059,8 +2962,6 @@ impl StateMachineLayerInstance {
             bindable_booleans,
             transition_durations,
             data_context_present,
-            data_context_view_model_bound,
-            view_model_triggers,
             reported_events,
             executor,
         )
@@ -3086,8 +2987,6 @@ impl StateMachineLayerInstance {
         bindable_booleans: &mut [StateMachineBindableBooleanInstance],
         transition_durations: &mut [StateMachineTransitionDurationInstance],
         _data_context_present: bool,
-        data_context_view_model_bound: bool,
-        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     ) -> Result<bool, ScriptError> {
@@ -3105,12 +3004,12 @@ impl StateMachineLayerInstance {
                 state,
                 state_index,
                 inputs,
-                view_model_triggers,
+                executor,
             ) else {
                 return Ok(false);
             };
             let transition = &state.transitions[transition_index];
-            transition.use_inputs(context, inputs, view_model_triggers);
+            transition.use_inputs(context, inputs, executor);
             self.change_state(
                 artboard,
                 layer,
@@ -3130,10 +3029,8 @@ impl StateMachineLayerInstance {
                     bindable_triggers: &mut *bindable_triggers,
                     bindable_view_models: &mut *bindable_view_models,
                     bindable_booleans: &mut *bindable_booleans,
-                    view_model_triggers: &mut *view_model_triggers,
                     transition_durations: &mut *transition_durations,
                 },
-                data_context_view_model_bound,
                 executor,
             )?;
             return Ok(true);
@@ -3157,13 +3054,7 @@ impl StateMachineLayerInstance {
             let allowance = if transition.direct_input_conditions_only {
                 transition.allow_direct_inputs(context, inputs, animation_from)
             } else {
-                transition.allow(
-                    context,
-                    artboard,
-                    inputs,
-                    view_model_triggers,
-                    animation_from,
-                )
+                transition.allow(context, artboard, inputs, executor, animation_from)
             };
             match allowance {
                 TransitionAllowance::No => continue,
@@ -3175,7 +3066,7 @@ impl StateMachineLayerInstance {
                     self.waiting_for_exit = false;
                 }
             }
-            transition.use_inputs(context, inputs, view_model_triggers);
+            transition.use_inputs(context, inputs, executor);
             self.change_state(
                 artboard,
                 layer,
@@ -3195,10 +3086,8 @@ impl StateMachineLayerInstance {
                     bindable_triggers: &mut *bindable_triggers,
                     bindable_view_models: &mut *bindable_view_models,
                     bindable_booleans: &mut *bindable_booleans,
-                    view_model_triggers: &mut *view_model_triggers,
                     transition_durations: &mut *transition_durations,
                 },
-                data_context_view_model_bound,
                 executor,
             )?;
             return Ok(true);
@@ -3213,7 +3102,7 @@ impl StateMachineLayerInstance {
         state: &RuntimeLayerState,
         state_index: usize,
         inputs: &[StateMachineInputInstance],
-        view_model_triggers: &[StateMachineViewModelTriggerInstance],
+        executor: &dyn RuntimeScheduledListenerActionExecutor,
     ) -> Option<(usize, usize)> {
         let mut weighted_candidates = Vec::new();
         let mut total_weight = 0_u64;
@@ -3238,13 +3127,7 @@ impl StateMachineLayerInstance {
             let allowance = if transition.direct_input_conditions_only {
                 transition.allow_direct_inputs(context, inputs, animation_from)
             } else {
-                transition.allow(
-                    context,
-                    artboard,
-                    inputs,
-                    view_model_triggers,
-                    animation_from,
-                )
+                transition.allow(context, artboard, inputs, executor, animation_from)
             };
             match allowance {
                 TransitionAllowance::No => {}
@@ -3327,7 +3210,6 @@ impl StateMachineLayerInstance {
         transition: &RuntimeStateTransition,
         state_to_index: usize,
         mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
-        data_context_view_model_bound: bool,
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     ) -> Result<(), ScriptError> {
         let previous_state_index = self.current_state_index;
@@ -3347,8 +3229,7 @@ impl StateMachineLayerInstance {
         {
             previous_state.perform_fire_actions(
                 StateMachineFireOccurrence::AtEnd,
-                data_context_view_model_bound,
-                &mut *targets.view_model_triggers,
+                executor,
                 &mut *targets.reported_events,
             );
             previous_state.perform_listener_actions(
@@ -3383,8 +3264,7 @@ impl StateMachineLayerInstance {
         if let Some(current_state) = layer.states.get(state_to_index) {
             current_state.perform_fire_actions(
                 StateMachineFireOccurrence::AtStart,
-                data_context_view_model_bound,
-                &mut *targets.view_model_triggers,
+                executor,
                 &mut *targets.reported_events,
             );
             current_state.perform_listener_actions(
@@ -3396,8 +3276,7 @@ impl StateMachineLayerInstance {
         }
         transition.perform_fire_actions(
             StateMachineFireOccurrence::AtStart,
-            data_context_view_model_bound,
-            &mut *targets.view_model_triggers,
+            executor,
             &mut *targets.reported_events,
         );
         transition.perform_listener_actions(
@@ -3420,8 +3299,7 @@ impl StateMachineLayerInstance {
         if transition_duration_seconds == 0.0 {
             transition.perform_fire_actions(
                 StateMachineFireOccurrence::AtEnd,
-                data_context_view_model_bound,
-                &mut *targets.view_model_triggers,
+                executor,
                 &mut *targets.reported_events,
             );
             transition.perform_listener_actions(
@@ -3459,13 +3337,7 @@ impl StateMachineLayerInstance {
             self.transition_listener_actions = transition.listener_actions.clone();
             self.transition_completed = false;
             self.transition_animation_reset = transition_animation_reset;
-            self.update_transition_mix(
-                artboard,
-                0.0,
-                targets.reborrow(),
-                data_context_view_model_bound,
-                executor,
-            )?;
+            self.update_transition_mix(artboard, 0.0, targets.reborrow(), executor)?;
         } else {
             self.clear_transition_source();
         }
@@ -3504,7 +3376,6 @@ impl StateMachineLayerInstance {
         artboard: &mut ArtboardInstance,
         elapsed_seconds: f32,
         mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
-        data_context_view_model_bound: bool,
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     ) -> Result<bool, ScriptError> {
         if !self.has_transition_source() || self.transition_duration_seconds == 0.0 {
@@ -3520,8 +3391,7 @@ impl StateMachineLayerInstance {
             perform_state_machine_fire_actions(
                 &self.transition_fire_actions,
                 StateMachineFireOccurrence::AtEnd,
-                data_context_view_model_bound,
-                &mut *targets.view_model_triggers,
+                executor,
                 &mut *targets.reported_events,
             );
             perform_scheduled_listener_actions(
@@ -4085,7 +3955,6 @@ mod tests {
                     bindable_triggers: &mut [],
                     bindable_view_models: &mut [],
                     bindable_booleans: &mut [],
-                    view_model_triggers: &mut [],
                     transition_durations: &mut [],
                 },
                 &mut executor,
@@ -4121,7 +3990,6 @@ mod tests {
                 bindable_triggers: &mut [],
                 bindable_view_models: &mut [],
                 bindable_booleans: &mut [],
-                view_model_triggers: &mut [],
                 transition_durations: &mut [],
             },
             &mut executor,
@@ -4171,15 +4039,5 @@ mod tests {
         let ordinary = StateMachineReportedEvent::from_runtime_event(8, ordinary);
         assert_eq!(ordinary.url(), None);
         assert_eq!(ordinary.target(), None);
-    }
-
-    #[test]
-    fn unbound_view_model_trigger_cannot_fire() {
-        let mut trigger = StateMachineViewModelTriggerInstance::new(7, 3);
-        trigger.increment();
-        assert_eq!(trigger.value(), 0);
-        assert!(!trigger.is_fireable_for_layer(11));
-        trigger.use_in_layer(11);
-        assert!(!trigger.is_fireable_for_layer(11));
     }
 }

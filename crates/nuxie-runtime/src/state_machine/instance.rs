@@ -1,7 +1,7 @@
 // Runtime instance orchestration for the C++ state machine path.
 // Mirrors /Users/levi/dev/oss/rive-runtime/src/animation/state_machine_instance.cpp.
 use super::*;
-use crate::artboard_data_bind::RuntimeOwnedViewModelBindingCandidate;
+use crate::artboard_data_bind::RuntimeOwnedDataContext;
 use crate::data_bind_graph::data_bind_flags_apply_source_to_target;
 use crate::focus::RuntimeFocusTree;
 use crate::scripting::RuntimeScriptInstanceHandle;
@@ -72,8 +72,7 @@ pub struct StateMachineInstance {
     bindable_triggers: Vec<StateMachineBindableTriggerInstance>,
     bindable_view_models: Vec<StateMachineBindableViewModelInstance>,
     bindable_booleans: Vec<StateMachineBindableBooleanInstance>,
-    default_view_model_triggers: Vec<StateMachineViewModelTriggerInstance>,
-    view_model_triggers: Vec<StateMachineViewModelTriggerInstance>,
+    default_view_model_triggers: Arc<Vec<RuntimeViewModelTrigger>>,
     transition_durations: Vec<StateMachineTransitionDurationInstance>,
     layers: Vec<StateMachineLayerInstance>,
     reported_events: Vec<StateMachineReportedEvent>,
@@ -103,7 +102,7 @@ pub struct StateMachineInstance {
     post_update_probe_pending: bool,
     data_bind_graph: RuntimeDataBindGraph,
     key_frame_data_bind_graphs: Vec<Option<RuntimeDataBindGraph>>,
-    owned_view_model_candidates: Vec<RuntimeOwnedViewModelBindingCandidate>,
+    owned_data_context: Option<RuntimeOwnedDataContext>,
     #[cfg(test)]
     owned_data_bind_context_bind_count: usize,
     /// C++ `ViewModelInstance::m_dependents` push channel: structural
@@ -157,7 +156,8 @@ struct RuntimePointerInput {
 struct RuntimeStateMachineListenerActionExecutor<'a> {
     data_bind_graph: &'a mut RuntimeDataBindGraph,
     owned_view_model_context: Option<&'a mut RuntimeOwnedViewModelInstance>,
-    owned_view_model_candidates: Vec<RuntimeOwnedViewModelBindingCandidate>,
+    owned_data_context: Option<RuntimeOwnedDataContext>,
+    file_data_context_instance: Option<RuntimeViewModelInstanceCells>,
     scripted_listener_action_instances: &'a BTreeMap<u32, RuntimeScriptInstanceHandle>,
     script_error: &'a mut Option<ScriptError>,
     focus: &'a mut RuntimeFocusTree,
@@ -257,8 +257,8 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
             );
             self.owned_view_model_context = Some(context);
             changed
-        } else if !self.owned_view_model_candidates.is_empty() {
-            self.perform_owned_view_model_candidates_change(data_bind_index, value, &mut targets)
+        } else if self.owned_data_context.is_some() {
+            self.perform_owned_data_context_change(data_bind_index, value, &mut targets)
         } else {
             self.data_bind_graph
                 .set_active_view_model_source_for_data_bind(data_bind_index, artboard_value.clone())
@@ -290,7 +290,7 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
         true
     }
 
-    fn perform_owned_view_model_candidates_change(
+    fn perform_owned_data_context_change(
         &mut self,
         data_bind_index: usize,
         value: &RuntimeListenerViewModelChangeValue,
@@ -302,14 +302,10 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
         else {
             return false;
         };
-        let Some((candidate, property_path)) =
-            self.owned_view_model_candidates
-                .iter()
-                .find_map(|candidate| {
-                    candidate
-                        .property_path_for_source_path(&source_path)
-                        .map(|property_path| (candidate.clone(), property_path))
-                })
+        let Some((context_handle, property_path)) = self
+            .owned_data_context
+            .as_ref()
+            .and_then(|context| context.resolved_property_path(&source_path))
         else {
             return false;
         };
@@ -323,7 +319,7 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
                 return false;
             };
             bindable_trigger.set_value(*value);
-            let mut context = candidate.context.borrow_mut();
+            let mut context = context_handle.borrow_mut();
             if !self
                 .data_bind_graph
                 .fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
@@ -379,7 +375,7 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
             }
             RuntimeListenerViewModelChangeValue::Trigger(_) => unreachable!(),
         };
-        let mut context = candidate.context.borrow_mut();
+        let mut context = context_handle.borrow_mut();
         let Some(context_changed) =
             StateMachineInstance::apply_listener_view_model_change_at_property_path(
                 &mut context,
@@ -492,6 +488,58 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
 }
 
 impl RuntimeScheduledListenerActionExecutor for RuntimeStateMachineListenerActionExecutor<'_> {
+    fn retained_view_model_trigger_source(
+        &self,
+        bindable_global_id: u32,
+    ) -> Option<RuntimeViewModelCell> {
+        self.data_bind_graph
+            .retained_trigger_source_for_bindable_target(bindable_global_id)
+    }
+
+    fn fire_view_model_trigger(&mut self, path: &RuntimeStateMachineFireTriggerPath) -> bool {
+        if let Some(data_context) = self.owned_data_context.as_ref()
+            && data_context.fire_trigger(&path.file, &path.source_path, path.is_relative)
+        {
+            return true;
+        }
+        if let Some(context) = self.owned_view_model_context.as_deref_mut() {
+            let property_path = if path.is_relative && path.file.scripting_manifest().is_some() {
+                context.property_path_for_context_source_path_with_manifest_mode(
+                    &path.file,
+                    &[],
+                    &path.source_path,
+                    true,
+                    true,
+                )
+            } else {
+                context.property_path_for_context_source_path(
+                    &path.file,
+                    &[],
+                    &path.source_path,
+                    false,
+                )
+            };
+            if let Some(cell) = property_path
+                .as_deref()
+                .and_then(|property_path| context.cell_by_property_path(property_path))
+                .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Trigger(_)))
+            {
+                cell.fire_trigger();
+                return true;
+            }
+        }
+        if let Some(context) = self.file_data_context_instance.as_ref()
+            && let Some(cell) = context
+                .cell_for_source_path(&path.source_path)
+                .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Trigger(_)))
+        {
+            cell.fire_trigger();
+            return true;
+        }
+        self.data_bind_graph
+            .fire_retained_trigger_for_source_path(&path.source_path)
+    }
+
     fn perform_instance_action(
         &mut self,
         artboard: &mut ArtboardInstance,
@@ -570,8 +618,7 @@ impl Clone for StateMachineInstance {
             bindable_triggers: self.bindable_triggers.clone(),
             bindable_view_models: self.bindable_view_models.clone(),
             bindable_booleans: self.bindable_booleans.clone(),
-            default_view_model_triggers: self.default_view_model_triggers.clone(),
-            view_model_triggers: self.view_model_triggers.clone(),
+            default_view_model_triggers: Arc::clone(&self.default_view_model_triggers),
             transition_durations: self.transition_durations.clone(),
             layers: self.layers.clone(),
             reported_events: self.reported_events.clone(),
@@ -587,7 +634,7 @@ impl Clone for StateMachineInstance {
             post_update_probe_pending: self.post_update_probe_pending,
             data_bind_graph: self.data_bind_graph.clone(),
             key_frame_data_bind_graphs: self.key_frame_data_bind_graphs.clone(),
-            owned_view_model_candidates: self.owned_view_model_candidates.clone(),
+            owned_data_context: self.owned_data_context.clone(),
             #[cfg(test)]
             owned_data_bind_context_bind_count: self.owned_data_bind_context_bind_count,
             owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
@@ -744,36 +791,11 @@ fn relink_view_model_listener_cell(
         cell.map(|cell| RuntimeViewModelListenerCellBinding::new(cell, queue, listener_index));
 }
 
-fn runtime_owned_view_model_trigger_cell_for_context_path(
-    context: &RuntimeOwnedViewModelInstance,
-    context_path: &[usize],
-    view_model_index: usize,
-    property_index: usize,
-) -> Option<RuntimeViewModelCell> {
-    let cell =
-        context.cell_by_scoped_property_path(context_path, view_model_index, &[property_index])?;
-    matches!(cell.value(), RuntimeViewModelCellValue::Trigger(_)).then_some(cell)
-}
-
 impl StateMachineInstance {
     fn rebind_file_trigger_cells_after_clone(
         &mut self,
         active_file_view_model_binding: Option<(usize, usize)>,
     ) {
-        if let (Some(view_model_index), Some(instance)) = (
-            self.default_view_model_index,
-            self.default_view_model_trigger_instance.as_ref(),
-        ) {
-            for trigger in &mut self.default_view_model_triggers {
-                let path = [
-                    u32::try_from(view_model_index).unwrap_or(u32::MAX),
-                    trigger.view_model_property_id(),
-                ];
-                if let Some(cell) = instance.cell_for_source_path(&path) {
-                    trigger.bind_cell(cell);
-                }
-            }
-        }
         let Some((view_model_index, instance_index)) = active_file_view_model_binding else {
             return;
         };
@@ -784,7 +806,6 @@ impl StateMachineInstance {
         else {
             return;
         };
-        self.bind_active_file_view_model_triggers(&instance);
         self.data_bind_graph
             .bind_file_view_model_trigger_sources(&instance);
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
@@ -867,31 +888,7 @@ impl StateMachineInstance {
                         .as_ref()?
                         .instance(view_model_index, 0)
                 });
-        let mut view_model_triggers = state_machine
-            .view_model_triggers
-            .iter()
-            .map(|trigger| {
-                StateMachineViewModelTriggerInstance::new(
-                    trigger.global_id,
-                    trigger.view_model_property_id,
-                )
-            })
-            .collect::<Vec<_>>();
-        if let (Some(view_model_index), Some(context)) = (
-            state_machine.default_view_model_index,
-            default_view_model_trigger_instance.as_ref(),
-        ) {
-            for trigger in &mut view_model_triggers {
-                let Ok(view_model_index) = u32::try_from(view_model_index) else {
-                    break;
-                };
-                let path = [view_model_index, trigger.view_model_property_id()];
-                if let Some(cell) = context.cell_for_source_path(&path) {
-                    trigger.bind_cell(cell);
-                }
-            }
-        }
-        let default_view_model_triggers = view_model_triggers.clone();
+        let default_view_model_triggers = Arc::clone(&state_machine.view_model_triggers);
         let transition_durations = state_machine
             .transition_duration_bindings
             .iter()
@@ -959,7 +956,6 @@ impl StateMachineInstance {
             bindable_view_models,
             bindable_booleans,
             default_view_model_triggers,
-            view_model_triggers,
             transition_durations,
             layers,
             reported_events: Vec::new(),
@@ -975,7 +971,7 @@ impl StateMachineInstance {
             post_update_probe_pending: false,
             data_bind_graph,
             key_frame_data_bind_graphs,
-            owned_view_model_candidates: Vec::new(),
+            owned_data_context: None,
             #[cfg(test)]
             owned_data_bind_context_bind_count: 0,
             owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
@@ -2245,7 +2241,7 @@ impl StateMachineInstance {
             // state_machine_instance.cpp:3021-3025,3048-3058). Temporarily
             // take both retained tables so actions can mutate this machine
             // and enqueue chained reports without cloning action vectors.
-            let candidates = std::mem::take(&mut self.owned_view_model_candidates);
+            let data_context = self.owned_data_context.take();
             let listeners = std::mem::take(&mut self.view_model_listeners);
             for &listener_index in &listener_indices {
                 let Some(listener) = listeners.get(listener_index) else {
@@ -2258,8 +2254,8 @@ impl StateMachineInstance {
                         &ScriptListenerInvocation::None,
                         &mut NoopScriptHost,
                     )
-                } else if !candidates.is_empty() {
-                    self.perform_listener_actions_for_candidates(&candidates, &listener.actions)
+                } else if let Some(data_context) = data_context.as_ref() {
+                    self.perform_listener_actions_for_data_context(data_context, &listener.actions)
                 } else {
                     self.perform_listener_actions(
                         &listener.actions,
@@ -2272,7 +2268,7 @@ impl StateMachineInstance {
                 changed |= action_changed;
             }
             self.view_model_listeners = listeners;
-            self.owned_view_model_candidates = candidates;
+            self.owned_data_context = data_context;
             listener_indices.clear();
             self.reporting_listener_view_models = listener_indices;
             self.reported_events
@@ -2378,10 +2374,9 @@ impl StateMachineInstance {
                             value,
                             Some(context),
                         )
-                    } else if !self.owned_view_model_candidates.is_empty() {
-                        let candidates = self.owned_view_model_candidates.clone();
-                        self.perform_listener_view_model_change_for_candidates(
-                            &candidates,
+                    } else if let Some(data_context) = self.owned_data_context.clone() {
+                        self.perform_listener_view_model_change_for_data_context(
+                            &data_context,
                             *data_bind_index,
                             value,
                         )
@@ -4673,7 +4668,6 @@ impl StateMachineInstance {
             graph.bind_empty_data_context();
         }
         self.active_file_view_model_binding = None;
-        self.unbind_active_view_model_triggers();
         self.needs_advance = true;
         true
     }
@@ -4694,7 +4688,6 @@ impl StateMachineInstance {
             }
         }
         self.sync_bindable_font_assets_from_default_context();
-        self.bind_active_default_view_model_triggers();
         self.active_file_view_model_binding = self.default_view_model_index.map(|index| (index, 0));
         self.needs_advance = true;
         true
@@ -4747,7 +4740,6 @@ impl StateMachineInstance {
             view_model_index,
             instance_index,
         );
-        self.bind_active_file_view_model_triggers(&instance_cells);
         self.active_file_view_model_binding = Some((view_model_index, instance_index));
         self.needs_advance = true;
         true
@@ -4783,7 +4775,6 @@ impl StateMachineInstance {
             context.view_model_index,
             context.instance_index,
         );
-        self.bind_active_imported_view_model_triggers(context);
         self.active_file_view_model_binding =
             Some((context.view_model_index, context.instance_index));
         self.needs_advance = true;
@@ -4817,9 +4808,9 @@ impl StateMachineInstance {
         &mut self,
         context: &RuntimeOwnedViewModelContextHandle,
     ) -> bool {
-        self.bind_owned_view_model_context_candidates(&[
-            RuntimeOwnedViewModelBindingCandidate::context_handle(context),
-        ])
+        self.bind_owned_view_model_data_context(&RuntimeOwnedDataContext::from_context_handle(
+            context,
+        ))
     }
 
     fn bind_owned_view_model_snapshot(&mut self, context: &RuntimeOwnedViewModelInstance) -> bool {
@@ -4832,7 +4823,6 @@ impl StateMachineInstance {
             changed |= graph.bind_owned_view_model_context(context);
         }
         self.sync_bindable_font_assets_from_owned_context(context);
-        self.bind_active_owned_view_model_triggers(context);
         self.bind_view_model_listener_cells_for_context_chain(context, &[&[]]);
         if changed {
             self.needs_advance = true;
@@ -4856,7 +4846,6 @@ impl StateMachineInstance {
             changed |= graph.bind_owned_view_model_context(context);
         }
         self.sync_bindable_font_assets_from_owned_context(context);
-        self.bind_active_owned_view_model_triggers(context);
         self.bind_view_model_listener_cells_for_context_chain(context, &[&[]]);
         if changed {
             self.needs_advance = true;
@@ -4886,9 +4875,9 @@ impl StateMachineInstance {
         }
     }
 
-    fn bind_view_model_listener_cells_for_candidates(
+    fn bind_view_model_listener_cells_for_data_context(
         &mut self,
-        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        data_context: &RuntimeOwnedDataContext,
     ) {
         for (listener_index, listener) in self.view_model_listeners.iter_mut().enumerate() {
             let mut source_path = Vec::with_capacity(listener.property_path.len() + 1);
@@ -4907,13 +4896,9 @@ impl StateMachineInstance {
             // `ViewModelInstanceValue`; the listener registers itself as a
             // dependent and does not snapshot or dispatch the initial value
             // (`state_machine_instance.cpp:1331-1372,1401-1407`).
-            let cell = candidates.iter().find_map(|candidate| {
-                let property_path = candidate.property_path_for_source_path(&source_path)?;
-                candidate
-                    .context
-                    .borrow()
-                    .cell_by_property_path(&property_path)
-            });
+            let cell = data_context.resolved_property_path(&source_path).and_then(
+                |(context, property_path)| context.borrow().cell_by_property_path(&property_path),
+            );
             relink_view_model_listener_cell(
                 listener,
                 cell,
@@ -4984,9 +4969,9 @@ impl StateMachineInstance {
         }
     }
 
-    fn perform_listener_view_model_change_for_candidates(
+    fn perform_listener_view_model_change_for_data_context(
         &mut self,
-        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        data_context: &RuntimeOwnedDataContext,
         data_bind_index: usize,
         value: &RuntimeListenerViewModelChangeValue,
     ) -> bool {
@@ -5005,37 +4990,33 @@ impl StateMachineInstance {
                     .clone()
             });
 
-        for candidate in candidates {
-            let Some(property_path) = candidate.property_path_for_source_path(&source_path) else {
-                continue;
-            };
-            let mut context = candidate.context.borrow_mut();
-            let changed = match value {
-                RuntimeListenerViewModelChangeValue::Trigger(value) => Some(
-                    self.fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
-                        &mut context,
-                        data_bind_index,
-                        *value,
-                        &property_path,
-                    ),
-                ),
-                _ => Self::apply_listener_view_model_change_at_property_path(
+        let Some((context, property_path)) = data_context.resolved_property_path(&source_path)
+        else {
+            return false;
+        };
+        let mut context = context.borrow_mut();
+        let changed = match value {
+            RuntimeListenerViewModelChangeValue::Trigger(value) => Some(
+                self.fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
                     &mut context,
+                    data_bind_index,
+                    *value,
                     &property_path,
-                    value,
-                    asset_value.as_ref(),
                 ),
-            };
-            if let Some(changed) = changed {
-                return changed;
-            }
-        }
-        false
+            ),
+            _ => Self::apply_listener_view_model_change_at_property_path(
+                &mut context,
+                &property_path,
+                value,
+                asset_value.as_ref(),
+            ),
+        };
+        changed.unwrap_or(false)
     }
 
-    fn bind_owned_data_binds_from_candidates(
+    fn bind_owned_data_binds_from_data_context(
         &mut self,
-        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        data_context: &RuntimeOwnedDataContext,
     ) -> bool {
         #[cfg(test)]
         {
@@ -5043,11 +5024,11 @@ impl StateMachineInstance {
         }
         let mut changed = self
             .data_bind_graph
-            .bind_owned_view_model_context_candidates(candidates);
+            .bind_owned_view_model_data_context(data_context);
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            changed |= graph.bind_owned_view_model_context_candidates(candidates);
+            changed |= graph.bind_owned_view_model_data_context(data_context);
         }
-        self.sync_bindable_font_assets_from_owned_candidates(candidates);
+        self.sync_bindable_font_assets_from_owned_data_context(data_context);
         changed
     }
 
@@ -5056,9 +5037,9 @@ impl StateMachineInstance {
         self.owned_data_bind_context_bind_count
     }
 
-    fn perform_listener_actions_for_candidates(
+    fn perform_listener_actions_for_data_context(
         &mut self,
-        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        data_context: &RuntimeOwnedDataContext,
         listener_actions: &[RuntimeScheduledListenerAction],
     ) -> Result<bool, ScriptError> {
         let mut changed = false;
@@ -5069,8 +5050,8 @@ impl StateMachineInstance {
                 ..
             } = action
             {
-                let context_changed = self.perform_listener_view_model_change_for_candidates(
-                    candidates,
+                let context_changed = self.perform_listener_view_model_change_for_data_context(
+                    data_context,
                     *data_bind_index,
                     value,
                 );
@@ -5094,14 +5075,9 @@ impl StateMachineInstance {
         &mut self,
         context: &RuntimeOwnedViewModelContext,
     ) -> bool {
-        let mut candidates = Vec::new();
-        if let Some(main) = context.main_handle() {
-            candidates.push(RuntimeOwnedViewModelBindingCandidate::root_handle(main));
-        }
-        candidates.extend(context.global_slot_handles().map(|(slot, handle)| {
-            RuntimeOwnedViewModelBindingCandidate::declared_global_slot(handle, slot)
-        }));
-        self.bind_owned_view_model_context_candidates(&candidates)
+        self.bind_owned_view_model_data_context(&RuntimeOwnedDataContext::from_owned_context(
+            context,
+        ))
     }
 
     pub(crate) fn bind_owned_view_model_context_chain(
@@ -5122,7 +5098,6 @@ impl StateMachineInstance {
             changed |= graph.bind_owned_view_model_context_chain(file, context, context_chain);
         }
         self.sync_bindable_font_assets_from_owned_context_chain(file, context, context_chain);
-        self.bind_active_owned_view_model_triggers_for_context_chain(context, context_chain);
         self.bind_view_model_listener_cells_for_context_chain(context, context_chain);
         if changed {
             self.needs_advance = true;
@@ -5130,17 +5105,15 @@ impl StateMachineInstance {
         changed
     }
 
-    pub(crate) fn bind_owned_view_model_context_candidates(
+    pub(crate) fn bind_owned_view_model_data_context(
         &mut self,
-        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        data_context: &RuntimeOwnedDataContext,
     ) -> bool {
         self.active_file_view_model_binding = None;
-        let identity_changed = self.owned_view_model_candidates.len() != candidates.len()
-            || self
-                .owned_view_model_candidates
-                .iter()
-                .zip(candidates)
-                .any(|(bound, candidate)| !bound.same_binding(candidate));
+        let identity_changed = self
+            .owned_data_context
+            .as_ref()
+            .is_none_or(|bound| !bound.same_binding(data_context));
         let structural_rebind = self
             .owned_view_model_rebind_sink
             .take_dirt()
@@ -5150,21 +5123,17 @@ impl StateMachineInstance {
             // `DataBind::bind()`: the graph marks both supported directions
             // for reconcile in favor order (`data_bind_context.cpp:80-85`).
             // This path deliberately does not scan trigger values.
-            let changed = self.bind_owned_data_binds_from_candidates(candidates);
+            let changed = self.bind_owned_data_binds_from_data_context(data_context);
             if changed {
                 self.needs_advance = true;
             }
             return changed;
         }
 
-        let changed = self.bind_owned_data_binds_from_candidates(candidates);
-        self.bind_active_owned_view_model_triggers_for_candidates(candidates);
-        self.bind_view_model_listener_cells_for_candidates(candidates);
-        self.owned_view_model_candidates = candidates.to_vec();
-        self.retain_owned_view_model_advance_context(candidates);
-        if candidates.is_empty() {
-            self.unbind_active_view_model_triggers();
-        }
+        let changed = self.bind_owned_data_binds_from_data_context(data_context);
+        self.bind_view_model_listener_cells_for_data_context(data_context);
+        self.owned_data_context = Some(data_context.clone());
+        self.retain_owned_view_model_advance_context(data_context);
         if identity_changed {
             self.owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
             self.register_owned_view_model_rebind_dependents();
@@ -5176,24 +5145,19 @@ impl StateMachineInstance {
     }
 
     fn register_owned_view_model_rebind_dependents(&self) {
-        for candidate in &self.owned_view_model_candidates {
-            candidate
-                .context
-                .add_rebind_dependent(&self.owned_view_model_rebind_sink);
+        if let Some(data_context) = self.owned_data_context.as_ref() {
+            data_context.add_rebind_dependent(&self.owned_view_model_rebind_sink);
         }
     }
 
-    fn retain_owned_view_model_advance_context(
-        &mut self,
-        candidates: &[RuntimeOwnedViewModelBindingCandidate],
-    ) {
-        if candidates.is_empty() {
+    fn retain_owned_view_model_advance_context(&mut self, data_context: &RuntimeOwnedDataContext) {
+        if data_context.is_empty() {
             self.active_owned_view_model_advance_context = None;
             return;
         }
         let mut advance_context = RuntimeOwnedViewModelAdvanceContext::default();
-        for candidate in candidates {
-            advance_context.extend(&candidate.context.borrow());
+        for context in data_context.root_handles() {
+            advance_context.extend(&context.borrow());
         }
         self.active_owned_view_model_advance_context = Some(advance_context);
     }
@@ -5269,18 +5233,18 @@ impl StateMachineInstance {
         });
     }
 
-    fn sync_bindable_font_assets_from_owned_candidates(
+    fn sync_bindable_font_assets_from_owned_data_context(
         &mut self,
-        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+        data_context: &RuntimeOwnedDataContext,
     ) {
         self.sync_bindable_font_assets(|source| {
-            candidates.iter().find_map(|candidate| {
-                let property_path = candidate.property_path_for_source_path(&source.path)?;
-                candidate
-                    .context
-                    .borrow()
-                    .font_asset_value_by_property_path(&property_path)
-            })
+            data_context.resolved_property_path(&source.path).and_then(
+                |(context, property_path)| {
+                    context
+                        .borrow()
+                        .font_asset_value_by_property_path(&property_path)
+                },
+            )
         });
     }
 
@@ -5382,7 +5346,7 @@ impl StateMachineInstance {
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
             collected |= graph.collect_retained_source_dirt();
         }
-        if self.owned_view_model_candidates.is_empty() {
+        if self.owned_data_context.is_none() {
             if collected {
                 self.needs_advance = true;
             }
@@ -5393,11 +5357,13 @@ impl StateMachineInstance {
             .take_dirt()
             .contains(RuntimeCellDirt::BINDINGS);
         if structural_rebind {
-            let candidates = self.owned_view_model_candidates.clone();
-            self.bind_owned_data_binds_from_candidates(&candidates);
-            self.bind_active_owned_view_model_triggers_for_candidates(&candidates);
-            self.bind_view_model_listener_cells_for_candidates(&candidates);
-            self.retain_owned_view_model_advance_context(&candidates);
+            let data_context = self
+                .owned_data_context
+                .clone()
+                .expect("owned context checked above");
+            self.bind_owned_data_binds_from_data_context(&data_context);
+            self.bind_view_model_listener_cells_for_data_context(&data_context);
+            self.retain_owned_view_model_advance_context(&data_context);
         }
         if collected || structural_rebind {
             self.needs_advance = true;
@@ -5406,7 +5372,7 @@ impl StateMachineInstance {
     }
 
     fn clear_owned_view_model_handle(&mut self) {
-        self.owned_view_model_candidates.clear();
+        self.owned_data_context = None;
         self.owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
         self.active_owned_view_model_advance_context = None;
     }
@@ -5536,9 +5502,16 @@ impl StateMachineInstance {
     }
 
     pub fn view_model_trigger_count(&self, index: usize) -> Option<u64> {
-        self.default_view_model_triggers
-            .get(index)
-            .map(StateMachineViewModelTriggerInstance::value)
+        let trigger = self.default_view_model_triggers.get(index)?;
+        let view_model_index = u32::try_from(self.default_view_model_index?).ok()?;
+        let cell = self
+            .default_view_model_trigger_instance
+            .as_ref()?
+            .cell_for_source_path(&[view_model_index, trigger.view_model_property_id])?;
+        match cell.value() {
+            RuntimeViewModelCellValue::Trigger(value) => Some(value),
+            _ => None,
+        }
     }
 
     /// #RB-1 e4 test seam: the retained cell a migrated listener condition is
@@ -5555,25 +5528,6 @@ impl StateMachineInstance {
             .map(|binding| binding.cell.clone())
     }
 
-    #[cfg(test)]
-    pub(crate) fn active_view_model_trigger_count(&self, index: usize) -> Option<u64> {
-        self.view_model_triggers
-            .get(index)
-            .map(StateMachineViewModelTriggerInstance::value)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn active_view_model_trigger_is_fireable_for_layer(
-        &self,
-        index: usize,
-        layer_index: usize,
-    ) -> Option<bool> {
-        let layer_id = self.layers.get(layer_index)?.view_model_trigger_layer_id();
-        self.view_model_triggers
-            .get(index)
-            .map(|trigger| trigger.is_fireable_for_layer(layer_id))
-    }
-
     pub fn view_model_trigger_value_count(&self) -> usize {
         self.default_view_model_triggers.len()
     }
@@ -5581,7 +5535,7 @@ impl StateMachineInstance {
     pub fn view_model_trigger_property_id(&self, index: usize) -> Option<u32> {
         self.default_view_model_triggers
             .get(index)
-            .map(StateMachineViewModelTriggerInstance::view_model_property_id)
+            .map(|trigger| trigger.view_model_property_id)
     }
 
     pub(crate) fn advance_with_owned_view_model_context(
@@ -5673,7 +5627,13 @@ impl StateMachineInstance {
         self.update_data_binds_false();
 
         let data_context_present = self.data_bind_graph.data_context_present();
-        let data_context_view_model_bound = self.data_bind_graph.default_view_model_context_bound();
+        let file_data_context_instance =
+            self.active_file_view_model_binding
+                .and_then(|(view_model_index, instance_index)| {
+                    self.file_view_model_instances
+                        .as_ref()?
+                        .instance(view_model_index, instance_index)
+                });
         let mut changed_state = false;
         for (layer_index, layer) in state_machine
             .layers
@@ -5709,14 +5669,14 @@ impl StateMachineInstance {
                 bindable_view_models: &bindable_view_models,
                 bindable_booleans: &bindable_booleans,
                 data_context_present,
-                data_context_view_model_bound,
                 layer_index,
                 view_model_trigger_layer_id,
             };
             let mut executor = RuntimeStateMachineListenerActionExecutor {
                 data_bind_graph: &mut self.data_bind_graph,
                 owned_view_model_context: None,
-                owned_view_model_candidates: self.owned_view_model_candidates.clone(),
+                owned_data_context: self.owned_data_context.clone(),
+                file_data_context_instance: file_data_context_instance.clone(),
                 scripted_listener_action_instances: &self.scripted_listener_action_instances,
                 script_error: &mut self.script_error,
                 focus: &mut self.focus,
@@ -5740,8 +5700,6 @@ impl StateMachineInstance {
                 &mut self.bindable_booleans,
                 &mut self.transition_durations,
                 data_context_present,
-                data_context_view_model_bound,
-                &mut self.view_model_triggers,
                 &mut self.reported_events,
                 &mut executor,
             )?;
@@ -5818,7 +5776,13 @@ impl StateMachineInstance {
             );
         }
         let data_context_present = self.data_bind_graph.data_context_present();
-        let data_context_view_model_bound = self.data_bind_graph.default_view_model_context_bound();
+        let file_data_context_instance =
+            self.active_file_view_model_binding
+                .and_then(|(view_model_index, instance_index)| {
+                    self.file_view_model_instances
+                        .as_ref()?
+                        .instance(view_model_index, instance_index)
+                });
         let mut keep_going = false;
         for (layer_index, layer) in state_machine
             .layers
@@ -5854,14 +5818,14 @@ impl StateMachineInstance {
                 bindable_view_models: &bindable_view_models,
                 bindable_booleans: &bindable_booleans,
                 data_context_present,
-                data_context_view_model_bound,
                 layer_index,
                 view_model_trigger_layer_id,
             };
             let mut executor = RuntimeStateMachineListenerActionExecutor {
                 data_bind_graph: &mut self.data_bind_graph,
                 owned_view_model_context: owned_context.as_deref_mut(),
-                owned_view_model_candidates: self.owned_view_model_candidates.clone(),
+                owned_data_context: self.owned_data_context.clone(),
+                file_data_context_instance: file_data_context_instance.clone(),
                 scripted_listener_action_instances: &self.scripted_listener_action_instances,
                 script_error: &mut self.script_error,
                 focus: &mut self.focus,
@@ -5889,8 +5853,6 @@ impl StateMachineInstance {
                     &mut self.bindable_booleans,
                     &mut self.transition_durations,
                     data_context_present,
-                    data_context_view_model_bound,
-                    &mut self.view_model_triggers,
                     &mut self.reported_events,
                     &mut executor,
                 )
@@ -5934,147 +5896,6 @@ impl StateMachineInstance {
             },
             phase,
         );
-    }
-
-    fn bind_active_default_view_model_triggers(&mut self) {
-        self.view_model_triggers = self.default_view_model_triggers.clone();
-    }
-
-    fn bind_active_file_view_model_triggers(&mut self, context: &RuntimeViewModelInstanceCells) {
-        let mut active = self.default_view_model_triggers.clone();
-        for trigger in &mut active {
-            let Ok(view_model_index) = u32::try_from(context.view_model_index()) else {
-                break;
-            };
-            let path = [view_model_index, trigger.view_model_property_id()];
-            if let Some(cell) = context
-                .cell_for_source_path(&path)
-                .filter(|cell| matches!(cell.value(), RuntimeViewModelCellValue::Trigger(_)))
-            {
-                trigger.bind_cell(cell);
-            } else {
-                *trigger = trigger.unbound();
-            }
-        }
-        self.view_model_triggers = active;
-    }
-
-    fn bind_active_imported_view_model_triggers(
-        &mut self,
-        context: &RuntimeImportedViewModelInstanceContext,
-    ) {
-        let mut active = self.default_view_model_triggers.clone();
-        for trigger in &mut active {
-            let Ok(view_model_index) = u32::try_from(context.view_model_index) else {
-                break;
-            };
-            let path = [view_model_index, trigger.view_model_property_id()];
-            if let Some(cell) = context.trigger_cell_for_source_path(&path) {
-                trigger.bind_cell(cell);
-            } else {
-                *trigger = trigger.unbound();
-            }
-        }
-        self.view_model_triggers = active;
-    }
-
-    fn bind_active_owned_view_model_triggers(&mut self, context: &RuntimeOwnedViewModelInstance) {
-        self.bind_active_owned_view_model_triggers_for_context(context, &[]);
-    }
-
-    fn bind_active_owned_view_model_triggers_for_context_chain(
-        &mut self,
-        context: &RuntimeOwnedViewModelInstance,
-        context_chain: &[&[usize]],
-    ) {
-        let default_view_model_index = self.default_view_model_index;
-        let mut active = self.default_view_model_triggers.clone();
-        for trigger in &mut active {
-            let cell = default_view_model_index.and_then(|view_model_index| {
-                usize::try_from(trigger.view_model_property_id())
-                    .ok()
-                    .and_then(|property_index| {
-                        context_chain.iter().find_map(|context_path| {
-                            runtime_owned_view_model_trigger_cell_for_context_path(
-                                context,
-                                context_path,
-                                view_model_index,
-                                property_index,
-                            )
-                        })
-                    })
-            });
-            if let Some(cell) = cell {
-                trigger.bind_cell(cell);
-            } else {
-                *trigger = trigger.unbound();
-            }
-        }
-        self.view_model_triggers = active;
-    }
-
-    fn bind_active_owned_view_model_triggers_for_candidates(
-        &mut self,
-        candidates: &[RuntimeOwnedViewModelBindingCandidate],
-    ) {
-        let default_view_model_index = self.default_view_model_index;
-        let mut active = self.default_view_model_triggers.clone();
-        for trigger in &mut active {
-            let resolved = default_view_model_index.and_then(|view_model_index| {
-                let view_model_index = u32::try_from(view_model_index).ok()?;
-                let source_path = [view_model_index, trigger.view_model_property_id()];
-                candidates.iter().find_map(|candidate| {
-                    candidate.resolve_value_and_cell_for_source_path(
-                        &RuntimeDataBindGraphValue::Trigger(trigger.value()),
-                        &source_path,
-                    )
-                })
-            });
-            match resolved {
-                Some((RuntimeDataBindGraphValue::Trigger(_), Some(cell), _)) => {
-                    trigger.bind_cell(cell)
-                }
-                _ => *trigger = trigger.unbound(),
-            }
-        }
-        self.view_model_triggers = active;
-    }
-
-    fn bind_active_owned_view_model_triggers_for_context(
-        &mut self,
-        context: &RuntimeOwnedViewModelInstance,
-        context_path: &[usize],
-    ) {
-        let default_view_model_index = self.default_view_model_index;
-        let mut active = self.default_view_model_triggers.clone();
-        for trigger in &mut active {
-            let cell = default_view_model_index.and_then(|view_model_index| {
-                usize::try_from(trigger.view_model_property_id())
-                    .ok()
-                    .and_then(|property_index| {
-                        runtime_owned_view_model_trigger_cell_for_context_path(
-                            context,
-                            context_path,
-                            view_model_index,
-                            property_index,
-                        )
-                    })
-            });
-            if let Some(cell) = cell {
-                trigger.bind_cell(cell);
-            } else {
-                *trigger = trigger.unbound();
-            }
-        }
-        self.view_model_triggers = active;
-    }
-
-    fn unbind_active_view_model_triggers(&mut self) {
-        self.view_model_triggers = self
-            .default_view_model_triggers
-            .iter()
-            .map(|trigger| trigger.unbound())
-            .collect();
     }
 }
 

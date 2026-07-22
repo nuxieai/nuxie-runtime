@@ -2445,8 +2445,8 @@ impl RuntimeOwnedViewModelContext {
     /// C++ `DataContext::getViewModelProperty(path)` over this context's
     /// retained instances (#RB-1 e3): try each instance in canonical order —
     /// main first, then globals by slot — and return the retained CELL, not
-    /// a copy. Contexts currently have no parent link; the candidate chain's
-    /// scoped entries are covered by the candidate-level lookup.
+    /// a copy. This public composite is one local instance list; the production
+    /// owned DataContext carrier supplies its optional parent link.
     pub fn cell_for_source_path(&self, path: &[u32]) -> Option<RuntimeViewModelCell> {
         self.handles()
             .find_map(|handle| handle.borrow().cell_for_source_path(path))
@@ -5285,30 +5285,6 @@ impl RuntimeOwnedViewModelViewModel {
             return false;
         };
         current.set_file_asset_index(file_asset_index)
-    }
-
-    fn sync_live_font_bytes_by_property_index(
-        &mut self,
-        property_index: usize,
-        font_bytes: Option<Arc<[u8]>>,
-    ) -> bool {
-        let values = match self.endpoint.value() {
-            RuntimeViewModelPointer::OwnedGenerated { .. } => &mut self.font_assets,
-            RuntimeViewModelPointer::Imported { object_id } => {
-                let Some(values) = self.imported_font_assets.get_mut(&object_id) else {
-                    return false;
-                };
-                values
-            }
-            _ => return false,
-        };
-        let Some(current) = values
-            .iter_mut()
-            .find(|current| current.property_index == property_index)
-        else {
-            return false;
-        };
-        current.set_live_font_bytes(font_bytes)
     }
 
     fn apply_font_asset_data_bind_value_by_property_index(
@@ -10273,31 +10249,6 @@ impl RuntimeOwnedViewModelInstance {
         };
         let changed =
             view_model.sync_font_asset_index_by_property_index(*property_index, file_asset_index);
-        changed
-    }
-
-    pub(crate) fn sync_live_font_bytes_by_property_path(
-        &mut self,
-        property_path: &[usize],
-        font_bytes: Option<Arc<[u8]>>,
-    ) -> bool {
-        let linked_font_bytes = font_bytes.clone();
-        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
-            linked.sync_live_font_bytes_by_property_path(path, linked_font_bytes)
-        }) {
-            return changed;
-        }
-        if property_path.len() == 1 {
-            return self.set_live_font_bytes_by_property_index(property_path[0], font_bytes);
-        }
-        let Some((property_index, view_model_path)) = property_path.split_last() else {
-            return false;
-        };
-        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
-            return false;
-        };
-        let changed =
-            view_model.sync_live_font_bytes_by_property_index(*property_index, font_bytes);
         changed
     }
 

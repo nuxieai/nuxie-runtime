@@ -31,40 +31,31 @@ public seams that originally fanned into it:
 
 ## Item 2 - Candidate vectors
 
-- `RuntimeOwnedViewModelBindingCandidate` remains as the ordered DataContext
-  lookup/listener-addressing carrier. f9 deleted its `mutation_generation`
-  accessor; constructors and path/context helpers remain.
-- Ctor call sites: `artboard.rs:2778,2837,3402,10518,10770-10771,
-  11122,11157-11158` (last four groups are tests); `instance.rs:4821,
-  5099,5102`; `artboard_data_bind.rs:4942,4970,4979,5067,5073,5134,
-  5138,5167,8511,8515,9690` (last is a test).
-- SM retained vector `owned_view_model_candidates` remains for deterministic
-  own/parent candidate order, key-frame graphs, listener writes, and public
-  compatibility seams. It no longer has a parallel generation vector or
-  participates in a steady-frame generation comparison.
-- Artboard retained vector `artboard_owned_view_model_candidates`
-  `artboard.rs:269`; init `:1078,6775`; artboard reads/writes
-  `:2405-2407,2755,2836-2838,3394`; data-bind reads/writes
-  `artboard_data_bind.rs:4649,5000-5019,5119-5124,5219-5227,5335,
-  5361,6087,6273-6296,6396-6411,6463,8439`.
-- `bind_owned_view_model_context_candidates` (SM)
-  `instance.rs:5133-5176`; graph-level `data_bind_graph.rs:5056-5129`;
-  callers `instance.rs:4820,5104`; `artboard.rs:2406,2798,2869,3418,
-  5683`; `artboard_data_bind.rs:5183`; tests
-  `artboard.rs:10520,10774,11126,11161`.
+- [x] f14 replaced the candidate carrier and both retained candidate vectors
+  with one production `RuntimeOwnedDataContext`. It owns an ordered local
+  main/global instance list plus an optional parent, resolves local before
+  parent, compares the occupying instance's actual ViewModel id, and stores no
+  global slot key or rewritten inherited path. A partial same-model local
+  instance falls through when the requested final property is absent, matching
+  `data_context.cpp:265-332,397-442`.
+- State-machine, artboard, graph, converter, listener, font, reset/advance,
+  nested-artboard, component-list, clone, public-bind, and structural-relink
+  consumers all retain or receive that same context. Nested owners add local
+  instances above their complete parent instead of flattening parent scopes.
 - [x] f13 deleted the two listener-write callers that rebound every graph
   source after mutating one retained cell. C++ `ListenerViewModelChange`
   updates the exact source bind and dirties its paired target bind; it never
   binds the whole DataContext again (`listener_viewmodel_change.cpp:42-80`;
   `viewmodel_instance_number.cpp:10-19`; `data_bind.cpp:502-546`). The
   surviving explicit-bind and pushed structural-relink operation is now named
-  `bind_owned_data_binds_from_candidates`, matching
+  `bind_owned_data_binds_from_data_context`, matching
   `DataBindContainer::bindDataBindsFromContext` rather than the deleted
   compensation lifecycle (`state_machine_instance.cpp:2901-2913`;
   `data_bind_container.cpp:25-35`; `data_bind_context.cpp:56-89`). Its unused
   trigger-sync parameter and branch were also deleted.
-- `owned_view_model_context_candidates_for_nested_host`
-  `artboard_data_bind.rs:5999-6043`; callers `:5055,5122,8444`.
+- The nested-host candidate-flattening helper is deleted. The surviving nested
+  helper returns a parent-linked context or passes the inherited context
+  through unchanged when the host has no local instances.
 
 ## Item 3 - Listener observed-copy rescans
 
@@ -286,16 +277,13 @@ public seams that originally fanned into it:
   target now builds/exports the C++ probe so the 721 tests cannot silently
   skip.
   Renderer goldens are not applicable because no renderer/draw code changed.
-- Instance fields `default_view_model_triggers` and `view_model_triggers`
-  remain as metadata/source-handle vectors; transition evaluation and fire
-  actions still thread them through the state-machine call tree. Input-trigger
-  `used_layers` is a separate C++ `SMITrigger` contract and survives.
-- `bind_active_owned_view_model_triggers_for_candidates` remains for identity
-  and structural rebind. [x] f9 deleted
-  `refresh_active_owned_view_model_triggers_for_candidates`; a retained trigger
-  cell supplies steady-frame change state. [x] f12B deleted the remaining
-  default/imported sync, mirror, copied-source, and reset helpers after binding
-  those modes to their canonical file-owned cells.
+- [x] f14 deleted the active ViewModel-trigger cell shadow and its binding/
+  call-tree route. Transition compare/use reads the source retained by its
+  bindable property's `DataBind`; fire actions retain the authored path and
+  resolve it against the live `RuntimeOwnedDataContext` at perform time. The
+  immutable `default_view_model_triggers` metadata remains only for public
+  inspection. Input-trigger `used_layers` is the separate C++ `SMITrigger`
+  contract and survives.
 - PUBLIC trigger reads (survive): `view_model_trigger_count` `instance.rs:5528`, `view_model_trigger_value_count` `:5567`, `view_model_trigger_property_id` `:5571`.
 
 ## Public API surface that must keep working
@@ -313,27 +301,26 @@ public seams that originally fanned into it:
 
 ## Deletion-gate checklist (f)
 
-Remaining work is now explicitly split into f14 (one atomic code landing) and
-f15 (closure evidence):
+The f14 production migration and f15 closure audit are complete:
 
-- [ ] f14A: add the production owned `DataContext` carrier: ordered local
+- [x] f14A: add the production owned `DataContext` carrier: ordered local
   retained handles/scopes, optional parent, actual-instance-id resolution,
   exact property/structural source lookup, and context identity. Slot keys are
   placement metadata only, matching `data_context.hpp:37-61,104-124` and
   `data_context.cpp:166-261,397-506`; delete candidate path rewriting rather
   than transplanting it into the new type.
-- [ ] f14B: migrate all candidate consumers in `artboard.rs`,
+- [x] f14B: migrate all candidate consumers in `artboard.rs`,
   `artboard_data_bind.rs`, `data_bind_graph.rs`, and
   `state_machine/instance.rs`. Nested artboards and component-list rows build
   local-plus-parent contexts instead of prefixing child scope paths into every
   inherited candidate. Listener cell binding/writes, converter operands,
   font sync, trigger/reset advance coverage, public bind seams, clone/reset,
   and pushed structural relink must all use the same retained context.
-- [ ] f14C: transition trigger compare/use obtains the source cell from the
+- [x] f14C: transition trigger compare/use obtains the source cell from the
   bindable target's retained `DataBind`; fire-trigger actions retain the
   authored path and resolve it from the live context at perform time. Delete
   the active trigger-cell vector and the call-tree parameters that carry it.
-- [ ] f14D: zero production occurrences of
+- [x] f14D: zero production occurrences of
   `RuntimeOwnedViewModelBindingCandidate`, `owned_view_model_candidates`,
   `artboard_owned_view_model_candidates`,
   `owned_view_model_context_candidates_for_nested_host`,
@@ -342,7 +329,7 @@ f15 (closure evidence):
   candidate tests migrate to direct parent/local-context contracts; public
   trigger inspection survives through immutable metadata plus the canonical
   retained source.
-- [ ] f15: repeat this inventory, run every Phase-RB floor (including scripted
+- [x] f15: repeated this inventory, ran every Phase-RB floor (including scripted
   immediately before push and the 1,468 renderer rows), and obtain clean
   independent Standards/Spec reviews. Only then close the parent (f) and
   #RB-1 boxes.
@@ -365,8 +352,8 @@ under C++-shaped names. Already deleted:
 ## Test-rewrite counts
 
 mutation-generation/clock tests were rewritten to exact-cell and pushed-sink
-contracts; candidates ~12 (rewrite to new
-context type); listener cap 1 (rewritten in f4 to the C++ batch cap);
+contracts; candidate tests were migrated to direct parent/local-context
+contracts; listener cap 1 (rewritten in f4 to the C++ batch cap);
 duplicate mutable authored-instance API 1 (removed; test migrated to the
 canonical constructor); alias sharing 1 (observable contract, keep); Scene dirty 0
 (integration coverage remains); per-source copied state: rewrite at graph

@@ -14,7 +14,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 346/346, nuxie lib 132/132,
+Regression floor (must stay green): runtime lib 348/348, nuxie lib 132/132,
 C++ probe 708/708, both runtime golden gates 317/317 exact / 647/647 segments
 with zero failures. The workspace push gate is green as of 2026-07-21. Review
 of e5(A) restored the distinction between raw `StateMachineInstance::advance`
@@ -178,6 +178,19 @@ upstream-sync-map registry).
     zero-call list-item context replacement helper deleted. The still-live
     shared structural clock is unchanged until list/ViewModel slots gain
     retained dirt. Runtime lib 345/345; probe 708/708.
+  - [x] (f4) owned-candidate ViewModel listeners no longer poll copied values
+    or run a bind-time bounded fixpoint. Retained scalar cells append the
+    listener occurrence for every genuine mutation, preserving duplicates and
+    registration order; the next ordinary frame swaps that queue with events
+    and drains chained batches up to C++'s 100-batch cap. Trigger-zero
+    acknowledgment alone is suppressed, batch 101 stays pending, and both raw
+    advance state and the `advanceAndApply` facade include pending listener
+    reports (`state_machine_instance.cpp:1374-1380,2320-2343,2583-2584,
+    2663-2665,3021-3025,3048-3058`). The compatibility snapshot/context-chain
+    listener paths remain for their later retained-context cut. Full evidence:
+    runtime lib 348/348, nuxie lib 132/132, probe 708/708, both golden modes
+    317/317 entries and 647/647 exact segments with zero failures, C API smoke
+    green, and `cargo test --workspace` green.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -589,3 +602,14 @@ Decisions log.)
   evidence: runtime lib 346/346, nuxie lib 132/132, probe 708/708, both golden
   gates 317/317 entries and 647/647 segments with zero failures, capi smoke
   green, and `cargo test --workspace` green; scripted failure list is empty.
+- 2026-07-21 — #RB-1 f4 deleted the owned-candidate listener observed-copy
+  scan and its bind-time fixpoint. Retained scalar cells now report every
+  mutation in registration order into the state machine's next-frame queue;
+  `applyEvents` swaps events and listener reports together, runs event actions
+  first, and drains chained listener batches through the C++ 100-batch cap.
+  Trigger-zero acknowledgment is suppressed and batch 101 remains pending.
+  Review found and removed one per-report action-vector clone; both Standards
+  and Spec re-reviews are clean. Full evidence: runtime lib 348/348, nuxie lib
+  132/132, probe 708/708, ordinary and scripted goldens 317/317 entries plus
+  647/647 exact segments with zero failures, C API smoke green, and the full
+  workspace green. The scripted failure list is empty.

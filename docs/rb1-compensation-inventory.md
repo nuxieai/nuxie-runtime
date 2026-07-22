@@ -31,9 +31,16 @@ change-propagation *by polling*. The five public seams that fan into it:
 
 ## Item 3 - Listener observed-copy rescans
 
-- `changed_view_model_listener_actions_for_candidates` `instance.rs:4924-4957`; caller `:5203`. Context-chain variant `:4896-4922` (caller `:5151`); single-context wrapper `:4886-4894`.
-- `MAX_VIEW_MODEL_LISTENER_ITERATIONS` (=100) `instance.rs:5172,5201`. Test asserting the cap: `artboard.rs:10082` (delete with the loop).
-- `observed` copies: field `instance.rs:649`; init `:860`; writes `:4916,4932,4951`.
+- [x] f4 deleted `changed_view_model_listener_actions_for_candidates` and
+  its bind-time `MAX_VIEW_MODEL_LISTENER_ITERATIONS` loop. Candidate listeners
+  now retain scalar-cell dependents and enqueue every mutation for next-frame
+  `applyEvents`; the former compensation cap test was rewritten as the C++
+  100-batch oracle, including batch 101 remaining pending.
+- [ ] Context-chain variant `instance.rs:4896-4922` (caller `:5151`) and
+  single-context wrapper `:4886-4894` still poll `observed` copies until those
+  contexts migrate to the retained candidate path.
+- [ ] Remaining `observed` copies: field `instance.rs:649`; init `:860`;
+  writes on the compatibility context-chain paths.
 
 ## Item 4 - Alias mirrors / detached trees
 
@@ -85,7 +92,8 @@ non-family callers): `changed_view_model_listener_actions_for_candidates`,
 ## Test-rewrite counts
 
 mutation_generation ~9 test sites (rewrite); candidates ~12 (rewrite to new
-context type); listener cap 1 (delete); from_instance_mutable 1 (API
+context type); listener cap 1 (rewritten in f4 to the C++ batch cap);
+from_instance_mutable 1 (API
 survives); alias sharing 1 (observable contract, keep); Scene dirty 0
 (integration coverage remains); per-source copied state: rewrite at graph
 API level; triggers: public read API survives, internal rescan tests delete.

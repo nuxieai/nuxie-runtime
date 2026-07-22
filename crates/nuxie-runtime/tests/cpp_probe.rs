@@ -17246,14 +17246,17 @@ fn composite_listener_trigger_survives_a_later_view_model_write_until_transition
             .set_number_by_property_name("watch", 1.0),
         "{label} failed to change the listener source"
     );
-    assert!(state_machine.bind_owned_view_model_contexts(&contexts));
+
+    // C++ queues the listener when `watch` mutates, then `applyEvents` drains
+    // that queue at the start of the next frame and runs both authored actions
+    // before advancing the layers
+    // (`state_machine_instance.cpp:2320-2335,2555-2565`).
+    let _ = rust.advance_state_machine_instance(&mut state_machine, 0.0);
     assert_eq!(
         context.borrow().number_value_by_property_name("output"),
         Some(42.0),
         "the later ViewModel action must still be applied"
     );
-
-    let _ = rust.advance_state_machine_instance(&mut state_machine, 0.0);
     assert_eq!(
         state_machine
             .current_animation(0)

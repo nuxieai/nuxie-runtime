@@ -10013,7 +10013,7 @@ mod tests {
 
     #[test]
     fn composite_owned_view_model_bind_dispatches_view_model_listeners() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9684, true);
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9684, true);
         let main = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 1)
                 .expect("fixture has an owned ViewModel context"),
@@ -10022,7 +10022,7 @@ mod tests {
 
         assert!(state_machine.bind_owned_view_model_contexts(&context));
         assert!(main.borrow_mut().set_number_by_property_index(0, 1.0));
-        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)
@@ -10038,8 +10038,9 @@ mod tests {
     }
 
     #[test]
-    fn composite_listener_cascade_reaches_a_bounded_fixpoint() {
-        let (file, _artboard, mut state_machine) = owned_view_model_listener_cascade_fixture(9700);
+    fn composite_listener_cascade_drains_in_one_apply_events_frame() {
+        let (file, mut artboard, mut state_machine) =
+            owned_view_model_listener_cascade_fixture(9700);
         let main = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 1)
                 .expect("fixture has an owned ViewModel context"),
@@ -10048,19 +10049,20 @@ mod tests {
 
         assert!(state_machine.bind_owned_view_model_contexts(&context));
         assert!(main.borrow_mut().set_number_by_property_index(0, 1.0));
-        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)
                 .and_then(|input| input.number_value()),
             Some(9.0),
-            "listener B must observe listener A's write in the same bounded bind fixpoint",
+            "applyEvents must drain listener A then its chained listener B before layer advance",
         );
     }
 
     #[test]
-    fn retained_handle_listener_cascade_reaches_a_bounded_fixpoint() {
-        let (file, _artboard, mut state_machine) = owned_view_model_listener_cascade_fixture(9701);
+    fn retained_handle_listener_cascade_drains_in_one_apply_events_frame() {
+        let (file, mut artboard, mut state_machine) =
+            owned_view_model_listener_cascade_fixture(9701);
         let context = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 1)
                 .expect("fixture has an owned ViewModel context"),
@@ -10068,38 +10070,39 @@ mod tests {
 
         assert!(state_machine.bind_owned_view_model_handle(&context));
         assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
-        assert!(state_machine.bind_owned_view_model_handle(&context));
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)
                 .and_then(|input| input.number_value()),
             Some(9.0),
-            "retained handle refresh must rescan listener B after listener A writes",
+            "retained listener reports must preserve the chained FIFO order",
         );
     }
 
     #[test]
-    fn retained_candidate_listener_cascade_reaches_a_bounded_fixpoint() {
-        let (file, _artboard, mut state_machine) = owned_view_model_listener_cascade_fixture(9702);
+    fn retained_candidate_listener_cascade_drains_in_one_apply_events_frame() {
+        let (file, mut artboard, mut state_machine) =
+            owned_view_model_listener_cascade_fixture(9702);
         let context = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 1)
                 .expect("fixture has an owned ViewModel context"),
         );
         assert!(state_machine.bind_owned_view_model_handle(&context));
         assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
-        assert!(state_machine.advance_data_context());
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)
                 .and_then(|input| input.number_value()),
             Some(9.0),
-            "first-class retained candidates must run the same listener fixpoint",
+            "first-class retained candidates must drain the same applyEvents queue",
         );
     }
 
     #[test]
-    fn retained_candidate_listener_is_a_cell_dependent_with_a_diff_gate() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9720, true);
+    fn retained_candidate_listener_queues_each_mutation_until_next_frame() {
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9720, true);
         let context = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 1)
                 .expect("fixture has an owned ViewModel context"),
@@ -10120,54 +10123,63 @@ mod tests {
             "the listener must observe the SAME retained cell the context owns"
         );
 
-        // A slot write cascades dirt into the listener's sink before any
-        // rescan runs; the next bounded bind consumes it and dispatches.
+        // A slot write reports the listener immediately, but C++ performs its
+        // actions only from next-frame applyEvents
+        // (`state_machine_instance.cpp:2320-2335,3021-3025`).
         assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
         assert_eq!(
-            state_machine.view_model_listener_has_pending_cell_dirt(0),
-            Some(true),
-            "the cell cascade must land in the listener's dirt sink"
+            state_machine.pending_listener_view_model_report_count(),
+            1,
+            "the cell cascade must append one listener report"
         );
-        assert!(state_machine.bind_owned_view_model_handle(&context));
+        state_machine.bind_owned_view_model_handle(&context);
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(0.0),
+            "rebinding must not execute a queued listener action"
+        );
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)
                 .and_then(|input| input.number_value()),
             Some(7.0),
-            "dirt plus a value change must dispatch the listener actions"
+            "next-frame applyEvents must dispatch the listener actions"
         );
         assert_eq!(
             context.borrow().number_value_by_property_path(&[1]),
             Some(42.0)
         );
 
-        // A transient write that lands back on the last-delivered value has
-        // dirt but no diff: the listener must consume the dirt WITHOUT
-        // re-dispatching (C++ listeners consume a value change once).
+        // C++ deliberately preserves duplicates instead of collapsing a
+        // transient 1→2→1 into a net-equal observed copy.
         assert!(context.borrow_mut().set_number_by_property_path(&[1], 0.0));
         assert!(context.borrow_mut().set_number_by_property_index(0, 2.0));
         assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
-        state_machine.bind_owned_view_model_handle(&context);
         assert_eq!(
-            state_machine.view_model_listener_has_pending_cell_dirt(0),
-            Some(false),
-            "the scan must consume the transient dirt"
+            state_machine.pending_listener_view_model_report_count(),
+            2,
+            "both genuine mutations must remain queued in order"
         );
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+        assert_eq!(state_machine.pending_listener_view_model_report_count(), 0);
         assert_eq!(
             context.borrow().number_value_by_property_path(&[1]),
-            Some(0.0),
-            "a dirt-only transient (no net value change) must not re-dispatch"
+            Some(42.0),
+            "the transient reports must execute instead of disappearing behind a net diff"
         );
     }
 
     #[test]
-    fn retained_candidate_listener_cap_leaves_the_unobserved_tail_dirty() {
+    fn retained_candidate_listener_apply_events_cap_leaves_batch_101_pending() {
         const LISTENER_CAP: usize = 100;
         let bytes = synthetic_owned_view_model_listener_chain_riv(9705, LISTENER_CAP + 1, false);
         let file = read_runtime_file(&bytes).expect("listener boundary fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
         let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
-        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+        let mut artboard = ArtboardInstance::from_graph(&file, artboard_graph)
             .expect("fixture artboard instantiates");
         let mut state_machine = artboard
             .state_machine_instance(0)
@@ -10180,7 +10192,7 @@ mod tests {
 
         assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
         assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
-        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             context
                 .borrow()
@@ -10192,23 +10204,18 @@ mod tests {
                 .borrow()
                 .number_value_by_property_index(LISTENER_CAP + 1),
             Some(0.0),
-            "the per-bind cap must stop before listener 101",
+            "the applyEvents batch cap must stop before listener 101",
         );
+        assert_eq!(state_machine.pending_listener_view_model_report_count(), 1);
 
-        assert!(
-            state_machine.bind_owned_view_model_handle(&context),
-            "the mutation produced at the cap must remain pending for the next bounded bind",
-        );
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             context
                 .borrow()
                 .number_value_by_property_index(LISTENER_CAP + 1),
             Some(1.0),
         );
-        assert!(
-            !state_machine.bind_owned_view_model_handle(&context),
-            "the completed chain must settle instead of remaining spuriously dirty",
-        );
+        assert_eq!(state_machine.pending_listener_view_model_report_count(), 0);
     }
 
     #[test]
@@ -10217,7 +10224,7 @@ mod tests {
         let file = read_runtime_file(&bytes).expect("listener cycle fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
         let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
-        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+        let mut artboard = ArtboardInstance::from_graph(&file, artboard_graph)
             .expect("fixture artboard instantiates");
         let mut state_machine = artboard
             .state_machine_instance(0)
@@ -10228,7 +10235,7 @@ mod tests {
         );
         assert!(state_machine.bind_owned_view_model_handle(&context));
         assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
-        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert!(artboard.advance_state_machine_instance(&mut state_machine, 0.0));
         assert_eq!(
             context.borrow().number_value_by_property_index(0),
             Some(2.0)
@@ -10241,19 +10248,16 @@ mod tests {
             context.borrow().number_value_by_property_index(2),
             Some(1.0)
         );
-        assert!(
-            !state_machine.bind_owned_view_model_handle(&context),
-            "a listener dependency cycle that reaches an idempotent value must settle and stay idle",
-        );
+        assert_eq!(state_machine.pending_listener_view_model_report_count(), 0);
     }
 
     #[test]
-    fn retained_candidate_listener_live_cycle_stays_bounded_and_pending_at_cap() {
+    fn retained_candidate_listener_live_cycle_stays_pending_at_apply_events_cap() {
         let bytes = synthetic_owned_view_model_listener_live_cycle_riv(9707);
         let file = read_runtime_file(&bytes).expect("listener live-cycle fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
         let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
-        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+        let mut artboard = ArtboardInstance::from_graph(&file, artboard_graph)
             .expect("fixture artboard instantiates");
         let mut state_machine = artboard
             .state_machine_instance(0)
@@ -10266,50 +10270,16 @@ mod tests {
         assert!(state_machine.bind_owned_view_model_handle(&context));
         assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
 
-        assert!(state_machine.bind_owned_view_model_handle(&context));
-        assert_eq!(
-            context.borrow().number_value_by_property_index(0),
-            Some(1.0)
-        );
-        assert_eq!(
-            context.borrow().number_value_by_property_index(1),
-            Some(1.0)
-        );
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+        assert!(state_machine.has_pending_listener_view_model_reports());
 
-        assert!(state_machine.bind_owned_view_model_handle(&context));
-        assert_eq!(
-            context.borrow().number_value_by_property_index(0),
-            Some(0.0)
-        );
-        assert_eq!(
-            context.borrow().number_value_by_property_index(1),
-            Some(0.0)
-        );
-
-        assert!(state_machine.bind_owned_view_model_handle(&context));
-        assert_eq!(
-            context.borrow().number_value_by_property_index(0),
-            Some(1.0)
-        );
-        assert_eq!(
-            context.borrow().number_value_by_property_index(1),
-            Some(0.0)
-        );
-
-        assert!(state_machine.bind_owned_view_model_handle(&context));
-        assert_eq!(
-            context.borrow().number_value_by_property_index(0),
-            Some(1.0)
-        );
-        assert_eq!(
-            context.borrow().number_value_by_property_index(1),
-            Some(1.0)
-        );
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+        assert!(state_machine.has_pending_listener_view_model_reports());
     }
 
     #[test]
     fn retained_scoped_context_refresh_dispatches_listener_actions_to_the_scope() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9688, true);
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9688, true);
         let root = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0)
                 .expect("fixture has a nested owned ViewModel context"),
@@ -10320,7 +10290,7 @@ mod tests {
 
         assert!(state_machine.bind_owned_view_model_context_handle(&scoped));
         assert!(root.borrow_mut().set_number_by_property_path(&[1, 0], 1.0));
-        assert!(state_machine.advance_data_context());
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)
@@ -10337,7 +10307,7 @@ mod tests {
 
     #[test]
     fn composite_listener_preserves_authored_view_model_identity() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9689, true);
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9689, true);
         let same_shaped_main = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 2)
                 .expect("fixture has a same-shaped non-global ViewModel"),
@@ -10370,7 +10340,7 @@ mod tests {
                 .borrow_mut()
                 .set_number_by_property_index(0, 1.0)
         );
-        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)
@@ -10393,7 +10363,7 @@ mod tests {
 
     #[test]
     fn listener_write_addresses_declared_global_slot_with_cross_model_override() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9690, true);
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9690, true);
         let main = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0)
                 .expect("fixture has a main ViewModel context"),
@@ -10431,7 +10401,7 @@ mod tests {
                 .borrow_mut()
                 .set_number_by_property_index(0, 1.0)
         );
-        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)
@@ -10516,7 +10486,7 @@ mod tests {
 
     #[test]
     fn cross_model_listener_trigger_does_not_fire_default_view_model_transition_trigger() {
-        let (file, _artboard, mut state_machine) =
+        let (file, mut artboard, mut state_machine) =
             owned_view_model_action_fixture_with_cross_model_trigger(9694);
         let main = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 1)
@@ -10541,7 +10511,7 @@ mod tests {
             "listener trigger bindable retains its authored action value"
         );
         assert!(main.borrow_mut().set_number_by_property_index(0, 1.0));
-        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             cross_model.borrow().trigger_value_by_property_path(&[2]),
             Some(1),
@@ -10797,7 +10767,7 @@ mod tests {
 
     #[test]
     fn nested_candidate_context_chain_bind_dispatches_view_model_listeners() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9685, true);
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9685, true);
         let main = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0)
                 .expect("fixture has a nested owned ViewModel context"),
@@ -10811,7 +10781,7 @@ mod tests {
 
         assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
         assert!(main.borrow_mut().set_number_by_property_path(&[1, 0], 1.0));
-        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)
@@ -10828,7 +10798,7 @@ mod tests {
 
     #[test]
     fn later_candidate_context_chain_owns_listener_observation_and_writes() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9686, true);
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9686, true);
         let root = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0)
                 .expect("fixture has nested candidate contexts"),
@@ -10846,7 +10816,7 @@ mod tests {
 
         assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
         assert!(root.borrow_mut().set_number_by_property_path(&[1, 0], 1.0));
-        assert!(state_machine.bind_owned_view_model_context_candidates(&candidates));
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)
@@ -10868,7 +10838,7 @@ mod tests {
 
     #[test]
     fn composite_context_listener_falls_through_main_to_global_slot() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9687, true);
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9687, true);
         let main = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 0)
                 .expect("fixture has a main ViewModel context"),
@@ -10882,7 +10852,7 @@ mod tests {
 
         assert!(state_machine.bind_owned_view_model_contexts(&context));
         assert!(global.borrow_mut().set_number_by_property_index(0, 1.0));
-        assert!(state_machine.bind_owned_view_model_contexts(&context));
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)

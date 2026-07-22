@@ -100,9 +100,10 @@ fn advance_and_apply_keep_going(
     // semantics for callers that do not run the full apply pipeline.
     changed
         || elapsed_seconds == 0.0
-        || state_machines
-            .iter()
-            .any(|instance| instance.reported_event_count() != 0)
+        || state_machines.iter().any(|instance| {
+            instance.reported_event_count() != 0
+                || instance.has_pending_listener_view_model_reports()
+        })
 }
 
 #[cfg(feature = "scripting")]

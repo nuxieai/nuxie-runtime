@@ -12,12 +12,56 @@
 //!
 //! `Rc<RefCell<..>>` is the Rust analog of C++ `rcp`: cloning a
 //! [`RuntimeViewModelCell`] shares identity, exactly like retaining the same
-//! `ViewModelInstanceValue*`. The dirt cascade deliberately does nothing but
-//! set bits on dependent sinks — mirroring C++ `addDirt`, and keeping the
-//! cascade re-entrancy-free while listener actions mutate other cells.
+//! `ViewModelInstanceValue*`. The dirt cascade sets dependent bits and may
+//! append a listener identity to its deferred report queue — mirroring C++
+//! `addDirt` without executing listener actions inline, so the cascade stays
+//! re-entrancy-free while those actions later mutate other cells.
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
+
+/// Retained mutation-order notification queue used by ViewModel listeners.
+///
+/// C++ `StateMachineInstance::m_reportedListenerViewModels` is appended from
+/// `ListenerViewModelPropertyBinding::addDirt` and swapped into a second
+/// retained vector by `applyEvents` (`state_machine_instance.cpp:1374-1380,
+/// 2320-2335,3021-3025`). The shared handle lets a retained cell append
+/// without borrowing the owning state machine; the state machine remains the
+/// sole owner of the handle and drains it at the frame boundary.
+#[derive(Clone, Default)]
+pub(crate) struct RuntimeCellNotificationQueue {
+    values: Rc<RefCell<Vec<usize>>>,
+}
+
+impl std::fmt::Debug for RuntimeCellNotificationQueue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RuntimeCellNotificationQueue")
+            .field("len", &self.len())
+            .finish()
+    }
+}
+
+impl RuntimeCellNotificationQueue {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.values.borrow().is_empty()
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.values.borrow().len()
+    }
+
+    /// Swap the pending queue into the retained reporting buffer. The empty
+    /// reporting allocation becomes the next pending allocation, matching
+    /// C++'s two retained vectors without dropping either capacity.
+    pub(crate) fn swap_into(&self, reporting: &mut Vec<usize>) {
+        reporting.clear();
+        std::mem::swap(&mut *self.values.borrow_mut(), reporting);
+    }
+
+    fn downgrade(&self) -> Weak<RefCell<Vec<usize>>> {
+        Rc::downgrade(&self.values)
+    }
+}
 
 /// Dirt bits a cell mutation cascades to its dependents.
 ///
@@ -61,11 +105,33 @@ impl RuntimeCellDirt {
 #[derive(Clone, Default)]
 pub struct RuntimeCellDirtSink {
     bits: Rc<Cell<u8>>,
+    notification: Option<RuntimeCellNotification>,
+}
+
+#[derive(Clone)]
+struct RuntimeCellNotification {
+    queue: Weak<RefCell<Vec<usize>>>,
+    value: usize,
+    suppress_trigger_zero: bool,
 }
 
 impl RuntimeCellDirtSink {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn reporting_listener(
+        queue: &RuntimeCellNotificationQueue,
+        listener_index: usize,
+    ) -> Self {
+        Self {
+            bits: Rc::new(Cell::new(0)),
+            notification: Some(RuntimeCellNotification {
+                queue: queue.downgrade(),
+                value: listener_index,
+                suppress_trigger_zero: true,
+            }),
+        }
     }
 
     pub fn add_dirt(&self, dirt: RuntimeCellDirt) {
@@ -80,9 +146,17 @@ impl RuntimeCellDirtSink {
         RuntimeCellDirt(self.bits.get())
     }
 
-    fn downgrade(&self) -> Weak<Cell<u8>> {
-        Rc::downgrade(&self.bits)
+    fn downgrade(&self) -> RuntimeCellDependent {
+        RuntimeCellDependent {
+            bits: Rc::downgrade(&self.bits),
+            notification: self.notification.clone(),
+        }
     }
+}
+
+struct RuntimeCellDependent {
+    bits: Weak<Cell<u8>>,
+    notification: Option<RuntimeCellNotification>,
 }
 
 /// The typed payload of one cell.
@@ -127,7 +201,7 @@ struct RuntimeViewModelCellState {
     /// C++ `SuppressDelegation` depth: internal writes still cascade dirt to
     /// dependents but do not count as host-visible changes.
     suppress_depth: u32,
-    dependents: Vec<Weak<Cell<u8>>>,
+    dependents: Vec<RuntimeCellDependent>,
 }
 
 impl RuntimeViewModelCellState {
@@ -135,10 +209,19 @@ impl RuntimeViewModelCellState {
         // Prune dead sinks while cascading; C++ relies on explicit
         // removeDependent in ~DataBind, which weak references replace.
         self.dependents.retain(|dependent| {
-            let Some(bits) = dependent.upgrade() else {
+            let Some(bits) = dependent.bits.upgrade() else {
                 return false;
             };
             bits.set(bits.get() | dirt.0);
+            if let Some(notification) = &dependent.notification
+                && !(notification.suppress_trigger_zero
+                    && matches!(self.value, RuntimeViewModelCellValue::Trigger(0)))
+                && let Some(queue) = notification.queue.upgrade()
+            {
+                // Push every mutation in dependent-registration order. C++
+                // deliberately does not dedupe listener reports.
+                queue.borrow_mut().push(notification.value);
+            }
             true
         });
     }
@@ -190,23 +273,23 @@ impl RuntimeViewModelCell {
     /// with C++ `bindsOnce()` simply never registers.
     pub fn add_dependent(&self, sink: &RuntimeCellDirtSink) {
         let mut state = self.state.borrow_mut();
-        let weak = sink.downgrade();
+        let dependent = sink.downgrade();
         if !state
             .dependents
             .iter()
-            .any(|existing| existing.ptr_eq(&weak))
+            .any(|existing| existing.bits.ptr_eq(&dependent.bits))
         {
-            state.dependents.push(weak);
+            state.dependents.push(dependent);
         }
     }
 
     /// C++ `removeDependent` (used by `clearSource`; drop also suffices).
     pub fn remove_dependent(&self, sink: &RuntimeCellDirtSink) {
-        let weak = sink.downgrade();
+        let dependent = sink.downgrade();
         self.state
             .borrow_mut()
             .dependents
-            .retain(|existing| !existing.ptr_eq(&weak));
+            .retain(|existing| !existing.bits.ptr_eq(&dependent.bits));
     }
 
     /// Write a same-kind value. Mirrors the concrete C++ setters
@@ -991,6 +1074,41 @@ mod tests {
         assert!(!cell.set_value(RuntimeViewModelCellValue::Number(4.0)));
         assert!(bind.peek_dirt().is_empty());
         assert!(!cell.has_changed());
+    }
+
+    #[test]
+    fn listener_notifications_preserve_each_mutation_and_registration_order() {
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(0.0));
+        let queue = RuntimeCellNotificationQueue::default();
+        let first = RuntimeCellDirtSink::reporting_listener(&queue, 7);
+        let second = RuntimeCellDirtSink::reporting_listener(&queue, 11);
+        cell.add_dependent(&first);
+        cell.add_dependent(&second);
+
+        assert!(cell.set_value(RuntimeViewModelCellValue::Number(1.0)));
+        assert!(cell.set_value(RuntimeViewModelCellValue::Number(2.0)));
+        assert!(cell.set_value(RuntimeViewModelCellValue::Number(1.0)));
+
+        let mut reporting = Vec::new();
+        queue.swap_into(&mut reporting);
+        assert_eq!(reporting, [7, 11, 7, 11, 7, 11]);
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn listener_notification_suppresses_only_trigger_zero_acknowledgment() {
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(0));
+        let queue = RuntimeCellNotificationQueue::default();
+        let listener = RuntimeCellDirtSink::reporting_listener(&queue, 3);
+        cell.add_dependent(&listener);
+
+        assert!(cell.fire_trigger());
+        cell.advanced();
+
+        let mut reporting = Vec::new();
+        queue.swap_into(&mut reporting);
+        assert_eq!(reporting, [3]);
+        assert_eq!(cell.value(), RuntimeViewModelCellValue::Trigger(0));
     }
 
     #[test]

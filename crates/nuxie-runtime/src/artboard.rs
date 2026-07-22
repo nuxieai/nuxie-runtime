@@ -504,6 +504,10 @@ pub(crate) struct RuntimeComponentListItemInstance {
     pub(crate) child: Box<ArtboardInstance>,
     pub(crate) state_machines: Vec<StateMachineInstance>,
     pub(crate) context: RuntimeOwnedViewModelHandle,
+    /// Last consumed row-local structural generation. Scalar cells notify the
+    /// mounted child's retained dependents directly; only ViewModel-reference
+    /// replacement requires the child to resolve its binding paths again.
+    pub(crate) context_structural_generation: u64,
     pub(crate) occurrence_identity: u64,
     pub(crate) logical_index: usize,
     pub(crate) virtualized_position: Option<(f32, f32)>,
@@ -514,6 +518,17 @@ pub(crate) struct RuntimeComponentListItemInstance {
     pub(crate) settled_layout_size: Cell<Option<(f32, f32)>>,
     pub(crate) transform: Mat2D,
     pub(crate) render_cache_revision: u64,
+}
+
+impl RuntimeComponentListItemInstance {
+    fn context_is_current(&self, context: &RuntimeOwnedViewModelHandle) -> bool {
+        self.context.ptr_eq(context)
+            && self.context_structural_generation == context.borrow().structural_generation()
+    }
+
+    fn consume_context_structural_generation(&mut self) {
+        self.context_structural_generation = self.context.borrow().structural_generation();
+    }
 }
 
 /// One exact descent edge from a retained root artboard to a nested occurrence.
@@ -2644,9 +2659,7 @@ impl ArtboardInstance {
                                 item.logical_index == *index
                                     && item.occurrence_identity == logical.occurrence_identity
                                     && item.virtualized_position == *position
-                                    && item.context.ptr_eq(&logical.context)
-                                    && item.context.borrow().mutation_generation()
-                                        == logical.context.borrow().mutation_generation()
+                                    && item.context_is_current(&logical.context)
                             })
                 });
         if existing_matches {
@@ -2680,10 +2693,7 @@ impl ArtboardInstance {
                 let mut item = reusable_items[existing_index]
                     .take()
                     .expect("component-list identity match must retain an item");
-                if !item.context.ptr_eq(&context)
-                    || item.context.borrow().mutation_generation()
-                        != context.borrow().mutation_generation()
-                {
+                if !item.context_is_current(&context) {
                     item.context = context.clone();
                     item.child
                         .bind_owned_view_model_artboard_handle(file, &context);
@@ -2691,9 +2701,6 @@ impl ArtboardInstance {
                     child_candidates
                         .push(RuntimeOwnedViewModelBindingCandidate::root_handle(&context));
                     child_candidates.extend(parent_candidates.iter().cloned());
-                    item.child.artboard_owned_view_model_context = Some(
-                        RuntimeOwnedViewModelContext::from_main_handle(context.clone()),
-                    );
                     item.child
                         .bind_owned_view_model_artboard_context_candidates(
                             file,
@@ -2701,6 +2708,15 @@ impl ArtboardInstance {
                             true,
                             true,
                         );
+                    // `bind_owned_view_model_artboard_context_candidates`
+                    // installs the row-first composite graph and clears the
+                    // public facade while doing so. Restore the facade after
+                    // the bind so scripting observes the same row main that
+                    // C++ installs in `ArtboardComponentList::bindArtboard`
+                    // (`artboard_component_list.cpp:1530-1543`).
+                    item.child.artboard_owned_view_model_context = Some(
+                        RuntimeOwnedViewModelContext::from_main_handle(context.clone()),
+                    );
                     for state_machine in &mut item.state_machines {
                         state_machine.bind_owned_view_model_handle(&context);
                         if state_machine.bind_owned_view_model_context_candidates(&child_candidates)
@@ -2710,6 +2726,7 @@ impl ArtboardInstance {
                     }
                     item.child.advance_artboard_data_binds_with_elapsed(0.0);
                     item.child.update_pass();
+                    item.consume_context_structural_generation();
                     item_context_changed = true;
                 }
                 item.logical_index = logical_index;
@@ -2743,14 +2760,14 @@ impl ArtboardInstance {
                 Vec::with_capacity(self.artboard_owned_view_model_candidates.len() + 1);
             child_candidates.push(RuntimeOwnedViewModelBindingCandidate::root_handle(&context));
             child_candidates.extend(self.artboard_owned_view_model_candidates.iter().cloned());
-            child.artboard_owned_view_model_context = Some(
-                RuntimeOwnedViewModelContext::from_main_handle(context.clone()),
-            );
             child.bind_owned_view_model_artboard_context_candidates(
                 file,
                 &child_candidates,
                 true,
                 true,
+            );
+            child.artboard_owned_view_model_context = Some(
+                RuntimeOwnedViewModelContext::from_main_handle(context.clone()),
             );
             let selected_machine_indices = {
                 let context = context.borrow();
@@ -2786,9 +2803,11 @@ impl ArtboardInstance {
             }
             child.advance_artboard_data_binds_with_elapsed(0.0);
             child.update_pass();
+            let context_structural_generation = context.borrow().structural_generation();
             items.push(RuntimeComponentListItemInstance {
                 child: Box::new(child),
                 state_machines,
+                context_structural_generation,
                 context,
                 occurrence_identity: logical.occurrence_identity,
                 logical_index,
@@ -3295,29 +3314,56 @@ impl ArtboardInstance {
             }
         }
         let mut component_list_source_changed = false;
+        let parent_candidates = self.artboard_owned_view_model_candidates.clone();
         for items in self.component_list_items.values_mut() {
             for item in items {
-                let context_generation = item.context.borrow().mutation_generation();
-                item.child.queue_script_advance(elapsed_seconds);
+                let context_structural_generation = item.context.borrow().structural_generation();
                 let mut row_changed = false;
+                if !item.context_is_current(&item.context)
+                    && let Some(file) = item.child.runtime_file_arc()
+                {
+                    let mut child_candidates = Vec::with_capacity(parent_candidates.len() + 1);
+                    child_candidates.push(RuntimeOwnedViewModelBindingCandidate::root_handle(
+                        &item.context,
+                    ));
+                    child_candidates.extend(parent_candidates.iter().cloned());
+                    row_changed |= item
+                        .child
+                        .bind_owned_view_model_artboard_context_candidates(
+                            &file,
+                            &child_candidates,
+                            true,
+                            true,
+                        );
+                    item.child.artboard_owned_view_model_context = Some(
+                        RuntimeOwnedViewModelContext::from_main_handle(item.context.clone()),
+                    );
+                    for state_machine in &mut item.state_machines {
+                        if state_machine.bind_owned_view_model_context_candidates(&child_candidates)
+                        {
+                            row_changed = true;
+                            row_changed |= state_machine.advance_data_context();
+                        }
+                    }
+                    item.consume_context_structural_generation();
+                }
+                item.child.queue_script_advance(elapsed_seconds);
                 for state_machine in &mut item.state_machines {
                     row_changed |= item
                         .child
                         .advance_state_machine_instance(state_machine, elapsed_seconds);
-                }
-                if let Some(file) = item.child.runtime_file_arc() {
-                    row_changed |= item
-                        .child
-                        .bind_owned_view_model_artboard_handle(&file, &item.context);
-                }
-                if item.context.borrow().mutation_generation() != context_generation {
-                    component_list_source_changed = true;
                 }
                 row_changed |= item
                     .child
                     .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
                 row_changed |= item.child.advance_nested_artboards(elapsed_seconds);
                 row_changed |= item.child.update_pass();
+                let live_context_structural_generation =
+                    item.context.borrow().structural_generation();
+                if live_context_structural_generation != context_structural_generation {
+                    component_list_source_changed = true;
+                }
+                item.context_structural_generation = live_context_structural_generation;
                 if row_changed {
                     // The hosting layout must remeasure this row before the
                     // parent draws; `settle_component_list_layout_and_virtualization`
@@ -6791,6 +6837,7 @@ mod tests {
         let row = RuntimeComponentListItemInstance {
             child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
             state_machines: Vec::new(),
+            context_structural_generation: retained.clone().borrow().structural_generation(),
             context: retained,
             occurrence_identity: 1,
             logical_index: 0,
@@ -9923,6 +9970,35 @@ mod tests {
         (file, artboard, state_machine)
     }
 
+    #[test]
+    fn component_list_occurrence_ignores_scalar_generation_but_consumes_structural_generation() {
+        let (file, _, _) = owned_view_model_action_fixture(9713, false);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("row context"),
+        );
+        let mut row = RuntimeComponentListItemInstance {
+            child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
+            state_machines: Vec::new(),
+            context_structural_generation: context.borrow().structural_generation(),
+            context: context.clone(),
+            occurrence_identity: 1,
+            logical_index: 0,
+            virtualized_position: None,
+            settled_layout_size: Cell::new(None),
+            transform: Mat2D::IDENTITY,
+            render_cache_revision: 1,
+        };
+        assert!(row.context_is_current(&context));
+
+        assert!(context.borrow_mut().set_number_by_property_path(&[1], 42.0));
+        assert!(row.context_is_current(&context));
+
+        row.context_structural_generation = row.context_structural_generation.wrapping_sub(1);
+        assert!(!row.context_is_current(&context));
+        row.consume_context_structural_generation();
+        assert!(row.context_is_current(&context));
+    }
+
     fn owned_view_model_action_fixture_with_cross_model_trigger(
         file_id: u64,
     ) -> (RuntimeFile, ArtboardInstance, StateMachineInstance) {
@@ -10948,6 +11024,11 @@ mod tests {
             vec![RuntimeComponentListItemInstance {
                 child: Box::new(child),
                 state_machines: vec![state_machine],
+                context_structural_generation: row
+                    .instance
+                    .clone()
+                    .borrow()
+                    .structural_generation(),
                 context: row.instance,
                 occurrence_identity: row.occurrence_identity,
                 logical_index: 0,
@@ -10973,10 +11054,14 @@ mod tests {
             Some(42.0),
             "the retained list source must observe the item-owned write"
         );
-        assert!(parent.cache_epoch() > cache_epoch);
-        assert!(parent.prepared_epoch() > prepared_epoch);
-        assert!(parent.path_epoch() > path_epoch);
-        assert!(parent.layout_epoch() > layout_epoch);
+        // C++ only dirties the component-list host when the mounted child
+        // retains Components dirt after its advance. This fixture's scalar is
+        // unprojected, so the row write stays local
+        // (`artboard_component_list.cpp:827-885`, especially 870-881).
+        assert_eq!(parent.cache_epoch(), cache_epoch);
+        assert_eq!(parent.prepared_epoch(), prepared_epoch);
+        assert_eq!(parent.path_epoch(), path_epoch);
+        assert_eq!(parent.layout_epoch(), layout_epoch);
     }
 
     #[test]
@@ -11003,6 +11088,7 @@ mod tests {
             vec![RuntimeComponentListItemInstance {
                 child: Box::new(child),
                 state_machines: vec![state_machine],
+                context_structural_generation: row.borrow().structural_generation(),
                 context: row.clone(),
                 occurrence_identity: 1,
                 logical_index: 0,
@@ -11073,6 +11159,11 @@ mod tests {
                 RuntimeComponentListItemInstance {
                     child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
                     state_machines: Vec::new(),
+                    context_structural_generation: first
+                        .instance
+                        .clone()
+                        .borrow()
+                        .structural_generation(),
                     context: first.instance,
                     occurrence_identity: first.occurrence_identity,
                     logical_index: 0,
@@ -11084,6 +11175,11 @@ mod tests {
                 RuntimeComponentListItemInstance {
                     child: Box::new(child),
                     state_machines: vec![state_machine],
+                    context_structural_generation: second
+                        .instance
+                        .clone()
+                        .borrow()
+                        .structural_generation(),
                     context: second.instance,
                     occurrence_identity: second.occurrence_identity,
                     logical_index: 1,
@@ -11503,6 +11599,14 @@ mod tests {
             .and_then(|items| items.first())
             .expect("mounted component-list row");
         assert!(mounted.context.ptr_eq(&row_context));
+        assert!(
+            mounted
+                .child
+                .owned_view_model_context()
+                .and_then(RuntimeOwnedViewModelContext::main_handle)
+                .is_some_and(|context| context.ptr_eq(&row_context)),
+            "the mounted child must publicly expose its occurrence-scoped row context"
+        );
         assert_eq!(
             mounted
                 .state_machines

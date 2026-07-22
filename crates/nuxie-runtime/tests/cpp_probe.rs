@@ -53984,7 +53984,7 @@ fn artboard_default_viewmodel_list_to_component_list_update_matches_cpp_probe() 
 }
 
 #[test]
-fn retained_artboard_context_observes_script_list_row_mutation() {
+fn retained_artboard_context_keeps_script_list_row_mutation_local() {
     let label = "synthetic/runtime_artboard_retained_list_row_mutation.riv";
     let bytes = synthetic_artboard_default_viewmodel_list_to_component_list(8580);
     let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
@@ -54013,12 +54013,8 @@ fn retained_artboard_context_observes_script_list_row_mutation() {
         Some("updated")
     );
     assert!(
-        rust.advance_artboard_data_binds(),
-        "mutating a retained list-row alias must invalidate the retained root context"
-    );
-    assert!(
         !rust.advance_artboard_data_binds(),
-        "the retained root invalidation must be consumed exactly once"
+        "a scalar list-row write must not invalidate the containing root binding"
     );
 }
 
@@ -54186,7 +54182,7 @@ fn owned_view_model_links_expose_shared_string_state_through_the_parent_path() {
 }
 
 #[test]
-fn shared_list_item_mutation_invalidates_every_retained_parent_graph() {
+fn shared_list_item_scalar_mutation_stays_local_to_the_shared_row() {
     let label = "synthetic/runtime_script_list_shared_multi_parent.riv";
     let bytes = synthetic_artboard_default_viewmodel_list_to_component_list(8583);
     let (runtime, mut artboard_a) = read_rust_instance_from_bytes(&bytes, label);
@@ -54219,15 +54215,13 @@ fn shared_list_item_mutation_invalidates_every_retained_parent_graph() {
 
     assert!(item.set_string("label", "shared"));
     assert!(
-        artboard_a.advance_artboard_data_binds(),
-        "the first parent must observe mutation after a later parent attaches"
+        !artboard_a.advance_artboard_data_binds(),
+        "the first root binding must remain local after a shared-row scalar write"
     );
     assert!(
-        artboard_c.advance_artboard_data_binds(),
-        "the second parent must observe the shared item mutation"
+        !artboard_c.advance_artboard_data_binds(),
+        "the second root binding must remain local after a shared-row scalar write"
     );
-    assert!(!artboard_a.advance_artboard_data_binds());
-    assert!(!artboard_c.advance_artboard_data_binds());
 }
 
 #[test]

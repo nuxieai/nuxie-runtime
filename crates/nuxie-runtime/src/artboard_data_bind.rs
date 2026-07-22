@@ -515,6 +515,7 @@ struct RuntimeArtboardOwnedContextInstanceKey {
     declared_view_model_index: Option<usize>,
     instance_identity: u64,
     mutation_generation: u64,
+    structural_generation: u64,
     context_chain: Vec<Vec<usize>>,
 }
 
@@ -529,6 +530,7 @@ impl RuntimeArtboardOwnedContextKey {
                 declared_view_model_index: None,
                 instance_identity: context.instance_identity(),
                 mutation_generation: context.mutation_generation(),
+                structural_generation: context.structural_generation(),
                 context_chain: context_chain
                     .iter()
                     .map(|context_path| context_path.to_vec())
@@ -546,6 +548,9 @@ impl RuntimeArtboardOwnedContextKey {
             && self.instances[0].view_model_index == context.view_model_index
             && self.instances[0].declared_view_model_index.is_none()
             && self.instances[0].instance_identity == context.instance_identity()
+            // Snapshot callers clone new value cells on every bind. A scalar
+            // generation change therefore replaces those sources even though
+            // the ViewModel topology itself is unchanged.
             && self.instances[0].mutation_generation == context.mutation_generation()
             && self.instances[0].context_chain.len() == context_chain.len()
             && self.instances[0]
@@ -566,6 +571,7 @@ impl RuntimeArtboardOwnedContextKey {
                         declared_view_model_index: candidate.declared_view_model_index,
                         instance_identity: context.instance_identity(),
                         mutation_generation: context.mutation_generation(),
+                        structural_generation: context.structural_generation(),
                         context_chain: candidate.context_chain.clone(),
                     }
                 })
@@ -585,6 +591,25 @@ impl RuntimeArtboardOwnedContextKey {
                         && stored.declared_view_model_index == current.declared_view_model_index
                         && stored.instance_identity == context.instance_identity()
                         && stored.mutation_generation == context.mutation_generation()
+                        && stored.context_chain == current.context_chain
+                })
+    }
+
+    fn matches_candidate_structure(
+        &self,
+        candidates: &[RuntimeOwnedViewModelBindingCandidate],
+    ) -> bool {
+        self.instances.len() == candidates.len()
+            && self
+                .instances
+                .iter()
+                .zip(candidates)
+                .all(|(stored, current)| {
+                    let context = current.context.borrow();
+                    stored.view_model_index == context.view_model_index()
+                        && stored.declared_view_model_index == current.declared_view_model_index
+                        && stored.instance_identity == context.instance_identity()
+                        && stored.structural_generation == context.structural_generation()
                         && stored.context_chain == current.context_chain
                 })
     }
@@ -4478,6 +4503,9 @@ impl ArtboardInstance {
                         true,
                         allow_full_context_bindings,
                     );
+                item.child.artboard_owned_view_model_context = Some(
+                    RuntimeOwnedViewModelContext::from_main_handle(item.context.clone()),
+                );
                 for state_machine in &mut item.state_machines {
                     if state_machine.bind_owned_view_model_context_candidates(&child_candidates) {
                         changed = true;
@@ -5761,18 +5789,25 @@ impl ArtboardInstance {
             return false;
         };
         let candidates = self.artboard_owned_view_model_candidates.clone();
-        // A value mutation does not relink the DataContext tree in C++.
-        // Dependents are dirtied on their own DataBindContainer and observe
-        // the shared source when that container reaches its scheduled
-        // updateDataBinds pass. Refresh only this artboard here; recursively
-        // rebinding descendants makes later siblings observe a reverse write
-        // before their C++ counterpart and also resets stateful converters.
-        if !self.retain_owned_view_model_context_candidates(&candidates) {
-            return false;
+        // A scalar mutation does not relink the DataContext tree in C++.
+        // Retain the resolved source cells and only consume the compatibility
+        // mutation snapshot. ViewModel-reference replacement advances the
+        // relay's structural generation and still takes the full rebind path.
+        let structural_rebind = self
+            .artboard_owned_context_key
+            .as_ref()
+            .is_none_or(|key| !key.matches_candidate_structure(&candidates));
+        if structural_rebind {
+            self.retain_owned_view_model_context_candidates(&candidates);
+        } else {
+            self.artboard_owned_context_key =
+                Some(RuntimeArtboardOwnedContextKey::from_candidates(&candidates));
         }
         self.mark_artboard_data_bind_work_dirty();
-        self.stateful_nested_view_model_contexts_dirty = true;
-        self.bind_owned_view_model_target_to_source_bindings(&file, &candidates, true);
+        if structural_rebind {
+            self.stateful_nested_view_model_contexts_dirty = true;
+            self.bind_owned_view_model_target_to_source_bindings(&file, &candidates, true);
+        }
         // A shared graph mutation is observable work even when it only
         // touches an unprojected list row or child. The retained invalidation
         // must be consumed exactly once by this artboard.

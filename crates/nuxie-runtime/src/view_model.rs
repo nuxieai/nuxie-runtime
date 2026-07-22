@@ -1,6 +1,6 @@
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
 use nuxie_binary::{
@@ -1514,6 +1514,7 @@ pub struct RuntimeOwnedViewModelInstance {
     pub(crate) view_model_index: usize,
     instance_identity: u64,
     mutation_clock: Rc<RuntimeOwnedViewModelMutationClock>,
+    parent_relay: Rc<RuntimeOwnedViewModelParentRelay>,
     property_names: Vec<(String, usize)>,
     numbers: Vec<RuntimeOwnedViewModelNumber>,
     booleans: Vec<RuntimeOwnedViewModelBoolean>,
@@ -1592,6 +1593,80 @@ impl RuntimeOwnedViewModelMutationClock {
                 left.rank.set(left_rank.saturating_add(1));
             }
         }
+    }
+}
+
+/// Retained structural-parent topology matching C++ `ViewModelInstance::m_parents`.
+///
+/// Scalar values keep their own mutation identity. Only ViewModel-reference
+/// replacement walks this relay and invalidates each live containing instance.
+#[derive(Debug)]
+struct RuntimeOwnedViewModelParentRelay {
+    mutation_clock: RefCell<Weak<RuntimeOwnedViewModelMutationClock>>,
+    structural_generation: Cell<u64>,
+    parents: RefCell<Vec<Weak<RuntimeOwnedViewModelParentRelay>>>,
+}
+
+impl RuntimeOwnedViewModelParentRelay {
+    fn new(clock: &Rc<RuntimeOwnedViewModelMutationClock>) -> Rc<Self> {
+        Rc::new(Self {
+            mutation_clock: RefCell::new(Rc::downgrade(clock)),
+            structural_generation: Cell::new(0),
+            parents: RefCell::new(Vec::new()),
+        })
+    }
+
+    fn replace_mutation_clock(&self, clock: &Rc<RuntimeOwnedViewModelMutationClock>) {
+        *self.mutation_clock.borrow_mut() = Rc::downgrade(clock);
+    }
+
+    fn add_parent(this: &Rc<Self>, parent: &Rc<Self>) {
+        let mut parents = this.parents.borrow_mut();
+        parents.retain(|candidate| candidate.strong_count() != 0);
+        if parents
+            .iter()
+            .any(|candidate| candidate.ptr_eq(&Rc::downgrade(parent)))
+        {
+            return;
+        }
+        parents.push(Rc::downgrade(parent));
+    }
+
+    fn remove_parent(this: &Rc<Self>, parent: &Rc<Self>) {
+        let parent = Rc::downgrade(parent);
+        this.parents
+            .borrow_mut()
+            .retain(|candidate| !candidate.ptr_eq(&parent) && candidate.strong_count() != 0);
+    }
+
+    fn rebind_dependents(this: &Rc<Self>) {
+        fn visit(relay: &Rc<RuntimeOwnedViewModelParentRelay>, visited: &mut BTreeSet<usize>) {
+            let identity = Rc::as_ptr(relay) as usize;
+            if !visited.insert(identity) {
+                return;
+            }
+            if let Some(clock) = relay.mutation_clock.borrow().upgrade() {
+                RuntimeOwnedViewModelMutationClock::mark_mutated(&clock);
+            }
+            relay
+                .structural_generation
+                .set(relay.structural_generation.get().wrapping_add(1));
+            let parents = relay
+                .parents
+                .borrow()
+                .iter()
+                .filter_map(Weak::upgrade)
+                .collect::<Vec<_>>();
+            relay
+                .parents
+                .borrow_mut()
+                .retain(|candidate| candidate.strong_count() != 0);
+            for parent in parents {
+                visit(&parent, visited);
+            }
+        }
+
+        visit(this, &mut BTreeSet::new());
     }
 }
 
@@ -1716,7 +1791,7 @@ impl RuntimeOwnedViewModelHandle {
         if property_path.contains('/') {
             return Err(RuntimeViewModelLinkError::NestedPathUnsupported);
         }
-        let (property_index, expected_schema, already_linked) = {
+        let (property_index, expected_schema, already_linked, previous) = {
             let instance = self
                 .instance
                 .try_borrow()
@@ -1738,6 +1813,7 @@ impl RuntimeOwnedViewModelHandle {
                     .linked_instance
                     .as_ref()
                     .is_some_and(|current| Rc::ptr_eq(current, &value.instance)),
+                property.linked_instance.as_ref().map(Rc::clone),
             )
         };
         let value_schema = value
@@ -1751,6 +1827,15 @@ impl RuntimeOwnedViewModelHandle {
         if already_linked {
             return Ok(false);
         }
+        let previous_relay = previous
+            .as_ref()
+            .map(|previous| {
+                previous
+                    .try_borrow()
+                    .map(|previous| Rc::clone(&previous.parent_relay))
+                    .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)
+            })
+            .transpose()?;
         drop(
             value
                 .instance
@@ -1765,19 +1850,25 @@ impl RuntimeOwnedViewModelHandle {
             .try_borrow()
             .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?;
         let value_clock = Rc::clone(&value_instance.mutation_clock);
+        let value_relay = Rc::clone(&value_instance.parent_relay);
         let mut instance = self
             .instance
             .try_borrow_mut()
             .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?;
+        let parent_relay = Rc::clone(&instance.parent_relay);
         let property = instance
             .view_models
             .iter_mut()
             .find(|view_model| view_model.property_index == property_index)
             .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
+        if let Some(previous_relay) = previous_relay {
+            RuntimeOwnedViewModelParentRelay::remove_parent(&previous_relay, &parent_relay);
+        }
         property.linked_instance = Some(value.shared());
         property.mirror_linked_instance(&value_instance);
+        RuntimeOwnedViewModelParentRelay::add_parent(&value_relay, &parent_relay);
         instance.merge_mutation_clock(&value_clock);
-        instance.mark_mutated();
+        instance.mark_structurally_mutated();
         drop(instance);
         drop(value_instance);
         Ok(true)
@@ -1897,15 +1988,10 @@ impl RuntimeOwnedViewModelHandle {
             return false;
         };
         let mut list = list.borrow_mut();
-        let Some(slot) = list.items.get_mut(index) else {
-            return false;
-        };
-        if Rc::ptr_eq(&slot.instance, &item.instance) {
+        if !list.replace_instance(index, item.shared()) {
             return false;
         }
-        slot.instance = item.shared();
         drop(list);
-        instance.merge_mutation_clock(&item.instance.borrow().mutation_clock);
         instance.mark_mutated();
         true
     }
@@ -1974,16 +2060,22 @@ fn clone_owned_view_model_graph(
     {
         let original = source.borrow();
         let mut cloned = candidate.borrow_mut();
-        remap_owned_view_model_lists(&original.lists, &mut cloned.lists, memo);
-        remap_owned_view_model_child_lists(&original.view_models, &mut cloned.view_models, memo);
+        let parent_relay = Rc::clone(&cloned.parent_relay);
+        remap_owned_view_model_lists(&original.lists, &mut cloned.lists, memo, &parent_relay);
+        remap_owned_view_model_child_lists(
+            &original.view_models,
+            &mut cloned.view_models,
+            memo,
+            &parent_relay,
+        );
+        cloned.bind_structural_ownership();
     }
     merge_owned_view_model_link_clocks(&candidate);
     candidate
 }
 
-/// Temporary slice-(f) bridge: linked children already share their retained
-/// cells directly, but structural/list dirt still uses the mutation-clock
-/// union until those properties move onto retained dependents too.
+/// Temporary slice-(f) bridge for direct ViewModel-property links. List rows
+/// use row-local clocks plus the structural-parent relay instead.
 fn merge_owned_view_model_link_clocks(owner: &Rc<RefCell<RuntimeOwnedViewModelInstance>>) {
     let links = owner
         .borrow()
@@ -2001,6 +2093,7 @@ fn remap_owned_view_model_lists(
     original: &[RuntimeOwnedViewModelList],
     cloned: &mut [RuntimeOwnedViewModelList],
     memo: &mut BTreeMap<usize, Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
+    parent_relay: &Rc<RuntimeOwnedViewModelParentRelay>,
 ) {
     for cloned_list in cloned {
         let Some(original_list) = original
@@ -2013,12 +2106,19 @@ fn remap_owned_view_model_lists(
         let items = original_value
             .items
             .iter()
-            .map(|item| RuntimeOwnedViewModelListItem {
-                occurrence_identity: item.occurrence_identity,
-                instance: clone_owned_view_model_graph(&item.instance, memo),
+            .map(|item| {
+                let mut cloned_item = RuntimeOwnedViewModelListItem::copy_identity_from(
+                    item,
+                    clone_owned_view_model_graph(&item.instance, memo),
+                );
+                if item.parent_registered {
+                    cloned_item.attach_parent(parent_relay);
+                }
+                cloned_item
             })
             .collect();
         cloned_list.value = Rc::new(RefCell::new(RuntimeOwnedViewModelListValue {
+            parent_relay: Rc::downgrade(parent_relay),
             item_count: original_value.item_count,
             items,
         }));
@@ -2029,6 +2129,7 @@ fn remap_owned_view_model_child_lists(
     original: &[RuntimeOwnedViewModelViewModel],
     cloned: &mut [RuntimeOwnedViewModelViewModel],
     memo: &mut BTreeMap<usize, Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
+    parent_relay: &Rc<RuntimeOwnedViewModelParentRelay>,
 ) {
     for cloned_child in cloned {
         let Some(original_child) = original
@@ -2041,20 +2142,31 @@ fn remap_owned_view_model_child_lists(
             .linked_instance
             .as_ref()
             .map(|linked| clone_owned_view_model_graph(linked, memo));
-        remap_owned_view_model_lists(&original_child.lists, &mut cloned_child.lists, memo);
+        remap_owned_view_model_lists(
+            &original_child.lists,
+            &mut cloned_child.lists,
+            memo,
+            parent_relay,
+        );
         for (key, cloned_lists) in &mut cloned_child.imported_lists {
             if let Some(original_lists) = original_child.imported_lists.get(key) {
-                remap_owned_view_model_lists(original_lists, cloned_lists, memo);
+                remap_owned_view_model_lists(original_lists, cloned_lists, memo, parent_relay);
             }
         }
         remap_owned_view_model_child_lists(
             &original_child.children,
             &mut cloned_child.children,
             memo,
+            parent_relay,
         );
         for (key, cloned_children) in &mut cloned_child.imported_children {
             if let Some(original_children) = original_child.imported_children.get(key) {
-                remap_owned_view_model_child_lists(original_children, cloned_children, memo);
+                remap_owned_view_model_child_lists(
+                    original_children,
+                    cloned_children,
+                    memo,
+                    parent_relay,
+                );
             }
         }
         // Re-bind the alias mirror to the COPY's linked instance so the
@@ -2959,9 +3071,10 @@ impl RuntimeOwnedViewModelEnum {
         if self.value() == value {
             return false;
         }
-        self.cell.set_value(RuntimeViewModelCellValue::Enum(
-            owned_scalar_u32_payload(value),
-        ));
+        self.cell
+            .set_value(RuntimeViewModelCellValue::Enum(owned_scalar_u32_payload(
+                value,
+            )));
         true
     }
 }
@@ -3047,16 +3160,181 @@ impl RuntimeOwnedViewModelList {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug)]
 struct RuntimeOwnedViewModelListValue {
+    parent_relay: Weak<RuntimeOwnedViewModelParentRelay>,
     item_count: usize,
     items: Vec<RuntimeOwnedViewModelListItem>,
 }
 
-#[derive(Debug, Clone)]
+impl Default for RuntimeOwnedViewModelListValue {
+    fn default() -> Self {
+        Self {
+            parent_relay: Weak::new(),
+            item_count: 0,
+            items: Vec::new(),
+        }
+    }
+}
+
+impl RuntimeOwnedViewModelListValue {
+    fn bind_parent_relay(&mut self, parent: &Rc<RuntimeOwnedViewModelParentRelay>) {
+        self.parent_relay = Rc::downgrade(parent);
+    }
+
+    fn attach_item(&self, item: &mut RuntimeOwnedViewModelListItem) {
+        if let Some(parent) = self.parent_relay.upgrade() {
+            item.attach_parent(&parent);
+        }
+    }
+
+    fn detach_item(&self, item: &mut RuntimeOwnedViewModelListItem) {
+        if let Some(parent) = self.parent_relay.upgrade() {
+            item.detach_parent(&parent);
+        } else {
+            item.parent_registered = false;
+        }
+    }
+
+    fn set_item_count(&mut self, item_count: usize) -> bool {
+        if self.item_count == item_count {
+            return false;
+        }
+        if item_count < self.items.len() {
+            let mut removed = self.items.split_off(item_count);
+            for item in &mut removed {
+                self.detach_item(item);
+            }
+        }
+        self.item_count = item_count;
+        true
+    }
+
+    fn push_instance(&mut self, instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>) {
+        let mut item = RuntimeOwnedViewModelListItem::new(instance);
+        self.attach_item(&mut item);
+        self.items.push(item);
+        self.item_count = self.items.len();
+    }
+
+    fn insert_instance(
+        &mut self,
+        index: usize,
+        instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    ) {
+        let mut item = RuntimeOwnedViewModelListItem::new(instance);
+        self.attach_item(&mut item);
+        self.items.insert(index.min(self.items.len()), item);
+        self.item_count = self.items.len();
+    }
+
+    fn replace_instance(
+        &mut self,
+        index: usize,
+        instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    ) -> bool {
+        let Some(current) = self.items.get(index) else {
+            return false;
+        };
+        if Rc::ptr_eq(&current.instance, &instance) {
+            return false;
+        }
+        let mut replacement = RuntimeOwnedViewModelListItem::new(instance);
+        self.attach_item(&mut replacement);
+        let mut previous = std::mem::replace(&mut self.items[index], replacement);
+        self.detach_item(&mut previous);
+        true
+    }
+
+    fn pop_instance(&mut self) -> Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
+        let mut item = self.items.pop()?;
+        // Pinned C++ `ViewModelInstanceList::pop()` omits `removeParent`.
+        item.disarm_parent_registration();
+        self.item_count = self.items.len();
+        Some(item.instance)
+    }
+
+    fn remove_instance_at(
+        &mut self,
+        index: usize,
+    ) -> Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
+        if index >= self.items.len() {
+            return None;
+        }
+        let mut item = self.items.remove(index);
+        self.detach_item(&mut item);
+        self.item_count = self.items.len();
+        Some(item.instance)
+    }
+
+    fn clear_instances(&mut self) -> bool {
+        if self.items.is_empty() && self.item_count == 0 {
+            return false;
+        }
+        let mut items = std::mem::take(&mut self.items);
+        for item in &mut items {
+            self.detach_item(item);
+        }
+        self.item_count = 0;
+        true
+    }
+
+    fn remove_instances_by_identity(
+        &mut self,
+        instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+        remove_all: bool,
+    ) -> bool {
+        let mut changed = false;
+        let mut index = 0;
+        while index < self.items.len() {
+            if Rc::ptr_eq(&self.items[index].instance, instance) {
+                let mut item = self.items.remove(index);
+                self.detach_item(&mut item);
+                changed = true;
+                if !remove_all {
+                    break;
+                }
+            } else {
+                index += 1;
+            }
+        }
+        if changed {
+            self.item_count = self.items.len();
+        }
+        changed
+    }
+
+    fn replace_instances(&mut self, instances: Vec<RuntimeOwnedViewModelInstance>) -> bool {
+        let changed = !instances.is_empty() || !self.items.is_empty() || self.item_count != 0;
+        let mut previous = std::mem::take(&mut self.items);
+        for item in &mut previous {
+            self.detach_item(item);
+        }
+        for instance in instances {
+            self.push_instance(Rc::new(RefCell::new(instance)));
+        }
+        self.item_count = self.items.len();
+        changed
+    }
+}
+
+impl Drop for RuntimeOwnedViewModelListValue {
+    fn drop(&mut self) {
+        let Some(parent) = self.parent_relay.upgrade() else {
+            return;
+        };
+        for item in &mut self.items {
+            item.detach_parent(&parent);
+        }
+    }
+}
+
+#[derive(Debug)]
 struct RuntimeOwnedViewModelListItem {
     occurrence_identity: u64,
     instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    child_relay: Rc<RuntimeOwnedViewModelParentRelay>,
+    parent_registered: bool,
 }
 
 fn reset_runtime_owned_triggers(triggers: &mut [RuntimeOwnedViewModelTrigger]) -> bool {
@@ -3084,14 +3362,79 @@ fn collect_runtime_owned_list_children(
     }
 }
 
+fn bind_owned_view_model_list_parent_relays(
+    lists: &mut [RuntimeOwnedViewModelList],
+    parent: &Rc<RuntimeOwnedViewModelParentRelay>,
+) {
+    for list in lists {
+        list.value.borrow_mut().bind_parent_relay(parent);
+    }
+}
+
+fn bind_owned_view_model_child_parent_relays(
+    children: &mut [RuntimeOwnedViewModelViewModel],
+    parent: &Rc<RuntimeOwnedViewModelParentRelay>,
+) {
+    for child in children {
+        if let Some(linked) = &child.linked_instance {
+            let linked_relay = Rc::clone(&linked.borrow().parent_relay);
+            RuntimeOwnedViewModelParentRelay::add_parent(&linked_relay, parent);
+            // Alias mirrors share the linked instance's list storage. Its
+            // owner relay stays with that linked identity; the edge above is
+            // the only outer relationship.
+            continue;
+        }
+        bind_owned_view_model_list_parent_relays(&mut child.lists, parent);
+        for lists in child.imported_lists.values_mut() {
+            bind_owned_view_model_list_parent_relays(lists, parent);
+        }
+        bind_owned_view_model_child_parent_relays(&mut child.children, parent);
+        for children in child.imported_children.values_mut() {
+            bind_owned_view_model_child_parent_relays(children, parent);
+        }
+    }
+}
+
 impl RuntimeOwnedViewModelListItem {
     fn new(instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>) -> Self {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT_OCCURRENCE_IDENTITY: AtomicU64 = AtomicU64::new(0);
+        let child_relay = Rc::clone(&instance.borrow().parent_relay);
         Self {
             occurrence_identity: NEXT_OCCURRENCE_IDENTITY.fetch_add(1, Ordering::Relaxed),
             instance,
+            child_relay,
+            parent_registered: false,
         }
+    }
+
+    fn copy_identity_from(
+        source: &Self,
+        instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    ) -> Self {
+        let child_relay = Rc::clone(&instance.borrow().parent_relay);
+        Self {
+            occurrence_identity: source.occurrence_identity,
+            instance,
+            child_relay,
+            parent_registered: false,
+        }
+    }
+
+    fn attach_parent(&mut self, parent: &Rc<RuntimeOwnedViewModelParentRelay>) {
+        RuntimeOwnedViewModelParentRelay::add_parent(&self.child_relay, parent);
+        self.parent_registered = true;
+    }
+
+    fn detach_parent(&mut self, parent: &Rc<RuntimeOwnedViewModelParentRelay>) {
+        if self.parent_registered {
+            RuntimeOwnedViewModelParentRelay::remove_parent(&self.child_relay, parent);
+            self.parent_registered = false;
+        }
+    }
+
+    fn disarm_parent_registration(&mut self) {
+        self.parent_registered = false;
     }
 }
 
@@ -3306,8 +3649,10 @@ impl RuntimeOwnedViewModelFontAsset {
     }
 
     fn apply_data_bind_value(&mut self, value: &RuntimeFontAssetValue) -> bool {
-        let bytes_changed =
-            !same_live_font_identity(self.value.live_font_bytes_arc(), value.live_font_bytes_arc());
+        let bytes_changed = !same_live_font_identity(
+            self.value.live_font_bytes_arc(),
+            value.live_font_bytes_arc(),
+        );
         let changed = self.value.apply_data_bind_value(value);
         if changed {
             self.write_cell(bytes_changed);
@@ -3499,12 +3844,14 @@ impl RuntimeOwnedViewModelInstance {
     /// `File::copyViewModelInstance`'s `instancesMap`.
     fn detached_shallow_copy(&self) -> Self {
         let mutation_generation = self.mutation_generation();
+        let mutation_clock =
+            RuntimeOwnedViewModelMutationClock::new_with_generation(mutation_generation);
+        let parent_relay = RuntimeOwnedViewModelParentRelay::new(&mutation_clock);
         Self {
             view_model_index: self.view_model_index,
             instance_identity: self.instance_identity,
-            mutation_clock: RuntimeOwnedViewModelMutationClock::new_with_generation(
-                mutation_generation,
-            ),
+            mutation_clock,
+            parent_relay,
             property_names: self.property_names.clone(),
             numbers: self.numbers.clone(),
             booleans: self.booleans.clone(),
@@ -3532,28 +3879,46 @@ impl Clone for RuntimeOwnedViewModelInstance {
     fn clone(&self) -> Self {
         let mut cloned = self.detached_shallow_copy();
         let mut instances_map = BTreeMap::new();
-        remap_owned_view_model_lists(&self.lists, &mut cloned.lists, &mut instances_map);
+        let parent_relay = Rc::clone(&cloned.parent_relay);
+        remap_owned_view_model_lists(
+            &self.lists,
+            &mut cloned.lists,
+            &mut instances_map,
+            &parent_relay,
+        );
         remap_owned_view_model_child_lists(
             &self.view_models,
             &mut cloned.view_models,
             &mut instances_map,
+            &parent_relay,
         );
+        cloned.bind_structural_ownership();
         cloned.reroot_mutation_clock();
         cloned
     }
 }
 
-fn detach_owned_view_model_list_storage(lists: &mut [RuntimeOwnedViewModelList]) {
+fn detach_owned_view_model_list_storage(
+    lists: &mut [RuntimeOwnedViewModelList],
+    parent_relay: &Rc<RuntimeOwnedViewModelParentRelay>,
+) {
     for list in lists {
         let value = list.value.borrow();
         let detached = RuntimeOwnedViewModelListValue {
+            parent_relay: Rc::downgrade(parent_relay),
             item_count: value.item_count,
             items: value
                 .items
                 .iter()
-                .map(|item| RuntimeOwnedViewModelListItem {
-                    occurrence_identity: item.occurrence_identity,
-                    instance: Rc::new(RefCell::new(item.instance.borrow().clone())),
+                .map(|item| {
+                    let mut detached = RuntimeOwnedViewModelListItem::copy_identity_from(
+                        item,
+                        Rc::new(RefCell::new(item.instance.borrow().clone())),
+                    );
+                    if item.parent_registered {
+                        detached.attach_parent(parent_relay);
+                    }
+                    detached
                 })
                 .collect(),
         };
@@ -3562,28 +3927,18 @@ fn detach_owned_view_model_list_storage(lists: &mut [RuntimeOwnedViewModelList])
     }
 }
 
-fn detach_owned_view_model_child_list_storage(children: &mut [RuntimeOwnedViewModelViewModel]) {
-    for child in children {
-        detach_owned_view_model_list_storage(&mut child.lists);
-        for lists in child.imported_lists.values_mut() {
-            detach_owned_view_model_list_storage(lists);
-        }
-        detach_owned_view_model_child_list_storage(&mut child.children);
-        for children in child.imported_children.values_mut() {
-            detach_owned_view_model_child_list_storage(children);
-        }
-    }
-}
-
-fn replace_owned_view_model_list_clock(
-    lists: &mut [RuntimeOwnedViewModelList],
-    clock: &Rc<RuntimeOwnedViewModelMutationClock>,
+fn detach_owned_view_model_child_list_storage(
+    children: &mut [RuntimeOwnedViewModelViewModel],
+    parent_relay: &Rc<RuntimeOwnedViewModelParentRelay>,
 ) {
-    for list in lists {
-        for item in &list.value.borrow().items {
-            item.instance
-                .borrow_mut()
-                .replace_mutation_clock(Rc::clone(clock));
+    for child in children {
+        detach_owned_view_model_list_storage(&mut child.lists, parent_relay);
+        for lists in child.imported_lists.values_mut() {
+            detach_owned_view_model_list_storage(lists, parent_relay);
+        }
+        detach_owned_view_model_child_list_storage(&mut child.children, parent_relay);
+        for children in child.imported_children.values_mut() {
+            detach_owned_view_model_child_list_storage(children, parent_relay);
         }
     }
 }
@@ -3595,10 +3950,6 @@ fn replace_owned_view_model_child_clock(
     for child in children {
         if let Some(linked) = &child.linked_instance {
             linked.borrow_mut().replace_mutation_clock(Rc::clone(clock));
-        }
-        replace_owned_view_model_list_clock(&mut child.lists, clock);
-        for lists in child.imported_lists.values_mut() {
-            replace_owned_view_model_list_clock(lists, clock);
         }
         replace_owned_view_model_child_clock(&mut child.children, clock);
         for children in child.imported_children.values_mut() {
@@ -3799,7 +4150,11 @@ impl RuntimeOwnedViewModelViewModel {
             RuntimeViewModelPointer::Imported { object_id } => {
                 self.imported_children.insert(
                     object_id,
-                    source.view_models.iter().map(|child| child.share()).collect(),
+                    source
+                        .view_models
+                        .iter()
+                        .map(|child| child.share())
+                        .collect(),
                 );
             }
             _ => {
@@ -4106,10 +4461,13 @@ impl RuntimeOwnedViewModelViewModel {
                 }
             }};
         }
+        let mutation_clock = RuntimeOwnedViewModelMutationClock::new();
+        let parent_relay = RuntimeOwnedViewModelParentRelay::new(&mutation_clock);
         let mut instance = RuntimeOwnedViewModelInstance {
             view_model_index,
             instance_identity: RuntimeOwnedViewModelInstance::next_instance_identity(),
-            mutation_clock: RuntimeOwnedViewModelMutationClock::new(),
+            mutation_clock,
+            parent_relay,
             property_names: self.property_names.clone(),
             numbers: active_values!(&self.numbers, self.imported_numbers),
             booleans: active_values!(&self.booleans, self.imported_booleans),
@@ -4436,12 +4794,7 @@ impl RuntimeOwnedViewModelViewModel {
             return false;
         };
         let mut value = list.value.borrow_mut();
-        if value.item_count == item_count {
-            return false;
-        }
-        value.item_count = item_count;
-        value.items.truncate(item_count);
-        true
+        value.set_item_count(item_count)
     }
 
     fn set_asset_by_property_name(&mut self, property_name: &str, value: u64) -> bool {
@@ -5483,9 +5836,8 @@ fn runtime_owned_view_model_numbers(
                 .into_iter()
                 .enumerate()
                 .filter_map(|(property_index, property)| {
-                    (property.type_name == "ViewModelPropertyNumber").then_some(
-                        RuntimeOwnedViewModelNumber::new(property_index, 0.0),
-                    )
+                    (property.type_name == "ViewModelPropertyNumber")
+                        .then_some(RuntimeOwnedViewModelNumber::new(property_index, 0.0))
                 })
                 .collect()
         })
@@ -5558,9 +5910,8 @@ fn runtime_owned_view_model_booleans(
                 .into_iter()
                 .enumerate()
                 .filter_map(|(property_index, property)| {
-                    (property.type_name == "ViewModelPropertyBoolean").then_some(
-                        RuntimeOwnedViewModelBoolean::new(property_index, false),
-                    )
+                    (property.type_name == "ViewModelPropertyBoolean")
+                        .then_some(RuntimeOwnedViewModelBoolean::new(property_index, false))
                 })
                 .collect()
         })
@@ -5633,9 +5984,8 @@ fn runtime_owned_view_model_strings(
                 .into_iter()
                 .enumerate()
                 .filter_map(|(property_index, property)| {
-                    (property.type_name == "ViewModelPropertyString").then_some(
-                        RuntimeOwnedViewModelString::new(property_index, Vec::new()),
-                    )
+                    (property.type_name == "ViewModelPropertyString")
+                        .then_some(RuntimeOwnedViewModelString::new(property_index, Vec::new()))
                 })
                 .collect()
         })
@@ -5666,7 +6016,10 @@ fn runtime_owned_view_model_strings_for_instance(
                         &path,
                     )?;
                     let value = file.view_model_instance_string_value_for_object(source)?;
-                    Some(RuntimeOwnedViewModelString::new(property_index, value.as_bytes().to_vec()))
+                    Some(RuntimeOwnedViewModelString::new(
+                        property_index,
+                        value.as_bytes().to_vec(),
+                    ))
                 })
                 .collect()
         })
@@ -5708,9 +6061,8 @@ fn runtime_owned_view_model_colors(
                 .into_iter()
                 .enumerate()
                 .filter_map(|(property_index, property)| {
-                    (property.type_name == "ViewModelPropertyColor").then_some(
-                        RuntimeOwnedViewModelColor::new(property_index, 0xFF000000),
-                    )
+                    (property.type_name == "ViewModelPropertyColor")
+                        .then_some(RuntimeOwnedViewModelColor::new(property_index, 0xFF000000))
                 })
                 .collect()
         })
@@ -5820,7 +6172,10 @@ fn runtime_owned_view_model_enums_for_instance(
                         &path,
                     )?;
                     let value = file.view_model_instance_enum_value_index_for_object(source)?;
-                    Some(RuntimeOwnedViewModelEnum::new(property_index, u64::try_from(value).ok()?))
+                    Some(RuntimeOwnedViewModelEnum::new(
+                        property_index,
+                        u64::try_from(value).ok()?,
+                    ))
                 })
                 .collect()
         })
@@ -5862,9 +6217,8 @@ fn runtime_owned_view_model_symbol_list_indices(
                 .into_iter()
                 .enumerate()
                 .filter_map(|(property_index, property)| {
-                    (property.type_name == "ViewModelPropertySymbolListIndex").then_some(
-                        RuntimeOwnedViewModelSymbolListIndex::new(property_index, 0),
-                    )
+                    (property.type_name == "ViewModelPropertySymbolListIndex")
+                        .then_some(RuntimeOwnedViewModelSymbolListIndex::new(property_index, 0))
                 })
                 .collect()
         })
@@ -5897,7 +6251,10 @@ fn runtime_owned_view_model_symbol_list_indices_for_instance(
                     )?;
                     let value =
                         file.view_model_instance_symbol_list_index_value_for_object(source)?;
-                    Some(RuntimeOwnedViewModelSymbolListIndex::new(property_index, value))
+                    Some(RuntimeOwnedViewModelSymbolListIndex::new(
+                        property_index,
+                        value,
+                    ))
                 })
                 .collect()
         })
@@ -6016,6 +6373,7 @@ fn runtime_owned_view_model_lists_for_instance(
                     Some(RuntimeOwnedViewModelList {
                         property_index,
                         value: Rc::new(RefCell::new(RuntimeOwnedViewModelListValue {
+                            parent_relay: Weak::new(),
                             item_count,
                             items,
                         })),
@@ -6087,7 +6445,10 @@ fn runtime_owned_view_model_assets(
                         property.type_name,
                         "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage"
                     )
-                    .then_some(RuntimeOwnedViewModelAsset::new(property_index, u64::from(u32::MAX)))
+                    .then_some(RuntimeOwnedViewModelAsset::new(
+                        property_index,
+                        u64::from(u32::MAX),
+                    ))
                 })
                 .collect()
         })
@@ -6322,9 +6683,8 @@ fn runtime_owned_view_model_triggers(
                 .into_iter()
                 .enumerate()
                 .filter_map(|(property_index, property)| {
-                    (property.type_name == "ViewModelPropertyTrigger").then_some(
-                        RuntimeOwnedViewModelTrigger::new(property_index, 0),
-                    )
+                    (property.type_name == "ViewModelPropertyTrigger")
+                        .then_some(RuntimeOwnedViewModelTrigger::new(property_index, 0))
                 })
                 .collect()
         })
@@ -6930,13 +7290,28 @@ impl RuntimeOwnedViewModelInstance {
         RuntimeOwnedViewModelMutationClock::current_generation(&self.mutation_clock)
     }
 
+    pub(crate) fn structural_generation(&self) -> u64 {
+        self.parent_relay.structural_generation.get()
+    }
+
     fn mark_mutated(&mut self) {
         RuntimeOwnedViewModelMutationClock::mark_mutated(&self.mutation_clock);
     }
 
+    fn mark_structurally_mutated(&mut self) {
+        RuntimeOwnedViewModelParentRelay::rebind_dependents(&self.parent_relay);
+    }
+
+    fn bind_structural_ownership(&mut self) {
+        bind_owned_view_model_list_parent_relays(&mut self.lists, &self.parent_relay);
+        bind_owned_view_model_child_parent_relays(&mut self.view_models, &self.parent_relay);
+    }
+
     fn detach_list_storage(&mut self) {
-        detach_owned_view_model_list_storage(&mut self.lists);
-        detach_owned_view_model_child_list_storage(&mut self.view_models);
+        let parent_relay = Rc::clone(&self.parent_relay);
+        detach_owned_view_model_list_storage(&mut self.lists, &parent_relay);
+        detach_owned_view_model_child_list_storage(&mut self.view_models, &parent_relay);
+        self.bind_structural_ownership();
     }
 
     fn reroot_mutation_clock(&mut self) {
@@ -6948,7 +7323,7 @@ impl RuntimeOwnedViewModelInstance {
 
     fn replace_mutation_clock(&mut self, clock: Rc<RuntimeOwnedViewModelMutationClock>) {
         self.mutation_clock = Rc::clone(&clock);
-        replace_owned_view_model_list_clock(&mut self.lists, &clock);
+        self.parent_relay.replace_mutation_clock(&clock);
         replace_owned_view_model_child_clock(&mut self.view_models, &clock);
     }
 
@@ -7157,10 +7532,13 @@ impl RuntimeOwnedViewModelInstance {
             &[view_model_index],
             use_generated_defaults,
         );
+        let mutation_clock = RuntimeOwnedViewModelMutationClock::new();
+        let parent_relay = RuntimeOwnedViewModelParentRelay::new(&mutation_clock);
         let mut instance = Self {
             view_model_index,
             instance_identity: Self::next_instance_identity(),
-            mutation_clock: RuntimeOwnedViewModelMutationClock::new(),
+            mutation_clock,
+            parent_relay,
             property_names: runtime_owned_view_model_property_names(file, view_model_index),
             numbers,
             booleans,
@@ -7175,6 +7553,7 @@ impl RuntimeOwnedViewModelInstance {
             triggers,
             view_models,
         };
+        instance.bind_structural_ownership();
         instance.reroot_mutation_clock();
         Some(instance)
     }
@@ -8194,11 +8573,9 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         let mut value = list.value.borrow_mut();
-        if value.item_count == item_count {
+        if !value.set_item_count(item_count) {
             return false;
         }
-        value.item_count = item_count;
-        value.items.truncate(item_count);
         drop(value);
         self.mark_mutated();
         true
@@ -8275,14 +8652,8 @@ impl RuntimeOwnedViewModelInstance {
         let Some(list) = self.list_value_by_property_path(property_path) else {
             return false;
         };
-        let Ok(mut item_instance) = item.try_borrow_mut() else {
-            return false;
-        };
-        item_instance.merge_mutation_clock(&self.mutation_clock);
-        drop(item_instance);
         let mut list = list.borrow_mut();
-        list.items.push(RuntimeOwnedViewModelListItem::new(item));
-        list.item_count = list.items.len();
+        list.push_instance(item);
         drop(list);
         self.mark_mutated();
         true
@@ -8297,16 +8668,8 @@ impl RuntimeOwnedViewModelInstance {
         let Some(list) = self.list_value_by_property_path(property_path) else {
             return false;
         };
-        let Ok(mut item_instance) = item.try_borrow_mut() else {
-            return false;
-        };
-        item_instance.merge_mutation_clock(&self.mutation_clock);
-        drop(item_instance);
         let mut list = list.borrow_mut();
-        let index = index.min(list.items.len());
-        list.items
-            .insert(index, RuntimeOwnedViewModelListItem::new(item));
-        list.item_count = list.items.len();
+        list.insert_instance(index, item);
         drop(list);
         self.mark_mutated();
         true
@@ -8318,11 +8681,10 @@ impl RuntimeOwnedViewModelInstance {
     ) -> Option<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
         let list = self.list_value_by_property_path(property_path)?;
         let mut list = list.borrow_mut();
-        let item = list.items.pop()?;
-        list.item_count = list.items.len();
+        let item = list.pop_instance()?;
         drop(list);
         self.mark_mutated();
-        Some(item.instance)
+        Some(item)
     }
 
     pub(crate) fn shift_list_item_by_property_path(
@@ -8334,11 +8696,10 @@ impl RuntimeOwnedViewModelInstance {
         if list.items.is_empty() {
             return None;
         }
-        let item = list.items.remove(0);
-        list.item_count = list.items.len();
+        let item = list.remove_instance_at(0)?;
         drop(list);
         self.mark_mutated();
-        Some(item.instance)
+        Some(item)
     }
 
     pub(crate) fn swap_list_items_by_property_path(
@@ -8365,11 +8726,9 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         let mut list = list.borrow_mut();
-        if list.items.is_empty() && list.item_count == 0 {
+        if !list.clear_instances() {
             return false;
         }
-        list.items.clear();
-        list.item_count = 0;
         drop(list);
         self.mark_mutated();
         true
@@ -8384,11 +8743,9 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         let mut list = list.borrow_mut();
-        if index >= list.items.len() {
+        if list.remove_instance_at(index).is_none() {
             return false;
         }
-        list.items.remove(index);
-        list.item_count = list.items.len();
         drop(list);
         self.mark_mutated();
         true
@@ -8404,21 +8761,9 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         let mut list = list.borrow_mut();
-        let old_len = list.items.len();
-        if remove_all {
-            list.items
-                .retain(|candidate| !Rc::ptr_eq(&candidate.instance, item));
-        } else if let Some(index) = list
-            .items
-            .iter()
-            .position(|candidate| Rc::ptr_eq(&candidate.instance, item))
-        {
-            list.items.remove(index);
-        }
-        if list.items.len() == old_len {
+        if !list.remove_instances_by_identity(item, remove_all) {
             return false;
         }
-        list.item_count = list.items.len();
         drop(list);
         self.mark_mutated();
         true
@@ -8547,12 +8892,7 @@ impl RuntimeOwnedViewModelInstance {
     ) -> Option<bool> {
         let list = self.list_handle_by_property_path(&handle.property_path)?;
         let mut list = list.value.borrow_mut();
-        let changed = !items.is_empty() || !list.items.is_empty() || list.item_count != 0;
-        list.items = items
-            .into_iter()
-            .map(|item| RuntimeOwnedViewModelListItem::new(Rc::new(RefCell::new(item))))
-            .collect();
-        list.item_count = list.items.len();
+        let changed = list.replace_instances(items);
         drop(list);
         Some(self.track_mutation(changed))
     }
@@ -9410,7 +9750,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         view_model.value = value;
-        self.mark_mutated();
+        self.mark_structurally_mutated();
         true
     }
 
@@ -9446,7 +9786,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         view_model.value = value;
-        self.mark_mutated();
+        self.mark_structurally_mutated();
         true
     }
 
@@ -11574,6 +11914,107 @@ mod owned_context_tests {
         .expect("mutable list default fixture imports")
     }
 
+    fn list_row_relink_fixture() -> RuntimeFile {
+        RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Root".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyList",
+                vec![property(
+                    "ViewModelPropertyList",
+                    "name",
+                    AuthoringValue::String("items".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Row".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("value".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyViewModel",
+                vec![
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "name",
+                        AuthoringValue::String("child".to_owned()),
+                    ),
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "viewModelReferenceId",
+                        AuthoringValue::Uint(2),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModelPropertyList",
+                vec![property(
+                    "ViewModelPropertyList",
+                    "name",
+                    AuthoringValue::String("nested".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Child".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyNumber",
+                vec![property(
+                    "ViewModelPropertyNumber",
+                    "name",
+                    AuthoringValue::String("value".to_owned()),
+                )],
+            ),
+            record(
+                "ViewModelPropertyViewModel",
+                vec![
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "name",
+                        AuthoringValue::String("leaf".to_owned()),
+                    ),
+                    property(
+                        "ViewModelPropertyViewModel",
+                        "viewModelReferenceId",
+                        AuthoringValue::Uint(3),
+                    ),
+                ],
+            ),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Leaf".to_owned()),
+                )],
+            ),
+        ])
+        .expect("list-row relink fixture imports")
+    }
+
     #[test]
     fn generated_artboard_property_starts_unassigned() {
         let file = RuntimeFile::from_authoring_records(vec![
@@ -11846,6 +12287,7 @@ mod owned_context_tests {
         ));
         let handle = RuntimeOwnedViewModelListHandle {
             value: Rc::new(RefCell::new(RuntimeOwnedViewModelListValue {
+                parent_relay: Weak::new(),
                 item_count: 2,
                 items: vec![
                     RuntimeOwnedViewModelListItem::new(Rc::clone(&instance)),
@@ -11993,7 +12435,11 @@ mod owned_context_tests {
         // One write through the retained child is visible through every
         // owner: two references to the same logical child hold the same
         // underlying cells.
-        assert!(child.borrow_mut().set_number_by_property_name("value", 77.0));
+        assert!(
+            child
+                .borrow_mut()
+                .set_number_by_property_name("value", 77.0)
+        );
         assert_eq!(
             owner_a
                 .borrow()
@@ -12070,7 +12516,247 @@ mod owned_context_tests {
     }
 
     #[test]
-    fn mutable_imported_list_items_invalidate_the_root_binding_generation() {
+    fn dynamic_list_row_relink_reaches_every_parent_while_scalar_dirt_stays_local() {
+        let file = list_row_relink_fixture();
+        let root_a = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("first root"),
+        );
+        let root_b = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("second root"),
+        );
+        let row = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("shared row"),
+        );
+        let first_child = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2).expect("first child"),
+        );
+        let second_child = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2).expect("second child"),
+        );
+        assert_eq!(
+            row.link_view_model_by_property_name_path("child", &first_child),
+            Ok(true)
+        );
+        assert!(root_a.insert_list_item_by_property_name_path("items", 0, &row));
+        assert!(root_b.insert_list_item_by_property_name_path("items", 0, &row));
+        let root_a_generation = root_a.borrow().mutation_generation();
+        let root_b_generation = root_b.borrow().mutation_generation();
+        let root_a_structural_generation = root_a.borrow().structural_generation();
+        let root_b_structural_generation = root_b.borrow().structural_generation();
+        let row_structural_generation = row.borrow().structural_generation();
+
+        assert!(row.borrow_mut().set_number_by_property_name("value", 1.0));
+        assert_eq!(root_a.borrow().mutation_generation(), root_a_generation);
+        assert_eq!(root_b.borrow().mutation_generation(), root_b_generation);
+        assert_eq!(
+            root_a.borrow().structural_generation(),
+            root_a_structural_generation
+        );
+        assert_eq!(
+            root_b.borrow().structural_generation(),
+            root_b_structural_generation
+        );
+        assert_eq!(
+            row.borrow().structural_generation(),
+            row_structural_generation
+        );
+
+        // C++ `replaceViewModelByName` calls `rebindDependents`, which walks
+        // every pointer-unique parent (`viewmodel_instance.cpp:118-154,406-415`).
+        assert_eq!(
+            row.link_view_model_by_property_name_path("child", &second_child),
+            Ok(true)
+        );
+        assert!(root_a.borrow().mutation_generation() > root_a_generation);
+        assert!(root_b.borrow().mutation_generation() > root_b_generation);
+        assert!(root_a.borrow().structural_generation() > root_a_structural_generation);
+        assert!(root_b.borrow().structural_generation() > root_b_structural_generation);
+        assert!(row.borrow().structural_generation() > row_structural_generation);
+    }
+
+    #[test]
+    fn removing_dynamic_list_row_detaches_only_that_parent() {
+        let file = list_row_relink_fixture();
+        let root_a = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("first root"),
+        );
+        let root_b = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("second root"),
+        );
+        let row = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("shared row"),
+        );
+        assert!(root_a.insert_list_item_by_property_name_path("items", 0, &row));
+        assert!(root_b.insert_list_item_by_property_name_path("items", 0, &row));
+        assert!(root_a.remove_list_item_by_property_name_path("items", 0));
+        let root_a_generation = root_a.borrow().mutation_generation();
+        let root_b_generation = root_b.borrow().mutation_generation();
+        let child = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2).expect("replacement child"),
+        );
+
+        assert_eq!(
+            row.link_view_model_by_property_name_path("child", &child),
+            Ok(true)
+        );
+        assert_eq!(root_a.borrow().mutation_generation(), root_a_generation);
+        assert!(root_b.borrow().mutation_generation() > root_b_generation);
+    }
+
+    #[test]
+    fn detached_graph_rebuilds_dynamic_list_parent_relays_without_source_leakage() {
+        let file = list_row_relink_fixture();
+        let source = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("source root"),
+        );
+        let source_row = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("source row"),
+        );
+        assert!(source.insert_list_item_by_property_name_path("items", 0, &source_row));
+        let detached = RuntimeOwnedViewModelHandle::detached_graph(std::slice::from_ref(&source))
+            .pop()
+            .expect("detached root");
+        let detached_row = detached
+            .list_items_by_property_name_path("items")
+            .and_then(|mut items| items.pop())
+            .expect("detached row");
+        assert!(!detached_row.ptr_eq(&source_row));
+        let source_generation = source.borrow().mutation_generation();
+        let detached_generation = detached.borrow().mutation_generation();
+        let child = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2).expect("detached child"),
+        );
+
+        assert_eq!(
+            detached_row.link_view_model_by_property_name_path("child", &child),
+            Ok(true)
+        );
+        assert_eq!(source.borrow().mutation_generation(), source_generation);
+        assert!(detached.borrow().mutation_generation() > detached_generation);
+    }
+
+    #[test]
+    fn nested_dynamic_list_row_relink_reaches_the_root_relay() {
+        let file = list_row_relink_fixture();
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("root"),
+        );
+        let row = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("row"),
+        );
+        let nested = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2).expect("nested row"),
+        );
+        assert!(root.insert_list_item_by_property_name_path("items", 0, &row));
+        assert!(row.insert_list_item_by_property_name_path("nested", 0, &nested));
+        let root_generation = root.borrow().mutation_generation();
+        let leaf = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 3).expect("leaf"),
+        );
+
+        assert_eq!(
+            nested.link_view_model_by_property_name_path("leaf", &leaf),
+            Ok(true)
+        );
+        assert!(root.borrow().mutation_generation() > root_generation);
+    }
+
+    #[test]
+    fn duplicate_list_occurrence_removal_matches_cpp_pointer_unique_parent_semantics() {
+        let file = list_row_relink_fixture();
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("root"),
+        );
+        let row = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("shared row"),
+        );
+        assert!(root.insert_list_item_by_property_name_path("items", 0, &row));
+        assert!(root.insert_list_item_by_property_name_path("items", 1, &row));
+        assert!(root.remove_list_item_by_property_name_path("items", 0));
+        assert_eq!(root.list_item_count_by_property_name_path("items"), Some(1));
+        let root_generation = root.borrow().mutation_generation();
+        let child = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2).expect("child"),
+        );
+
+        // C++ addParent dedupes by parent pointer, while removeParent erases
+        // it outright (`viewmodel_instance.cpp:346-363`).
+        assert_eq!(
+            row.link_view_model_by_property_name_path("child", &child),
+            Ok(true)
+        );
+        assert_eq!(root.borrow().mutation_generation(), root_generation);
+    }
+
+    #[test]
+    fn list_pop_preserves_but_shift_removes_the_pinned_parent_registration() {
+        let file = list_row_relink_fixture();
+        let popped_root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("pop root"),
+        );
+        let popped_row = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("popped row"),
+        );
+        assert!(popped_root.insert_list_item_by_property_name_path("items", 0, &popped_row));
+        assert!(
+            popped_root
+                .borrow_mut()
+                .pop_list_item_by_property_path(&[0])
+                .is_some()
+        );
+        let popped_root_generation = popped_root.borrow().mutation_generation();
+        let first_child = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2).expect("first child"),
+        );
+        assert_eq!(
+            popped_row.link_view_model_by_property_name_path("child", &first_child),
+            Ok(true)
+        );
+        assert!(popped_root.borrow().mutation_generation() > popped_root_generation);
+
+        let shifted_root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("shift root"),
+        );
+        let shifted_row = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("shifted row"),
+        );
+        assert!(shifted_root.insert_list_item_by_property_name_path("items", 0, &shifted_row));
+        assert!(
+            shifted_root
+                .borrow_mut()
+                .shift_list_item_by_property_path(&[0])
+                .is_some()
+        );
+        let shifted_root_generation = shifted_root.borrow().mutation_generation();
+        let second_child = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 2).expect("second child"),
+        );
+        assert_eq!(
+            shifted_row.link_view_model_by_property_name_path("child", &second_child),
+            Ok(true)
+        );
+        assert_eq!(
+            shifted_root.borrow().mutation_generation(),
+            shifted_root_generation,
+            "C++ shift delegates to removeItem and detaches; pop does not (`viewmodel_instance_list.cpp:76-114`)"
+        );
+    }
+
+    #[test]
+    fn authored_list_rows_start_without_a_parent_registration() {
+        let file = mutable_list_default_fixture();
+        let root =
+            RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0).expect("authored root");
+        let row = root
+            .list_items_by_property_name("items")
+            .and_then(|mut items| items.pop())
+            .expect("authored row");
+
+        assert!(row.borrow().parent_relay.parents.borrow().is_empty());
+    }
+
+    #[test]
+    fn mutable_imported_list_items_keep_row_local_binding_generation() {
         let file = mutable_list_default_fixture();
         let target = RuntimeOwnedViewModelInstance::from_instance_mutable(&file, 0, 0)
             .expect("mutable imported root instance");
@@ -12086,7 +12772,8 @@ mod owned_context_tests {
             .next()
             .expect("imported list row");
         let occurrence_identity = row.occurrence_identity;
-        let bound_generation = target.mutation_generation();
+        let root_generation = target.mutation_generation();
+        let row_generation = row.instance.borrow().mutation_generation();
 
         assert!(
             row.instance
@@ -12094,10 +12781,12 @@ mod owned_context_tests {
                 .set_number_by_property_name("value", 42.0)
         );
 
-        assert!(
-            target.mutation_generation() > bound_generation,
-            "a copied-default row mutation must invalidate the root binding key"
+        assert_eq!(
+            target.mutation_generation(),
+            root_generation,
+            "C++ list rows retain their own property dirt; scalar writes do not call the parent `rebindDependents` path (`viewmodel_instance.cpp:406-415`)"
         );
+        assert!(row.instance.borrow().mutation_generation() > row_generation);
         let refreshed = list
             .item_entries()
             .into_iter()

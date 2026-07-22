@@ -679,18 +679,11 @@ struct RuntimeViewModelListenerInstance {
     view_model_index: usize,
     property_path: Vec<usize>,
     actions: Vec<RuntimeScheduledListenerAction>,
-    /// Last-delivered condition value. Migrated (cell-backed) listeners keep
-    /// this as the C++ "consume a value change once" record; unmigrated
-    /// conditions still use it as the polled observed copy. Deletion belongs
-    /// to slice (f).
-    observed: Option<RuntimeViewModelListenerValue>,
-    /// #RB-1 e4: the retained scalar cell this listener's condition currently
-    /// reads on the owned-candidates path, with this listener's dirt sink
+    /// The retained scalar cell this listener's condition currently reads,
+    /// with this listener's dirt sink
     /// registered as a dependent (C++ `ListenerViewModelPropertyBinding`,
-    /// src/animation/state_machine_instance.cpp:1281-1299 at pin d788e8ec:
-    /// `vmProp->addDependent(this)`). `None` while the condition is
-    /// unmigrated: list/view-model conditions, unresolved paths, and every
-    /// non-candidates context bind.
+    /// src/animation/state_machine_instance.cpp:1331-1407 at pin d788e8ec).
+    /// `None` for list/view-model conditions and unresolved paths.
     cell_binding: Option<RuntimeViewModelListenerCellBinding>,
 }
 
@@ -703,7 +696,6 @@ impl RuntimeViewModelListenerInstance {
             view_model_index: self.view_model_index,
             property_path: self.property_path.clone(),
             actions: self.actions.clone(),
-            observed: self.observed.clone(),
             cell_binding: self.cell_binding.as_ref().map(|binding| {
                 RuntimeViewModelListenerCellBinding::new(
                     binding.cell.clone(),
@@ -743,87 +735,22 @@ impl std::fmt::Debug for RuntimeViewModelListenerCellBinding {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum RuntimeViewModelListenerValue {
-    Number(u32),
-    Boolean(bool),
-    String(Vec<u8>),
-    Color(u32),
-    Enum(u64),
-    SymbolListIndex(u64),
-    Asset(u64),
-    Trigger(u64),
-}
-
-/// C++ `ListenerViewModel::reportToStateMachine` ignores the suppressed
-/// trigger-zero write performed by `ViewModelInstanceTrigger::advanced()`
-/// (`state_machine_instance.cpp:1374-1380`). Other changed values report.
-fn runtime_view_model_listener_should_dispatch(
-    previous: &RuntimeViewModelListenerValue,
-    current: &RuntimeViewModelListenerValue,
-) -> bool {
-    previous != current && !matches!(current, RuntimeViewModelListenerValue::Trigger(0))
-}
-
-fn runtime_view_model_listener_value(
-    context: &RuntimeOwnedViewModelInstance,
-    property_path: &[usize],
-) -> Option<RuntimeViewModelListenerValue> {
-    context
-        .number_value_by_property_path(property_path)
-        .map(|value| RuntimeViewModelListenerValue::Number(value.to_bits()))
-        .or_else(|| {
-            context
-                .boolean_value_by_property_path(property_path)
-                .map(RuntimeViewModelListenerValue::Boolean)
-        })
-        .or_else(|| {
-            context
-                .string_value_by_property_path(property_path)
-                .map(|value| RuntimeViewModelListenerValue::String(value.to_vec()))
-        })
-        .or_else(|| {
-            context
-                .color_value_by_property_path(property_path)
-                .map(RuntimeViewModelListenerValue::Color)
-        })
-        .or_else(|| {
-            context
-                .enum_value_by_property_path(property_path)
-                .map(RuntimeViewModelListenerValue::Enum)
-        })
-        .or_else(|| {
-            context
-                .symbol_list_index_value_by_property_path(property_path)
-                .map(RuntimeViewModelListenerValue::SymbolListIndex)
-        })
-        .or_else(|| {
-            context
-                .asset_value_by_property_path(property_path)
-                .map(RuntimeViewModelListenerValue::Asset)
-        })
-        .or_else(|| {
-            context
-                .trigger_value_by_property_path(property_path)
-                .map(RuntimeViewModelListenerValue::Trigger)
-        })
-}
-
-fn runtime_view_model_listener_value_for_context_path(
-    context: &RuntimeOwnedViewModelInstance,
-    context_path: &[usize],
-    view_model_index: usize,
-    property_path: &[usize],
-) -> Option<RuntimeViewModelListenerValue> {
-    let context_view_model_index = context.view_model_index_by_property_path(context_path)?;
-    if context_view_model_index != view_model_index {
-        return None;
+fn relink_view_model_listener_cell(
+    listener: &mut RuntimeViewModelListenerInstance,
+    cell: Option<RuntimeViewModelCell>,
+    queue: &RuntimeCellNotificationQueue,
+    listener_index: usize,
+) {
+    let same_cell = listener
+        .cell_binding
+        .as_ref()
+        .zip(cell.as_ref())
+        .is_some_and(|(binding, cell)| binding.cell.ptr_eq(cell));
+    if same_cell {
+        return;
     }
-    let mut resolved_path =
-        Vec::with_capacity(context_path.len().saturating_add(property_path.len()));
-    resolved_path.extend_from_slice(context_path);
-    resolved_path.extend_from_slice(property_path);
-    runtime_view_model_listener_value(context, &resolved_path)
+    listener.cell_binding =
+        cell.map(|cell| RuntimeViewModelListenerCellBinding::new(cell, queue, listener_index));
 }
 
 fn runtime_owned_view_model_trigger_value_for_context_path(
@@ -961,7 +888,6 @@ impl StateMachineInstance {
                     view_model_index: listener.view_model_index?,
                     property_path: listener.view_model_property_path.clone()?,
                     actions: listener.listener_actions.clone(),
-                    observed: None,
                     cell_binding: None,
                 })
             })
@@ -2270,13 +2196,28 @@ impl StateMachineInstance {
             let candidates = std::mem::take(&mut self.owned_view_model_candidates);
             let listeners = std::mem::take(&mut self.view_model_listeners);
             for &listener_index in &listener_indices {
-                let Some(listener) = listeners.get(listener_index)
-                else {
+                let Some(listener) = listeners.get(listener_index) else {
                     continue;
                 };
-                changed |= self
-                    .perform_listener_actions_for_candidates(&candidates, &listener.actions)
-                    .unwrap_or(false);
+                let action_changed = if let Some(context) = owned_context.as_deref_mut() {
+                    self.perform_listener_actions(
+                        &listener.actions,
+                        Some(context),
+                        &ScriptListenerInvocation::None,
+                        &mut NoopScriptHost,
+                    )
+                } else if !candidates.is_empty() {
+                    self.perform_listener_actions_for_candidates(&candidates, &listener.actions)
+                } else {
+                    self.perform_listener_actions(
+                        &listener.actions,
+                        None,
+                        &ScriptListenerInvocation::None,
+                        &mut NoopScriptHost,
+                    )
+                }
+                .unwrap_or(false);
+                changed |= action_changed;
             }
             self.view_model_listeners = listeners;
             self.owned_view_model_candidates = candidates;
@@ -4837,7 +4778,7 @@ impl StateMachineInstance {
     }
 
     pub fn bind_empty_data_context(&mut self) -> bool {
-        self.clear_owned_view_model_handle();
+        self.clear_owned_view_model_context();
         if !self.data_bind_graph.bind_empty_data_context() {
             return false;
         }
@@ -4849,7 +4790,7 @@ impl StateMachineInstance {
     }
 
     pub fn bind_default_view_model_context(&mut self) -> bool {
-        self.clear_owned_view_model_handle();
+        self.clear_owned_view_model_context();
         if !self.data_bind_graph.bind_default_view_model_context() {
             return false;
         }
@@ -4880,7 +4821,7 @@ impl StateMachineInstance {
         view_model_index: usize,
         instance_index: usize,
     ) -> bool {
-        self.clear_owned_view_model_handle();
+        self.clear_owned_view_model_context();
         if !self.data_bind_graph.bind_view_model_instance_context(
             file,
             view_model_index,
@@ -4906,7 +4847,7 @@ impl StateMachineInstance {
         file: &RuntimeFile,
         context: &RuntimeImportedViewModelInstanceContext,
     ) -> bool {
-        self.clear_owned_view_model_handle();
+        self.clear_owned_view_model_context();
         if !self
             .data_bind_graph
             .bind_imported_view_model_context(file, context)
@@ -4970,36 +4911,19 @@ impl StateMachineInstance {
         }
         self.sync_bindable_font_assets_from_owned_context(context);
         self.bind_active_owned_view_model_triggers(context);
-        for listener_actions in self.changed_view_model_listener_actions(context) {
-            changed |= self
-                .perform_listener_actions(
-                    &listener_actions,
-                    None,
-                    &ScriptListenerInvocation::None,
-                    &mut NoopScriptHost,
-                )
-                .unwrap_or(false);
-        }
+        self.bind_view_model_listener_cells_for_context_chain(context, &[&[]]);
         if changed {
             self.needs_advance = true;
         }
         changed
     }
 
-    /// Rebind an owned ViewModel context and dispatch typed ViewModel-change
-    /// listeners into that same retained context.
+    /// Rebind an owned ViewModel context. Typed ViewModel-change listeners
+    /// retain their condition cells here and dispatch at next-frame start.
     pub fn bind_owned_view_model_context_mut(
         &mut self,
         context: &mut RuntimeOwnedViewModelInstance,
     ) -> bool {
-        self.bind_owned_view_model_context_mut_with_listener_change(context)
-            .0
-    }
-
-    pub(crate) fn bind_owned_view_model_context_mut_with_listener_change(
-        &mut self,
-        context: &mut RuntimeOwnedViewModelInstance,
-    ) -> (bool, bool) {
         self.clear_owned_view_model_handle();
         let mut changed = self.data_bind_graph.bind_owned_view_model_context(context);
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
@@ -5007,60 +4931,33 @@ impl StateMachineInstance {
         }
         self.sync_bindable_font_assets_from_owned_context(context);
         self.bind_active_owned_view_model_triggers(context);
-        let actions = self.changed_view_model_listener_actions(context);
-        let mut listener_changed = false;
-        for listener_actions in actions {
-            listener_changed |= self
-                .perform_listener_actions(
-                    &listener_actions,
-                    Some(context),
-                    &ScriptListenerInvocation::None,
-                    &mut NoopScriptHost,
-                )
-                .unwrap_or(false);
-        }
-        changed |= listener_changed;
+        self.bind_view_model_listener_cells_for_context_chain(context, &[&[]]);
         if changed {
             self.needs_advance = true;
         }
-        (changed, listener_changed)
+        changed
     }
 
-    fn changed_view_model_listener_actions(
-        &mut self,
-        context: &RuntimeOwnedViewModelInstance,
-    ) -> Vec<Vec<RuntimeScheduledListenerAction>> {
-        self.changed_view_model_listener_actions_for_context_chain(context, &[&[]])
-    }
-
-    fn changed_view_model_listener_actions_for_context_chain(
+    fn bind_view_model_listener_cells_for_context_chain(
         &mut self,
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &[&[usize]],
-    ) -> Vec<Vec<RuntimeScheduledListenerAction>> {
-        let mut changed = Vec::new();
-        for listener in &mut self.view_model_listeners {
-            let current = context_chain.iter().find_map(|context_path| {
-                runtime_view_model_listener_value_for_context_path(
-                    context,
+    ) {
+        for (listener_index, listener) in self.view_model_listeners.iter_mut().enumerate() {
+            let cell = context_chain.iter().find_map(|context_path| {
+                context.cell_by_scoped_property_path(
                     context_path,
                     listener.view_model_index,
                     &listener.property_path,
                 )
             });
-            let should_dispatch = listener
-                .observed
-                .as_ref()
-                .zip(current.as_ref())
-                .is_some_and(|(previous, current)| {
-                    runtime_view_model_listener_should_dispatch(previous, current)
-                });
-            listener.observed = current;
-            if should_dispatch {
-                changed.push(listener.actions.clone());
-            }
+            relink_view_model_listener_cell(
+                listener,
+                cell,
+                &self.reported_listener_view_models,
+                listener_index,
+            );
         }
-        changed
     }
 
     fn bind_view_model_listener_cells_for_candidates(
@@ -5091,21 +4988,12 @@ impl StateMachineInstance {
                     .borrow()
                     .cell_by_property_path(&property_path)
             });
-            if let Some(cell) = cell {
-                let same_cell = listener
-                    .cell_binding
-                    .as_ref()
-                    .is_some_and(|binding| binding.cell.ptr_eq(&cell));
-                if !same_cell {
-                    listener.cell_binding = Some(RuntimeViewModelListenerCellBinding::new(
-                        cell,
-                        &self.reported_listener_view_models,
-                        listener_index,
-                    ));
-                }
-            } else {
-                listener.cell_binding = None;
-            }
+            relink_view_model_listener_cell(
+                listener,
+                cell,
+                &self.reported_listener_view_models,
+                listener_index,
+            );
         }
     }
 
@@ -5300,18 +5188,7 @@ impl StateMachineInstance {
         }
         self.sync_bindable_font_assets_from_owned_context_chain(file, context, context_chain);
         self.bind_active_owned_view_model_triggers_for_context_chain(context, context_chain);
-        for listener_actions in
-            self.changed_view_model_listener_actions_for_context_chain(context, context_chain)
-        {
-            changed |= self
-                .perform_listener_actions(
-                    &listener_actions,
-                    None,
-                    &ScriptListenerInvocation::None,
-                    &mut NoopScriptHost,
-                )
-                .unwrap_or(false);
-        }
+        self.bind_view_model_listener_cells_for_context_chain(context, context_chain);
         if changed {
             self.needs_advance = true;
         }
@@ -5549,9 +5426,14 @@ impl StateMachineInstance {
     fn clear_owned_view_model_handle(&mut self) {
         self.owned_view_model_candidates.clear();
         self.owned_view_model_candidate_generations.clear();
-        // Leaving the candidates path drops every listener's dependent
-        // registration (C++ `ListenerViewModel::clearDataContext`); snapshot
-        // and context-chain binds poll the observed copy instead.
+    }
+
+    fn clear_owned_view_model_context(&mut self) {
+        self.clear_owned_view_model_handle();
+        // Leaving every owned-context path drops each listener's dependent
+        // registration (C++ `ListenerViewModel::clearDataContext`). Owned
+        // compatibility rebinds instead relink in place when identity is
+        // unchanged.
         for listener in &mut self.view_model_listeners {
             listener.cell_binding = None;
         }

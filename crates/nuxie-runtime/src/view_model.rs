@@ -4035,6 +4035,21 @@ impl RuntimeOwnedViewModelViewModel {
             .or_else(|| family_cell!(triggers, imported_triggers))
     }
 
+    fn active_scalar_cell_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<RuntimeViewModelCell> {
+        let (property_index, view_model_path) = property_path.split_last()?;
+        let mut view_model = self;
+        for property_index in view_model_path {
+            view_model = view_model
+                .active_children()?
+                .iter()
+                .find(|view_model| view_model.property_index == *property_index)?;
+        }
+        view_model.active_scalar_cell_by_property_index(*property_index)
+    }
+
     fn list_item_count_by_property_index(&self, property_index: usize) -> Option<usize> {
         self.lists
             .iter()
@@ -9893,6 +9908,26 @@ impl RuntimeOwnedViewModelInstance {
         let (property_index, view_model_path) = property_path.split_last()?;
         let view_model = self.view_model_by_property_path(view_model_path)?;
         view_model.active_scalar_cell_by_property_index(*property_index)
+    }
+
+    /// Resolve a listener condition relative to one compatibility context
+    /// path without building a temporary combined path. The context path must
+    /// land on the listener's declared view model; the listener property path
+    /// then walks that retained instance to its scalar cell.
+    pub(crate) fn cell_by_scoped_property_path(
+        &self,
+        context_path: &[usize],
+        view_model_index: usize,
+        property_path: &[usize],
+    ) -> Option<RuntimeViewModelCell> {
+        if self.view_model_index_by_property_path(context_path)? != view_model_index {
+            return None;
+        }
+        if context_path.is_empty() {
+            return self.cell_by_property_path(property_path);
+        }
+        self.view_model_by_property_path(context_path)?
+            .active_scalar_cell_by_property_path(property_path)
     }
 
     /// C++ `DataContext::tryGetViewModelProperty` against this instance's own

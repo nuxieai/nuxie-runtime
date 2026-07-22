@@ -2956,20 +2956,16 @@ impl ArtboardInstance {
         let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
             return false;
         };
-        let mut owned_context = owned_context;
-        let next_event_index = instance.reported_event_count();
-        let mut changed = instance.advance_preserving_reported_events(
+        // This is C++'s `newFrame=false` follow-up after direct nested-event
+        // notification. It advances layers but does not call `applyEvents`;
+        // reports created here remain queued for the next ordinary frame
+        // (`state_machine_instance.cpp:2555-2565`).
+        instance.advance_preserving_reported_events(
             self,
             state_machine,
             elapsed_seconds,
-            owned_context.as_deref_mut(),
-        );
-        changed |= instance.apply_local_event_listeners(
-            self,
-            next_event_index,
-            owned_context.as_deref_mut(),
-        );
-        changed
+            owned_context,
+        )
     }
 
     fn advance_state_machine_instance_after_state_probe(
@@ -3063,34 +3059,6 @@ impl ArtboardInstance {
                     0.0,
                     owned_context.as_deref_mut(),
                 );
-            }
-        }
-        changed
-    }
-
-    /// Rebind machines until ViewModel listener actions reach a fixpoint.
-    ///
-    /// Returns `true` only when a listener action changes machine or context
-    /// state. Snapshotting the same context into a data-bind graph is work, but
-    /// is not itself a frame change.
-    pub fn settle_state_machine_instances_with_owned_view_model_context(
-        &mut self,
-        instances: &mut [StateMachineInstance],
-        context: &mut RuntimeOwnedViewModelInstance,
-    ) -> bool {
-        const MAX_VIEW_MODEL_ITERATIONS: usize = 100;
-
-        let mut changed = false;
-        for _ in 0..MAX_VIEW_MODEL_ITERATIONS {
-            let mut listener_changed = false;
-            for instance in instances.iter_mut() {
-                let (_instance_changed, instance_listener_changed) =
-                    instance.bind_owned_view_model_context_mut_with_listener_change(context);
-                changed |= instance_listener_changed;
-                listener_changed |= instance_listener_changed;
-            }
-            if !listener_changed {
-                break;
             }
         }
         changed
@@ -9990,13 +9958,21 @@ mod tests {
 
     #[test]
     fn immutable_owned_view_model_bind_dispatches_without_mutating_the_borrowed_context() {
-        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9680, true);
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9680, true);
         let mut context = RuntimeOwnedViewModelInstance::new(&file, 1)
             .expect("fixture has an owned ViewModel context");
 
         assert!(state_machine.bind_owned_view_model_context(&context));
         assert!(context.set_number_by_property_index(0, 1.0));
-        assert!(state_machine.bind_owned_view_model_context(&context));
+        state_machine.bind_owned_view_model_context(&context);
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(0.0),
+            "rebinding must not execute a queued listener action"
+        );
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         assert_eq!(
             state_machine
                 .input(0)
@@ -10007,8 +9983,76 @@ mod tests {
         assert_eq!(context.number_value_by_property_path(&[1]), Some(0.0));
 
         assert!(context.set_number_by_property_index(0, 2.0));
-        assert!(state_machine.bind_owned_view_model_context_mut(&mut context));
+        state_machine.bind_owned_view_model_context_mut(&mut context);
+        assert_eq!(context.number_value_by_property_path(&[1]), Some(0.0));
+        artboard.advance_state_machine_instances_with_nested_and_owned_view_model_context(
+            std::slice::from_mut(&mut state_machine),
+            0.0,
+            &mut context,
+        );
         assert_eq!(context.number_value_by_property_path(&[1]), Some(42.0));
+    }
+
+    #[test]
+    fn compatibility_context_chain_listener_dispatches_on_the_next_frame() {
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9682, true);
+        let mut root = RuntimeOwnedViewModelInstance::new(&file, 0)
+            .expect("fixture has a nested owned ViewModel context");
+
+        assert!(state_machine.bind_owned_view_model_context_chain(&file, &root, &[&[1]]));
+        assert!(root.set_number_by_property_path(&[1, 0], 1.0));
+        state_machine.bind_owned_view_model_context_chain(&file, &root, &[&[1]]);
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(0.0),
+            "context-chain rebinding must only retain the listener cell"
+        );
+
+        // C++ reports cell dirt immediately but drains listener actions at
+        // the next new-frame `applyEvents`, before layer advance
+        // (`state_machine_instance.cpp:1374-1380,2320-2335,2555-2565`).
+        artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(7.0)
+        );
+        assert_eq!(
+            root.number_value_by_property_path(&[1, 1]),
+            Some(0.0),
+            "an immutable context-chain bind cannot receive ViewModel writes"
+        );
+    }
+
+    #[test]
+    fn compatibility_mutable_listener_cascade_drains_in_one_apply_events_frame() {
+        let (file, mut artboard, mut state_machine) =
+            owned_view_model_listener_cascade_fixture(9689);
+        let mut context = RuntimeOwnedViewModelInstance::new(&file, 1)
+            .expect("fixture has an owned ViewModel context");
+
+        assert!(state_machine.bind_owned_view_model_context_mut(&mut context));
+        assert!(context.set_number_by_property_index(0, 1.0));
+        state_machine.bind_owned_view_model_context_mut(&mut context);
+
+        // C++ applies the report present at new-frame start, then loops the
+        // ViewModel write's chained report to completion before layer advance
+        // (`state_machine_instance.cpp:2320-2343,2555-2565`).
+        artboard.advance_state_machine_instances_with_nested_and_owned_view_model_context(
+            std::slice::from_mut(&mut state_machine),
+            0.0,
+            &mut context,
+        );
+        assert_eq!(
+            state_machine
+                .input(0)
+                .and_then(|input| input.number_value()),
+            Some(9.0),
+            "the chained listener must finish in the same applyEvents frame",
+        );
     }
 
     #[test]
@@ -10869,38 +10913,6 @@ mod tests {
             main.borrow().number_value_by_property_path(&[1, 1]),
             Some(0.0),
             "the composite main context must not receive the global source write"
-        );
-    }
-
-    #[test]
-    fn settling_owned_view_model_context_reports_changes_then_returns_to_idle() {
-        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9683, true);
-        let mut context = RuntimeOwnedViewModelInstance::new(&file, 1)
-            .expect("fixture has an owned ViewModel context");
-        assert!(state_machine.bind_owned_view_model_context(&context));
-
-        assert!(
-            !artboard.settle_state_machine_instances_with_owned_view_model_context(
-                std::slice::from_mut(&mut state_machine),
-                &mut context,
-            ),
-            "rebinding an unchanged context is not a runtime change"
-        );
-
-        assert!(context.set_number_by_property_index(0, 1.0));
-        assert!(
-            artboard.settle_state_machine_instances_with_owned_view_model_context(
-                std::slice::from_mut(&mut state_machine),
-                &mut context,
-            )
-        );
-        assert_eq!(context.number_value_by_property_path(&[1]), Some(42.0));
-        assert!(
-            !artboard.settle_state_machine_instances_with_owned_view_model_context(
-                std::slice::from_mut(&mut state_machine),
-                &mut context,
-            ),
-            "the listener fixpoint must become idle after applying its write"
         );
     }
 

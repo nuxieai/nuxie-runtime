@@ -36,11 +36,11 @@ change-propagation *by polling*. The five public seams that fan into it:
   now retain scalar-cell dependents and enqueue every mutation for next-frame
   `applyEvents`; the former compensation cap test was rewritten as the C++
   100-batch oracle, including batch 101 remaining pending.
-- [ ] Context-chain variant `instance.rs:4896-4922` (caller `:5151`) and
-  single-context wrapper `:4886-4894` still poll `observed` copies until those
-  contexts migrate to the retained candidate path.
-- [ ] Remaining `observed` copies: field `instance.rs:649`; init `:860`;
-  writes on the compatibility context-chain paths.
+- [x] f5 deleted the context-chain/single-context scanners, the `observed`
+  value enum and readers, and the polling-era bind-time settlement API.
+  Compatibility contexts resolve the retained scalar cell directly without
+  concatenating temporary paths. Every owned-context listener path now uses
+  the same mutation queue; binding itself is silent.
 
 ## Item 4 - Alias mirrors / detached trees
 
@@ -77,8 +77,7 @@ change-propagation *by polling*. The five public seams that fan into it:
 ## Deletion-gate checklist (f)
 
 Safe to remove once the public seams are re-implemented (zero non-test,
-non-family callers): `changed_view_model_listener_actions_for_candidates`,
-`rebind_owned_view_model_context_candidates`,
+non-family callers): `rebind_owned_view_model_context_candidates`,
 `refresh_owned_view_model_candidates`,
 `refresh_owned_view_model_artboard_context_if_mutated`,
 `owned_view_model_context_candidates_for_nested_host`,

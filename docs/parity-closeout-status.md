@@ -14,7 +14,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 348/348, nuxie lib 132/132,
+Regression floor (must stay green): runtime lib 349/349, nuxie lib 132/132,
 C++ probe 708/708, both runtime golden gates 317/317 exact / 647/647 segments
 with zero failures. The workspace push gate is green as of 2026-07-21. Review
 of e5(A) restored the distinction between raw `StateMachineInstance::advance`
@@ -191,6 +191,19 @@ upstream-sync-map registry).
     runtime lib 348/348, nuxie lib 132/132, probe 708/708, both golden modes
     317/317 entries and 647/647 exact segments with zero failures, C API smoke
     green, and `cargo test --workspace` green.
+  - [x] (f5) compatibility snapshot, mutable, and context-chain ViewModel
+    listeners now retain the same scalar cells as their borrowed context;
+    the remaining `observed` value enum/readers/rescan loops and their
+    bind-time settlement API are deleted. Bind/rebind only relinks dependents;
+    ordinary new-frame `applyEvents` performs actions, mutable context-aware
+    frames receive ViewModel writes, immutable/context-chain frames do not,
+    and chained reports drain inside the same 100-batch loop
+    (`state_machine_instance.cpp:1331-1427,2320-2343,2555-2565`). The
+    `newFrame=false` nested-event follow-up now also leaves newly created
+    event/listener reports queued instead of inventing a same-frame drain.
+    Full evidence: runtime lib 349/349, nuxie lib 132/132, probe 708/708,
+    both golden modes 317/317 entries and 647/647 exact segments with zero
+    failures, C API smoke green, and `cargo test --workspace` green.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:

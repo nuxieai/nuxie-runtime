@@ -2367,7 +2367,7 @@ fn image_export_order_and_asset_ids_follow_current_first_use_not_add_history() -
 }
 
 #[test]
-fn image_origin_zero_is_the_sparse_schema_default() -> Result<()> {
+fn image_origin_zero_is_explicit_against_the_cpp_schema_default() -> Result<()> {
     let mut scene = Scene::new();
     scene.edit(|tx| {
         let image = tx.create_image_asset(ImageAssetSpec {
@@ -2412,8 +2412,13 @@ fn image_origin_zero_is_the_sparse_schema_default() -> Result<()> {
         vec![
             ExportedProperty::ComponentName("Default Origin Image".into()),
             ExportedProperty::ImageAssetId(0),
+            ExportedProperty::ImageOriginX(0.0),
+            ExportedProperty::ImageOriginY(0.0),
         ],
-        "Image origin follows the Rive schema default of 0.0, not a UI-center default"
+        // C++ oracle d788e8ec: dev/defs/shapes/image.json and generated
+        // image_base.hpp initialize both Image origins to 0.5. A top-left
+        // authored origin is therefore observable and must survive export.
+        "Image origin zero differs from the C++ Rive schema default of 0.5"
     );
     Ok(())
 }

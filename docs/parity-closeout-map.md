@@ -105,6 +105,51 @@ a user decision.
 
 ---
 
+## Porting methodology — structure-preserving by default (standing; user-directed 2026-07-22)
+
+Adopted from the Anthropic large-scale-migrations write-up (the Bun
+Zig→Rust precedent: structure-preserving, file-corresponding translation
+with the old code as the spec — NOT the redesign mode). Our own closeout
+history is the evidence: every major incident family traces to a
+subsystem that reimplemented C++ behavior under a different design
+(compensation machinery → #RB-1, scene-level replay caches → #RD-1, CSS
+text spacing), while faithfully ported code has stayed quiet.
+
+1. **Structure-preserving is the default for all divergent subsystems.**
+   When a #B-6 divergent family (or any new divergence) is fixed, the fix
+   is "port the corresponding C++ file(s), replace ours" — not "patch our
+   design until behavior matches." Point-fixing inside a divergent design
+   is the failure mode that #RB-1's four-red evidence trail documents.
+   Already-faithful, gate-green code is NOT re-ported for its own sake.
+2. **The rulebook is codified, not implicit.** docs/PORTING.md carries the
+   translation table: C++ idiom → Rust idiom (rcp/RefCounted →
+   Rc<RefCell> cell handles + weak dirt sinks, DependencyHelper →
+   RuntimeCellDirtSink, Core property setters → arena apply seam, §8
+   AF-1..8, etc.). Every new mapping established by a rebuild phase is
+   added to the table when the phase lands. What C++ expresses that Rust
+   cannot directly (inheritance dispatch, intrusive lists) gets a gap-
+   inventory row with the chosen mapping and its C++ citation.
+3. **Stress-test before fan-out.** Any multi-file porting phase (starting
+   with #RD-1) begins with: two agents independently translate the same
+   2–3 representative files — one strictly from the rulebook, one "as a
+   senior Rust engineer" — diff the results, fold every disagreement into
+   the rulebook as a new rule, then DISCARD both translations. Only then
+   fan out. (This catches rulebook holes at 3-file cost instead of
+   1,400-file cost.)
+4. **The file-correspondence manifest is the exit condition.** Every
+   in-scope C++ source file maps to a Rust module with exactly one
+   status: `faithful` | `divergent-by-decision` (must cite a D-row) |
+   `pending`. Seed from the #B-6 447-row manifest. The closeout is DONE
+   when no row is `pending` and every `divergent-by-decision` row has its
+   D-row. Ratchet rule: a row moves to `faithful` only on an orchestrator-
+   verified gate run.
+5. **The judge is already validated both directions** (passes against
+   C++ by construction; has caught real regressions within hours). The
+   iron rules keep it that way: never weakened, never widened, never
+   edited to pass.
+
+---
+
 ## Phase 0 — Baseline (#B) — do first, mostly parallel lanes
 
 ### #B-1 Phase S sync cycle to current upstream — SPINE, S/M, USER-GATE
@@ -386,12 +431,22 @@ rebuild at a time while the editor team lands on main. (2) A measured
 spike precedes demolition: implement the live-traversal feed for a
 representative corpus slice, run the r4/renderer timing gates and
 perf-hot-loop on it, and publish the real delta — the number informs
-execution order and batching design, not whether to proceed. (3) Then a
-lane-by-lane migration with the same pattern as #RB-1: pixel corpus
-(1,468) and both golden gates are the referee at every merge — output is
-identical BY DEFINITION; only the production strategy changes. (4)
-DELETION gate: prepared-frame machinery, command-stream retention, epoch
-bridges, and the D-12 register row all removed together.
+execution order and batching design, not whether to proceed. (2b)
+RULEBOOK + STRESS TEST (per the standing porting methodology above):
+codify the renderer-feed translation rules in docs/PORTING.md, then two
+independent translations of 2–3 representative C++ draw/traversal files
+(rulebook-strict vs senior-engineer), diff, fold disagreements into the
+rulebook, discard both translations — only then fan out. (3) Then a
+lane-by-lane migration executed as FILE-CORRESPONDING PORTS of the C++
+draw/traversal sources (`artboard.cpp` draw path, `shape.cpp`,
+`image.cpp`, drawable `willDraw` family, draw-target ordering) rather
+than reshaping the existing Rust feed code — same lane pattern as #RB-1:
+pixel corpus (1,468) and both golden gates are the referee at every
+merge — output is identical BY DEFINITION; only the production strategy
+changes. (4) DELETION gate: prepared-frame machinery, command-stream
+retention, epoch bridges, and the D-12 register row all removed
+together; the file-correspondence manifest rows for the renderer feed
+flip to `faithful` on the orchestrator's verified run.
 **Gate:** all floors green at completed values on the live-traversal
 feed; zero scene-level cache/epoch mechanisms remaining (the #B-6 audit
 re-run over the renderer clusters returns no mutation-gated mechanisms);

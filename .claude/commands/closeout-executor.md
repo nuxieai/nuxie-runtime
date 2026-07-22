@@ -78,7 +78,17 @@ main — their changes are audited by the same gates, not trusted).
    per-frame traversal for a corpus slice, run r4-timing-gate +
    perf-hot-loop, commit the numbers, REPORT THE PERF DELTA TO THE USER
    before demolition begins (this is a USER checkpoint, not a gate);
-   (c) lane-by-lane migration, pixel corpus (1,468) referees every merge;
+   (b2) RULEBOOK + STRESS TEST (map "Porting methodology" section, user-
+   directed 2026-07-22): codify the renderer-feed translation rules in
+   docs/PORTING.md, then have two agents independently translate the
+   SAME 2–3 representative C++ draw/traversal files (one strictly from
+   the rulebook, one "as a senior Rust engineer"), diff the two, fold
+   every disagreement into the rulebook as a new rule, then DISCARD both
+   translations before fanning out;
+   (c) lane-by-lane migration as FILE-CORRESPONDING PORTS of the C++
+   draw/traversal sources (port the C++ file, replace ours — do not
+   reshape the existing Rust feed), pixel corpus (1,468) referees every
+   merge;
    (d) deletion gate: prepared frames, command streams, path caches,
    epoch bridges gone; re-run the B-6 audit brief over renderer clusters
    expecting zero mutation-gated mechanisms; remove register D-12.
@@ -112,8 +122,20 @@ main — their changes are audited by the same gates, not trusted).
   probe) after every substantive change, the full battery before every
   push. Dispatch lanes only for the well-templated shapes (a fixture
   batch, an audit batch) using the briefs in docs/ as templates.
+- use as many sub agents as you need when the work is parallelizable
 - Port code, not behaviors: every fix cites the C++ file:line it mirrors.
   If you cannot cite it, stop — that is a design question for the user.
+- STRUCTURE-PRESERVING BY DEFAULT (map "Porting methodology" section,
+  user-directed 2026-07-22): when fixing any divergent subsystem (a B-6
+  divergent family or a newly found divergence), port the corresponding
+  C++ file(s) and replace our design — do not patch our design until
+  behavior matches. New C++→Rust idiom mappings you establish go into
+  docs/PORTING.md's translation table when the slice lands. Keep the
+  file-correspondence manifest (seeded from the b6-audit manifest)
+  current: each in-scope C++ file is `faithful`, `divergent-by-decision`
+  (cites a D-row), or `pending`; rows flip to `faithful` only on an
+  orchestrator-verified run. Already-faithful gate-green code is never
+  re-ported for its own sake.
 - Half-day budget per divergence: localize with instrumentation (env-var
   gated eprintln, removed before commit), then fix or file. Never guess.
 - Keep the status file current enough that the NEXT session resumes from

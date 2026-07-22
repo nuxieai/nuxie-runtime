@@ -24500,6 +24500,17 @@ mod tests {
         decoded
     }
 
+    fn fixture_40_by_20_png() -> Vec<u8> {
+        vec![
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48,
+            0x44, 0x52, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x14, 0x08, 0x06, 0x00, 0x00,
+            0x00, 0xff, 0x46, 0x7f, 0xbb, 0x00, 0x00, 0x00, 0x1a, 0x49, 0x44, 0x41, 0x54, 0x78,
+            0xda, 0xed, 0xc1, 0x31, 0x01, 0x00, 0x00, 0x00, 0xc2, 0xa0, 0xf5, 0x4f, 0x6d, 0x0c,
+            0x1f, 0xa0, 0x00, 0x00, 0x00, 0x7e, 0x06, 0x0c, 0x94, 0x00, 0x01, 0xac, 0x16, 0x5d,
+            0xaf, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+        ]
+    }
+
     fn fixture_authoring_record(
         type_name: &str,
         properties: Vec<(&str, AuthoringValue)>,
@@ -24569,6 +24580,170 @@ mod tests {
             push_var_uint(&mut bytes, 0);
         }
         bytes
+    }
+
+    #[test]
+    fn cropped_image_mesh_and_text_siblings_match_cpp_draw_admission() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let image = tx.create_image_asset(ImageAssetSpec {
+                name: "Cropped photo".into(),
+                bytes: fixture_40_by_20_png(),
+            })?;
+            let font = tx.create_font_asset(FontAssetSpec {
+                name: "Roboto A".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Image and title".into(),
+                width: 200.0,
+                height: 100.0,
+            })?;
+            tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Image(ImageSpec {
+                    name: "Photo".into(),
+                    x: 10.0,
+                    y: 20.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    image,
+                    origin_x: 0.0,
+                    origin_y: 0.0,
+                    fit: 0,
+                    alignment_x: 0.0,
+                    alignment_y: 0.0,
+                    crop: Some(ImageCropRect {
+                        x: 0.25,
+                        y: 0.0,
+                        width: 0.5,
+                        height: 1.0,
+                    }),
+                }),
+            )?;
+            let text = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Text(TextSpec {
+                    name: "Title".into(),
+                    x: 60.0,
+                    y: 20.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    sizing: SceneTextSizing::Fixed,
+                    width: 120.0,
+                    height: 30.0,
+                    align: SceneTextAlign::Left,
+                    wrap: SceneTextWrap::NoWrap,
+                    overflow: SceneTextOverflow::Visible,
+                }),
+            )?;
+            let style = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "Title style".into(),
+                    font_size: 18.0,
+                    line_height: 22.0,
+                    letter_spacing: 0.0,
+                    font,
+                }),
+            )?;
+            let fill = tx.create(
+                Parent::Object(style),
+                NodeSpec::Fill(FillSpec {
+                    name: "Title fill".into(),
+                }),
+            )?;
+            tx.create(
+                Parent::Object(fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Title color".into(),
+                    color: 0xffb7_5aff,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: "Title run".into(),
+                    text: "a".into(),
+                    style,
+                }),
+            )?;
+            Ok(())
+        })?;
+
+        let exported = scene.export_records();
+        assert!(
+            exported
+                .records()
+                .iter()
+                .any(|record| record.kind == ExportedObjectKind::Mesh),
+            "the cropped Image must exercise the C++ Image-owned Mesh path"
+        );
+        assert_eq!(
+            exported
+                .records()
+                .iter()
+                .filter(|record| record.kind == ExportedObjectKind::MeshVertex)
+                .count(),
+            4,
+        );
+        let bytes = encode_authoring_records(exported.into_authoring_records());
+
+        let file = Arc::new(File::import(&bytes)?);
+        let mut rust = OwnedArtboardInstance::instantiate(file, 0)?;
+        let rust_stream = owned_draw_stream(&mut rust)?;
+        assert!(rust_stream.contains("drawImageMesh"), "{rust_stream}");
+        assert!(
+            rust_stream.lines().any(|line| {
+                line.starts_with("drawPath ") && !line.contains("path={verbs=[],points=[]}")
+            }),
+            "{rust_stream}"
+        );
+
+        let Some(cpp_runner) = std::env::var_os("RIVE_GOLDEN_RUNNER") else {
+            eprintln!(
+                "skipping C++ draw admission; set RIVE_GOLDEN_RUNNER to the pinned golden runner"
+            );
+            return Ok(());
+        };
+        let fixture_path = std::env::temp_dir().join(format!(
+            "nuxie-text-image-mesh-parity-{}.riv",
+            std::process::id()
+        ));
+        std::fs::write(&fixture_path, &bytes)?;
+        let output = std::process::Command::new(cpp_runner)
+            .args(["--file"])
+            .arg(&fixture_path)
+            .output()
+            .context("run pinned C++ golden runner")?;
+        let _ = std::fs::remove_file(&fixture_path);
+        assert!(
+            output.status.success(),
+            "pinned C++ rejected the exact authored fixture: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let cpp_stream = String::from_utf8(output.stdout)?;
+        assert!(cpp_stream.contains("drawImageMesh"), "{cpp_stream}");
+        assert!(
+            cpp_stream.lines().any(|line| {
+                line.starts_with("drawPath ") && !line.contains("path={verbs=[],points=[]}")
+            }),
+            "{cpp_stream}"
+        );
+        let draw_call_kinds = |stream: &str| {
+            stream
+                .lines()
+                .filter(|line| line.starts_with("draw"))
+                .filter_map(|line| line.split_ascii_whitespace().next())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(draw_call_kinds(&rust_stream), draw_call_kinds(&cpp_stream));
+        Ok(())
     }
 
     #[test]

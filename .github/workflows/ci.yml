@@ -28,7 +28,7 @@ jobs:
   # same-repository changes can use the selected Nuxie runner group.
   apple-runtime-ci:
     name: Apple runtime
-    uses: nuxieai/nuxie-runtime/.github/workflows/_trusted-macos.yml@e4d360c84d37783ec53b6cf0e14d00c5d7bad2c7
+    uses: nuxieai/nuxie-runtime/.github/workflows/_trusted-macos.yml@6531b8a826ace45a5812f3efa1dd51205540d67d
 
   port-manifest:
     name: Upstream C++ port manifest

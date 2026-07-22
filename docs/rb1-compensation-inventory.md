@@ -55,7 +55,7 @@ change-propagation *by polling*. The five public seams that fan into it:
   snapshot itself is not yet shared: a parent borrow held across a separate
   child mutation stays stale until the next handle borrow. The typed Font
   endpoint must remove that boundary before the direct-property clock union
-  deletes.
+  deletes. Superseded by f7B/f8 below.
 - [x] f7B removed that owned String/Font payload snapshot boundary. String
   cells now own `Arc<[u8]>`, Font cells own the complete file-index/live-Font
   value, and every retained alias/source candidate points at that one typed
@@ -74,6 +74,35 @@ change-propagation *by polling*. The five public seams that fan into it:
   This slice covers owned retained contexts. Imported override storage,
   artboard target/cache values, converter operands, and the remaining direct-
   property mutation-clock union are separate cuts and remain inventoried.
+- [x] f8 deleted the dynamic structural-mirror refresh lifecycle. One retained
+  `RuntimeOwnedViewModelEndpoint` now carries a ViewModel-valued property's
+  active imported selection plus retained linked child; ordinary `Clone`
+  detaches the endpoint before the graph remap.
+  `RuntimeOwnedViewModelHandle::{borrow,borrow_mut}` no longer performs a
+  refresh pass, and linked writes no longer recopy child/list topology after
+  mutation. Active value/cell/list reads, sync and ViewModel writes, script
+  advance, graph-cycle walks, and clock rerooting traverse the retained link
+  directly and exclude the inactive compatibility storage. A parent borrow
+  held across a direct retained-child replacement observes the new leaf
+  immediately, matching the retained setter and
+  synchronous relink ordering in
+  `include/rive/viewmodel/viewmodel_instance_viewmodel.hpp:23-35` and
+  `src/viewmodel/viewmodel_instance.cpp:118-188`. No dynamic or one-time
+  scalar/list mirror copy remains: active paths traverse the retained child
+  directly, while inactive authored/generated compatibility storage remains
+  untouched and becomes visible again if authored selection replaces the
+  explicit link. The direct-property clock union remains only for unmigrated
+  artboard target/cache and converter consumers. Direct
+  reassignment of the same retained child also runs the lifecycle and returns
+  success; the prior `Ok(false)` equality shortcut was absent from C++.
+  Selecting an authored instance after an explicit link detaches that link and
+  its parent relay, because C++ has one active child pointer rather than two
+  layered selections. Final evidence is runtime lib 361/361, nuxie lib
+  132/132, C++ probe 708/708, ordinary and scripted goldens 317/317 entries
+  plus 647/647 exact segments with zero failures, C API smoke green, and the
+  full workspace green. Both Standards and Spec re-reviews are clean.
+  Renderer goldens are not applicable because this slice changes no
+  renderer/draw code.
 - [x] f1 deleted `linked_aliases`, `add_linked_alias`,
   `remove_linked_alias`, and `synchronize_linked_aliases`. Linked scalar
   properties share retained cells by identity; deep-copy `Clone` remains the

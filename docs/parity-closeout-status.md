@@ -723,3 +723,24 @@ Decisions log.)
   review found one steady-frame allocation before String's equality early-out;
   the allocation now occurs only after the C++-matching content comparison,
   and both Standards and Spec re-reviews are clean.
+- 2026-07-21 — #RB-1 f8 deleted the dynamic linked-child structural mirror
+  refresh. ViewModel-valued properties now retain one structural endpoint for
+  imported-instance selection and linked-child identity; handle borrows and
+  linked writes no longer retry or recopy topology, and link setup performs no
+  one-time scalar/list copy. Same-child
+  assignment now re-runs the lifecycle instead of taking a Rust-only equality
+  early-out, and authored selection detaches an explicit link and reveals the
+  untouched authored compatibility storage instead of layering over it.
+  Active reads/writes, script advance, and structural graph walks now follow
+  only the retained link. A held-parent regression proves a
+  direct grandchild replacement is visible immediately, matching C++'s
+  retained setter (`viewmodel_instance_viewmodel.hpp:23-35`) and synchronous
+  replacement/relink walk (`viewmodel_instance.cpp:118-188`). The independent
+  mutation clock remains because artboard
+  target/cache payloads and converter operands still use it as their only
+  wakeup; deleting those bumps in this slice would create stale consumers.
+  Full evidence is runtime lib 361/361, nuxie lib 132/132, C++ probe 708/708,
+  ordinary and scripted goldens 317/317 entries plus 647/647 exact segments
+  with zero failures, C API smoke green, and the full workspace green. Both
+  Standards and Spec re-reviews are clean. Renderer goldens are not applicable
+  because this slice changes no renderer/draw code.

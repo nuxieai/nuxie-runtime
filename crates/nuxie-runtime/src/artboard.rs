@@ -15,25 +15,26 @@ use crate::animation::{
     build_linear_animations, build_runtime_joysticks,
 };
 use crate::artboard_data_bind::{
-    RuntimeArtboardContextSourceValue, RuntimeArtboardConverterPropertyBindingInstance,
-    RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardDataBindSourceQueues,
-    RuntimeArtboardDataBindTargetQueues, RuntimeArtboardFormulaTokenBindingInstance,
-    RuntimeArtboardImageAssetBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
-    RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
-    RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardOwnedContextKey,
-    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardRetainedConverterOperands,
-    RuntimeArtboardSharedDataBindConverterState, RuntimeArtboardSoloBindingInstance,
-    RuntimeArtboardSoloSourceBindingInstance, RuntimeArtboardTextListBindingInstance,
-    RuntimeNestedChildContextUpdate, RuntimeOwnedViewModelBindingCandidate,
-    apply_artboard_name_based_color_data_bind_defaults, build_artboard_converter_property_bindings,
+    RuntimeArtboardAuthoredDataBindStates, RuntimeArtboardContextSourceValue,
+    RuntimeArtboardConverterPropertyBindingInstance, RuntimeArtboardCustomPropertyBindingInstance,
+    RuntimeArtboardDataBindSourceQueues, RuntimeArtboardDataBindTargetQueues,
+    RuntimeArtboardFormulaTokenBindingStates, RuntimeArtboardImageAssetBindingInstance,
+    RuntimeArtboardLayoutComputedBindingInstance, RuntimeArtboardListBindingInstance,
+    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardNumericSourceBindingInstance,
+    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardRetainedSubordinateConverterOperands,
+    RuntimeArtboardSoloBindingInstance, RuntimeArtboardSoloSourceBindingInstance,
+    RuntimeArtboardTextListBindingInstance, RuntimeNestedChildContextUpdate,
+    RuntimeOwnedViewModelBindingCandidate, apply_artboard_name_based_color_data_bind_defaults,
+    build_artboard_authored_data_bind_states, build_artboard_converter_property_bindings,
     build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
     build_artboard_formula_token_bindings, build_artboard_image_asset_bindings,
     build_artboard_layout_computed_bindings, build_artboard_list_bindings,
     build_artboard_nested_host_bindings, build_artboard_numeric_source_bindings,
-    build_artboard_property_bindings, build_artboard_shared_data_bind_converter_states,
-    build_artboard_solo_bindings, build_artboard_solo_source_bindings,
-    build_artboard_text_list_bindings, build_nested_host_data_bind_source_local_slots,
-    build_nested_host_data_bind_source_locals, build_nested_host_view_model_instance_locals,
+    build_artboard_property_bindings, build_artboard_solo_bindings,
+    build_artboard_solo_source_bindings, build_artboard_text_list_bindings,
+    build_nested_host_data_bind_source_local_slots, build_nested_host_data_bind_source_locals,
+    build_nested_host_view_model_instance_locals,
+    reunite_artboard_shared_data_bind_converter_states,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -260,24 +261,26 @@ pub struct ArtboardInstance {
     build_context: Option<RuntimeArtboardBuildContext>,
     pub(crate) nested_context_source_tree_cache: Cell<Option<(u64, bool)>>,
     nested_layout_bounds: Option<RuntimeNestedLayoutBoundsFrame>,
-    pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
+    pub(crate) artboard_data_bind_values: BTreeMap<Arc<[u32]>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
-    pub(crate) artboard_owned_context_key: Option<RuntimeArtboardOwnedContextKey>,
     pub(crate) artboard_owned_view_model_context: Option<RuntimeOwnedViewModelContext>,
     pub(crate) artboard_owned_view_model_candidates: Vec<RuntimeOwnedViewModelBindingCandidate>,
     pub(crate) artboard_owned_view_model_handle: Option<RuntimeOwnedViewModelContextHandle>,
+    pub(crate) artboard_authored_data_bind_states: RuntimeArtboardAuthoredDataBindStates,
+    /// Structural ViewModel replacement pushes a relink request just as C++
+    /// `ViewModelInstance::addDependent` does; steady frames never poll a
+    /// mutation generation (`data_context.cpp:265-332,399-442`).
+    pub(crate) artboard_owned_view_model_rebind_sink: crate::view_model_cell::RuntimeCellDirtSink,
     pub(crate) artboard_property_bindings: Vec<RuntimeArtboardPropertyBindingInstance>,
     pub(crate) artboard_image_asset_bindings: Vec<RuntimeArtboardImageAssetBindingInstance>,
     pub(crate) artboard_data_bind_target_queues: RuntimeArtboardDataBindTargetQueues,
     pub(crate) artboard_data_bind_source_queues: RuntimeArtboardDataBindSourceQueues,
-    pub(crate) artboard_shared_data_bind_converter_states:
-        BTreeMap<usize, RuntimeArtboardSharedDataBindConverterState>,
-    pub(crate) artboard_retained_converter_operands: Vec<RuntimeArtboardRetainedConverterOperands>,
-    pub(crate) artboard_data_bind_suppressed_target_data_bind: Option<usize>,
+    pub(crate) artboard_retained_subordinate_converter_operands:
+        Vec<RuntimeArtboardRetainedSubordinateConverterOperands>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
     pub(crate) artboard_layout_computed_bindings: Vec<RuntimeArtboardLayoutComputedBindingInstance>,
     pub(crate) artboard_numeric_source_bindings: Vec<RuntimeArtboardNumericSourceBindingInstance>,
-    pub(crate) artboard_formula_token_bindings: Vec<RuntimeArtboardFormulaTokenBindingInstance>,
+    pub(crate) artboard_formula_token_bindings: RuntimeArtboardFormulaTokenBindingStates,
     pub(crate) artboard_converter_property_bindings:
         Vec<RuntimeArtboardConverterPropertyBindingInstance>,
     pub(crate) artboard_solo_bindings: Vec<RuntimeArtboardSoloBindingInstance>,
@@ -505,10 +508,10 @@ pub(crate) struct RuntimeComponentListItemInstance {
     pub(crate) child: Box<ArtboardInstance>,
     pub(crate) state_machines: Vec<StateMachineInstance>,
     pub(crate) context: RuntimeOwnedViewModelHandle,
-    /// Last consumed row-local structural generation. Scalar cells notify the
-    /// mounted child's retained dependents directly; only ViewModel-reference
-    /// replacement requires the child to resolve its binding paths again.
-    pub(crate) context_structural_generation: u64,
+    /// Pushed C++ `ViewModelInstance::m_dependents` relink channel. Scalar
+    /// cells notify the mounted child's binds directly; ViewModel-reference
+    /// replacement dirties this sink (`viewmodel_instance.cpp:118-188,346-415`).
+    pub(crate) context_rebind_sink: crate::view_model_cell::RuntimeCellDirtSink,
     pub(crate) occurrence_identity: u64,
     pub(crate) logical_index: usize,
     pub(crate) virtualized_position: Option<(f32, f32)>,
@@ -524,11 +527,14 @@ pub(crate) struct RuntimeComponentListItemInstance {
 impl RuntimeComponentListItemInstance {
     fn context_is_current(&self, context: &RuntimeOwnedViewModelHandle) -> bool {
         self.context.ptr_eq(context)
-            && self.context_structural_generation == context.borrow().structural_generation()
+            && !self
+                .context_rebind_sink
+                .peek_dirt()
+                .contains(crate::view_model_cell::RuntimeCellDirt::BINDINGS)
     }
 
-    fn consume_context_structural_generation(&mut self) {
-        self.context_structural_generation = self.context.borrow().structural_generation();
+    fn consume_context_rebind_dirt(&self) {
+        self.context_rebind_sink.take_dirt();
     }
 }
 
@@ -911,16 +917,18 @@ impl ArtboardInstance {
         let state_machines =
             build_state_machines(file, graph, &linear_animations, &mut converter_cache);
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
-        let artboard_property_bindings =
+        let mut artboard_authored_data_bind_states =
+            build_artboard_authored_data_bind_states(file, graph);
+        let mut artboard_property_bindings =
             build_artboard_property_bindings(file, graph, &mut converter_cache);
         let artboard_image_asset_bindings = build_artboard_image_asset_bindings(file, graph);
-        let artboard_custom_property_bindings =
+        let mut artboard_custom_property_bindings =
             build_artboard_custom_property_bindings(file, graph, &mut converter_cache);
-        let artboard_shared_data_bind_converter_states =
-            build_artboard_shared_data_bind_converter_states(
-                &artboard_property_bindings,
-                &artboard_custom_property_bindings,
-            );
+        reunite_artboard_shared_data_bind_converter_states(
+            &mut artboard_authored_data_bind_states,
+            &mut artboard_property_bindings,
+            &mut artboard_custom_property_bindings,
+        );
         let artboard_layout_computed_bindings =
             build_artboard_layout_computed_bindings(file, graph);
         let artboard_numeric_source_bindings = build_artboard_numeric_source_bindings(file, graph);
@@ -928,16 +936,17 @@ impl ArtboardInstance {
             build_artboard_formula_token_bindings(file, graph, &mut converter_cache);
         let artboard_converter_property_bindings =
             build_artboard_converter_property_bindings(file, graph, &mut converter_cache);
+        let artboard_list_bindings =
+            build_artboard_list_bindings(file, graph, &mut converter_cache);
         let artboard_data_bind_target_queues = RuntimeArtboardDataBindTargetQueues::new(
             &artboard_property_bindings,
             &artboard_image_asset_bindings,
             &artboard_converter_property_bindings,
+            &artboard_list_bindings,
         );
         let artboard_solo_bindings = build_artboard_solo_bindings(file, graph);
         let artboard_solo_source_bindings = build_artboard_solo_source_bindings(file, graph);
         let artboard_nested_host_bindings = build_artboard_nested_host_bindings(file, graph);
-        let artboard_list_bindings =
-            build_artboard_list_bindings(file, graph, &mut converter_cache);
         let artboard_text_list_bindings = build_artboard_text_list_bindings(file, graph);
         let artboard_data_bind_source_queues = RuntimeArtboardDataBindSourceQueues::new(
             &artboard_custom_property_bindings,
@@ -1030,17 +1039,17 @@ impl ArtboardInstance {
             nested_layout_bounds: None,
             artboard_data_bind_values,
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
-            artboard_owned_context_key: None,
             artboard_owned_view_model_context: None,
             artboard_owned_view_model_candidates: Vec::new(),
             artboard_owned_view_model_handle: None,
+            artboard_authored_data_bind_states,
+            artboard_owned_view_model_rebind_sink: crate::view_model_cell::RuntimeCellDirtSink::new(
+            ),
             artboard_property_bindings,
             artboard_image_asset_bindings,
             artboard_data_bind_target_queues,
             artboard_data_bind_source_queues,
-            artboard_shared_data_bind_converter_states,
-            artboard_retained_converter_operands: Vec::new(),
-            artboard_data_bind_suppressed_target_data_bind: None,
+            artboard_retained_subordinate_converter_operands: Vec::new(),
             artboard_custom_property_bindings,
             artboard_layout_computed_bindings,
             artboard_numeric_source_bindings,
@@ -2697,6 +2706,8 @@ impl ArtboardInstance {
                     .expect("component-list identity match must retain an item");
                 if !item.context_is_current(&context) {
                     item.context = context.clone();
+                    item.context_rebind_sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+                    context.add_rebind_dependent(&item.context_rebind_sink);
                     item.child
                         .bind_owned_view_model_artboard_handle(file, &context);
                     let mut child_candidates = Vec::with_capacity(parent_candidates.len() + 1);
@@ -2728,7 +2739,7 @@ impl ArtboardInstance {
                     }
                     item.child.advance_artboard_data_binds_with_elapsed(0.0);
                     item.child.update_pass();
-                    item.consume_context_structural_generation();
+                    item.consume_context_rebind_dirt();
                     item_context_changed = true;
                 }
                 item.logical_index = logical_index;
@@ -2805,11 +2816,12 @@ impl ArtboardInstance {
             }
             child.advance_artboard_data_binds_with_elapsed(0.0);
             child.update_pass();
-            let context_structural_generation = context.borrow().structural_generation();
+            let context_rebind_sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+            context.add_rebind_dependent(&context_rebind_sink);
             items.push(RuntimeComponentListItemInstance {
                 child: Box::new(child),
                 state_machines,
-                context_structural_generation,
+                context_rebind_sink,
                 context,
                 occurrence_identity: logical.occurrence_identity,
                 logical_index,
@@ -3319,7 +3331,6 @@ impl ArtboardInstance {
         let parent_candidates = self.artboard_owned_view_model_candidates.clone();
         for items in self.component_list_items.values_mut() {
             for item in items {
-                let context_structural_generation = item.context.borrow().structural_generation();
                 let mut row_changed = false;
                 if !item.context_is_current(&item.context)
                     && let Some(file) = item.child.runtime_file_arc()
@@ -3347,7 +3358,8 @@ impl ArtboardInstance {
                             row_changed |= state_machine.advance_data_context();
                         }
                     }
-                    item.consume_context_structural_generation();
+                    item.consume_context_rebind_dirt();
+                    component_list_source_changed = true;
                 }
                 item.child.queue_script_advance(elapsed_seconds);
                 for state_machine in &mut item.state_machines {
@@ -3360,12 +3372,13 @@ impl ArtboardInstance {
                     .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
                 row_changed |= item.child.advance_nested_artboards(elapsed_seconds);
                 row_changed |= item.child.update_pass();
-                let live_context_structural_generation =
-                    item.context.borrow().structural_generation();
-                if live_context_structural_generation != context_structural_generation {
+                if item
+                    .context_rebind_sink
+                    .peek_dirt()
+                    .contains(crate::view_model_cell::RuntimeCellDirt::BINDINGS)
+                {
                     component_list_source_changed = true;
                 }
-                item.context_structural_generation = live_context_structural_generation;
                 if row_changed {
                     // The hosting layout must remeasure this row before the
                     // parent draws; `settle_component_list_layout_and_virtualization`
@@ -5108,7 +5121,6 @@ impl ArtboardInstance {
             if changed {
                 self.remove_nested_artboard_local(local_id);
                 self.mark_nested_structure_changed();
-                self.artboard_owned_context_key = None;
                 self.stateful_nested_view_model_contexts_dirty = true;
                 self.mark_artboard_data_bind_work_dirty();
                 self.mark_changed();
@@ -5145,7 +5157,6 @@ impl ArtboardInstance {
         if let Some(file) = self.runtime_file_arc() {
             self.rebind_owned_view_model_context_after_nested_artboard_swap(&file, local_id);
         }
-        self.artboard_owned_context_key = None;
         self.stateful_nested_view_model_contexts_dirty = true;
         self.mark_artboard_data_bind_work_dirty();
         self.sync_nested_artboard_root_opacity(local_id);
@@ -6697,21 +6708,21 @@ mod tests {
             nested_layout_bounds: None,
             artboard_data_bind_values: BTreeMap::new(),
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
-            artboard_owned_context_key: None,
             artboard_owned_view_model_context: None,
             artboard_owned_view_model_candidates: Vec::new(),
             artboard_owned_view_model_handle: None,
+            artboard_authored_data_bind_states: RuntimeArtboardAuthoredDataBindStates::default(),
+            artboard_owned_view_model_rebind_sink: crate::view_model_cell::RuntimeCellDirtSink::new(
+            ),
             artboard_property_bindings: Vec::new(),
             artboard_image_asset_bindings: Vec::new(),
             artboard_data_bind_target_queues: RuntimeArtboardDataBindTargetQueues::default(),
             artboard_data_bind_source_queues: RuntimeArtboardDataBindSourceQueues::default(),
-            artboard_shared_data_bind_converter_states: BTreeMap::new(),
-            artboard_retained_converter_operands: Vec::new(),
-            artboard_data_bind_suppressed_target_data_bind: None,
+            artboard_retained_subordinate_converter_operands: Vec::new(),
             artboard_custom_property_bindings: Vec::new(),
             artboard_layout_computed_bindings: Vec::new(),
             artboard_numeric_source_bindings: Vec::new(),
-            artboard_formula_token_bindings: Vec::new(),
+            artboard_formula_token_bindings: RuntimeArtboardFormulaTokenBindingStates::default(),
             artboard_converter_property_bindings: Vec::new(),
             artboard_solo_bindings: Vec::new(),
             artboard_solo_source_bindings: Vec::new(),
@@ -6840,7 +6851,11 @@ mod tests {
         let row = RuntimeComponentListItemInstance {
             child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
             state_machines: Vec::new(),
-            context_structural_generation: retained.clone().borrow().structural_generation(),
+            context_rebind_sink: {
+                let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+                retained.add_rebind_dependent(&sink);
+                sink
+            },
             context: retained,
             occurrence_identity: 1,
             logical_index: 0,
@@ -9974,15 +9989,19 @@ mod tests {
     }
 
     #[test]
-    fn component_list_occurrence_ignores_scalar_generation_but_consumes_structural_generation() {
+    fn component_list_occurrence_ignores_scalar_dirt_but_consumes_structural_rebind() {
         let (file, _, _) = owned_view_model_action_fixture(9713, false);
         let context = RuntimeOwnedViewModelHandle::new(
             RuntimeOwnedViewModelInstance::new(&file, 1).expect("row context"),
         );
-        let mut row = RuntimeComponentListItemInstance {
+        let row = RuntimeComponentListItemInstance {
             child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
             state_machines: Vec::new(),
-            context_structural_generation: context.borrow().structural_generation(),
+            context_rebind_sink: {
+                let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+                context.add_rebind_dependent(&sink);
+                sink
+            },
             context: context.clone(),
             occurrence_identity: 1,
             logical_index: 0,
@@ -9996,9 +10015,10 @@ mod tests {
         assert!(context.borrow_mut().set_number_by_property_path(&[1], 42.0));
         assert!(row.context_is_current(&context));
 
-        row.context_structural_generation = row.context_structural_generation.wrapping_sub(1);
+        row.context_rebind_sink
+            .add_dirt(crate::view_model_cell::RuntimeCellDirt::BINDINGS);
         assert!(!row.context_is_current(&context));
-        row.consume_context_structural_generation();
+        row.consume_context_rebind_dirt();
         assert!(row.context_is_current(&context));
     }
 
@@ -11065,11 +11085,11 @@ mod tests {
             vec![RuntimeComponentListItemInstance {
                 child: Box::new(child),
                 state_machines: vec![state_machine],
-                context_structural_generation: row
-                    .instance
-                    .clone()
-                    .borrow()
-                    .structural_generation(),
+                context_rebind_sink: {
+                    let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+                    row.instance.add_rebind_dependent(&sink);
+                    sink
+                },
                 context: row.instance,
                 occurrence_identity: row.occurrence_identity,
                 logical_index: 0,
@@ -11129,7 +11149,11 @@ mod tests {
             vec![RuntimeComponentListItemInstance {
                 child: Box::new(child),
                 state_machines: vec![state_machine],
-                context_structural_generation: row.borrow().structural_generation(),
+                context_rebind_sink: {
+                    let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+                    row.add_rebind_dependent(&sink);
+                    sink
+                },
                 context: row.clone(),
                 occurrence_identity: 1,
                 logical_index: 0,
@@ -11200,11 +11224,11 @@ mod tests {
                 RuntimeComponentListItemInstance {
                     child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
                     state_machines: Vec::new(),
-                    context_structural_generation: first
-                        .instance
-                        .clone()
-                        .borrow()
-                        .structural_generation(),
+                    context_rebind_sink: {
+                        let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+                        first.instance.add_rebind_dependent(&sink);
+                        sink
+                    },
                     context: first.instance,
                     occurrence_identity: first.occurrence_identity,
                     logical_index: 0,
@@ -11216,11 +11240,11 @@ mod tests {
                 RuntimeComponentListItemInstance {
                     child: Box::new(child),
                     state_machines: vec![state_machine],
-                    context_structural_generation: second
-                        .instance
-                        .clone()
-                        .borrow()
-                        .structural_generation(),
+                    context_rebind_sink: {
+                        let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+                        second.instance.add_rebind_dependent(&sink);
+                        sink
+                    },
                     context: second.instance,
                     occurrence_identity: second.occurrence_identity,
                     logical_index: 1,

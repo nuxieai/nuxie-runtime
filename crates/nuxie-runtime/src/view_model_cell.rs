@@ -59,6 +59,14 @@ impl RuntimeCellNotificationQueue {
         std::mem::swap(&mut *self.values.borrow_mut(), reporting);
     }
 
+    /// Re-report retained DataBind dirt while moving a bind onto a fresh
+    /// container queue (for example when cloning an artboard). The sink bits
+    /// themselves are restored separately so primary and converter-operand
+    /// origin remain distinguishable.
+    pub(crate) fn report_data_bind(&self, data_bind_index: usize) {
+        self.values.borrow_mut().push(data_bind_index);
+    }
+
     fn downgrade(&self) -> Weak<RefCell<Vec<usize>>> {
         Rc::downgrade(&self.values)
     }
@@ -122,6 +130,7 @@ struct RuntimeCellNotification {
     queue: Weak<RefCell<Vec<usize>>>,
     value: usize,
     suppress_trigger_zero: bool,
+    dedupe_while_dirty: bool,
 }
 
 impl RuntimeCellDirtSink {
@@ -139,6 +148,27 @@ impl RuntimeCellDirtSink {
                 queue: queue.downgrade(),
                 value: listener_index,
                 suppress_trigger_zero: true,
+                dedupe_while_dirty: false,
+            }),
+        }
+    }
+
+    /// Report the exact retained DataBind index when this sink first becomes
+    /// dirty. Further cascades stay coalesced until the owner drains `bits`,
+    /// matching C++ `DataBind::addDirt`'s already-marked early return and the
+    /// container's occurrence queue (`data_bind.cpp:502-507`;
+    /// `data_bind_container.cpp:115-147`).
+    pub(crate) fn reporting_data_bind(
+        queue: &RuntimeCellNotificationQueue,
+        data_bind_index: usize,
+    ) -> Self {
+        Self {
+            bits: Rc::new(Cell::new(0)),
+            notification: Some(RuntimeCellNotification {
+                queue: queue.downgrade(),
+                value: data_bind_index,
+                suppress_trigger_zero: false,
+                dedupe_while_dirty: true,
             }),
         }
     }
@@ -343,8 +373,10 @@ impl RuntimeViewModelCellState {
             let Some(bits) = dependent.bits.upgrade() else {
                 return false;
             };
+            let was_dirty = bits.get() & dirt.0 == dirt.0;
             bits.set(bits.get() | dirt.0);
             if let Some(notification) = &dependent.notification
+                && (!notification.dedupe_while_dirty || !was_dirty)
                 && !(notification.suppress_trigger_zero
                     && matches!(self.value, RuntimeViewModelCellValue::Trigger(0)))
                 && let Some(queue) = notification.queue.upgrade()
@@ -1287,6 +1319,26 @@ mod tests {
         queue.swap_into(&mut reporting);
         assert_eq!(reporting, [7, 11, 7, 11, 7, 11]);
         assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn data_bind_notifications_report_the_exact_occurrence_once_until_drained() {
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(0.0));
+        let queue = RuntimeCellNotificationQueue::default();
+        let data_bind = RuntimeCellDirtSink::reporting_data_bind(&queue, 7);
+        cell.add_dependent(&data_bind);
+
+        assert!(cell.set_value(RuntimeViewModelCellValue::Number(1.0)));
+        assert!(cell.set_value(RuntimeViewModelCellValue::Number(2.0)));
+
+        let mut reporting = Vec::new();
+        queue.swap_into(&mut reporting);
+        assert_eq!(reporting, [7]);
+        assert!(data_bind.take_dirt().contains(RuntimeCellDirt::BINDINGS));
+
+        assert!(cell.set_value(RuntimeViewModelCellValue::Number(3.0)));
+        queue.swap_into(&mut reporting);
+        assert_eq!(reporting, [7]);
     }
 
     #[test]

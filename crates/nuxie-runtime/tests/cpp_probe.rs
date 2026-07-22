@@ -20064,9 +20064,9 @@ fn synthetic_artboard_owned_viewmodel_number_binding(file_id: u64) -> Vec<u8> {
     })
 }
 
-// Regression for the M8 audit finding (owned-context rebind key, item 22a):
-// set_number_by_property_index skipped mark_mutated, so a root number write
-// never invalidated the owned-context key and the rebind was skipped.
+// Regression for the M8 audit finding (owned-context propagation, item 22a):
+// a root number write must reach the retained authored bind even when the host
+// repeats the same context bind before advancing it.
 #[test]
 fn artboard_owned_context_rebinds_after_root_number_set() {
     let label = "synthetic/runtime_artboard_owned_context_number_set.riv";

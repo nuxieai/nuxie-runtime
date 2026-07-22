@@ -258,7 +258,7 @@ impl RuntimeDataBindTarget for RuntimeGraphSourceValueTarget<'_> {
 /// Cell payload → graph value, mirroring the owned slot getters EXACTLY
 /// (u32 payloads widen via `u64::from`, matching e1's sentinel handling).
 /// `kind` is the source's current value; a kind mismatch returns `None`.
-fn runtime_graph_value_from_cell_value(
+pub(crate) fn runtime_graph_value_from_cell_value(
     cell_value: &RuntimeViewModelCellValue,
     kind: &RuntimeDataBindGraphValue,
 ) -> Option<RuntimeDataBindGraphValue> {
@@ -300,7 +300,7 @@ fn runtime_graph_value_from_cell_value(
 
 /// Graph value → cell payload for the migrated scalar kinds, mirroring the
 /// owned slot setters' u32 saturation.
-fn runtime_cell_value_from_graph_value(
+pub(crate) fn runtime_cell_value_from_graph_value(
     value: &RuntimeDataBindGraphValue,
     source_value: Option<&RuntimeViewModelCellValue>,
 ) -> Option<RuntimeViewModelCellValue> {
@@ -963,6 +963,18 @@ pub(crate) fn runtime_data_bind_graph_converter_contains_source_change_random(
         RuntimeDataBindGraphConverter::Group(converters) => converters
             .iter()
             .any(runtime_data_bind_graph_converter_contains_source_change_random),
+        _ => false,
+    }
+}
+
+pub(crate) fn runtime_data_bind_graph_converter_contains_formula(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::Formula { .. } => true,
+        RuntimeDataBindGraphConverter::Group(converters) => converters
+            .iter()
+            .any(runtime_data_bind_graph_converter_contains_formula),
         _ => false,
     }
 }
@@ -3968,6 +3980,36 @@ impl RuntimeDataBindGraphConverterState {
                 }
             }
             Self::Interpolator(_) | Self::Project { .. } | Self::None => {}
+        }
+    }
+
+    pub(crate) fn reset_source_change_formula_randoms(
+        &mut self,
+        converter: &RuntimeDataBindGraphConverter,
+    ) {
+        match (converter, self) {
+            (RuntimeDataBindGraphConverter::Formula { tokens }, Self::Formula(state))
+                if tokens.iter().any(|token| {
+                    matches!(
+                        token,
+                        RuntimeDataBindGraphFormulaToken::Function {
+                            function_type: 16,
+                            random_mode: 2,
+                            ..
+                        }
+                    )
+                }) =>
+            {
+                state.clear()
+            }
+            (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
+                if converters.len() == states.len() =>
+            {
+                for (converter, state) in converters.iter().zip(states) {
+                    state.reset_source_change_formula_randoms(converter);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -10413,7 +10455,9 @@ impl RuntimeDataBindGraphSourceNode {
             .as_ref()
             .is_some_and(runtime_data_bind_graph_converter_contains_source_change_random)
         {
-            self.reset_formula_random_state();
+            self.converter_state.reset_source_change_formula_randoms(
+                self.converter.as_ref().expect("checked converter"),
+            );
         }
     }
 
@@ -11588,6 +11632,91 @@ mod tests {
                 &RuntimeDataBindGraphValue::Number(3.9),
             ),
             Some(RuntimeDataBindGraphValue::List { item_count: 3 })
+        );
+    }
+
+    #[test]
+    fn source_change_reset_preserves_other_formula_state_in_a_group() {
+        let formula = |random_mode| RuntimeDataBindGraphConverter::Formula {
+            tokens: vec![RuntimeDataBindGraphFormulaToken::Function {
+                function_type: 16,
+                arguments_count: 0,
+                random_mode,
+            }],
+        };
+        let converter = RuntimeDataBindGraphConverter::Group(vec![formula(2), formula(0)]);
+        let mut state = RuntimeDataBindGraphConverterState::for_converter(Some(&converter));
+        let RuntimeDataBindGraphConverterState::Group(states) = &mut state else {
+            panic!("group state");
+        };
+        let [
+            RuntimeDataBindGraphConverterState::Formula(source_change),
+            RuntimeDataBindGraphConverterState::Formula(initial),
+        ] = states.as_mut_slice()
+        else {
+            panic!("formula states");
+        };
+        source_change.randoms.push(0.25);
+        initial.randoms.push(0.75);
+
+        state.reset_source_change_formula_randoms(&converter);
+
+        let RuntimeDataBindGraphConverterState::Group(states) = state else {
+            panic!("group state");
+        };
+        let [
+            RuntimeDataBindGraphConverterState::Formula(source_change),
+            RuntimeDataBindGraphConverterState::Formula(initial),
+        ] = states.as_slice()
+        else {
+            panic!("formula states");
+        };
+        assert!(source_change.randoms.is_empty());
+        assert_eq!(
+            initial.randoms,
+            [0.75],
+            "C++ group dirt reaches every Formula, but only the Formula whose own random mode is sourceChange clears its cached state (`data_converter_group.cpp:63-73`, `data_converter_formula.cpp:537-542`)"
+        );
+    }
+
+    #[test]
+    fn replacing_formula_random_values_invalidates_initial_formula_cache() {
+        fn converted_number(graph: &mut RuntimeDataBindGraph) -> f32 {
+            let (sources, random_source) = (&mut graph.sources, &mut graph.formula_random_source);
+            let source = &mut sources[0];
+            let RuntimeDataBindGraphValue::Number(value) = source
+                .converter_state
+                .convert_value_with_formula_randoms(
+                    source.converter.as_ref().expect("formula converter"),
+                    &RuntimeDataBindGraphValue::Number(0.0),
+                    random_source,
+                )
+                .expect("formula converts")
+            else {
+                panic!("formula output is numeric");
+            };
+            value
+        }
+
+        let mut graph = graph_with_number_binding(0);
+        let formula = RuntimeDataBindGraphConverter::Formula {
+            tokens: vec![RuntimeDataBindGraphFormulaToken::Function {
+                function_type: 16,
+                arguments_count: 0,
+                random_mode: 0,
+            }],
+        };
+        graph.sources[0].converter_state =
+            RuntimeDataBindGraphConverterState::for_converter(Some(&formula));
+        graph.sources[0].converter = Some(formula);
+
+        graph.set_formula_random_values(&[0.25]);
+        assert_eq!(converted_number(&mut graph), 0.25);
+        graph.set_formula_random_values(&[0.75]);
+        assert_eq!(
+            converted_number(&mut graph),
+            0.75,
+            "replacing the deterministic random stream invalidates every cached Formula mode"
         );
     }
 }

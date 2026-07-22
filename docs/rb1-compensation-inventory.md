@@ -3,8 +3,9 @@
 Scout inventory (2026-07-21) for map Phase RB. The migration slice (e) works
 through this list; the deletion gate (f) empties it. All paths repo-relative.
 
-The whole family exists to emulate C++ `DataBindContainer`/`DataContext`
-change-propagation *by polling*. The five public seams that fan into it:
+The family was inventoried because it emulated C++
+`DataBindContainer`/`DataContext` change-propagation *by polling*. The five
+public seams that originally fanned into it:
 
 - `StateMachineInstance::bind_owned_view_model_contexts` / `::advance_data_context` (`crates/nuxie-runtime/src/state_machine/instance.rs:5121`, `:5316`)
 - `ArtboardInstance::bind_owned_view_model_artboard_contexts` / `::advance_artboard_data_binds[_with_elapsed]` (`crates/nuxie-runtime/src/artboard_data_bind.rs:4225`, `:5534`, `:5690`)
@@ -16,17 +17,15 @@ change-propagation *by polling*. The five public seams that fan into it:
 
 ## Item 1 - Mutation clocks / generations
 
-- `mutation_generation`: the root clock and its artboard readers remain in
-  `view_model.rs`, `artboard.rs`, and `artboard_data_bind.rs`. f9 deleted the
-  state-machine candidate projection and the candidate accessor; state-machine
-  steady frames no longer sample this clock. f10 moved owned converter
-  operands to retained exact-cell dependents, so remaining consumers are the
-  artboard primary target/cache refresh, the structural key, and their
-  clock-lifecycle tests.
-- `RuntimeArtboardOwnedContextKey` (VM structure epoch, NOT render-cache): struct `artboard_data_bind.rs:507`, instance key `:511-518`; ctors/comparators `:521,:539,:557,:575,:594`; field set/cleared `:4576,4583,4638-4639,5398`; users `retain_owned_view_model_context_candidates` `:4627-4640`, `refresh_owned_view_model_artboard_context_if_mutated` `:5694-5697`, `:5890`.
+- [x] f11 deleted the shared `mutation_generation` clock, every reroot/replace/
+  merge/union/track helper and caller, `RuntimeArtboardOwnedContextKey`, and
+  the component-list structural-generation poll. Exact cells now notify the
+  one retained authored bind, which appends its exact occurrence to a reusable
+  container queue; ViewModel replacement and mounted list rows use pushed
+  structural-rebind sinks. Steady frames do not traverse candidates or compare
+  a generation.
 - [x] f9 deleted `owned_view_model_candidate_generations` and every
   state-machine read/write/clone/reset site.
-- `reroot_mutation_clock` `view_model.rs:6423-6428`; callers `:1625,:3013,:3493,:6495,:6662`; related `replace_mutation_clock` `:6430`, `merge_mutation_clock` `:6436` (alias registry `:1787,:2013`), `track_mutation` `:6440`, reset `:6522`.
 
 ## Item 2 - Candidate vectors
 
@@ -105,9 +104,9 @@ change-propagation *by polling*. The five public seams that fan into it:
   scalar/list mirror copy remains: active paths traverse the retained child
   directly, while inactive authored/generated compatibility storage remains
   untouched and becomes visible again if authored selection replaces the
-  explicit link. The direct-property clock union remains only for unmigrated
-  artboard target/cache consumers. Direct
-  reassignment of the same retained child also runs the lifecycle and returns
+  explicit link. The direct-property clock union remained only for the
+  then-unmigrated artboard target/cache consumers and was deleted in f11.
+  Direct reassignment of the same retained child also runs the lifecycle and returns
   success; the prior `Ok(false)` equality shortcut was absent from C++.
   Selecting an authored instance after an explicit link detaches that link and
   its parent relay, because C++ has one active child pointer rather than two
@@ -152,8 +151,8 @@ change-propagation *by polling*. The five public seams that fan into it:
   for deterministic context resolution. Linked-child read models use a
   clone-fresh allocation identity, not the semantic instance ID, so detached
   graphs retain C++ pointer-key inequality. The artboard structural key, root
-  clock, and target/cache values remain inventoried; f10 supersedes the
-  converter-operand entry below.
+  clock, and target/cache values were subsequently removed or migrated in
+  f11; f10 supersedes the converter-operand entry below.
   Evidence: runtime lib 363/363, nuxie lib 133/133, C++ probe 708/708,
   ordinary and scripted goldens 317/317 entries plus 647/647 exact segments
   with zero failures, C API smoke and workspace green; Standards and Spec
@@ -168,8 +167,11 @@ change-propagation *by polling*. The five public seams that fan into it:
   candidate-generation poll/full rebind into retained per-source dirt
   collection plus one pushed structural-rebind sink. The helper name remains
   because its callers still need to collect source dirt before the frame.
-- Artboard analog `refresh_owned_view_model_artboard_context_if_mutated`
-  remains and still compares `RuntimeArtboardOwnedContextKey` generations.
+- [x] f11 replaced the artboard analog with
+  `refresh_retained_owned_view_model_artboard_sources`: scalar/source dirt
+  drains exact retained occurrences from the container queue, while only
+  pushed structural rebind dirt re-resolves paths. A second clean advance
+  performs no bind scan.
 
 ## Item 6 - Per-source copied state (data_bind_graph.rs)
 
@@ -186,18 +188,30 @@ change-propagation *by polling*. The five public seams that fan into it:
   `DataBind*` (`data_converter_operation_viewmodel.cpp:8-27,48-59`). Project
   conversion resolves the live cell value on demand; its serialized
   `resolved_values` vector is now default/imported compatibility state only.
-  Artboard's still-split authored-bind records use fresh per-occurrence sinks.
-  Shared/property/converter-property records route directly; formula/list
-  records wake their existing bounded active pass. This is an explicit
-  transitional adapter until the next slice reunifies one shared retained
-  state per authored `data_bind_index`. The old owned operand snapshot builders and
-  listener-write path scanners are deleted. Remaining clock-driven copied
-  state is artboard primary target/cache projection plus the structural key.
-- `default_value` fields `:74` (target), `:219` (source); copies `:987-992,:4270,:4318-4322,:4427,:4637,:4666,:4747,:4781`; whole `:4744-6262` block is per-type default_value rw.
-- `target_origin` field `:206`; set/cleared `:4356,7846,9387,9547,9560,9565,9582,9917`.
-- `mark_reconcile_dirty` `:9569-9588`; callers `:4294,4331,4433,4580,4614,4650,4677`.
-- `reset_converter_state` `:9906-9909`; batch `:4685`; callers `:4290,4325,4432,4579,4613,4649,4676,4687`. `reset_formula_random_state_for_source_change` `:9915-9924`.
-- Reverse-write sibling scans: `bind_owned_view_model_target_to_source_bindings` `artboard_data_bind.rs:4273,5605,5717`; ordering comment `:5706-5719`.
+  f11 supersedes the transitional artboard entry below.
+- [x] f11 creates one `RuntimeArtboardAuthoredDataBindState` per authored
+  `data_bind_index`. It owns the exact source, `RuntimeRetainedDataBind`
+  direction/origin dirt, shared two-way converter state, outer converter
+  operand subscriptions, and target-notification suppression. Source dirt is
+  occurrence-indexed and updates the typed cache from that exact source without
+  a candidate rescan; target adapters are preindexed by `data_bind_index`, so
+  converter operands never fan out to same-path sibling binds. Direct list
+  dirt executes the full retained list adapter and component-list occurrence
+  reconciliation even when the item count is unchanged;
+  reverse writes call the same retained bind's `update_source_binding`, so its
+  self-echo is swallowed. Default/imported rebinding clears the old source.
+  Formula-token and converter-property binds retain separate sinks because
+  they are subordinate authored DataBinds in C++ rather than split records of
+  the outer bind. Formula-token binds additionally own an exact primary-source
+  queue independent of the outer `data_bind_index`; clone-local primary and
+  converter-operand sinks preserve pending dirt. `bindsOnce` skips the
+  DataBind source edge unless an attached Formula owns its independent C++
+  dependency, and mixed Formula groups reset only their sourceChange children.
+  The old shared-converter map, split occurrence sinks, reverse-write sibling
+  resolver, structural key, and mutation clock are deleted.
+- Per-target `default_value`/pending fields remain execution adapters for the
+  serialized target and converter kinds; they no longer decide source
+  identity, direction origin, or steady-frame wakeup.
 
 ## Item 7 - Trigger observed/rescan state
 
@@ -225,22 +239,24 @@ change-propagation *by polling*. The five public seams that fan into it:
 
 ## Deletion-gate checklist (f)
 
-Safe to remove once the public seams are re-implemented (zero non-test,
+Still queued once the remaining public seams are re-implemented (zero non-test,
 non-family callers): `rebind_owned_view_model_context_candidates`,
 `refresh_owned_view_model_candidates`,
-`refresh_owned_view_model_artboard_context_if_mutated`,
 `owned_view_model_context_candidates_for_nested_host`,
 `bind_active_owned_view_model_triggers_for_candidates`,
 `sync_default_view_model_triggers_from_active`,
-`reset_bound_trigger_sources`, `RuntimeArtboardOwnedContextKey` +
-`matches_candidate*`, and the `mutation_generation` clock. Already deleted:
+and `reset_bound_trigger_sources`. Already deleted:
+`refresh_owned_view_model_artboard_context_if_mutated`,
+`RuntimeArtboardOwnedContextKey` + `matches_candidate*`, the complete
+`mutation_generation` clock family,
 `owned_view_model_candidate_generations`,
 `refresh_active_owned_view_model_triggers_for_candidates`, and
 `linked_aliases`/`synchronize_linked_aliases`.
 
 ## Test-rewrite counts
 
-mutation_generation ~9 test sites (rewrite); candidates ~12 (rewrite to new
+mutation-generation/clock tests were rewritten to exact-cell and pushed-sink
+contracts; candidates ~12 (rewrite to new
 context type); listener cap 1 (rewritten in f4 to the C++ batch cap);
 duplicate mutable authored-instance API 1 (removed; test migrated to the
 canonical constructor); alias sharing 1 (observable contract, keep); Scene dirty 0

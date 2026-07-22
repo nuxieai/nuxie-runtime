@@ -22,7 +22,8 @@ use crate::data_bind_graph::{
     data_bind_flags_source_to_target_runs_first,
 };
 use crate::view_model_cell::{
-    RuntimeCellDirt, RuntimeCellDirtSink, RuntimeViewModelCell, RuntimeViewModelCellValue,
+    RuntimeCellDirt, RuntimeCellDirtSink, RuntimeCellNotificationQueue, RuntimeViewModelCell,
+    RuntimeViewModelCellValue,
 };
 
 /// The bind's target seam. C++ writes `Core*` properties through generated
@@ -42,14 +43,22 @@ pub trait RuntimeDataBindTarget {
 pub struct RuntimeRetainedDataBind {
     flags: u64,
     binds_once: bool,
+    /// Primary `ViewModelInstanceValue` dependency. Formula converters also
+    /// subscribe to this value in C++ so source-change randoms can distinguish
+    /// it from an OperationViewModel operand notification.
     sink: RuntimeCellDirtSink,
+    /// Additional converter operands still dirty this same outer DataBind,
+    /// but retain a distinct dependency sink so the converter can preserve
+    /// primary-source-only side effects (`data_converter_formula.cpp:526-543`;
+    /// `data_converter_operation_viewmodel.cpp:48-59`).
+    additional_sink: RuntimeCellDirtSink,
     source: Option<RuntimeViewModelCell>,
     /// Converter operands that dirty this SAME owning bind. C++
     /// `DataConverterOperationViewModel::bindFromContext` registers the
     /// outer `DataBind*` directly on its operand value
-    /// (`data_converter_operation_viewmodel.cpp:48-59`); these cells
-    /// therefore share `sink` with the primary source instead of owning
-    /// independently drained notification state.
+    /// (`data_converter_operation_viewmodel.cpp:48-59`). The distinct sink
+    /// above is only an origin discriminator; both sinks fold into this same
+    /// bind's `ComponentDirt::Bindings` latch and occurrence queue.
     additional_sources: Vec<RuntimeViewModelCell>,
     /// C++ `Flag::TargetOrigin`: which side the latched dirt came from.
     target_origin: bool,
@@ -77,6 +86,8 @@ impl Clone for RuntimeRetainedDataBind {
     /// the copy observes subsequent writes independently; direction state
     /// carries over, pending sink dirt does not (the original consumes it).
     fn clone(&self) -> Self {
+        let primary_dirt = self.sink.peek_dirt();
+        let additional_dirt = self.additional_sink.peek_dirt();
         let mut cloned = Self::new(self.flags, self.binds_once);
         if let Some(source) = &self.source {
             cloned.set_source(source.clone());
@@ -84,6 +95,8 @@ impl Clone for RuntimeRetainedDataBind {
         cloned.set_additional_sources(self.additional_sources.clone());
         cloned.target_origin = self.target_origin;
         cloned.dirt = self.dirt;
+        cloned.sink.add_dirt(primary_dirt);
+        cloned.additional_sink.add_dirt(additional_dirt);
         cloned
     }
 }
@@ -94,6 +107,7 @@ impl RuntimeRetainedDataBind {
             flags,
             binds_once,
             sink: RuntimeCellDirtSink::new(),
+            additional_sink: RuntimeCellDirtSink::new(),
             source: None,
             additional_sources: Vec::new(),
             target_origin: false,
@@ -122,45 +136,110 @@ impl RuntimeRetainedDataBind {
         self.source.is_some() || !self.additional_sources.is_empty()
     }
 
-    fn unregister_sources(&self) {
+    fn primary_source_is_an_additional_source(&self) -> bool {
+        self.source.as_ref().is_some_and(|primary| {
+            self.additional_sources
+                .iter()
+                .any(|additional| primary.ptr_eq(additional))
+        })
+    }
+
+    fn registers_primary_sink(&self) -> bool {
+        !self.binds_once || self.primary_source_is_an_additional_source()
+    }
+
+    fn unregister_primary_source(&self) {
         if let Some(source) = &self.source
-            && !self.binds_once
+            && self.registers_primary_sink()
         {
-            source.remove_dependent(&self.sink);
-        }
-        for source in &self.additional_sources {
             source.remove_dependent(&self.sink);
         }
     }
 
-    fn register_sources(&self) {
+    fn unregister_additional_sources(&self) {
+        for source in &self.additional_sources {
+            if self
+                .source
+                .as_ref()
+                .is_some_and(|primary| primary.ptr_eq(source))
+            {
+                continue;
+            }
+            source.remove_dependent(&self.additional_sink);
+        }
+    }
+
+    fn register_primary_source(&self) {
         if let Some(source) = &self.source
-            && !self.binds_once
+            && self.registers_primary_sink()
         {
             source.add_dependent(&self.sink);
         }
+    }
+
+    fn register_additional_sources(&self) {
         // Converter operands register the outer DataBind even when the
         // primary bind is `bindsOnce`
         // (`data_converter_operation_viewmodel.cpp:48-59`).
         for source in &self.additional_sources {
-            source.add_dependent(&self.sink);
+            // C++ registers one `DataBind*`; DependencyHelper deduplicates
+            // that identity when an operand aliases the primary source.
+            if self
+                .source
+                .as_ref()
+                .is_some_and(|primary| primary.ptr_eq(source))
+            {
+                continue;
+            }
+            source.add_dependent(&self.additional_sink);
         }
     }
 
     /// C++ `DataBind::source(value)`: retain the cell, register as a
     /// dependent unless the bind binds once.
     pub fn set_source(&mut self, cell: RuntimeViewModelCell) {
-        self.unregister_sources();
+        // Alias eligibility for converter operands changes with the primary.
+        self.unregister_additional_sources();
+        self.unregister_primary_source();
         self.source = Some(cell);
-        self.register_sources();
+        self.register_primary_source();
+        self.register_additional_sources();
         self.sink.take_dirt();
+    }
+
+    /// Re-home this bind's retained source sink onto an occurrence-indexed
+    /// container queue. Artboard clones call this with their fresh queue, so
+    /// each cloned container receives its own C++-shaped dirty occurrence.
+    pub(crate) fn report_source_dirt_to(
+        &mut self,
+        queue: &RuntimeCellNotificationQueue,
+        data_bind_index: usize,
+    ) {
+        let primary_dirt = self.sink.peek_dirt();
+        let additional_dirt = self.additional_sink.peek_dirt();
+        self.unregister_additional_sources();
+        self.unregister_primary_source();
+        self.sink = RuntimeCellDirtSink::reporting_data_bind(queue, data_bind_index);
+        self.additional_sink = RuntimeCellDirtSink::reporting_data_bind(queue, data_bind_index);
+        self.register_primary_source();
+        self.register_additional_sources();
+        if !primary_dirt.is_empty() {
+            self.sink.add_dirt(primary_dirt);
+            queue.report_data_bind(data_bind_index);
+        }
+        if !additional_dirt.is_empty() {
+            self.additional_sink.add_dirt(additional_dirt);
+            queue.report_data_bind(data_bind_index);
+        }
     }
 
     /// C++ `DataBind::clearSource()`.
     pub fn clear_source(&mut self) {
-        self.unregister_sources();
+        // The former primary may remain registered as a converter operand.
+        self.unregister_additional_sources();
+        self.unregister_primary_source();
         self.source = None;
-        self.register_sources();
+        self.register_additional_sources();
         // Any latched source dirt refers to the departed cell.
         self.sink.take_dirt();
     }
@@ -178,10 +257,12 @@ impl RuntimeRetainedDataBind {
         {
             return;
         }
-        self.unregister_sources();
+        self.unregister_additional_sources();
+        self.unregister_primary_source();
         self.additional_sources = sources;
-        self.register_sources();
-        self.sink.take_dirt();
+        self.register_primary_source();
+        self.register_additional_sources();
+        self.additional_sink.take_dirt();
     }
 
     /// C++ `DataBind::bind()` tail: a (re)bind is a reconcile — mark every
@@ -214,7 +295,7 @@ impl RuntimeRetainedDataBind {
     /// bits) resolves the origin by favored direction; a one-sided change
     /// records its own side. Suppressed applies never re-dirty.
     fn add_dirt(&mut self, dirt: RuntimeCellDirt) {
-        if self.suppress_dirt || dirt.is_empty() {
+        if self.suppress_dirt || dirt.is_empty() || self.dirt.contains(dirt) {
             return;
         }
         let has_source = dirt.contains(RuntimeCellDirt::BINDINGS);
@@ -234,13 +315,79 @@ impl RuntimeRetainedDataBind {
     /// how C++ receives `addDirt` calls directly from `DependencyHelper`.
     /// Returns whether any sink dirt was folded — distinguishing a genuine
     /// cell cascade from dirt latched earlier (e.g. a rebind reconcile).
-    pub fn collect_source_dirt(&mut self) -> bool {
-        let dirt = self.sink.take_dirt();
-        if !dirt.is_empty() {
+    fn collect_source_dirt_parts(&mut self) -> (bool, bool) {
+        let primary = !self.sink.take_dirt().is_empty();
+        let additional = !self.additional_sink.take_dirt().is_empty();
+        if primary || additional {
             self.add_dirt(RuntimeCellDirt::BINDINGS);
-            return true;
         }
-        false
+        (primary, additional)
+    }
+
+    pub fn collect_source_dirt(&mut self) -> bool {
+        let (primary, additional) = self.collect_source_dirt_parts();
+        primary || additional
+    }
+
+    /// Drain the retained source notification without applying through this
+    /// module's generic target seam. Artboard's authored-bind scheduler owns
+    /// the concrete target adapters and consumes this exact bit before it
+    /// dispatches them (`data_bind_container.cpp:115-147,156-203`).
+    #[cfg(test)]
+    pub(crate) fn take_source_dirt(&mut self) -> bool {
+        self.take_source_dirt_with_primary().is_some()
+    }
+
+    /// Drain one retained notification and report whether the primary source
+    /// participated. C++ Formula source-change randoms subscribe to that
+    /// primary value, whereas OperationViewModel operands dirty only the
+    /// outer DataBind (`data_converter_formula.cpp:526-543`;
+    /// `data_converter_operation_viewmodel.cpp:48-59`).
+    pub(crate) fn take_source_dirt_with_primary(&mut self) -> Option<bool> {
+        // `dirt` may already contain Bindings from a rebind reconcile. Only
+        // report this compatibility drain when the retained cell's sink
+        // actually pushed a new notification this pass.
+        let (primary, additional) = self.collect_source_dirt_parts();
+        if !primary && !additional {
+            return None;
+        }
+        self.dirt = if self.dirt.contains(RuntimeCellDirt::BINDINGS_TARGET) {
+            RuntimeCellDirt::BINDINGS_TARGET
+        } else {
+            RuntimeCellDirt::NONE
+        };
+        Some(primary)
+    }
+
+    /// Consume the concrete target adapter's queued notification. This is
+    /// the authored-bind scheduler counterpart to [`Self::take_source_dirt`]
+    /// and preserves any simultaneously pending source reconcile bit.
+    pub(crate) fn take_target_dirt(&mut self) -> bool {
+        if !self.dirt.contains(RuntimeCellDirt::BINDINGS_TARGET) {
+            return false;
+        }
+        self.dirt = if self.dirt.contains(RuntimeCellDirt::BINDINGS) {
+            RuntimeCellDirt::BINDINGS
+        } else {
+            RuntimeCellDirt::NONE
+        };
+        true
+    }
+
+    /// Consume a source bit whose concrete facade adapter has just applied.
+    /// C++ removes the queued dirt before calling `DataBind::update`, so a
+    /// later notification can latch a fresh origin (`data_bind_container.cpp:
+    /// 144-147`, `data_bind.cpp:502-531`).
+    pub(crate) fn take_pending_source_dirt(&mut self) -> bool {
+        if !self.dirt.contains(RuntimeCellDirt::BINDINGS) {
+            return false;
+        }
+        self.dirt = if self.dirt.contains(RuntimeCellDirt::BINDINGS_TARGET) {
+            RuntimeCellDirt::BINDINGS_TARGET
+        } else {
+            RuntimeCellDirt::NONE
+        };
+        true
     }
 
     pub fn pending_dirt(&self) -> RuntimeCellDirt {
@@ -407,6 +554,21 @@ mod tests {
     }
 
     #[test]
+    fn binds_once_still_observes_an_operand_that_aliases_its_primary() {
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let mut bind = RuntimeRetainedDataBind::new(TO_TARGET, true);
+        bind.set_source(cell.clone());
+        bind.set_additional_sources(vec![cell.clone()]);
+
+        assert!(cell.set_value(RuntimeViewModelCellValue::Number(2.0)));
+        assert_eq!(
+            bind.take_source_dirt_with_primary(),
+            Some(true),
+            "C++ skips the bindsOnce primary DataBind edge but OperationViewModel still registers that same outer DataBind (`data_bind.cpp:210-216`, `data_converter_operation_viewmodel.cpp:48-59`)"
+        );
+    }
+
+    #[test]
     fn target_to_source_write_reaches_sibling_binds_without_echo() {
         let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
         let mut writer = RuntimeRetainedDataBind::new(TO_SOURCE, false);
@@ -427,6 +589,60 @@ mod tests {
         assert!(
             !writer.pending_dirt().contains(RuntimeCellDirt::BINDINGS),
             "own write echo is swallowed (C++ suppressDirt)"
+        );
+    }
+
+    #[test]
+    fn aliased_converter_operand_does_not_requeue_own_target_to_source_write() {
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let mut bind = RuntimeRetainedDataBind::new(TO_SOURCE, false);
+        bind.set_source(cell.clone());
+        bind.set_additional_sources(vec![cell]);
+
+        let mut target = FakeTarget::number(9.0);
+        bind.mark_target_changed();
+        assert!(bind.update_source_binding(&mut target));
+        assert_eq!(bind.take_source_dirt_with_primary(), None);
+    }
+
+    #[test]
+    fn target_to_source_write_preserves_pending_distinct_operand_dirt() {
+        let primary = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(2.0));
+        let mut bind = RuntimeRetainedDataBind::new(TO_SOURCE, false);
+        bind.set_source(primary);
+        bind.set_additional_sources(vec![operand.clone()]);
+
+        assert!(operand.set_value(RuntimeViewModelCellValue::Number(3.0)));
+        let mut target = FakeTarget::number(9.0);
+        bind.mark_target_changed();
+        assert!(bind.update_source_binding(&mut target));
+        assert_eq!(
+            bind.take_source_dirt_with_primary(),
+            Some(false),
+            "swallowing the primary self-echo must not discard independent operand work"
+        );
+    }
+
+    #[test]
+    fn primary_changes_recompute_converter_operand_alias_registration() {
+        let first = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let second = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(2.0));
+        let mut bind = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        bind.set_source(first.clone());
+        bind.set_additional_sources(vec![first.clone()]);
+
+        bind.set_source(second.clone());
+        assert!(first.set_value(RuntimeViewModelCellValue::Number(3.0)));
+        assert_eq!(bind.take_source_dirt_with_primary(), Some(false));
+
+        bind.set_additional_sources(vec![second.clone()]);
+        bind.clear_source();
+        assert!(second.set_value(RuntimeViewModelCellValue::Number(4.0)));
+        assert_eq!(
+            bind.take_source_dirt_with_primary(),
+            Some(false),
+            "clearing the primary must enroll its retained operand alias"
         );
     }
 
@@ -478,10 +694,56 @@ mod tests {
         bind.mark_target_changed();
         assert!(bind.target_origin());
 
-        // Compatibility sources that have not moved onto retained cells yet
-        // still use the same direction engine instead of a parallel flag.
+        // C++ returns before changing the origin when the same dirt bit is
+        // already pending (`data_bind.cpp:502-507`).
         bind.mark_source_changed();
-        assert!(!bind.target_origin());
+        assert!(bind.target_origin());
+    }
+
+    #[test]
+    fn completed_target_first_reconcile_allows_a_fresh_source_origin() {
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(0.0));
+        let mut bind = RuntimeRetainedDataBind::new(TWO_WAY, false);
+        bind.set_source(cell.clone());
+        bind.mark_rebind_reconcile();
+        assert!(
+            bind.target_origin(),
+            "target-first reconcile starts at target"
+        );
+
+        assert!(bind.take_target_dirt());
+        assert!(bind.take_pending_source_dirt());
+        assert!(bind.pending_dirt().is_empty());
+
+        assert!(cell.set_value(RuntimeViewModelCellValue::Number(1.0)));
+        assert!(bind.take_source_dirt());
+        assert!(
+            !bind.target_origin(),
+            "after processed dirt is cleared, a genuine source notification latches source origin"
+        );
+    }
+
+    #[test]
+    fn primary_and_converter_operand_dirt_remain_distinguishable() {
+        let primary = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(2.0));
+        let mut bind = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        bind.set_source(primary.clone());
+        bind.set_additional_sources(vec![operand.clone()]);
+
+        assert!(operand.set_value(RuntimeViewModelCellValue::Number(3.0)));
+        assert_eq!(
+            bind.take_source_dirt_with_primary(),
+            Some(false),
+            "OperationViewModel operands dirty the outer bind without imitating Formula's primary-source subscription"
+        );
+
+        assert!(primary.set_value(RuntimeViewModelCellValue::Number(4.0)));
+        assert_eq!(
+            bind.take_source_dirt_with_primary(),
+            Some(true),
+            "the exact primary source remains visible for source-change formula invalidation"
+        );
     }
 
     #[test]

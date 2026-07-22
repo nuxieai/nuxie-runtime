@@ -14,9 +14,11 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 370/370, nuxie lib 134/134,
-C++ probe 708/708, both runtime golden gates 317/317 exact / 647/647 segments
-with zero failures. The workspace push gate is green as of 2026-07-22. Review
+Regression floor (must stay green): runtime lib 391/391, nuxie lib 140/140,
+C++ probe 714/714, both runtime golden gates 317/317 exact / 647/647 segments;
+ordinary has zero failures and scripted has only the two permitted verification
+names (`data_viz_demo`, `db_health_tracker`). The workspace push gate is green
+as of 2026-07-22. Review
 of e5(A) restored the distinction between raw `StateMachineInstance::advance`
 and the full `advanceAndApply` facade: the facade forces zero-second returns
 true and includes pending reports (`state_machine_instance.cpp:2608-2613,
@@ -335,6 +337,46 @@ upstream-sync-map registry).
     nested compatibility-context resolution; Standards and Spec re-reviews are
     clean. Renderer goldens are not applicable because no renderer/draw code
     changed.
+  - [x] (f11) artboard authored binds now have one retained state per authored
+    `data_bind_index`. That state owns the exact source, direction/origin dirt,
+    shared two-way converter state, outer converter-operand subscriptions, and
+    target-notification suppression. Each retained bind reports its exact
+    authored occurrence into a reusable container queue, so steady source
+    delivery neither scans all binds nor allocates. Source dirt reads that
+    retained source directly; direct list sources run the complete occurrence-
+    local adapter and component-list reconciliation, including different list
+    items at an unchanged count. Exact target dispatch is indexed by
+    `data_bind_index`, so a converter operand cannot wake same-path siblings.
+    Reverse writes pass through the same bind and suppress their own cell echo;
+    default/imported rebinding clears the old source. Only pushed
+    structural-rebind dirt re-resolves ordered context candidates. The old
+    shared-converter map, reverse-write sibling resolver, artboard structural
+    key, component-list structural-generation poll, and complete shared
+    mutation-clock family are deleted. Formula-token and converter-property
+    records keep separate sinks because they are subordinate authored binds,
+    not split records of the outer bind. Formula-token DataBinds own an
+    independent exact primary-source queue; clone-local sinks preserve pending
+    source and converter-operand dirt. `bindsOnce` registers no DataBind source
+    edge unless an attached Formula (including inside a Group) owns C++'s
+    independent dependency. Source-change resets walk converter/state groups
+    in lockstep and clear only Formula children whose own random mode is
+    sourceChange, while explicit deterministic RNG replacement still
+    invalidates every Formula cache. Reconcile now preserves C++'s
+    already-dirty origin guard, and source dirt is consumed immediately before
+    target application so dirt created during apply relatches for the next
+    pass (`data_bind.cpp:502-531`; `data_bind_container.cpp:144-147`). The
+    zero-second `advanceAndApply` forcing and pending-report return semantics
+    remain unchanged (`state_machine_instance.cpp:2612,2663`), as does the
+    next-frame-start `applyEvents` chained-batch drain
+    (`state_machine_instance.cpp:2320-2343`). Evidence: runtime lib 391/391,
+    nuxie lib 140/140, and C++ probe 714/714; Standards, Spec, and converter
+    re-reviews are clean. Full corpus, C API, and workspace evidence is
+    recorded in the history entry below. The ordinary corpus has zero
+    failures; scripted exact parity is complete with only the two permitted
+    verification names (`data_viz_demo`, `db_health_tracker`). Candidate vectors remain only for
+    ordered context/listener addressing; their public-seam and trigger-state
+    cleanup remains before the overall (f) gate can close. Renderer goldens
+    are not applicable because no renderer/draw code changed.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -858,3 +900,28 @@ Decisions log.)
   370/370, nuxie lib 134/134, C++ probe 708/708, ordinary and scripted goldens
   317/317 entries plus 647/647 exact segments with zero failures, C API smoke
   green, and the full workspace green. Renderer goldens are not applicable.
+- 2026-07-22 — #RB-1 f11 reunified each artboard authored DataBind around one
+  retained state: exact source identity, direction/origin dirt, shared
+  converter state, outer converter operands, and self-notification
+  suppression. Exact source dirt now arrives through a reusable occurrence-
+  indexed queue and updates only that `data_bind_index`'s target adapters,
+  without a candidate rescan or same-path sibling fan-out. Direct list dirt
+  runs the full retained adapter/component-list update, so a different same-
+  count list replaces the old row occurrences. Target-to-source writes use
+  that same state, and pushed
+  structural rebind is the only path-resolution wakeup. The artboard
+  structural key, component-list generation poll, shared-converter map,
+  reverse-write sibling scan, and full mutation-clock family are deleted.
+  C++ ordering corrections preserve already-pending dirt origin, consume
+  source dirt at the apply boundary, retain zero-second facade forcing and
+  pending-report returns, and leave next-frame chained listener delivery
+  unchanged. Subordinate Formula-token binds retain exact primary-source and
+  converter-operand dirt across clones, skip the DataBind source edge for
+  non-Formula `bindsOnce`, and reset only each Formula child whose own random
+  mode is sourceChange; explicit deterministic RNG replacement remains a broad
+  cache reset. Standards, Spec, and converter re-reviews are clean. Evidence is
+  runtime lib 391/391, nuxie lib 140/140, C++ probe 714/714, and both golden modes at
+  317/317 entries plus 647/647 exact segments. Ordinary has zero failures;
+  scripted retains exactly the two permitted verification names
+  (`data_viz_demo`, `db_health_tracker`) and no new failure. C API smoke and
+  the full workspace are green. Renderer goldens are not applicable.

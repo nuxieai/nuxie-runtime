@@ -2599,11 +2599,14 @@ impl StateMachineViewModelTriggerInstance {
     }
 
     pub(crate) fn is_fireable_for_layer(&self, layer_index: usize) -> bool {
+        self.has_changed() && !self.used_layers.contains(&layer_index)
+    }
+
+    pub(crate) fn has_changed(&self) -> bool {
         self.cell
             .as_ref()
             .map(RuntimeViewModelCell::has_changed)
             .unwrap_or(self.changed)
-            && !self.used_layers.contains(&layer_index)
     }
 
     pub(crate) fn use_in_layer(&mut self, layer_index: usize) {

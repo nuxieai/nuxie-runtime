@@ -7,7 +7,7 @@ use crate::focus::RuntimeFocusTree;
 use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::RuntimeFontAssetValue;
 use crate::view_model_cell::{
-    RuntimeCellDirtSink, RuntimeCellNotificationQueue, RuntimeViewModelCell,
+    RuntimeCellDirt, RuntimeCellDirtSink, RuntimeCellNotificationQueue, RuntimeViewModelCell,
 };
 use crate::{
     ArtboardInstance, NoopScriptHost, RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase,
@@ -96,7 +96,10 @@ pub struct StateMachineInstance {
     data_bind_graph: RuntimeDataBindGraph,
     key_frame_data_bind_graphs: Vec<Option<RuntimeDataBindGraph>>,
     owned_view_model_candidates: Vec<RuntimeOwnedViewModelBindingCandidate>,
-    owned_view_model_candidate_generations: Vec<u64>,
+    /// C++ `ViewModelInstance::m_dependents` push channel: structural
+    /// ViewModel replacement dirties this sink so the retained DataContext is
+    /// relinked without polling a root mutation generation every frame.
+    owned_view_model_rebind_sink: RuntimeCellDirtSink,
     pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
     pointer_listener_states: Vec<RuntimePointerListenerState>,
     pointer_positions: Vec<RuntimePointerPosition>,
@@ -569,7 +572,7 @@ impl Clone for StateMachineInstance {
                 listener.clone_for_queue(&reported_listener_view_models, listener_index)
             })
             .collect();
-        Self {
+        let cloned = Self {
             state_machine_index: self.state_machine_index,
             default_view_model_index: self.default_view_model_index,
             requires_post_update_state_probe: self.requires_post_update_state_probe,
@@ -603,9 +606,7 @@ impl Clone for StateMachineInstance {
             data_bind_graph: self.data_bind_graph.clone(),
             key_frame_data_bind_graphs: self.key_frame_data_bind_graphs.clone(),
             owned_view_model_candidates: self.owned_view_model_candidates.clone(),
-            owned_view_model_candidate_generations: self
-                .owned_view_model_candidate_generations
-                .clone(),
+            owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
             pointer_down_listener_hits: self.pointer_down_listener_hits.clone(),
             pointer_listener_states: self.pointer_listener_states.clone(),
             pointer_positions: self.pointer_positions.clone(),
@@ -618,7 +619,9 @@ impl Clone for StateMachineInstance {
             scripted_listener_action_instances: BTreeMap::new(),
             script_error: None,
             view_model_listeners,
-        }
+        };
+        cloned.register_owned_view_model_rebind_dependents();
+        cloned
     }
 }
 
@@ -926,7 +929,7 @@ impl StateMachineInstance {
             data_bind_graph,
             key_frame_data_bind_graphs,
             owned_view_model_candidates: Vec::new(),
-            owned_view_model_candidate_generations: Vec::new(),
+            owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
             pointer_positions: Vec::new(),
@@ -5205,30 +5208,45 @@ impl StateMachineInstance {
                 .iter()
                 .zip(candidates)
                 .any(|(bound, candidate)| !bound.same_binding(candidate));
-        let generations = candidates
-            .iter()
-            .map(RuntimeOwnedViewModelBindingCandidate::mutation_generation)
-            .collect::<Vec<_>>();
-        if !identity_changed && self.owned_view_model_candidate_generations == generations {
-            return false;
+        let structural_rebind = self
+            .owned_view_model_rebind_sink
+            .take_dirt()
+            .contains(RuntimeCellDirt::BINDINGS);
+        if !identity_changed && !structural_rebind {
+            // Explicit same-source bindFromContext is still C++
+            // `DataBind::bind()`: the graph marks both supported directions
+            // for reconcile in favor order (`data_bind_context.cpp:80-85`).
+            // This path deliberately does not scan trigger values.
+            let changed = self.rebind_owned_view_model_context_candidates(candidates, false);
+            if changed {
+                self.needs_advance = true;
+            }
+            return changed;
         }
 
         let changed = self.rebind_owned_view_model_context_candidates(candidates, false);
-        if identity_changed {
-            self.bind_active_owned_view_model_triggers_for_candidates(candidates);
-        } else {
-            self.refresh_active_owned_view_model_triggers_for_candidates(candidates);
-        }
+        self.bind_active_owned_view_model_triggers_for_candidates(candidates);
         self.bind_view_model_listener_cells_for_candidates(candidates);
         self.owned_view_model_candidates = candidates.to_vec();
         if candidates.is_empty() {
             self.reset_active_view_model_triggers();
         }
-        self.owned_view_model_candidate_generations = generations;
-        if changed || identity_changed {
+        if identity_changed {
+            self.owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
+            self.register_owned_view_model_rebind_dependents();
+        }
+        if changed || identity_changed || structural_rebind {
             self.needs_advance = true;
         }
-        changed || identity_changed
+        changed || identity_changed || structural_rebind
+    }
+
+    fn register_owned_view_model_rebind_dependents(&self) {
+        for candidate in &self.owned_view_model_candidates {
+            candidate
+                .context
+                .add_rebind_dependent(&self.owned_view_model_rebind_sink);
+        }
     }
 
     fn sync_bindable_font_assets<F>(&mut self, mut resolve: F)
@@ -5403,26 +5421,33 @@ impl StateMachineInstance {
         if self.owned_view_model_candidates.is_empty() {
             return false;
         }
-        // #RB-1 e3: migrated sources refresh from retained-cell dirt — the
-        // direction-engine channel — BEFORE the mutation-clock poll below, so
-        // cell writes that never bump the clock still propagate, and stale
-        // sink dirt cannot flip a fresh reconcile's origin afterwards.
-        // Unmigrated sources still rely entirely on the generation rebind.
+        // Retained property cells refresh through their individual dirt
+        // sinks. Structural ViewModel replacement separately pushes the
+        // parent relay's DataContext-rebind sink; no root generation is
+        // sampled or compared on the steady frame.
         let mut collected = self.data_bind_graph.collect_retained_owned_source_dirt();
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
             collected |= graph.collect_retained_owned_source_dirt();
         }
-        let candidates = self.owned_view_model_candidates.clone();
-        let bound = self.bind_owned_view_model_context_candidates(&candidates);
-        if collected {
+        let structural_rebind = self
+            .owned_view_model_rebind_sink
+            .take_dirt()
+            .contains(RuntimeCellDirt::BINDINGS);
+        if structural_rebind {
+            let candidates = self.owned_view_model_candidates.clone();
+            self.rebind_owned_view_model_context_candidates(&candidates, false);
+            self.bind_active_owned_view_model_triggers_for_candidates(&candidates);
+            self.bind_view_model_listener_cells_for_candidates(&candidates);
+        }
+        if collected || structural_rebind {
             self.needs_advance = true;
         }
-        collected || bound
+        collected || structural_rebind
     }
 
     fn clear_owned_view_model_handle(&mut self) {
         self.owned_view_model_candidates.clear();
-        self.owned_view_model_candidate_generations.clear();
+        self.owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
     }
 
     fn clear_owned_view_model_context(&mut self) {
@@ -6048,44 +6073,16 @@ impl StateMachineInstance {
                 })
             });
             match resolved {
-                Some((RuntimeDataBindGraphValue::Trigger(_), Some(cell))) => {
+                Some((RuntimeDataBindGraphValue::Trigger(_), Some(cell), _)) => {
                     trigger.bind_cell(cell)
                 }
-                Some((RuntimeDataBindGraphValue::Trigger(value), None)) => {
+                Some((RuntimeDataBindGraphValue::Trigger(value), None, _)) => {
                     trigger.replace_value(value)
                 }
                 _ => trigger.reset(),
             }
         }
         self.view_model_triggers = active;
-    }
-
-    fn refresh_active_owned_view_model_triggers_for_candidates(
-        &mut self,
-        candidates: &[RuntimeOwnedViewModelBindingCandidate],
-    ) {
-        let default_view_model_index = self.default_view_model_index;
-        for trigger in &mut self.view_model_triggers {
-            let resolved = default_view_model_index.and_then(|view_model_index| {
-                let view_model_index = u32::try_from(view_model_index).ok()?;
-                let source_path = [view_model_index, trigger.view_model_property_id()];
-                candidates.iter().find_map(|candidate| {
-                    candidate.resolve_value_and_cell_for_source_path(
-                        &RuntimeDataBindGraphValue::Trigger(trigger.value()),
-                        &source_path,
-                    )
-                })
-            });
-            match resolved {
-                Some((RuntimeDataBindGraphValue::Trigger(_), Some(cell))) => {
-                    trigger.bind_cell(cell)
-                }
-                Some((RuntimeDataBindGraphValue::Trigger(value), None)) => {
-                    trigger.replace_value(value)
-                }
-                _ => trigger.reset(),
-            }
-        }
     }
 
     fn bind_active_owned_view_model_triggers_for_context(

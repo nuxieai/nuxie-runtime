@@ -15,7 +15,7 @@ use crate::project_data_converter::{
 };
 use crate::retained_data_bind::{RuntimeDataBindTarget, RuntimeRetainedDataBind};
 use crate::scripting::{RuntimeScriptInstanceHandle, ScriptDataConverterMethod};
-use crate::view_model::RuntimeFontAssetValue;
+use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelStructuralSource};
 use crate::view_model_cell::{RuntimeCellDirt, RuntimeViewModelCellValue};
 use crate::{
     ProjectDataConverterContext, ProjectDataConverterOutputType, ProjectDataConverterProgram,
@@ -218,10 +218,14 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
     pub(crate) value: RuntimeDataBindGraphValue,
     pub(crate) view_model_instance_ids: Vec<u32>,
     /// Every source owns exactly one C++-shaped direction engine. Owned
-    /// scalar paths additionally attach its retained source cell; unresolved
-    /// and not-yet-migrated source kinds leave that cell empty while still
-    /// sharing the same origin/reconcile state.
+    /// owned paths attach their retained source property cell; unresolved
+    /// compatibility paths leave it empty while still sharing the same
+    /// origin/reconcile state.
     pub(crate) retained_bind: RuntimeRetainedDataBind,
+    /// Exact retained list/child endpoint for structural sources. Its cell is
+    /// only the dependency identity; values are read from this object after
+    /// dirt, matching C++ ContextValueList/ContextValueViewModel ownership.
+    pub(crate) retained_structural_source: Option<RuntimeOwnedViewModelStructuralSource>,
 }
 
 /// The #RB-1 e3 [`RuntimeDataBindTarget`] adapter: the retained bind's
@@ -231,7 +235,7 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
 /// keep applying downstream exactly where they do today. `read_target`
 /// reports the current source-side copy re-encoded as a cell value (used by
 /// `update_source_binding` cell pushes in later slices; keyframe targets and
-/// unmigrated kinds simply return `None`).
+/// unsupported target-to-source kinds simply return `None`).
 struct RuntimeGraphSourceValueTarget<'a> {
     value: &'a mut RuntimeDataBindGraphValue,
     source_value: Option<RuntimeViewModelCellValue>,
@@ -1980,6 +1984,11 @@ fn project_view_model_reference_from_runtime(
     match value {
         RuntimeViewModelPointer::Null => ProjectDataViewModelReference::Null,
         RuntimeViewModelPointer::DataContextRoot => ProjectDataViewModelReference::DataContextRoot,
+        RuntimeViewModelPointer::Retained {
+            allocation_identity,
+        } => ProjectDataViewModelReference::Retained {
+            allocation_identity,
+        },
         RuntimeViewModelPointer::OwnedGenerated {
             view_model_index,
             property_index,
@@ -2001,6 +2010,11 @@ fn runtime_view_model_pointer_from_project(
     match value {
         ProjectDataViewModelReference::Null => RuntimeViewModelPointer::Null,
         ProjectDataViewModelReference::DataContextRoot => RuntimeViewModelPointer::DataContextRoot,
+        ProjectDataViewModelReference::Retained {
+            allocation_identity,
+        } => RuntimeViewModelPointer::Retained {
+            allocation_identity,
+        },
         ProjectDataViewModelReference::OwnedGenerated {
             view_model_index,
             property_index,
@@ -4477,6 +4491,7 @@ impl RuntimeDataBindGraph {
             value,
             view_model_instance_ids: Vec::new(),
             retained_bind: RuntimeRetainedDataBind::new(flags, false),
+            retained_structural_source: None,
         });
         let target_handle = RuntimeDataBindGraphTargetHandle(targets.len());
         targets.push(RuntimeDataBindGraphTargetNode { target });
@@ -4791,7 +4806,7 @@ impl RuntimeDataBindGraph {
             // cell dirt alone decides whether the value refreshes below.
             let retained_refresh = matches!(
                 &resolved,
-                Some((_, Some(cell)))
+                Some((_, Some(cell), _))
                     if source.bound
                         && source
                             .retained_bind
@@ -4801,21 +4816,26 @@ impl RuntimeDataBindGraph {
             if !retained_refresh {
                 source.retained_bind = RuntimeRetainedDataBind::new(source.flags, false);
                 match resolved {
-                    Some((value, Some(cell))) => {
+                    Some((value, Some(cell), structural_source)) => {
                         // C++ `DataBind::bind()`: retain the source, register
                         // as dependent, mark the reconcile in favor order.
                         source.retained_bind.set_source(cell);
+                        source.retained_structural_source = structural_source;
                         source.value = value;
                         source.bound = true;
                     }
-                    Some((value, None)) => {
+                    Some((value, None, structural_source)) => {
+                        source.retained_structural_source = structural_source;
                         source.value = value;
                         source.bound = true;
                     }
                     None => {
+                        source.retained_structural_source = None;
                         source.bound = false;
                     }
                 }
+            } else if let Some((_, _, structural_source)) = &resolved {
+                source.retained_structural_source = structural_source.clone();
             }
             if let Some(converter) = source.converter.as_mut() {
                 runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_candidates(
@@ -4824,6 +4844,11 @@ impl RuntimeDataBindGraph {
             }
             if retained_refresh {
                 Self::refresh_retained_source_from_cell(source);
+                // An explicit bindFromContext is still C++ `DataBind::bind()`
+                // even when the retained source pointer is unchanged: both
+                // supported directions are dirtied in favor order
+                // (`data_bind_context.cpp:80-85`).
+                source.mark_reconcile_dirty();
             } else {
                 source.reset_converter_state();
                 source.mark_reconcile_dirty();
@@ -4835,10 +4860,9 @@ impl RuntimeDataBindGraph {
         true
     }
 
-    /// #RB-1 e3 step 3: fold cell-cascade dirt into migrated sources during
-    /// an advance — the direction-engine replacement for the mutation-clock
-    /// value-copy refresh. Unmigrated sources are untouched (they keep the
-    /// polling rebind).
+    /// Fold retained property dirt into owned sources during an advance —
+    /// the direction-engine replacement for mutation-clock value-copy
+    /// refresh.
     pub(crate) fn collect_retained_owned_source_dirt(&mut self) -> bool {
         if self.context_kind != RuntimeDataBindGraphContextKind::OwnedViewModel {
             return false;
@@ -4872,6 +4896,33 @@ impl RuntimeDataBindGraph {
             return false;
         }
         debug_assert!(bind.pending_dirt().contains(RuntimeCellDirt::BINDINGS));
+        if let Some(value) = source
+            .retained_structural_source
+            .as_ref()
+            .and_then(|retained| match &source.value {
+                RuntimeDataBindGraphValue::List { .. } => retained
+                    .list_item_count()
+                    .map(|item_count| RuntimeDataBindGraphValue::List { item_count }),
+                RuntimeDataBindGraphValue::ListLength(_) => retained
+                    .list_item_count()
+                    .map(RuntimeDataBindGraphValue::ListLength),
+                RuntimeDataBindGraphValue::ViewModel(_) => retained
+                    .view_model_pointer()
+                    .map(RuntimeDataBindGraphValue::ViewModel),
+                _ => None,
+            })
+        {
+            let value_changed = source.value != value;
+            source.value = value;
+            if value_changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+            if source.applies_source_to_target() {
+                source.mark_source_dirty_after_target_to_source();
+                return true;
+            }
+            return value_changed;
+        }
         let (applied_changed, unapplied_cell_value) = {
             let mut target = RuntimeGraphSourceValueTarget {
                 value: &mut source.value,
@@ -4918,6 +4969,7 @@ impl RuntimeDataBindGraph {
     fn clear_retained_binds(&mut self) {
         for source in &mut self.sources {
             source.retained_bind = RuntimeRetainedDataBind::new(source.flags, false);
+            source.retained_structural_source = None;
         }
     }
 

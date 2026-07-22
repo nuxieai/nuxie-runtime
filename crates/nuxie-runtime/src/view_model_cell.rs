@@ -109,6 +109,14 @@ pub struct RuntimeCellDirtSink {
     notification: Option<RuntimeCellNotification>,
 }
 
+impl std::fmt::Debug for RuntimeCellDirtSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RuntimeCellDirtSink")
+            .field("dirt", &self.peek_dirt())
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Clone)]
 struct RuntimeCellNotification {
     queue: Weak<RefCell<Vec<usize>>>,
@@ -147,7 +155,7 @@ impl RuntimeCellDirtSink {
         RuntimeCellDirt(self.bits.get())
     }
 
-    fn downgrade(&self) -> RuntimeCellDependent {
+    pub(crate) fn downgrade(&self) -> RuntimeCellDependent {
         RuntimeCellDependent {
             bits: Rc::downgrade(&self.bits),
             notification: self.notification.clone(),
@@ -155,17 +163,39 @@ impl RuntimeCellDirtSink {
     }
 }
 
-struct RuntimeCellDependent {
+pub(crate) struct RuntimeCellDependent {
     bits: Weak<Cell<u8>>,
     notification: Option<RuntimeCellNotification>,
 }
 
+impl std::fmt::Debug for RuntimeCellDependent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RuntimeCellDependent")
+            .field("alive", &(self.bits.strong_count() != 0))
+            .finish_non_exhaustive()
+    }
+}
+
+impl RuntimeCellDependent {
+    pub(crate) fn add_dirt(&self, dirt: RuntimeCellDirt) -> bool {
+        let Some(bits) = self.bits.upgrade() else {
+            return false;
+        };
+        bits.set(bits.get() | dirt.0);
+        true
+    }
+
+    pub(crate) fn ptr_eq(&self, other: &Self) -> bool {
+        self.bits.ptr_eq(&other.bits)
+    }
+}
+
 /// The typed payload of one cell.
 ///
-/// Mirrors the concrete `ViewModelInstance*` C++ subclasses. `ViewModel` and
-/// `List` payloads retain child cells/instances by identity in later #RB-1
-/// slices; they enter here as the type lattice so the cell layer is complete
-/// from the start.
+/// Mirrors the concrete scalar `ViewModelInstance*` C++ subclasses. Structural
+/// `ViewModel` and `List` variants are dirt/type markers: their owning source
+/// objects retain the child/list identity, just as C++ keeps the value on the
+/// structural property rather than copying it into `DependencyHelper`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeViewModelCellValue {
     Number(f32),
@@ -184,6 +214,13 @@ pub enum RuntimeViewModelCellValue {
     /// live Font identity, so every alias retains one exact source object.
     AssetFont(RuntimeFontAssetValue),
     Artboard(u32),
+    /// Dirt identity for a retained `ViewModelInstanceList` property. The
+    /// data-bind source retains the list itself and reads its current items;
+    /// the cell deliberately carries no copied structural payload.
+    List,
+    /// Dirt identity for a retained ViewModel-valued property. The data-bind
+    /// source retains the endpoint and reads its current linked child.
+    ViewModel,
 }
 
 /// The two-part value stored by C++ `ViewModelInstanceAssetFont`.

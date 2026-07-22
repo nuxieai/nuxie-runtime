@@ -14,16 +14,27 @@ change-propagation *by polling*. The five public seams that fan into it:
 
 ## Item 1 - Mutation clocks / generations
 
-- `mutation_generation`: field `view_model.rs:1514`; accessor `:6355`; bump `mark_mutated()` `:6359-6362` (+ `synchronize_linked_aliases`); init `:3464`, `:6645`. Readers: `view_model.rs:2681,2988,2992-2994`; `artboard_data_bind.rs:530,548,567,586,604,696-697`; `artboard.rs:2648-2649,2684-2685,3324,3337`; `instance.rs:5182,5206`. Tests `view_model.rs:11321-11335,11355-11364`; `artboard_data_bind.rs:8274,8289` (rewrite).
+- `mutation_generation`: the root clock and its artboard readers remain in
+  `view_model.rs`, `artboard.rs`, and `artboard_data_bind.rs`. f9 deleted the
+  state-machine candidate projection and the candidate accessor; state-machine
+  steady frames no longer sample this clock. Remaining consumers are artboard
+  target/cache refresh and converter operands, plus their clock-lifecycle
+  tests.
 - `RuntimeArtboardOwnedContextKey` (VM structure epoch, NOT render-cache): struct `artboard_data_bind.rs:507`, instance key `:511-518`; ctors/comparators `:521,:539,:557,:575,:594`; field set/cleared `:4576,4583,4638-4639,5398`; users `retain_owned_view_model_context_candidates` `:4627-4640`, `refresh_owned_view_model_artboard_context_if_mutated` `:5694-5697`, `:5890`.
-- `owned_view_model_candidate_generations`: field `instance.rs:80`; carry `:573-574`; init `:893`; write `:5220`; clear `:5400`; gate read `:5184`.
+- [x] f9 deleted `owned_view_model_candidate_generations` and every
+  state-machine read/write/clone/reset site.
 - `reroot_mutation_clock` `view_model.rs:6423-6428`; callers `:1625,:3013,:3493,:6495,:6662`; related `replace_mutation_clock` `:6430`, `merge_mutation_clock` `:6436` (alias registry `:1787,:2013`), `track_mutation` `:6440`, reset `:6522`.
 
 ## Item 2 - Candidate vectors
 
-- `RuntimeOwnedViewModelBindingCandidate` def `artboard_data_bind.rs:610`; ctors `root` `:617`, `root_handle` `:625`, `context_handle` `:633`, `declared_global_slot` `:641`; path helpers `source_path_for_context_path` `:652` (rewrite seam), `context_path_for_source_path` `:677`, `context_chain` `:692`, `mutation_generation` `:696`.
+- `RuntimeOwnedViewModelBindingCandidate` remains as the ordered DataContext
+  lookup/listener-addressing carrier. f9 deleted its `mutation_generation`
+  accessor; constructors and path/context helpers remain.
 - Ctor call sites: `artboard.rs:2692,2744,5577,10097,10391-10392,10693,10728-10729` (last four tests); `instance.rs:4822,5127,5130`; `artboard_data_bind.rs:4204,4232,4241,4311,4317,4378,4382,4411,4461,4556,5358,5596,7663,7667`.
-- SM retained vector `owned_view_model_candidates` `instance.rs:79` (+ key-frame `:129`); rw `:244-245,290,572,892,2248-2257,5174-5194,5391-5395,5399,5678,5828`; listener write `perform_owned_view_model_candidates_change` `:277-299`.
+- SM retained vector `owned_view_model_candidates` remains for deterministic
+  own/parent candidate order, key-frame graphs, listener writes, and public
+  compatibility seams. It no longer has a parallel generation vector or
+  participates in a steady-frame generation comparison.
 - Artboard retained vector `artboard_owned_view_model_candidates` `artboard.rs:267`; init `:1019,6667`; rw `artboard.rs:2316-2318,2668,2743-2745`; `artboard_data_bind.rs:4265,4363-4368,4460-4473,5400,5580-5603,5695-5705,5750,6000,6483,6936,7089,7591-7596`.
 - `bind_owned_view_model_context_candidates` (SM) `instance.rs:5168-5224`; graph-level `data_bind_graph.rs:4658-4683`; callers `instance.rs:5076,5078,5132,5188,5395`; `artboard.rs:2317,2706,2776,5585`; `artboard_data_bind.rs:4424`; tests `artboard.rs:10099,10101,10697,10699,10732,10734`.
 - `rebind_owned_view_model_context_candidates` `instance.rs:5069-5085`; callers `:5107,:5188,:2257`.
@@ -109,13 +120,57 @@ change-propagation *by polling*. The five public seams that fan into it:
   observable detached-tree contract.
 - `from_instance_mutable` `view_model.rs:6486-6497` (PUBLIC; callers `crates/nuxie/src/lib.rs:2625,3334`; test `:11341` — API survives, internals replaced); `overlay_active_instance` `:6499+` (only `:6493`); `detach_list_storage` `:6418-6421` (callers `:3012,:3492,:6494`).
 
+- [x] f9 retained structural source dirt and removed the state-machine
+  candidate-generation poll. `List`, `ListLength`, and `ViewModel` source
+  paths now retain the exact property cell plus the actual list/child endpoint;
+  structural cells carry dirt identity rather than copied payloads, and graph
+  read models are derived from the retained object. List mutations notify
+  their own list cell even for same-index swap and empty-to-empty update,
+  ViewModel assignment notifies its endpoint, and nested replacement pushes
+  one dedicated rebind sink through the weak-parent relay. Explicit same-source
+  binds preserve C++'s reconcile dirt in favor order.
+  The state machine deleted `owned_view_model_candidate_generations`, the
+  candidate mutation accessor, steady-frame full-graph rebind, and the
+  trigger-source refresh scan. C++ retains dependents on each
+  `ViewModelInstanceValue`, notifies the exact list property, retains that
+  source in `DataBind`, and synchronously relinks parent containers
+  (`include/rive/viewmodel/viewmodel_instance_value.hpp:68-97`;
+  `src/viewmodel/viewmodel_instance_list.cpp:26-60,76-143,183-225`;
+  `src/data_bind/context/context_value.cpp:133-165`;
+  `src/data_bind/context/context_value_list.cpp:17-29`;
+  `src/data_bind/context/context_value_viewmodel.cpp:21-41`;
+  `src/data_bind/data_bind_context.cpp:80-85`;
+  `src/data_bind/data_bind.cpp:210-240,502-546`;
+  `src/viewmodel/viewmodel_instance.cpp:346-415`). Candidate vectors remain
+  for deterministic context resolution. Linked-child read models use a
+  clone-fresh allocation identity, not the semantic instance ID, so detached
+  graphs retain C++ pointer-key inequality. The artboard structural key, root
+  clock, target/cache values, and converter operands remain inventoried.
+  Evidence: runtime lib 363/363, nuxie lib 133/133, C++ probe 708/708,
+  ordinary and scripted goldens 317/317 entries plus 647/647 exact segments
+  with zero failures, C API smoke and workspace green; Standards and Spec
+  re-reviews clean. Renderer goldens are not applicable because no
+  renderer/draw code changed.
+
 ## Item 5 - Facade-wide rebind bits
 
-- Scene `dirty` `scene.rs:4715`; init `:5287`; `flush_view_model` `:5389-5413`; consumers `:15534,:15599`; setters `:15327,:15373,:15430,:15462`; inline mount binds `:5260-5298,:5301,:5312,:5358,:5404,:5415,:5454`.
-- `refresh_owned_view_model_candidates` `instance.rs:5390-5396`; callers `:5321,:5633,:5747`. Artboard analog `refresh_owned_view_model_artboard_context_if_mutated` `artboard_data_bind.rs:5694` (caller `:5755`).
+- [x] e5(C) deleted Scene's `dirty` bit, `flush_view_model`, advance-time
+  flush, and pointer-time rebinds.
+- [x] f9 changed state-machine `refresh_owned_view_model_candidates` from a
+  candidate-generation poll/full rebind into retained per-source dirt
+  collection plus one pushed structural-rebind sink. The helper name remains
+  because its callers still need to collect source dirt before the frame.
+- Artboard analog `refresh_owned_view_model_artboard_context_if_mutated`
+  remains and still compares `RuntimeArtboardOwnedContextKey` generations.
 
 ## Item 6 - Per-source copied state (data_bind_graph.rs)
 
+- [x] f9 migrated state-machine `List`, `ListLength`, and `ViewModel` sources
+  to exact retained property cells and retained structural source objects.
+  Their graph values remain derived read models rather than cell payloads;
+  wakeup identity is the property cell and structural relinking is pushed, so
+  no candidate-generation rebind is required. Artboard target/cache storage
+  and project-converter operands remain separate consumers of copied values.
 - `default_value` fields `:74` (target), `:219` (source); copies `:987-992,:4270,:4318-4322,:4427,:4637,:4666,:4747,:4781`; whole `:4744-6262` block is per-type default_value rw.
 - `target_origin` field `:206`; set/cleared `:4356,7846,9387,9547,9560,9565,9582,9917`.
 - `mark_reconcile_dirty` `:9569-9588`; callers `:4294,4331,4433,4580,4614,4650,4677`.
@@ -125,7 +180,12 @@ change-propagation *by polling*. The five public seams that fan into it:
 ## Item 7 - Trigger observed/rescan state
 
 - `StateMachineViewModelTriggerInstance` `state_machine.rs:2527-2591` (`used_layers` `:2532`; `reset` `:2567,2573,2581`; `is_changed_for_layer` `:2585-2590`); instance fields `default_view_model_triggers` `instance.rs:64`, `view_model_triggers` `:65`; ctor `:810`; threaded through `state_machine.rs:1139,1230,1301,1372,2006,2110,2880,2989,3070,3196`, `transition_conditions.rs:984,1468`; input-trigger used_layers `state_machine.rs:2503-2521`.
-- `bind_active_owned_view_model_triggers_for_candidates` `instance.rs:5984-6009` (callers `:5082,:5190`); `refresh_active_...` `:6011-6034` (`:5192`); `sync_default_view_model_triggers_from_active` `:6072-6082` (`:5373,:5874`); `reset_bound_trigger_sources` `data_bind_graph.rs:7786-7826` (`instance.rs:5368`); context-chain binders `:6036,:5149`; `reset_active_view_model_triggers` `:6065` (`:5218`).
+- `bind_active_owned_view_model_triggers_for_candidates` remains for identity
+  and structural rebind. [x] f9 deleted
+  `refresh_active_owned_view_model_triggers_for_candidates`; a retained trigger
+  cell supplies steady-frame change state. `sync_default_view_model_triggers_from_active`,
+  `reset_bound_trigger_sources`, context-chain binders, and
+  `reset_active_view_model_triggers` remain for later trigger-state cleanup.
 - PUBLIC trigger reads (survive): `view_model_trigger_count` `instance.rs:5486`, `view_model_trigger_value_count` `:5510`, `view_model_trigger_property_id` `:5514`.
 
 ## Public API surface that must keep working
@@ -143,12 +203,13 @@ non-family callers): `rebind_owned_view_model_context_candidates`,
 `refresh_owned_view_model_candidates`,
 `refresh_owned_view_model_artboard_context_if_mutated`,
 `owned_view_model_context_candidates_for_nested_host`,
-`bind_active/refresh_active_owned_view_model_triggers_for_candidates`,
+`bind_active_owned_view_model_triggers_for_candidates`,
 `sync_default_view_model_triggers_from_active`,
 `reset_bound_trigger_sources`, `RuntimeArtboardOwnedContextKey` +
-`matches_candidate*`, `owned_view_model_candidate_generations`,
-`linked_aliases`/`synchronize_linked_aliases`, and the
-`mutation_generation` clock.
+`matches_candidate*`, and the `mutation_generation` clock. Already deleted:
+`owned_view_model_candidate_generations`,
+`refresh_active_owned_view_model_triggers_for_candidates`, and
+`linked_aliases`/`synchronize_linked_aliases`.
 
 ## Test-rewrite counts
 

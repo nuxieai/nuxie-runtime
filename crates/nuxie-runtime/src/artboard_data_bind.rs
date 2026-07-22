@@ -18,7 +18,9 @@ use crate::properties::{
     solo_active_component_id_property_key,
 };
 use crate::scripting::RuntimeScriptInstanceHandle;
-use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelListHandle};
+use crate::view_model::{
+    RuntimeFontAssetValue, RuntimeOwnedViewModelListHandle, RuntimeOwnedViewModelStructuralSource,
+};
 use crate::view_model_cell::{RuntimeViewModelCell, RuntimeViewModelCellValue};
 use crate::{
     ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
@@ -719,10 +721,6 @@ impl RuntimeOwnedViewModelBindingCandidate {
         self.context_chain.iter().map(Vec::as_slice).collect()
     }
 
-    pub(crate) fn mutation_generation(&self) -> u64 {
-        self.context.borrow().mutation_generation()
-    }
-
     pub(crate) fn same_binding(&self, other: &Self) -> bool {
         self.context.ptr_eq(&other.context)
             && self.context_chain == other.context_chain
@@ -737,31 +735,42 @@ impl RuntimeOwnedViewModelBindingCandidate {
         })
     }
 
-    pub(crate) fn resolve_value_for_source_path(
-        &self,
-        value: &RuntimeDataBindGraphValue,
-        source_path: &[u32],
-    ) -> Option<RuntimeDataBindGraphValue> {
-        self.resolve_value_and_cell_for_source_path(value, source_path)
-            .map(|(value, _)| value)
-    }
-
     /// The #RB-1 e3 resolution: exactly `resolve_value_for_source_path`'s
     /// coverage (same candidate path walk, same value-kind matrix), PLUS the
-    /// retained scalar cell backing the resolved value when the source is a
-    /// migrated scalar kind. String and AssetFont participate now that their
-    /// complete payload lives in the retained cell; only structural
-    /// list/list-length/view-model sources remain on copied-value machinery.
+    /// retained property cell backing the resolved value. Structural List,
+    /// ListLength, and ViewModel projections participate alongside scalars;
+    /// the retained property identity is what C++ registers as the source.
     pub(crate) fn resolve_value_and_cell_for_source_path(
         &self,
         value: &RuntimeDataBindGraphValue,
         source_path: &[u32],
-    ) -> Option<(RuntimeDataBindGraphValue, Option<RuntimeViewModelCell>)> {
+    ) -> Option<(
+        RuntimeDataBindGraphValue,
+        Option<RuntimeViewModelCell>,
+        Option<RuntimeOwnedViewModelStructuralSource>,
+    )> {
         let property_path = self.property_path_for_source_path(source_path)?;
         let context = self.context.borrow();
-        let resolved = Self::kind_matched_binding_value(&context, &property_path, value)?;
-        let cell = context
-            .cell_by_property_path(&property_path)
+        let structural_source = context.structural_source_by_property_path(&property_path);
+        let resolved = structural_source
+            .as_ref()
+            .and_then(|source| match value {
+                RuntimeDataBindGraphValue::List { .. } => source
+                    .list_item_count()
+                    .map(|item_count| RuntimeDataBindGraphValue::List { item_count }),
+                RuntimeDataBindGraphValue::ListLength(_) => source
+                    .list_item_count()
+                    .map(RuntimeDataBindGraphValue::ListLength),
+                RuntimeDataBindGraphValue::ViewModel(_) => source
+                    .view_model_pointer()
+                    .map(RuntimeDataBindGraphValue::ViewModel),
+                _ => None,
+            })
+            .or_else(|| Self::kind_matched_binding_value(&context, &property_path, value))?;
+        let cell = structural_source
+            .as_ref()
+            .map(RuntimeOwnedViewModelStructuralSource::cell)
+            .or_else(|| context.cell_by_property_path(&property_path))
             .filter(|cell| {
                 matches!(
                     (&cell.value(), &resolved),
@@ -795,10 +804,19 @@ impl RuntimeOwnedViewModelBindingCandidate {
                     ) | (
                         RuntimeViewModelCellValue::Trigger(_),
                         RuntimeDataBindGraphValue::Trigger(_)
+                    ) | (
+                        RuntimeViewModelCellValue::List,
+                        RuntimeDataBindGraphValue::List { .. }
+                    ) | (
+                        RuntimeViewModelCellValue::List,
+                        RuntimeDataBindGraphValue::ListLength(_)
+                    ) | (
+                        RuntimeViewModelCellValue::ViewModel,
+                        RuntimeDataBindGraphValue::ViewModel(_)
                     )
                 )
             });
-        Some((resolved, cell))
+        Some((resolved, cell, structural_source))
     }
 
     fn kind_matched_binding_value(
@@ -8091,13 +8109,13 @@ mod tests {
         );
         let candidate = RuntimeOwnedViewModelBindingCandidate::root_handle(&context);
 
-        let (_, string_cell) = candidate
+        let (_, string_cell, _) = candidate
             .resolve_value_and_cell_for_source_path(
                 &RuntimeDataBindGraphValue::String(Vec::new()),
                 &[0, 0],
             )
             .expect("string source resolves");
-        let (_, font_cell) = candidate
+        let (_, font_cell, _) = candidate
             .resolve_value_and_cell_for_source_path(
                 &RuntimeDataBindGraphValue::Asset(RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX),
                 &[0, 1],

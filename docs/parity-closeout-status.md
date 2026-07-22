@@ -14,9 +14,9 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 357/357, nuxie lib 132/132,
+Regression floor (must stay green): runtime lib 363/363, nuxie lib 133/133,
 C++ probe 708/708, both runtime golden gates 317/317 exact / 647/647 segments
-with zero failures. The workspace push gate is green as of 2026-07-21. Review
+with zero failures. The workspace push gate is green as of 2026-07-22. Review
 of e5(A) restored the distinction between raw `StateMachineInstance::advance`
 and the full `advanceAndApply` facade: the facade forces zero-second returns
 true and includes pending reports (`state_machine_instance.cpp:2608-2613,
@@ -261,6 +261,50 @@ upstream-sync-map registry).
     found and fixed one unchanged-String allocation before the equality
     early-out; Standards and Spec re-reviews are clean. Renderer goldens are
     not applicable because this slice changes no renderer/draw code.
+  - [x] (f8) ViewModel-valued properties now retain one structural endpoint;
+    linked reads and writes traverse the retained child directly, and handle
+    borrows no longer refresh or recopy a dynamic mirror. Same-child
+    assignment still runs the lifecycle, while authored selection detaches an
+    explicit link and reveals the untouched compatibility storage. This
+    matches C++'s retained child setter and synchronous parent relink walk
+    (`viewmodel_instance_viewmodel.hpp:23-35`;
+    `viewmodel_instance.cpp:118-188`). The direct-property mutation clock
+    remains for artboard target/cache and converter consumers. Full evidence:
+    runtime lib 361/361, nuxie lib 132/132, probe 708/708, both golden modes
+    317/317 entries and 647/647 exact segments with zero failures, C API smoke
+    and workspace green; both closeout reviews clean. Renderer goldens were
+    not applicable.
+  - [x] (f9) state-machine `List`, `ListLength`, and `ViewModel` graph sources
+    now retain both the exact property cell and the structural list/child
+    endpoint itself instead of depending on a root mutation-generation sample
+    or storing a copied structural payload in the cell. The graph derives its
+    list-count read model and linked-child identity from that retained source
+    after property dirt. List mutations dirty the list property, including
+    same-index swaps and empty-to-empty `updateList`; ViewModel assignment
+    dirties its structural endpoint; and the existing weak-parent relay pushes
+    a dedicated DataContext-rebind sink through nested replacements. Explicit
+    same-source binds still mark both supported directions for reconcile in
+    C++ favor order. This follows C++'s value-owned dependent list, retained
+    list/child ContextValues, exact list-property notification, retained
+    DataBind source, and synchronous parent relink lifecycle
+    (`viewmodel_instance_value.hpp:68-97`;
+    `viewmodel_instance_list.cpp:26-60,76-143,183-225`;
+    `context_value.cpp:133-165`; `context_value_list.cpp:17-29`;
+    `context_value_viewmodel.cpp:21-41`; `data_bind_context.cpp:80-85`;
+    `data_bind.cpp:210-240,502-546`;
+    `viewmodel_instance.cpp:346-415`). State-machine
+    `owned_view_model_candidate_generations`, the candidate mutation accessor,
+    the steady-frame full-graph poll/rebind, and the trigger refresh scan are
+    deleted. Candidate order remains for DataContext lookup and listener
+    addressing; the artboard structural key, direct-property mutation clock,
+    target/cache payloads, and converter operands remain queued. Retained-child
+    pointer projections use a clone-fresh allocation identity rather than the
+    semantic instance ID, matching C++ pointer-key behavior. Full evidence:
+    runtime lib 363/363, nuxie lib 133/133, probe 708/708, ordinary and
+    scripted goldens 317/317 entries and 647/647 exact segments with zero
+    failures, C API smoke and workspace green; Standards and Spec re-reviews
+    clean. Renderer goldens are not applicable because no renderer/draw code
+    changed.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -744,3 +788,29 @@ Decisions log.)
   with zero failures, C API smoke green, and the full workspace green. Both
   Standards and Spec re-reviews are clean. Renderer goldens are not applicable
   because this slice changes no renderer/draw code.
+- 2026-07-22 — #RB-1 f9 replaced the state-machine candidate-generation poll
+  with retained structural property dirt. `List`, `ListLength`, and
+  `ViewModel` sources now retain their exact property cell plus the actual
+  list/child endpoint; the cell is dirt-only and the graph derives its read
+  model from the retained object. List mutations notify that cell even for a
+  same-index swap or empty-to-empty update, ViewModel assignment notifies its
+  endpoint, and nested replacement pushes a DataContext-rebind sink through
+  the existing weak parent relays. Explicit same-source binds preserve C++'s
+  bidirectional reconcile marking. The state machine no longer stores or compares
+  `owned_view_model_candidate_generations`, performs a steady-frame full-graph
+  rebind, or separately refreshes trigger sources. This matches C++'s
+  per-value dependents and retained bind source (`viewmodel_instance_value.hpp:
+  68-97`; `viewmodel_instance_list.cpp:26-60,76-143,183-225`;
+  `context_value.cpp:133-165`; `context_value_list.cpp:17-29`;
+  `context_value_viewmodel.cpp:21-41`; `data_bind_context.cpp:80-85`;
+  `data_bind.cpp:210-240,502-546`) plus its synchronous structural parent walk
+  (`viewmodel_instance.cpp:346-415`). Candidate order is retained for context
+  lookup; artboard target/cache and converter consumers still require the
+  direct mutation clock and remain queued. Retained-child pointer projections
+  use a clone-fresh allocation identity while the semantic instance ID remains
+  stable across detached copies, matching C++ pointer-key behavior. Full
+  evidence is runtime lib 363/363, nuxie lib 133/133, C++ probe 708/708,
+  ordinary and scripted goldens 317/317 entries plus 647/647 exact segments
+  with zero failures, C API smoke and workspace green; Standards and Spec
+  re-reviews clean. Renderer goldens are not applicable because the slice
+  changes no renderer/draw code.

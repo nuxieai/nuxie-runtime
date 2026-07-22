@@ -43,6 +43,9 @@ pub enum ProjectDataValue {
 pub enum ProjectDataViewModelReference {
     Null,
     DataContextRoot,
+    Retained {
+        allocation_identity: u64,
+    },
     OwnedGenerated {
         view_model_index: usize,
         property_index: usize,

@@ -24696,6 +24696,192 @@ mod tests {
         Ok(())
     }
 
+    struct AuthoredTextOracleSpec<'a> {
+        artboard_name: &'a str,
+        frame_size: (f32, f32),
+        text_width: f32,
+        font_size: f32,
+        line_height: f32,
+        overflow: SceneTextOverflow,
+        text: &'a str,
+    }
+
+    fn authored_text_oracle_bytes(spec: AuthoredTextOracleSpec<'_>) -> Result<Vec<u8>> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let font = tx.create_font_asset(FontAssetSpec {
+                name: "Roboto A".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: spec.artboard_name.into(),
+                width: spec.frame_size.0,
+                height: spec.frame_size.1,
+            })?;
+            let text = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Text(TextSpec {
+                    name: "Text".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    sizing: SceneTextSizing::Fixed,
+                    width: spec.text_width,
+                    height: spec.frame_size.1,
+                    align: SceneTextAlign::Left,
+                    wrap: SceneTextWrap::NoWrap,
+                    overflow: spec.overflow,
+                }),
+            )?;
+            let style = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "Text style".into(),
+                    font_size: spec.font_size,
+                    line_height: spec.line_height,
+                    letter_spacing: 0.0,
+                    font,
+                }),
+            )?;
+            let fill = tx.create(
+                Parent::Object(style),
+                NodeSpec::Fill(FillSpec {
+                    name: "Text fill".into(),
+                }),
+            )?;
+            tx.create(
+                Parent::Object(fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Text color".into(),
+                    color: 0xff00_0000,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: "Text run".into(),
+                    text: spec.text.into(),
+                    style,
+                }),
+            )?;
+            Ok(())
+        })?;
+        Ok(encode_authoring_records(
+            scene.export_records().into_authoring_records(),
+        ))
+    }
+
+    fn cpp_stream_for_exact_riv(
+        bytes: &[u8],
+        artboard_name: &str,
+        fixture_stem: &str,
+    ) -> Result<Option<RenderStream>> {
+        let Some(cpp_runner) = std::env::var_os("RIVE_GOLDEN_RUNNER") else {
+            eprintln!(
+                "skipping C++ {fixture_stem} oracle; set RIVE_GOLDEN_RUNNER to the pinned golden runner"
+            );
+            return Ok(None);
+        };
+        let fixture_path = std::env::temp_dir().join(format!(
+            "nuxie-{fixture_stem}-parity-{}.riv",
+            std::process::id()
+        ));
+        std::fs::write(&fixture_path, bytes)?;
+        let output = std::process::Command::new(cpp_runner)
+            .args(["--file"])
+            .arg(&fixture_path)
+            .args(["--artboard", artboard_name, "--samples", "0"])
+            .output()
+            .with_context(|| format!("run pinned C++ {fixture_stem} oracle"))?;
+        let _ = std::fs::remove_file(&fixture_path);
+        assert!(
+            output.status.success(),
+            "pinned C++ rejected the exact authored fixture: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(Some(RenderStream::parse(&String::from_utf8(
+            output.stdout,
+        )?)?))
+    }
+
+    fn text_glyph_pipeline(stream: &RenderStream) -> Vec<Command> {
+        stream
+            .frames
+            .first()
+            .into_iter()
+            .flat_map(|frame| frame.commands.iter())
+            .filter(|command| matches!(command, Command::Transform(_) | Command::DrawPath { .. }))
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn authored_explicit_line_height_first_baseline_matches_cpp_after_exact_riv_round_trip()
+    -> Result<()> {
+        let bytes = authored_text_oracle_bytes(AuthoredTextOracleSpec {
+            artboard_name: "Explicit line-height text",
+            frame_size: (80.0, 50.0),
+            text_width: 80.0,
+            font_size: 20.0,
+            line_height: 40.0,
+            overflow: SceneTextOverflow::Visible,
+            text: "a",
+        })?;
+
+        let file = Arc::new(File::import(&bytes)?);
+        let mut rust = OwnedArtboardInstance::instantiate(file, 0)?;
+        let rust_stream = parse_single_frame(&owned_draw_stream(&mut rust)?)?;
+        let Some(cpp_stream) =
+            cpp_stream_for_exact_riv(&bytes, "Explicit line-height text", "explicit-line-height")?
+        else {
+            return Ok(());
+        };
+        assert_eq!(cpp_stream.frame_size, Some((80, 50)));
+        assert_eq!(
+            text_glyph_pipeline(&rust_stream),
+            text_glyph_pipeline(&cpp_stream),
+            // C++ d788e8ec: src/text/line_breaker.cpp
+            // GlyphLine::ComputeLineSpacing always places the first line at
+            // the font's real ascent, even with an authored lineHeight.
+            "the exact authored .riv must place its first glyph identically in Rust and pinned C++"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn authored_ellipsis_keeps_a_fitting_last_line_after_exact_riv_round_trip() -> Result<()> {
+        let bytes = authored_text_oracle_bytes(AuthoredTextOracleSpec {
+            artboard_name: "Fitting ellipsis text",
+            frame_size: (20.0, 30.0),
+            text_width: 12.0,
+            font_size: 20.0,
+            line_height: 20.0,
+            overflow: SceneTextOverflow::Ellipsis,
+            text: "a",
+        })?;
+        let file = Arc::new(File::import(&bytes)?);
+        let mut rust = OwnedArtboardInstance::instantiate(file, 0)?;
+        let rust_stream = parse_single_frame(&owned_draw_stream(&mut rust)?)?;
+        let Some(cpp_stream) =
+            cpp_stream_for_exact_riv(&bytes, "Fitting ellipsis text", "fitting-ellipsis")?
+        else {
+            return Ok(());
+        };
+        assert_eq!(cpp_stream.frame_size, Some((20, 30)));
+        assert_eq!(
+            text_glyph_pipeline(&rust_stream),
+            text_glyph_pipeline(&cpp_stream),
+            // C++ d788e8ec: src/text/text_engine.cpp
+            // OrderedLine::buildEllipsisRuns returns the unmodified last line
+            // before shaping an ellipsis when all authored advances fit.
+            "the exact authored .riv must not ellipsize a fitting final line"
+        );
+        Ok(())
+    }
+
     #[test]
     fn cropped_image_mesh_and_text_siblings_match_cpp_draw_admission() -> Result<()> {
         let mut scene = Scene::new();
@@ -29315,19 +29501,24 @@ mod tests {
             first_glyph.max_x,
             (first_glyph.min_y + first_glyph.max_y) / 2.0,
         );
-        for (actual, expected) in [
-            (canonical_downstream.top.x, 26.835_938),
-            (canonical_downstream.top.y, 50.878_906),
-            (canonical_downstream.bottom.x, 6.835_937_5),
-            (canonical_downstream.bottom.y, 50.878_906),
-            (first_glyph.max_x, 10.878_906),
-            (first_glyph.min_y, 33.164_063),
-            (upstream_point.x, 10.878_906),
-            (upstream_point.y, 43.164_063),
-        ] {
+        let actuals = [
+            canonical_downstream.top.x,
+            canonical_downstream.top.y,
+            canonical_downstream.bottom.x,
+            canonical_downstream.bottom.y,
+            first_glyph.max_x,
+            first_glyph.min_y,
+            upstream_point.x,
+            upstream_point.y,
+        ];
+        let expected = [
+            28.554_688, 50.878_906, 5.833_334, 50.878_906, 10.878_906, 31.445_313, 10.878_906,
+            42.805_99,
+        ];
+        for (actual, expected) in actuals.into_iter().zip(expected) {
             assert!(
                 (actual - expected).abs() <= 0.001,
-                "follow-path affinity golden changed: expected {expected}, got {actual}"
+                "follow-path affinity golden changed: expected {expected}, got {actual}; all actuals: {actuals:?}"
             );
         }
 
@@ -29341,7 +29532,7 @@ mod tests {
             Some(1),
             "the upstream side of the real follow-path boundary remains hittable"
         );
-        let upstream_golden_top = crate::Vec2D::new(10.878_906, 33.164_063);
+        let upstream_golden_top = crate::Vec2D::new(10.878_906, 31.445_313);
         assert_eq!(
             frame.text_hit(instance, text, upstream_golden_top),
             Some(1),

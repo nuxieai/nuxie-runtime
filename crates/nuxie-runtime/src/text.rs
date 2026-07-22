@@ -2885,12 +2885,11 @@ impl<'a> StaticTextSlice<'a> {
         runs: &[StaticResolvedRun],
         font_scale: f32,
     ) -> Result<Vec<StaticTextLineMetrics>> {
-        // Port of `GlyphLine::ComputeLineSpacing` with CSS line-box semantics
-        // for an explicit lineHeight. CSS distributes the difference between
-        // the authored line height and the font's natural metrics equally
-        // above and below the glyph box. The first line keeps that half-leading
-        // whenever any participating run has an explicit line height; text
-        // using default font metrics retains Rive's ascent-only first line.
+        // Exact port of C++ `src/text/line_breaker.cpp`
+        // `computeLineMetrics` / `GlyphLine::ComputeLineSpacing`. An explicit
+        // lineHeight preserves the font's natural baseline ratio; it is not a
+        // CSS half-leading box. C++ always places the first line at the font's
+        // real ascent, while subsequent lines use the adjusted ascent.
         // Authored lineHeight is absolute and therefore does not follow the
         // fit-font-size scale; natural font metrics do.
         let mut metrics = Vec::with_capacity(lines.len());
@@ -2914,7 +2913,6 @@ impl<'a> StaticTextSlice<'a> {
             let mut natural_ascent = 0.0f32;
             let mut adjusted_ascent = 0.0f32;
             let mut adjusted_descent = 0.0f32;
-            let mut has_explicit_line_height = false;
             for style_index in style_indices {
                 let style = self
                     .styles
@@ -2942,20 +2940,17 @@ impl<'a> StaticTextSlice<'a> {
                 let (ascent_px, descent_px) = if line_height < 0.0 {
                     (natural_ascent_px, natural_descent_px)
                 } else {
-                    has_explicit_line_height = true;
                     let natural_height = natural_ascent_px + natural_descent_px;
-                    let half_leading = (line_height - natural_height) * 0.5;
-                    (
-                        natural_ascent_px + half_leading,
-                        natural_descent_px + half_leading,
-                    )
+                    let baseline_factor = natural_ascent_px / natural_height;
+                    let authored_ascent = baseline_factor * line_height;
+                    (authored_ascent, line_height - authored_ascent)
                 };
                 adjusted_ascent = adjusted_ascent.max(ascent_px);
                 adjusted_descent = adjusted_descent.max(descent_px);
             }
 
             let top = cursor_y;
-            let baseline = if line_index == 0 && !has_explicit_line_height {
+            let baseline = if line_index == 0 {
                 natural_ascent
             } else {
                 cursor_y + adjusted_ascent
@@ -5698,6 +5693,25 @@ fn apply_static_ellipsis(
     max_width: f32,
     force: bool,
 ) {
+    // Exact port of C++ `src/text/text_engine.cpp`
+    // `OrderedLine::buildEllipsisRuns`: the final visual line first measures
+    // its authored advances without reserving room for an ellipsis. If the
+    // entire line fits, C++ returns the original glyphs unchanged.
+    if !force {
+        let mut authored_width = 0.0f32;
+        let mut fits = true;
+        for glyph in glyphs.iter() {
+            authored_width += glyph.advance;
+            if authored_width > max_width {
+                fits = false;
+                break;
+            }
+        }
+        if fits {
+            return;
+        }
+    }
+
     let ellipsis_width = ellipsis.iter().map(|glyph| glyph.advance).sum::<f32>();
     let mut width = 0.0;
     let mut keep = glyphs.len();
@@ -6341,7 +6355,7 @@ mod tests {
     }
 
     #[test]
-    fn explicit_line_height_uses_css_half_leading_for_every_line() {
+    fn explicit_line_height_keeps_cxx_first_ascent_and_later_baseline_ratio() {
         let (runtime, graphs) = baseline_origin_text_runtime();
         let graph = graphs.artboards.first().expect("fixture has an artboard");
         let instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
@@ -6356,9 +6370,10 @@ mod tests {
             .expect("half-size line metrics compute");
         let first = half_size_metrics.first().expect("first line metric");
         let second = half_size_metrics.get(1).expect("second line metric");
-        assert_close(first.bottom - first.top, 40.0);
+        assert_close(first.baseline, 9.277344);
         assert_close(second.bottom - second.top, 40.0);
-        assert_close(first.baseline - first.top, second.baseline - second.top);
+        assert_ne!(first.bottom - first.top, 40.0);
+        assert_ne!(first.baseline - first.top, second.baseline - second.top);
         assert_close(second.baseline - first.baseline, 40.0);
 
         let local_bounds = slice
@@ -6367,7 +6382,7 @@ mod tests {
             .expect("Text has bounds");
 
         assert_close(local_bounds.0, -20.0);
-        assert_close(local_bounds.1, -51.835938);
+        assert_close(local_bounds.1, -43.554688);
         assert_close(local_bounds.2, 80.0);
         assert_close(local_bounds.3, 50.0);
 

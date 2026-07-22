@@ -8,6 +8,7 @@ use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::RuntimeFontAssetValue;
 use crate::view_model_cell::{
     RuntimeCellDirt, RuntimeCellDirtSink, RuntimeCellNotificationQueue, RuntimeViewModelCell,
+    RuntimeViewModelCellValue,
 };
 use crate::{
     ArtboardInstance, NoopScriptHost, RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase,
@@ -571,7 +572,7 @@ impl Clone for StateMachineInstance {
                 listener.clone_for_queue(&reported_listener_view_models, listener_index)
             })
             .collect();
-        let cloned = Self {
+        let mut cloned = Self {
             state_machine_index: self.state_machine_index,
             default_view_model_index: self.default_view_model_index,
             requires_post_update_state_probe: self.requires_post_update_state_probe,
@@ -619,6 +620,9 @@ impl Clone for StateMachineInstance {
             script_error: None,
             view_model_listeners,
         };
+        for layer in &mut cloned.layers {
+            layer.refresh_view_model_trigger_layer_id();
+        }
         cloned.register_owned_view_model_rebind_dependents();
         cloned
     }
@@ -755,18 +759,15 @@ fn relink_view_model_listener_cell(
         cell.map(|cell| RuntimeViewModelListenerCellBinding::new(cell, queue, listener_index));
 }
 
-fn runtime_owned_view_model_trigger_value_for_context_path(
+fn runtime_owned_view_model_trigger_cell_for_context_path(
     context: &RuntimeOwnedViewModelInstance,
     context_path: &[usize],
     view_model_index: usize,
     property_index: usize,
-) -> Option<u64> {
-    if context.view_model_index_by_property_path(context_path)? != view_model_index {
-        return None;
-    }
-    let mut property_path = context_path.to_vec();
-    property_path.push(property_index);
-    context.trigger_value_by_property_path(&property_path)
+) -> Option<RuntimeViewModelCell> {
+    let cell =
+        context.cell_by_scoped_property_path(context_path, view_model_index, &[property_index])?;
+    matches!(cell.value(), RuntimeViewModelCellValue::Trigger(_)).then_some(cell)
 }
 
 impl StateMachineInstance {
@@ -5607,9 +5608,10 @@ impl StateMachineInstance {
         index: usize,
         layer_index: usize,
     ) -> Option<bool> {
+        let layer_id = self.layers.get(layer_index)?.view_model_trigger_layer_id();
         self.view_model_triggers
             .get(index)
-            .map(|trigger| trigger.is_fireable_for_layer(layer_index))
+            .map(|trigger| trigger.is_fireable_for_layer(layer_id))
     }
 
     pub fn view_model_trigger_value_count(&self) -> usize {
@@ -5719,6 +5721,8 @@ impl StateMachineInstance {
             .enumerate()
             .take(self.layers.len())
         {
+            let view_model_trigger_layer_id =
+                self.layers[layer_index].view_model_trigger_layer_id();
             let scripted_instances = self.scripted_instances_by_global.clone();
             let focus = self.focus.clone();
             let bindable_numbers = self.bindable_numbers.clone();
@@ -5747,6 +5751,7 @@ impl StateMachineInstance {
                 data_context_present,
                 data_context_view_model_bound,
                 layer_index,
+                view_model_trigger_layer_id,
             };
             let mut executor = RuntimeStateMachineListenerActionExecutor {
                 data_bind_graph: &mut self.data_bind_graph,
@@ -5862,6 +5867,8 @@ impl StateMachineInstance {
             .enumerate()
             .take(self.layers.len())
         {
+            let view_model_trigger_layer_id =
+                self.layers[layer_index].view_model_trigger_layer_id();
             let scripted_instances = self.scripted_instances_by_global.clone();
             let focus = self.focus.clone();
             let bindable_numbers = self.bindable_numbers.clone();
@@ -5890,6 +5897,7 @@ impl StateMachineInstance {
                 data_context_present,
                 data_context_view_model_bound,
                 layer_index,
+                view_model_trigger_layer_id,
             };
             let mut executor = RuntimeStateMachineListenerActionExecutor {
                 data_bind_graph: &mut self.data_bind_graph,
@@ -6031,12 +6039,12 @@ impl StateMachineInstance {
         let default_view_model_index = self.default_view_model_index;
         let mut active = self.default_view_model_triggers.clone();
         for trigger in &mut active {
-            let value = default_view_model_index.and_then(|view_model_index| {
+            let cell = default_view_model_index.and_then(|view_model_index| {
                 usize::try_from(trigger.view_model_property_id())
                     .ok()
                     .and_then(|property_index| {
                         context_chain.iter().find_map(|context_path| {
-                            runtime_owned_view_model_trigger_value_for_context_path(
+                            runtime_owned_view_model_trigger_cell_for_context_path(
                                 context,
                                 context_path,
                                 view_model_index,
@@ -6045,8 +6053,8 @@ impl StateMachineInstance {
                         })
                     })
             });
-            if let Some(value) = value {
-                trigger.replace_value(value);
+            if let Some(cell) = cell {
+                trigger.bind_cell(cell);
             } else {
                 trigger.reset();
             }
@@ -6092,11 +6100,11 @@ impl StateMachineInstance {
         let default_view_model_index = self.default_view_model_index;
         let mut active = self.default_view_model_triggers.clone();
         for trigger in &mut active {
-            let value = default_view_model_index.and_then(|view_model_index| {
+            let cell = default_view_model_index.and_then(|view_model_index| {
                 usize::try_from(trigger.view_model_property_id())
                     .ok()
                     .and_then(|property_index| {
-                        runtime_owned_view_model_trigger_value_for_context_path(
+                        runtime_owned_view_model_trigger_cell_for_context_path(
                             context,
                             context_path,
                             view_model_index,
@@ -6104,8 +6112,8 @@ impl StateMachineInstance {
                         )
                     })
             });
-            if let Some(value) = value {
-                trigger.replace_value(value);
+            if let Some(cell) = cell {
+                trigger.bind_cell(cell);
             } else {
                 trigger.reset();
             }
@@ -6635,6 +6643,11 @@ mod scripted_listener_action_tests {
     #[test]
     fn cloned_occurrence_is_cold_instead_of_sharing_listener_tables() {
         let mut original = scripted_listener_machine();
+        let original_layer_ids = original
+            .layers
+            .iter()
+            .map(StateMachineLayerInstance::view_model_trigger_layer_id)
+            .collect::<Vec<_>>();
         let definition = original
             .scripted_listener_actions()
             .first()
@@ -6649,6 +6662,19 @@ mod scripted_listener_action_tests {
             .expect("attach original occurrence");
 
         let mut cloned = original.clone();
+        let cloned_layer_ids = cloned
+            .layers
+            .iter()
+            .map(StateMachineLayerInstance::view_model_trigger_layer_id)
+            .collect::<Vec<_>>();
+        assert_eq!(original_layer_ids.len(), cloned_layer_ids.len());
+        assert!(
+            original_layer_ids
+                .iter()
+                .zip(&cloned_layer_ids)
+                .all(|(original, cloned)| original != cloned),
+            "a cloned state-machine occurrence has distinct C++ layer-pointer identities"
+        );
         let cloned_calls = Rc::new(RefCell::new(Vec::new()));
         cloned
             .set_scripted_listener_action_instance(

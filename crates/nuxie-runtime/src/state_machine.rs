@@ -17,6 +17,7 @@ use nuxie_binary::{RuntimeFile, RuntimeObject};
 use nuxie_graph::{ArtboardGraph, ParametricPathNode};
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 mod bindables;
 mod instance;
@@ -44,6 +45,11 @@ pub(crate) use bindables::{
 };
 pub use instance::StateMachineInstance;
 use transition_conditions::RuntimeTransitionCondition;
+
+fn next_view_model_trigger_layer_id() -> u64 {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
+}
 
 #[derive(Debug, Clone)]
 pub struct RuntimeStateMachineInput {
@@ -1206,6 +1212,7 @@ pub(crate) struct TransitionEvaluationContext<'a> {
     data_context_present: bool,
     data_context_view_model_bound: bool,
     layer_index: usize,
+    view_model_trigger_layer_id: u64,
 }
 
 impl RuntimeStateTransition {
@@ -1378,6 +1385,7 @@ impl RuntimeStateTransition {
                 context.bindable_triggers,
                 view_model_triggers,
                 context.layer_index,
+                context.view_model_trigger_layer_id,
             );
         }
     }
@@ -2528,10 +2536,20 @@ impl StateMachineInputInstance {
 pub(crate) struct StateMachineViewModelTriggerInstance {
     global_id: u32,
     view_model_property_id: u32,
-    value: u64,
-    changed: bool,
-    used_layers: Vec<usize>,
-    cell: Option<RuntimeViewModelCell>,
+    source: StateMachineViewModelTriggerSource,
+}
+
+#[derive(Debug, Clone)]
+enum StateMachineViewModelTriggerSource {
+    /// Default/imported contexts are still compatibility snapshots. f12B
+    /// will give those file-owned instances canonical retained cells.
+    Copied {
+        value: u64,
+        changed: bool,
+        used_layers: Vec<u64>,
+    },
+    /// Owned contexts retain the exact `ViewModelInstanceTrigger` analog.
+    Retained(RuntimeViewModelCell),
 }
 
 impl StateMachineViewModelTriggerInstance {
@@ -2539,10 +2557,11 @@ impl StateMachineViewModelTriggerInstance {
         Self {
             global_id,
             view_model_property_id,
-            value,
-            changed: false,
-            used_layers: Vec::new(),
-            cell: None,
+            source: StateMachineViewModelTriggerSource::Copied {
+                value,
+                changed: false,
+                used_layers: Vec::new(),
+            },
         }
     }
 
@@ -2551,95 +2570,113 @@ impl StateMachineViewModelTriggerInstance {
     }
 
     pub(crate) fn increment(&mut self) {
-        if let Some(cell) = &self.cell {
-            cell.fire_trigger();
-            return;
+        match &mut self.source {
+            StateMachineViewModelTriggerSource::Copied { value, changed, .. } => {
+                *value = value.saturating_add(1);
+                *changed = true;
+            }
+            StateMachineViewModelTriggerSource::Retained(cell) => {
+                cell.fire_trigger();
+            }
         }
-        self.value = self.value.saturating_add(1);
-        self.changed = true;
     }
 
     pub(crate) fn set_value(&mut self, value: u64) -> bool {
-        if let Some(cell) = &self.cell {
-            return cell.set_value(RuntimeViewModelCellValue::Trigger(value));
+        match &mut self.source {
+            StateMachineViewModelTriggerSource::Copied {
+                value: current,
+                changed,
+                ..
+            } => {
+                if *current == value {
+                    return false;
+                }
+                *current = value;
+                *changed = true;
+                true
+            }
+            StateMachineViewModelTriggerSource::Retained(cell) => {
+                cell.set_value(RuntimeViewModelCellValue::Trigger(value))
+            }
         }
-        if self.value == value {
-            return false;
-        }
-        self.value = value;
-        self.changed = true;
-        true
     }
 
     pub(crate) fn replace_value(&mut self, value: u64) {
-        self.cell = None;
-        self.value = value;
-        self.changed = false;
-        self.used_layers.clear();
+        self.source = StateMachineViewModelTriggerSource::Copied {
+            value,
+            changed: false,
+            used_layers: Vec::new(),
+        };
     }
 
     pub(crate) fn reset(&mut self) {
-        self.cell = None;
-        self.value = 0;
-        self.changed = false;
-        self.used_layers.clear();
+        self.replace_value(0);
     }
 
     /// C++ `ViewModelInstance::advanced()` acknowledges the retained source;
     /// `ViewModelInstanceTrigger::advanced()` additionally zeroes the counter
     /// under `SuppressDelegation`. Copied fallbacks preserve that contract.
     pub(crate) fn advanced(&mut self) {
-        if let Some(cell) = &self.cell {
-            cell.advanced();
-        } else {
-            self.value = 0;
-            self.changed = false;
+        match &mut self.source {
+            StateMachineViewModelTriggerSource::Copied {
+                value,
+                changed,
+                used_layers,
+            } => {
+                *value = 0;
+                *changed = false;
+                used_layers.clear();
+            }
+            StateMachineViewModelTriggerSource::Retained(cell) => cell.advanced(),
         }
-        self.used_layers.clear();
     }
 
-    pub(crate) fn is_fireable_for_layer(&self, layer_index: usize) -> bool {
-        self.has_changed() && !self.used_layers.contains(&layer_index)
+    pub(crate) fn is_fireable_for_layer(&self, layer_id: u64) -> bool {
+        match &self.source {
+            StateMachineViewModelTriggerSource::Copied {
+                changed,
+                used_layers,
+                ..
+            } => *changed && !used_layers.contains(&layer_id),
+            StateMachineViewModelTriggerSource::Retained(cell) => {
+                cell.is_changed_for_layer(layer_id)
+            }
+        }
     }
 
-    pub(crate) fn has_changed(&self) -> bool {
-        self.cell
-            .as_ref()
-            .map(RuntimeViewModelCell::has_changed)
-            .unwrap_or(self.changed)
-    }
-
-    pub(crate) fn use_in_layer(&mut self, layer_index: usize) {
-        if !self.used_layers.contains(&layer_index) {
-            self.used_layers.push(layer_index);
+    pub(crate) fn use_in_layer(&mut self, layer_id: u64) {
+        match &mut self.source {
+            StateMachineViewModelTriggerSource::Copied { used_layers, .. } => {
+                if !used_layers.contains(&layer_id) {
+                    used_layers.push(layer_id);
+                }
+            }
+            StateMachineViewModelTriggerSource::Retained(cell) => cell.use_in_layer(layer_id),
         }
     }
 
     pub(crate) fn value(&self) -> u64 {
-        self.cell
-            .as_ref()
-            .and_then(|cell| match cell.value() {
-                RuntimeViewModelCellValue::Trigger(value) => Some(value),
-                _ => None,
-            })
-            .unwrap_or(self.value)
+        match &self.source {
+            StateMachineViewModelTriggerSource::Copied { value, .. } => *value,
+            StateMachineViewModelTriggerSource::Retained(cell) => match cell.value() {
+                RuntimeViewModelCellValue::Trigger(value) => value,
+                _ => 0,
+            },
+        }
     }
 
     pub(crate) fn bind_cell(&mut self, cell: RuntimeViewModelCell) {
-        if self
-            .cell
-            .as_ref()
-            .is_some_and(|current| current.ptr_eq(&cell))
-        {
+        if matches!(
+            &self.source,
+            StateMachineViewModelTriggerSource::Retained(current) if current.ptr_eq(&cell)
+        ) {
             return;
         }
         debug_assert!(matches!(
             cell.value(),
             RuntimeViewModelCellValue::Trigger(_)
         ));
-        self.cell = Some(cell);
-        self.changed = false;
-        self.used_layers.clear();
+        self.source = StateMachineViewModelTriggerSource::Retained(cell);
     }
 
     pub(crate) fn view_model_property_id(&self) -> u32 {
@@ -2649,6 +2686,10 @@ impl StateMachineViewModelTriggerInstance {
 
 #[derive(Debug, Clone)]
 pub(crate) struct StateMachineLayerInstance {
+    /// C++ keys trigger consumption by `StateMachineLayerInstance*`. A fresh
+    /// monotonic token gives every Rust layer occurrence the same identity
+    /// boundary, including cloned state machines that share a retained VM.
+    view_model_trigger_layer_id: u64,
     current_state_index: Option<usize>,
     current_animation: Option<LinearAnimationInstance>,
     current_blend_state_1d: Option<BlendState1DInstance>,
@@ -2869,6 +2910,7 @@ impl StateMachineLayerInstance {
         bindable_numbers: &[StateMachineBindableNumberInstance],
     ) -> Self {
         let mut instance = Self {
+            view_model_trigger_layer_id: next_view_model_trigger_layer_id(),
             current_state_index: layer.entry_state_index,
             current_animation: None,
             current_blend_state_1d: None,
@@ -2892,6 +2934,14 @@ impl StateMachineLayerInstance {
         };
         instance.refresh_current_animation(artboard, layer, inputs, bindable_numbers);
         instance
+    }
+
+    pub(crate) fn view_model_trigger_layer_id(&self) -> u64 {
+        self.view_model_trigger_layer_id
+    }
+
+    pub(crate) fn refresh_view_model_trigger_layer_id(&mut self) {
+        self.view_model_trigger_layer_id = next_view_model_trigger_layer_id();
     }
 
     pub(crate) fn has_current_animation(&self) -> bool {

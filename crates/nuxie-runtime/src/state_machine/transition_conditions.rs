@@ -999,6 +999,7 @@ impl RuntimeTransitionCondition {
             data_context_present,
             data_context_view_model_bound,
             layer_index,
+            view_model_trigger_layer_id,
         } = context;
         match self {
             Self::Focus {
@@ -1235,7 +1236,9 @@ impl RuntimeTransitionCondition {
                 view_model_triggers
                     .iter()
                     .find(|trigger| trigger.global_id() == trigger_global_id)
-                    .is_some_and(|trigger| trigger.is_fireable_for_layer(layer_index))
+                    .is_some_and(|trigger| {
+                        trigger.is_fireable_for_layer(view_model_trigger_layer_id)
+                    })
             }
             Self::ViewModelPointer {
                 left_bindable_global_id,
@@ -1467,6 +1470,7 @@ impl RuntimeTransitionCondition {
         bindable_triggers: &[StateMachineBindableTriggerInstance],
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         layer_index: usize,
+        view_model_trigger_layer_id: u64,
     ) {
         match self {
             Self::Trigger { input_index } => {
@@ -1484,7 +1488,7 @@ impl RuntimeTransitionCondition {
                     .iter_mut()
                     .find(|trigger| trigger.global_id() == trigger_global_id)
                 {
-                    trigger.use_in_layer(layer_index);
+                    trigger.use_in_layer(view_model_trigger_layer_id);
                 }
             }
             _ => {}

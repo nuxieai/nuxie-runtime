@@ -359,6 +359,9 @@ struct RuntimeViewModelCellState {
     value: RuntimeViewModelCellValue,
     /// C++ `ValueFlags::valueChanged`: set by writes, cleared by `advanced`.
     value_changed: bool,
+    /// C++ `Triggerable::m_usedLayers`: transition conditions consume the
+    /// retained source itself once per layer, rather than a copied wrapper.
+    used_layers: Vec<u64>,
     /// C++ `SuppressDelegation` depth: internal writes still cascade dirt to
     /// dependents but do not count as host-visible changes.
     suppress_depth: u32,
@@ -420,6 +423,7 @@ impl RuntimeViewModelCell {
             state: Rc::new(RefCell::new(RuntimeViewModelCellState {
                 value,
                 value_changed: false,
+                used_layers: Vec::new(),
                 suppress_depth: 0,
                 dependents: Vec::new(),
             })),
@@ -438,6 +442,21 @@ impl RuntimeViewModelCell {
     /// C++ `ViewModelInstanceValue::hasChanged` (`ValueFlags::valueChanged`).
     pub fn has_changed(&self) -> bool {
         self.state.borrow().value_changed
+    }
+
+    /// C++ `ViewModelInstanceValue` inherits `Triggerable`, so the changed
+    /// flag and per-layer consumption state live on the same retained value
+    /// (`state_machine_input_instance.hpp:78-102`).
+    pub(crate) fn is_changed_for_layer(&self, layer_id: u64) -> bool {
+        let state = self.state.borrow();
+        state.value_changed && !state.used_layers.contains(&layer_id)
+    }
+
+    pub(crate) fn use_in_layer(&self, layer_id: u64) {
+        let mut state = self.state.borrow_mut();
+        if !state.used_layers.contains(&layer_id) {
+            state.used_layers.push(layer_id);
+        }
     }
 
     /// Register a dependent's dirt sink (C++ `addDependent`). A bind created
@@ -591,7 +610,9 @@ impl RuntimeViewModelCell {
                 cell.set_value(RuntimeViewModelCellValue::Trigger(0));
             });
         }
-        self.state.borrow_mut().value_changed = false;
+        let mut state = self.state.borrow_mut();
+        state.value_changed = false;
+        state.used_layers.clear();
     }
 
     /// C++ `SuppressDelegation` scope: writes inside `body` cascade dirt but
@@ -1399,6 +1420,32 @@ mod tests {
         assert_eq!(cell.value(), RuntimeViewModelCellValue::Trigger(0));
         assert!(!cell.has_changed());
         assert!(bind.take_dirt().contains(RuntimeCellDirt::BINDINGS));
+    }
+
+    #[test]
+    fn retained_trigger_consumption_is_scoped_to_layer_occurrence_identity() {
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(0));
+        let first_machine_layer = 41;
+        let second_machine_layer = 42;
+
+        assert!(cell.fire_trigger());
+        assert!(cell.is_changed_for_layer(first_machine_layer));
+        assert!(cell.is_changed_for_layer(second_machine_layer));
+
+        cell.use_in_layer(first_machine_layer);
+        assert!(!cell.is_changed_for_layer(first_machine_layer));
+        assert!(
+            cell.is_changed_for_layer(second_machine_layer),
+            "C++ keys Triggerable::m_usedLayers by layer-instance pointer, so two machines sharing one ViewModel source may both consume it (state_machine_input_instance.hpp:82-101)"
+        );
+
+        cell.advanced();
+        assert!(!cell.is_changed_for_layer(first_machine_layer));
+        assert!(cell.fire_trigger());
+        assert!(
+            cell.is_changed_for_layer(first_machine_layer),
+            "ViewModelInstanceValue::advanced clears the retained source's used-layer set for the next frame (viewmodel_instance_value.cpp:131-135)"
+        );
     }
 
     #[test]

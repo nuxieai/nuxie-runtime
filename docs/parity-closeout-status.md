@@ -14,7 +14,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 391/391, nuxie lib 140/140,
+Regression floor (must stay green): runtime lib 393/393, nuxie lib 140/140,
 C++ probe 714/714, both runtime golden gates 317/317 exact / 647/647 segments;
 ordinary has zero failures and scripted has only the two permitted verification
 names (`data_viz_demo`, `db_health_tracker`). The workspace push gate is green
@@ -377,6 +377,30 @@ upstream-sync-map registry).
     ordered context/listener addressing; their public-seam and trigger-state
     cleanup remains before the overall (f) gate can close. Renderer goldens
     are not applicable because no renderer/draw code changed.
+  - [x] (f12A) owned ViewModel transition triggers now keep counter,
+    `valueChanged`, and per-layer consumption on the exact retained trigger
+    cell. `StateMachineViewModelTriggerInstance` is only metadata plus either
+    that retained source or an explicit copied compatibility source for the
+    not-yet-canonical default/imported modes; owned bindings no longer carry
+    parallel `value`/`changed`/`used_layers` state. Each state-machine layer
+    occurrence receives a distinct identity token, refreshed on clone, because
+    C++ keys `Triggerable::m_usedLayers` by `StateMachineLayerInstance*`; two
+    machines sharing one ViewModel may therefore consume the same trigger in
+    their respective layers. This follows C++'s single retained value/change
+    object (`viewmodel_instance_value.cpp:59-62,131-135,176-179`), inherited
+    layer-use state (`state_machine_input_instance.hpp:78-102`), and transition
+    evaluation/use of the DataBind's exact source
+    (`transition_viewmodel_condition.cpp:49-60`;
+    `transition_property_viewmodel_comparator.cpp:50-67`). Default/imported
+    canonical cell ownership, `sync_default_view_model_triggers_from_active`,
+    and `reset_bound_trigger_sources` remain explicitly queued as f12B rather
+    than inventing file-level sharing in this mechanical slice. Evidence:
+    runtime lib 393/393, nuxie lib 140/140, C++ probe 714/714, ordinary and
+    scripted goldens 317/317 entries plus 647/647 exact segments; ordinary has
+    zero failures and scripted retains exactly the two permitted verification
+    names (`data_viz_demo`, `db_health_tracker`). C API smoke and the full
+    workspace are green. Standards and Spec re-reviews are clean.
+    Renderer goldens are not applicable because no renderer/draw code changed.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -925,3 +949,14 @@ Decisions log.)
   scripted retains exactly the two permitted verification names
   (`data_viz_demo`, `db_health_tracker`) and no new failure. C API smoke and
   the full workspace are green. Renderer goldens are not applicable.
+- 2026-07-22 — #RB-1 f12A removed the owned-trigger parallel state copy.
+  Retained trigger cells now own the fire counter, changed flag, and C++
+  `Triggerable` layer-use set; every Rust layer occurrence has a clone-fresh
+  identity token so two machines sharing one source do not collide at the same
+  numeric layer index. Default/imported contexts intentionally remain copied
+  compatibility sources pending f12B's file-level canonical-cell ownership
+  decision, so their mirror/reset helpers remain queued. Full evidence is
+  runtime lib 393/393, nuxie lib 140/140, C++ probe 714/714, both golden modes
+  at 317/317 entries plus 647/647 exact segments, scripted limited to
+  `data_viz_demo` and `db_health_tracker`, C API smoke green, and the full
+  workspace green. Renderer goldens are not applicable.

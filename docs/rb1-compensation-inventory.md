@@ -215,13 +215,29 @@ public seams that originally fanned into it:
 
 ## Item 7 - Trigger observed/rescan state
 
-- `StateMachineViewModelTriggerInstance` `state_machine.rs:2527-2591` (`used_layers` `:2532`; `reset` `:2567,2573,2581`; `is_changed_for_layer` `:2585-2590`); instance fields `default_view_model_triggers` `instance.rs:64`, `view_model_triggers` `:65`; ctor `:810`; threaded through `state_machine.rs:1139,1230,1301,1372,2006,2110,2880,2989,3070,3196`, `transition_conditions.rs:984,1468`; input-trigger used_layers `state_machine.rs:2503-2521`.
+- [x] f12A removed the owned-context trigger copy. The adapter now stores
+  metadata plus `StateMachineViewModelTriggerSource::{Retained,Copied}`; owned
+  bindings select the exact `RuntimeViewModelCell`, whose state owns both
+  `ValueFlags::valueChanged` and the per-layer use set. Layer keys are unique
+  per state-machine layer occurrence (and refreshed on clone), matching C++'s
+  `StateMachineLayerInstance*` keys rather than colliding on a shared numeric
+  layer index (`viewmodel_instance_value.cpp:59-62,131-135,176-179`;
+  `state_machine_input_instance.hpp:78-102`;
+  `transition_viewmodel_condition.cpp:49-60`;
+  `transition_property_viewmodel_comparator.cpp:50-67`). Default/imported
+  contexts still use the explicit copied variant until f12B establishes their
+  file-level canonical cell owner.
+- Instance fields `default_view_model_triggers` and `view_model_triggers`
+  remain as metadata/source-handle vectors; transition evaluation and fire
+  actions still thread them through the state-machine call tree. Input-trigger
+  `used_layers` is a separate C++ `SMITrigger` contract and survives.
 - `bind_active_owned_view_model_triggers_for_candidates` remains for identity
   and structural rebind. [x] f9 deleted
   `refresh_active_owned_view_model_triggers_for_candidates`; a retained trigger
-  cell supplies steady-frame change state. `sync_default_view_model_triggers_from_active`,
-  `reset_bound_trigger_sources`, context-chain binders, and
-  `reset_active_view_model_triggers` remain for later trigger-state cleanup.
+  cell supplies steady-frame change state. f12B still owns
+  `sync_default_view_model_triggers_from_active`, `reset_bound_trigger_sources`,
+  default/imported canonical cells, context-chain binders, and
+  `reset_active_view_model_triggers`.
 - PUBLIC trigger reads (survive): `view_model_trigger_count` `instance.rs:5486`, `view_model_trigger_value_count` `:5510`, `view_model_trigger_property_id` `:5514`.
 
 ## Public API surface that must keep working

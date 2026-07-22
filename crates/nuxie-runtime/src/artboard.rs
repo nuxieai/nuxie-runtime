@@ -10763,6 +10763,22 @@ mod tests {
     }
 
     #[test]
+    fn direct_owned_context_trigger_binding_retains_the_exact_source_cell() {
+        let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9722, false);
+        let mut context = RuntimeOwnedViewModelInstance::new(&file, 1)
+            .expect("fixture has the default ViewModel");
+
+        assert!(state_machine.bind_owned_view_model_context_mut(&mut context));
+        assert!(context.set_trigger_by_property_index(2, 1));
+        assert_eq!(state_machine.active_view_model_trigger_count(0), Some(1));
+        assert_eq!(
+            state_machine.active_view_model_trigger_is_fireable_for_layer(0, 0),
+            Some(true),
+            "C++ transition evaluation follows the DataBind to the exact retained ViewModelInstanceValue source (transition_viewmodel_condition.cpp:49-60)"
+        );
+    }
+
+    #[test]
     fn switching_from_retained_handle_to_composite_clears_stale_refresh_source() {
         let (file, _artboard, mut state_machine) = owned_view_model_action_fixture(9696, false);
         let stale = RuntimeOwnedViewModelHandle::new(

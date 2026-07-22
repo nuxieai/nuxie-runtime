@@ -4144,6 +4144,7 @@ impl RuntimeOwnedViewModelViewModel {
         replace_active_values!(symbol_list_indices, imported_symbol_list_indices);
         replace_active_values!(lists, imported_lists);
         replace_active_values!(assets, imported_assets);
+        replace_active_values!(font_assets, imported_font_assets);
         replace_active_values!(artboards, imported_artboards);
         replace_active_values!(triggers, imported_triggers);
         match self.value {
@@ -9275,6 +9276,13 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[&str],
         file_asset_index: u64,
     ) -> bool {
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_font_asset_index_by_property_names(path, file_asset_index)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_font_asset_index_by_property_name(property_path[0], file_asset_index);
         }
@@ -9300,6 +9308,14 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[&str],
         font_bytes: Option<Arc<[u8]>>,
     ) -> bool {
+        let linked_font_bytes = font_bytes.clone();
+        if let Some(changed) = self
+            .mutate_linked_by_property_names(property_path, |linked, path| {
+                linked.set_live_font_bytes_by_property_names(path, linked_font_bytes)
+            })
+        {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_live_font_bytes_by_property_name(property_path[0], font_bytes);
         }
@@ -9324,6 +9340,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         file_asset_index: u64,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_font_asset_index_by_property_path(path, file_asset_index)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_font_asset_index_by_property_index(property_path[0], file_asset_index);
         }
@@ -9349,6 +9370,12 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         font_bytes: Option<Arc<[u8]>>,
     ) -> bool {
+        let linked_font_bytes = font_bytes.clone();
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_live_font_bytes_by_property_path(path, linked_font_bytes)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_live_font_bytes_by_property_index(property_path[0], font_bytes);
         }
@@ -10060,6 +10087,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         file_asset_index: u64,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.sync_font_asset_index_by_property_path(path, file_asset_index)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_font_asset_index_by_property_index(property_path[0], file_asset_index);
         }
@@ -10079,6 +10111,12 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         font_bytes: Option<Arc<[u8]>>,
     ) -> bool {
+        let linked_font_bytes = font_bytes.clone();
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.sync_live_font_bytes_by_property_path(path, linked_font_bytes)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             return self.set_live_font_bytes_by_property_index(property_path[0], font_bytes);
         }
@@ -10098,6 +10136,11 @@ impl RuntimeOwnedViewModelInstance {
         property_path: &[usize],
         value: &RuntimeFontAssetValue,
     ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.apply_font_asset_data_bind_value_by_property_path(path, value)
+        }) {
+            return changed;
+        }
         if property_path.len() == 1 {
             let Some(asset) = self
                 .font_assets
@@ -12398,7 +12441,34 @@ mod owned_context_tests {
                 ],
             ),
         ];
-        records.extend(view_model_records("Child", 0, 1, 5.0));
+        let mut child_records = view_model_records("Child", 0, 1, 5.0);
+        child_records.insert(
+            2,
+            record(
+                "ViewModelPropertyAssetFont",
+                vec![property(
+                    "ViewModelPropertyAssetFont",
+                    "name",
+                    AuthoringValue::String("font".to_owned()),
+                )],
+            ),
+        );
+        child_records.push(record(
+            "ViewModelInstanceAssetFont",
+            vec![
+                property(
+                    "ViewModelInstanceAssetFont",
+                    "viewModelPropertyId",
+                    AuthoringValue::Uint(1),
+                ),
+                property(
+                    "ViewModelInstanceAssetFont",
+                    "propertyValue",
+                    AuthoringValue::Uint(0),
+                ),
+            ],
+        ));
+        records.extend(child_records);
         RuntimeFile::from_authoring_records(records).expect("linked child fixture imports")
     }
 
@@ -12430,6 +12500,19 @@ mod owned_context_tests {
         assert_eq!(
             owner_b.link_view_model_by_property_name_path("child", &child),
             Ok(true)
+        );
+
+        let child_font_cell = child
+            .borrow()
+            .cell_by_property_path(&[1])
+            .expect("child font has a retained cell");
+        let owner_font_cell = owner_a
+            .borrow()
+            .cell_by_property_path(&[0, 1])
+            .expect("owner path reaches the retained child font cell");
+        assert!(
+            child_font_cell.ptr_eq(&owner_font_cell),
+            "linked AssetFont paths retain the exact child cell"
         );
 
         // One write through the retained child is visible through every
@@ -12475,6 +12558,84 @@ mod owned_context_tests {
                 .number_value_by_property_name_path("child2/value"),
             Some(78.0),
             "the second slot on the writing owner shares the same child"
+        );
+
+        // AssetFont carries a retained live payload in addition to its scalar
+        // cell. C++ stores the child as one `rcp<ViewModelInstance>`
+        // (`viewmodel_instance_viewmodel.hpp:19-39`). Rust shares the exact
+        // retained cell and refreshes its payload snapshot at each handle
+        // borrow; nested writes must therefore target the child before that
+        // refresh instead of mutating only the parent's snapshot.
+        let child_live: Arc<[u8]> = vec![1, 2, 3, 4].into();
+        assert!(
+            child
+                .borrow_mut()
+                .set_live_font_bytes_by_property_name("font", Some(Arc::clone(&child_live)))
+        );
+        assert!(
+            owner_a
+                .borrow()
+                .font_asset_value_by_property_path(&[0, 1])
+                .and_then(RuntimeFontAssetValue::live_font_bytes_arc)
+                .is_some_and(|value| Arc::ptr_eq(value, &child_live))
+        );
+
+        let owner_live: Arc<[u8]> = vec![5, 6, 7, 8].into();
+        assert!(
+            owner_a
+                .borrow_mut()
+                .set_live_font_bytes_by_property_path(&[0, 1], Some(Arc::clone(&owner_live)),)
+        );
+        assert!(
+            child
+                .borrow()
+                .font_asset_value_by_property_name("font")
+                .and_then(RuntimeFontAssetValue::live_font_bytes_arc)
+                .is_some_and(|value| Arc::ptr_eq(value, &owner_live))
+        );
+        assert!(
+            owner_b
+                .borrow_mut()
+                .set_font_asset_index_by_property_name_path("child/font", 7)
+        );
+        assert_eq!(
+            child
+                .borrow()
+                .font_asset_value_by_property_name("font")
+                .map(RuntimeFontAssetValue::file_asset_index),
+            Some(7),
+        );
+        assert!(
+            child
+                .borrow()
+                .font_asset_value_by_property_name("font")
+                .and_then(RuntimeFontAssetValue::live_font_bytes_arc)
+                .is_some_and(|value| Arc::ptr_eq(value, &owner_live)),
+            "a propertyValue write preserves C++'s private live-Font fallback"
+        );
+        assert_eq!(
+            owner_a
+                .borrow()
+                .font_asset_value_by_property_path(&[0, 1])
+                .map(RuntimeFontAssetValue::file_asset_index),
+            Some(7),
+        );
+
+        let bind_live: Arc<[u8]> = vec![9, 10, 11, 12].into();
+        let mut bind_value = RuntimeFontAssetValue::default();
+        assert!(bind_value.set_live_font_bytes(Some(Arc::clone(&bind_live))));
+        assert!(
+            owner_a
+                .borrow_mut()
+                .apply_font_asset_data_bind_value_by_property_path(&[0, 1], &bind_value)
+        );
+        assert!(
+            child
+                .borrow()
+                .font_asset_value_by_property_name("font")
+                .and_then(RuntimeFontAssetValue::live_font_bytes_arc)
+                .is_some_and(|value| Arc::ptr_eq(value, &bind_live)),
+            "target-to-source application mutates the retained child payload"
         );
 
         // Clone is a DEEP copy: nothing is shared with the source graph...

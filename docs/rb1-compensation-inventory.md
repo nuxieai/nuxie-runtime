@@ -44,7 +44,22 @@ change-propagation *by polling*. The five public seams that fan into it:
 
 ## Item 4 - Alias mirrors / detached trees
 
-- `linked_aliases` field `view_model.rs:1529`; struct `:1533`; init `:3009,3490,6660`; `add_linked_alias` `:6365`, `remove_linked_alias` `:6384`, `synchronize_linked_aliases` `:6398`; registration `:1999-2016`, link/unlink `:1785-1801`. Test `view_model.rs:11299-11308` (alias sharing = observable clone contract; rewrite/keep).
+- [x] f7A closed the linked-`AssetFont` cell/delegation omission:
+  `mirror_linked_instance` shares the exact retained Font cell and refreshes
+  its payload snapshot at handle borrow, and all nested host/sync/full-data-
+  bind writes delegate to the retained child. The oracle is C++
+  `ViewModelInstanceViewModel` retaining one
+  `rcp<ViewModelInstance>` (`viewmodel_instance_viewmodel.hpp:19-39`) while
+  preserving `ViewModelInstanceAssetFont`'s file-index/live-Font two-part
+  setter contract (`viewmodel_instance_asset_font.cpp:29-75`). The payload
+  snapshot itself is not yet shared: a parent borrow held across a separate
+  child mutation stays stale until the next handle borrow. The typed Font
+  endpoint must remove that boundary before the direct-property clock union
+  deletes.
+- [x] f1 deleted `linked_aliases`, `add_linked_alias`,
+  `remove_linked_alias`, and `synchronize_linked_aliases`. Linked scalar
+  properties share retained cells by identity; deep-copy `Clone` remains the
+  observable detached-tree contract.
 - `from_instance_mutable` `view_model.rs:6486-6497` (PUBLIC; callers `crates/nuxie/src/lib.rs:2625,3334`; test `:11341` — API survives, internals replaced); `overlay_active_instance` `:6499+` (only `:6493`); `detach_list_storage` `:6418-6421` (callers `:3012,:3492,:6494`).
 
 ## Item 5 - Facade-wide rebind bits

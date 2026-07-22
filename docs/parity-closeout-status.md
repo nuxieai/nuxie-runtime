@@ -223,6 +223,24 @@ upstream-sync-map registry).
     C API smoke green, and `cargo test --workspace` green. Renderer goldens
     are not applicable because the slice changes no renderer/draw code. Both
     Standards and Spec reviews are clean.
+  - [x] (f7A) linked `AssetFont` values now retain the exact child slot cell
+    and route every nested host/data-bind payload write through that retained
+    child. This closes the cell/delegation omission in
+    `mirror_linked_instance` and is a prerequisite for the retained Font
+    source cut. The oracle is C++'s single `rcp<ViewModelInstance>` child
+    reference
+    (`viewmodel_instance_viewmodel.hpp:19-39`) plus the two-part Font setter
+    (`viewmodel_instance_asset_font.cpp:29-75`). The Font payload itself is
+    still a snapshot refreshed at the `RuntimeOwnedViewModelHandle::borrow`
+    seam, like String bytes; a held parent borrow can remain stale after a
+    direct child write. The typed payload endpoint must remove that remaining
+    Rust boundary before the direct-property clock union can delete. String/
+    Font source dependents, artboard sinks, and converter operands also remain.
+    Fast and corpus evidence: runtime lib 357/357, nuxie lib 132/132, probe
+    708/708, and ordinary plus scripted goldens 317/317 entries / 647/647
+    segments with zero failures. C API smoke and `cargo test --workspace` are
+    green; Standards and Spec re-reviews are clean. Renderer goldens are not
+    applicable because the slice changes no renderer/draw code.
 - [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
@@ -658,3 +676,16 @@ Decisions log.)
   with zero failures, C API smoke green, and `cargo test --workspace` green.
   Renderer goldens are not applicable because the slice changes no
   renderer/draw code.
+- 2026-07-21 — #RB-1 f7A closed the linked-`AssetFont` retained-cell and
+  write-delegation omission. Parent paths now share the child Font cell,
+  refresh their payload snapshot on handle borrow, and delegate host, sync,
+  and full data-bind writes to the retained child. The regression proves cell
+  pointer identity, writes in both directions, preservation of the private
+  live Font across a file-index write, and target-to-source payload
+  application. It does not claim that a payload reference held across a
+  separate child mutation updates live; removing that snapshot boundary is
+  still part of the typed Font endpoint. Fast and corpus evidence is runtime
+  lib 357/357, nuxie lib 132/132, C++ probe 708/708, and both golden modes
+  317/317 entries plus 647/647 exact segments with zero failures. The scripted
+  failure list is empty, C API smoke and the workspace suite are green, and
+  both re-reviews are clean. Renderer goldens are not applicable.

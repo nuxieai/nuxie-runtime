@@ -3,9 +3,8 @@ use nuxie_binary::{RuntimeFile, RuntimeFileAssetContents, RuntimeObject};
 use nuxie_graph::{
     ArtboardGraph, ClippingShapeNode, DashNode, DrawableOrderKind, DrawableOrderNode, FeatherNode,
     GradientStopNode, MeshGeometryNode, MeshVertexNode, NSlicerAxisNode, NSlicerDetailsNode,
-    ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode,
-    ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
-    ShapePaintStateNode, StrokeEffectNode,
+    ParametricPathNode, PathGeometryNode, PathVertexNode, ShapePaintContainerNode, ShapePaintKind,
+    ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode, StrokeEffectNode,
 };
 use nuxie_image_codec::{decoded_rgba_len, preflight_encoded_image};
 use nuxie_render_api::{
@@ -3686,19 +3685,21 @@ impl ArtboardInstance {
             renderer.transform(self.artboard_origin_transform());
         }
 
-        let spike_prepared;
-        let cached_prepared;
-        let prepared = if path_cache.rd1_live_traversal_spike {
-            spike_prepared = path_cache.rd1_live_traversal_spike_frame(self, graph, Some(runtime));
-            &spike_prepared
-        } else {
-            cached_prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
-            cached_prepared.as_ref()
-        };
-        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
-        let component_list_item_bounds = prepared.component_list_item_bounds.as_ref();
-        let component_list_layout_children = prepared.component_list_layout_children.as_ref();
-        if let Some(background) = prepared.background.as_ref() {
+        let (mounted_component_list_layout_revision, _) =
+            runtime_mounted_component_list_revisions(self);
+        let layout_frame = path_cache.layout_bounds_frame(
+            self,
+            graph,
+            Some(runtime),
+            mounted_component_list_layout_revision,
+        );
+        let layout_bounds = layout_frame.bounds.as_ref().as_ref();
+        let component_list_layout_children = runtime_component_list_layout_children(
+            self,
+            layout_frame.component_list_item_bounds.as_ref(),
+        );
+        let background = runtime_prepared_background_frame(self, graph, layout_bounds);
+        if let Some(background) = background.as_ref() {
             runtime_draw_background(
                 runtime,
                 self,
@@ -3712,37 +3713,45 @@ impl ArtboardInstance {
             )?;
         }
 
-        // C++ retains the drawable list but evaluates `willDraw()` while
-        // walking it, buffering clip starts until a live drawable needs them.
-        // The prepared Rust commands likewise retain zero-opacity topology;
-        // keep clip envelopes lazy so a dynamically hidden shape does not
-        // emit otherwise-empty save/clip/restore operations.
-        let mut pending_clip_operations = std::mem::take(&mut path_cache.pending_clip_commands);
-        pending_clip_operations.clear();
-        for (command_index, command) in prepared.commands.iter().enumerate() {
-            match command.kind {
-                RuntimeDrawCommandKind::ClipStart => {
-                    pending_clip_operations.push(command_index);
-                    continue;
-                }
-                RuntimeDrawCommandKind::ClipEnd => {
-                    if pending_clip_operations.pop().is_none() {
-                        runtime_draw_clip_end(self, graph, command, renderer);
-                    }
-                    continue;
-                }
-                RuntimeDrawCommandKind::Draw => {}
-            }
-            if !runtime_draw_command_will_draw_live(self, command) {
+        // Ported from C++ `Artboard::drawInternal`
+        // (`src/artboard.cpp:1652-1698`): traverse the clone-owned linked list
+        // directly, evaluate every virtual predicate live, and materialize
+        // only the one drawable currently being dispatched. Prepared command
+        // frames remain available to geometry/preparation callers until RD-C7,
+        // but they are no longer the renderer feed.
+        let mut pending_clip_operations = Vec::<&RuntimeDrawable>::new();
+        let mut empty_clips = 0i32;
+        for drawable in self.runtime_drawables.iter() {
+            let previous_empty_clips = empty_clips;
+            empty_clips += self.runtime_empty_clip_count(drawable, graph);
+            if !self.runtime_will_draw(drawable, false)
+                || empty_clips != previous_empty_clips
+                || empty_clips > 0
+            {
                 continue;
             }
+
+            if drawable.kind == DrawableOrderKind::ClipStartProxy {
+                pending_clip_operations.push(drawable);
+                continue;
+            }
+
             if !pending_clip_operations.is_empty() {
-                for pending_clip_index in pending_clip_operations.drain(..) {
-                    let pending_clip = &prepared.commands[pending_clip_index];
+                if drawable.kind == DrawableOrderKind::ClipEndProxy {
+                    pending_clip_operations.pop();
+                    continue;
+                }
+                for pending_clip in pending_clip_operations.drain(..) {
+                    let pending_clip_command = self.runtime_draw_command_for_node(
+                        pending_clip,
+                        graph,
+                        layout_bounds,
+                        path_cache,
+                    );
                     runtime_draw_clip_start(
                         self,
                         graph,
-                        pending_clip,
+                        &pending_clip_command,
                         layout_bounds,
                         factory,
                         renderer,
@@ -3750,15 +3759,49 @@ impl ArtboardInstance {
                     );
                 }
             }
+
+            if drawable.kind == DrawableOrderKind::Drawable
+                && drawable.type_name == "Shape"
+                && let Some(shape_local) = drawable.local_id
+            {
+                let mut shape_paints =
+                    self.runtime_shape_paint_commands(drawable, graph, layout_bounds, path_cache);
+                for paint in &mut shape_paints {
+                    if !paint.has_effect_path && paint.feather_state.is_none() {
+                        paint.path_commands.clear();
+                    }
+                }
+                runtime_draw_live_shape(
+                    runtime,
+                    self,
+                    graph,
+                    shape_local,
+                    &shape_paints,
+                    layout_bounds,
+                    factory,
+                    renderer,
+                    paint_by_global,
+                    path_cache,
+                    paint_configurations.as_deref_mut(),
+                )?;
+                continue;
+            }
+
+            let command =
+                self.runtime_draw_command_for_node(drawable, graph, layout_bounds, path_cache);
+            if drawable.kind == DrawableOrderKind::ClipEndProxy {
+                runtime_draw_clip_end(self, graph, &command, renderer);
+                continue;
+            }
             runtime_draw_live_command(
                 runtime,
                 self,
                 graph,
                 artboards,
-                command,
+                &command,
                 layout_bounds,
-                component_list_item_bounds,
-                component_list_layout_children,
+                layout_frame.component_list_item_bounds.as_ref(),
+                &component_list_layout_children,
                 factory,
                 renderer,
                 paint_by_global,
@@ -3771,13 +3814,12 @@ impl ArtboardInstance {
                     None => None,
                 },
                 nested_ancestors,
-                prepared.world_dependent,
+                true,
             )?;
         }
         // RF-21 / C++ `Artboard::drawInternal`: a trailing clip start is
         // intentionally discarded when no later live drawable flushes it.
         pending_clip_operations.clear();
-        path_cache.pending_clip_commands = pending_clip_operations;
 
         if needs_save {
             renderer.restore();
@@ -3895,7 +3937,7 @@ impl ArtboardInstance {
         };
 
         if self.runtime_clipping_shape_is_visible(clipping_shape)
-            && !self.clipping_shape_has_runtime_clip_path(clipping_shape, &graph.path_composers)
+            && !self.clipping_shape_has_runtime_clip_path(clipping_shape, graph)
         {
             empty_delta
         } else {
@@ -3906,23 +3948,37 @@ impl ArtboardInstance {
     fn clipping_shape_has_runtime_clip_path(
         &self,
         clipping_shape: &ClippingShapeNode,
-        path_composers: &[PathComposerNode],
+        graph: &ArtboardGraph,
     ) -> bool {
         clipping_shape.shape_locals.iter().any(|shape_local| {
-            path_composers
-                .iter()
-                .find(|composer| composer.shape_local == *shape_local)
-                .is_some_and(|composer| {
-                    composer
-                        .paths
-                        .iter()
-                        .any(|path| self.runtime_path_counts_for_clip(path))
-                })
+            self.runtime_shapes.get(*shape_local).is_some_and(|shape| {
+                shape
+                    .path_locals
+                    .iter()
+                    .any(|path_local| self.runtime_shape_path_is_visible(*path_local, graph))
+            })
         })
     }
 
-    fn runtime_path_counts_for_clip(&self, path: &PathComposerPathNode) -> bool {
-        !path.is_hidden && !self.runtime_component_is_collapsed_for_draw(path.local_id)
+    fn runtime_shape_path_is_visible(&self, path_local: usize, graph: &ArtboardGraph) -> bool {
+        let Some(path) = graph.paths.iter().find(|path| path.local_id == path_local) else {
+            return false;
+        };
+        let imported_hidden = graph
+            .path_composers
+            .iter()
+            .flat_map(|composer| &composer.paths)
+            .find(|path| path.local_id == path_local)
+            .is_some_and(|path| path.is_hidden);
+        let default_flags = u64::from(imported_hidden);
+        let path_flags = runtime_path_uint_property(
+            self,
+            path_local,
+            path.type_name,
+            "pathFlags",
+            default_flags,
+        );
+        path_flags & 1 == 0 && !self.runtime_component_is_collapsed_for_draw(path_local)
     }
 
     fn runtime_component_is_effectively_collapsed(&self, local_id: usize) -> bool {
@@ -4080,11 +4136,21 @@ impl ArtboardInstance {
         let Some(container_local) = container_local else {
             return Vec::new();
         };
-        let Some(container) = graph
-            .shape_paint_containers
-            .iter()
-            .find(|container| container.local_id == container_local)
-        else {
+        let owned_shape = (container_local == drawable.local_id.unwrap_or(usize::MAX)
+            && drawable.type_name == "Shape")
+            .then(|| self.runtime_shapes.get(container_local))
+            .flatten();
+        let container = if let Some(shape) = owned_shape {
+            shape
+                .paint_container_index
+                .and_then(|index| graph.shape_paint_containers.get(index))
+        } else {
+            graph
+                .shape_paint_containers
+                .iter()
+                .find(|container| container.local_id == container_local)
+        };
+        let Some(container) = container else {
             return Vec::new();
         };
         if !matches!(
@@ -4119,75 +4185,84 @@ impl ArtboardInstance {
             )
         };
 
-        let mut commands = container
-            .paints
-            .iter()
-            .filter_map(|paint| {
-                let (path_commands, prepared_raw_path) = match container.type_name {
-                    "Shape" => self
-                        .runtime_shape_paint_path_commands(
-                            container_local,
-                            paint,
-                            graph,
-                            layout_bounds,
-                            path_cache,
-                        )
-                        .map(|path| (path.commands.as_ref().clone(), Some(path.raw_path.clone())))
-                        .unwrap_or_default(),
-                    "LayoutComponent" => (
+        let paint_count =
+            owned_shape.map_or(container.paints.len(), |shape| shape.paint_indices.len());
+        let mut commands = Vec::with_capacity(paint_count);
+        for membership_index in 0..paint_count {
+            let paint_index = owned_shape
+                .and_then(|shape| shape.paint_indices.get(membership_index).copied())
+                .unwrap_or(membership_index);
+            let Some(paint) = container.paints.get(paint_index) else {
+                continue;
+            };
+            let (path_commands, prepared_raw_path) = match container.type_name {
+                "Shape" => self
+                    .runtime_shape_paint_path_commands(
+                        container_local,
+                        paint,
+                        graph,
+                        layout_bounds,
+                        path_cache,
+                    )
+                    .map(|path| (path.commands.as_ref().clone(), Some(path.raw_path.clone())))
+                    .unwrap_or_default(),
+                "LayoutComponent" => (
+                    self.runtime_layout_component_paint_path_commands(
+                        container_local,
+                        paint,
+                        graph,
+                        layout_bounds,
+                    ),
+                    None,
+                ),
+                "ForegroundLayoutDrawable" => {
+                    // Ported from C++ `src/foreground_layout_drawable.cpp`:
+                    // foreground layout paints draw the parent
+                    // `LayoutComponent` path with the parent layout world
+                    // transform.
+                    let Some(layout_local) = layout_path_local else {
+                        continue;
+                    };
+                    (
                         self.runtime_layout_component_paint_path_commands(
-                            container_local,
+                            layout_local,
                             paint,
                             graph,
                             layout_bounds,
                         ),
                         None,
-                    ),
-                    "ForegroundLayoutDrawable" => {
-                        // Ported from C++ `src/foreground_layout_drawable.cpp`:
-                        // foreground layout paints draw the parent
-                        // `LayoutComponent` path with the parent layout world
-                        // transform.
-                        let layout_local = layout_path_local?;
-                        (
-                            self.runtime_layout_component_paint_path_commands(
-                                layout_local,
-                                paint,
-                                graph,
-                                layout_bounds,
-                            ),
-                            None,
-                        )
-                    }
-                    _ => (Vec::new(), None),
-                };
-                let mut command = runtime_shape_paint_command(
-                    self,
-                    paint,
-                    container.blend_mode_value,
-                    needs_save_operation,
-                    render_opacity,
-                    shape_world,
-                    path_commands,
-                    matches!(
-                        container.type_name,
-                        "LayoutComponent" | "ForegroundLayoutDrawable"
-                    ),
-                    matches!(
-                        container.type_name,
-                        "LayoutComponent" | "ForegroundLayoutDrawable"
-                    ),
-                    container.type_name != "Shape",
-                )?;
-                command.prepared_raw_path = prepared_raw_path;
-                if drawable.kind == DrawableOrderKind::LayoutProxy
-                    || container.type_name == "ForegroundLayoutDrawable"
-                {
-                    command.shape_world_override = Some(shape_world);
+                    )
                 }
-                Some(command)
-            })
-            .collect::<Vec<_>>();
+                _ => (Vec::new(), None),
+            };
+            let Some(mut command) = runtime_shape_paint_command(
+                self,
+                paint,
+                container.blend_mode_value,
+                needs_save_operation,
+                render_opacity,
+                shape_world,
+                path_commands,
+                matches!(
+                    container.type_name,
+                    "LayoutComponent" | "ForegroundLayoutDrawable"
+                ),
+                matches!(
+                    container.type_name,
+                    "LayoutComponent" | "ForegroundLayoutDrawable"
+                ),
+                container.type_name != "Shape",
+            ) else {
+                continue;
+            };
+            command.prepared_raw_path = prepared_raw_path;
+            if drawable.kind == DrawableOrderKind::LayoutProxy
+                || container.type_name == "ForegroundLayoutDrawable"
+            {
+                command.shape_world_override = Some(shape_world);
+            }
+            commands.push(command);
+        }
         assign_shape_paint_path_slot_indices(&mut commands);
         commands
     }
@@ -5949,7 +6024,7 @@ impl ArtboardInstance {
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Option<Vec<RuntimePathCommand>> {
         let path_lookup = path_cache.path_composer_lookup_frame(graph);
-        let composer = path_lookup.composer(graph, shape_local)?;
+        let shape = self.runtime_shapes.get(shape_local)?;
         let shape_world = path_cache.component_world_transform_with_bounds(
             self,
             graph,
@@ -5961,11 +6036,11 @@ impl ArtboardInstance {
             runtime_nsliced_node_context_for_shape(self, graph, shape_local, layout_bounds);
         let mut commands = Vec::new();
 
-        for path_ref in &composer.paths {
-            if !self.runtime_path_counts_for_clip(path_ref) {
+        for path_local in &shape.path_locals {
+            if !self.runtime_shape_path_is_visible(*path_local, graph) {
                 continue;
             }
-            let Some(path) = path_lookup.path(graph, path_ref.local_id) else {
+            let Some(path) = path_lookup.path(graph, *path_local) else {
                 continue;
             };
             let path_world = path_cache.component_world_transform_with_bounds(
@@ -6067,10 +6142,7 @@ impl ArtboardInstance {
         shape_local: usize,
         graph: &ArtboardGraph,
     ) -> Option<f32> {
-        let composer = graph
-            .path_composers
-            .iter()
-            .find(|composer| composer.shape_local == shape_local)?;
+        let shape = self.runtime_shapes.get(shape_local)?;
         let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file());
         let layout_bounds = layout_bounds.as_ref();
         let shape_world =
@@ -6082,8 +6154,8 @@ impl ArtboardInstance {
         let path_lookup = path_cache.path_composer_lookup_frame(graph);
         let mut commands = Vec::new();
 
-        for path_ref in &composer.paths {
-            let path = path_lookup.path(graph, path_ref.local_id)?;
+        for path_local in &shape.path_locals {
+            let path = path_lookup.path(graph, *path_local)?;
             let path_world = path_cache.component_world_transform_with_bounds(
                 self,
                 graph,
@@ -6126,7 +6198,7 @@ impl ArtboardInstance {
             return Vec::new();
         };
         let path_lookup = path_cache.path_composer_lookup_frame(graph);
-        let Some(composer) = path_lookup.composer(graph, shape_local) else {
+        let Some(shape) = self.runtime_shapes.get(shape_local) else {
             return Vec::new();
         };
 
@@ -6141,11 +6213,11 @@ impl ArtboardInstance {
             runtime_nsliced_node_context_for_shape(self, graph, shape_local, layout_bounds);
         let mut commands = Vec::new();
 
-        for path_ref in &composer.paths {
-            if !self.runtime_path_counts_for_clip(path_ref) {
+        for path_local in &shape.path_locals {
+            if !self.runtime_shape_path_is_visible(*path_local, graph) {
                 continue;
             }
-            let Some(path) = path_lookup.path(graph, path_ref.local_id) else {
+            let Some(path) = path_lookup.path(graph, *path_local) else {
                 continue;
             };
             let path_world = path_cache.component_world_transform_with_bounds(
@@ -6246,7 +6318,7 @@ impl ArtboardInstance {
         let mut commands = Vec::new();
         let path_lookup = path_cache.path_composer_lookup_frame(graph);
         for shape_local in &clipping_shape.shape_locals {
-            let Some(composer) = path_lookup.composer(graph, *shape_local) else {
+            let Some(shape) = self.runtime_shapes.get(*shape_local) else {
                 continue;
             };
             let shape_world = path_cache.component_world_transform_with_bounds(
@@ -6259,11 +6331,11 @@ impl ArtboardInstance {
             let nsliced_context =
                 runtime_nsliced_node_context_for_shape(self, graph, *shape_local, layout_bounds);
 
-            for path_ref in &composer.paths {
-                if !self.runtime_path_counts_for_clip(path_ref) {
+            for path_local in &shape.path_locals {
+                if !self.runtime_shape_path_is_visible(*path_local, graph) {
                     continue;
                 }
-                let Some(path) = path_lookup.path(graph, path_ref.local_id) else {
+                let Some(path) = path_lookup.path(graph, *path_local) else {
                     continue;
                 };
                 let path_world = path_cache.component_world_transform_with_bounds(
@@ -6420,6 +6492,61 @@ impl ArtboardInstance {
             skin_world_transform: Mat2D(skin.world_transform),
             bone_transforms,
         })
+    }
+}
+
+/// Clone-owned Shape membership established by C++ `Shape::addPath` and
+/// `ShapePaint::onAddedClean` (`src/shapes/shape.cpp:20-27`,
+/// `src/shapes/paint/shape_paint.cpp:12-27`). The immutable graph only seeds
+/// these indices; live traversal reads the ordered memberships from this
+/// instance-owned object.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeShapeList {
+    by_local: Vec<Option<RuntimeShape>>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeShape {
+    path_locals: Vec<usize>,
+    paint_container_index: Option<usize>,
+    paint_indices: Vec<usize>,
+}
+
+impl RuntimeShapeList {
+    pub(crate) fn from_graph(graph: &ArtboardGraph) -> Self {
+        let mut shapes = Self::default();
+        for composer in &graph.path_composers {
+            let shape = shapes.slot_mut(composer.shape_local);
+            shape.path_locals.clear();
+            shape
+                .path_locals
+                .extend(composer.paths.iter().map(|path| path.local_id));
+        }
+        for (container_index, container) in graph.shape_paint_containers.iter().enumerate() {
+            if container.type_name != "Shape" {
+                continue;
+            }
+            let shape = shapes.slot_mut(container.local_id);
+            shape.paint_container_index = Some(container_index);
+            shape.paint_indices.clear();
+            shape.paint_indices.extend(0..container.paints.len());
+        }
+        shapes
+    }
+
+    fn slot_mut(&mut self, shape_local: usize) -> &mut RuntimeShape {
+        if self.by_local.len() <= shape_local {
+            self.by_local.resize_with(shape_local + 1, || None);
+        }
+        self.by_local[shape_local].get_or_insert_with(|| RuntimeShape {
+            path_locals: Vec::new(),
+            paint_container_index: None,
+            paint_indices: Vec::new(),
+        })
+    }
+
+    fn get(&self, shape_local: usize) -> Option<&RuntimeShape> {
+        self.by_local.get(shape_local)?.as_ref()
     }
 }
 
@@ -9754,10 +9881,6 @@ impl RuntimePaintPreparationFrame {
 
 #[derive(Default)]
 pub struct RuntimeRenderPathCache {
-    // RD-1 measured-spike switch. This bypasses only the retained scene
-    // command frame: sorted drawable topology and object render resources stay
-    // retained so the spike isolates per-frame live-feed traversal cost.
-    rd1_live_traversal_spike: bool,
     prepared_artboard: Option<Arc<RuntimePreparedArtboardFrame>>,
     layout_bounds: Option<RuntimeLayoutBoundsFrame>,
     path_composer_lookup: Option<RuntimePathComposerLookupFrame>,
@@ -9777,7 +9900,6 @@ pub struct RuntimeRenderPathCache {
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
     nested_artboards: RuntimeNestedRenderCaches<RuntimeRenderPathCache>,
-    pending_clip_commands: Vec<usize>,
     // Cycle guard for the component_world_transform_with_bounds <->
     // compute_component_world_transform_with_layout_bounds parent-walk
     // recursion: locals on the current walk. See the guard comment in
@@ -9995,7 +10117,6 @@ struct RuntimePreparedArtboardFrame {
     layout_bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
     component_list_item_bounds: Arc<BTreeMap<usize, Vec<RuntimeLayoutBounds>>>,
     component_list_layout_children: Arc<BTreeMap<usize, Vec<ArtboardInstance>>>,
-    background: Option<RuntimePreparedBackgroundFrame>,
     commands: Arc<Vec<RuntimeDrawCommand>>,
 }
 
@@ -10029,24 +10150,10 @@ struct RuntimePathComposerLookupCacheKey {
 #[derive(Clone)]
 struct RuntimePathComposerLookupFrame {
     key: RuntimePathComposerLookupCacheKey,
-    composer_index_by_shape_local: Arc<Vec<Option<usize>>>,
     path_index_by_local: Arc<Vec<Option<usize>>>,
 }
 
 impl RuntimePathComposerLookupFrame {
-    fn composer<'a>(
-        &self,
-        graph: &'a ArtboardGraph,
-        shape_local: usize,
-    ) -> Option<&'a PathComposerNode> {
-        graph.path_composers.get(
-            self.composer_index_by_shape_local
-                .get(shape_local)?
-                .as_ref()
-                .copied()?,
-        )
-    }
-
     fn path<'a>(
         &self,
         graph: &'a ArtboardGraph,
@@ -10688,15 +10795,6 @@ fn runtime_nested_preparation_command(
 }
 
 impl RuntimeRenderPathCache {
-    /// Enable RD-1's temporary live-feed timing spike.
-    ///
-    /// Exposed only so the golden runner can select the measured path; normal
-    /// runtime and host draws keep the established prepared-frame feed.
-    #[doc(hidden)]
-    pub fn enable_rd1_live_traversal_spike(&mut self) {
-        self.rd1_live_traversal_spike = true;
-    }
-
     fn component_world_transform_with_bounds(
         &mut self,
         instance: &ArtboardInstance,
@@ -11056,8 +11154,6 @@ impl RuntimeRenderPathCache {
                 true,
                 reusable_commands,
             );
-            let background =
-                runtime_prepared_background_frame(instance, graph, layout_bounds.as_ref().as_ref());
             let component_list_layout_children = Arc::new(runtime_component_list_layout_children(
                 instance,
                 layout_frame.component_list_item_bounds.as_ref(),
@@ -11068,7 +11164,6 @@ impl RuntimeRenderPathCache {
                 layout_bounds,
                 component_list_item_bounds: layout_frame.component_list_item_bounds,
                 component_list_layout_children,
-                background,
                 commands: Arc::new(commands),
             }));
         }
@@ -11077,57 +11172,6 @@ impl RuntimeRenderPathCache {
             .as_ref()
             .expect("prepared artboard frame was just populated")
             .clone()
-    }
-
-    fn rd1_live_traversal_spike_frame(
-        &mut self,
-        instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
-        runtime: Option<&RuntimeFile>,
-    ) -> RuntimePreparedArtboardFrame {
-        let (mounted_component_list_layout_revision, mounted_component_list_prepared_revision) =
-            runtime_mounted_component_list_revisions(instance);
-        let layout_frame = self.layout_bounds_frame(
-            instance,
-            graph,
-            runtime,
-            mounted_component_list_layout_revision,
-        );
-        let layout_bounds = layout_frame.bounds.clone();
-        // C++ retains m_FirstDrawable but walks it every frame. Keep the
-        // clone-owned linked order and reify each live node on every draw
-        // rather than replaying the retained scene command frame.
-        let commands = instance.draw_commands_with_live_drawable_order_reusing(
-            graph,
-            layout_bounds.as_ref().as_ref(),
-            self,
-            true,
-            Vec::new(),
-        );
-        let background =
-            runtime_prepared_background_frame(instance, graph, layout_bounds.as_ref().as_ref());
-        let component_list_layout_children = Arc::new(runtime_component_list_layout_children(
-            instance,
-            layout_frame.component_list_item_bounds.as_ref(),
-        ));
-        let world_dependent = runtime_command_frame_requires_world_epoch(graph);
-        RuntimePreparedArtboardFrame {
-            key: RuntimePreparedArtboardCacheKey {
-                graph_global_id: graph.global_id,
-                command_epoch: instance.command_epoch(),
-                world_epoch: world_dependent
-                    .then(|| instance.prepared_epoch())
-                    .unwrap_or_default(),
-                mounted_component_list_layout_revision,
-                mounted_component_list_prepared_revision,
-            },
-            world_dependent,
-            layout_bounds,
-            component_list_item_bounds: layout_frame.component_list_item_bounds,
-            component_list_layout_children,
-            background,
-            commands: Arc::new(commands),
-        }
     }
 
     fn retained_geometry_artboard_frame(
@@ -11193,13 +11237,6 @@ impl RuntimeRenderPathCache {
         {
             self.path_composer_lookup = Some(RuntimePathComposerLookupFrame {
                 key,
-                composer_index_by_shape_local: Arc::new(runtime_local_index_lookup(
-                    graph
-                        .path_composers
-                        .iter()
-                        .enumerate()
-                        .map(|(index, composer)| (composer.shape_local, index)),
-                )),
                 path_index_by_local: Arc::new(runtime_local_index_lookup(
                     graph
                         .paths
@@ -12813,24 +12850,6 @@ fn runtime_shape_paint_container_world_transform(
     }
 }
 
-fn runtime_draw_command_will_draw_live(
-    instance: &ArtboardInstance,
-    command: &RuntimeDrawCommand,
-) -> bool {
-    if command.kind != RuntimeDrawCommandKind::Draw {
-        return true;
-    }
-    if command.object_kind == RuntimeDrawCommandObjectKind::Image
-        || sorted_drawable_uses_render_opacity(command.type_name)
-    {
-        return command
-            .local_id
-            .and_then(|local_id| instance.component(local_id))
-            .is_some_and(|component| component.transform.render_opacity != 0.0);
-    }
-    true
-}
-
 fn runtime_foreground_layout_parent_local(
     instance: &ArtboardInstance,
     foreground_local: usize,
@@ -13372,6 +13391,184 @@ fn runtime_draw_live_command(
         renderer.restore();
     }
 
+    Ok(())
+}
+
+/// Direct port of C++ `Shape::draw` and `ShapePaint::draw`
+/// (`src/shapes/shape.cpp:137-159`,
+/// `src/shapes/paint/shape_paint.cpp:78-191`). Shape memberships and paths are
+/// already retained by the clone-owned Shape; this adapter draws those live
+/// paints without constructing a `RuntimeDrawCommand`.
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_live_shape(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    shape_local: usize,
+    shape_paints: &[RuntimeShapePaintCommand],
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    path_cache: &mut RuntimeRenderPathCache,
+    mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+) -> Result<()> {
+    let shape_world = path_cache.component_world_transform_with_bounds(
+        instance,
+        graph,
+        shape_local,
+        layout_bounds,
+    );
+
+    for paint in shape_paints {
+        let global_id = paint.paint_global_id;
+        let paint_configuration_is_current =
+            paint_configurations
+                .as_deref()
+                .is_some_and(|configurations| {
+                    configurations.is_current(
+                        global_id,
+                        runtime_paint_configuration_epoch(instance, paint),
+                    )
+                });
+        if !paint_configuration_is_current {
+            let object = runtime
+                .object(global_id as usize)
+                .with_context(|| format!("missing paint global {global_id}"))?;
+            let render_paint = paint_by_global
+                .paint_mut(global_id)
+                .with_context(|| format!("missing render paint for global {global_id}"))?
+                .as_mut();
+            if let Some(configurations) = paint_configurations.as_mut() {
+                runtime_configure_paint_with_cache(
+                    render_paint,
+                    configurations,
+                    global_id,
+                    instance,
+                    object,
+                    paint,
+                )?;
+            } else {
+                runtime_configure_paint(render_paint, instance, object, paint, None)?;
+            }
+        }
+
+        let draw_path_revision = runtime_draw_path_revision(instance, paint.path_kind);
+        let effect_or_shape_path_commands = if paint.has_effect_path {
+            paint.effect_path_commands.as_slice()
+        } else {
+            paint.path_commands.as_slice()
+        };
+        let draw_path_commands = paint
+            .feather_state
+            .as_ref()
+            .filter(|feather| feather.inner)
+            .map(|feather| feather.inner_path_commands.as_slice())
+            .unwrap_or(effect_or_shape_path_commands);
+        let draw_path_cache_local = if paint.has_effect_path {
+            Some(paint.paint_local)
+        } else {
+            Some(shape_local)
+        };
+        let inner_feather_path_cache_local = if paint
+            .feather_state
+            .as_ref()
+            .is_some_and(|feather| feather.inner)
+        {
+            Some(paint.paint_local)
+        } else {
+            draw_path_cache_local
+        };
+
+        let mut saved = !paint.needs_save_operation;
+        if let Some(feather) = paint.feather_state.as_ref()
+            && runtime_feather_uses_world_space(feather)
+            && !feather.inner
+            && runtime_feather_has_offset(feather)
+        {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+        }
+        if matches!(
+            paint.path_kind,
+            RuntimeShapePaintPathKind::Local | RuntimeShapePaintPathKind::LocalClockwise
+        ) {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            renderer.transform(runtime_render_mat(shape_world));
+        }
+        if let Some(feather) = paint.feather_state.as_ref() {
+            if feather.inner {
+                // C++ returns from ShapePaint::draw here. The Shape loop then
+                // continues to its next retained paint.
+                if feather.inner_path_commands.is_empty() {
+                    continue;
+                }
+                if !saved {
+                    saved = true;
+                    renderer.save();
+                }
+                let clip_path = path_cache.draw_path(
+                    RuntimeDrawPathCacheKey {
+                        kind: RuntimeDrawPathCacheKind::Draw,
+                        path_kind: runtime_draw_path_cache_path_kind(paint),
+                        local_id: draw_path_cache_local,
+                        path_index: paint.clip_path_slot_index,
+                    },
+                    draw_path_revision,
+                    factory,
+                    effect_or_shape_path_commands,
+                    RenderFillRule::Clockwise,
+                );
+                renderer.clip_path(clip_path.as_ref());
+            } else if !runtime_feather_uses_world_space(feather)
+                && runtime_feather_has_offset(feather)
+            {
+                if !saved {
+                    saved = true;
+                    renderer.save();
+                }
+                renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+            }
+        }
+
+        let replay_fill_rule =
+            (paint.paint_type == RuntimeShapePaintKind::Fill).then_some(paint.fill_rule);
+        let prepared_raw_path = paint.prepared_raw_path.as_ref().filter(|_| {
+            !paint.has_effect_path
+                && !paint
+                    .feather_state
+                    .as_ref()
+                    .is_some_and(|feather| feather.inner)
+        });
+        let path = path_cache.draw_path_with_optional_fill_rule_and_prepared_raw_path(
+            RuntimeDrawPathCacheKey {
+                kind: RuntimeDrawPathCacheKind::Draw,
+                path_kind: runtime_draw_path_cache_path_kind(paint),
+                local_id: inner_feather_path_cache_local,
+                path_index: paint.path_slot_index,
+            },
+            draw_path_revision,
+            factory,
+            draw_path_commands,
+            RenderFillRule::Clockwise,
+            replay_fill_rule,
+            prepared_raw_path,
+        );
+        let render_paint = paint_by_global
+            .paint(global_id)
+            .with_context(|| format!("missing render paint for global {global_id}"))?
+            .as_ref();
+        renderer.draw_path(path.as_ref(), render_paint);
+        if saved && paint.needs_save_operation {
+            renderer.restore();
+        }
+    }
     Ok(())
 }
 
@@ -15141,9 +15338,7 @@ fn runtime_draw_component_list(
             item.logical_index,
             item.render_cache_revision,
         );
-        let rd1_live_traversal_spike = path_cache.rd1_live_traversal_spike;
         let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
-        child_cache.rd1_live_traversal_spike = rd1_live_traversal_spike;
         let child = component_list_layout_children
             .get(&local_id)
             .and_then(|children| children.get(item_index))
@@ -15379,9 +15574,7 @@ fn runtime_draw_nested_artboard(
         referenced_artboard_global,
         nested_instance.map_or(0, |nested| nested.render_cache_revision),
     );
-    let rd1_live_traversal_spike = path_cache.rd1_live_traversal_spike;
     let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
-    child_cache.rd1_live_traversal_spike = rd1_live_traversal_spike;
 
     if let Some(child) = persistent_child {
         let layout_child;

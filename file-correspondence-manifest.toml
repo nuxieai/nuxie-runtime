@@ -1144,7 +1144,7 @@ b6_row_id = "B6-0094"
 b6_verdict = "DIVERGENT"
 b6_cluster = "artboard"
 audit_record = "docs/b6-audit/results/artboard.md"
-note = "RD-C1 verified Artboard::buildDrawOrder/sortDrawOrder/clearRedundantOperations and ordinary DrawOrder/Clipping update ownership; later RD lanes and Artboard::volume keep the whole-file row pending."
+note = "RD-C1/C2 implemented and executor-gate-green pending independent orchestrator verification: Artboard owns the live drawable and Shape topology and ordinary traversal no longer builds a full-frame command snapshot; later RD lanes and Artboard::volume keep the whole-file row pending."
 
 [[file]]
 upstream = "src/artboard_component_list.cpp"
@@ -3988,7 +3988,7 @@ b6_row_id = "B6-0331"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C1/C2 implemented and executor-gate-green pending independent orchestrator verification: clip proxies and pending clip ranges are retained owner state and consumed during live traversal; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/cubic_asymmetric_vertex.cpp"
@@ -4180,7 +4180,7 @@ b6_row_id = "B6-0347"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: Fill is dispatched from the live Shape paint membership with the C++ path/paint ordering; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/gradient_stop.cpp"
@@ -4216,7 +4216,7 @@ b6_row_id = "B6-0350"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: linear-gradient paint state is read while dispatching the live owning Shape; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/radial_gradient.cpp"
@@ -4228,7 +4228,7 @@ b6_row_id = "B6-0351"
 b6_verdict = "ISOMORPHIC"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: radial-gradient paint state is read while dispatching the live owning Shape; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/shape_paint.cpp"
@@ -4240,7 +4240,7 @@ b6_row_id = "B6-0352"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: ShapePaint draws directly from live owner membership without a full-frame RuntimeDrawCommand; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/shape_paint_mutator.cpp"
@@ -4264,7 +4264,7 @@ b6_row_id = "B6-0354"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: ShapePaintPath composition follows clone-owned PathComposer membership and live path flags/collapse state; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/solid_color.cpp"
@@ -4276,7 +4276,7 @@ b6_row_id = "B6-0355"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: solid-color paint state is read while dispatching the live owning Shape; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/stroke.cpp"
@@ -4288,7 +4288,7 @@ b6_row_id = "B6-0356"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: Stroke is dispatched from the live Shape paint membership with C++ transform/path semantics; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/stroke_effect.cpp"
@@ -4360,7 +4360,7 @@ b6_row_id = "B6-0362"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: PathComposer order is retained by the clone-owned Shape and ordinary draw reads live path flags/collapse state; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/path_vertex.cpp"
@@ -4432,7 +4432,7 @@ b6_row_id = "B6-0368"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: Shape owns stable ordered path and paint membership and dispatches directly during live traversal; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/shape_paint_container.cpp"

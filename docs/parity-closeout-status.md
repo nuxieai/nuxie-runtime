@@ -562,9 +562,15 @@ upstream-sync-map registry).
   clip proxies, and save intent. Ordinary `DrawOrder`/`Clipping` dirt relinks
   or refreshes that owner state from live generated properties. Imported graph
   order and mutable values are construction inputs only; the sorted-order
-  prepared frame and `draw_order_epoch` bridge are deleted. RD-C2 is next; the
-  command-materialization seam and every scene cache remain intact until that
-  lane supplies the complete Shape/path/paint live feed.
+  prepared frame and `draw_order_epoch` bridge are deleted. RD-C2 is complete:
+  clone-owned Shapes retain their ordered PathComposer path and Shape paint
+  memberships; ordinary traversal reads live path visibility/collapse state
+  and dispatches Shape/ShapePaint directly in owner order. The temporary
+  full-frame command-materialization switch and seam are deleted. The narrower
+  current-object adapters for later RD-C3..C6 families and all scene resource
+  caches remain; no RD-C7 deletion has begun. The mandatory canonical,
+  quiet-host, fully fenced post-C1/C2 performance checkpoint is next and must
+  be reported to the user before any scene-cache deletion.
   WATCH: a user-authorized but invalid 2026-07-22 unfenced R4 bracket observed
   `gm-bug339297-clockwise-atomic` at 2.129754x C++ in its post-tail B leg. The
   bracket is discarded as evidence because host-idle spread was 58.47% and A
@@ -631,17 +637,15 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-C2 Shape, paths, and paints. RD-C1's object-owned live list, target
-   relinking, clip-proxy pool, and save-elision foundation is complete. Port the
-   mapped C++ files directly under RF-1..RF-26; do not reshape the prepared Rust
-   feed. Once C2 removes the command-materialization seam, stop for the second
-   measured USER
-   CHECKPOINT. No scene-cache deletion may begin until the new delta is reported
-   and reviewed. `r4-timing-gate` remains deferred to a quiet host after four
-   canonical brackets were invalidated by the unchanged 12% host-idle-spread
-   fence. A later unfenced bracket is discarded and recorded only as the WATCH
-   above; no R4 ratio is claimed. No future measurement may override a fence or
-   validity check, including a labeled one-off run.
+1. #RD-1 post-C1/C2 measured USER CHECKPOINT. Run `r4-timing-gate` and
+   `perf-hot-loop` canonically on a quiet host with the unchanged 12%
+   host-idle-spread fence and every validity check intact. If the host is noisy,
+   defer; never override a fence. Report the valid delta to the user and stop
+   for review. No scene-cache deletion may begin before that review.
+2. #RD-C3 Images and meshes. Continue the mapped C++ ownership translation
+   under RF-1..RF-26 only after the performance checkpoint is accepted. The
+   narrower current-object adapter and retained scene resources remain until
+   their mapped lanes cross the retention boundary.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -787,6 +791,21 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-22 — #RD-C2 replaced the temporary full-frame command materializer
+  with direct live Shape traversal. Clone-owned Shape topology retains ordered
+  PathComposer path membership and Shape paint membership; ordinary draw reads
+  live `Path::pathFlags`/collapse state, composes in owner order, and dispatches
+  ShapePaint directly with C++ fill/stroke/gradient semantics. Geometry
+  preparation still uses the retained raw-path resources, and the narrower
+  current-object adapters for RD-C3..C6 plus every scene resource cache remain;
+  no RD-C7 deletion has begun. Focused evidence is runtime 402/402, nuxie
+  140/140, and pinned-C++ probe 721/721. Ordinary and scripted goldens are
+  317/317 entries plus 647/647 segments with zero divergences; the probe-armed
+  full workspace suite and CAPI smoke pass. Renderer pixels are 1468/1468 exact
+  with zero divergences and zero gated failures. The mandatory quiet-host,
+  fully fenced post-C1/C2 performance checkpoint is next and must be reported
+  to the user before any scene-cache deletion.
 
 - 2026-07-22 — #RD-C1 replaced the sorted drawable frame with clone-owned,
   stable drawable objects linked through live `prev`/`next` ids. DrawTarget and

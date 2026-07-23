@@ -3077,6 +3077,15 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-22: #RD-C2 moved Shape/path/paint drawing onto the live owner
+  topology. Clone-owned Shapes retain PathComposer path order and Shape paint
+  order, ordinary traversal reads live path visibility/collapse state, and
+  Shape/ShapePaint dispatch no longer requires a full-frame command snapshot.
+  The narrower current-object adapters for RD-C3..C6 and all scene resource
+  caches remain; RD-C7 demolition has not begun. The mandatory canonical,
+  quiet-host, fully fenced post-C1/C2 performance checkpoint is next and must
+  be reported to the user before any scene-cache deletion. The pixel referee
+  remains 1468/1468 exact with zero divergences and zero gated failures.
 - 2026-07-22: #RD-C1 established the live drawable/order foundation for the
   renderer-feed restoration. Each ArtboardInstance now owns stable drawable
   objects, and command construction follows their retained `prev` links;

@@ -54,7 +54,7 @@ use crate::data_bind_graph::{
 };
 use crate::draw::{
     RuntimeDrawableList, RuntimeInitialNestedLayoutPaintFrame, RuntimeLayoutBounds,
-    runtime_apply_component_list_item_layout_bounds,
+    RuntimeShapeList, runtime_apply_component_list_item_layout_bounds,
 };
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
@@ -323,6 +323,9 @@ pub struct ArtboardInstance {
     /// C++ `Artboard::m_Drawables`/`m_FirstDrawable`: clone-owned drawable
     /// objects linked in live draw order. Import graph order only seeds it.
     pub(crate) runtime_drawables: RuntimeDrawableList,
+    /// C++ `Shape::{m_PathComposer,m_Paths}` plus
+    /// `ShapePaintContainer::m_ShapePaints`: clone-owned ordered memberships.
+    pub(crate) runtime_shapes: RuntimeShapeList,
     pub(crate) did_change: bool,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
@@ -1118,6 +1121,7 @@ impl ArtboardInstance {
             text_affecting_locals,
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::from_graph(graph),
+            runtime_shapes: RuntimeShapeList::from_graph(graph),
             did_change: true,
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
@@ -6821,6 +6825,7 @@ mod tests {
             text_affecting_locals,
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::default(),
+            runtime_shapes: RuntimeShapeList::default(),
             did_change: true,
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,

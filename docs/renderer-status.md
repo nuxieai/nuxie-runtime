@@ -3077,6 +3077,16 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-23: The next user-initiated post-RD-C6 checkpoint rebuilt and
+  first-launched immutable pinned C++ `d788e8ec`, pre-live A `076b4139`, and
+  live-traversal B `307b0db7` runners. The user ended the prepared idle
+  interval after about four minutes. The sole canonical A-B-B-A run then
+  failed closed in `validate-host-load` at 80.60% idle spread against the
+  unchanged 12% fence
+  (`target/r4-timing-gate/20260723T154251Z-36478`). No comparison,
+  `perf-hot-loop`, or retry followed. This is invalid evidence, and RD-C7
+  remains blocked pending a valid checkpoint number and user review.
+
 - 2026-07-23: The configured post-RD-C6 A-B-B-A checkpoint used immutable
   C++ `d788e8ec`, pre-live A `076b4139`, and RD-C6 B `6830602c` runners. Its
   only bracket failed closed in `validate-host-load` at 36.54% idle spread

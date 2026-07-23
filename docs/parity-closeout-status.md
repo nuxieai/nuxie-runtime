@@ -618,6 +618,12 @@ upstream-sync-map registry).
   36.54% idle spread (`target/r4-timing-gate/20260723T081932Z-60125`), before
   any comparison was accepted. No retry or `perf-hot-loop` followed. RD-C7
   remains blocked.
+  The next user-initiated attempt rebuilt and first-launched immutable pinned
+  C++, A `076b4139`, and B `307b0db7` runners. The user shortened the
+  post-build idle interval from about ten minutes to about four, then the one
+  canonical A-B-B-A run failed closed at 80.60% idle spread
+  (`target/r4-timing-gate/20260723T154251Z-36478`). No comparison,
+  `perf-hot-loop`, or retry followed; RD-C7 remains blocked.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -833,6 +839,16 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-23 — A user-initiated post-RD-C6 checkpoint rebuilt and
+  first-launched immutable pinned C++ `d788e8ec`, pre-live A `076b4139`, and
+  live-traversal B `307b0db7` runners. After the user directed the prepared
+  idle interval to end at about four minutes, the sole canonical A-B-B-A run
+  failed closed in `validate-host-load`: samples ranged from 0.00% to 80.60%
+  idle, an 80.60% spread against the unchanged 12% fence
+  (`target/r4-timing-gate/20260723T154251Z-36478`). No comparison exists; no
+  `perf-hot-loop` or retry followed. The attempt is invalid evidence and
+  RD-C7 plus every scene-cache deletion remain blocked.
 
 - 2026-07-23 — The sole configured post-RD-C6 performance checkpoint attempt
   used immutable C++ `d788e8ec`, pre-live A `076b4139`, and RD-C6 B

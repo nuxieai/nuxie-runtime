@@ -140,6 +140,30 @@ unchanged 1.0x threshold. Across 11 entries, min-based aggregate Rust/C++ was
 ranged from 4.623x to 8.955x. These are checkpoint results for user review,
 not authorization for RD-C7. Scene-cache deletion remains blocked.
 
+### Post-fix checkpoint
+
+After the exact C++-owner correction landed at immutable B `95eb49c3`, the
+required checkpoint reran against pinned C++ `d788e8ec` and pre-live A
+`076b4139`, with no threshold overrides. The canonical A-B-B-A artifact is
+`target/r4-timing-gate/20260723T213040Z-37772`. It failed the retained checks:
+
+- normalized B/A was 1.036127x;
+- post-tail B/C++ was 1.059670x in aggregate;
+- the worst B row was `gm-batchedconvexpaths-msaa` at 1.352479x C++;
+- C++ control drift was 1.504122x against 1.05x;
+- A repeat drift was 1.017338x and B repeat drift was 1.049521x, both passing.
+
+Host idle ranged from 70.53% to 90.64% (20.11% spread), retained only as
+non-gating telemetry. The canonical hot-loop artifact is
+`target/rd1-postfix-perf-hot-loop-20260723T2133Z.json`. It also failed the
+unchanged 1.0x limit, but the diagnosed redraw defect is substantially
+reduced: aggregate Rust/C++ fell from 61.278871x to 2.332664x, and
+`ai_assitant@0` fell from 229.451367x total / 577.854015x draw to 2.549961x
+total / 4.719936x draw. The residual worst total is
+`advance_blend_mode@0` at 3.855891x; the residual worst draw is
+`advance_blend_mode@0.25` at 11.020004x. The checkpoint did not pass and is
+stopped for user review. RD-C7 and all scene-cache deletion remain blocked.
+
 ## Correctness and floors
 
 - Spike slice: 3/3 entries and 7/7 exact segments, zero divergence.

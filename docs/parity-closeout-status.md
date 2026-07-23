@@ -666,10 +666,22 @@ upstream-sync-map registry).
   scripting-on, both below the unchanged 9,437,184 B budget. The probe build
   now cleans stale dependency files after Premake regeneration so temporary
   pin-verification checkout paths cannot poison the ordinary workspace target.
-  No post-fix performance result has been accepted. The mandatory canonical
-  bracket plus `perf-hot-loop` remains the next user checkpoint; RD-C7 and
-  every scene-cache deletion remain blocked until both retained drift/perf
-  checks pass and the result is reported and reviewed.
+  The first post-fix checkpoint at immutable B `95eb49c3` completed both
+  required measurements. The canonical A-B-B-A comparison
+  (`target/r4-timing-gate/20260723T213040Z-37772`) reported normalized
+  B/A=1.036127x, post-tail B/C++=1.059670x aggregate, and worst
+  B/C++=1.352479x (`gm-batchedconvexpaths-msaa`). A-repeat=1.017338x and
+  B-repeat=1.049521x passed their 1.05x limits, but C++ control
+  drift=1.504122x and both 1.0x performance checks failed. Host idle spread
+  was recorded as non-gating telemetry at 20.11%. Canonical `perf-hot-loop`
+  (`target/rd1-postfix-perf-hot-loop-20260723T2133Z.json`) improved the
+  diagnosed pre-fix 61.278871x aggregate to 2.332664x, with
+  `ai_assitant@0` improving from 229.451367x total / 577.854015x draw to
+  2.549961x total / 4.719936x draw. The remaining worst total is
+  `advance_blend_mode@0` at 3.855891x and worst draw is
+  `advance_blend_mode@0.25` at 11.020004x. This checkpoint did not pass.
+  RD-C7 and every scene-cache deletion remain blocked pending user review;
+  no further change is authorized by this evidence alone.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -729,13 +741,15 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-1 post-C1/C2 measured USER CHECKPOINT — corrective exact-owner port is
-   gate-green; run one fresh canonical A-B-B-A bracket plus `perf-hot-loop`
-   in the next suitable measurement window. Both retained drift/perf checks
-   must pass, and report the result for user review before RD-C7. The prior
-   61.278871x aggregate / 577.854015x `ai_assitant` draw result is superseded
-   only as a diagnosed pre-fix defect, not as accepted performance evidence.
-   Every scene-cache deletion remains blocked.
+1. #RD-1 post-C1/C2 measured USER CHECKPOINT — STOP FOR USER REVIEW. The
+   immutable post-fix run at B `95eb49c3` completed both required
+   measurements but did not pass. A-B-B-A reported normalized
+   B/A=1.036127x, post-tail B/C++=1.059670x, worst B/C++=1.352479x, and C++
+   control drift=1.504122x; both candidate repeat checks passed.
+   `perf-hot-loop` improved from the diagnosed pre-fix 61.278871x aggregate
+   to 2.332664x, while `ai_assitant` improved from 577.854015x draw to
+   4.719936x draw. Report these results; do not begin RD-C7 or any scene-cache
+   deletion without a new user decision.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -881,6 +895,24 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-23 — The mandatory post-fix RD-1 checkpoint ran against immutable
+  pinned C++ `d788e8ec`, pre-live A `076b4139`, and corrective B `95eb49c3`
+  with the unchanged A-B-B-A order and 1.0x performance / 1.05x drift limits.
+  The bracket artifact
+  `target/r4-timing-gate/20260723T213040Z-37772` failed: normalized
+  B/A=1.036127x, post-tail B/C++=1.059670x aggregate, worst
+  B/C++=1.352479x (`gm-batchedconvexpaths-msaa`), and C++ control
+  drift=1.504122x. A-repeat=1.017338x and B-repeat=1.049521x passed; 20.11%
+  host-idle spread is telemetry only. Canonical `perf-hot-loop`
+  (`target/rd1-postfix-perf-hot-loop-20260723T2133Z.json`) also failed its
+  unchanged 1.0x limit, but confirms the exact-owner correction removed the
+  catastrophic redraw defect: aggregate Rust/C++ fell from 61.278871x to
+  2.332664x and `ai_assitant@0` fell from 229.451367x total /
+  577.854015x draw to 2.549961x total / 4.719936x draw. The residual worst
+  total is `advance_blend_mode@0` at 3.855891x and worst draw is
+  `advance_blend_mode@0.25` at 11.020004x. The checkpoint is STOP FOR USER
+  REVIEW; RD-C7 and every scene-cache deletion remain blocked.
 
 - 2026-07-23 — #RD-1 corrective owner port localized the catastrophic
   unchanged-frame hot loop to Shape draw rebuilding path/effect command state

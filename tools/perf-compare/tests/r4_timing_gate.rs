@@ -215,7 +215,6 @@ fn run_gate_with_sampler(gate: Gate<'_>, sampler: &Path) -> Output {
         .env("R4_TIMING_GATE_MAX_B_OVER_A", gate.max_b_over_a)
         .env("R4_TIMING_GATE_MAX_CONTROL_DRIFT", gate.max_control_drift)
         .env("R4_TIMING_GATE_MAX_REPEAT_DRIFT", gate.max_repeat_drift)
-        .env("R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT", "1")
         .env("R4_TIMING_GATE_HOST_SAMPLER", sampler)
         .env(
             "R4_TIMING_GATE_BASELINE_SOURCE_ID",
@@ -704,7 +703,7 @@ fn r4_gate_accepts_stable_low_absolute_idle() {
 }
 
 #[test]
-fn r4_gate_rejects_load_spread_before_writing_a_comparison() {
+fn r4_gate_records_load_spread_without_gating_the_comparison() {
     let directory = TempDir::new("idle-spread");
     let baseline = static_runner(&directory.path, "baseline.sh", 100);
     let a = static_runner(&directory.path, "a.sh", 100);
@@ -724,11 +723,16 @@ fn r4_gate_rejects_load_spread_before_writing_a_comparison() {
         &sampler,
     );
 
-    assert!(!output.status.success());
-    assert_finalized_failure(&directory.path);
+    assert!(
+        output.status.success(),
+        "stderr={} metadata={}",
+        String::from_utf8_lossy(&output.stderr),
+        metadata(&directory.path)
+    );
     let decision = decision(&directory.path);
-    assert_eq!(decision["phase"], "validate-host-load");
-    assert_eq!(decision["comparison_available"], false);
+    assert_eq!(decision["status"], "pass");
+    assert_eq!(decision["phase"], "validate-comparison");
+    assert_eq!(decision["comparison_available"], true);
     assert_eq!(decision["idle_spread_percent"], 8.0);
-    assert!(!directory.path.join("artifacts/comparison.json").exists());
+    assert!(directory.path.join("artifacts/comparison.json").exists());
 }

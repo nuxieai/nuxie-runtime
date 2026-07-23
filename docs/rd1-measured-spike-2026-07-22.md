@@ -110,14 +110,35 @@ its 65.92%–83.10% idle range produced 17.18% spread, still above the fence.
 Neither attempt ran `perf-hot-loop` or produced a comparison. These rows are
 provenance records, not performance evidence, and RD-C7 remains blocked.
 
-The next-attempt recipe separates build from measure. The user will initiate
-the attempt when the orchestrator's quiet-window watcher fires. Then build all
-three immutable runners and launch each once briefly to complete Gatekeeper
-assessment, leave the host idle for approximately ten minutes, and run one
-canonical preflight. Only a valid result proceeds to the fenced A-B-B-A bracket
-and `perf-hot-loop`; a failed preflight ends the session without a retry. This
-prevents fresh-build syspolicyd and fseventsd activity from seeding the measured
-window while preserving every existing fence and provenance check.
+On 2026-07-23 the user removed host-idle spread as an acceptance condition and
+accepted testing in the current environment. Boundary samples and aggregate
+spread remain recorded telemetry, but there is no idle-spread threshold or
+host-load rejection phase. Future runs proceed through comparison regardless
+of sampled load and are judged by immutable runner provenance, fixed A-B-B-A
+ordering, paired C++ control drift, candidate-repeat drift, and performance
+ratios. The historical rows above remain invalid under the policy active when
+they ran.
+
+### Current-environment checkpoint
+
+The first run under the telemetry-only host-load policy completed the full
+A-B-B-A bracket at `target/r4-timing-gate/20260723T163358Z-76070`. Host idle
+ranged from 60.52% to 85.23% (24.71% spread), which is recorded but non-gating.
+The comparison was produced and failed the remaining gates:
+
+- normalized B/A was 1.068645x (+6.86%);
+- normalized B/C++ was 1.149762x in aggregate;
+- the worst B row was `gm-OverStroke-clockwise-atomic` at 2.156308x C++;
+- C++ control drift was 1.114087x against 1.05x;
+- B repeat drift was 1.060374x against 1.05x.
+
+The canonical `perf-hot-loop` report at
+`target/rd1-current-env-perf-hot-loop-20260723T1636Z.json` also failed its
+unchanged 1.0x threshold. Across 11 entries, min-based aggregate Rust/C++ was
+61.278871x (2,505.782499 ms / 40.891460 ms). The dominant row was
+`ai_assitant@0` at 229.451367x total and 577.854015x draw; the remaining rows
+ranged from 4.623x to 8.955x. These are checkpoint results for user review,
+not authorization for RD-C7. Scene-cache deletion remains blocked.
 
 ## Correctness and floors
 

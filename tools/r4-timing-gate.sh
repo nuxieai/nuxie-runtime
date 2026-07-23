@@ -18,7 +18,6 @@ capture_max_ratio="${R4_TIMING_GATE_CAPTURE_MAX_RATIO:-1000}"
 max_b_over_a="${R4_TIMING_GATE_MAX_B_OVER_A:-1.0}"
 max_control_drift="${R4_TIMING_GATE_MAX_CONTROL_DRIFT:-1.05}"
 max_repeat_drift="${R4_TIMING_GATE_MAX_REPEAT_DRIFT:-1.05}"
-max_idle_spread_percent="${R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT:-12}"
 host_sampler="${R4_TIMING_GATE_HOST_SAMPLER:-}"
 baseline_source_id="${R4_TIMING_GATE_BASELINE_SOURCE_ID:-}"
 a_source_id="${R4_TIMING_GATE_A_SOURCE_ID:-}"
@@ -42,10 +41,10 @@ three corresponding immutable runner sources.
 
 R4_TIMING_GATE_HOST_SAMPLER may name one executable (without arguments) that
 emits a `r4-host-idle-percent=<number>` line or a normal `top` CPU line. Its
-raw output is retained. Sampling occurs before and after each leg and rejects
-only excessive spread across the bracket; paired C++ controls inside every
-report account for absolute load during the timed work without running a
-competing monitor.
+raw output is retained. Sampling occurs before and after each leg as
+non-gating telemetry. Paired C++ controls inside every report plus control and
+candidate-repeat drift checks account for load during the timed work without
+running a competing monitor.
 EOF
 }
 
@@ -181,7 +180,6 @@ printf 'capture_max_ratio=%s\n' "$capture_max_ratio" >>"$metadata"
 printf 'max_b_over_a=%s\n' "$max_b_over_a" >>"$metadata"
 printf 'max_control_drift=%s\n' "$max_control_drift" >>"$metadata"
 printf 'max_repeat_drift=%s\n' "$max_repeat_drift" >>"$metadata"
-printf 'max_idle_spread_percent=%s\n' "$max_idle_spread_percent" >>"$metadata"
 printf 'baseline_source_id=%q\n' "$baseline_source_id" >>"$metadata"
 printf 'a_source_id=%q\n' "$a_source_id" >>"$metadata"
 printf 'b_source_id=%q\n' "$b_source_id" >>"$metadata"
@@ -212,8 +210,7 @@ for numeric in \
     R4_TIMING_GATE_CAPTURE_MAX_RATIO="$capture_max_ratio" \
     R4_TIMING_GATE_MAX_B_OVER_A="$max_b_over_a" \
     R4_TIMING_GATE_MAX_CONTROL_DRIFT="$max_control_drift" \
-    R4_TIMING_GATE_MAX_REPEAT_DRIFT="$max_repeat_drift" \
-    R4_TIMING_GATE_MAX_IDLE_SPREAD_PERCENT="$max_idle_spread_percent"; do
+    R4_TIMING_GATE_MAX_REPEAT_DRIFT="$max_repeat_drift"; do
     is_positive_number "${numeric#*=}" \
         || fail "validate-configuration" "${numeric%%=*} must be a positive number" 2
 done
@@ -363,10 +360,8 @@ for index in "${!sequence[@]}"; do
     run_leg "$((index + 1))" "${sequence[$index]}"
 done
 
-phase="validate-host-load"
+phase="summarize-host-load"
 idle_spread="$(awk 'NR == 2 { min = $3; max = $3 } NR > 1 { if ($3 < min) min = $3; if ($3 > max) max = $3 } END { if (NR > 1) printf "%.6f", max - min }' "$output_dir/host-idle.tsv")"
-awk -v spread="$idle_spread" -v maximum="$max_idle_spread_percent" 'BEGIN { exit !(spread <= maximum) }' \
-    || fail "validate-host-load" "idle spread fence failed: ${idle_spread}% > ${max_idle_spread_percent}%"
 printf 'idle_spread_percent=%s\n' "$idle_spread" >>"$metadata"
 
 phase="validate-comparison"

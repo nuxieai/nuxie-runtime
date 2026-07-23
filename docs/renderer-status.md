@@ -1738,11 +1738,11 @@ widening. Universal byte identity is not part of that stop condition.
     and pairs Rust from that exact sample index. The v3 comparator validates
     all sample-order, selected-pair, aggregate, worst-row, adapter, and scene
     provenance before applying the inclusive 2.0x threshold. The shell pins
-    the manifest and all three runners, rejects every runner alias, applies
-    host-load fences before comparison, and writes one authoritative JSON gate
-    decision on both admitted and rejected runs. Eleven gate integration tests
-    cover pass, threshold, drift, malformed output, mutation, aliasing, stable
-    low absolute idle, idle spread, and sampler serialization. This tooling does not add
+    the manifest and all three runners, rejects every runner alias, records
+    host-load telemetry without using it for admission, and writes one
+    authoritative JSON gate decision. Eleven gate integration tests cover
+    pass, threshold, drift, malformed output, mutation, aliasing, stable low
+    absolute idle, non-gating idle spread, and sampler serialization. This tooling does not add
     timing ceremony to counter-defined optimizations; it only makes item 135's
     one final timing-defined decision trustworthy.
 138. [x] Replace generic atomic backing host clears with C++'s generated
@@ -3076,6 +3076,30 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
    decision used D's counterbalanced directional p50 after exact work parity.
 
 ## Log
+
+- 2026-07-23: The first current-environment RD checkpoint under the
+  telemetry-only host-load policy reached comparison despite 24.71% idle
+  spread. Pinned C++ `d788e8ec`, pre-live A `076b4139`, and live-traversal B
+  `307b0db7` produced normalized B/A=1.068645x, aggregate B/C++=1.149762x,
+  and worst B/C++=2.156308x (`gm-OverStroke-clockwise-atomic`). The unchanged
+  C++ control-drift and B-repeat-drift checks also failed at 1.114087x and
+  1.060374x against 1.05x
+  (`target/r4-timing-gate/20260723T163358Z-76070`). Canonical
+  `perf-hot-loop` reported aggregate Rust/C++=61.278871x over 11 entries, with
+  `ai_assitant@0` at 229.451367x total and 577.854015x draw
+  (`target/rd1-current-env-perf-hot-loop-20260723T1636Z.json`). This is the
+  binding user checkpoint: stop for review, with RD-C7 and all scene-cache
+  deletion still blocked.
+
+- 2026-07-23: By explicit user decision, R4 host-idle spread is no longer an
+  admission fence. Boundary samples and aggregate spread remain in every
+  artifact as telemetry, while immutable runner provenance, fixed A-B-B-A
+  ordering, paired C++ control drift, candidate-repeat drift, and performance
+  ratios remain gating. The integration contract now proves that an 8%
+  alternating idle spread still reaches comparison. This supersedes only the
+  spread-admission portion of the 2026-07-17 load decision; historical
+  fence-rejected attempts remain correctly labeled under their then-active
+  policy.
 
 - 2026-07-23: The user initiated one new immediate post-RD-C6 checkpoint
   attempt using the unchanged immutable pinned C++ `d788e8ec`, pre-live A

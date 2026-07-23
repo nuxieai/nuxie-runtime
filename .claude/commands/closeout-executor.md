@@ -92,6 +92,9 @@ main — their changes are audited by the same gates, not trusted).
    (d) deletion gate: prepared frames, command streams, path caches,
    epoch bridges gone; re-run the B-6 audit brief over renderer clusters
    expecting zero mutation-gated mechanisms; remove register D-12.
+   R4 host-idle samples are telemetry only and never admit or reject a run
+   (explicit user decision 2026-07-23); immutable provenance, A-B-B-A order,
+   paired control drift, repeat drift, and performance ratios remain gating.
 4. **#B-5 fixtures** (4 named in the status file): two-way TrimPath.start
    seeding, nested parent-relative bind default at t=0, self-referential
    layout recursion, deep trigger source paths. Each becomes a repair or

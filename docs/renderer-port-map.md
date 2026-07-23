@@ -112,6 +112,14 @@ rejects excessive load spread across the bracket and retains paired C++ control
 and candidate-repeat drift checks. A stable busy machine is admissible; an
 unstable bracket is not.
 
+**Decision (2026-07-23): host load is telemetry, not admission.** The user
+removed the remaining host-idle-spread fence and accepted measurement in the
+current environment. The final R4 timing gate still records every boundary
+sample and its spread, but host load cannot accept or reject a result. Immutable
+runner provenance, the fixed A-B-B-A order, paired C++ control drift,
+candidate-repeat drift, and the performance ratios remain gating. This
+supersedes the spread-admission part of the 2026-07-17 decision.
+
 **Decision (2026-07-17): close R4 on directional p50 after structural parity.**
 Once the deterministic counter report has zero excess rows, the final timing
 decision uses the counterbalanced fixed matrix as directional evidence rather

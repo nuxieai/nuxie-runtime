@@ -592,11 +592,12 @@ upstream-sync-map registry).
   fail closed. The diagnostic/prepared compatibility surface and scene
   resource caches remain for RD-C7; ordinary renderer feed no longer enters
   command-kind dispatch.
-  No RD-C7 deletion has begun. The mandatory canonical,
-  quiet-host, fully fenced post-C1/C2 performance checkpoint gates RD-C7 and
-  all scene-cache deletion only; RD-C3..C6 additive family migrations may
-  proceed while it is deferred. The checkpoint must still be reported to the
-  user and reviewed before demolition.
+  No RD-C7 deletion has begun. The mandatory canonical post-C1/C2 performance
+  checkpoint gates RD-C7 and all scene-cache deletion only; RD-C3..C6 additive
+  family migrations may proceed while it is deferred. By explicit user
+  decision on 2026-07-23, host-idle spread is recorded telemetry rather than
+  an admission fence. The checkpoint must still be reported to the user and
+  reviewed before demolition.
   WATCH: a user-authorized but invalid 2026-07-22 unfenced R4 bracket observed
   `gm-bug339297-clockwise-atomic` at 2.129754x C++ in its post-tail B leg. The
   bracket is discarded as evidence because host-idle spread was 58.47% and A
@@ -628,6 +629,20 @@ upstream-sync-map registry).
   runner hashes. It failed closed at 17.18% idle spread
   (`target/r4-timing-gate/20260723T162631Z-30981`) against the same 12% fence.
   No comparison or `perf-hot-loop` followed; RD-C7 remains blocked.
+  The user then removed host-idle spread as an acceptance condition and
+  accepted testing in the current environment. Historical attempts remain
+  invalid under their then-active 12% policy; the next run is judged by
+  immutable provenance, A-B-B-A ordering, paired control drift,
+  candidate-repeat drift, and the performance ratios only.
+  The first telemetry-only run reached comparison with 24.71% idle spread.
+  It reported normalized B/A=1.068645x, aggregate B/C++=1.149762x, and worst
+  B/C++=2.156308x, while still-binding C++ control drift (1.114087x) and B
+  repeat drift (1.060374x) also failed their 1.05x limits
+  (`target/r4-timing-gate/20260723T163358Z-76070`). Canonical
+  `perf-hot-loop` reported aggregate Rust/C++=61.278871x and
+  `ai_assitant@0`=229.451367x
+  (`target/rd1-current-env-perf-hot-loop-20260723T1636Z.json`). These numbers
+  await user review; RD-C7 remains blocked.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -687,17 +702,13 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-1 post-C1/C2 measured USER CHECKPOINT. Wait for the user's
-   quiet-window signal; the orchestrator owns the host watcher. Once the user
-   initiates the attempt, build all three immutable runners and launch each
-   once briefly so Gatekeeper/syspolicyd assessment and first-run filesystem
-   activity complete. Then leave the host idle for about ten minutes and run
-   exactly one canonical preflight with the unchanged 12%
-   host-idle-spread fence and every validity check intact; only a valid
-   preflight proceeds to the A-B-B-A bracket and `perf-hot-loop`. If the
-   preflight fails, defer without another attempt that session. Report the
-   valid delta to the user and stop for review. RD-C7 and all scene-cache
-   deletion remain blocked until that review.
+1. #RD-1 post-C1/C2 measured USER CHECKPOINT — STOP FOR USER REVIEW.
+   Telemetry-only A-B-B-A produced normalized B/A=1.068645x, aggregate
+   B/C++=1.149762x, worst B/C++=2.156308x, C++ control drift=1.114087x, and B
+   repeat drift=1.060374x. Canonical `perf-hot-loop` produced aggregate
+   Rust/C++=61.278871x with `ai_assitant@0`=229.451367x. Do not diagnose,
+   optimize, repeat, or begin RD-C7 until the user reviews these numbers.
+   Every scene-cache deletion remains blocked.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -843,6 +854,31 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-23 — The first current-environment checkpoint under the
+  telemetry-only host-load policy completed comparison despite 24.71% sampled
+  idle spread. Immutable pinned C++ `d788e8ec`, pre-live A `076b4139`, and
+  live-traversal B `307b0db7` produced normalized B/A=1.068645x, aggregate
+  B/C++=1.149762x, and worst B/C++=2.156308x
+  (`gm-OverStroke-clockwise-atomic`). The comparison still failed the
+  unchanged 1.0x performance limits plus C++ control drift=1.114087x and B
+  repeat drift=1.060374x against their 1.05x limits
+  (`target/r4-timing-gate/20260723T163358Z-76070`). Canonical
+  `perf-hot-loop` then reported aggregate Rust/C++=61.278871x over 11 entries;
+  `ai_assitant@0` was 229.451367x total and 577.854015x draw
+  (`target/rd1-current-env-perf-hot-loop-20260723T1636Z.json`). The user
+  checkpoint is now STOP FOR REVIEW; no RD-C7 demolition or optimization
+  began. Publication remains pending because `git pull --rebase origin main`
+  again failed GitHub SSH authentication (`Permission denied (publickey)`).
+
+- 2026-07-23 — The user removed host-idle spread as an acceptance condition
+  and accepted R4 testing in the current environment. The harness retains all
+  boundary samples and spread in its artifacts but no longer exposes or reads
+  an idle-spread threshold. Immutable runner provenance, fixed A-B-B-A order,
+  paired C++ control drift, candidate-repeat drift, and performance ratios
+  remain gating. Historical fence failures remain historical evidence under
+  their then-active policy. The current-environment checkpoint is next and
+  RD-C7 remains blocked until its number is reported and reviewed.
 
 - 2026-07-23 — The user initiated one new immediate post-RD-C6 checkpoint
   attempt using the unchanged immutable pinned C++ `d788e8ec`, pre-live A

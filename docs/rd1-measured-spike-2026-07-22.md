@@ -97,16 +97,18 @@ source-identified executables:
 | 20260723T072026Z-90912 | `076b4139` | `d335d4a1` | 65.15% | invalid: greater than 12% |
 | 20260723T081932Z-60125 | `076b4139` | `6830602c` | 36.54% | invalid: greater than 12% |
 | 20260723T154251Z-36478 | `076b4139` | `307b0db7` | 80.60% | invalid: greater than 12% |
+| 20260723T162631Z-30981 | `076b4139` | `307b0db7` | 17.18% | invalid: greater than 12% |
 
-All three used pinned C++ `d788e8ec` and the canonical A-B-B-A sequence. Each
+All four used pinned C++ `d788e8ec` and the canonical A-B-B-A sequence. Each
 completed its timed legs but failed closed in `validate-host-load`; none
 produced an accepted comparison. The third attempt rebuilt and first-launched
 all measurement executables, then began the requested idle interval; the user
 directed the run to start after approximately four minutes instead of ten. The
-unchanged fence rejected the resulting 0.00%–80.60% idle range. The latter two
-attempts performed no retry and did not run `perf-hot-loop`, following the
-one-preflight rule. These rows are provenance records, not performance
-evidence, and RD-C7 remains blocked.
+unchanged fence rejected the resulting 0.00%–80.60% idle range. The user then
+authorized one new immediate attempt with the same immutable runner hashes;
+its 65.92%–83.10% idle range produced 17.18% spread, still above the fence.
+Neither attempt ran `perf-hot-loop` or produced a comparison. These rows are
+provenance records, not performance evidence, and RD-C7 remains blocked.
 
 The next-attempt recipe separates build from measure. The user will initiate
 the attempt when the orchestrator's quiet-window watcher fires. Then build all

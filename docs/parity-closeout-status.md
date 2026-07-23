@@ -624,6 +624,10 @@ upstream-sync-map registry).
   canonical A-B-B-A run failed closed at 80.60% idle spread
   (`target/r4-timing-gate/20260723T154251Z-36478`). No comparison,
   `perf-hot-loop`, or retry followed; RD-C7 remains blocked.
+  The user then initiated one new immediate attempt with the same immutable
+  runner hashes. It failed closed at 17.18% idle spread
+  (`target/r4-timing-gate/20260723T162631Z-30981`) against the same 12% fence.
+  No comparison or `perf-hot-loop` followed; RD-C7 remains blocked.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -839,6 +843,18 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-23 — The user initiated one new immediate post-RD-C6 checkpoint
+  attempt using the unchanged immutable pinned C++ `d788e8ec`, pre-live A
+  `076b4139`, and live-traversal B `307b0db7` runner hashes. The canonical
+  A-B-B-A run completed, then failed closed in `validate-host-load`: samples
+  ranged from 65.92% to 83.10% idle, a 17.18% spread against the unchanged
+  12% fence (`target/r4-timing-gate/20260723T162631Z-30981`). No comparison
+  exists; no `perf-hot-loop` or further retry followed. This is invalid
+  evidence and RD-C7 plus every scene-cache deletion remain blocked. The
+  evidence commit's first `git pull --rebase origin main` attempt could not
+  authenticate to GitHub (`Permission denied (publickey)`), so publication
+  remained pending rather than blocking the slice.
 
 - 2026-07-23 — A user-initiated post-RD-C6 checkpoint rebuilt and
   first-launched immutable pinned C++ `d788e8ec`, pre-live A `076b4139`, and

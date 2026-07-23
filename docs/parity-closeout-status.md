@@ -567,10 +567,16 @@ upstream-sync-map registry).
   memberships; ordinary traversal reads live path visibility/collapse state
   and dispatches Shape/ShapePaint directly in owner order. The temporary
   full-frame command-materialization switch and seam are deleted. The narrower
-  current-object adapters for later RD-C3..C6 families and all scene resource
-  caches remain; no RD-C7 deletion has begun. The mandatory canonical,
-  quiet-host, fully fenced post-C1/C2 performance checkpoint is next and must
-  be reported to the user before any scene-cache deletion.
+  current-object adapters for later RD-C4..C6 families and all scene resource
+  caches remain. RD-C3 is complete: Image traversal now dispatches the live
+  clone-owned Image and its retained `m_Mesh` counterpart directly; ImageAsset
+  render images and Mesh/NSlicer-owned buffers remain one-to-one backend
+  sidecars, and NSlicer preparation no longer reconstructs a command frame.
+  No RD-C7 deletion has begun. The mandatory canonical,
+  quiet-host, fully fenced post-C1/C2 performance checkpoint gates RD-C7 and
+  all scene-cache deletion only; RD-C3..C6 additive family migrations may
+  proceed while it is deferred. The checkpoint must still be reported to the
+  user and reviewed before demolition.
   WATCH: a user-authorized but invalid 2026-07-22 unfenced R4 bracket observed
   `gm-bug339297-clockwise-atomic` at 2.129754x C++ in its post-tail B leg. The
   bracket is discarded as evidence because host-idle spread was 58.47% and A
@@ -637,15 +643,17 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-1 post-C1/C2 measured USER CHECKPOINT. Run `r4-timing-gate` and
-   `perf-hot-loop` canonically on a quiet host with the unchanged 12%
-   host-idle-spread fence and every validity check intact. If the host is noisy,
-   defer; never override a fence. Report the valid delta to the user and stop
-   for review. No scene-cache deletion may begin before that review.
-2. #RD-C3 Images and meshes. Continue the mapped C++ ownership translation
-   under RF-1..RF-26 only after the performance checkpoint is accepted. The
-   narrower current-object adapter and retained scene resources remain until
-   their mapped lanes cross the retention boundary.
+1. #RD-C4 Text and TextInput. Continue the mapped C++ ownership translation
+   under RF-1..RF-26 with the 1,468-row pixel corpus refereeing the merge.
+   RD-C4..C6 are additive family migrations and do not wait on the deferred
+   performance checkpoint.
+2. #RD-1 post-C1/C2 measured USER CHECKPOINT. Run `r4-timing-gate` and
+   `perf-hot-loop` only as the first action of a quiet-window session, with one
+   canonical preflight, the unchanged 12% host-idle-spread fence, and every
+   validity check intact. If that preflight fails, defer without another
+   attempt that session. Report the valid delta to the user and stop for
+   review. RD-C7 and all scene-cache deletion remain blocked until that review;
+   RD-C4..C6 do not.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -791,6 +799,20 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-22 — #RD-C3 moved Image and Mesh drawing onto the live owner
+  topology. Each clone-owned Image retains the direct C++ `m_Mesh` equivalent
+  installed by its Mesh or NSlicer child; ordinary traversal reads the live
+  asset reference and dispatches Image, Mesh, or SliceMesh without a
+  `RuntimeDrawCommand`. ImageAsset render images and clone-local mesh buffers
+  remain one-to-one backend sidecars, while NSlicer preparation now reads live
+  layout and asset state without materializing a prepared command frame. No
+  scene cache or RD-C7 object was deleted. Focused runtime tests, the
+  probe-armed full workspace suite, and CAPI smoke pass; ordinary and scripted
+  goldens are 317/317 entries plus 647/647 segments with zero divergences.
+  Renderer pixels are 1,468/1,468 with zero divergences and zero gated
+  failures. The deferred performance checkpoint still blocks RD-C7 and all
+  scene-cache deletion only.
 
 - 2026-07-22 — #RD-C2 replaced the temporary full-frame command materializer
   with direct live Shape traversal. Clone-owned Shape topology retains ordered

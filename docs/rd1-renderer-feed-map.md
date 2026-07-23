@@ -36,7 +36,8 @@ the per-frame rendering feed.
 4. **RD-C1/RD-C2 performance checkpoint.** Remove the temporary command-
    materialization seam, rerun the measured comparison, and report the delta
    to the user before any scene-cache deletion.  This checkpoint cannot be
-   self-cleared; scene-cache demolition remains blocked until user review.
+   self-cleared and blocks RD-C7 demolition only; additive RD-C3 through RD-C6
+   may proceed while a quiet-host measurement is deferred.
 5. Execute RD-C1 through RD-C7 in order.  C2 and C3 may investigate in parallel
    after C1's interfaces settle, but production edits in the monolithic Rust draw
    path serialize.  No adjacent lane may hide attribution by landing concurrently.

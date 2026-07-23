@@ -2141,13 +2141,19 @@ impl ArtboardInstance {
         if graph.n_slicer_details.is_empty() {
             return Ok(());
         }
-        let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
-        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        let (mounted_component_list_layout_revision, _) =
+            runtime_mounted_component_list_revisions(self);
+        let layout_frame = path_cache.layout_bounds_frame(
+            self,
+            graph,
+            Some(runtime),
+            mounted_component_list_layout_revision,
+        );
+        let layout_bounds = layout_frame.bounds.as_ref().as_ref();
         runtime_prepare_slice_meshes(
             runtime,
             self,
             graph,
-            prepared.commands.as_slice(),
             layout_bounds,
             factory,
             image_by_global,
@@ -3783,6 +3789,21 @@ impl ArtboardInstance {
                     paint_by_global,
                     path_cache,
                     paint_configurations.as_deref_mut(),
+                )?;
+                continue;
+            }
+
+            if drawable.kind == DrawableOrderKind::Drawable && drawable.type_name == "Image" {
+                runtime_draw_live_image(
+                    runtime,
+                    self,
+                    graph,
+                    drawable,
+                    layout_bounds,
+                    image_by_global,
+                    mesh_by_local,
+                    path_cache,
+                    renderer,
                 )?;
                 continue;
             }
@@ -6553,6 +6574,42 @@ impl RuntimeShapeList {
 /// One clone-owned runtime drawable. This is the direct Rust counterpart of
 /// C++ `Drawable`: mutable draw-order links and save intent live on the object,
 /// while immutable import topology only seeds construction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeImageMeshOwner {
+    Mesh(usize),
+    SliceMesh(usize),
+}
+
+fn runtime_image_mesh_owner(
+    graph: &ArtboardGraph,
+    image_local: usize,
+) -> Option<RuntimeImageMeshOwner> {
+    // Direct port of the construction-time `Image::setMesh` calls from
+    // `Mesh::onAddedDirty` and `NSlicer::onAddedDirty`
+    // (`src/shapes/mesh.cpp:22-38`, `src/layout/n_slicer.cpp:18-35`).
+    // Child order is import order, so a later child replaces the same
+    // non-owning pointer exactly as C++ does.
+    graph
+        .components
+        .iter()
+        .find(|component| component.local_id == image_local)
+        .into_iter()
+        .flat_map(|component| component.children.iter().copied())
+        .fold(None, |owner, child_local| {
+            if graph
+                .n_slicer_details
+                .iter()
+                .any(|details| details.local_id == child_local)
+            {
+                Some(RuntimeImageMeshOwner::SliceMesh(child_local))
+            } else if graph.meshes.iter().any(|mesh| mesh.local_id == child_local) {
+                Some(RuntimeImageMeshOwner::Mesh(child_local))
+            } else {
+                owner
+            }
+        })
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeDrawable {
     kind: DrawableOrderKind,
@@ -6565,6 +6622,9 @@ pub(crate) struct RuntimeDrawable {
     flattened_draw_rules_local: Option<usize>,
     draw_target_local: Option<usize>,
     clipping_shape_local: Option<usize>,
+    /// C++ `Image::m_Mesh`: a non-owning pointer to the clone-owned Mesh or
+    /// the NSlicer's uniquely owned SliceMesh.
+    image_mesh: Option<RuntimeImageMeshOwner>,
     needs_save_operation: bool,
     /// C++ `Drawable::prev`; `Artboard::drawInternal` follows this link.
     prev: Option<usize>,
@@ -6573,7 +6633,7 @@ pub(crate) struct RuntimeDrawable {
 }
 
 impl RuntimeDrawable {
-    fn from_imported(drawable: &DrawableOrderNode) -> Self {
+    fn from_imported(drawable: &DrawableOrderNode, graph: &ArtboardGraph) -> Self {
         Self {
             kind: drawable.kind,
             local_id: drawable.local_id,
@@ -6585,6 +6645,10 @@ impl RuntimeDrawable {
             flattened_draw_rules_local: drawable.flattened_draw_rules_local,
             draw_target_local: None,
             clipping_shape_local: None,
+            image_mesh: drawable
+                .local_id
+                .filter(|_| drawable.type_name == "Image")
+                .and_then(|image_local| runtime_image_mesh_owner(graph, image_local)),
             needs_save_operation: true,
             prev: None,
             next: None,
@@ -6607,6 +6671,7 @@ impl RuntimeDrawable {
             flattened_draw_rules_local: None,
             draw_target_local: None,
             clipping_shape_local: Some(clipping_shape_local),
+            image_mesh: None,
             needs_save_operation: true,
             prev: None,
             next: None,
@@ -6644,7 +6709,7 @@ impl RuntimeDrawableList {
         let drawables = graph
             .drawable_order
             .iter()
-            .map(|drawable| Box::new(RuntimeDrawable::from_imported(drawable)))
+            .map(|drawable| Box::new(RuntimeDrawable::from_imported(drawable, graph)))
             .collect::<Vec<_>>();
         let imported_count = drawables.len();
         let drawable_by_local = drawables
@@ -9584,6 +9649,10 @@ impl RuntimeRenderPaintCache {
 
 #[derive(Default)]
 pub struct RuntimeRenderImages {
+    // RF-14 backend sidecar: each dense slot is owned one-to-one by the
+    // file's ImageAsset global id. It has no scene epoch or prepared-frame
+    // lifetime and is shared by every Image referencer like C++
+    // ImageAsset::m_RenderImage.
     images_by_global: Vec<Option<RuntimeRenderImageEntry>>,
     retained_decoded_bytes: usize,
     // `None` retains every decoded image, matching pinned C++, which has no
@@ -9814,6 +9883,9 @@ struct RuntimeSliceMeshUpdate {
 
 #[derive(Default)]
 struct RuntimeMeshRenderBufferSlots {
+    // RF-14 clone sidecar: each slot belongs one-to-one to the live Mesh or
+    // NSlicer-owned SliceMesh at the same local id. No scene key or replay
+    // command owns these buffers.
     buffers_by_local: Vec<Option<RuntimeMeshRenderBuffers>>,
     slice_buffers_by_local: Vec<Option<RuntimeSliceMeshRenderBuffers>>,
 }
@@ -13017,20 +13089,6 @@ fn runtime_draw_live_command(
         );
     }
 
-    if command.object_kind == RuntimeDrawCommandObjectKind::Image {
-        return runtime_draw_image(
-            runtime,
-            instance,
-            graph,
-            command,
-            layout_bounds,
-            image_by_global,
-            mesh_by_local,
-            path_cache,
-            renderer,
-        );
-    }
-
     if command.object_kind == RuntimeDrawCommandObjectKind::ScriptedDrawable {
         return runtime_draw_scripted_drawable(
             instance,
@@ -13907,7 +13965,6 @@ fn runtime_prepare_slice_meshes(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
-    commands: &[RuntimeDrawCommand],
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     factory: &mut dyn RenderFactory,
     image_by_global: &RuntimeRenderImages,
@@ -13922,20 +13979,15 @@ fn runtime_prepare_slice_meshes(
         let Some(image_local) = runtime_nslicer_image_local(instance, details) else {
             continue;
         };
-        let image_command = commands.iter().find(|command| {
-            command.object_kind == RuntimeDrawCommandObjectKind::Image
-                && command.local_id == Some(image_local)
-        });
-        let resolved_image_asset_global = image_command
-            .and_then(|command| command.resolved_image_asset_global)
-            .or_else(|| {
-                let authored = graph
-                    .sorted_drawable_order
-                    .iter()
-                    .find(|drawable| drawable.local_id == Some(image_local))
-                    .and_then(|drawable| drawable.resolved_image_asset_global);
-                instance.resolved_image_asset_global(Some(image_local), authored)
-            });
+        let authored_image_asset_global = instance
+            .runtime_drawables
+            .iter()
+            .find(|drawable| {
+                drawable.type_name == "Image" && drawable.local_id == Some(image_local)
+            })
+            .and_then(|drawable| drawable.resolved_image_asset_global);
+        let resolved_image_asset_global =
+            instance.resolved_image_asset_global(Some(image_local), authored_image_asset_global);
         let Some(image) =
             resolved_image_asset_global.and_then(|asset_global| image_by_global.get(asset_global))
         else {
@@ -14389,36 +14441,75 @@ fn runtime_update_slice_mesh_render_buffer(
     }
 }
 
-fn runtime_draw_image(
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_live_image(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
-    command: &RuntimeDrawCommand,
+    drawable: &RuntimeDrawable,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     image_by_global: &RuntimeRenderImages,
     mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
-    // Ported from C++ `src/shapes/image.cpp::Image::draw`.
-    let local_id = command.local_id.context("image command missing local id")?;
-    let image_object = command
-        .global_id
-        .and_then(|global_id| runtime.object(global_id as usize));
-    let Some(image) = command
-        .resolved_image_asset_global
-        .and_then(|asset_global| image_by_global.get(asset_global))
+    let local_id = drawable.local_id.context("live image missing local id")?;
+    let resolved_image_asset_global =
+        instance.resolved_image_asset_global(Some(local_id), drawable.resolved_image_asset_global);
+    runtime_draw_image_with_owner(
+        runtime,
+        instance,
+        graph,
+        local_id,
+        drawable.global_id,
+        resolved_image_asset_global,
+        drawable.image_mesh,
+        drawable.needs_save_operation,
+        layout_bounds,
+        image_by_global,
+        mesh_by_local,
+        path_cache,
+        renderer,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_image_with_owner(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    local_id: usize,
+    image_global_id: Option<u32>,
+    resolved_image_asset_global: Option<u32>,
+    image_mesh: Option<RuntimeImageMeshOwner>,
+    needs_save_operation: bool,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    image_by_global: &RuntimeRenderImages,
+    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
+    path_cache: &mut RuntimeRenderPathCache,
+    renderer: &mut dyn Renderer,
+) -> Result<()> {
+    // Direct port of C++ `Image::draw`; the live path supplies the retained
+    // Image-to-Mesh pointer instead of materializing a RuntimeDrawCommand.
+    let image_object = image_global_id.and_then(|global_id| runtime.object(global_id as usize));
+    let Some(image) =
+        resolved_image_asset_global.and_then(|asset_global| image_by_global.get(asset_global))
     else {
         // C++ `Image::draw` returns before saving when the asset has no
         // decoded RenderImage, e.g. hosted images with no loader.
         return Ok(());
     };
 
-    if command.needs_save_operation {
+    if needs_save_operation {
         renderer.save();
     }
 
-    if let Some(details) = runtime_image_nslicer(instance, graph, local_id) {
+    if let Some(RuntimeImageMeshOwner::SliceMesh(slice_local)) = image_mesh {
+        let details = graph
+            .n_slicer_details
+            .iter()
+            .find(|details| details.local_id == slice_local)
+            .with_context(|| format!("missing slice mesh owner for local {slice_local}"))?;
         if let Some(buffers) = mesh_by_local.slice(details.local_id) {
             runtime_draw_slice_mesh_image(
                 runtime,
@@ -14426,7 +14517,7 @@ fn runtime_draw_image(
                 graph,
                 local_id,
                 image_object,
-                command.resolved_image_asset_global,
+                resolved_image_asset_global,
                 buffers,
                 layout_bounds,
                 image,
@@ -14434,13 +14525,18 @@ fn runtime_draw_image(
                 renderer,
             )?;
         }
-        if command.needs_save_operation {
+        if needs_save_operation {
             renderer.restore();
         }
         return Ok(());
     }
 
-    if let Some(mesh) = runtime_image_mesh(runtime, graph, local_id) {
+    if let Some(RuntimeImageMeshOwner::Mesh(mesh_local)) = image_mesh {
+        let mesh = graph
+            .meshes
+            .iter()
+            .find(|mesh| mesh.local_id == mesh_local)
+            .with_context(|| format!("missing mesh owner for local {mesh_local}"))?;
         let buffers = mesh_by_local
             .get_mut(mesh.local_id)
             .with_context(|| format!("missing mesh render buffers for local {}", mesh.local_id))?;
@@ -14450,7 +14546,7 @@ fn runtime_draw_image(
             graph,
             local_id,
             image_object,
-            command.resolved_image_asset_global,
+            resolved_image_asset_global,
             mesh,
             buffers,
             layout_bounds,
@@ -14458,7 +14554,7 @@ fn runtime_draw_image(
             path_cache,
             renderer,
         )?;
-        if command.needs_save_operation {
+        if needs_save_operation {
             renderer.restore();
         }
         return Ok(());
@@ -14491,7 +14587,7 @@ fn runtime_draw_image(
             graph,
             local_id,
             image_object,
-            command.resolved_image_asset_global,
+            resolved_image_asset_global,
             image,
             layout_bounds,
             false,
@@ -14536,21 +14632,10 @@ fn runtime_draw_image(
         opacity,
     );
 
-    if command.needs_save_operation {
+    if needs_save_operation {
         renderer.restore();
     }
     Ok(())
-}
-
-fn runtime_image_nslicer<'a>(
-    instance: &ArtboardInstance,
-    graph: &'a ArtboardGraph,
-    image_local: usize,
-) -> Option<&'a NSlicerDetailsNode> {
-    graph.n_slicer_details.iter().find(|details| {
-        details.type_name == "NSlicer"
-            && runtime_nslicer_image_local(instance, details) == Some(image_local)
-    })
 }
 
 fn runtime_image_mesh<'a>(
@@ -23244,6 +23329,20 @@ mod tests {
         let graph = graphs.artboards.first().expect("fixture has an artboard");
         let instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
         let details = graph.n_slicer_details.first().expect("NSlicer details");
+        let image = instance
+            .runtime_drawables
+            .iter()
+            .find(|drawable| drawable.type_name == "Image")
+            .expect("image is retained in the live drawable list");
+
+        // C++ `NSlicer::onAddedDirty` installs its uniquely owned SliceMesh
+        // directly on the live Image (`n_slicer.cpp:18-35`). The immutable
+        // graph only seeds that non-owning pointer; draw traversal reads it
+        // from the clone-owned drawable.
+        assert_eq!(
+            image.image_mesh,
+            Some(RuntimeImageMeshOwner::SliceMesh(details.local_id))
+        );
 
         let geometry =
             runtime_slice_mesh_geometry(&file, &instance, details, 300.0, 300.0, 1.5, 1.5);

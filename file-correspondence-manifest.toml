@@ -1258,13 +1258,13 @@ note = "Consolidated Rust port for assets."
 upstream = "src/assets/image_asset.cpp"
 status = "pending"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/objects.rs"
+rust_module = "crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0104"
 b6_verdict = "UNKNOWN"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "Consolidated Rust port for assets."
+note = "RD-C3 retains decoded RenderImage resources by ImageAsset global identity in the renderer sidecar; additive lane implemented locally, pending orchestrator verification."
 
 [[file]]
 upstream = "src/assets/manifest_asset.cpp"
@@ -4072,7 +4072,7 @@ b6_row_id = "B6-0338"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C3 live Image traversal and owner-local RenderImage/Mesh dispatch implemented; pending orchestrator verification."
 
 [[file]]
 upstream = "src/shapes/list_path.cpp"
@@ -4096,7 +4096,7 @@ b6_row_id = "B6-0340"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C3 live Mesh owner pointer and object-keyed buffer update/draw implemented; pending orchestrator verification."
 
 [[file]]
 upstream = "src/shapes/mesh_vertex.cpp"
@@ -4456,7 +4456,7 @@ b6_row_id = "B6-0370"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C3 live NSlicer-owned SliceMesh dispatch and object-keyed buffer updates implemented; pending orchestrator verification."
 
 [[file]]
 upstream = "src/shapes/star.cpp"

@@ -3077,15 +3077,28 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-22: #RD-C3 moved Image, Mesh, and SliceMesh dispatch onto the live
+  owner topology. Clone-owned Images retain the direct C++ `m_Mesh`
+  equivalent installed by Mesh/NSlicer children, ordinary traversal resolves
+  the live asset and dispatches without a `RuntimeDrawCommand`, and NSlicer
+  preparation no longer reconstructs a command frame. ImageAsset render
+  images and owner-local mesh buffers remain one-to-one backend sidecars; no
+  scene cache or RD-C7 object was deleted. The probe-armed full workspace
+  suite, ordinary/scripted golden floors, and CAPI smoke remain green.
+  Renderer pixels are 1,468/1,468 with zero divergences and zero gated
+  failures. RD-C4 through RD-C6 remain unblocked; the quiet-host checkpoint
+  still blocks RD-C7 and every scene-cache deletion.
 - 2026-07-22: #RD-C2 moved Shape/path/paint drawing onto the live owner
   topology. Clone-owned Shapes retain PathComposer path order and Shape paint
   order, ordinary traversal reads live path visibility/collapse state, and
   Shape/ShapePaint dispatch no longer requires a full-frame command snapshot.
   The narrower current-object adapters for RD-C3..C6 and all scene resource
   caches remain; RD-C7 demolition has not begun. The mandatory canonical,
-  quiet-host, fully fenced post-C1/C2 performance checkpoint is next and must
-  be reported to the user before any scene-cache deletion. The pixel referee
-  remains 1468/1468 exact with zero divergences and zero gated failures.
+  quiet-host, fully fenced post-C1/C2 performance checkpoint gates RD-C7 and
+  all scene-cache deletion only; RD-C3..C6 additive family migrations may
+  proceed while it is deferred. The number must still be reported to the user
+  and reviewed before demolition. The pixel referee remains 1468/1468 exact
+  with zero divergences and zero gated failures.
 - 2026-07-22: #RD-C1 established the live drawable/order foundation for the
   renderer-feed restoration. Each ArtboardInstance now owns stable drawable
   objects, and command construction follows their retained `prev` links;

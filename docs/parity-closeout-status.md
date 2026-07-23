@@ -551,9 +551,12 @@ upstream-sync-map registry).
   user checkpoint: live per-frame command materialization measured 5.866x
   prepared Rust (+486.6%) on the seven-segment shape/image/nested slice.
   The user accepted that temporary-seam cost and authorized RD-1b2 plus
-  RD-C1/RD-C2. A second measured user checkpoint is binding after C1/C2 remove
-  command materialization and before any scene-cache deletion; demolition
-  cannot self-clear that checkpoint.
+  RD-C1/RD-C2. RD-1b2 is complete: `docs/PORTING.md` now binds RF-1..RF-26,
+  including every disagreement found by independent rulebook-strict and
+  senior-engineer translations of the same Drawable/Shape/Artboard traversal
+  slice; both disposable translations were discarded. A second measured user
+  checkpoint is binding after C1/C2 remove command materialization and before
+  any scene-cache deletion; demolition cannot self-clear that checkpoint.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -613,14 +616,15 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-1b2 renderer-feed rulebook and dual-translation stress test. The user
-   accepted RD-1b's 5.866x temporary command-materialization result and
-   authorized work to proceed. `r4-timing-gate` ran four unchanged-threshold
-   brackets, all invalidated by its host-idle-spread fence, so no R4 ratio is
-   claimed; a follow-up run is explicitly deferred to a quiet host with the
-   12% fence intact. A second USER CHECKPOINT follows RD-C1/RD-C2 seam removal and
-   blocks every scene-cache deletion until the new delta is reported and
-   reviewed.
+1. #RD-C1 live drawable and draw-order foundation, followed by #RD-C2 Shape,
+   paths, and paints. RD-1b2's rulebook stress test is complete and both
+   disposable translations are discarded. Port the mapped C++ files directly
+   under RF-1..RF-26; do not reshape the prepared Rust feed. After C1/C2 remove
+   the command-materialization seam, stop for the second measured USER
+   CHECKPOINT. No scene-cache deletion may begin until the new delta is reported
+   and reviewed. `r4-timing-gate` remains deferred to a quiet host after four
+   brackets were invalidated by the unchanged 12% host-idle-spread fence; no R4
+   ratio is claimed.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -766,6 +770,19 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-22 — #RD-1b2 codified the live renderer-feed translation rulebook as
+  RF-1..RF-26 in `docs/PORTING.md`, then stress-tested it with two independent,
+  disposable translations of `src/drawable.cpp`, `src/shapes/shape.cpp`, and
+  `src/artboard.cpp:1606-1698`. The rulebook-strict translation retained C++
+  object ownership and live list traversal; the senior-engineer translation
+  proposed sorted snapshots, centralized caches, option-derived frame origin,
+  epoch caches, and defensive per-frame guards. Every disagreement was resolved
+  against the pinned source and folded into RF-13..RF-26. Neither translation
+  was retained. The workspace-floor scorecard guard now also asserts both C++
+  oracle prerequisites and both exported runner paths, covering the probe arming
+  added to the make target. Next is RD-C1; no production renderer code or
+  scene-cache demolition changed in this slice.
 
 - 2026-07-22 — #RD-1b measured a non-default live per-frame traversal without
   deleting any retained scene layer. Across five animated-shape samples, one

@@ -748,3 +748,201 @@ rules exist so a reviewer can cite the violated rule behind every finding.
   (`crates/nuxie-runtime/src/artboard_data_bind.rs:2561-2572`). Candidate-vector
   precedence, slot-key path rewriting, or stopping at a partial same-model
   match is architecture drift even when a sampled value happens to agree.
+
+---
+
+## §9 Renderer-Feed Translation Rules (RD-1)
+
+These rules bind the Phase RD move from scene-level prepared replay to the
+pinned C++ runtime's live traversal. They apply to the lane map in
+`docs/rd1-renderer-feed-map.md`; renderer pixels, ordinary goldens, and scripted
+goldens referee every merge.
+
+- **RF-1 Traverse retained object topology live.** C++ constructs and relinks
+  `Artboard::m_FirstDrawable`/`Drawable::{prev,next}` under draw-order dirt, then
+  walks that linked object graph on every `drawInternal`
+  (`src/artboard.cpp:429-840,1159-1169,1652-1698`,
+  `include/rive/drawable.hpp:27-31,75-78`). Rust stores equivalent object ids or
+  handles and follows them per frame. A prepared frame, sorted replay array, or
+  retained scene command stream is not an equivalent implementation.
+- **RF-2 Retain resources at the C++ owner.** An embedded or uniquely owned C++
+  resource stays with its corresponding Rust object: `Shape` owns its
+  `PathComposer`, paths own their live geometry, paints own render paint, and
+  assets own render images. Do not move those resources into an artboard- or
+  facade-level cache. Conversely, non-owning C++ pointers become ids/handles,
+  not cloned resources (`include/rive/shapes/shape.hpp:18-26`).
+- **RF-3 Preserve live virtual-dispatch boundaries.** Closed C++ drawable
+  subclasses may become enum dispatch, but `willDraw`, `draw`, `isHidden`,
+  `isClipStart`, `isClipEnd`, and `emptyClipCount` must be evaluated on the live
+  object at the same traversal site and in the same order. Import-time type
+  devirtualization may choose the match arm; it may not snapshot a mutable
+  return value (`include/rive/drawable.hpp:42-68`).
+- **RF-4 Port lazy clipping as one ordered state machine.** Preserve the exact
+  `emptyClips` update, `willDraw` guard, clip-start push, adjacent clip-end pop,
+  pending-clip flush, and drawable draw order from
+  `Artboard::drawInternal` (`src/artboard.cpp:1652-1698`). Do not precompute clip
+  commands, split the logic across phases, or emit save/clip/restore for a clip
+  pair that C++ elides because no drawable occurs between it.
+- **RF-5 Read mutable render state at draw time.** Hidden/collapsed state,
+  opacity, visibility, fill/path selection, world transform, clip counts, and
+  other mutable properties are live reads. Epoch-correct invalidation cannot
+  make an import-time or prepared-frame snapshot faithful
+  (`src/drawable.cpp:41`, `src/shapes/shape.cpp:123-147,309`).
+- **RF-6 Keep save/restore ownership and predicates local.** Artboard save is
+  exactly `clip() || m_FrameOrigin`, with one balanced restore. Shape paint save
+  intent is exactly `m_needsSaveOperation || m_ShapePaints.size() > 1` and is
+  passed to each visible paint draw (`src/artboard.cpp:1620-1640,1699-1702`,
+  `src/shapes/shape.cpp:123-147`). Do not infer a broader scene-wide save policy.
+- **RF-7 Preserve transform side, multiplication order, and path space.** A
+  local `Shape` path composes `transform * worldTransform`; a world path uses
+  `transform` directly. Raw-path null transforms and hit-test transforms follow
+  their separate C++ branches (`src/shapes/shape.cpp:90-121,171-218`). Reusing
+  one normalized transform formula across those sites is drift.
+- **RF-8 Translate every skip/continue guard in source order.** Examples include
+  hidden/collapsed drawables, zero render opacity, invisible paint, null
+  `pickPath`, translucent hit-test paint, and collapsed child paths. Combining
+  predicates is allowed only when it preserves short-circuit evaluation and
+  every intervening side effect (`src/shapes/shape.cpp:123-147,161-218,309-317`).
+- **RF-9 Separate retained object state from traversal scratch.** C++'s
+  `m_PathComposer`, `m_Paths`, and shape-paint resources cross frames; the local
+  `pendingClipOperations` vector and `emptyClips` counter in `drawInternal` do
+  not. Rust may reuse allocation privately, but must not turn per-call scratch
+  into a scene representation or give it independent invalidation/ownership.
+- **RF-10 Preserve construction-only work as construction-only.** Dependency
+  wiring, deformer discovery, path-list membership, and the current non-animated
+  blend-mode propagation happen at the corresponding C++ add/build hooks
+  (`src/shapes/shape.cpp:20-25,264-307`). Do not refresh them every frame; if an
+  upstream property becomes animated, port its new C++ dirt/update site rather
+  than inventing a scan.
+- **RF-11 Preserve frame-entry side effects.** `Artboard::draw` increments the
+  frame id and draws canvases before `drawInternal`; `drawInternal` clears
+  `m_didChange` before the opacity early return (`src/artboard.cpp:1606-1618`).
+  A facade or renderer adapter must not reorder or omit those effects when it
+  switches from prepared replay to live traversal.
+- **RF-12 Cut over only when the reachable family is complete.** No scene-cache
+  deletion occurs until every drawable kind reachable from the live artboard
+  walk has a faithful dispatch arm and the 1,468-row pixel corpus is exact.
+  RD-C1/RD-C2 must first remove the temporary command-materialization seam and
+  report the second measured checkpoint; RD-C7 owns scene-cache deletion.
+
+### RD-1b2 dual-translation stress-test decisions
+
+On 2026-07-22, two independent disposable translations of
+`src/drawable.cpp`, `src/shapes/shape.cpp`, and
+`src/artboard.cpp:1606-1698` were compared: one followed this rulebook
+strictly; one approached the same slice as a senior Rust engineer without the
+rulebook. Neither translation was retained as implementation. Every
+disagreement is resolved below and is binding on RD-C1/RD-C2.
+
+- **RF-13 A cached sorted vector is not the live-list port.** The senior
+  translation treated `Arc<Vec<SortedDrawableNode>>` keyed by
+  `draw_order_epoch` as equivalent to C++'s list. The strict translation kept
+  `firstDrawable` plus `prev`/`next` ids on retained drawable objects, including
+  synthetic clip/layout proxies. RD uses the strict form: imported graph order
+  may seed construction, but the runtime representation being traversed is the
+  relinked object list. Its direction is literal: start at `m_FirstDrawable`
+  and advance through `prev` (`src/artboard.cpp:1652-1654`); do not infer a
+  different direction from the field names.
+- **RF-14 Backend-specific storage does not change logical ownership.** The
+  senior translation left `RenderPath`/`RenderPaint` in centralized
+  `RuntimeRenderPathCache`/`RuntimeRenderPaintCache`; the strict translation
+  placed them with the owning PathComposer/ShapePaintPath/ShapePaint. C++
+  ownership wins. Rust may use a backend-specific dense sidecar when trait
+  objects cannot live in cloneable CPU state, but each slot must be one-to-one
+  with, created for, invalidated by, cloned/recreated with, and dropped with its
+  owning runtime object. A key-addressed artboard/facade cache with an
+  independent lifetime or scene epoch is still a scene cache and is deleted.
+- **RF-15 `m_FrameOrigin` is live artboard state, not a draw option.** The
+  senior translation proposed deriving it from the current
+  `apply_origin_transform` argument; the strict translation retained the C++
+  field. Port the field and its setter. It defaults true, is copied with an
+  artboard instance, and nested/scripted/component-list callers set it false
+  (`include/rive/artboard.hpp:105,554,611-617`,
+  `src/nested_artboard.cpp:120`, `src/scripted/scripted_object.cpp:52`,
+  `src/artboard_component_list.cpp:1481`). A facade argument may set that live
+  state at the corresponding C++ call site; it may not become a second source
+  of truth.
+- **RF-16 Validate structural cycles once; do not invent per-frame guards.**
+  The senior translation added visited sets to parent and proxy walks; the
+  strict translation preserved the C++ loops. If Rust can import a parent or
+  proxy cycle that the C++ construction contract rejects, close that importer
+  or build-time validation gap. Do not allocate a visited set or silently
+  return a different result on every draw/hit test unless the pinned C++ site
+  has that guard.
+- **RF-17 Port object-local invalidation representation exactly.** The senior
+  translation replaced `DrawableFlag::WorldBoundsClean` and
+  `Shape::m_WorldLength == -1` with epoch-keyed cache entries. The strict
+  translation kept the flag and sentinel. Keep the C++ representation and
+  invalidation call sites (`include/rive/shapes/shape.hpp:21-24,52-72`,
+  `src/shapes/shape.cpp:55-88`). Do not introduce an epoch merely because the
+  old scene replay already has one.
+- **RF-18 Do not clone topology vectors to satisfy the borrow checker.** One
+  disposable translation cloned path/paint id vectors before live loops; the
+  other used borrowed topology. C++ iterates retained vectors in place. Rust
+  must split graph/object/resource borrows, use stable ids, or use index-based
+  loops so drawing does not copy `path_locals`, `paint_locals`, clipping ids, or
+  drawable order each frame.
+- **RF-19 Preserve renderer stack balance across Rust errors.** C++ draw
+  methods in this slice are infallible; a direct translation therefore has no
+  exit between `save` and `restore`. If a Rust engine substitution or lazy
+  factory call remains fallible, complete it before emitting renderer side
+  effects where possible. Otherwise use a scope guard/finally-shaped helper
+  that restores on every `Result` path. A `?` that can leave a saved or clipped
+  renderer state active is never a faithful port.
+- **RF-20 Preserve C++ integer narrowing and later mutation.**
+  `Drawable::onAddedDirty` casts the stored `uint32_t` through
+  `BlendMode : unsigned char` before validation
+  (`include/rive/generated/drawable_base.hpp:35-52`,
+  `include/rive/shapes/paint/blend_mode.hpp:5`, `src/drawable.cpp:17-39`). Rust
+  must validate the narrowed `u8`. It may retain a typed value only if every
+  later generated/property write updates that value; otherwise narrow the live
+  property at each C++ read site. Import-time normalization that snapshots a
+  mutable property, or later matching the original `u32`, disagrees with C++.
+  Import validation may reject early too, but it does not replace the
+  `onAddedDirty` hook after `Super::onAddedDirty`; that order is observable to
+  programmatically constructed objects.
+- **RF-21 Trailing pending clip starts are discarded, not asserted away.** The
+  senior translation allowed `debug_assert!(pending.is_empty())` if validation
+  promised balance; the strict translation followed C++ and simply dropped
+  the local vector at return. The pinned traversal states no balance invariant,
+  and deliberately elides clip ranges with no later drawable. Do not add an
+  assertion or import rejection solely because pending starts remain after the
+  walk (`src/artboard.cpp:1660-1698`).
+- **RF-22 Private helper devirtualization is allowed only with exact state.**
+  The strict translation mirrored `ComputeBoundsCommandPath`; the senior
+  translation proposed operating directly on a temporary `RawPath`. Either
+  representation is acceptable because the helper is closed and local, but it
+  must preserve the expansion sentinel, per-path rewind, collapsed-only skip,
+  command order, and `pathTransform * suppliedTransform` multiplication
+  (`src/shapes/shape.cpp:315-392`). It must not reuse a generic filtered-path
+  iterator: length, emptiness, HiFi hit testing, paint hit testing, and bounds
+  intentionally apply different hidden/collapsed filters.
+- **RF-23 Mutable flags never belong in immutable topology.** The senior
+  translation's proposed topology record included `authored_hidden`; the strict
+  translation read `drawableFlags()` live. Hidden, opaque, blend mode, save
+  need, and any other property with a generated setter live in instance/object
+  state. Immutable topology may keep only identity and type discrimination.
+  Import-time devirtualization does not authorize copying a mutable payload.
+- **RF-24 Ordered memberships live on their C++ owner.** The senior translation
+  left shape path/paint membership in immutable `ArtboardGraph`; the strict
+  translation put the ordered non-owning ids on the retained `RuntimeShape`.
+  Use the strict form. Graph nodes may seed `Shape::m_Paths`,
+  `ShapePaintContainer` membership, `Drawable::m_ClippingShapes`, and proxy
+  objects during construction, but the live object's vectors are the runtime
+  source of truth. Append-only construction data may be frozen after build; it
+  is still owned and traversed through that object, not rediscovered by a graph
+  scan (`src/shapes/shape.cpp:20-25`, `src/drawable.cpp:36-39`).
+- **RF-25 Preserve nullable/self/other pointer flow.** The strict translation
+  made a proxy target required; the senior translation exposed
+  `Option<local_id>`. Construction may make a specific proxy target non-null,
+  but the generic `Drawable::hittableComponent` contract still has three
+  outcomes: self and null both fall through to base component hit testing;
+  another drawable delegates with both booleans unchanged
+  (`src/drawable.cpp:58-77`). Do not collapse null into a panic, and do not make
+  it skip the base call.
+- **RF-26 Scratch allocation reuse has no semantic owner.** One translation
+  allocated `pendingClipOperations` per call; the other cleared a vector stored
+  in the old render-path cache. Reusing the allocation is allowed, but move it
+  to a draw-context/artboard scratch slot that is cleared at entry and carries
+  no cache key, epoch, or cross-frame content. The scene cache does not survive
+  merely because it owns a useful `Vec` allocation.

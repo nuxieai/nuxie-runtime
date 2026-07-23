@@ -43,7 +43,7 @@ def size_summary(off=7534056, on=8335288, budget=8388608):
 
 
 class ParityScorecardCliTests(unittest.TestCase):
-    def test_workspace_floor_cannot_silently_skip_the_pinned_cpp_oracle(self):
+    def test_workspace_floor_cannot_silently_skip_the_pinned_cpp_oracles(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
         trusted_workflow = (
             REPO_ROOT / ".github" / "workflows" / "_trusted-macos.yml"
@@ -57,9 +57,11 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertRegex(
             makefile,
             re.compile(
-                r"cpp-oracle-workspace-tests: fixtures golden-runner\s+"
+                r"cpp-oracle-workspace-tests: fixtures golden-runner cpp-probe\s+"
                 r'@test -x "\$\(GOLDEN_RUNNER\)"[\s\S]{0,300}'
-                r'RIVE_GOLDEN_RUNNER="\$\(GOLDEN_RUNNER\)" cargo test --workspace'
+                r'@test -x "\$\(CPP_PROBE\)"[\s\S]{0,300}'
+                r'RIVE_GOLDEN_RUNNER="\$\(GOLDEN_RUNNER\)" '
+                r'RIVE_CPP_PROBE="\$\(CPP_PROBE\)" cargo test --workspace'
             ),
         )
         self.assertIn("-- make cpp-oracle-workspace-tests", workflow)

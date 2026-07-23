@@ -3077,6 +3077,28 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-23: The post-checkpoint redraw defect was localized to ordinary
+  Shape traversal rebuilding path/effect command state on unchanged draws.
+  The corrective file-corresponding port now gives clone-owned Shape,
+  ShapePaint, ShapePaintPath, Drawable flags, and StrokeEffect invalidation
+  the pinned C++ ownership/dirt boundaries (`shape.cpp:137-159`,
+  `shape_paint.cpp:30-47,78-205`, `shape_paint_path.cpp:13-75`,
+  `stroke_effect.cpp:6-48`, `dash_path.cpp:9,18-31,126-159`). The renderer
+  consumes retained raw/backend paths and retained paints directly; a
+  dashed-stroke regression proves one effect build across two unchanged draws
+  and one rebuild after exact Dash dirt. The probe-armed workspace exposed and
+  now covers replacement RenderPaint sidecars receiving clean retained
+  ShapePaint state after structural remounts. Final behavioral evidence is
+  ordinary/scripted 317/317 entries and 647/647 segments with zero
+  divergences, pixels 1,468/1,468 exact (1,370 byte-exact) with zero
+  divergences/gated, runtime 406/406, scene-authoring 167/167, the full
+  probe-armed workspace green with 721 runtime probe tests discoverable, and
+  C API/static floors green. Size is 8,300,344 B scripting-off and 9,217,944 B
+  scripting-on, both below the unchanged 9,437,184 B budget. No post-fix
+  performance number is accepted; RD-C7 remains blocked until a fresh
+  canonical bracket plus `perf-hot-loop` passes retained checks and is
+  reported for user review.
+
 - 2026-07-23: The first current-environment RD checkpoint under the
   telemetry-only host-load policy reached comparison despite 24.71% idle
   spread. Pinned C++ `d788e8ec`, pre-live A `076b4139`, and live-traversal B

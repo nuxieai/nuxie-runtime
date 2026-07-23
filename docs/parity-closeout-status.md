@@ -642,7 +642,34 @@ upstream-sync-map registry).
   `perf-hot-loop` reported aggregate Rust/C++=61.278871x and
   `ai_assitant@0`=229.451367x
   (`target/rd1-current-env-perf-hot-loop-20260723T1636Z.json`). These numbers
-  await user review; RD-C7 remains blocked.
+  were reviewed as a real redraw defect, not host noise. The corrective
+  file-corresponding port now mirrors `Shape::draw`,
+  `ShapePaint::update/draw`, `ShapePaintPath::renderPath`, and
+  `StrokeEffect`/`DashPath` invalidation
+  (`shape.cpp:137-159`, `shape_paint.cpp:30-47,78-205`,
+  `shape_paint_path.cpp:13-75`, `stroke_effect.cpp:6-48`,
+  `dash_path.cpp:9,18-31,126-159`): clone-owned Shapes retain their three
+  source paths, ShapePaint owners retain selected effect results and live
+  paint state, backend paths/paints remain one-to-one factory sidecars, and
+  unchanged draws enter none of the effect/path command builders. Relevant
+  component/property dirt now invalidates those owners directly. A regression
+  test proves two unchanged dashed-stroke draws build the effect once and
+  `Dash.length` dirt rebuilds it exactly once. Replacement render-paint
+  sidecars also receive a clean retained ShapePaint's state, matching C++'s
+  clone-together ownership across structural remounts.
+  Corrective evidence is runtime lib 406/406; scene-authoring 167/167; the
+  probe-armed full workspace green with 721 discoverable runtime probe tests;
+  ordinary and scripted goldens each 317/317 entries and 647/647 segments,
+  zero divergences; renderer pixels 1,468/1,468 exact, 1,370 byte-exact, zero
+  divergences/gated; C API smoke green; formatting, diff, and runtime test
+  checking green; size is 8,300,344 B scripting-off and 9,217,944 B
+  scripting-on, both below the unchanged 9,437,184 B budget. The probe build
+  now cleans stale dependency files after Premake regeneration so temporary
+  pin-verification checkout paths cannot poison the ordinary workspace target.
+  No post-fix performance result has been accepted. The mandatory canonical
+  bracket plus `perf-hot-loop` remains the next user checkpoint; RD-C7 and
+  every scene-cache deletion remain blocked until both retained drift/perf
+  checks pass and the result is reported and reviewed.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -702,12 +729,12 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-1 post-C1/C2 measured USER CHECKPOINT — STOP FOR USER REVIEW.
-   Telemetry-only A-B-B-A produced normalized B/A=1.068645x, aggregate
-   B/C++=1.149762x, worst B/C++=2.156308x, C++ control drift=1.114087x, and B
-   repeat drift=1.060374x. Canonical `perf-hot-loop` produced aggregate
-   Rust/C++=61.278871x with `ai_assitant@0`=229.451367x. Do not diagnose,
-   optimize, repeat, or begin RD-C7 until the user reviews these numbers.
+1. #RD-1 post-C1/C2 measured USER CHECKPOINT — corrective exact-owner port is
+   gate-green; run one fresh canonical A-B-B-A bracket plus `perf-hot-loop`
+   in the next suitable measurement window. Both retained drift/perf checks
+   must pass, and report the result for user review before RD-C7. The prior
+   61.278871x aggregate / 577.854015x `ai_assitant` draw result is superseded
+   only as a diagnosed pre-fix defect, not as accepted performance evidence.
    Every scene-cache deletion remains blocked.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
@@ -854,6 +881,24 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-23 — #RD-1 corrective owner port localized the catastrophic
+  unchanged-frame hot loop to Shape draw rebuilding path/effect command state
+  outside C++'s dirt-gated owners. ShapePaintPath source geometry, selected
+  effect output, live ShapePaint state, shared fill-rule behavior, and
+  Drawable hidden state now live on clone-owned counterparts with one-to-one
+  backend sidecars. `Shape::draw` directly reads those owners; unchanged
+  dashed strokes reuse the effect path, while exact path/property dirt
+  invalidates it. A fresh-sidecar remount bug found by the newly armed
+  workspace probe was fixed by carrying clean retained ShapePaint state into
+  the replacement RenderPaint, matching C++ clone ownership. Final evidence:
+  runtime 406/406, scene-authoring 167/167, probe-armed workspace green (721
+  runtime probe tests discoverable), ordinary/scripted 317/317 and 647/647
+  with zero divergences, renderer 1,468/1,468 exact with zero gated,
+  C API/static floors green, and size 8,300,344 B off / 9,217,944 B on under
+  the unchanged 9,437,184 B budget. No post-fix perf measurement was taken;
+  RD-C7 remains blocked on the canonical bracket + hot-loop checkpoint and
+  user review.
 
 - 2026-07-23 — The first current-environment checkpoint under the
   telemetry-only host-load policy completed comparison despite 24.71% sampled

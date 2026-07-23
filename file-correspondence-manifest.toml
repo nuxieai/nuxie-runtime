@@ -4144,7 +4144,7 @@ b6_row_id = "B6-0344"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C2 corrective owner port is executor-gate-green pending independent orchestrator verification: DashPath effect output is retained per live ShapePaint owner and rebuilt only through exact effect/path dirt; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/effects_container.cpp"
@@ -4240,7 +4240,7 @@ b6_row_id = "B6-0352"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: ShapePaint draws directly from live owner membership without a full-frame RuntimeDrawCommand; whole-file status remains pending."
+note = "RD-C2 corrective owner port is executor-gate-green pending independent orchestrator verification: ShapePaint retains live visibility, paint state, selected source/effect path, and its one-to-one RenderPaint sidecar configuration, then draws directly without a RuntimeDrawCommand; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/shape_paint_mutator.cpp"
@@ -4264,7 +4264,7 @@ b6_row_id = "B6-0354"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: ShapePaintPath composition follows clone-owned PathComposer membership and live path flags/collapse state; whole-file status remains pending."
+note = "RD-C2 corrective owner port is executor-gate-green pending independent orchestrator verification: Shape owns three retained ShapePaintPath source variants and their backend RenderPaths, rebuilt only from live PathComposer dirt while preserving shared fill-rule behavior; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/solid_color.cpp"
@@ -4300,7 +4300,7 @@ b6_row_id = "B6-0357"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "RD-C2 corrective owner port is executor-gate-green pending independent orchestrator verification: StrokeEffect invalidation dirties the owning ShapePaint's retained effect result and clean draws reuse it; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/target_effect.cpp"
@@ -4432,7 +4432,7 @@ b6_row_id = "B6-0368"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: Shape owns stable ordered path and paint membership and dispatches directly during live traversal; whole-file status remains pending."
+note = "RD-C2 corrective owner port is executor-gate-green pending independent orchestrator verification: Shape owns stable ordered path/paint membership, retained ShapePaintPaths, and live world transform, then dispatches those owners directly during traversal; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/shape_paint_container.cpp"

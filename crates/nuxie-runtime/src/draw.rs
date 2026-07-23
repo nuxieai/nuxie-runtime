@@ -148,6 +148,9 @@ fn runtime_draw_property_key_for_name(type_name: &str, property_name: &str) -> O
         ("Drawable", "blendModeValue") => {
             cached_runtime_property_key!("Drawable", "blendModeValue")
         }
+        ("Drawable", "drawableFlags") => {
+            cached_runtime_property_key!("Drawable", "drawableFlags")
+        }
         ("Component", "parentId") => cached_runtime_property_key!("Component", "parentId"),
         ("WorldTransformComponent", "parentId") => {
             cached_runtime_property_key!("WorldTransformComponent", "parentId")
@@ -3746,25 +3749,17 @@ impl ArtboardInstance {
                 && drawable.type_name == "Shape"
                 && let Some(shape_local) = drawable.local_id
             {
-                let mut shape_paints =
-                    self.runtime_shape_paint_commands(drawable, graph, layout_bounds, path_cache);
-                for paint in &mut shape_paints {
-                    if !paint.has_effect_path && paint.feather_state.is_none() {
-                        paint.path_commands.clear();
-                    }
-                }
-                runtime_draw_live_shape(
+                runtime_draw_live_owned_shape(
                     runtime,
                     self,
                     graph,
                     shape_local,
-                    &shape_paints,
+                    drawable.needs_save_operation,
                     layout_bounds,
                     factory,
                     renderer,
                     paint_by_global,
                     path_cache,
-                    paint_configurations.as_deref_mut(),
                 )?;
                 continue;
             }
@@ -3953,13 +3948,7 @@ impl ArtboardInstance {
                     DrawableOrderKind::LayoutProxy => drawable.layout_local,
                     _ => drawable.local_id,
                 };
-                let live_hidden = component_local
-                    .and_then(|local_id| {
-                        property_key_for_name("Drawable", "drawableFlags")
-                            .and_then(|key| self.uint_property(local_id, key))
-                    })
-                    .is_some_and(|flags| flags & 1 != 0);
-                if live_hidden {
+                if drawable.is_hidden {
                     return false;
                 }
                 if component_local
@@ -4385,6 +4374,183 @@ impl ArtboardInstance {
         }
         assign_shape_paint_path_slot_indices(&mut commands);
         commands
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn ensure_runtime_shape_paint_owner(
+        &self,
+        runtime: &RuntimeFile,
+        shape_local: usize,
+        owner_index: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        paint_by_global: &mut RuntimeRenderPaints,
+        path_cache: &mut RuntimeRenderPathCache,
+    ) -> Result<()> {
+        let Some(shape) = self.runtime_shapes.get(shape_local) else {
+            return Ok(());
+        };
+        let Some(owner) = shape.paint_owners.get(owner_index) else {
+            return Ok(());
+        };
+        if !owner.dirty.get()
+            && let Some(retained) = owner.retained.borrow().as_ref().cloned()
+        {
+            // C++ clones the ShapePaint and its RenderPaint together. Our
+            // backend RenderPaint has to stay in a factory-specific sidecar,
+            // so a replacement sidecar must receive the already-retained
+            // ShapePaint state even when the ShapePaint itself is clean.
+            if paint_by_global.shape_owner_is_configured(retained.paint_global_id) {
+                return Ok(());
+            }
+            let object = runtime
+                .object(retained.paint_global_id as usize)
+                .with_context(|| {
+                    format!(
+                        "missing retained ShapePaint global {}",
+                        retained.paint_global_id
+                    )
+                })?;
+            let render_paint = paint_by_global
+                .paint_mut(retained.paint_global_id)
+                .with_context(|| {
+                    format!(
+                        "missing retained RenderPaint for global {}",
+                        retained.paint_global_id
+                    )
+                })?
+                .as_mut();
+            runtime_configure_owned_shape_paint(render_paint, self, object, &retained)?;
+            paint_by_global.mark_shape_owner_configured(retained.paint_global_id);
+            return Ok(());
+        }
+        let Some(container) = shape
+            .paint_container_index
+            .and_then(|index| graph.shape_paint_containers.get(index))
+        else {
+            owner.retained.replace(None);
+            owner.dirty.set(false);
+            return Ok(());
+        };
+        let Some(paint) = container.paints.get(owner.paint_index) else {
+            owner.retained.replace(None);
+            owner.dirty.set(false);
+            return Ok(());
+        };
+        owner
+            .is_visible
+            .set(runtime_shape_paint_is_visible(self, paint));
+        let Some(path) = self.runtime_shape_paint_path_commands(
+            shape_local,
+            paint,
+            graph,
+            layout_bounds,
+            path_cache,
+        ) else {
+            owner.retained.replace(None);
+            owner.dirty.set(false);
+            return Ok(());
+        };
+        let path_commands = path.commands.as_ref().clone();
+
+        if owner.effect_dirty_from.get().is_some() || owner.retained_effect_path.borrow().is_none()
+        {
+            let effect_path =
+                runtime_effect_path_commands(self, paint, &path_commands).map(|commands| {
+                    RuntimePreparedShapePaintPath {
+                        raw_path: Arc::new(runtime_raw_path_from_commands(&commands)),
+                        commands: Arc::new(commands),
+                    }
+                });
+            owner.retained_effect_path.replace(Some(effect_path));
+            owner.effect_dirty_from.set(None);
+        }
+        let effect_path = owner
+            .retained_effect_path
+            .borrow()
+            .as_ref()
+            .cloned()
+            .unwrap_or(None);
+        let shape_world = path_cache.component_world_transform_with_bounds(
+            self,
+            graph,
+            shape_local,
+            layout_bounds,
+        );
+        shape.world_transform.set(shape_world);
+        let live_render_opacity = self
+            .component(shape_local)
+            .map(|component| component.transform.render_opacity)
+            .unwrap_or(1.0);
+        let render_opacity = if matches!(
+            paint.paint_state,
+            Some(
+                ShapePaintStateNode::LinearGradient { .. }
+                    | ShapePaintStateNode::RadialGradient { .. }
+            )
+        ) {
+            let opacity_local = shape_paint_container_opacity_local(graph, container.local_id);
+            runtime_retained_gradient_render_opacity(
+                self,
+                opacity_local,
+                paint.global_id,
+                path_cache,
+            )
+        } else {
+            live_render_opacity
+        };
+        let selected_path = effect_path.clone().unwrap_or(path);
+        let mut feather_state = runtime_feather_state(
+            self,
+            paint.feather.as_ref(),
+            selected_path.commands.as_ref(),
+            shape_world,
+        );
+        if let Some(feather_state) = feather_state.as_mut() {
+            prune_empty_path_segments(&mut feather_state.inner_path_commands);
+        }
+        let retained = paint
+            .path_kind
+            .and_then(runtime_shape_paint_path_kind)
+            .map(|path_kind| RuntimeOwnedShapePaint {
+                paint_local: paint.local_id,
+                paint_global_id: paint.global_id,
+                paint_type: runtime_shape_paint_kind(paint.paint_type),
+                fill_rule: runtime_live_shape_paint_fill_rule(self, paint),
+                render_blend_mode_value: runtime_shape_paint_blend_mode_value(
+                    paint.blend_mode_value,
+                    container.blend_mode_value,
+                ),
+                paint_state: runtime_shape_paint_state(self, paint, render_opacity),
+                path_kind,
+                feather_state,
+                selected_path,
+                has_effect_path: effect_path.is_some(),
+            });
+        if let Some(retained) = retained.as_ref() {
+            let object = runtime
+                .object(retained.paint_global_id as usize)
+                .with_context(|| {
+                    format!(
+                        "missing retained ShapePaint global {}",
+                        retained.paint_global_id
+                    )
+                })?;
+            let render_paint = paint_by_global
+                .paint_mut(retained.paint_global_id)
+                .with_context(|| {
+                    format!(
+                        "missing retained RenderPaint for global {}",
+                        retained.paint_global_id
+                    )
+                })?
+                .as_mut();
+            runtime_configure_owned_shape_paint(render_paint, self, object, retained)?;
+            paint_by_global.mark_shape_owner_configured(retained.paint_global_id);
+        }
+        owner.retained.replace(retained);
+        owner.dirty.set(false);
+        Ok(())
     }
 
     fn runtime_layout_component_paint_path_commands(
@@ -6119,39 +6285,24 @@ impl ArtboardInstance {
         let Some(path_kind) = paint.path_kind.and_then(runtime_shape_paint_path_kind) else {
             return None;
         };
-        let key = RuntimeShapePaintPathCommandsCacheKey {
-            shape_local,
-            path_epoch: self.path_epoch(),
-            layout_epoch: self.layout_epoch(),
-            world_epoch: (path_kind == RuntimeShapePaintPathKind::World)
-                .then(|| self.prepared_epoch())
-                .unwrap_or_default(),
-            path_kind,
-        };
-        if let Some(path) = path_cache
-            .shape_paint_paths
-            .get(graph.global_id, shape_local, key)
-        {
-            return Some(path);
-        }
-
-        let mut commands = self.runtime_shape_paint_path_commands_uncached(
-            shape_local,
-            paint,
-            graph,
-            layout_bounds,
-            path_cache,
-        );
-        prune_empty_path_segments(&mut commands);
-        let raw_path = Arc::new(runtime_raw_path_from_commands(&commands));
-        let path = RuntimePreparedShapePaintPath {
-            commands: Arc::new(commands),
-            raw_path,
-        };
-        path_cache
-            .shape_paint_paths
-            .insert(graph.global_id, shape_local, key, path.clone());
-        Some(path)
+        let owner = self
+            .runtime_shapes
+            .paint_path_owner(shape_local, path_kind)?;
+        Some(owner.retained_or_build(|| {
+            let mut commands = self.runtime_shape_paint_path_commands_uncached(
+                shape_local,
+                paint,
+                graph,
+                layout_bounds,
+                path_cache,
+            );
+            prune_empty_path_segments(&mut commands);
+            let raw_path = Arc::new(runtime_raw_path_from_commands(&commands));
+            RuntimePreparedShapePaintPath {
+                commands: Arc::new(commands),
+                raw_path,
+            }
+        }))
     }
 
     fn runtime_shape_world_path_commands(
@@ -6641,6 +6792,9 @@ impl ArtboardInstance {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct RuntimeShapeList {
     by_local: Vec<Option<RuntimeShape>>,
+    shape_by_path_local: Vec<Option<usize>>,
+    paint_owners_by_component_local: Vec<Vec<RuntimeShapePaintOwnerRef>>,
+    effect_owners_by_component_local: Vec<Vec<RuntimeShapeEffectOwnerRef>>,
 }
 
 #[derive(Debug, Clone)]
@@ -6648,6 +6802,122 @@ struct RuntimeShape {
     path_locals: Vec<usize>,
     paint_container_index: Option<usize>,
     paint_indices: Vec<usize>,
+    /// C++ `WorldTransformComponent::m_worldTransform`, settled during the
+    /// owner update pass and read directly by `Shape::draw`.
+    world_transform: Cell<Mat2D>,
+    paint_paths: [RuntimeShapePaintPathOwner; 3],
+    paint_owners: Vec<RuntimeShapePaintOwner>,
+}
+
+/// Clone-owned counterpart of C++ `ShapePaintPath`. CPU commands and raw
+/// geometry live with the Shape; only the backend RenderPath remains in the
+/// one-to-one render sidecar.
+#[derive(Debug, Clone)]
+struct RuntimeShapePaintPathOwner {
+    dirty: Cell<bool>,
+    retained: RefCell<Option<RuntimePreparedShapePaintPath>>,
+}
+
+impl Default for RuntimeShapePaintPathOwner {
+    fn default() -> Self {
+        Self {
+            dirty: Cell::new(true),
+            retained: RefCell::new(None),
+        }
+    }
+}
+
+impl RuntimeShapePaintPathOwner {
+    fn mark_dirty(&self) {
+        self.dirty.set(true);
+    }
+
+    fn retained_or_build(
+        &self,
+        build: impl FnOnce() -> RuntimePreparedShapePaintPath,
+    ) -> RuntimePreparedShapePaintPath {
+        if self.dirty.get() || self.retained.borrow().is_none() {
+            *self.retained.borrow_mut() = Some(build());
+            self.dirty.set(false);
+        }
+        self.retained
+            .borrow()
+            .as_ref()
+            .expect("shape paint path owner was just populated")
+            .clone()
+    }
+}
+
+/// Clone-owned counterpart of one C++ ShapePaint and the EffectPath entries
+/// keyed by that ShapePaint's PathProvider identity.
+#[derive(Debug, Clone)]
+struct RuntimeShapePaintOwner {
+    paint_index: usize,
+    is_visible: Cell<bool>,
+    dirty: Cell<bool>,
+    effect_dirty_from: Cell<Option<usize>>,
+    retained_effect_path: RefCell<Option<Option<RuntimePreparedShapePaintPath>>>,
+    retained: RefCell<Option<RuntimeOwnedShapePaint>>,
+}
+
+/// Clone-owned draw state of one C++ `ShapePaint`. Geometry remains on the
+/// selected `ShapePaintPath`; renderer resources remain in one-to-one
+/// sidecars. This deliberately is not a `RuntimeDrawCommand`.
+#[derive(Debug, Clone)]
+struct RuntimeOwnedShapePaint {
+    paint_local: usize,
+    paint_global_id: u32,
+    paint_type: RuntimeShapePaintKind,
+    fill_rule: RenderFillRule,
+    render_blend_mode_value: u32,
+    paint_state: Option<RuntimeShapePaintState>,
+    path_kind: RuntimeShapePaintPathKind,
+    feather_state: Option<RuntimeFeatherState>,
+    selected_path: RuntimePreparedShapePaintPath,
+    has_effect_path: bool,
+}
+
+impl RuntimeShapePaintOwner {
+    fn new(paint_index: usize, is_visible: bool) -> Self {
+        Self {
+            paint_index,
+            is_visible: Cell::new(is_visible),
+            dirty: Cell::new(true),
+            effect_dirty_from: Cell::new(Some(0)),
+            retained_effect_path: RefCell::new(None),
+            retained: RefCell::new(None),
+        }
+    }
+
+    fn mark_dirty(&self) {
+        self.dirty.set(true);
+    }
+
+    fn invalidate_effects_from(&self, effect_index: usize) {
+        let first = self
+            .effect_dirty_from
+            .get()
+            .map_or(effect_index, |current| current.min(effect_index));
+        self.effect_dirty_from.set(Some(first));
+        self.dirty.set(true);
+    }
+
+    fn invalidate_all_effects(&self) {
+        self.invalidate_effects_from(0);
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeShapePaintOwnerRef {
+    shape_local: usize,
+    owner_index: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeShapeEffectOwnerRef {
+    shape_local: usize,
+    owner_index: usize,
+    effect_index: usize,
 }
 
 impl RuntimeShapeList {
@@ -6659,6 +6929,12 @@ impl RuntimeShapeList {
             shape
                 .path_locals
                 .extend(composer.paths.iter().map(|path| path.local_id));
+            for path in &composer.paths {
+                if shapes.shape_by_path_local.len() <= path.local_id {
+                    shapes.shape_by_path_local.resize(path.local_id + 1, None);
+                }
+                shapes.shape_by_path_local[path.local_id] = Some(composer.shape_local);
+            }
         }
         for (container_index, container) in graph.shape_paint_containers.iter().enumerate() {
             if container.type_name != "Shape" {
@@ -6668,8 +6944,81 @@ impl RuntimeShapeList {
             shape.paint_container_index = Some(container_index);
             shape.paint_indices.clear();
             shape.paint_indices.extend(0..container.paints.len());
+            shape.paint_owners.clear();
+            shape
+                .paint_owners
+                .extend(
+                    container
+                        .paints
+                        .iter()
+                        .enumerate()
+                        .map(|(paint_index, paint)| {
+                            RuntimeShapePaintOwner::new(paint_index, paint.is_visible)
+                        }),
+                );
+            for (owner_index, paint) in container.paints.iter().enumerate() {
+                let owner_ref = RuntimeShapePaintOwnerRef {
+                    shape_local: container.local_id,
+                    owner_index,
+                };
+                shapes.register_paint_component(container.local_id, owner_ref);
+                shapes.register_paint_component(paint.local_id, owner_ref);
+                if let Some(local_id) = paint.mutator_local {
+                    shapes.register_paint_component(local_id, owner_ref);
+                }
+                if let Some(local_id) = paint.feather_local {
+                    shapes.register_paint_component(local_id, owner_ref);
+                }
+                for stop in &paint.gradient_stops {
+                    shapes.register_paint_component(stop.local_id, owner_ref);
+                }
+                for (effect_index, effect) in paint.effects.iter().enumerate() {
+                    shapes.register_effect_components(effect, owner_ref, effect_index);
+                }
+            }
         }
         shapes
+    }
+
+    fn register_paint_component(&mut self, local_id: usize, owner: RuntimeShapePaintOwnerRef) {
+        if self.paint_owners_by_component_local.len() <= local_id {
+            self.paint_owners_by_component_local
+                .resize_with(local_id + 1, Vec::new);
+        }
+        self.paint_owners_by_component_local[local_id].push(owner);
+    }
+
+    fn register_effect_components(
+        &mut self,
+        effect: &StrokeEffectNode,
+        owner: RuntimeShapePaintOwnerRef,
+        effect_index: usize,
+    ) {
+        self.register_effect_component(effect.local_id, owner, effect_index);
+        for dash in &effect.dashes {
+            self.register_effect_component(dash.local_id, owner, effect_index);
+        }
+        for nested in &effect.group_effects {
+            self.register_effect_components(nested, owner, effect_index);
+        }
+    }
+
+    fn register_effect_component(
+        &mut self,
+        local_id: usize,
+        owner: RuntimeShapePaintOwnerRef,
+        effect_index: usize,
+    ) {
+        self.register_paint_component(local_id, owner);
+        if self.effect_owners_by_component_local.len() <= local_id {
+            self.effect_owners_by_component_local
+                .resize_with(local_id + 1, Vec::new);
+        }
+        self.effect_owners_by_component_local[local_id].push(RuntimeShapeEffectOwnerRef {
+            shape_local: owner.shape_local,
+            owner_index: owner.owner_index,
+            effect_index,
+        });
     }
 
     fn slot_mut(&mut self, shape_local: usize) -> &mut RuntimeShape {
@@ -6680,11 +7029,97 @@ impl RuntimeShapeList {
             path_locals: Vec::new(),
             paint_container_index: None,
             paint_indices: Vec::new(),
+            world_transform: Cell::new(Mat2D::IDENTITY),
+            paint_paths: std::array::from_fn(|_| RuntimeShapePaintPathOwner::default()),
+            paint_owners: Vec::new(),
         })
     }
 
     fn get(&self, shape_local: usize) -> Option<&RuntimeShape> {
         self.by_local.get(shape_local)?.as_ref()
+    }
+
+    fn paint_path_owner(
+        &self,
+        shape_local: usize,
+        path_kind: RuntimeShapePaintPathKind,
+    ) -> Option<&RuntimeShapePaintPathOwner> {
+        self.get(shape_local)?
+            .paint_paths
+            .get(runtime_shape_paint_path_kind_slot(path_kind))
+    }
+
+    fn mark_shape_paths_dirty(&self, shape_local: usize) {
+        let Some(shape) = self.get(shape_local) else {
+            return;
+        };
+        for path in &shape.paint_paths {
+            path.mark_dirty();
+        }
+        for paint in &shape.paint_owners {
+            paint.invalidate_all_effects();
+        }
+    }
+
+    pub(crate) fn mark_component_dirt(&self, local_id: usize, dirt: ComponentDirt) {
+        if !(dirt
+            & (ComponentDirt::PATH
+                | ComponentDirt::VERTICES
+                | ComponentDirt::WORLD_TRANSFORM
+                | ComponentDirt::N_SLICER
+                | ComponentDirt::LAYOUT_STYLE))
+            .is_empty()
+        {
+            if self.get(local_id).is_some() {
+                self.mark_shape_paths_dirty(local_id);
+            }
+            if let Some(shape_local) = self
+                .shape_by_path_local
+                .get(local_id)
+                .and_then(|shape_local| *shape_local)
+            {
+                self.mark_shape_paths_dirty(shape_local);
+            }
+        }
+        if let Some(owners) = self.paint_owners_by_component_local.get(local_id) {
+            for owner in owners {
+                let Some(paint) = self
+                    .get(owner.shape_local)
+                    .and_then(|shape| shape.paint_owners.get(owner.owner_index))
+                else {
+                    continue;
+                };
+                paint.mark_dirty();
+                if dirt.contains(ComponentDirt::PATH) {
+                    paint.invalidate_all_effects();
+                }
+            }
+        }
+    }
+
+    pub(crate) fn mark_property_changed(&self, local_id: usize, effect_path_property: bool) {
+        if let Some(owners) = self.paint_owners_by_component_local.get(local_id) {
+            for owner in owners {
+                if let Some(paint) = self
+                    .get(owner.shape_local)
+                    .and_then(|shape| shape.paint_owners.get(owner.owner_index))
+                {
+                    paint.mark_dirty();
+                }
+            }
+        }
+        if effect_path_property
+            && let Some(effects) = self.effect_owners_by_component_local.get(local_id)
+        {
+            for effect in effects {
+                if let Some(paint) = self
+                    .get(effect.shape_local)
+                    .and_then(|shape| shape.paint_owners.get(effect.owner_index))
+                {
+                    paint.invalidate_effects_from(effect.effect_index);
+                }
+            }
+        }
     }
 }
 
@@ -6829,6 +7264,8 @@ pub(crate) struct RuntimeDrawable {
     /// This CPU-side retained frame is clone-owned with the concrete drawable
     /// and is dirtied by object changes, never by a scene epoch.
     text_draw_owner: Option<RuntimeTextDrawOwner>,
+    /// C++ `Drawable::m_drawableFlags`, mutated in place by property writes.
+    is_hidden: bool,
     needs_save_operation: bool,
     /// C++ `Drawable::prev`; `Artboard::drawInternal` follows this link.
     prev: Option<usize>,
@@ -6856,6 +7293,7 @@ impl RuntimeDrawable {
             text_draw_owner: (drawable.type_name == "Text"
                 || is_text_input_drawable_type(drawable.type_name))
             .then(RuntimeTextDrawOwner::default),
+            is_hidden: drawable.is_hidden,
             needs_save_operation: true,
             prev: None,
             next: None,
@@ -6880,6 +7318,7 @@ impl RuntimeDrawable {
             clipping_shape_local: Some(clipping_shape_local),
             image_mesh: None,
             text_draw_owner: None,
+            is_hidden: false,
             needs_save_operation: true,
             prev: None,
             next: None,
@@ -7310,6 +7749,23 @@ impl RuntimeDrawableList {
         RuntimeDrawableIter {
             list: self,
             current: self.first_drawable,
+        }
+    }
+
+    pub(crate) fn mark_uint_property_changed(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: u64,
+    ) {
+        if runtime_draw_property_key_for_name("Drawable", "drawableFlags") != Some(property_key) {
+            return;
+        }
+        let Some(index) = self.drawable_by_local.get(&local_id).copied() else {
+            return;
+        };
+        if let Some(drawable) = self.drawables.get_mut(index) {
+            drawable.is_hidden = value & 1 != 0;
         }
     }
 }
@@ -9805,6 +10261,11 @@ pub struct RuntimeRenderPaintCache {
 #[derive(Default)]
 pub struct RuntimeRenderPaints {
     paints_by_global: Vec<Option<Box<dyn RenderPaint>>>,
+    // C++ ShapePaint owns its RenderPaint, so cloning/replacing one always
+    // carries the live paint state with it. RenderPaint is factory-specific in
+    // Rust and therefore lives in this one-to-one sidecar; this bit records
+    // whether that particular sidecar resource has received its owner's state.
+    shape_owner_configured_by_global: Vec<bool>,
     text_paint_pools: RuntimeTextPaintPools,
 }
 
@@ -9852,7 +10313,12 @@ impl RuntimeRenderPaints {
         if self.paints_by_global.len() <= slot {
             self.paints_by_global.resize_with(slot + 1, || None);
         }
+        if self.shape_owner_configured_by_global.len() <= slot {
+            self.shape_owner_configured_by_global
+                .resize(slot + 1, false);
+        }
         self.paints_by_global[slot] = Some(paint);
+        self.shape_owner_configured_by_global[slot] = false;
     }
 
     fn paint(&self, global_id: u32) -> Option<&Box<dyn RenderPaint>> {
@@ -9863,6 +10329,22 @@ impl RuntimeRenderPaints {
 
     fn paint_mut(&mut self, global_id: u32) -> Option<&mut Box<dyn RenderPaint>> {
         self.paints_by_global.get_mut(global_id as usize)?.as_mut()
+    }
+
+    fn shape_owner_is_configured(&self, global_id: u32) -> bool {
+        self.shape_owner_configured_by_global
+            .get(global_id as usize)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    fn mark_shape_owner_configured(&mut self, global_id: u32) {
+        let slot = global_id as usize;
+        if self.shape_owner_configured_by_global.len() <= slot {
+            self.shape_owner_configured_by_global
+                .resize(slot + 1, false);
+        }
+        self.shape_owner_configured_by_global[slot] = true;
     }
 }
 
@@ -10251,9 +10733,9 @@ pub struct RuntimeRenderPathCache {
     layout_clip_paths: RuntimeRetainedRenderPathSlots,
     text_clip_paths: RuntimeRetainedRenderPathSlots,
     simple_solid_draw_paths: RuntimeSimpleSolidDrawPathSlots,
+    owned_shape_draw_paths: RuntimeOwnedShapeRenderPathSlots,
     draw_paths: RuntimeDrawPathSlots,
     path_geometry_commands: RuntimePathGeometryCommandSlots,
-    shape_paint_paths: RuntimeShapePaintPathCommandSlots,
     clipping_shape_commands: RuntimeClippingShapeCommandSlots,
     world_transforms: RuntimeWorldTransformSlots,
     image_layout_transforms: RuntimeImageLayoutTransformSlots,
@@ -10565,60 +11047,6 @@ struct RuntimeCachedPathGeometryCommands {
     has_weighted_context: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RuntimeShapePaintPathCommandsCacheKey {
-    shape_local: usize,
-    path_epoch: u64,
-    layout_epoch: u64,
-    world_epoch: u64,
-    path_kind: RuntimeShapePaintPathKind,
-}
-
-#[derive(Default)]
-struct RuntimeShapePaintPathCommandSlots {
-    graph_global_id: Option<u32>,
-    by_shape_local: Vec<[Option<RuntimeCachedShapePaintPathCommands>; 3]>,
-}
-
-impl RuntimeShapePaintPathCommandSlots {
-    fn get(
-        &mut self,
-        graph_global_id: u32,
-        shape_local: usize,
-        key: RuntimeShapePaintPathCommandsCacheKey,
-    ) -> Option<RuntimePreparedShapePaintPath> {
-        if self.graph_global_id != Some(graph_global_id) {
-            self.graph_global_id = Some(graph_global_id);
-            self.by_shape_local.clear();
-            return None;
-        }
-        self.by_shape_local
-            .get(shape_local)
-            .and_then(|slots| slots[runtime_shape_paint_path_kind_slot(key.path_kind)].as_ref())
-            .filter(|cached| cached.key == key)
-            .map(|cached| cached.path.clone())
-    }
-
-    fn insert(
-        &mut self,
-        graph_global_id: u32,
-        shape_local: usize,
-        key: RuntimeShapePaintPathCommandsCacheKey,
-        path: RuntimePreparedShapePaintPath,
-    ) {
-        if self.graph_global_id != Some(graph_global_id) {
-            self.graph_global_id = Some(graph_global_id);
-            self.by_shape_local.clear();
-        }
-        if self.by_shape_local.len() <= shape_local {
-            self.by_shape_local
-                .resize_with(shape_local + 1, || [None, None, None]);
-        }
-        self.by_shape_local[shape_local][runtime_shape_paint_path_kind_slot(key.path_kind)] =
-            Some(RuntimeCachedShapePaintPathCommands { key, path });
-    }
-}
-
 fn runtime_shape_paint_path_kind_slot(path_kind: RuntimeShapePaintPathKind) -> usize {
     match path_kind {
         RuntimeShapePaintPathKind::Local => 0,
@@ -10631,12 +11059,6 @@ fn runtime_shape_paint_path_kind_slot(path_kind: RuntimeShapePaintPathKind) -> u
 struct RuntimePreparedShapePaintPath {
     commands: Arc<Vec<RuntimePathCommand>>,
     raw_path: Arc<RawPath>,
-}
-
-#[derive(Clone)]
-struct RuntimeCachedShapePaintPathCommands {
-    key: RuntimeShapePaintPathCommandsCacheKey,
-    path: RuntimePreparedShapePaintPath,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -10890,6 +11312,55 @@ struct RuntimeSimpleSolidDrawPath {
     raw_path: Arc<RawPath>,
     revision: RuntimeDrawPathRevision,
     fill_rule: RenderFillRule,
+}
+
+struct RuntimeOwnedShapeRenderPath {
+    path: Box<dyn RenderPath>,
+    raw_path: Arc<RawPath>,
+    fill_rule: RenderFillRule,
+}
+
+/// RF-14 backend sidecar for C++ `ShapePaintPath::m_renderPath`.
+///
+/// The three Shape-owned source paths are shared by every paint on that
+/// Shape. Each effect result is owned by its `(ShapePaint, PathProvider)`
+/// entry, matching `StrokeEffect::m_effectPaths`.
+#[derive(Default)]
+struct RuntimeOwnedShapeRenderPathSlots {
+    source_by_shape_local: Vec<Option<[Option<RuntimeOwnedShapeRenderPath>; 3]>>,
+    effect_by_shape_local: Vec<Vec<Option<RuntimeOwnedShapeRenderPath>>>,
+}
+
+impl RuntimeOwnedShapeRenderPathSlots {
+    fn source_slot_mut(
+        &mut self,
+        shape_local: usize,
+        path_kind: RuntimeShapePaintPathKind,
+    ) -> &mut Option<RuntimeOwnedShapeRenderPath> {
+        if self.source_by_shape_local.len() <= shape_local {
+            self.source_by_shape_local
+                .resize_with(shape_local + 1, || None);
+        }
+        let paths = self.source_by_shape_local[shape_local]
+            .get_or_insert_with(|| std::array::from_fn(|_| None));
+        &mut paths[runtime_shape_paint_path_kind_slot(path_kind)]
+    }
+
+    fn effect_slot_mut(
+        &mut self,
+        shape_local: usize,
+        owner_index: usize,
+    ) -> &mut Option<RuntimeOwnedShapeRenderPath> {
+        if self.effect_by_shape_local.len() <= shape_local {
+            self.effect_by_shape_local
+                .resize_with(shape_local + 1, Vec::new);
+        }
+        let paths = &mut self.effect_by_shape_local[shape_local];
+        if paths.len() <= owner_index {
+            paths.resize_with(owner_index + 1, || None);
+        }
+        &mut paths[owner_index]
+    }
 }
 
 enum RuntimeCachedDrawRawPath {
@@ -11843,6 +12314,53 @@ impl RuntimeRenderPathCache {
             cached.revision = revision;
         }
         if cached.fill_rule != fill_rule {
+            cached.path.fill_rule(fill_rule);
+            cached.fill_rule = fill_rule;
+        }
+        &mut cached.path
+    }
+
+    fn owned_shape_draw_path(
+        &mut self,
+        shape_local: usize,
+        owner_index: usize,
+        path_kind: RuntimeShapePaintPathKind,
+        effect_path: bool,
+        factory: &mut dyn RenderFactory,
+        raw_path: &Arc<RawPath>,
+        fill_rule: Option<RenderFillRule>,
+    ) -> &mut Box<dyn RenderPath> {
+        let slot = if effect_path {
+            self.owned_shape_draw_paths
+                .effect_slot_mut(shape_local, owner_index)
+        } else {
+            self.owned_shape_draw_paths
+                .source_slot_mut(shape_local, path_kind)
+        };
+        let cached = slot.get_or_insert_with(|| RuntimeOwnedShapeRenderPath {
+            path: runtime_make_path_from_raw_path(
+                factory,
+                raw_path.as_ref(),
+                RenderFillRule::Clockwise,
+            ),
+            raw_path: raw_path.clone(),
+            fill_rule: RenderFillRule::Clockwise,
+        });
+        // Direct port of `ShapePaintPath::renderPath`: `rewind` dirties the
+        // one owned RawPath; a clean draw reuses the same backend path.
+        if !Arc::ptr_eq(&cached.raw_path, raw_path) {
+            cached.raw_path = raw_path.clone();
+            runtime_rebuild_path_from_raw_path_preserving_fill_rule(
+                cached.path.as_mut(),
+                cached.raw_path.as_ref(),
+            );
+        }
+        // C++ `ShapePaint::draw` mutates a shared ShapePaintPath fill rule
+        // only for Fill. Strokes and inner-feather clips observe whatever
+        // rule that retained path already owns.
+        if let Some(fill_rule) = fill_rule
+            && cached.fill_rule != fill_rule
+        {
             cached.path.fill_rule(fill_rule);
             cached.fill_rule = fill_rule;
         }
@@ -13577,7 +14095,7 @@ fn runtime_draw_live_layout_family(
 
     let shape_paints =
         instance.runtime_shape_paint_commands(drawable, graph, layout_bounds, path_cache);
-    runtime_draw_live_shape(
+    runtime_draw_live_shape_commands(
         runtime,
         instance,
         graph,
@@ -14218,7 +14736,175 @@ fn runtime_draw_live_command(
 /// already retained by the clone-owned Shape; this adapter draws those live
 /// paints without constructing a `RuntimeDrawCommand`.
 #[allow(clippy::too_many_arguments)]
-fn runtime_draw_live_shape(
+fn runtime_draw_live_owned_shape(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    shape_local: usize,
+    drawable_needs_save_operation: bool,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    path_cache: &mut RuntimeRenderPathCache,
+) -> Result<()> {
+    let paint_count = instance
+        .runtime_shapes
+        .get(shape_local)
+        .map_or(0, |shape| shape.paint_owners.len());
+    let needs_save_operation = drawable_needs_save_operation || paint_count > 1;
+
+    for owner_index in 0..paint_count {
+        instance.ensure_runtime_shape_paint_owner(
+            runtime,
+            shape_local,
+            owner_index,
+            graph,
+            layout_bounds,
+            paint_by_global,
+            path_cache,
+        )?;
+        let shape_world = instance
+            .runtime_shapes
+            .get(shape_local)
+            .map_or(Mat2D::IDENTITY, |shape| shape.world_transform.get());
+        let Some(owner) = instance
+            .runtime_shapes
+            .get(shape_local)
+            .and_then(|shape| shape.paint_owners.get(owner_index))
+        else {
+            continue;
+        };
+        let retained = owner.retained.borrow();
+        let Some(paint) = retained.as_ref() else {
+            continue;
+        };
+        // Direct C++ `Shape::draw` read: visibility belongs to the live
+        // ShapePaint, not to a prepared draw command.
+        if !owner.is_visible.get() {
+            continue;
+        }
+        runtime_draw_live_owned_shape_paint(
+            instance,
+            shape_local,
+            shape_world,
+            paint,
+            owner_index,
+            needs_save_operation,
+            factory,
+            renderer,
+            paint_by_global,
+            path_cache,
+        )?;
+    }
+    Ok(())
+}
+
+/// Direct port of C++ `ShapePaint::draw` for clone-owned Shape paints. The
+/// selected ShapePaintPath and RenderPaint are owner resources; no command
+/// object is constructed or consulted on a clean draw.
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_live_owned_shape_paint(
+    instance: &ArtboardInstance,
+    shape_local: usize,
+    shape_world: Mat2D,
+    paint: &RuntimeOwnedShapePaint,
+    owner_index: usize,
+    needs_save_operation: bool,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    path_cache: &mut RuntimeRenderPathCache,
+) -> Result<()> {
+    let mut saved = !needs_save_operation;
+    if let Some(feather) = paint.feather_state.as_ref()
+        && runtime_feather_uses_world_space(feather)
+        && !feather.inner
+        && runtime_feather_has_offset(feather)
+    {
+        if !saved {
+            saved = true;
+            renderer.save();
+        }
+        renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+    }
+    if matches!(
+        paint.path_kind,
+        RuntimeShapePaintPathKind::Local | RuntimeShapePaintPathKind::LocalClockwise
+    ) {
+        if !saved {
+            saved = true;
+            renderer.save();
+        }
+        renderer.transform(runtime_render_mat(shape_world));
+    }
+
+    if let Some(feather) = paint.feather_state.as_ref() {
+        if feather.inner {
+            if feather.inner_path_commands.is_empty() {
+                return Ok(());
+            }
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            let clip_path = path_cache.owned_shape_draw_path(
+                shape_local,
+                owner_index,
+                paint.path_kind,
+                paint.has_effect_path,
+                factory,
+                &paint.selected_path.raw_path,
+                None,
+            );
+            renderer.clip_path(clip_path.as_ref());
+        } else if !runtime_feather_uses_world_space(feather) && runtime_feather_has_offset(feather)
+        {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+        }
+    }
+
+    let path = if let Some(feather) = paint.feather_state.as_ref().filter(|feather| feather.inner) {
+        path_cache.draw_path(
+            RuntimeDrawPathCacheKey {
+                kind: RuntimeDrawPathCacheKind::Draw,
+                path_kind: paint.path_kind,
+                local_id: Some(paint.paint_local),
+                path_index: 0,
+            },
+            runtime_draw_path_revision(instance, paint.path_kind),
+            factory,
+            &feather.inner_path_commands,
+            RenderFillRule::Clockwise,
+        )
+    } else {
+        path_cache.owned_shape_draw_path(
+            shape_local,
+            owner_index,
+            paint.path_kind,
+            paint.has_effect_path,
+            factory,
+            &paint.selected_path.raw_path,
+            (paint.paint_type == RuntimeShapePaintKind::Fill).then_some(paint.fill_rule),
+        )
+    };
+    let render_paint = paint_by_global
+        .paint(paint.paint_global_id)
+        .with_context(|| format!("missing render paint for global {}", paint.paint_global_id))?
+        .as_ref();
+    renderer.draw_path(path.as_ref(), render_paint);
+    if saved && needs_save_operation {
+        renderer.restore();
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_live_shape_commands(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
@@ -14237,72 +14923,148 @@ fn runtime_draw_live_shape(
         shape_local,
         layout_bounds,
     );
-
     for paint in shape_paints {
-        let global_id = paint.paint_global_id;
-        let paint_configuration_is_current =
-            paint_configurations
-                .as_deref()
-                .is_some_and(|configurations| {
-                    configurations.is_current(
-                        global_id,
-                        runtime_paint_configuration_epoch(instance, paint),
-                    )
-                });
-        if !paint_configuration_is_current {
-            let object = runtime
-                .object(global_id as usize)
-                .with_context(|| format!("missing paint global {global_id}"))?;
-            let render_paint = paint_by_global
-                .paint_mut(global_id)
-                .with_context(|| format!("missing render paint for global {global_id}"))?
-                .as_mut();
-            if let Some(configurations) = paint_configurations.as_mut() {
-                runtime_configure_paint_with_cache(
-                    render_paint,
-                    configurations,
+        runtime_draw_live_shape_paint(
+            runtime,
+            instance,
+            shape_local,
+            shape_world,
+            paint,
+            factory,
+            renderer,
+            paint_by_global,
+            path_cache,
+            paint_configurations.as_deref_mut(),
+            true,
+            paint.needs_save_operation,
+            None,
+        )?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_live_shape_paint(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    shape_local: usize,
+    shape_world: Mat2D,
+    paint: &RuntimeShapePaintCommand,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    path_cache: &mut RuntimeRenderPathCache,
+    mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+    configure_paint_if_stale: bool,
+    needs_save_operation: bool,
+    owned_paint_index: Option<usize>,
+) -> Result<()> {
+    let global_id = paint.paint_global_id;
+    let paint_configuration_is_current = !configure_paint_if_stale
+        || paint_configurations
+            .as_deref()
+            .is_some_and(|configurations| {
+                configurations.is_current(
                     global_id,
-                    instance,
-                    object,
-                    paint,
-                )?;
-            } else {
-                runtime_configure_paint(render_paint, instance, object, paint, None)?;
-            }
+                    runtime_paint_configuration_epoch(instance, paint),
+                )
+            });
+    if !paint_configuration_is_current {
+        let object = runtime
+            .object(global_id as usize)
+            .with_context(|| format!("missing paint global {global_id}"))?;
+        let render_paint = paint_by_global
+            .paint_mut(global_id)
+            .with_context(|| format!("missing render paint for global {global_id}"))?
+            .as_mut();
+        if let Some(configurations) = paint_configurations.as_mut() {
+            runtime_configure_paint_with_cache(
+                render_paint,
+                configurations,
+                global_id,
+                instance,
+                object,
+                paint,
+            )?;
+        } else {
+            runtime_configure_paint(render_paint, instance, object, paint, None)?;
         }
+    }
 
-        let draw_path_revision = runtime_draw_path_revision(instance, paint.path_kind);
-        let effect_or_shape_path_commands = if paint.has_effect_path {
-            paint.effect_path_commands.as_slice()
-        } else {
-            paint.path_commands.as_slice()
-        };
-        let draw_path_commands = paint
-            .feather_state
-            .as_ref()
-            .filter(|feather| feather.inner)
-            .map(|feather| feather.inner_path_commands.as_slice())
-            .unwrap_or(effect_or_shape_path_commands);
-        let draw_path_cache_local = if paint.has_effect_path {
-            Some(paint.paint_local)
-        } else {
-            Some(shape_local)
-        };
-        let inner_feather_path_cache_local = if paint
-            .feather_state
-            .as_ref()
-            .is_some_and(|feather| feather.inner)
-        {
-            Some(paint.paint_local)
-        } else {
-            draw_path_cache_local
-        };
+    let draw_path_revision = runtime_draw_path_revision(instance, paint.path_kind);
+    let effect_or_shape_path_commands = if paint.has_effect_path {
+        paint.effect_path_commands.as_slice()
+    } else {
+        paint.path_commands.as_slice()
+    };
+    let draw_path_commands = paint
+        .feather_state
+        .as_ref()
+        .filter(|feather| feather.inner)
+        .map(|feather| feather.inner_path_commands.as_slice())
+        .unwrap_or(effect_or_shape_path_commands);
+    let draw_path_cache_local = if paint.has_effect_path {
+        Some(paint.paint_local)
+    } else {
+        Some(shape_local)
+    };
+    let inner_feather_path_cache_local = if paint
+        .feather_state
+        .as_ref()
+        .is_some_and(|feather| feather.inner)
+    {
+        Some(paint.paint_local)
+    } else {
+        draw_path_cache_local
+    };
 
-        let mut saved = !paint.needs_save_operation;
-        if let Some(feather) = paint.feather_state.as_ref()
-            && runtime_feather_uses_world_space(feather)
-            && !feather.inner
-            && runtime_feather_has_offset(feather)
+    let mut saved = !needs_save_operation;
+    if let Some(feather) = paint.feather_state.as_ref()
+        && runtime_feather_uses_world_space(feather)
+        && !feather.inner
+        && runtime_feather_has_offset(feather)
+    {
+        if !saved {
+            saved = true;
+            renderer.save();
+        }
+        renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+    }
+    if matches!(
+        paint.path_kind,
+        RuntimeShapePaintPathKind::Local | RuntimeShapePaintPathKind::LocalClockwise
+    ) {
+        if !saved {
+            saved = true;
+            renderer.save();
+        }
+        renderer.transform(runtime_render_mat(shape_world));
+    }
+    if let Some(feather) = paint.feather_state.as_ref() {
+        if feather.inner {
+            // C++ returns from ShapePaint::draw here. The Shape loop then
+            // continues to its next retained paint.
+            if feather.inner_path_commands.is_empty() {
+                return Ok(());
+            }
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            let clip_path = path_cache.draw_path(
+                RuntimeDrawPathCacheKey {
+                    kind: RuntimeDrawPathCacheKind::Draw,
+                    path_kind: runtime_draw_path_cache_path_kind(paint),
+                    local_id: draw_path_cache_local,
+                    path_index: paint.clip_path_slot_index,
+                },
+                draw_path_revision,
+                factory,
+                effect_or_shape_path_commands,
+                RenderFillRule::Clockwise,
+            );
+            renderer.clip_path(clip_path.as_ref());
+        } else if !runtime_feather_uses_world_space(feather) && runtime_feather_has_offset(feather)
         {
             if !saved {
                 saved = true;
@@ -14310,61 +15072,31 @@ fn runtime_draw_live_shape(
             }
             renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
         }
-        if matches!(
-            paint.path_kind,
-            RuntimeShapePaintPathKind::Local | RuntimeShapePaintPathKind::LocalClockwise
-        ) {
-            if !saved {
-                saved = true;
-                renderer.save();
-            }
-            renderer.transform(runtime_render_mat(shape_world));
-        }
-        if let Some(feather) = paint.feather_state.as_ref() {
-            if feather.inner {
-                // C++ returns from ShapePaint::draw here. The Shape loop then
-                // continues to its next retained paint.
-                if feather.inner_path_commands.is_empty() {
-                    continue;
-                }
-                if !saved {
-                    saved = true;
-                    renderer.save();
-                }
-                let clip_path = path_cache.draw_path(
-                    RuntimeDrawPathCacheKey {
-                        kind: RuntimeDrawPathCacheKind::Draw,
-                        path_kind: runtime_draw_path_cache_path_kind(paint),
-                        local_id: draw_path_cache_local,
-                        path_index: paint.clip_path_slot_index,
-                    },
-                    draw_path_revision,
-                    factory,
-                    effect_or_shape_path_commands,
-                    RenderFillRule::Clockwise,
-                );
-                renderer.clip_path(clip_path.as_ref());
-            } else if !runtime_feather_uses_world_space(feather)
-                && runtime_feather_has_offset(feather)
-            {
-                if !saved {
-                    saved = true;
-                    renderer.save();
-                }
-                renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
-            }
-        }
+    }
 
-        let replay_fill_rule =
-            (paint.paint_type == RuntimeShapePaintKind::Fill).then_some(paint.fill_rule);
-        let prepared_raw_path = paint.prepared_raw_path.as_ref().filter(|_| {
-            !paint.has_effect_path
-                && !paint
-                    .feather_state
-                    .as_ref()
-                    .is_some_and(|feather| feather.inner)
-        });
-        let path = path_cache.draw_path_with_optional_fill_rule_and_prepared_raw_path(
+    let replay_fill_rule =
+        (paint.paint_type == RuntimeShapePaintKind::Fill).then_some(paint.fill_rule);
+    let prepared_raw_path = paint.prepared_raw_path.as_ref().filter(|_| {
+        !paint
+            .feather_state
+            .as_ref()
+            .is_some_and(|feather| feather.inner)
+            && (owned_paint_index.is_some() || !paint.has_effect_path)
+    });
+    let path = if let (Some(owner_index), Some(prepared_raw_path)) =
+        (owned_paint_index, prepared_raw_path)
+    {
+        path_cache.owned_shape_draw_path(
+            shape_local,
+            owner_index,
+            runtime_draw_path_cache_path_kind(paint),
+            paint.has_effect_path,
+            factory,
+            prepared_raw_path,
+            replay_fill_rule,
+        )
+    } else {
+        path_cache.draw_path_with_optional_fill_rule_and_prepared_raw_path(
             RuntimeDrawPathCacheKey {
                 kind: RuntimeDrawPathCacheKind::Draw,
                 path_kind: runtime_draw_path_cache_path_kind(paint),
@@ -14377,15 +15109,15 @@ fn runtime_draw_live_shape(
             RenderFillRule::Clockwise,
             replay_fill_rule,
             prepared_raw_path,
-        );
-        let render_paint = paint_by_global
-            .paint(global_id)
-            .with_context(|| format!("missing render paint for global {global_id}"))?
-            .as_ref();
-        renderer.draw_path(path.as_ref(), render_paint);
-        if saved && paint.needs_save_operation {
-            renderer.restore();
-        }
+        )
+    };
+    let render_paint = paint_by_global
+        .paint(global_id)
+        .with_context(|| format!("missing render paint for global {global_id}"))?
+        .as_ref();
+    renderer.draw_path(path.as_ref(), render_paint);
+    if saved && needs_save_operation {
+        renderer.restore();
     }
     Ok(())
 }
@@ -17195,6 +17927,71 @@ fn runtime_configure_paint_with_cache(
     Ok(())
 }
 
+/// Direct clone-owner translation of the ShapePaint mutator update path.
+/// C++ mutates the ShapePaint-owned RenderPaint when its component dirt is
+/// processed; the Rust arena keeps that backend object in a one-to-one
+/// sidecar and applies the same live fields when the owner is dirty.
+fn runtime_configure_owned_shape_paint(
+    render_paint: &mut dyn RenderPaint,
+    instance: &ArtboardInstance,
+    object: &RuntimeObject,
+    paint: &RuntimeOwnedShapePaint,
+) -> Result<()> {
+    match paint.paint_type {
+        RuntimeShapePaintKind::Fill => {
+            render_paint.style(RenderPaintStyle::Fill);
+        }
+        RuntimeShapePaintKind::Stroke => {
+            render_paint.style(RenderPaintStyle::Stroke);
+            render_paint.thickness(runtime_stroke_thickness(
+                instance,
+                object,
+                paint.paint_local,
+            ));
+            render_paint.cap(runtime_stroke_cap(runtime_stroke_uint_property(
+                instance,
+                object,
+                paint.paint_local,
+                "cap",
+                0,
+            ))?);
+            render_paint.join(runtime_stroke_join(runtime_stroke_uint_property(
+                instance,
+                object,
+                paint.paint_local,
+                "join",
+                0,
+            ))?);
+        }
+        RuntimeShapePaintKind::Unknown => anyhow::bail!("unsupported: unknown shape paint"),
+    }
+    render_paint.blend_mode(runtime_blend_mode(paint.render_blend_mode_value)?);
+    match paint.paint_state.as_ref() {
+        Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => {
+            render_paint.shader(None);
+            render_paint.color(*render_color);
+        }
+        // LinearGradient/RadialGradient own shader mutation in their
+        // dependency-ordered update pass. ShapePaint only retains and draws
+        // the already-attached shader.
+        Some(
+            RuntimeShapePaintState::LinearGradient { .. }
+            | RuntimeShapePaintState::RadialGradient { .. },
+        ) => {}
+        None => {
+            render_paint.shader(None);
+        }
+    }
+    render_paint.feather(
+        paint
+            .feather_state
+            .as_ref()
+            .map(|feather| feather.strength)
+            .unwrap_or(0.0),
+    );
+    Ok(())
+}
+
 fn runtime_configure_paint(
     render_paint: &mut dyn RenderPaint,
     instance: &ArtboardInstance,
@@ -18090,6 +18887,38 @@ pub(crate) fn runtime_shape_paint_command(
     suppress_authored_transparent: bool,
     aliases_local_clockwise_path: bool,
 ) -> Option<RuntimeShapePaintCommand> {
+    let mut path_commands = path_commands;
+    prune_empty_path_segments(&mut path_commands);
+    let effect_path_commands = runtime_effect_path_commands(artboard, paint, &path_commands);
+    runtime_shape_paint_command_with_effect_path(
+        artboard,
+        paint,
+        container_blend_mode_value,
+        needs_save_operation,
+        render_opacity,
+        shape_world,
+        path_commands,
+        effect_path_commands,
+        require_effective_visible,
+        suppress_authored_transparent,
+        aliases_local_clockwise_path,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_shape_paint_command_with_effect_path(
+    artboard: &ArtboardInstance,
+    paint: &ShapePaintNode,
+    container_blend_mode_value: u32,
+    needs_save_operation: bool,
+    render_opacity: f32,
+    shape_world: Mat2D,
+    path_commands: Vec<RuntimePathCommand>,
+    effect_path_commands: Option<Vec<RuntimePathCommand>>,
+    require_effective_visible: bool,
+    suppress_authored_transparent: bool,
+    aliases_local_clockwise_path: bool,
+) -> Option<RuntimeShapePaintCommand> {
     if !runtime_shape_paint_is_visible(artboard, paint) {
         return None;
     }
@@ -18101,9 +18930,6 @@ pub(crate) fn runtime_shape_paint_command(
     if suppress_authored_transparent && !runtime_shape_paint_state_is_visible(&paint_state) {
         return None;
     }
-    let mut path_commands = path_commands;
-    prune_empty_path_segments(&mut path_commands);
-    let effect_path_commands = runtime_effect_path_commands(artboard, paint, &path_commands);
     let has_effect_path = effect_path_commands.is_some();
     let mut effect_path_commands = effect_path_commands.unwrap_or_default();
     prune_empty_path_segments(&mut effect_path_commands);
@@ -20549,6 +21375,7 @@ fn runtime_dash_path_effect_commands(
     paint: &ShapePaintNode,
     source: &[RuntimePathCommand],
 ) -> Option<Vec<RuntimePathCommand>> {
+    record_runtime_dash_path_effect_rebuild();
     let offset = runtime_dash_path_double_property(artboard, effect, "offset", effect.dash_offset)?;
     let offset_is_percentage = runtime_dash_path_bool_property(
         artboard,
@@ -20567,6 +21394,29 @@ fn runtime_dash_path_effect_commands(
         offset_is_percentage,
         &effect.dashes,
     ))
+}
+
+#[inline]
+fn record_runtime_dash_path_effect_rebuild() {
+    #[cfg(test)]
+    RUNTIME_DASH_PATH_EFFECT_REBUILDS.with(|calls| calls.set(calls.get() + 1));
+}
+
+#[cfg(test)]
+std::thread_local! {
+    static RUNTIME_DASH_PATH_EFFECT_REBUILDS: std::cell::Cell<usize> = const {
+        std::cell::Cell::new(0)
+    };
+}
+
+#[cfg(test)]
+fn reset_runtime_dash_path_effect_rebuilds() {
+    RUNTIME_DASH_PATH_EFFECT_REBUILDS.with(|calls| calls.set(0));
+}
+
+#[cfg(test)]
+fn runtime_dash_path_effect_rebuilds() -> usize {
+    RUNTIME_DASH_PATH_EFFECT_REBUILDS.with(std::cell::Cell::get)
 }
 
 fn runtime_dash_path_double_property(
@@ -25164,17 +26014,10 @@ mod tests {
         let prepared_before = cache
             .paths
             .prepared_artboard_frame(&instance, graph, Some(&file));
-        let key = RuntimeShapePaintPathCommandsCacheKey {
-            shape_local: 1,
-            path_epoch: instance.path_epoch(),
-            layout_epoch: instance.layout_epoch(),
-            world_epoch: 0,
-            path_kind: RuntimeShapePaintPathKind::Local,
-        };
-        let before = cache
-            .paths
-            .shape_paint_paths
-            .get(graph.global_id, 1, key)
+        let before = instance
+            .runtime_shapes
+            .paint_path_owner(1, RuntimeShapePaintPathKind::Local)
+            .and_then(|owner| owner.retained.borrow().clone())
             .expect("the first query retains local paint commands");
 
         assert!(instance.set_transform_property(1, TransformProperty::X, 60.0));
@@ -25188,10 +26031,10 @@ mod tests {
             ),
             vec![1]
         );
-        let after = cache
-            .paths
-            .shape_paint_paths
-            .get(graph.global_id, 1, key)
+        let after = instance
+            .runtime_shapes
+            .paint_path_owner(1, RuntimeShapePaintPathKind::Local)
+            .and_then(|owner| owner.retained.borrow().clone())
             .expect("transform-only writes retain local paint commands");
         let prepared_after = cache
             .paths
@@ -27689,6 +28532,7 @@ mod tests {
             clipping_shape_local: None,
             image_mesh: None,
             text_draw_owner: None,
+            is_hidden: false,
             needs_save_operation: true,
             prev: None,
             next: None,
@@ -27757,6 +28601,7 @@ mod tests {
             clipping_shape_local: None,
             image_mesh: None,
             text_draw_owner: None,
+            is_hidden: false,
             needs_save_operation: true,
             prev: None,
             next: None,
@@ -29468,6 +30313,135 @@ mod tests {
             push_f32(bytes, "Vertex", "y", 10.0);
         });
         bytes
+    }
+
+    fn synthetic_dashed_stroke_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9662);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "Stroke", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+            push_f32(bytes, "Stroke", "thickness", 2.0);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 2);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "DashPath", |bytes| {
+            push_uint(bytes, "Component", "parentId", 2);
+        });
+        push_object(&mut bytes, "Dash", |bytes| {
+            push_uint(bytes, "Component", "parentId", 4);
+            push_f32(bytes, "Dash", "length", 4.0);
+        });
+        push_object(&mut bytes, "Dash", |bytes| {
+            push_uint(bytes, "Component", "parentId", 4);
+            push_f32(bytes, "Dash", "length", 2.0);
+        });
+        push_object(&mut bytes, "PointsPath", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+        });
+        push_object(&mut bytes, "StraightVertex", |bytes| {
+            push_uint(bytes, "Component", "parentId", 7);
+            push_f32(bytes, "Vertex", "x", 0.0);
+            push_f32(bytes, "Vertex", "y", 0.0);
+        });
+        push_object(&mut bytes, "StraightVertex", |bytes| {
+            push_uint(bytes, "Component", "parentId", 7);
+            push_f32(bytes, "Vertex", "x", 100.0);
+            push_f32(bytes, "Vertex", "y", 0.0);
+        });
+        bytes
+    }
+
+    #[test]
+    fn unchanged_dashed_stroke_retains_effect_path_until_path_dirt() {
+        // C++ retains one EffectPath per (StrokeEffect, PathProvider), skips
+        // DashPath::updateEffect once that path owns a RenderPath, and rewinds
+        // it only through the path-dirt invalidation chain
+        // (stroke_effect.hpp:17-56, dash_path.cpp:9,126-155,
+        // shape_paint.cpp:30-47,193-205).
+        let bytes = synthetic_dashed_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic dashed stroke imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic dashed stroke graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic dashed stroke has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let mut factory = CountingFactory {
+            stats: Rc::new(CountingStats::default()),
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let ops = Rc::new(RefCell::new(Vec::new()));
+        let mut renderer = RecordingRenderer { ops };
+
+        instance.update_components();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("paint preparation succeeds");
+        reset_runtime_dash_path_effect_rebuilds();
+
+        for _ in 0..2 {
+            instance
+                .draw_prepared_static_artboard_with_render_cache(
+                    &file,
+                    graph,
+                    &graphs.artboards,
+                    &mut factory,
+                    &mut renderer,
+                    &mut paint_cache,
+                    &mut path_cache,
+                )
+                .expect("unchanged draw succeeds");
+        }
+        assert_eq!(
+            runtime_dash_path_effect_rebuilds(),
+            1,
+            "the second unchanged draw must reuse the retained effect path"
+        );
+
+        let dash_length = property_key_for_name("Dash", "length").expect("Dash.length key");
+        assert!(instance.set_double_property(5, dash_length, 8.0));
+        instance.update_components();
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("path-dirty draw succeeds");
+        assert_eq!(
+            runtime_dash_path_effect_rebuilds(),
+            2,
+            "Dash.length dirt must rebuild the retained effect path exactly once"
+        );
     }
 
     #[test]

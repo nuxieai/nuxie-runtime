@@ -1923,6 +1923,7 @@ impl ArtboardInstance {
             self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         }
         self.mark_changed();
+        self.runtime_shapes.mark_property_changed(local_id, false);
         if let Some(revision) = self.solid_color_paint_revisions.get_mut(local_id) {
             *revision = revision.wrapping_add(1);
         }
@@ -1941,6 +1942,7 @@ impl ArtboardInstance {
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
+        self.runtime_shapes.mark_property_changed(local_id, false);
         self.mark_text_changed_for_local(local_id);
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("SolidColor")
             && solid_color_value_property_key() == Some(property_key)
@@ -1979,10 +1981,13 @@ impl ArtboardInstance {
         self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
-        if property_affects_effect_path_epoch(
+        let affects_effect_path = property_affects_effect_path_epoch(
             self.slot(local_id).and_then(|slot| slot.type_name),
             property_key,
-        ) {
+        );
+        self.runtime_shapes
+            .mark_property_changed(local_id, affects_effect_path);
+        if affects_effect_path {
             self.mark_path_changed();
         }
         self.apply_bool_property_changed(local_id, property_key, value);
@@ -2254,10 +2259,13 @@ impl ArtboardInstance {
         self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
-        if property_affects_effect_path_epoch(
+        let affects_effect_path = property_affects_effect_path_epoch(
             self.slot(local_id).and_then(|slot| slot.type_name),
             property_key,
-        ) {
+        );
+        self.runtime_shapes
+            .mark_property_changed(local_id, affects_effect_path);
+        if affects_effect_path {
             self.mark_path_changed();
         }
         self.apply_double_property_changed(local_id, property_key, value);
@@ -2281,10 +2289,15 @@ impl ArtboardInstance {
         self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
-        if property_affects_effect_path_epoch(
+        self.runtime_drawables
+            .mark_uint_property_changed(local_id, property_key, value);
+        let affects_effect_path = property_affects_effect_path_epoch(
             self.slot(local_id).and_then(|slot| slot.type_name),
             property_key,
-        ) {
+        );
+        self.runtime_shapes
+            .mark_property_changed(local_id, affects_effect_path);
+        if affects_effect_path {
             self.mark_path_changed();
         }
         self.apply_uint_property_changed(local_id, property_key);
@@ -4138,6 +4151,7 @@ impl ArtboardInstance {
             self.runtime_drawables
                 .mark_text_resource_dirty_for_local(local_id);
         }
+        self.runtime_shapes.mark_component_dirt(local_id, dirt);
         self.components[index].dirt |= dirt;
         if dirt.contains(ComponentDirt::LAYOUT_STYLE) {
             self.mark_layout_changed();

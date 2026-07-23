@@ -1,0 +1,734 @@
+version = 1
+title = "C++ runtime drawing port ownership ledger"
+upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+porting_rules_file = "docs/PORTING.md"
+phase = "ownership-proof-before-scene-cache-removal"
+
+# This count is a ratchet, not a completion claim. `make
+# runtime-drawing-port-closed` requires pending=0, compensation=0, and every
+# legacy symbol count below to reach zero.
+expected_status_counts = { exact = 5, adapted = 7, pending = 10, compensation = 15 }
+
+[[batch]]
+id = "shape_path_paint"
+sequence = 1
+depends_on = []
+boundary = "Shape, PathComposer, ShapePaintPath, and ShapePaint own their complete CPU and backend draw state."
+
+[[batch]]
+id = "image_mesh"
+sequence = 2
+depends_on = ["shape_path_paint"]
+boundary = "ImageAsset, Image, Mesh, and NSlicer own render images and mesh buffers without an artboard cache."
+
+[[batch]]
+id = "text"
+sequence = 3
+depends_on = ["shape_path_paint", "image_mesh"]
+boundary = "Text and TextInput own shaped draw commands, style paints, paths, and emoji images."
+
+[[batch]]
+id = "layout_nested"
+sequence = 4
+depends_on = ["shape_path_paint", "text"]
+boundary = "Layout, nested artboards, and component-list occurrences own their live paths and child identity."
+
+[[batch]]
+id = "artboard_facade"
+sequence = 5
+depends_on = ["shape_path_paint", "image_mesh", "text", "layout_nested"]
+boundary = "ArtboardInstance owns the complete runtime drawing object graph; the host facade retains no scene replay."
+
+[[ratchet]]
+id = "prepared_frame_type"
+globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
+pattern = "\\bRuntimePreparedArtboardFrame\\b"
+max_occurrences = 5
+
+[[ratchet]]
+id = "draw_command_type"
+globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
+pattern = "\\bRuntimeDrawCommand\\w*"
+max_occurrences = 85
+
+[[ratchet]]
+id = "scene_path_cache_type"
+globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
+pattern = "\\bRuntimeRenderPathCache\\b"
+max_occurrences = 108
+
+[[ratchet]]
+id = "scene_paint_cache_type"
+globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
+pattern = "\\bRuntimeRenderPaintCache\\b"
+max_occurrences = 44
+
+[[ratchet]]
+id = "facade_cache_type"
+globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
+pattern = "\\bArtboardRenderCache\\b"
+max_occurrences = 13
+
+[[ratchet]]
+id = "prepare_tree_api"
+globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
+pattern = "\\bprepare_static_artboard_tree_paints\\w*"
+max_occurrences = 46
+
+[[ratchet]]
+id = "prepared_draw_api"
+globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
+pattern = "\\bdraw_prepared_static_artboard\\w*"
+max_occurrences = 42
+
+[[ratchet]]
+id = "prepared_frame_accessor"
+globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
+pattern = "\\bprepared_artboard_frame\\b"
+max_occurrences = 19
+
+[[ratchet]]
+id = "draw_time_shape_ensure"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bensure_runtime_shape_paint_owner\\b"
+max_occurrences = 2
+
+[[ratchet]]
+id = "global_shape_paint_configuration"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bshape_owner_configured_by_global\\b"
+max_occurrences = 8
+
+[[ratchet]]
+id = "command_shape_draw_adapter"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bruntime_draw_live_shape_commands\\b"
+max_occurrences = 2
+
+[[ratchet]]
+id = "generic_command_draw_adapter"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bruntime_draw_live_command\\b"
+max_occurrences = 1
+
+[[ratchet]]
+id = "paint_preparation_frame"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bRuntimePaintPreparationFrame\\b"
+max_occurrences = 8
+
+[[ratchet]]
+id = "render_paint_configuration_slots"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bRuntimeRenderPaintConfigurationSlots\\b"
+max_occurrences = 25
+
+[[ratchet]]
+id = "shape_paint_snapshot_type"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bRuntimeOwnedShapePaint\\b"
+max_occurrences = 5
+
+[[ratchet]]
+id = "shape_world_transform_copy"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bworld_transform: Cell<Mat2D>"
+max_occurrences = 1
+
+[[ratchet]]
+id = "shape_paint_visibility_copy"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bis_visible: Cell<bool>"
+max_occurrences = 1
+
+[[owner]]
+id = "shape.path_composer"
+batch = "shape_path_paint"
+status = "compensation"
+rule = "RF-29"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "struct RuntimeShape {"
+depends_on = []
+legacy_ratchets = ["draw_time_shape_ensure"]
+note = "Rust retains PathComposer-shaped data on RuntimeShape but omits the C++ synthetic Component from the executable dependency/update list, so its work is recovered from draw."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/shape.cpp:20", "rust:crates/nuxie-runtime/src/draw.rs:7024-7035"]
+update = ["cpp:src/shapes/path_composer.cpp:40-117", "rust:crates/nuxie-runtime/src/draw.rs:7052-7071"]
+draw = ["cpp:src/shapes/shape.cpp:137-159", "rust:crates/nuxie-runtime/src/draw.rs:14739-14800"]
+clone_drop = ["cpp:include/rive/shapes/shape.hpp:18-24", "rust:crates/nuxie-runtime/src/draw.rs:6800-6810"]
+
+[[owner]]
+id = "shape.inherited_world_transform"
+batch = "shape_path_paint"
+status = "compensation"
+rule = "RF-34"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "world_transform: Cell<Mat2D>"
+depends_on = ["shape.path_composer"]
+legacy_ratchets = ["shape_world_transform_copy"]
+note = "C++ inherits one live WorldTransformComponent value. Rust copies it into RuntimeShape, creating the second source of truth rejected by the stress test."
+[owner.lifecycle]
+construct = ["cpp:include/rive/shapes/shape.hpp:13-18", "rust:crates/nuxie-runtime/src/draw.rs:7014-7035"]
+update = ["cpp:src/shapes/shape.cpp:54-62", "rust:crates/nuxie-runtime/src/draw.rs:7041-7050"]
+draw = ["cpp:src/shapes/shape.cpp:137-159", "rust:crates/nuxie-runtime/src/draw.rs:14739-14800"]
+clone_drop = ["cpp:include/rive/shapes/shape.hpp:13-24", "rust:crates/nuxie-runtime/src/draw.rs:6792-6810"]
+
+[[owner]]
+id = "shape.path.local"
+batch = "shape_path_paint"
+status = "compensation"
+rule = "RF-29"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "paint_paths: [RuntimeShapePaintPathOwner; 3]"
+depends_on = ["shape.path_composer"]
+legacy_ratchets = ["draw_time_shape_ensure", "shape_paint_snapshot_type"]
+note = "Slot 0 retains local-path data, but the current draw-time builder substitutes for PathComposer update."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/path_composer.cpp:11-17", "rust:crates/nuxie-runtime/src/draw.rs:7028-7034"]
+update = ["cpp:src/shapes/path_composer.cpp:51-66", "rust:crates/nuxie-runtime/src/draw.rs:7052-7061"]
+draw = ["cpp:src/shapes/shape.cpp:137-159", "rust:crates/nuxie-runtime/src/draw.rs:14831-14840"]
+clone_drop = ["cpp:include/rive/shapes/path_composer.hpp:29-35", "rust:crates/nuxie-runtime/src/draw.rs:6812-6827"]
+
+[[owner]]
+id = "shape.path.world"
+batch = "shape_path_paint"
+status = "compensation"
+rule = "RF-29"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "paint_paths: [RuntimeShapePaintPathOwner; 3]"
+depends_on = ["shape.path_composer"]
+legacy_ratchets = ["draw_time_shape_ensure", "shape_paint_snapshot_type"]
+note = "Slot 2 retains world-path data, but the current draw-time builder substitutes for PathComposer update."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/path_composer.cpp:11-17", "rust:crates/nuxie-runtime/src/draw.rs:7028-7034"]
+update = ["cpp:src/shapes/path_composer.cpp:102-114", "rust:crates/nuxie-runtime/src/draw.rs:7052-7061"]
+draw = ["cpp:src/shapes/shape.cpp:110-120", "rust:crates/nuxie-runtime/src/draw.rs:14831-14840"]
+clone_drop = ["cpp:include/rive/shapes/path_composer.hpp:29-35", "rust:crates/nuxie-runtime/src/draw.rs:6812-6827"]
+
+[[owner]]
+id = "shape.path.local_clockwise"
+batch = "shape_path_paint"
+status = "compensation"
+rule = "RF-29"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "paint_paths: [RuntimeShapePaintPathOwner; 3]"
+depends_on = ["shape.path_composer"]
+legacy_ratchets = ["draw_time_shape_ensure", "shape_paint_snapshot_type"]
+note = "Slot 1 retains local-clockwise data, but the current draw-time builder substitutes for PathComposer update."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/path_composer.cpp:11-17", "rust:crates/nuxie-runtime/src/draw.rs:7028-7034"]
+update = ["cpp:src/shapes/path_composer.cpp:67-101", "rust:crates/nuxie-runtime/src/draw.rs:7052-7061"]
+draw = ["cpp:include/rive/shapes/shape.hpp:102-105", "rust:crates/nuxie-runtime/src/draw.rs:14831-14840"]
+clone_drop = ["cpp:include/rive/shapes/path_composer.hpp:29-35", "rust:crates/nuxie-runtime/src/draw.rs:6812-6827"]
+
+[[owner]]
+id = "shape_paint_path.raw_path"
+batch = "shape_path_paint"
+status = "compensation"
+rule = "RF-29"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "struct RuntimePreparedShapePaintPath {"
+depends_on = ["shape.path.local", "shape.path.world", "shape.path.local_clockwise"]
+legacy_ratchets = ["draw_time_shape_ensure", "shape_paint_snapshot_type"]
+note = "The raw path is retained in a Shape-owned slot, but Rust currently creates it through the draw-time prepared-path seam rather than the C++ update node."
+[owner.lifecycle]
+construct = ["cpp:include/rive/shapes/shape_paint_path.hpp:78-84", "rust:crates/nuxie-runtime/src/draw.rs:11058-11060"]
+update = ["cpp:src/shapes/paint/shape_paint_path.cpp:13-50", "rust:crates/nuxie-runtime/src/draw.rs:6830-6848"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:173-185", "rust:crates/nuxie-runtime/src/draw.rs:14871-14894"]
+clone_drop = ["cpp:include/rive/shapes/shape_paint_path.hpp:78-84", "rust:crates/nuxie-runtime/src/draw.rs:6815-6819"]
+
+[[owner]]
+id = "shape_paint_path.render_dirty"
+batch = "shape_path_paint"
+status = "adapted"
+rule = "RF-29"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "dirty: Cell<bool>"
+depends_on = ["shape_paint_path.raw_path"]
+legacy_ratchets = []
+note = "A local dirty bit belongs to the path owner; it is not a scene epoch."
+[owner.lifecycle]
+construct = ["cpp:include/rive/shapes/shape_paint_path.hpp:79", "rust:crates/nuxie-runtime/src/draw.rs:6821-6827"]
+update = ["cpp:src/shapes/paint/shape_paint_path.cpp:13-50", "rust:crates/nuxie-runtime/src/draw.rs:6830-6842"]
+draw = ["cpp:src/shapes/paint/shape_paint_path.cpp:58-75", "rust:crates/nuxie-runtime/src/draw.rs:6835-6848"]
+clone_drop = ["cpp:include/rive/shapes/shape_paint_path.hpp:78-84", "rust:crates/nuxie-runtime/src/draw.rs:6815-6819"]
+
+[[owner]]
+id = "shape_paint_path.render_path"
+batch = "shape_path_paint"
+status = "pending"
+rule = "RF-30"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "struct RuntimeOwnedShapeRenderPathSlots"
+depends_on = ["shape_paint_path.raw_path", "shape_paint_path.render_dirty"]
+legacy_ratchets = ["scene_path_cache_type"]
+note = "C++ stores the RenderPath on ShapePaintPath. Rust still stores the backend object inside RuntimeRenderPathCache."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/paint/shape_paint_path.cpp:58-67", "rust:crates/nuxie-runtime/src/draw.rs:11317-11332"]
+update = ["cpp:src/shapes/paint/shape_paint_path.cpp:68-73", "rust:crates/nuxie-runtime/src/draw.rs:12323-12340"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:173-185", "rust:crates/nuxie-runtime/src/draw.rs:14885-14899"]
+clone_drop = ["cpp:include/rive/shapes/shape_paint_path.hpp:80", "rust:crates/nuxie-runtime/src/draw.rs:10726-10750"]
+
+[[owner]]
+id = "shape.path_membership"
+batch = "shape_path_paint"
+status = "adapted"
+rule = "RF-27"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "path_locals: Vec<usize>"
+depends_on = ["shape.path_composer"]
+legacy_ratchets = []
+note = "Non-owning C++ Path pointers are stable local ids on the clone-owned Shape."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/shape.cpp:22-27", "rust:crates/nuxie-runtime/src/draw.rs:6924-6937"]
+update = ["cpp:src/shapes/path_composer.cpp:40-117", "rust:crates/nuxie-runtime/src/draw.rs:7052-7071"]
+draw = ["cpp:src/shapes/shape.cpp:137-159", "rust:crates/nuxie-runtime/src/draw.rs:14751-14787"]
+clone_drop = ["cpp:include/rive/shapes/shape.hpp:21-24", "rust:crates/nuxie-runtime/src/draw.rs:6800-6810"]
+
+[[owner]]
+id = "shape.paint_membership"
+batch = "shape_path_paint"
+status = "adapted"
+rule = "RF-27"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "paint_owners: Vec<RuntimeShapePaintOwner>"
+depends_on = ["shape.path_membership"]
+legacy_ratchets = []
+note = "Non-owning ShapePaint pointers become ordered owner entries on the clone-owned Shape."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/paint/shape_paint.cpp:12-27", "rust:crates/nuxie-runtime/src/draw.rs:6939-6978"]
+update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:6880-6907"]
+draw = ["cpp:src/shapes/shape.cpp:137-159", "rust:crates/nuxie-runtime/src/draw.rs:14751-14800"]
+clone_drop = ["cpp:include/rive/shapes/shape_paint_container.hpp:26-28", "rust:crates/nuxie-runtime/src/draw.rs:6851-6861"]
+
+[[owner]]
+id = "shape_paint.mutator"
+batch = "shape_path_paint"
+status = "compensation"
+rule = "RF-34"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "paint_local: usize"
+depends_on = ["shape.paint_membership"]
+legacy_ratchets = ["shape_paint_snapshot_type", "draw_time_shape_ensure"]
+note = "The non-owning mutator identity is copied into the draw-time RuntimeOwnedShapePaint snapshot instead of living on one generated ShapePaint object."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/paint/shape_paint.cpp:50-58", "rust:crates/nuxie-runtime/src/draw.rs:6867-6878"]
+update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:7064-7071"]
+draw = ["cpp:include/rive/shapes/paint/shape_paint.hpp:61-69", "rust:crates/nuxie-runtime/src/draw.rs:14778-14799"]
+clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:24-27", "rust:crates/nuxie-runtime/src/draw.rs:6863-6878"]
+
+[[owner]]
+id = "shape_paint.mutable_state"
+batch = "shape_path_paint"
+status = "compensation"
+rule = "RF-34"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "struct RuntimeOwnedShapePaint"
+depends_on = ["shape_paint.mutator"]
+legacy_ratchets = ["shape_paint_snapshot_type", "global_shape_paint_configuration", "render_paint_configuration_slots", "draw_time_shape_ensure"]
+note = "Fill rule, blend, stroke/gradient state, path selection, and other generated properties are copied into a command-shaped snapshot assembled from several C++ owners."
+[owner.lifecycle]
+construct = ["cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crates/nuxie-runtime/src/draw.rs:6867-6878"]
+update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:4380-4530"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:60-72", "rust:crates/nuxie-runtime/src/draw.rs:14811-14903"]
+clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crates/nuxie-runtime/src/draw.rs:6851-6878"]
+
+[[owner]]
+id = "shape_paint.visibility"
+batch = "shape_path_paint"
+status = "compensation"
+rule = "RF-34"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "is_visible: Cell<bool>"
+depends_on = ["shape_paint.mutable_state"]
+legacy_ratchets = ["shape_paint_visibility_copy"]
+note = "C++ has one generated live visibility property. Rust seeds a second Cell on RuntimeShapePaintOwner and later mutates that copy."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/paint/shape_paint.cpp:12-27", "rust:crates/nuxie-runtime/src/draw.rs:6880-6889"]
+update = ["cpp:src/shapes/paint/shape_paint.cpp:60-72", "rust:crates/nuxie-runtime/src/draw.rs:7037-7071"]
+draw = ["cpp:src/shapes/shape.cpp:147-152", "rust:crates/nuxie-runtime/src/draw.rs:14778-14799"]
+clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crates/nuxie-runtime/src/draw.rs:6851-6878"]
+
+[[owner]]
+id = "shape_paint.render_paint"
+batch = "shape_path_paint"
+status = "pending"
+rule = "RF-30"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "paints_by_global: Vec<Option<Box<dyn RenderPaint>>>"
+depends_on = ["shape_paint.mutator"]
+legacy_ratchets = ["scene_paint_cache_type", "draw_time_shape_ensure", "global_shape_paint_configuration", "render_paint_configuration_slots"]
+note = "C++ ShapePaint owns its RenderPaint. Rust still keys it globally and repairs/configures it from the draw path."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/paint/shape_paint.cpp:50-58", "rust:crates/nuxie-runtime/src/draw.rs:10262-10270"]
+update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:4380-4424"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:173-185", "rust:crates/nuxie-runtime/src/draw.rs:14895-14899"]
+clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:25", "rust:crates/nuxie-runtime/src/draw.rs:10233-10259"]
+
+[[owner]]
+id = "shape_paint.effects"
+batch = "shape_path_paint"
+status = "compensation"
+rule = "RF-35"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "retained_effect_path"
+depends_on = ["shape.paint_membership", "shape_paint_path.raw_path"]
+legacy_ratchets = ["shape_paint_snapshot_type"]
+note = "Rust retains one final effect result on the paint owner; it does not preserve C++'s per-(StrokeEffect, PathProvider) EffectPath ownership."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/paint/shape_paint.cpp:207-211", "rust:crates/nuxie-runtime/src/draw.rs:6851-6889"]
+update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:6892-6907"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:115-119", "rust:crates/nuxie-runtime/src/draw.rs:14842-14859"]
+clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crates/nuxie-runtime/src/draw.rs:6851-6878"]
+
+[[owner]]
+id = "shape_paint.feather"
+batch = "shape_path_paint"
+status = "compensation"
+rule = "RF-34"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "feather_state: Option<RuntimeFeatherState>"
+depends_on = ["shape_paint.effects"]
+legacy_ratchets = ["shape_paint_snapshot_type"]
+note = "The current snapshot copies selected Feather state instead of retaining the C++ non-owning relationship on the generated ShapePaint."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/paint/shape_paint.cpp:74-76", "rust:crates/nuxie-runtime/src/draw.rs:6867-6878"]
+update = ["cpp:src/shapes/paint/shape_paint.cpp:193-201", "rust:crates/nuxie-runtime/src/draw.rs:6892-6907"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:87-171", "rust:crates/nuxie-runtime/src/draw.rs:14819-14869"]
+clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:89-91", "rust:crates/nuxie-runtime/src/draw.rs:6863-6878"]
+
+[[owner]]
+id = "shape.world_bounds"
+batch = "shape_path_paint"
+status = "pending"
+rule = "RF-32"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "pub struct RuntimeGeometryCache"
+depends_on = ["shape.path_membership"]
+legacy_ratchets = ["scene_path_cache_type"]
+note = "C++ stores bounds on Shape. Rust geometry queries still borrow the scene path cache and must be split into independently justified owner/query state."
+[owner.lifecycle]
+construct = ["cpp:include/rive/shapes/shape.hpp:23", "rust:crates/nuxie-runtime/src/draw.rs:10752-10760"]
+update = ["cpp:include/rive/shapes/shape.hpp:65-82", "rust:crates/nuxie-runtime/src/draw.rs:10845-10855"]
+draw = ["cpp:src/shapes/shape.cpp:161-163", "rust:crates/nuxie-runtime/src/draw.rs:10783-10824"]
+clone_drop = ["cpp:include/rive/shapes/shape.hpp:21-24", "rust:crates/nuxie/src/lib.rs:2390-2397"]
+
+[[owner]]
+id = "shape.world_length"
+batch = "shape_path_paint"
+status = "pending"
+rule = "RF-32"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "pub struct RuntimeGeometryCache"
+depends_on = ["shape.path_membership"]
+legacy_ratchets = ["scene_path_cache_type"]
+note = "The C++ -1 sentinel is Shape-owned; any retained Rust query value must move to the same owner and invalidation sites."
+[owner.lifecycle]
+construct = ["cpp:include/rive/shapes/shape.hpp:24", "rust:crates/nuxie-runtime/src/draw.rs:10752-10760"]
+update = ["cpp:src/shapes/shape.cpp:74-107", "rust:crates/nuxie-runtime/src/draw.rs:10845-10855"]
+draw = ["cpp:src/shapes/shape.cpp:74-97", "rust:crates/nuxie-runtime/src/draw.rs:10783-10824"]
+clone_drop = ["cpp:include/rive/shapes/shape.hpp:21-24", "rust:crates/nuxie/src/lib.rs:2390-2397"]
+
+[[owner]]
+id = "image_asset.render_image"
+batch = "image_mesh"
+status = "pending"
+rule = "RF-30"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "images: RuntimeRenderImages"
+depends_on = []
+legacy_ratchets = ["scene_paint_cache_type"]
+note = "C++ ImageAsset owns the RenderImage; Rust still retains image resources inside the facade-created paint cache."
+[owner.lifecycle]
+construct = ["cpp:src/assets/image_asset.cpp:34-45", "rust:crates/nuxie-runtime/src/draw.rs:10233-10241"]
+update = ["cpp:src/assets/image_asset.cpp:34-45", "rust:crates/nuxie-runtime/src/draw.rs:10233-10259"]
+draw = ["cpp:src/shapes/image.cpp:28-48", "rust:crates/nuxie-runtime/src/draw.rs:15983-16080"]
+clone_drop = ["cpp:include/rive/assets/image_asset.hpp:19", "rust:crates/nuxie-runtime/src/draw.rs:10233-10259"]
+
+[[owner]]
+id = "image.mesh_link"
+batch = "image_mesh"
+status = "adapted"
+rule = "RF-27"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "image_mesh: Option<RuntimeImageMeshOwner>"
+depends_on = []
+legacy_ratchets = []
+note = "The live Image-to-Mesh relationship is retained on the clone-owned occurrence; stable ids replace the C++ non-owning pointer."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/image.cpp:149-154", "rust:crates/nuxie-runtime/src/draw.rs:7130-7162", "rust:crates/nuxie-runtime/src/draw.rs:7289-7292"]
+update = ["cpp:src/shapes/image.cpp:111-126", "rust:crates/nuxie-runtime/src/draw.rs:15983-16080"]
+draw = ["cpp:src/shapes/image.cpp:28-48", "rust:crates/nuxie-runtime/src/draw.rs:15983-16080"]
+clone_drop = ["cpp:include/rive/shapes/image.hpp:31", "rust:crates/nuxie-runtime/src/draw.rs:7250-7295"]
+
+[[owner]]
+id = "mesh.render_buffers"
+batch = "image_mesh"
+status = "pending"
+rule = "RF-30"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "struct RuntimeMeshRenderBufferSlots"
+depends_on = ["image.mesh_link"]
+legacy_ratchets = ["scene_paint_cache_type"]
+note = "Slots are one-to-one by local id, but their lifetime is still the outer scene paint cache rather than the Mesh/NSlicer owner."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/image.cpp:149-154", "rust:crates/nuxie-runtime/src/draw.rs:10655-10670"]
+update = ["cpp:src/shapes/image.cpp:111-126", "rust:crates/nuxie-runtime/src/draw.rs:10664-10687"]
+draw = ["cpp:src/shapes/image.cpp:28-48", "rust:crates/nuxie-runtime/src/draw.rs:15983-16080"]
+clone_drop = ["cpp:include/rive/shapes/image.hpp:31", "rust:crates/nuxie-runtime/src/draw.rs:10233-10259"]
+
+[[owner]]
+id = "text.draw_commands"
+batch = "text"
+status = "adapted"
+rule = "RF-27"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "struct RuntimeTextDrawOwner"
+depends_on = ["shape_paint_path.raw_path"]
+legacy_ratchets = []
+note = "Text's object-local command frame is preserved; it is not the scene RuntimeDrawCommand stream."
+[owner.lifecycle]
+construct = ["cpp:include/rive/text/text.hpp:290", "rust:crates/nuxie-runtime/src/draw.rs:7166-7205"]
+update = ["cpp:src/text/text.cpp:195", "rust:crates/nuxie-runtime/src/draw.rs:7166-7205"]
+draw = ["cpp:src/text/text.cpp:845-875", "rust:crates/nuxie-runtime/src/draw.rs:13773-14047"]
+clone_drop = ["cpp:include/rive/text/text.hpp:290", "rust:crates/nuxie-runtime/src/draw.rs:7166-7205"]
+
+[[owner]]
+id = "text.style_render_paints"
+batch = "text"
+status = "pending"
+rule = "RF-30"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "struct RuntimeTextPaintPools"
+depends_on = ["text.draw_commands"]
+legacy_ratchets = ["scene_paint_cache_type"]
+note = "Dense style pools are object-shaped, but still live inside the scene RuntimeRenderPaints cache."
+[owner.lifecycle]
+construct = ["cpp:src/text/text_style_paint.cpp:53-70", "rust:crates/nuxie-runtime/src/draw.rs:10272-10292"]
+update = ["cpp:src/text/text_style_paint.cpp:89-116", "rust:crates/nuxie-runtime/src/draw.rs:10278-10301"]
+draw = ["cpp:src/text/text.cpp:845-875", "rust:crates/nuxie-runtime/src/draw.rs:14694-14723"]
+clone_drop = ["cpp:include/rive/text/text.hpp:290", "rust:crates/nuxie-runtime/src/draw.rs:10262-10276"]
+
+[[owner]]
+id = "text.clip_path"
+batch = "text"
+status = "pending"
+rule = "RF-30"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "text_clip_paths: RuntimeRetainedRenderPathSlots"
+depends_on = ["text.draw_commands"]
+legacy_ratchets = ["scene_path_cache_type"]
+note = "The retained clip path remains in RuntimeRenderPathCache instead of the Text occurrence."
+[owner.lifecycle]
+construct = ["cpp:src/text/text.cpp:620-742", "rust:crates/nuxie-runtime/src/draw.rs:10726-10744"]
+update = ["cpp:src/text/text.cpp:620-742", "rust:crates/nuxie-runtime/src/draw.rs:13773-14047"]
+draw = ["cpp:src/text/text.cpp:845-875", "rust:crates/nuxie-runtime/src/draw.rs:13773-14047"]
+clone_drop = ["cpp:include/rive/text/text.hpp:290", "rust:crates/nuxie-runtime/src/draw.rs:10726-10750"]
+
+[[owner]]
+id = "layout.cpu_paths"
+batch = "layout_nested"
+status = "adapted"
+rule = "RF-27"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "struct RuntimeLayoutDrawOwner"
+depends_on = ["shape_paint_path.raw_path"]
+legacy_ratchets = []
+note = "Layout paint and clip CPU paths are retained by the layout drawable owner under local dirt."
+[owner.lifecycle]
+construct = ["cpp:src/layout_component.cpp:317-374", "rust:crates/nuxie-runtime/src/draw.rs:7207-7247"]
+update = ["cpp:src/layout_component.cpp:317-374", "rust:crates/nuxie-runtime/src/draw.rs:4571-4607"]
+draw = ["cpp:src/layout_component.cpp:317-374", "rust:crates/nuxie-runtime/src/draw.rs:14048-14117"]
+clone_drop = ["cpp:include/rive/layout_component.hpp:247", "rust:crates/nuxie-runtime/src/draw.rs:7207-7247"]
+
+[[owner]]
+id = "layout.backend_paths"
+batch = "layout_nested"
+status = "pending"
+rule = "RF-30"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "layout_clip_paths: RuntimeRetainedRenderPathSlots"
+depends_on = ["layout.cpu_paths"]
+legacy_ratchets = ["scene_path_cache_type"]
+note = "Backend paths still live in the scene path cache and must follow the Layout owner."
+[owner.lifecycle]
+construct = ["cpp:src/layout_component.cpp:317-374", "rust:crates/nuxie-runtime/src/draw.rs:10726-10744"]
+update = ["cpp:src/layout_component.cpp:317-374", "rust:crates/nuxie-runtime/src/draw.rs:4571-4607"]
+draw = ["cpp:src/layout_component.cpp:317-374", "rust:crates/nuxie-runtime/src/draw.rs:14048-14117"]
+clone_drop = ["cpp:include/rive/layout_component.hpp:247", "rust:crates/nuxie-runtime/src/draw.rs:10726-10750"]
+
+[[owner]]
+id = "nested.mounted_child"
+batch = "layout_nested"
+status = "exact"
+rule = "RF-27"
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "pub(crate) struct RuntimeNestedArtboardInstance"
+depends_on = []
+legacy_ratchets = []
+note = "Nested draw traversal reads the mounted child occurrence directly."
+[owner.lifecycle]
+construct = ["cpp:src/nested_artboard.cpp:885-939", "rust:crates/nuxie-runtime/src/artboard.rs:360-431"]
+update = ["cpp:src/nested_artboard.cpp:965-1008", "rust:crates/nuxie-runtime/src/artboard.rs:6199"]
+draw = ["cpp:src/nested_artboard.cpp:491-508", "rust:crates/nuxie-runtime/src/draw.rs:14118-14276"]
+clone_drop = ["cpp:src/nested_artboard.cpp:885-939", "rust:crates/nuxie-runtime/src/artboard.rs:360-431"]
+
+[[owner]]
+id = "component_list.draw_order"
+batch = "layout_nested"
+status = "exact"
+rule = "RF-27"
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "pub(crate) struct RuntimeComponentListOrderCache"
+depends_on = ["nested.mounted_child"]
+legacy_ratchets = []
+note = "Each component-list occurrence owns mounted row identity and stable draw-index order."
+[owner.lifecycle]
+construct = ["cpp:src/artboard_component_list.cpp:1453-1477", "rust:crates/nuxie-runtime/src/artboard.rs:523-603"]
+update = ["cpp:src/artboard_component_list.cpp:1528-1543", "rust:crates/nuxie-runtime/src/artboard.rs:523-603"]
+draw = ["cpp:src/artboard_component_list.cpp:977-980", "rust:crates/nuxie-runtime/src/draw.rs:16852-17077"]
+clone_drop = ["cpp:src/artboard_component_list.cpp:1453-1477", "rust:crates/nuxie-runtime/src/artboard.rs:523-603"]
+
+[[owner]]
+id = "artboard.first_drawable"
+batch = "artboard_facade"
+status = "exact"
+rule = "RF-27"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "first_drawable: Option<usize>"
+depends_on = ["shape.paint_membership", "nested.mounted_child", "component_list.draw_order"]
+legacy_ratchets = []
+note = "The live list is owned by ArtboardInstance and traversed through prev links each frame."
+[owner.lifecycle]
+construct = ["cpp:src/artboard.cpp:429-840", "rust:crates/nuxie-runtime/src/draw.rs:7341-7422"]
+update = ["cpp:src/artboard.cpp:1159-1169", "rust:crates/nuxie-runtime/src/draw.rs:7594-7709"]
+draw = ["cpp:src/artboard.cpp:1652-1698", "rust:crates/nuxie-runtime/src/draw.rs:3715-3910"]
+clone_drop = ["cpp:include/rive/artboard.hpp:103", "rust:crates/nuxie-runtime/src/artboard.rs:320-340"]
+
+[[owner]]
+id = "artboard.frame_origin"
+batch = "artboard_facade"
+status = "exact"
+rule = "RF-27"
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "pub(crate) frame_origin: Cell<bool>"
+depends_on = []
+legacy_ratchets = []
+note = "Frame origin is live Artboard occurrence state, not a facade draw option."
+[owner.lifecycle]
+construct = ["cpp:include/rive/artboard.hpp:105", "rust:crates/nuxie-runtime/src/artboard.rs:1077"]
+update = ["cpp:src/artboard.cpp:2520-2525", "rust:crates/nuxie-runtime/src/artboard.rs:3857-3862"]
+draw = ["cpp:src/artboard.cpp:1621-1640", "rust:crates/nuxie-runtime/src/draw.rs:3654-3683"]
+clone_drop = ["cpp:include/rive/artboard.hpp:554", "rust:crates/nuxie-runtime/src/artboard.rs:230-240"]
+
+[[owner]]
+id = "artboard.pending_clip_scratch"
+batch = "artboard_facade"
+status = "adapted"
+rule = "RF-26"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "pending_clip"
+depends_on = ["artboard.first_drawable"]
+legacy_ratchets = []
+note = "Per-call clip scratch has no semantic owner and is cleared for every live traversal."
+[owner.lifecycle]
+construct = ["cpp:src/artboard.cpp:1652-1660", "rust:crates/nuxie-runtime/src/draw.rs:3654-3715"]
+update = ["cpp:src/artboard.cpp:1660-1698", "rust:crates/nuxie-runtime/src/draw.rs:3715-3910"]
+draw = ["cpp:src/artboard.cpp:1660-1698", "rust:crates/nuxie-runtime/src/draw.rs:3715-3910"]
+clone_drop = ["cpp:src/artboard.cpp:1652-1698", "rust:crates/nuxie-runtime/src/draw.rs:3654-3715"]
+
+[[owner]]
+id = "artboard.prepared_frame"
+batch = "artboard_facade"
+status = "compensation"
+rule = "RF-31"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "struct RuntimePreparedArtboardFrame"
+depends_on = ["artboard.first_drawable"]
+legacy_ratchets = ["prepared_frame_type", "prepared_frame_accessor", "scene_path_cache_type"]
+note = "No C++ scene-level prepared frame exists; delete rather than translate."
+[owner.lifecycle]
+construct = ["cpp:src/artboard.cpp:1606-1651", "rust:crates/nuxie-runtime/src/draw.rs:10955-10963"]
+update = ["cpp:src/artboard.cpp:1159-1169", "rust:crates/nuxie-runtime/src/draw.rs:2035-2237"]
+draw = ["cpp:src/artboard.cpp:1652-1698", "rust:crates/nuxie-runtime/src/draw.rs:3522-3627"]
+clone_drop = ["cpp:include/rive/artboard.hpp:103-105", "rust:crates/nuxie-runtime/src/draw.rs:10955-10963"]
+
+[[owner]]
+id = "artboard.draw_command_stream"
+batch = "artboard_facade"
+status = "compensation"
+rule = "RF-31"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "pub struct RuntimeDrawCommand"
+depends_on = ["artboard.first_drawable"]
+legacy_ratchets = ["draw_command_type", "command_shape_draw_adapter", "generic_command_draw_adapter"]
+note = "RuntimeDrawCommand survives only as the old diagnostic/replay representation and has no C++ runtime owner."
+[owner.lifecycle]
+construct = ["cpp:src/artboard.cpp:429-840", "rust:crates/nuxie-runtime/src/draw.rs:7837-7854"]
+update = ["cpp:src/artboard.cpp:1159-1169", "rust:crates/nuxie-runtime/src/draw.rs:4208-4376"]
+draw = ["cpp:src/artboard.cpp:1652-1698", "rust:crates/nuxie-runtime/src/draw.rs:14277-14731"]
+clone_drop = ["cpp:include/rive/artboard.hpp:103-105", "rust:crates/nuxie-runtime/src/draw.rs:7837-7854"]
+
+[[owner]]
+id = "facade.scene_render_cache"
+batch = "artboard_facade"
+status = "compensation"
+rule = "RF-31"
+rust_file = "crates/nuxie/src/lib.rs"
+rust_anchor = "pub struct ArtboardRenderCache"
+depends_on = ["artboard.first_drawable"]
+legacy_ratchets = ["facade_cache_type", "scene_path_cache_type", "scene_paint_cache_type"]
+note = "The public cache owns the scene resource lifetime independently from ArtboardInstance; C++ has no counterpart."
+[owner.lifecycle]
+construct = ["cpp:src/artboard.cpp:1606-1651", "rust:crates/nuxie/src/lib.rs:2399-2431"]
+update = ["cpp:src/artboard.cpp:1159-1169", "rust:crates/nuxie/src/lib.rs:2944-2982"]
+draw = ["cpp:src/artboard.cpp:1652-1698", "rust:crates/nuxie/src/lib.rs:2944-2982"]
+clone_drop = ["cpp:include/rive/artboard.hpp:103-105", "rust:crates/nuxie/src/lib.rs:2399-2408"]
+
+[[owner]]
+id = "facade.prepare_replay_api"
+batch = "artboard_facade"
+status = "compensation"
+rule = "RF-31"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "pub fn prepare_static_artboard_tree_paints"
+depends_on = ["facade.scene_render_cache", "artboard.prepared_frame"]
+legacy_ratchets = ["prepare_tree_api", "prepared_draw_api", "paint_preparation_frame"]
+note = "The explicit prepare/replay facade is deleted after object owners perform their C++ update work."
+[owner.lifecycle]
+construct = ["cpp:src/artboard.cpp:1606-1651", "rust:crates/nuxie-runtime/src/draw.rs:2035-2105"]
+update = ["cpp:src/artboard.cpp:1159-1169", "rust:crates/nuxie-runtime/src/draw.rs:2169-2237"]
+draw = ["cpp:src/artboard.cpp:1652-1698", "rust:crates/nuxie-runtime/src/draw.rs:3522-3627"]
+clone_drop = ["cpp:include/rive/artboard.hpp:103-105", "rust:crates/nuxie-runtime/src/draw.rs:10233-10259"]
+
+[[owner]]
+id = "geometry.query_state"
+batch = "artboard_facade"
+status = "pending"
+rule = "RF-32"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "pub struct RuntimeGeometryCache"
+depends_on = ["shape.world_bounds", "shape.world_length", "layout.cpu_paths"]
+legacy_ratchets = ["scene_path_cache_type"]
+note = "Geometry and semantic hit APIs are valid retained consumers, but their state must stop embedding the render scene cache."
+[owner.lifecycle]
+construct = ["cpp:include/rive/shapes/shape.hpp:64-95", "rust:crates/nuxie-runtime/src/draw.rs:10752-10760"]
+update = ["cpp:include/rive/shapes/shape.hpp:65-82", "rust:crates/nuxie-runtime/src/draw.rs:10845-10855"]
+draw = ["cpp:src/shapes/shape.cpp:161-218", "rust:crates/nuxie-runtime/src/draw.rs:10858-10934"]
+clone_drop = ["cpp:include/rive/shapes/shape.hpp:21-24", "rust:crates/nuxie/src/lib.rs:2390-2397"]
+
+[[owner]]
+id = "renderer.interface_boundary"
+batch = "artboard_facade"
+status = "exact"
+rule = "RF-27"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "renderer: &mut dyn Renderer"
+depends_on = ["artboard.first_drawable"]
+legacy_ratchets = []
+note = "The port stops at the existing Renderer/RenderFactory API. Backend renderer code, shaders, and batching remain untouched."
+[owner.lifecycle]
+construct = ["cpp:include/rive/shapes/shape_paint_path.hpp:16-17", "rust:crates/nuxie-runtime/src/draw.rs:14739-14750"]
+update = ["cpp:src/shapes/paint/shape_paint_path.cpp:58-75", "rust:crates/nuxie-runtime/src/draw.rs:14807-14818"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:173-185", "rust:crates/nuxie-runtime/src/draw.rs:14895-14903"]
+clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:41-44", "rust:crates/nuxie-runtime/src/draw.rs:14733-14750"]

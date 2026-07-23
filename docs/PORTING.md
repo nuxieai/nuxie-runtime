@@ -946,3 +946,98 @@ disagreement is resolved below and is binding on RD-C1/RD-C2.
   to a draw-context/artboard scratch slot that is cleared at entry and carries
   no cache key, epoch, or cross-frame content. The scene cache does not survive
   merely because it owns a useful `Vec` allocation.
+
+### C++ runtime drawing ownership closure
+
+The 2026-07-23 member-level stress test repeated the translation exercise for
+`ShapePaintPath`, `ShapePaint`, and `Shape`, including headers, synthetic
+runtime objects, and the complete construct/update/draw/clone/drop lifecycle.
+The file-level rules above were necessary but not sufficient: a whole file
+could look ported while one member still had a facade owner or draw-time update.
+The following rules are binding for the C++ runtime drawing port. The renderer
+backend below `Renderer`/`RenderFactory` is outside this work.
+
+- **RF-27 Close ownership member by member, not file by file.** Every
+  state-bearing C++ member and non-owning relationship gets one Rust owner and
+  one recorded construct/update/draw/clone/drop lifecycle. Embedded values stay
+  embedded in the corresponding runtime owner; raw non-owning pointers become
+  stable typed ids whose ordered vector remains on that owner. Imported graph
+  records may seed construction but are not the live object. A command-shaped
+  snapshot that contains selected path, paint state, visibility, transform, or
+  other fields copied from several C++ objects is not a port of any one of
+  those objects (`include/rive/shapes/shape.hpp:18-28`,
+  `include/rive/shapes/shape_paint_container.hpp:17-28`,
+  `include/rive/shapes/paint/shape_paint.hpp:20-27`).
+- **RF-28 Factory-late allocation may delay only the backend object.** C++ can
+  reach `Artboard::factory()` during initialization; Rust sometimes first
+  receives `RenderFactory` at a later host boundary. That difference may leave
+  one empty backend slot on the correct runtime owner. It may not delay CPU
+  memberships, dependency wiring, dirt propagation, path composition, effect
+  evaluation, visibility, transform settlement, or paint-state updates. On
+  first factory access, materialize the owner-local backend object and apply
+  already-settled state once. After that, draw may perform only the same lazy
+  check C++ performs, such as `ShapePaintPath::renderPath`
+  (`src/shapes/paint/shape_paint.cpp:50-58`,
+  `src/shapes/paint/shape_paint_path.cpp:58-75`).
+- **RF-29 Derived drawing work belongs to the C++ dependency/update node.**
+  Runtime-only C++ Components such as `PathComposer` remain explicit nodes in
+  the Rust dependency order even when they have no authored Core object.
+  Their update methods compose paths, run effects, propagate opacity, and
+  mutate owned renderer resources under the same dirt and in the same order.
+  A `draw` method must not call `ensure_*`, reconstruct paint/effect state,
+  query a graph to refresh inherited values, or compensate for an omitted
+  synthetic update node (`src/shapes/path_composer.cpp:19-117`,
+  `src/shapes/paint/shape_paint.cpp:30-47`,
+  `src/shapes/shape.cpp:54-62,137-159`).
+- **RF-30 A physical sidecar must have the logical owner's identity and
+  lifetime.** Non-cloneable backend trait objects may live in a typed physical
+  table rather than inline in a cloneable Rust struct, but the slot is created
+  for one exact runtime occurrence, reached through that owner, recreated empty
+  on clone/remount, and dropped with it. It has no global-object-id ownership,
+  scene key, epoch, facade lifetime, or configured-bit repair vector.
+  `ShapePaintPath::m_renderPath`, `ShapePaint::m_RenderPaint`, and
+  `ImageAsset::m_RenderImage` are the reference ownership shapes
+  (`include/rive/shapes/shape_paint_path.hpp:78-84`,
+  `include/rive/shapes/paint/shape_paint.hpp:24-27`,
+  `include/rive/assets/image_asset.hpp:16-31`).
+- **RF-31 Replace one complete owner lifecycle and delete its old path in the
+  same batch.** A batch is construct, membership/dependencies, update/dirt,
+  draw, clone, and drop for one coupled owner family. It does not land while
+  the old scene-cache/replay owner still serves that family, even if another
+  family temporarily keeps the cache type alive. Public compatibility handles
+  may forward to occurrence-owned state during migration; they may not own a
+  second resource graph. This makes partial cutovers mechanically rejectable
+  rather than relying on a later cleanup promise.
+- **RF-32 Split legitimate query state from scene replay.** Geometry, bounds,
+  hit testing, semantic text, intrinsic image dimensions, and layout queries
+  are real non-render consumers and survive. They do not justify embedding
+  `RuntimeRenderPathCache`, a prepared frame, command stream, or renderer epoch.
+  Object-local C++ query caches, including `Shape::m_WorldBounds` plus its
+  clean flag and `Shape::m_WorldLength == -1`, stay on the corresponding
+  runtime object; query-only scratch/state may remain opaque and instance-owned
+  (`include/rive/shapes/shape.hpp:21-24,64-95`).
+- **RF-33 File correspondence closes only after member correspondence.** A
+  C++ file remains `pending` while any in-scope ownership-ledger row for one of
+  its members is `pending` or `compensation`. Promotion to `faithful` requires
+  zero open member rows, zero legacy ratchet hits for that family, and the
+  orchestrator-verified gate run. A file-level note can summarize the proof;
+  it cannot override it.
+- **RF-34 Inherited and mutable object state has one live source.** A Shape
+  reads its inherited world transform, opacity, save need, and generated
+  properties from the live runtime component/drawable object at the C++ site.
+  ShapePaint visibility, blend, fill rule, mutator state, and stroke values
+  likewise remain on their actual runtime objects. Do not copy them into a
+  paint owner/snapshot, combine an import-time boolean with a live value, or
+  refresh them through a cache during draw. This resolves the stress-test
+  disagreement over placing `world_transform` directly on `RuntimeShape`:
+  C++ inheritance owns it, so the strict translation wins
+  (`src/shapes/shape.cpp:137-159`,
+  `src/shapes/paint/shape_paint.cpp:60-72`).
+- **RF-35 Preserve effect paths per effect and PathProvider identity.** C++
+  `StrokeEffect` owns an EffectPath for each non-owning `PathProvider` key;
+  concrete EffectPaths own their own `ShapePaintPath`. Rust retains the same
+  pair identity and partial invalidation order. One final effect-path snapshot
+  on ShapePaint loses ownership, prevents exact clone/drop behavior, and can
+  only rebuild the whole chain, so it is rejected
+  (`include/rive/shapes/paint/stroke_effect.hpp:13-56`,
+  `src/shapes/paint/shape_paint.cpp:30-47,193-211`).

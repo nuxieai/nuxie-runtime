@@ -1,0 +1,94 @@
+version = 1
+title = "C++ to Rust gap inventory for the runtime drawing port"
+upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+
+[[gap]]
+id = "G1.synthetic_update_nodes"
+rule = "RF-29"
+citations = ["cpp:include/rive/shapes/path_composer.hpp:13-35", "cpp:src/shapes/path_composer.cpp:19-117", "rust:crates/nuxie-graph/src/lib.rs:215-315", "rust:crates/nuxie-runtime/src/artboard.rs:4591-4665"]
+decision = "Preserve PathComposer and other C++ runtime-only Components as explicit nodes in the runtime dependency/update order. Do not approximate their work with reverse lookup tables reached from draw."
+closure_test = "The update-order test observes PathComposer update before ShapePaint effects, and the production Shape draw call graph contains no CPU path/effect builder."
+
+[[gap]]
+id = "G2.noncloneable_backend_resources"
+rule = "RF-30"
+citations = ["cpp:include/rive/shapes/shape_paint_path.hpp:78-84", "cpp:include/rive/shapes/paint/shape_paint.hpp:24-27", "rust:crates/nuxie-runtime/src/draw.rs:10262-10270", "rust:crates/nuxie-runtime/src/draw.rs:11317-11332"]
+decision = "A Box<dyn RenderPath/RenderPaint> lives in a one-to-one slot attached to the exact runtime owner. Cloning the owner creates an empty slot; remount materializes a fresh backend object. The slot has no scene key, global-id ownership, or independent lifetime."
+closure_test = "CountingFactory proves one creation per owner occurrence, a clone gets a different resource, and dropping/remounting cannot reuse the former resource."
+
+[[gap]]
+id = "G3.factory_availability"
+rule = "RF-28"
+citations = ["cpp:src/shapes/paint/shape_paint.cpp:50-58", "cpp:src/shapes/paint/shape_paint_path.cpp:58-75", "rust:crates/nuxie/src/lib.rs:2491-2491", "rust:crates/nuxie-runtime/src/draw.rs:14739-14818"]
+decision = "Rust may delay backend allocation until the first factory-bearing boundary, but CPU ownership, memberships, dirt propagation, path composition, effects, and settled paint state still run at the C++ construction/update sites. Draw may perform only C++'s own lazy ShapePaintPath renderPath check."
+closure_test = "A clean unchanged draw performs zero CPU composition/effect/paint configuration and at most the first-use owner-local backend allocation."
+
+[[gap]]
+id = "G4.raw_nonowning_pointers"
+rule = "RF-27"
+citations = ["cpp:include/rive/shapes/shape.hpp:21-28", "cpp:include/rive/shapes/shape_paint_container.hpp:26-28", "rust:crates/nuxie-runtime/src/draw.rs:6801-6810"]
+decision = "C++ raw non-owning pointers become stable typed local ids into the Artboard occurrence's runtime object tables. The owning object retains the ordered id vector; imported graph indices are construction input only."
+closure_test = "Clone/build tests prove ordered membership, no topology vector clone occurs during draw, and removing the graph after construction does not change traversal."
+
+[[gap]]
+id = "G5.generated_clone_rebuild"
+rule = "RF-28"
+citations = ["cpp:include/rive/shapes/shape.hpp:18-24", "cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crates/nuxie-runtime/src/artboard.rs:224-340", "rust:crates/nuxie-runtime/src/draw.rs:6792-6819"]
+decision = "Copy authored/current properties, then rebuild runtime memberships, dependencies, derived paths, effect-provider maps, bounds sentinels, and backend slots through the construction phases. Do not derive Clone over dirty flags, retained geometry, or backend resources."
+closure_test = "A clone begins with fresh dirty/derived state and distinct backend resources while preserving authored properties and membership order."
+
+[[gap]]
+id = "G6.effect_provider_identity"
+rule = "RF-35"
+citations = ["cpp:include/rive/shapes/paint/stroke_effect.hpp:13-56", "cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:6851-6878"]
+decision = "Preserve one effect-path owner per (StrokeEffect, PathProvider) occurrence. A final-only effect snapshot on ShapePaint is not equivalent because it loses provider identity and partial invalidation."
+closure_test = "Two paints sharing one effect retain distinct effect paths; dirt at effect N rebuilds N and later effects once, not the whole chain."
+
+[[gap]]
+id = "G7.live_mutable_properties"
+rule = "RF-34"
+citations = ["cpp:src/shapes/shape.cpp:137-159", "cpp:src/shapes/paint/shape_paint.cpp:60-72", "rust:crates/nuxie-runtime/src/draw.rs:6854-6878", "rust:crates/nuxie-runtime/src/draw.rs:14778-14799"]
+decision = "Visibility, blend, fill rule, opacity, world transform, and stroke fields remain on their runtime objects. Update mutates owned renderer resources where C++ does; draw reads the live object. A command-like paint snapshot is rejected."
+closure_test = "A false-to-true visibility mutation, inherited blend change, and transform change are visible on the next C++-matching update/draw without rebuilding a scene record."
+
+[[gap]]
+id = "G8.rust_borrow_separation"
+rule = "RF-27"
+citations = ["cpp:src/shapes/shape.cpp:137-159", "rust:crates/nuxie-runtime/src/draw.rs:14739-14818"]
+decision = "Split typed runtime object tables or use stable ids/index loops so Shape can iterate paints and borrow the selected path without cloning topology or paint state. Borrow-checker convenience does not change ownership."
+closure_test = "The hot draw loop allocates no topology vector or paint snapshot and accepts only the live object arena plus Renderer/RenderFactory context."
+
+[[gap]]
+id = "G9.fallible_factory_stack_balance"
+rule = "RF-19"
+citations = ["cpp:src/shapes/paint/shape_paint.cpp:78-191", "rust:crates/nuxie-runtime/src/draw.rs:14819-14903"]
+decision = "Complete fallible owner-local allocation/configuration before renderer save/clip side effects, or use an exact scope guard. No Result path may leave the renderer stack unbalanced."
+closure_test = "A deliberately failing factory after requested allocation leaves save/restore and clip depth balanced."
+
+[[gap]]
+id = "G10.geometry_query_split"
+rule = "RF-32"
+citations = ["cpp:include/rive/shapes/shape.hpp:23-24", "cpp:include/rive/shapes/shape.hpp:64-95", "rust:crates/nuxie-runtime/src/draw.rs:10752-10760"]
+decision = "Preserve geometry, bounds, semantic hit, and image-dimension APIs, but split their legitimate retained data from RuntimeRenderPathCache. Shape-local bounds/length follow the C++ owner; query-only scratch may remain opaque and instance-owned."
+closure_test = "All geometry and semantic tests pass after RuntimeGeometryCache no longer contains RuntimeRenderPathCache or any replay/prepared frame."
+
+[[gap]]
+id = "G11.text_command_name_collision"
+rule = "RF-27"
+citations = ["cpp:include/rive/text/text.hpp:290-290", "cpp:src/text/text.cpp:845-875", "rust:crates/nuxie-runtime/src/draw.rs:7166-7205", "rust:crates/nuxie-runtime/src/draw.rs:7837-7854"]
+decision = "Preserve Text's object-owned shaped draw-command vector. Delete only the scene-wide RuntimeDrawCommand replay stream. Names and checker patterns must distinguish these two concepts."
+closure_test = "Text unchanged-frame reuse remains covered while the RuntimeDrawCommand ratchet reaches zero."
+
+[[gap]]
+id = "G12.public_cache_compatibility"
+rule = "RF-31"
+citations = ["cpp:src/artboard.cpp:1606-1698", "rust:crates/nuxie/src/lib.rs:2399-2431", "rust:crates/nuxie/src/lib.rs:2944-2982"]
+decision = "Move renderer-resource lifetime onto the Artboard occurrence. Public/C API cache handles may become compatibility handles to that occurrence during migration, but may not own a second resource graph or retain scene epochs."
+closure_test = "The public and C API draw paths work without ArtboardRenderCache, RuntimeRenderPaintCache, RuntimeRenderPathCache, prepare_static_artboard_tree_paints, or prepared replay calls."
+
+[[gap]]
+id = "G13.file_rows_hide_member_gaps"
+rule = "RF-33"
+citations = ["rust:file-correspondence-manifest.toml:4234-4234", "rust:crates/nuxie-runtime/src/draw.rs:4380-4424"]
+decision = "A whole C++ file remains pending until every state-bearing member and lifecycle row in this ledger is exact/adapted and the independent gate run passes. File-level notes cannot override open member rows."
+closure_test = "The checker reports zero pending/compensation ownership rows before any corresponding file row moves to faithful."

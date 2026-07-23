@@ -14,7 +14,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 405/405, nuxie lib 140/140,
+Regression floor (must stay green): runtime lib 406/406, nuxie lib 140/140,
 C++ probe 721/721, both runtime golden gates 317/317 exact / 647/647 segments;
 ordinary and scripted both have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
@@ -540,7 +540,8 @@ upstream-sync-map registry).
   with subsystem-clustered batching. Spec landed as
   docs/b6-structural-audit-spec.md; remaining: PORTING.md
   architecture-fidelity rules section, then the ~40-55 batch fan-out.
-- [ ] #RD-1 renderer-feed restoration to the C++ retention boundary
+- [ ] #RD-1 C++ runtime drawing port (historical internal code; renderer
+  backend unchanged)
   (user-directed 2026-07-21, P0 AFTER #RB-1; supersedes D-12) — see map
   Phase RD: measured spike, then lane-by-lane live-traversal migration
   with the pixel corpus as referee, ending in the scene-cache deletion
@@ -682,6 +683,26 @@ upstream-sync-map registry).
   `advance_blend_mode@0.25` at 11.020004x. This checkpoint did not pass.
   RD-C7 and every scene-cache deletion remain blocked pending user review;
   no further change is authorized by this evidence alone.
+  On 2026-07-23 the user clarified the boundary and retired “RD-C7” from
+  user-facing language: the remaining work is the **C++ runtime drawing
+  port**, ending at the existing `Renderer`/`RenderFactory` API. The renderer
+  backend, shaders, atlases, tessellation, batching, and GPU algorithms are
+  working referees and are out of scope. The prerequisite proof slice is now
+  explicit and makes no production runtime change: 37 state-bearing
+  ownership/lifecycle rows (5 exact, 7 adapted, 10 pending, 15 compensation),
+  13 gap decisions, and five dependency-ordered replacement batches live in
+  `docs/runtime-drawing-ownership.toml`,
+  `docs/runtime-drawing-gaps.toml`, and
+  `docs/runtime-drawing-port-map.md`. RF-27..RF-35 bind member-level closure,
+  update-owned derived work, owner-occurrence sidecars, single ownership,
+  query-state separation, and identity preservation. Two independent
+  disposable translations of the Shape/path/paint slice were diffed; every
+  disagreement was resolved from pinned C++ ownership and folded into the
+  rulebook, then both translations were discarded. The pre-removal
+  `make runtime-drawing-port-check` is green; its closed-mode negative control
+  correctly rejects every open ownership row and nonzero legacy-symbol
+  ratchet. No scene cache or production drawing path was deleted in this
+  prerequisite slice.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -741,15 +762,12 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-1 post-C1/C2 measured USER CHECKPOINT — STOP FOR USER REVIEW. The
-   immutable post-fix run at B `95eb49c3` completed both required
-   measurements but did not pass. A-B-B-A reported normalized
-   B/A=1.036127x, post-tail B/C++=1.059670x, worst B/C++=1.352479x, and C++
-   control drift=1.504122x; both candidate repeat checks passed.
-   `perf-hot-loop` improved from the diagnosed pre-fix 61.278871x aggregate
-   to 2.332664x, while `ai_assitant` improved from 577.854015x draw to
-   4.719936x draw. Report these results; do not begin RD-C7 or any scene-cache
-   deletion without a new user decision.
+1. Review the completed C++ runtime drawing-port prerequisite and its
+   five-batch order: Shape/path/paint; Image/mesh; Text; Layout/nested/list;
+   Artboard/facade. Production work begins with the complete Shape/path/paint
+   owner lifecycle only after this review. Each batch must remove its old
+   ownership representation in the same landing; no scene-cache demolition
+   may precede the owning family.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -834,8 +852,8 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
 
 ## Pending USER-GATEs
 
-(none — the reopened #B-3 budget was decided 2026-07-21; see the
-Decisions log.)
+- Review the C++ runtime drawing-port prerequisite and five-batch order before
+  the first production Shape/path/paint replacement begins.
 
 ## Decisions log
 
@@ -893,8 +911,32 @@ Decisions log.)
   reopened the gate the same day, and the user approved the recommended
   9 MiB replacement (~3.4% headroom over ON). CI evidence recording is
   re-enabled.
+- 2026-07-23: **Use “C++ runtime drawing port” for the remaining ownership
+  work; “RD-C7” is historical tracking language only.** The port includes
+  runtime objects, construction, dirt/update, draw traversal, clone/drop, and
+  the host cache seam. It stops at the existing `Renderer`/`RenderFactory`
+  interface. The renderer backend is accepted as working and is not a
+  boundary this phase crosses.
 
 ## Log
+
+- 2026-07-23 — The C++ runtime drawing-port prerequisite was executed without
+  production runtime or renderer changes. The member-level ownership ledger
+  contains 37 lifecycle rows (5 exact / 7 adapted / 10 pending /
+  15 compensation), the gap inventory contains 13 ruled decisions, and the
+  dependency graph fixes five replacement batches from Shape/path/paint
+  through Artboard/facade. `docs/PORTING.md` gained RF-27..RF-35. Independent
+  rulebook-strict and senior-engineer translations of the same
+  Shape/path/paint slice were diffed, all disagreements were resolved from
+  pinned C++ ownership, and both disposable translations were discarded.
+  `make runtime-drawing-port-check` passes; the closed-mode negative run
+  rejects the current open rows and legacy-symbol ratchets as designed. Full
+  executor evidence is runtime 406/406, nuxie 140/140, pinned C++ probes
+  721/721 both directly and in the probe-armed green workspace, ordinary and
+  scripted goldens 317/317 entries and 647/647 segments with zero failures,
+  renderer pixels 1,468/1,468 exact with zero divergences/gated failures,
+  C API smoke green, and size 8,300,344 B off / 9,217,944 B on under the
+  unchanged 9,437,184 B budget.
 
 - 2026-07-23 — The mandatory post-fix RD-1 checkpoint ran against immutable
   pinned C++ `d788e8ec`, pre-live A `076b4139`, and corrective B `95eb49c3`

@@ -411,9 +411,9 @@ byproduct; if any stays red it is a fresh divergence to localize on the new
 foundation. Editor-team changes to this layer freeze until #RB-1 lands
 (or route through the same floor gates).
 
-## Phase RD — Renderer-feed restoration to the C++ retention boundary (#RD) — P0 after #RB-1 (user-directed 2026-07-21)
+## Phase RD — C++ runtime drawing port (#RD, historical internal code) — P0 after #RB-1 (user-directed 2026-07-21)
 
-### #RD-1 Immediate per-frame traversal, per-object retained resources — SPINE, XL (own mini-map before execution)
+### #RD-1 Runtime objects own drawing state; renderer backend unchanged — SPINE, XL (own mini-map before execution)
 User decision (2026-07-21, superseding register D-12): match C++'s
 retention boundary instead of the scene-level retained-replay design. C++
 retains GPU resources ON the live objects (each Shape its RenderPath, each
@@ -447,6 +447,14 @@ changes. (4) DELETION gate: prepared-frame machinery, command-stream
 retention, epoch bridges, and the D-12 register row all removed
 together; the file-correspondence manifest rows for the renderer feed
 flip to `faithful` on the orchestrator's verified run.
+
+The remaining execution language and member-level proof live in
+`docs/runtime-drawing-port-map.md`,
+`docs/runtime-drawing-ownership.toml`, and
+`docs/runtime-drawing-gaps.toml`. “Runtime drawing” means the Artboard/Shape/
+Paint/Text/Image object and update code above the existing Renderer API. The
+working renderer backend, shaders, atlases, and GPU algorithms are out of
+scope.
 **Gate:** all floors green at completed values on the live-traversal
 feed; zero scene-level cache/epoch mechanisms remaining (the #B-6 audit
 re-run over the renderer clusters returns no mutation-gated mechanisms);

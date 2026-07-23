@@ -1,7 +1,15 @@
-# RD-1 Renderer-feed restoration mini-map
+# Historical RD-1 mini-map — C++ runtime drawing port
 
 Status: execution map committed before production changes.  The C++ oracle is
 `rive-app/rive-runtime@d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
+
+“RD-C7” is retained below only as the historical internal ticket code. The
+plain-language name for the remaining work is **the C++ runtime drawing port**:
+runtime Artboard/Shape/Paint/Text/Image ownership and update code above the
+existing Renderer API. The renderer backend is working and out of scope.
+Current member-level execution order and judges are in
+`docs/runtime-drawing-port-map.md` and
+`docs/runtime-drawing-ownership.toml`.
 
 ## Fixed retention boundary
 
@@ -58,7 +66,7 @@ them to `faithful`.
 | **RD-C4: Text and TextInput** | `src/text/text.cpp:620-742,845-875`; `src/text/text_style_paint.cpp`; `src/text/text_input_drawable.cpp`; supporting `raw_text.cpp` and `raw_text_input.cpp` paths reached by those files | Text-owned shaped lines, style paths, pools, clip path, emoji cache, and `m_drawCommands`; live TextInput paths | epoch-keyed scene text reconstruction and generic text command replay -> Text-owned retained commands and style resources | Depends on C2. Preserve the C++ per-object `m_drawCommands` cache; it is not scene replay. |
 | **RD-C5: layout and nested traversal** | `src/layout_component.cpp:317-374`; `src/foreground_layout_drawable.cpp`; `src/nested_artboard_leaf.cpp`; `src/nested_artboard_layout.cpp`; `src/nested_artboard.cpp:491-508` | live layout proxy/background/foreground drawing; mounted child identity; direct recursive child `drawInternal` | layout/nested prepared frames and cloned child snapshots -> mounted child object plus ordinary per-object layout paths and direct recursion | Depends on C1/C2 and the live traversal interface. Do not remove non-render geometry-query state merely because it shares an epoch name. |
 | **RD-C6: remaining virtual family and Artboard cutover** | `src/artboard_component_list.cpp:977-980`; `src/scripted/scripted_drawable.cpp:312-315,343`; `src/artboard.cpp:1606-1698` | component-list and scripted live dispatch; complete `Artboard::draw`/`drawInternal` walk with lazy clipping and virtual draw | command-kind dispatch over a prepared tree -> one per-frame walk of the complete live drawable family | Depends on C1-C5. Cut over only after every reachable drawable kind has a live implementation. |
-| **RD-C7: facade cutover and deletion gate** | C++ retention result established by the files above; no compensating C++ cache layer exists | reduce/remove `ArtboardRenderCache` and scene callers; migrate independently justified geometry state; remove replay-only exports and C API cache plumbing | external scene cache, prepared artboard frames, retained `RuntimeDrawCommand` streams, scene path/paint/text/nested caches, sorted/layout replay frames, and renderer epoch/revision bridges -> object-owned resources only | Last lane. Re-run #B-6 renderer clusters and remove D-12 only when zero scene-level mutation-gated mechanisms remain. |
+| **C++ runtime drawing ownership closure (historical code RD-C7)** | C++ retention result established by the files above; no compensating C++ cache layer exists | reduce/remove `ArtboardRenderCache` and scene callers; migrate independently justified geometry state; remove replay-only exports and C API cache plumbing | external scene cache, prepared artboard frames, retained `RuntimeDrawCommand` streams, scene path/paint/text/nested caches, sorted/layout replay frames, and renderer epoch/revision bridges -> object-owned resources only | Last lane. Follow `docs/runtime-drawing-port-map.md`; re-run #B-6 runtime-drawing clusters and remove D-12 only when zero scene-level mutation-gated mechanisms remain. |
 
 Execution through RD-C6 now crosses the complete live Artboard traversal
 boundary. Each clone-owned LayoutComponent retains its paint and clip paths;

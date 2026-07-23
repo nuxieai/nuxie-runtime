@@ -3077,6 +3077,20 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-22: #RD-C5 moved layout and nested-artboard rendering onto the live
+  owner topology. LayoutComponent paint/clip paths are retained per clone and
+  dirtied with their owning object; layout proxies, LayoutComponent, and
+  ForegroundLayoutDrawable dispatch directly. Nested Artboard, Leaf, and
+  Layout traversal now reads the mounted child occurrence and recurses into
+  its live draw walk without a draw-time clone or `RuntimeDrawCommand`.
+  Runtime tests are 405/405, the probe-armed workspace includes 721/721 pinned
+  C++ probes, and CAPI smoke plus `lint-gate` pass. Ordinary/scripted parity is
+  317/317 entries and 647/647 exact segments with zero divergences. The rebuilt
+  current-runtime Dawn reference and Rust candidate report 1,468/1,468 pixels,
+  zero divergences, zero gated failures, and 1,370 byte-exact rows on Apple M5
+  Max. No timing retry occurred; RD-C6 remains unblocked while RD-C7 and every
+  scene-cache deletion remain blocked on the quiet-host user checkpoint.
+
 - 2026-07-22: #RD-C4 moved Text and TextInput rendering onto clone-owned live
   drawable resources. Object-local dirt now rebuilds each retained
   shaped/style-paint frame; ordinary traversal dispatches Text/TextInput

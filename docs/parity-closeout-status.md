@@ -14,7 +14,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 399/399, nuxie lib 140/140,
+Regression floor (must stay green): runtime lib 405/405, nuxie lib 140/140,
 C++ probe 721/721, both runtime golden gates 317/317 exact / 647/647 segments;
 ordinary and scripted both have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
@@ -576,7 +576,12 @@ upstream-sync-map registry).
   own shaped/style-paint command frame, rebuild it under object-local dirt, and
   dispatch the live family directly without a `RuntimeDrawCommand`. Text paint
   pools are dense object/style sidecars, and the scene-wide text epoch and
-  text-command cache are gone.
+  text-command cache are gone. RD-C5 is complete: clone-owned LayoutComponents
+  retain their paint and clip paths under object-local dirt; layout proxy,
+  LayoutComponent, and ForegroundLayoutDrawable traversal dispatches those
+  owner resources directly. Nested Artboard, Leaf, and Layout traversal reads
+  the mounted child occurrence and recurses directly into its live draw walk;
+  no draw-time child clone or nested `RuntimeDrawCommand` remains.
   No RD-C7 deletion has begun. The mandatory canonical,
   quiet-host, fully fenced post-C1/C2 performance checkpoint gates RD-C7 and
   all scene-cache deletion only; RD-C3..C6 additive family migrations may
@@ -652,9 +657,9 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-C5 layout and nested traversal. Continue the mapped C++ ownership translation
-   under RF-1..RF-26 with the 1,468-row pixel corpus refereeing the merge.
-   RD-C5..C6 are additive family migrations and do not wait on the deferred
+1. #RD-C6 remaining virtual family and Artboard cutover. Continue the mapped
+   C++ ownership translation under RF-1..RF-26 with the 1,468-row pixel corpus
+   refereeing the merge. RD-C6 is additive and does not wait on the deferred
    performance checkpoint.
 2. #RD-1 post-C1/C2 measured USER CHECKPOINT. Run `r4-timing-gate` and
    `perf-hot-loop` only as the first action of a quiet-window session, with one
@@ -808,6 +813,25 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-22 — #RD-C5 moved layout and nested-artboard rendering onto live
+  clone-owned resources. LayoutComponent owners retain paint and clip paths
+  and rebuild them only under object-local layout/path dirt; layout proxies,
+  LayoutComponent, and ForegroundLayoutDrawable now dispatch directly.
+  Nested Artboard, Leaf, and Layout traversal reads the mounted child
+  occurrence and recurses into its live draw walk without a draw-time child
+  clone or `RuntimeDrawCommand`. The one probe-found seam is explicit: the
+  diagnostic command stream may represent a successfully resolved initial
+  authored reference when constructed from one graph, while live traversal
+  requires the mounted child, matching C++ pointer ownership. Runtime tests
+  are 405/405, nuxie tests are 140/140, the armed workspace contains 721/721
+  pinned C++ probes, and CAPI smoke plus `lint-gate` pass. Ordinary and
+  scripted goldens are 317/317 entries and 647/647 exact segments with zero
+  divergences; renderer pixels are 1,468/1,468 with zero divergences and zero
+  gated failures. The correspondence rows remain `pending-verification`
+  until the orchestrator's independent run. No timing command was retried in
+  this session; RD-C7 and all scene-cache deletion remain blocked by the
+  canonical quiet-host checkpoint.
 
 - 2026-07-22 — #RD-C4 moved Text and TextInput drawing onto clone-owned live
   drawable resources. Each drawable retains its shaped/style-paint command

@@ -3865,12 +3865,14 @@ impl ArtboardInstance {
 
     pub(crate) fn mark_layout_changed(&mut self) {
         self.layout_epoch = self.layout_epoch.wrapping_add(1);
+        self.runtime_drawables.mark_layout_resources_dirty();
         self.runtime_drawables.mark_text_resources_dirty();
         self.mark_prepared_changed();
     }
 
     pub(crate) fn mark_path_changed(&mut self) {
         self.path_epoch = self.path_epoch.wrapping_add(1);
+        self.runtime_drawables.mark_layout_resources_dirty();
         self.runtime_drawables.mark_text_resources_dirty();
         self.mark_prepared_changed();
     }

@@ -60,14 +60,18 @@ them to `faithful`.
 | **RD-C6: remaining virtual family and Artboard cutover** | `src/artboard_component_list.cpp:977-980`; `src/scripted/scripted_drawable.cpp:312-315,343`; `src/artboard.cpp:1606-1698` | component-list and scripted live dispatch; complete `Artboard::draw`/`drawInternal` walk with lazy clipping and virtual draw | command-kind dispatch over a prepared tree -> one per-frame walk of the complete live drawable family | Depends on C1-C5. Cut over only after every reachable drawable kind has a live implementation. |
 | **RD-C7: facade cutover and deletion gate** | C++ retention result established by the files above; no compensating C++ cache layer exists | reduce/remove `ArtboardRenderCache` and scene callers; migrate independently justified geometry state; remove replay-only exports and C API cache plumbing | external scene cache, prepared artboard frames, retained `RuntimeDrawCommand` streams, scene path/paint/text/nested caches, sorted/layout replay frames, and renderer epoch/revision bridges -> object-owned resources only | Last lane. Re-run #B-6 renderer clusters and remove D-12 only when zero scene-level mutation-gated mechanisms remain. |
 
-Execution through RD-C4 now crosses the Text/TextInput boundary: clone-owned
-drawables retain shaped/style-paint frames, dense Text/style paint pools are
-backend sidecars for one live graph/instance, and traversal invokes the live
-family without a `RuntimeDrawCommand`. The scene-wide text epoch and text-command
-map have been removed. Whole-file manifest rows remain `pending-verification`
-until the orchestrator's independent run; TextInput editing remains outside this
-rendering slice. RD-C5 is next. RD-C7 remains blocked by the measured user
-checkpoint.
+Execution through RD-C5 now crosses the layout/nested boundary. Each clone-owned
+LayoutComponent retains its paint and clip paths and rebuilds them only under
+object-local layout/path dirt. Layout proxies, LayoutComponent, and
+ForegroundLayoutDrawable dispatch directly from that owner state. Nested
+Artboard, Leaf, and Layout traversal reads the mounted child occurrence and
+recurses into its live `drawInternal` walk without cloning a child snapshot or
+constructing a `RuntimeDrawCommand`. The diagnostic command-stream compatibility
+surface still represents an initially resolved authored nested reference when it
+is intentionally built from only one graph; live renderer traversal requires the
+mounted child identity. Whole-file manifest rows remain `pending-verification`
+until the orchestrator's independent run. RD-C6 is next. RD-C7 remains blocked
+by the measured user checkpoint.
 
 ## Oracle call chain and present Rust seams
 

@@ -2536,7 +2536,7 @@ b6_row_id = "B6-0210"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "RD-C5 executor-green live foreground-layout traversal; pending orchestrator verification."
 
 [[file]]
 upstream = "src/hittest_command_path.cpp"
@@ -3112,7 +3112,7 @@ b6_row_id = "B6-0258"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "RD-C5 executor-green retained layout paths and live traversal; pending orchestrator verification."
 
 [[file]]
 upstream = "src/listener_group.cpp"
@@ -3652,7 +3652,7 @@ b6_row_id = "B6-0303"
 b6_verdict = "DIVERGENT"
 b6_cluster = "artboard"
 audit_record = "docs/b6-audit/results/artboard.md"
-note = "F13: nested artboards are ported; latent hit-propagation ceilings remain."
+note = "RD-C5 executor-green mounted-child live recursion; pending orchestrator verification. F13 latent hit-propagation ceilings remain."
 
 [[file]]
 upstream = "src/nested_artboard_layout.cpp"
@@ -3664,7 +3664,7 @@ b6_row_id = "B6-0304"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "RD-C5 executor-green mounted NestedArtboardLayout traversal; pending orchestrator verification."
 
 [[file]]
 upstream = "src/nested_artboard_leaf.cpp"
@@ -3676,7 +3676,7 @@ b6_row_id = "B6-0305"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "RD-C5 executor-green mounted NestedArtboardLeaf traversal; pending orchestrator verification."
 
 [[file]]
 upstream = "src/nested_artboard_origin.cpp"

@@ -3100,29 +3100,10 @@ impl ArtboardInstance {
             .and_then(|local_id| self.nested_artboards.get(&local_id))
             .map(|nested| nested.child.as_ref())
         {
-            let nested_layout_child;
-            let child = if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout
-            {
-                if apply_nested_layout_bounds {
-                    // C++ settles the mounted occurrence after its one-time
-                    // pre-transfer shader boundary. Preserve that pass even
-                    // when update already installed the constraint space:
-                    // pending component/binding dirt belongs to this child.
-                    let mut cloned = child.clone_for_transient_layout();
-                    runtime_apply_nested_artboard_layout_child_bounds(
-                        &mut cloned,
-                        command,
-                        layout_bounds,
-                    )?;
-                    runtime_settle_nested_artboard_layout_child(&mut cloned);
-                    nested_layout_child = cloned;
-                    &nested_layout_child
-                } else {
-                    child
-                }
-            } else {
-                child
-            };
+            // `NestedArtboardLayout::takeLayoutData` transfers constraints to
+            // this mounted occurrence during the ordinary parent update. C++
+            // prepares and draws that same child; it never clones a paint-only
+            // snapshot at the renderer boundary.
             if let Some((
                 child_paints,
                 child_configurations,
@@ -3731,7 +3712,7 @@ impl ArtboardInstance {
         for drawable in self.runtime_drawables.iter() {
             let previous_empty_clips = empty_clips;
             empty_clips += self.runtime_empty_clip_count(drawable, graph);
-            if !self.runtime_will_draw(drawable, false)
+            if !self.runtime_will_draw_live_traversal(drawable)
                 || empty_clips != previous_empty_clips
                 || empty_clips > 0
             {
@@ -3823,6 +3804,54 @@ impl ArtboardInstance {
                     paint_by_global,
                     path_cache,
                     paint_configurations.as_deref_mut(),
+                )?;
+                continue;
+            }
+
+            if drawable.kind == DrawableOrderKind::LayoutProxy
+                || (drawable.kind == DrawableOrderKind::Drawable
+                    && matches!(
+                        drawable.type_name,
+                        "LayoutComponent" | "ForegroundLayoutDrawable"
+                    ))
+            {
+                runtime_draw_live_layout_family(
+                    runtime,
+                    self,
+                    graph,
+                    drawable,
+                    layout_bounds,
+                    factory,
+                    renderer,
+                    paint_by_global,
+                    path_cache,
+                    paint_configurations.as_deref_mut(),
+                )?;
+                continue;
+            }
+
+            if drawable.kind == DrawableOrderKind::Drawable
+                && sorted_drawable_is_nested_artboard(drawable.type_name)
+            {
+                runtime_draw_live_nested_artboard(
+                    runtime,
+                    self,
+                    graph,
+                    artboards,
+                    drawable,
+                    factory,
+                    renderer,
+                    paint_by_global,
+                    image_by_global,
+                    mesh_by_local,
+                    path_cache,
+                    paint_configurations.as_deref_mut(),
+                    match &mut nested_paint_caches {
+                        Some(caches) => Some(&mut **caches),
+                        None => None,
+                    },
+                    layout_bounds,
+                    nested_ancestors,
                 )?;
                 continue;
             }
@@ -3936,7 +3965,16 @@ impl ArtboardInstance {
                 }
 
                 if sorted_drawable_is_nested_artboard(drawable.type_name) {
-                    return drawable.referenced_artboard_global.is_some();
+                    // The public command-stream compatibility surface can be
+                    // constructed from one graph without mounting the full
+                    // artboard tree. In that case the successfully resolved
+                    // authored reference stands in for the initial C++
+                    // `m_referencedArtboard` pointer. Live renderer traversal
+                    // tightens this to the mounted occurrence below.
+                    return drawable.local_id.is_some_and(|local_id| {
+                        self.nested_artboards.get(&local_id).is_some()
+                            || drawable.referenced_artboard_global.is_some()
+                    });
                 }
 
                 if sorted_drawable_uses_render_opacity(drawable.type_name) {
@@ -3957,6 +3995,14 @@ impl ArtboardInstance {
                 true
             }
         }
+    }
+
+    fn runtime_will_draw_live_traversal(&self, drawable: &RuntimeDrawable) -> bool {
+        self.runtime_will_draw(drawable, false)
+            && (!sorted_drawable_is_nested_artboard(drawable.type_name)
+                || drawable
+                    .local_id
+                    .is_some_and(|local_id| self.nested_artboards.get(&local_id).is_some()))
     }
 
     fn runtime_empty_clip_count(&self, drawable: &RuntimeDrawable, graph: &ArtboardGraph) -> i32 {
@@ -4317,15 +4363,36 @@ impl ArtboardInstance {
         if paint.path_kind.is_none() {
             return Vec::new();
         }
+        self.runtime_layout_component_draw_paths(layout_local, graph, layout_bounds)
+            .map(|paths| paths.paint.as_ref().clone())
+            .unwrap_or_default()
+    }
+
+    fn runtime_layout_component_draw_paths(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> Option<RuntimeLayoutDrawPaths> {
         // Ported from C++ `src/layout_component.cpp`
         // `LayoutComponent::drawProxy/updateRenderPath`: layout components draw
-        // shape paints against a background rectangle built from computed
-        // layout bounds. TODO(golden): route all layout components through the
-        // M6 layout engine.
-        let bounds =
-            self.runtime_layout_component_bounds_with_bounds(layout_local, graph, layout_bounds);
-        let corners = self.runtime_layout_component_corners(layout_local);
-        runtime_layout_rect_path_commands(bounds, corners)
+        // and clip from the retained background rectangle rebuilt by ordinary
+        // layout/path dirt.
+        self.runtime_drawables.layout_draw_paths(layout_local, || {
+            let bounds = self.runtime_layout_component_bounds_with_bounds(
+                layout_local,
+                graph,
+                layout_bounds,
+            );
+            let corners = self.runtime_layout_component_corners(layout_local);
+            let paint = runtime_layout_rect_path_commands(bounds, corners);
+            let mut clip = paint.clone();
+            translate_path_commands(&mut clip, (bounds.x, bounds.y));
+            RuntimeLayoutDrawPaths {
+                paint: Arc::new(paint),
+                clip: Arc::new(clip),
+            }
+        })
     }
 
     fn runtime_layout_component_clip_path_commands(
@@ -4334,12 +4401,9 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Vec<RuntimePathCommand> {
-        let bounds =
-            self.runtime_layout_component_bounds_with_bounds(layout_local, graph, layout_bounds);
-        let corners = self.runtime_layout_component_corners(layout_local);
-        let mut commands = runtime_layout_rect_path_commands(bounds, corners);
-        translate_path_commands(&mut commands, (bounds.x, bounds.y));
-        commands
+        self.runtime_layout_component_draw_paths(layout_local, graph, layout_bounds)
+            .map(|paths| paths.clip.as_ref().clone())
+            .unwrap_or_default()
     }
 
     fn runtime_layout_component_clip_enabled(&self, layout_local: usize) -> bool {
@@ -6667,6 +6731,51 @@ impl RuntimeTextDrawOwner {
     }
 }
 
+/// Clone-owned counterpart of `LayoutComponent::m_backgroundRect` and
+/// `m_worldPath`. CPU geometry belongs to the live layout object; the backend
+/// path remains a one-to-one sidecar in `RuntimeRenderPathCache`.
+#[derive(Debug, Clone)]
+struct RuntimeLayoutDrawPaths {
+    paint: Arc<Vec<RuntimePathCommand>>,
+    clip: Arc<Vec<RuntimePathCommand>>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeLayoutDrawOwner {
+    dirty: Cell<bool>,
+    retained: RefCell<Option<RuntimeLayoutDrawPaths>>,
+}
+
+impl Default for RuntimeLayoutDrawOwner {
+    fn default() -> Self {
+        Self {
+            dirty: Cell::new(true),
+            retained: RefCell::new(None),
+        }
+    }
+}
+
+impl RuntimeLayoutDrawOwner {
+    fn mark_dirty(&self) {
+        self.dirty.set(true);
+    }
+
+    fn retained_or_build(
+        &self,
+        build: impl FnOnce() -> RuntimeLayoutDrawPaths,
+    ) -> RuntimeLayoutDrawPaths {
+        if self.dirty.get() || self.retained.borrow().is_none() {
+            *self.retained.borrow_mut() = Some(build());
+            self.dirty.set(false);
+        }
+        self.retained
+            .borrow()
+            .as_ref()
+            .expect("layout owner was just populated")
+            .clone()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeDrawable {
     kind: DrawableOrderKind,
@@ -6759,6 +6868,7 @@ struct RuntimeDrawTarget {
 pub(crate) struct RuntimeDrawableList {
     drawables: Vec<Box<RuntimeDrawable>>,
     imported_count: usize,
+    layout_draw_owners: Vec<Option<RuntimeLayoutDrawOwner>>,
     first_drawable: Option<usize>,
     drawable_by_local: BTreeMap<usize, usize>,
     draw_targets: Vec<RuntimeDrawTarget>,
@@ -6777,6 +6887,17 @@ impl RuntimeDrawableList {
             .map(|drawable| Box::new(RuntimeDrawable::from_imported(drawable, graph)))
             .collect::<Vec<_>>();
         let imported_count = drawables.len();
+        let mut layout_draw_owners = Vec::new();
+        for component in graph
+            .components
+            .iter()
+            .filter(|component| component.type_name == "LayoutComponent")
+        {
+            if layout_draw_owners.len() <= component.local_id {
+                layout_draw_owners.resize_with(component.local_id + 1, || None);
+            }
+            layout_draw_owners[component.local_id] = Some(RuntimeLayoutDrawOwner::default());
+        }
         let drawable_by_local = drawables
             .iter()
             .enumerate()
@@ -6824,6 +6945,7 @@ impl RuntimeDrawableList {
         let mut result = Self {
             drawables,
             imported_count,
+            layout_draw_owners,
             first_drawable: None,
             drawable_by_local,
             draw_targets,
@@ -6860,6 +6982,25 @@ impl RuntimeDrawableList {
         if let Some(owner) = self.drawables[drawable_index].text_draw_owner.as_ref() {
             owner.mark_dirty();
         }
+    }
+
+    pub(crate) fn mark_layout_resources_dirty(&self) {
+        for owner in self.layout_draw_owners.iter().flatten() {
+            owner.mark_dirty();
+        }
+    }
+
+    fn layout_draw_paths(
+        &self,
+        layout_local: usize,
+        build: impl FnOnce() -> RuntimeLayoutDrawPaths,
+    ) -> Option<RuntimeLayoutDrawPaths> {
+        Some(
+            self.layout_draw_owners
+                .get(layout_local)?
+                .as_ref()?
+                .retained_or_build(build),
+        )
     }
 
     fn sort_draw_order(
@@ -13347,6 +13488,242 @@ fn runtime_draw_live_text_family(
     Ok(())
 }
 
+/// Direct port of `LayoutComponent::drawProxy/draw` and
+/// `ForegroundLayoutDrawable::draw` (`src/layout_component.cpp:317-374`,
+/// `src/foreground_layout_drawable.cpp`). The retained layout object supplies
+/// its paths and live world transform; no `RuntimeDrawCommand` is built.
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_live_layout_family(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    drawable: &RuntimeDrawable,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    path_cache: &mut RuntimeRenderPathCache,
+    paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+) -> Result<()> {
+    if drawable.kind == DrawableOrderKind::Drawable && drawable.type_name == "LayoutComponent" {
+        let layout_local = drawable
+            .local_id
+            .context("live layout component is missing its local id")?;
+        if instance.runtime_layout_component_clip_enabled(layout_local) {
+            // C++ restores the clip before the foreground stroke drawable.
+            renderer.restore();
+        }
+        return Ok(());
+    }
+
+    let layout_local = match drawable.kind {
+        DrawableOrderKind::LayoutProxy => drawable.layout_local,
+        DrawableOrderKind::Drawable if drawable.type_name == "ForegroundLayoutDrawable" => drawable
+            .local_id
+            .and_then(|local_id| runtime_foreground_layout_parent_local(instance, local_id)),
+        _ => None,
+    }
+    .context("live layout drawable is missing its owning LayoutComponent")?;
+
+    if drawable.kind == DrawableOrderKind::LayoutProxy
+        && instance.runtime_layout_component_clip_enabled(layout_local)
+    {
+        renderer.save();
+        if let Some(paths) =
+            instance.runtime_layout_component_draw_paths(layout_local, graph, layout_bounds)
+            && !paths.clip.is_empty()
+        {
+            let key =
+                path_cache.retained_render_path_key(instance, graph, RenderFillRule::Clockwise);
+            let path =
+                path_cache.layout_clip_path(key, layout_local, factory, paths.clip.as_slice());
+            renderer.clip_path(path.as_ref());
+        }
+    }
+
+    let shape_paints =
+        instance.runtime_shape_paint_commands(drawable, graph, layout_bounds, path_cache);
+    runtime_draw_live_shape(
+        runtime,
+        instance,
+        graph,
+        layout_local,
+        &shape_paints,
+        layout_bounds,
+        factory,
+        renderer,
+        paint_by_global,
+        path_cache,
+        paint_configurations,
+    )
+}
+
+/// Direct port of `NestedArtboard::draw/willDraw`
+/// (`src/nested_artboard.cpp:491-508`) plus the live transforms established by
+/// `NestedArtboardLeaf::update` and `NestedArtboardLayout::update`. Recursion
+/// always uses the mounted child occurrence; layout drawing never clones it.
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_live_nested_artboard(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    drawable: &RuntimeDrawable,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    image_by_global: &RuntimeRenderImages,
+    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
+    path_cache: &mut RuntimeRenderPathCache,
+    mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+    nested_paint_caches: Option<
+        &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+    >,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    nested_ancestors: &[u32],
+) -> Result<()> {
+    let host_local = drawable
+        .local_id
+        .context("live nested artboard is missing its host local id")?;
+    let nested = instance
+        .nested_artboards
+        .get(&host_local)
+        .context("live nested artboard is missing its mounted child")?;
+    let child = nested.child.as_ref();
+    let child_graph = child
+        .runtime_graph()
+        .or_else(|| {
+            artboards
+                .iter()
+                .find(|candidate| candidate.global_id == child.graph_global_id)
+        })
+        .context("mounted nested artboard graph is missing")?;
+
+    let host_world = match drawable.type_name {
+        "NestedArtboardLayout" => path_cache.component_world_transform_with_bounds(
+            instance,
+            graph,
+            host_local,
+            layout_bounds,
+        ),
+        "NestedArtboardLeaf" => runtime_nested_artboard_leaf_world_transform(
+            instance,
+            graph,
+            host_local,
+            child_graph,
+            Some(child),
+            layout_bounds,
+            path_cache,
+        )?,
+        _ => path_cache.component_world_transform_with_bounds(
+            instance,
+            graph,
+            host_local,
+            layout_bounds,
+        ),
+    };
+    let cache_key = nested_render_cache_key(
+        drawable.global_id,
+        Some(host_local),
+        child_graph.global_id,
+        nested.render_cache_revision,
+    );
+    let needs_save = drawable.needs_save_operation;
+    if needs_save {
+        renderer.save();
+    }
+    renderer.transform(runtime_render_mat(host_world));
+
+    let draw_result = (|| {
+        let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
+        if let Some(caches) = nested_paint_caches {
+            let child_paint_cache = caches.entry(cache_key).or_default();
+            if child_paint_cache.preparation.is_none() {
+                child.prepare_static_artboard_tree_paints_internal(
+                    runtime,
+                    child_graph,
+                    artboards,
+                    factory,
+                    &mut child_paint_cache.paints,
+                    Some(&mut child_paint_cache.paint_configurations),
+                    Some(&mut child_paint_cache.preparation),
+                    Some(&mut child_paint_cache.nested_artboards),
+                    child_cache,
+                    false,
+                    true,
+                    nested_ancestors,
+                )?;
+            }
+            child.prepare_static_artboard_slice_meshes(
+                runtime,
+                child_graph,
+                factory,
+                image_by_global,
+                &mut child_paint_cache.meshes,
+                child_cache,
+            )?;
+            child.draw_prepared_static_artboard_internal_with_path_cache(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                renderer,
+                &mut child_paint_cache.paints,
+                image_by_global,
+                &mut child_paint_cache.meshes,
+                child_cache,
+                Some(&mut child_paint_cache.paint_configurations),
+                Some(&mut child_paint_cache.nested_artboards),
+                false,
+                nested_ancestors,
+            )
+        } else {
+            child.prepare_static_artboard_tree_paints_internal(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                paint_by_global,
+                paint_configurations.as_deref_mut(),
+                None,
+                None,
+                child_cache,
+                false,
+                true,
+                nested_ancestors,
+            )?;
+            child.prepare_static_artboard_slice_meshes(
+                runtime,
+                child_graph,
+                factory,
+                image_by_global,
+                mesh_by_local,
+                child_cache,
+            )?;
+            child.draw_prepared_static_artboard_internal_with_path_cache(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                renderer,
+                paint_by_global,
+                image_by_global,
+                mesh_by_local,
+                child_cache,
+                paint_configurations.as_deref_mut(),
+                None,
+                false,
+                nested_ancestors,
+            )
+        }
+    })();
+
+    if needs_save {
+        renderer.restore();
+    }
+    draw_result
+}
+
 fn runtime_draw_live_command(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -16009,20 +16386,9 @@ fn runtime_draw_nested_artboard(
     let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
 
     if let Some(child) = persistent_child {
-        let layout_child;
-        let child = if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout {
-            let mut cloned = child.clone_for_transient_layout();
-            runtime_apply_nested_artboard_layout_child_bounds(
-                &mut cloned,
-                &command,
-                layout_bounds,
-            )?;
-            cloned.update_pass();
-            layout_child = cloned;
-            &layout_child
-        } else {
-            child
-        };
+        // The mounted child already owns transferred layout data. Drawing a
+        // transient clone here disagrees with C++ pointer identity and loses
+        // object-local retained resources.
         if let Some(caches) = nested_paint_caches {
             let child_paint_cache = caches.entry(cache_key).or_default();
             // The public prepared-draw contract recursively prepares this
@@ -23506,6 +23872,27 @@ mod tests {
     }
 
     #[test]
+    fn layout_draw_owner_rebuilds_only_after_object_local_dirt() {
+        let owner = RuntimeLayoutDrawOwner::default();
+        let builds = Cell::new(0usize);
+        let build = || {
+            builds.set(builds.get() + 1);
+            RuntimeLayoutDrawPaths {
+                paint: Arc::new(vec![RuntimePathCommand::Move { x: 1.0, y: 2.0 }]),
+                clip: Arc::new(vec![RuntimePathCommand::Move { x: 3.0, y: 4.0 }]),
+            }
+        };
+
+        owner.retained_or_build(build);
+        owner.retained_or_build(build);
+        assert_eq!(builds.get(), 1);
+
+        owner.mark_dirty();
+        owner.retained_or_build(build);
+        assert_eq!(builds.get(), 2);
+    }
+
+    #[test]
     fn retained_text_paints_preserve_each_run_world_transform() {
         let live_text_world = Mat2D([1.0, 0.0, 0.0, 1.0, 70.0, 184.57031]);
         let first_run_world = Mat2D([1.0, 0.0, 0.0, 1.0, 70.0, 184.57031]);
@@ -28820,6 +29207,40 @@ mod tests {
         assert!(
             ops.borrow().iter().any(|op| op.starts_with("transform:")),
             "the nested host envelope must still replay its transform"
+        );
+    }
+
+    #[test]
+    fn nested_will_draw_distinguishes_command_compatibility_from_live_mounts() {
+        let bytes = synthetic_zero_opacity_nested_gradient_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic nested riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic nested riv graphs");
+        let graph = graphs.artboards.first().expect("parent artboard");
+        let unmounted = ArtboardInstance::from_graph(&file, graph).expect("unmounted instance");
+        let mounted = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+            .expect("mounted instance");
+        let unmounted_drawable = unmounted
+            .runtime_drawables
+            .iter()
+            .find(|drawable| sorted_drawable_is_nested_artboard(drawable.type_name))
+            .expect("nested drawable");
+        let mounted_drawable = mounted
+            .runtime_drawables
+            .iter()
+            .find(|drawable| sorted_drawable_is_nested_artboard(drawable.type_name))
+            .expect("nested drawable");
+
+        assert!(
+            unmounted.runtime_will_draw(unmounted_drawable, false),
+            "the command-stream compatibility surface retains the resolved initial C++ pointer"
+        );
+        assert!(
+            !unmounted.runtime_will_draw_live_traversal(unmounted_drawable),
+            "live traversal requires the mounted child occurrence"
+        );
+        assert!(
+            mounted.runtime_will_draw_live_traversal(mounted_drawable),
+            "the mounted child occurrence is the live reference"
         );
     }
 

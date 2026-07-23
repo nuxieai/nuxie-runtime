@@ -677,13 +677,17 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-1 post-C1/C2 measured USER CHECKPOINT. Run `r4-timing-gate` and
-   `perf-hot-loop` only as the first action of a quiet-window session, with one
-   canonical preflight, the unchanged 12% host-idle-spread fence, and every
-   validity check intact. If that preflight fails, defer without another
-   attempt that session. Report the valid delta to the user and stop for
-   review. RD-C7 and all scene-cache deletion remain blocked until that review;
-   RD-C5..C6 do not.
+1. #RD-1 post-C1/C2 measured USER CHECKPOINT. Wait for the user's
+   quiet-window signal; the orchestrator owns the host watcher. Once the user
+   initiates the attempt, build all three immutable runners and launch each
+   once briefly so Gatekeeper/syspolicyd assessment and first-run filesystem
+   activity complete. Then leave the host idle for about ten minutes and run
+   exactly one canonical preflight with the unchanged 12%
+   host-idle-spread fence and every validity check intact; only a valid
+   preflight proceeds to the A-B-B-A bracket and `perf-hot-loop`. If the
+   preflight fails, defer without another attempt that session. Report the
+   valid delta to the user and stop for review. RD-C7 and all scene-cache
+   deletion remain blocked until that review.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare

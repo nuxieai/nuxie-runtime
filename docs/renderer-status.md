@@ -3084,6 +3084,11 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
   (`target/r4-timing-gate/20260723T081932Z-60125`). No comparison,
   `perf-hot-loop`, or retry followed. The attempt is invalid evidence and
   RD-C7 remains blocked pending a valid quiet-host number and user review.
+  The next attempt waits for the user's watcher-backed quiet-window signal,
+  then builds and first-launches all three runners, idles the host for about
+  ten minutes, and runs its single preflight. This keeps
+  Gatekeeper/syspolicyd and first-run fseventsd churn outside the bracket; all
+  existing validity checks and the 12% fence remain unchanged.
 
 - 2026-07-23: #RD-C6 completed live Artboard traversal across the remaining
   component-list, scripted, and virtual drawable families. Ordinary renderer

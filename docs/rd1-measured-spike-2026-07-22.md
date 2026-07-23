@@ -104,6 +104,15 @@ not run `perf-hot-loop`, following the one-preflight quiet-window rule. These
 rows are provenance records, not performance evidence, and RD-C7 remains
 blocked.
 
+The next-attempt recipe separates build from measure. The user will initiate
+the attempt when the orchestrator's quiet-window watcher fires. Then build all
+three immutable runners and launch each once briefly to complete Gatekeeper
+assessment, leave the host idle for approximately ten minutes, and run one
+canonical preflight. Only a valid result proceeds to the fenced A-B-B-A bracket
+and `perf-hot-loop`; a failed preflight ends the session without a retry. This
+prevents fresh-build syspolicyd and fseventsd activity from seeding the measured
+window while preserving every existing fence and provenance check.
+
 ## Correctness and floors
 
 - Spike slice: 3/3 entries and 7/7 exact segments, zero divergence.

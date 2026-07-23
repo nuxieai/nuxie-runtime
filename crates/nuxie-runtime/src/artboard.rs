@@ -55,6 +55,7 @@ use crate::data_bind_graph::{
 use crate::draw::{
     RuntimeDrawableList, RuntimeInitialNestedLayoutPaintFrame, RuntimeLayoutBounds,
     RuntimeShapeList, runtime_apply_component_list_item_layout_bounds,
+    runtime_component_list_item_layout_size,
 };
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
@@ -228,6 +229,13 @@ pub struct ArtboardInstance {
     pub(crate) origin_x: f32,
     pub(crate) origin_y: f32,
     pub(crate) clip: bool,
+    /// C++ `Artboard::m_FrameOrigin`: clone-owned draw state. Root artboards
+    /// default true; mounted nested/scripted/component-list occurrences set it
+    /// false at the same ownership boundary as C++.
+    pub(crate) frame_origin: Cell<bool>,
+    /// C++ `Artboard::m_FrameID`, incremented by the public draw entry before
+    /// `drawInternal`; mounted children recurse directly and do not increment.
+    pub(crate) frame_id: Cell<u64>,
     pub(crate) slots: Vec<InstanceSlot>,
     pub(crate) objects: InstanceObjectArena,
     pub(crate) components: Vec<RuntimeComponent>,
@@ -240,6 +248,8 @@ pub struct ArtboardInstance {
     pub(crate) component_list_item_transforms: BTreeMap<usize, Vec<Mat2D>>,
     pub(crate) component_list_logical_items: BTreeMap<usize, Vec<RuntimeComponentListLogicalItem>>,
     pub(crate) component_list_items: BTreeMap<usize, Vec<RuntimeComponentListItemInstance>>,
+    pub(crate) component_list_order_caches:
+        RefCell<BTreeMap<usize, RuntimeComponentListOrderCache>>,
     pub(crate) component_list_sources: BTreeMap<usize, RuntimeOwnedViewModelListHandle>,
     pub(crate) ik_constraints: Vec<RuntimeIkConstraint>,
     pub(crate) joysticks_apply_before_update: bool,
@@ -325,7 +335,7 @@ pub struct ArtboardInstance {
     /// C++ `Shape::{m_PathComposer,m_Paths}` plus
     /// `ShapePaintContainer::m_ShapePaints`: clone-owned ordered memberships.
     pub(crate) runtime_shapes: RuntimeShapeList,
-    pub(crate) did_change: bool,
+    pub(crate) did_change: Cell<bool>,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
 }
@@ -518,6 +528,9 @@ pub(crate) struct RuntimeComponentListItemInstance {
     /// cells notify the mounted child's binds directly; ViewModel-reference
     /// replacement dirties this sink (`viewmodel_instance.cpp:118-188,346-415`).
     pub(crate) context_rebind_sink: crate::view_model_cell::RuntimeCellDirtSink,
+    /// C++ `ArtboardListDrawIndexDependent`: scalar writes invalidate the
+    /// retained paint-order indices without polling the ViewModel graph.
+    pub(crate) draw_index_sink: Option<crate::view_model_cell::RuntimeCellDirtSink>,
     pub(crate) occurrence_identity: u64,
     pub(crate) logical_index: usize,
     pub(crate) virtualized_position: Option<(f32, f32)>,
@@ -528,6 +541,12 @@ pub(crate) struct RuntimeComponentListItemInstance {
     pub(crate) settled_layout_size: Cell<Option<(f32, f32)>>,
     pub(crate) transform: Mat2D,
     pub(crate) render_cache_revision: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeComponentListOrderCache {
+    pub(crate) indices: Vec<usize>,
+    pub(crate) valid: bool,
 }
 
 impl RuntimeComponentListItemInstance {
@@ -542,6 +561,21 @@ impl RuntimeComponentListItemInstance {
     fn consume_context_rebind_dirt(&self) {
         self.context_rebind_sink.take_dirt();
     }
+}
+
+fn component_list_draw_index_sink(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelHandle,
+) -> Option<crate::view_model_cell::RuntimeCellDirtSink> {
+    let property_name = file
+        .view_model_property_for_symbol(context.borrow().view_model_index(), 16)?
+        .string_property("name")?;
+    let cell = context
+        .borrow()
+        .number_cell_by_property_name(property_name)?;
+    let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+    cell.add_dependent(&sink);
+    Some(sink)
 }
 
 /// One exact descent edge from a retained root artboard to a nested occurrence.
@@ -1040,6 +1074,8 @@ impl ArtboardInstance {
             origin_x: dimensions.origin_x,
             origin_y: dimensions.origin_y,
             clip: dimensions.clip,
+            frame_origin: Cell::new(true),
+            frame_id: Cell::new(0),
             slots,
             objects,
             components,
@@ -1052,6 +1088,7 @@ impl ArtboardInstance {
             component_list_item_transforms: BTreeMap::new(),
             component_list_logical_items: BTreeMap::new(),
             component_list_items: BTreeMap::new(),
+            component_list_order_caches: RefCell::new(BTreeMap::new()),
             component_list_sources: BTreeMap::new(),
             ik_constraints,
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
@@ -1120,7 +1157,7 @@ impl ArtboardInstance {
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::from_graph(graph),
             runtime_shapes: RuntimeShapeList::from_graph(graph),
-            did_change: true,
+            did_change: Cell::new(true),
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
         };
@@ -2740,6 +2777,9 @@ impl ArtboardInstance {
                 });
         if existing_matches {
             if logical_changed {
+                self.component_list_order_caches
+                    .borrow_mut()
+                    .remove(&list_local_id);
                 self.mark_layout_changed();
                 self.mark_prepared_changed();
             }
@@ -2773,6 +2813,7 @@ impl ArtboardInstance {
                     item.context = context.clone();
                     item.context_rebind_sink = crate::view_model_cell::RuntimeCellDirtSink::new();
                     context.add_rebind_dependent(&item.context_rebind_sink);
+                    item.draw_index_sink = component_list_draw_index_sink(file, &context);
                     let child_data_context = RuntimeOwnedDataContext::with_local_handles(
                         [context.clone()],
                         Some(&parent_data_context),
@@ -2827,6 +2868,7 @@ impl ArtboardInstance {
             ) else {
                 continue;
             };
+            child.set_frame_origin(false);
             let child_data_context = RuntimeOwnedDataContext::with_local_handles(
                 [context.clone()],
                 Some(&parent_data_context),
@@ -2876,10 +2918,12 @@ impl ArtboardInstance {
             child.update_pass();
             let context_rebind_sink = crate::view_model_cell::RuntimeCellDirtSink::new();
             context.add_rebind_dependent(&context_rebind_sink);
+            let draw_index_sink = component_list_draw_index_sink(file, &context);
             items.push(RuntimeComponentListItemInstance {
                 child: Box::new(child),
                 state_machines,
                 context_rebind_sink,
+                draw_index_sink,
                 context,
                 occurrence_identity: logical.occurrence_identity,
                 logical_index,
@@ -2896,6 +2940,9 @@ impl ArtboardInstance {
             list_local_id,
             items.iter().map(|item| item.transform).collect(),
         );
+        self.component_list_order_caches
+            .borrow_mut()
+            .remove(&list_local_id);
         self.component_list_items.insert(list_local_id, items);
         let changed = !existing_matches || logical_changed || item_context_changed;
         if changed {
@@ -2944,9 +2991,26 @@ impl ArtboardInstance {
 
         let mut changed = false;
         for _ in 0..MAX_LAYOUT_FEEDBACK_PASSES {
-            let assigned_bounds = self.runtime_component_list_assigned_layout_bounds();
-            if assigned_bounds.is_empty() {
-                break;
+            let mut assigned_bounds = self.runtime_component_list_assigned_layout_bounds();
+            // An unhosted ArtboardComponentList has no parent Yoga assignment,
+            // but C++ still writes each mounted artboard's own `layoutBounds`
+            // into the occurrence before drawing it. The former transient
+            // draw clone hid this transfer; keep it on the authoritative child.
+            for (&list_local, items) in &self.component_list_items {
+                assigned_bounds.entry(list_local).or_insert_with(|| {
+                    items
+                        .iter()
+                        .map(|item| {
+                            let (width, height) = runtime_component_list_item_layout_size(item);
+                            RuntimeLayoutBounds {
+                                x: 0.0,
+                                y: 0.0,
+                                width,
+                                height,
+                            }
+                        })
+                        .collect()
+                });
             }
 
             let mut size_feedback_changed = false;
@@ -3774,7 +3838,23 @@ impl ArtboardInstance {
     }
 
     pub fn did_change(&self) -> bool {
-        self.did_change
+        self.did_change.get()
+    }
+
+    pub fn frame_origin(&self) -> bool {
+        self.frame_origin.get()
+    }
+
+    pub fn set_frame_origin(&self, frame_origin: bool) {
+        self.frame_origin.set(frame_origin);
+    }
+
+    pub fn frame_id(&self) -> u64 {
+        self.frame_id.get()
+    }
+
+    pub(crate) fn begin_draw_frame(&self) {
+        self.frame_id.set(self.frame_id.get().wrapping_add(1));
     }
 
     pub(crate) fn cache_epoch(&self) -> u64 {
@@ -3809,7 +3889,7 @@ impl ArtboardInstance {
     }
 
     fn mark_changed(&mut self) {
-        self.did_change = true;
+        self.did_change.set(true);
         self.cache_epoch = self.cache_epoch.wrapping_add(1);
     }
 
@@ -6102,6 +6182,7 @@ fn build_runtime_nested_artboard_instance(
         false,
     )?);
     apply_nested_artboard_origin_override(parent_graph, parent_objects, host_local_id, &mut child);
+    child.set_frame_origin(false);
     child.bind_default_view_model_artboard_list_context(file);
     if !child_has_state_machine_data_binds(file, child_graph) {
         child.clear_default_text_property_context();
@@ -6756,6 +6837,8 @@ mod tests {
             origin_x: 0.0,
             origin_y: 0.0,
             clip: true,
+            frame_origin: Cell::new(true),
+            frame_id: Cell::new(0),
             slots,
             objects,
             components,
@@ -6768,6 +6851,7 @@ mod tests {
             component_list_item_transforms: BTreeMap::new(),
             component_list_logical_items: BTreeMap::new(),
             component_list_items: BTreeMap::new(),
+            component_list_order_caches: RefCell::new(BTreeMap::new()),
             component_list_sources: BTreeMap::new(),
             ik_constraints: Vec::new(),
             joysticks_apply_before_update: true,
@@ -6833,7 +6917,7 @@ mod tests {
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::default(),
             runtime_shapes: RuntimeShapeList::default(),
-            did_change: true,
+            did_change: Cell::new(true),
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,
         }
@@ -6939,6 +7023,7 @@ mod tests {
                 retained.add_rebind_dependent(&sink);
                 sink
             },
+            draw_index_sink: None,
             context: retained,
             occurrence_identity: 1,
             logical_index: 0,
@@ -9236,7 +9321,7 @@ mod tests {
         component.dirt = ComponentDirt::NONE;
         let mut instance = synthetic_instance(vec![component], vec![0]);
         instance.dirt = ComponentDirt::NONE;
-        instance.did_change = false;
+        instance.did_change.set(false);
 
         assert!(instance.set_transform_property(0, TransformProperty::X, 12.0));
         let component = instance.component(0).unwrap();
@@ -10115,6 +10200,7 @@ mod tests {
                 context.add_rebind_dependent(&sink);
                 sink
             },
+            draw_index_sink: None,
             context: context.clone(),
             occurrence_identity: 1,
             logical_index: 0,
@@ -11120,6 +11206,7 @@ mod tests {
                     row.instance.add_rebind_dependent(&sink);
                     sink
                 },
+                draw_index_sink: None,
                 context: row.instance,
                 occurrence_identity: row.occurrence_identity,
                 logical_index: 0,
@@ -11184,6 +11271,7 @@ mod tests {
                     row.add_rebind_dependent(&sink);
                     sink
                 },
+                draw_index_sink: None,
                 context: row.clone(),
                 occurrence_identity: 1,
                 logical_index: 0,
@@ -11259,6 +11347,7 @@ mod tests {
                         first.instance.add_rebind_dependent(&sink);
                         sink
                     },
+                    draw_index_sink: None,
                     context: first.instance,
                     occurrence_identity: first.occurrence_identity,
                     logical_index: 0,
@@ -11275,6 +11364,7 @@ mod tests {
                         second.instance.add_rebind_dependent(&sink);
                         sink
                     },
+                    draw_index_sink: None,
                     context: second.instance,
                     occurrence_identity: second.occurrence_identity,
                     logical_index: 1,

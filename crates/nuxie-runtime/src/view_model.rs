@@ -7321,6 +7321,17 @@ impl RuntimeOwnedViewModelInstance {
         self.number_value_by_property_index(property_index)
     }
 
+    pub(crate) fn number_cell_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeViewModelCell> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.numbers
+            .iter()
+            .find(|number| number.property_index == property_index)
+            .map(|number| number.cell.clone())
+    }
+
     pub fn color_value_by_property_name(&self, property_name: &str) -> Option<u32> {
         let property_index = self.property_index_by_name(property_name)?;
         self.color_value_by_property_index(property_index)

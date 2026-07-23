@@ -955,6 +955,7 @@ impl FileScriptArtboard {
             file.file_view_model_instances.clone(),
         )
         .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
+        instance.set_frame_origin(false);
         let state_machine_index = file
             .artboard(artboard_index)
             .and_then(|artboard| artboard.default_state_machine_index())
@@ -1039,6 +1040,7 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
 
     fn set_frame_origin(&mut self, frame_origin: bool) {
         self.frame_origin = frame_origin;
+        self.instance.set_frame_origin(frame_origin);
     }
 
     fn data(&self) -> Option<nuxie_runtime::ScriptViewModel> {

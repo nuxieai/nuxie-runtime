@@ -3548,6 +3548,7 @@ impl ArtboardInstance {
     ) -> Result<()> {
         let mut mesh_buffers = RuntimeMeshRenderBufferSlots::default();
         let images = RuntimeRenderImages::default();
+        self.begin_draw_frame();
         // Seed the nested-artboard cycle guard with this artboard's global id.
         let nested_ancestors = [graph.global_id];
         self.draw_prepared_static_artboard_internal_with_path_cache(
@@ -3562,7 +3563,6 @@ impl ArtboardInstance {
             path_cache,
             None,
             None,
-            true,
             &nested_ancestors,
         )
     }
@@ -3601,6 +3601,8 @@ impl ArtboardInstance {
         path_cache: &mut RuntimeRenderPathCache,
         apply_origin_transform: bool,
     ) -> Result<()> {
+        self.set_frame_origin(apply_origin_transform);
+        self.begin_draw_frame();
         // Seed the nested-artboard cycle guard with this artboard's global id.
         let nested_ancestors = [graph.global_id];
         self.draw_prepared_static_artboard_internal_with_path_cache(
@@ -3615,7 +3617,6 @@ impl ArtboardInstance {
             path_cache,
             Some(&mut paint_cache.paint_configurations),
             Some(&mut paint_cache.nested_artboards),
-            apply_origin_transform,
             &nested_ancestors,
         )
     }
@@ -3635,9 +3636,11 @@ impl ArtboardInstance {
         mut nested_paint_caches: Option<
             &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
         >,
-        apply_origin_transform: bool,
         nested_ancestors: &[u32],
     ) -> Result<()> {
+        // C++ `Artboard::drawInternal` clears this before the opacity early
+        // return, so an invisible artboard still consumes its change bit.
+        self.did_change.set(false);
         if self
             .component(0)
             .is_some_and(|component| component.transform.render_opacity == 0.0)
@@ -3645,12 +3648,13 @@ impl ArtboardInstance {
             return Ok(());
         }
 
-        let needs_save = self.clip || apply_origin_transform;
+        let frame_origin = self.frame_origin();
+        let needs_save = self.clip || frame_origin;
         if needs_save {
             renderer.save();
         }
         if self.clip {
-            let (clip_left, clip_top) = if apply_origin_transform {
+            let (clip_left, clip_top) = if frame_origin {
                 (0.0, 0.0)
             } else {
                 (-self.origin_x * self.width, -self.origin_y * self.height)
@@ -3669,7 +3673,7 @@ impl ArtboardInstance {
             });
             renderer.clip_path(clip.as_ref());
         }
-        if apply_origin_transform {
+        if frame_origin {
             renderer.transform(self.artboard_origin_transform());
         }
 
@@ -3682,10 +3686,6 @@ impl ArtboardInstance {
             mounted_component_list_layout_revision,
         );
         let layout_bounds = layout_frame.bounds.as_ref().as_ref();
-        let component_list_layout_children = runtime_component_list_layout_children(
-            self,
-            layout_frame.component_list_item_bounds.as_ref(),
-        );
         let background = runtime_prepared_background_frame(self, graph, layout_bounds);
         if let Some(background) = background.as_ref() {
             runtime_draw_background(
@@ -3730,16 +3730,10 @@ impl ArtboardInstance {
                     continue;
                 }
                 for pending_clip in pending_clip_operations.drain(..) {
-                    let pending_clip_command = self.runtime_draw_command_for_node(
-                        pending_clip,
-                        graph,
-                        layout_bounds,
-                        path_cache,
-                    );
-                    runtime_draw_clip_start(
+                    runtime_draw_live_clip_start(
                         self,
                         graph,
-                        &pending_clip_command,
+                        pending_clip,
                         layout_bounds,
                         factory,
                         renderer,
@@ -3808,6 +3802,16 @@ impl ArtboardInstance {
                 continue;
             }
 
+            // TextInput is the retained container and TextInputDrawable is
+            // the shared base for its concrete cursor/text/selection
+            // drawables. Their C++ draw methods contribute no pixels; the
+            // concrete child subclasses above own the live rendering.
+            if drawable.kind == DrawableOrderKind::Drawable
+                && matches!(drawable.type_name, "TextInput" | "TextInputDrawable")
+            {
+                continue;
+            }
+
             if drawable.kind == DrawableOrderKind::LayoutProxy
                 || (drawable.kind == DrawableOrderKind::Drawable
                     && matches!(
@@ -3856,35 +3860,57 @@ impl ArtboardInstance {
                 continue;
             }
 
-            let command =
-                self.runtime_draw_command_for_node(drawable, graph, layout_bounds, path_cache);
-            if drawable.kind == DrawableOrderKind::ClipEndProxy {
-                runtime_draw_clip_end(self, graph, &command, renderer);
+            if drawable.kind == DrawableOrderKind::Drawable
+                && drawable.type_name == "ArtboardComponentList"
+            {
+                runtime_draw_live_component_list(
+                    runtime,
+                    self,
+                    graph,
+                    artboards,
+                    drawable,
+                    factory,
+                    renderer,
+                    paint_by_global,
+                    image_by_global,
+                    mesh_by_local,
+                    path_cache,
+                    paint_configurations.as_deref_mut(),
+                    match &mut nested_paint_caches {
+                        Some(caches) => Some(&mut **caches),
+                        None => None,
+                    },
+                    layout_bounds,
+                    layout_frame.component_list_item_bounds.as_ref(),
+                    nested_ancestors,
+                )?;
                 continue;
             }
-            runtime_draw_live_command(
-                runtime,
-                self,
-                graph,
-                artboards,
-                &command,
-                layout_bounds,
-                layout_frame.component_list_item_bounds.as_ref(),
-                &component_list_layout_children,
-                factory,
-                renderer,
-                paint_by_global,
-                image_by_global,
-                mesh_by_local,
-                path_cache,
-                paint_configurations.as_deref_mut(),
-                match &mut nested_paint_caches {
-                    Some(caches) => Some(&mut **caches),
-                    None => None,
-                },
-                nested_ancestors,
-                true,
-            )?;
+
+            if drawable.kind == DrawableOrderKind::Drawable
+                && matches!(drawable.type_name, "ScriptedDrawable" | "ScriptedLayout")
+            {
+                runtime_draw_live_scripted_drawable(
+                    self,
+                    graph,
+                    drawable,
+                    layout_bounds,
+                    path_cache,
+                    factory,
+                    renderer,
+                )?;
+                continue;
+            }
+
+            if drawable.kind == DrawableOrderKind::ClipEndProxy {
+                runtime_draw_live_clip_end(self, graph, drawable, renderer);
+                continue;
+            }
+
+            anyhow::bail!(
+                "live Artboard traversal has no draw family for {}",
+                drawable.type_name
+            );
         }
         // RF-21 / C++ `Artboard::drawInternal`: a trailing clip start is
         // intentionally discarded when no later live drawable flushes it.
@@ -3948,6 +3974,14 @@ impl ArtboardInstance {
                             .get(&local_id)
                             .is_some_and(|items| !items.is_empty())
                     });
+                }
+
+                if matches!(drawable.type_name, "ScriptedDrawable" | "ScriptedLayout")
+                    && !drawable
+                        .global_id
+                        .is_some_and(|global_id| self.has_script_instance_for_global(global_id))
+                {
+                    return false;
                 }
 
                 if drawable.type_name == "Image" {
@@ -7414,7 +7448,7 @@ struct RuntimeComputedLayout {
     component_list_item_bounds: BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
 }
 
-fn runtime_component_list_item_layout_size(
+pub(crate) fn runtime_component_list_item_layout_size(
     item: &crate::artboard::RuntimeComponentListItemInstance,
 ) -> (f32, f32) {
     item.child
@@ -13674,7 +13708,6 @@ fn runtime_draw_live_nested_artboard(
                 child_cache,
                 Some(&mut child_paint_cache.paint_configurations),
                 Some(&mut child_paint_cache.nested_artboards),
-                false,
                 nested_ancestors,
             )
         } else {
@@ -13712,7 +13745,6 @@ fn runtime_draw_live_nested_artboard(
                 child_cache,
                 paint_configurations.as_deref_mut(),
                 None,
-                false,
                 nested_ancestors,
             )
         }
@@ -13819,12 +13851,16 @@ fn runtime_draw_live_command(
     }
 
     if command.object_kind == RuntimeDrawCommandObjectKind::ArtboardComponentList {
-        return runtime_draw_component_list(
+        return runtime_draw_component_list_with_state(
             runtime,
             instance,
             graph,
             artboards,
-            command,
+            command
+                .local_id
+                .context("component-list draw command missing local id")?,
+            command.global_id,
+            command.needs_save_operation,
             factory,
             renderer,
             paint_by_global,
@@ -13835,7 +13871,7 @@ fn runtime_draw_live_command(
             nested_paint_caches,
             layout_bounds,
             component_list_item_bounds,
-            component_list_layout_children,
+            Some(component_list_layout_children),
             nested_ancestors,
         );
     }
@@ -14639,6 +14675,52 @@ fn runtime_draw_scripted_drawable(
         .map_err(|error| anyhow::anyhow!("scripted drawable {global_id} draw failed: {error}"));
 
     if command.needs_save_operation || needs_opacity_save {
+        renderer.restore();
+    }
+    draw_result
+}
+
+fn runtime_draw_live_scripted_drawable(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    drawable: &RuntimeDrawable,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    path_cache: &mut RuntimeRenderPathCache,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+) -> Result<()> {
+    let Some(global_id) = drawable.global_id else {
+        return Ok(());
+    };
+    let Some(script_instance) = instance.script_instance_for_global(global_id) else {
+        return Ok(());
+    };
+    let Some(local_id) = drawable.local_id else {
+        return Ok(());
+    };
+    let render_opacity = instance
+        .component(local_id)
+        .map(|component| component.transform.render_opacity)
+        .unwrap_or(1.0);
+    let needs_opacity_save = render_opacity != 1.0;
+    let needs_save = drawable.needs_save_operation || needs_opacity_save;
+    if needs_save {
+        renderer.save();
+    }
+    if needs_opacity_save {
+        renderer.modulate_opacity(render_opacity);
+    }
+    let world_transform =
+        path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds);
+    renderer.transform(runtime_render_mat(world_transform));
+
+    let mut host = crate::NoopScriptHost;
+    let draw_result = script_instance
+        .borrow_mut()
+        .call_draw(factory, renderer, &mut host)
+        .map_err(|error| anyhow::anyhow!("scripted drawable {global_id} draw failed: {error}"));
+
+    if needs_save {
         renderer.restore();
     }
     draw_result
@@ -16034,12 +16116,62 @@ fn runtime_component_list_item_local_transforms(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn runtime_draw_component_list(
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_live_component_list(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
-    command: &RuntimeDrawCommand,
+    drawable: &RuntimeDrawable,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    image_by_global: &RuntimeRenderImages,
+    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
+    path_cache: &mut RuntimeRenderPathCache,
+    paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+    nested_paint_caches: Option<
+        &mut BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
+    >,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    component_list_item_bounds: &BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
+    nested_ancestors: &[u32],
+) -> Result<()> {
+    let local_id = drawable
+        .local_id
+        .context("live component list is missing its local id")?;
+    runtime_draw_component_list_with_state(
+        runtime,
+        instance,
+        graph,
+        artboards,
+        local_id,
+        drawable.global_id,
+        drawable.needs_save_operation,
+        factory,
+        renderer,
+        paint_by_global,
+        image_by_global,
+        mesh_by_local,
+        path_cache,
+        paint_configurations,
+        nested_paint_caches,
+        layout_bounds,
+        component_list_item_bounds,
+        None,
+        nested_ancestors,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_component_list_with_state(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    local_id: usize,
+    global_id: Option<u32>,
+    needs_save_operation: bool,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
@@ -16052,12 +16184,9 @@ fn runtime_draw_component_list(
     >,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     component_list_item_bounds: &BTreeMap<usize, Vec<RuntimeLayoutBounds>>,
-    component_list_layout_children: &BTreeMap<usize, Vec<ArtboardInstance>>,
+    component_list_layout_children: Option<&BTreeMap<usize, Vec<ArtboardInstance>>>,
     nested_ancestors: &[u32],
 ) -> Result<()> {
-    let local_id = command
-        .local_id
-        .context("component-list draw command missing local id")?;
     let Some(items) = instance.component_list_items.get(&local_id) else {
         return Ok(());
     };
@@ -16079,7 +16208,7 @@ fn runtime_draw_component_list(
         host_transform_local,
         layout_bounds,
     );
-    if command.needs_save_operation {
+    if needs_save_operation {
         renderer.save();
     }
     renderer.transform(runtime_render_mat(host_world));
@@ -16089,25 +16218,9 @@ fn runtime_draw_component_list(
         local_id,
         component_list_item_bounds.get(&local_id).map(Vec::as_slice),
         component_list_layout_children
-            .get(&local_id)
-            .map(Vec::as_slice),
+            .and_then(|children| children.get(&local_id).map(Vec::as_slice)),
     );
 
-    let mut item_indices = (0..items.len()).collect::<Vec<_>>();
-    let draw_indices = items
-        .iter()
-        .map(|item| {
-            runtime
-                .view_model_property_for_symbol(item.context.borrow().view_model_index(), 16)
-                .map(|property| {
-                    property
-                        .string_property("name")
-                        .and_then(|name| item.context.borrow().number_value_by_property_name(name))
-                        .filter(|value| value.is_finite())
-                        .unwrap_or(0.0)
-                })
-        })
-        .collect::<Vec<_>>();
     let uses_draw_index_sort = instance
         .component_list_logical_items
         .get(&local_id)
@@ -16118,17 +16231,42 @@ fn runtime_draw_component_list(
                     .is_some()
             })
         });
-    if uses_draw_index_sort {
-        item_indices.sort_by(|&a, &b| {
-            draw_indices[a]
-                .unwrap_or(0.0)
-                .partial_cmp(&draw_indices[b].unwrap_or(0.0))
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| items[a].logical_index.cmp(&items[b].logical_index))
-        });
+    let order_dirty = items.iter().any(|item| {
+        item.draw_index_sink
+            .as_ref()
+            .is_some_and(|sink| !sink.peek_dirt().is_empty())
+    });
+    let mut order_caches = instance.component_list_order_caches.borrow_mut();
+    let order_cache = order_caches.entry(local_id).or_default();
+    if !order_cache.valid || order_cache.indices.len() != items.len() || order_dirty {
+        order_cache.indices.clear();
+        order_cache.indices.extend(0..items.len());
+        if uses_draw_index_sort {
+            let draw_index = |item_index: usize| {
+                let item = &items[item_index];
+                runtime
+                    .view_model_property_for_symbol(item.context.borrow().view_model_index(), 16)
+                    .and_then(|property| property.string_property("name"))
+                    .and_then(|name| item.context.borrow().number_value_by_property_name(name))
+                    .filter(|value| value.is_finite())
+                    .unwrap_or(0.0)
+            };
+            order_cache.indices.sort_by(|&a, &b| {
+                draw_index(a)
+                    .partial_cmp(&draw_index(b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| items[a].logical_index.cmp(&items[b].logical_index))
+            });
+        }
+        for item in items {
+            if let Some(sink) = item.draw_index_sink.as_ref() {
+                sink.take_dirt();
+            }
+        }
+        order_cache.valid = true;
     }
 
-    for item_index in item_indices {
+    for &item_index in &order_cache.indices {
         let item = &items[item_index];
         if nested_ancestors.contains(&item.child.graph_global_id) {
             continue;
@@ -16141,15 +16279,15 @@ fn runtime_draw_component_list(
             continue;
         };
         let cache_key = component_list_render_cache_key(
-            command.global_id,
-            command.local_id,
+            global_id,
+            Some(local_id),
             item.child.graph_global_id,
             item.logical_index,
             item.render_cache_revision,
         );
         let child_cache = path_cache.nested_artboards.get_or_insert_default(cache_key);
         let child = component_list_layout_children
-            .get(&local_id)
+            .and_then(|children| children.get(&local_id))
             .and_then(|children| children.get(item_index))
             .unwrap_or(item.child.as_ref());
 
@@ -16202,7 +16340,6 @@ fn runtime_draw_component_list(
                 child_cache,
                 Some(&mut child_paint_cache.paint_configurations),
                 Some(&mut child_paint_cache.nested_artboards),
-                false,
                 nested_ancestors,
             )?;
         } else {
@@ -16240,14 +16377,13 @@ fn runtime_draw_component_list(
                 child_cache,
                 paint_configurations.as_deref_mut(),
                 None,
-                false,
                 nested_ancestors,
             )?;
         }
         renderer.restore();
     }
 
-    if command.needs_save_operation {
+    if needs_save_operation {
         renderer.restore();
     }
     Ok(())
@@ -16430,7 +16566,6 @@ fn runtime_draw_nested_artboard(
                 child_cache,
                 Some(&mut child_paint_cache.paint_configurations),
                 Some(&mut child_paint_cache.nested_artboards),
-                false,
                 child_ancestors,
             )?;
         } else {
@@ -16468,7 +16603,6 @@ fn runtime_draw_nested_artboard(
                 child_cache,
                 paint_configurations.as_deref_mut(),
                 None,
-                false,
                 child_ancestors,
             )?;
         }
@@ -16521,7 +16655,6 @@ fn runtime_draw_nested_artboard(
             child_cache,
             Some(&mut child_paint_cache.paint_configurations),
             Some(&mut child_paint_cache.nested_artboards),
-            false,
             child_ancestors,
         )?;
     } else {
@@ -16559,7 +16692,6 @@ fn runtime_draw_nested_artboard(
             child_cache,
             paint_configurations.as_deref_mut(),
             None,
-            false,
             child_ancestors,
         )?;
     }
@@ -16815,16 +16947,16 @@ fn runtime_settle_nested_artboard_layout_child(child: &mut ArtboardInstance) {
     }
 }
 
-fn runtime_draw_clip_start(
+fn runtime_draw_live_clip_start(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
-    command: &RuntimeDrawCommand,
+    drawable: &RuntimeDrawable,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     path_cache: &mut RuntimeRenderPathCache,
 ) {
-    let Some(clipping_shape) = command
+    let Some(clipping_shape) = drawable
         .clipping_shape_local
         .and_then(|local_id| runtime_clipping_shape(graph, local_id))
     else {
@@ -16833,7 +16965,7 @@ fn runtime_draw_clip_start(
     if !instance.runtime_clipping_shape_is_visible(clipping_shape) {
         return;
     }
-    if command.needs_save_operation {
+    if drawable.needs_save_operation {
         renderer.save();
     }
     let path_commands =
@@ -16854,19 +16986,19 @@ fn runtime_draw_clip_start(
     renderer.clip_path(path.as_ref());
 }
 
-fn runtime_draw_clip_end(
+fn runtime_draw_live_clip_end(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
-    command: &RuntimeDrawCommand,
+    drawable: &RuntimeDrawable,
     renderer: &mut dyn Renderer,
 ) {
-    let Some(clipping_shape) = command
+    let Some(clipping_shape) = drawable
         .clipping_shape_local
         .and_then(|local_id| runtime_clipping_shape(graph, local_id))
     else {
         return;
     };
-    if instance.runtime_clipping_shape_is_visible(clipping_shape) && command.needs_save_operation {
+    if instance.runtime_clipping_shape_is_visible(clipping_shape) && drawable.needs_save_operation {
         renderer.restore();
     }
 }
@@ -27544,23 +27676,26 @@ mod tests {
                 fails: false,
             }),
         );
-
-        let command = RuntimeDrawCommand {
-            kind: RuntimeDrawCommandKind::Draw,
-            object_kind: RuntimeDrawCommandObjectKind::ScriptedDrawable,
-            local_id: None,
+        let scripted = RuntimeDrawable {
+            kind: DrawableOrderKind::Drawable,
+            local_id: Some(0),
             global_id: Some(900),
             type_name: "ScriptedDrawable",
-            world_transform: Some(Mat2D([1.0, 0.0, 0.0, 1.0, 10.0, 20.0])),
-            render_opacity: 0.5,
-            referenced_artboard_global: None,
             resolved_image_asset_global: None,
+            referenced_artboard_global: None,
+            layout_local: None,
+            flattened_draw_rules_local: None,
+            draw_target_local: None,
             clipping_shape_local: None,
+            image_mesh: None,
+            text_draw_owner: None,
             needs_save_operation: true,
-            shape_paints: Vec::new(),
-            simple_solid_shape: false,
-            world_stroke_shape: false,
+            prev: None,
+            next: None,
         };
+        let component = instance.component_mut(0).expect("root component exists");
+        component.transform.world_transform = Mat2D([1.0, 0.0, 0.0, 1.0, 10.0, 20.0]);
+        component.transform.render_opacity = 0.5;
         let stats = Rc::new(CountingStats::default());
         let mut factory = CountingFactory {
             stats,
@@ -27571,15 +27706,14 @@ mod tests {
         };
         let mut path_cache = RuntimeRenderPathCache::default();
 
-        runtime_draw_scripted_drawable(
+        runtime_draw_live_scripted_drawable(
             &instance,
             artboard,
-            &command,
+            &scripted,
             None,
             &mut path_cache,
             &mut factory,
             &mut renderer,
-            true,
         )
         .expect("scripted draw succeeds");
 
@@ -27610,22 +27744,28 @@ mod tests {
                 fails: true,
             }),
         );
-        let command = RuntimeDrawCommand {
-            kind: RuntimeDrawCommandKind::Draw,
-            object_kind: RuntimeDrawCommandObjectKind::ScriptedDrawable,
-            local_id: None,
+        let scripted = RuntimeDrawable {
+            kind: DrawableOrderKind::Drawable,
+            local_id: Some(0),
             global_id: Some(901),
             type_name: "ScriptedDrawable",
-            world_transform: Some(Mat2D::IDENTITY),
-            render_opacity: 0.5,
-            referenced_artboard_global: None,
             resolved_image_asset_global: None,
+            referenced_artboard_global: None,
+            layout_local: None,
+            flattened_draw_rules_local: None,
+            draw_target_local: None,
             clipping_shape_local: None,
+            image_mesh: None,
+            text_draw_owner: None,
             needs_save_operation: true,
-            shape_paints: Vec::new(),
-            simple_solid_shape: false,
-            world_stroke_shape: false,
+            prev: None,
+            next: None,
         };
+        instance
+            .component_mut(0)
+            .expect("root component exists")
+            .transform
+            .render_opacity = 0.5;
         let mut factory = CountingFactory {
             stats: Rc::new(CountingStats::default()),
             next_path_id: 0,
@@ -27635,15 +27775,14 @@ mod tests {
         };
         let mut path_cache = RuntimeRenderPathCache::default();
 
-        let error = runtime_draw_scripted_drawable(
+        let error = runtime_draw_live_scripted_drawable(
             &instance,
             artboard,
-            &command,
+            &scripted,
             None,
             &mut path_cache,
             &mut factory,
             &mut renderer,
-            true,
         )
         .expect_err("throwing script draw must surface an error");
 

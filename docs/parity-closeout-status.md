@@ -582,6 +582,16 @@ upstream-sync-map registry).
   owner resources directly. Nested Artboard, Leaf, and Layout traversal reads
   the mounted child occurrence and recurses directly into its live draw walk;
   no draw-time child clone or nested `RuntimeDrawCommand` remains.
+  RD-C6 is complete: ordinary `Artboard::draw`/`drawInternal` traversal now
+  walks the complete live drawable family, including component-list rows and
+  scripted drawables/layouts, with lazy clipping and frame-origin state owned
+  by the Artboard occurrence. Component lists retain mounted row identity and
+  stable draw-index order; exact number-cell dirt invalidates that order, and
+  unhosted lists settle authoritative intrinsic child bounds during update
+  rather than cloning a child at draw time. Unknown future drawable families
+  fail closed. The diagnostic/prepared compatibility surface and scene
+  resource caches remain for RD-C7; ordinary renderer feed no longer enters
+  command-kind dispatch.
   No RD-C7 deletion has begun. The mandatory canonical,
   quiet-host, fully fenced post-C1/C2 performance checkpoint gates RD-C7 and
   all scene-cache deletion only; RD-C3..C6 additive family migrations may
@@ -598,6 +608,10 @@ upstream-sync-map registry).
   idle spread against the unchanged 12% fence. Per the one-preflight rule,
   neither `r4-timing-gate` nor `perf-hot-loop` was retried in that session; the
   checkpoint remains deferred and no number was accepted as evidence.
+  On 2026-07-23 the next session's single canonical preflight also failed
+  closed at 65.15% host-idle spread versus the unchanged 12% fence
+  (`target/r4-timing-gate/20260723T072026Z-90912`). No comparison or
+  `perf-hot-loop` result was accepted, and the measurement was not retried.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -657,11 +671,7 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-C6 remaining virtual family and Artboard cutover. Continue the mapped
-   C++ ownership translation under RF-1..RF-26 with the 1,468-row pixel corpus
-   refereeing the merge. RD-C6 is additive and does not wait on the deferred
-   performance checkpoint.
-2. #RD-1 post-C1/C2 measured USER CHECKPOINT. Run `r4-timing-gate` and
+1. #RD-1 post-C1/C2 measured USER CHECKPOINT. Run `r4-timing-gate` and
    `perf-hot-loop` only as the first action of a quiet-window session, with one
    canonical preflight, the unchanged 12% host-idle-spread fence, and every
    validity check intact. If that preflight fails, defer without another
@@ -813,6 +823,31 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-23 — #RD-C6 completed the remaining virtual-family and Artboard
+  cutover. Ordinary renderer feed now follows one complete live
+  `Artboard::draw`/`drawInternal` walk across Shape, Image, Text/TextInput,
+  Layout, nested Artboard, component-list, scripted, and clip-proxy families;
+  no current object is materialized into a `RuntimeDrawCommand`. Frame origin,
+  frame identity, `didChange` clearing, lazy clipping, scripted save/restore,
+  and mounted component-list child traversal follow the pinned C++ ownership
+  order. Component-list draw-index sorting is retained per occurrence and
+  invalidated by exact number-cell dirt; unhosted list children receive their
+  settled intrinsic bounds during update, which restored exact
+  `component_list_follow_path` output without a draw-time clone. Unknown
+  future drawable kinds fail closed. The two zero-second advance-return tests
+  and the chained next-frame `applyEvents` assertion are unchanged. Executor
+  evidence is runtime 405/405, pinned C++ probes 721/721 inside the green
+  probe-armed workspace, ordinary/scripted goldens 317/317 entries and
+  647/647 exact segments with zero divergences, CAPI smoke and lint green,
+  and renderer pixels 1,468/1,468 with 1,370 byte-exact rows, zero
+  divergences, and zero gated failures. The immutable size report is
+  8,283,752 B (7.90 MiB) with scripting off and 9,201,336 B (8.78 MiB) with
+  scripting on, both below the unchanged 9 MiB budget. Correspondence rows
+  remain `pending-verification` for the orchestrator. No RD-C7 cache/facade
+  deletion occurred. The session's sole canonical timing preflight failed the
+  unchanged host-idle fence at 65.15% versus 12%; it produced no accepted
+  delta, was not retried, and RD-C7 remains blocked.
 
 - 2026-07-22 — #RD-C5 moved layout and nested-artboard rendering onto live
   clone-owned resources. LayoutComponent owners retain paint and clip paths

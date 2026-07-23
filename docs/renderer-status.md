@@ -3077,6 +3077,25 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-23: #RD-C6 completed live Artboard traversal across the remaining
+  component-list, scripted, and virtual drawable families. Ordinary renderer
+  feed now performs one live `draw`/`drawInternal` walk with occurrence-owned
+  frame origin, frame-entry `didChange` clearing, lazy clipping, exact
+  scripted save/restore, retained component-list row identity, and
+  cell-dirt-driven draw-index ordering; it no longer dispatches current
+  objects through `RuntimeDrawCommand`. Unknown future families fail closed.
+  Runtime tests are 405/405, the probe-armed workspace includes 721/721 pinned
+  C++ probes, and CAPI smoke plus `lint-gate` pass. Ordinary/scripted parity is
+  317/317 entries and 647/647 exact segments with zero divergences. The
+  current-runtime Dawn reference and Rust candidate report 1,468/1,468 pixels,
+  zero divergences, zero gated failures, and 1,370 byte-exact rows on Apple M5
+  Max. Immutable size evidence is 8,283,752 B (7.90 MiB) with scripting off
+  and 9,201,336 B (8.78 MiB) with scripting on, both below the unchanged 9 MiB
+  budget. The session's sole canonical post-C1/C2 timing preflight failed
+  closed at 65.15% host-idle spread against the unchanged 12% fence; no
+  comparison, `perf-hot-loop`, or retry followed. RD-C7 and all scene-cache
+  deletion remain blocked pending a valid quiet-host number and user review.
+
 - 2026-07-22: #RD-C5 moved layout and nested-artboard rendering onto the live
   owner topology. LayoutComponent paint/clip paths are retained per clone and
   dirtied with their owning object; layout proxies, LayoutComponent, and

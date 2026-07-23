@@ -1855,6 +1855,7 @@ impl RunnerScriptArtboard {
             .with_context(|| {
                 format!("failed to instantiate scripted artboard index {artboard_index}")
             })?;
+        instance.set_frame_origin(false);
         let state_machine_index = runtime
             .artboard(artboard_index)
             .and_then(|artboard| artboard.uint_property("defaultStateMachineId"))
@@ -1929,6 +1930,7 @@ impl ScriptArtboard for RunnerScriptArtboard {
 
     fn set_frame_origin(&mut self, frame_origin: bool) {
         self.frame_origin = frame_origin;
+        self.instance.set_frame_origin(frame_origin);
     }
 
     fn data(&self) -> Option<nuxie_runtime::ScriptViewModel> {

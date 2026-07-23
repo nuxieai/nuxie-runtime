@@ -3077,6 +3077,22 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-22: #RD-C4 moved Text and TextInput rendering onto clone-owned live
+  drawable resources. Object-local dirt now rebuilds each retained
+  shaped/style-paint frame; ordinary traversal dispatches Text/TextInput
+  directly and keeps dense Text/style paint pools as one-graph/instance
+  backend sidecars. The scene-wide text epoch, scene text-command map, and
+  generic text replay path are gone. C++ empty-shape behavior remains exact:
+  the draw save/restore envelope survives, while `Text::buildRenderStyles`'
+  early return prevents a synthetic clip. No RD-C7 scene cache was deleted.
+  Runtime tests are 403/403, the probe-armed workspace includes 721/721 pinned
+  C++ probes, and CAPI smoke plus lint pass. Ordinary/scripted parity is
+  317/317 entries and 647/647 exact segments with zero divergences; renderer
+  pixels are 1,468/1,468 with zero divergences and zero gated failures. The
+  session's one canonical post-C1/C2 timing preflight failed closed at 25.86%
+  host-idle spread against the unchanged 12% fence; no retry or
+  `perf-hot-loop` run followed, so the checkpoint remains deferred and RD-C7
+  remains blocked. RD-C5 and RD-C6 remain unblocked.
 - 2026-07-22: #RD-C3 moved Image, Mesh, and SliceMesh dispatch onto the live
   owner topology. Clone-owned Images retain the direct C++ `m_Mesh`
   equivalent installed by Mesh/NSlicer children, ordinary traversal resolves

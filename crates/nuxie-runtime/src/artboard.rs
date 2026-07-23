@@ -314,7 +314,6 @@ pub struct ArtboardInstance {
     pub(crate) command_epoch: u64,
     pub(crate) path_epoch: u64,
     pub(crate) layout_epoch: u64,
-    pub(crate) text_epoch: u64,
     text_affecting_locals: Vec<bool>,
     // C++ SolidColor mutates its attached RenderPaint when its property dirt
     // is applied. Renderer resources live outside the Rust instance, so retain
@@ -1117,7 +1116,6 @@ impl ArtboardInstance {
             command_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
-            text_epoch: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::from_graph(graph),
@@ -3803,10 +3801,6 @@ impl ArtboardInstance {
         self.layout_epoch
     }
 
-    pub(crate) fn text_epoch(&self) -> u64 {
-        self.text_epoch
-    }
-
     pub(crate) fn solid_color_paint_revision(&self, local_id: usize) -> u64 {
         self.solid_color_paint_revisions
             .get(local_id)
@@ -3871,16 +3865,18 @@ impl ArtboardInstance {
 
     pub(crate) fn mark_layout_changed(&mut self) {
         self.layout_epoch = self.layout_epoch.wrapping_add(1);
+        self.runtime_drawables.mark_text_resources_dirty();
         self.mark_prepared_changed();
     }
 
     pub(crate) fn mark_path_changed(&mut self) {
         self.path_epoch = self.path_epoch.wrapping_add(1);
+        self.runtime_drawables.mark_text_resources_dirty();
         self.mark_prepared_changed();
     }
 
     fn mark_text_changed(&mut self) {
-        self.text_epoch = self.text_epoch.wrapping_add(1);
+        self.runtime_drawables.mark_text_resources_dirty();
     }
 
     fn mark_text_changed_for_local(&mut self, local_id: usize) {
@@ -4050,6 +4046,16 @@ impl ArtboardInstance {
             return false;
         }
 
+        if !(dirt
+            & (ComponentDirt::TEXT_SHAPE
+                | ComponentDirt::WORLD_TRANSFORM
+                | ComponentDirt::RENDER_OPACITY
+                | ComponentDirt::PAINT))
+            .is_empty()
+        {
+            self.runtime_drawables
+                .mark_text_resource_dirty_for_local(local_id);
+        }
         self.components[index].dirt |= dirt;
         if dirt.contains(ComponentDirt::LAYOUT_STYLE) {
             self.mark_layout_changed();
@@ -6821,7 +6827,6 @@ mod tests {
             command_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
-            text_epoch: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::default(),

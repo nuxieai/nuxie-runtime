@@ -27,7 +27,7 @@ use crate::draw::{
 };
 use crate::properties::{joystick_x_property_key, joystick_y_property_key, property_key_for_name};
 use crate::view_model::RuntimeFontAssetValue;
-use crate::{ArtboardInstance, Mat2D, RuntimeDrawCommand, RuntimePathCommand};
+use crate::{ArtboardInstance, Mat2D, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
 use std::collections::BTreeMap;
 
@@ -325,13 +325,10 @@ pub(crate) fn runtime_text_shape_paint_commands(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
-    command: &RuntimeDrawCommand,
+    text_local: usize,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Result<Vec<RuntimeShapePaintCommand>> {
-    let text_local = command
-        .local_id
-        .context("text draw command missing local id")?;
     let slice = StaticTextSlice::from_graph(runtime, graph, text_local)?;
     let render_opacity = instance
         .component(text_local)

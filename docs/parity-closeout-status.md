@@ -567,11 +567,16 @@ upstream-sync-map registry).
   memberships; ordinary traversal reads live path visibility/collapse state
   and dispatches Shape/ShapePaint directly in owner order. The temporary
   full-frame command-materialization switch and seam are deleted. The narrower
-  current-object adapters for later RD-C4..C6 families and all scene resource
+  current-object adapters for later RD-C5..C6 families and all scene resource
   caches remain. RD-C3 is complete: Image traversal now dispatches the live
   clone-owned Image and its retained `m_Mesh` counterpart directly; ImageAsset
   render images and Mesh/NSlicer-owned buffers remain one-to-one backend
   sidecars, and NSlicer preparation no longer reconstructs a command frame.
+  RD-C4 is complete: clone-owned Text and TextInput drawables now retain their
+  own shaped/style-paint command frame, rebuild it under object-local dirt, and
+  dispatch the live family directly without a `RuntimeDrawCommand`. Text paint
+  pools are dense object/style sidecars, and the scene-wide text epoch and
+  text-command cache are gone.
   No RD-C7 deletion has begun. The mandatory canonical,
   quiet-host, fully fenced post-C1/C2 performance checkpoint gates RD-C7 and
   all scene-cache deletion only; RD-C3..C6 additive family migrations may
@@ -584,6 +589,10 @@ upstream-sync-map registry).
   known 1.67x prepared-Rust aggregate gap, not classified as a new regression.
   Settle it only in the mandatory post-C1/C2 checkpoint, run canonically on a
   quiet host with every fence and validity check intact.
+  The session's single canonical preflight then failed closed at 25.86% host-
+  idle spread against the unchanged 12% fence. Per the one-preflight rule,
+  neither `r4-timing-gate` nor `perf-hot-loop` was retried in that session; the
+  checkpoint remains deferred and no number was accepted as evidence.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -643,9 +652,9 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-C4 Text and TextInput. Continue the mapped C++ ownership translation
+1. #RD-C5 layout and nested traversal. Continue the mapped C++ ownership translation
    under RF-1..RF-26 with the 1,468-row pixel corpus refereeing the merge.
-   RD-C4..C6 are additive family migrations and do not wait on the deferred
+   RD-C5..C6 are additive family migrations and do not wait on the deferred
    performance checkpoint.
 2. #RD-1 post-C1/C2 measured USER CHECKPOINT. Run `r4-timing-gate` and
    `perf-hot-loop` only as the first action of a quiet-window session, with one
@@ -653,7 +662,7 @@ upstream-sync-map registry).
    validity check intact. If that preflight fails, defer without another
    attempt that session. Report the valid delta to the user and stop for
    review. RD-C7 and all scene-cache deletion remain blocked until that review;
-   RD-C4..C6 do not.
+   RD-C5..C6 do not.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -799,6 +808,25 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-22 — #RD-C4 moved Text and TextInput drawing onto clone-owned live
+  drawable resources. Each drawable retains its shaped/style-paint command
+  frame and rebuilds it only under object-local text, transform, opacity, path,
+  or paint dirt; ordinary traversal dispatches Text/TextInput directly without
+  constructing a `RuntimeDrawCommand`. Dense backend paint pools are now owned
+  by one graph/instance and indexed by Text/style, matching C++ object
+  ownership. The scene-wide `text_epoch`, scene text-command map, and generic
+  text replay path are removed; no RD-C7 scene cache or facade was deleted.
+  Empty shaped frames preserve C++ `Text::draw` save/restore while following
+  `Text::buildRenderStyles`' early return rather than synthesizing a clip.
+  Runtime tests are 403/403, the probe-armed workspace includes 721/721 pinned
+  C++ probes, and CAPI smoke plus lint pass. Ordinary and scripted goldens are
+  317/317 entries and 647/647 exact segments with zero divergences; renderer
+  pixels are 1,468/1,468 with zero divergences and zero gated failures. The
+  correspondence rows remain `pending-verification` until the orchestrator's
+  independent run. The session's one canonical performance preflight failed
+  the unchanged idle-spread fence at 25.86% versus 12%, so no measurement
+  retry occurred and RD-C7 remains blocked.
 
 - 2026-07-22 — #RD-C3 moved Image and Mesh drawing onto the live owner
   topology. Each clone-owned Image retains the direct C++ `m_Mesh` equivalent

@@ -42,6 +42,7 @@ use crate::text::{
     text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D, TransformProperty};
+use std::cell::{Cell, RefCell};
 
 struct RuntimeImageAssetCatalog<'a> {
     globals: Vec<u32>,
@@ -3808,6 +3809,24 @@ impl ArtboardInstance {
                 continue;
             }
 
+            if drawable.kind == DrawableOrderKind::Drawable
+                && (drawable.type_name == "Text" || is_text_input_drawable_type(drawable.type_name))
+            {
+                runtime_draw_live_text_family(
+                    runtime,
+                    self,
+                    graph,
+                    drawable,
+                    layout_bounds,
+                    factory,
+                    renderer,
+                    paint_by_global,
+                    path_cache,
+                    paint_configurations.as_deref_mut(),
+                )?;
+                continue;
+            }
+
             let command =
                 self.runtime_draw_command_for_node(drawable, graph, layout_bounds, path_cache);
             if drawable.kind == DrawableOrderKind::ClipEndProxy {
@@ -6611,6 +6630,44 @@ fn runtime_image_mesh_owner(
 }
 
 #[derive(Debug, Clone)]
+struct RuntimeTextDrawOwner {
+    dirty: Cell<bool>,
+    retained: RefCell<Option<RuntimeCachedTextShapePaints>>,
+}
+
+impl Default for RuntimeTextDrawOwner {
+    fn default() -> Self {
+        Self {
+            dirty: Cell::new(true),
+            retained: RefCell::new(None),
+        }
+    }
+}
+
+impl RuntimeTextDrawOwner {
+    fn mark_dirty(&self) {
+        self.dirty.set(true);
+    }
+
+    fn retained_or_build(
+        &self,
+        build: impl FnOnce() -> Result<RuntimeCachedTextShapePaints>,
+    ) -> Result<RuntimeCachedTextShapePaints> {
+        if self.dirty.get() || self.retained.borrow().is_none() {
+            let retained = build()?;
+            *self.retained.borrow_mut() = Some(retained);
+            self.dirty.set(false);
+        }
+        Ok(self
+            .retained
+            .borrow()
+            .as_ref()
+            .expect("text owner was just populated")
+            .clone())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct RuntimeDrawable {
     kind: DrawableOrderKind,
     local_id: Option<usize>,
@@ -6625,6 +6682,10 @@ pub(crate) struct RuntimeDrawable {
     /// C++ `Image::m_Mesh`: a non-owning pointer to the clone-owned Mesh or
     /// the NSlicer's uniquely owned SliceMesh.
     image_mesh: Option<RuntimeImageMeshOwner>,
+    /// C++ `Text::m_drawCommands` / TextInputDrawable's parent-owned paths.
+    /// This CPU-side retained frame is clone-owned with the concrete drawable
+    /// and is dirtied by object changes, never by a scene epoch.
+    text_draw_owner: Option<RuntimeTextDrawOwner>,
     needs_save_operation: bool,
     /// C++ `Drawable::prev`; `Artboard::drawInternal` follows this link.
     prev: Option<usize>,
@@ -6649,6 +6710,9 @@ impl RuntimeDrawable {
                 .local_id
                 .filter(|_| drawable.type_name == "Image")
                 .and_then(|image_local| runtime_image_mesh_owner(graph, image_local)),
+            text_draw_owner: (drawable.type_name == "Text"
+                || is_text_input_drawable_type(drawable.type_name))
+            .then(RuntimeTextDrawOwner::default),
             needs_save_operation: true,
             prev: None,
             next: None,
@@ -6672,6 +6736,7 @@ impl RuntimeDrawable {
             draw_target_local: None,
             clipping_shape_local: Some(clipping_shape_local),
             image_mesh: None,
+            text_draw_owner: None,
             needs_save_operation: true,
             prev: None,
             next: None,
@@ -6778,6 +6843,23 @@ impl RuntimeDrawableList {
             Some(&initial_clipping_visibility),
         );
         result
+    }
+
+    pub(crate) fn mark_text_resources_dirty(&self) {
+        for drawable in self.drawables.iter().take(self.imported_count) {
+            if let Some(owner) = drawable.text_draw_owner.as_ref() {
+                owner.mark_dirty();
+            }
+        }
+    }
+
+    pub(crate) fn mark_text_resource_dirty_for_local(&self, local_id: usize) {
+        let Some(drawable_index) = self.drawable_by_local.get(&local_id).copied() else {
+            return;
+        };
+        if let Some(owner) = self.drawables[drawable_index].text_draw_owner.as_ref() {
+            owner.mark_dirty();
+        }
     }
 
     fn sort_draw_order(
@@ -9548,7 +9630,39 @@ pub struct RuntimeRenderPaintCache {
 #[derive(Default)]
 pub struct RuntimeRenderPaints {
     paints_by_global: Vec<Option<Box<dyn RenderPaint>>>,
-    text_paint_pools: BTreeMap<RuntimeTextPaintPoolKey, Vec<Box<dyn RenderPaint>>>,
+    text_paint_pools: RuntimeTextPaintPools,
+}
+
+#[derive(Default)]
+struct RuntimeTextPaintPools {
+    owner: Option<(u32, u64)>,
+    by_text_local: Vec<BTreeMap<usize, Vec<Box<dyn RenderPaint>>>>,
+}
+
+impl RuntimeTextPaintPools {
+    fn pool_mut(&mut self, key: RuntimeTextPaintPoolKey) -> &mut Vec<Box<dyn RenderPaint>> {
+        let owner = (key.graph_global_id, key.instance_identity);
+        if self.owner != Some(owner) {
+            self.owner = Some(owner);
+            self.by_text_local.clear();
+        }
+        if self.by_text_local.len() <= key.text_local {
+            self.by_text_local
+                .resize_with(key.text_local.saturating_add(1), BTreeMap::new);
+        }
+        self.by_text_local[key.text_local]
+            .entry(key.style_local)
+            .or_default()
+    }
+
+    fn pool(&self, key: RuntimeTextPaintPoolKey) -> Option<&Vec<Box<dyn RenderPaint>>> {
+        if self.owner != Some((key.graph_global_id, key.instance_identity)) {
+            return None;
+        }
+        self.by_text_local
+            .get(key.text_local)?
+            .get(&key.style_local)
+    }
 }
 
 impl RuntimeRenderPaints {
@@ -9968,7 +10082,6 @@ pub struct RuntimeRenderPathCache {
     clipping_shape_commands: RuntimeClippingShapeCommandSlots,
     world_transforms: RuntimeWorldTransformSlots,
     image_layout_transforms: RuntimeImageLayoutTransformSlots,
-    text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
     nested_artboards: RuntimeNestedRenderCaches<RuntimeRenderPathCache>,
@@ -10539,22 +10652,8 @@ impl RuntimeImageLayoutTransformSlots {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct RuntimeTextShapePaintCacheSlot {
-    graph_global_id: u32,
-    text_local: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RuntimeTextShapePaintCacheKey {
-    path_epoch: u64,
-    layout_epoch: u64,
-    text_epoch: u64,
-}
-
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct RuntimeCachedTextShapePaints {
-    key: RuntimeTextShapePaintCacheKey,
     commands: Arc<Vec<RuntimeShapePaintCommand>>,
     clip_bounds: Option<StaticTextClipBounds>,
 }
@@ -11362,62 +11461,6 @@ impl RuntimeRenderPathCache {
         slot.as_ref()
             .expect("path geometry command cache was just populated")
             .clone()
-    }
-
-    fn text_shape_paint_commands(
-        &mut self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
-        command: &RuntimeDrawCommand,
-        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    ) -> Result<RuntimeCachedTextShapePaints> {
-        let text_local = command
-            .local_id
-            .context("text draw command missing local id")?;
-        let slot = RuntimeTextShapePaintCacheSlot {
-            graph_global_id: graph.global_id,
-            text_local,
-        };
-        let key = RuntimeTextShapePaintCacheKey {
-            path_epoch: instance.path_epoch(),
-            layout_epoch: instance.layout_epoch(),
-            text_epoch: instance.text_epoch(),
-        };
-
-        if self
-            .text_shape_paints
-            .get(&slot)
-            .is_none_or(|cached| cached.key != key)
-        {
-            let layout_constraint =
-                instance.runtime_text_layout_constraint(text_local, layout_bounds);
-            let mut commands = runtime_text_shape_paint_commands(
-                runtime,
-                instance,
-                graph,
-                command,
-                layout_bounds,
-                layout_constraint,
-            )?;
-            let clip_bounds =
-                static_text_clip_bounds(runtime, graph, instance, text_local, layout_constraint)?;
-            assign_shape_paint_path_slot_indices(&mut commands);
-            self.text_shape_paints.insert(
-                slot,
-                RuntimeCachedTextShapePaints {
-                    key,
-                    commands: Arc::new(commands),
-                    clip_bounds,
-                },
-            );
-        }
-
-        Ok(self
-            .text_shape_paints
-            .get(&slot)
-            .expect("text shape paint cache was just populated")
-            .clone())
     }
 
     fn gradient_preparation_frame(
@@ -12973,6 +13016,337 @@ fn runtime_text_paint_shape_world(
     draws_text.then(|| shape_world_override.unwrap_or(live_shape_world))
 }
 
+fn runtime_retained_text_draw_frame(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    drawable: &RuntimeDrawable,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+) -> Result<RuntimeCachedTextShapePaints> {
+    let owner = drawable
+        .text_draw_owner
+        .as_ref()
+        .context("live text drawable is missing its retained owner")?;
+    let drawable_local = drawable
+        .local_id
+        .context("live text drawable is missing its local id")?;
+    owner.retained_or_build(|| {
+        let (mut commands, clip_bounds) = if drawable.type_name == "Text" {
+            let layout_constraint =
+                instance.runtime_text_layout_constraint(drawable_local, layout_bounds);
+            (
+                runtime_text_shape_paint_commands(
+                    runtime,
+                    instance,
+                    graph,
+                    drawable_local,
+                    layout_bounds,
+                    layout_constraint,
+                )?,
+                static_text_clip_bounds(
+                    runtime,
+                    graph,
+                    instance,
+                    drawable_local,
+                    layout_constraint,
+                )?,
+            )
+        } else {
+            (
+                runtime_text_input_shape_paint_commands(
+                    runtime,
+                    instance,
+                    graph,
+                    drawable_local,
+                    layout_bounds,
+                )?,
+                None,
+            )
+        };
+        assign_shape_paint_path_slot_indices(&mut commands);
+        Ok(RuntimeCachedTextShapePaints {
+            commands: Arc::new(commands),
+            clip_bounds,
+        })
+    })
+}
+
+/// Direct port of C++ `Text::draw`, `TextStylePaint::draw`, and
+/// `TextInputDrawable::draw` (`src/text/text.cpp:845-875`,
+/// `src/text/text_style_paint.cpp:42-127`,
+/// `src/text/text_input_drawable.cpp:24-41`). Each drawable owns its retained
+/// CPU draw frame; this path never constructs a `RuntimeDrawCommand`.
+#[allow(clippy::too_many_arguments)]
+fn runtime_draw_live_text_family(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    drawable: &RuntimeDrawable,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut RuntimeRenderPaints,
+    path_cache: &mut RuntimeRenderPathCache,
+    mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
+) -> Result<()> {
+    let drawable_local = drawable
+        .local_id
+        .context("live text drawable is missing its local id")?;
+    let retained =
+        runtime_retained_text_draw_frame(runtime, instance, graph, drawable, layout_bounds)?;
+
+    let is_text = drawable.type_name == "Text";
+    let live_world = path_cache.component_world_transform_with_bounds(
+        instance,
+        graph,
+        drawable_local,
+        layout_bounds,
+    );
+    let clip_path_commands = retained
+        .clip_bounds
+        // C++ `Text::buildRenderStyles` returns before rebuilding `m_clipRect`
+        // when shaping produced no renderable frame (`text.cpp:534-543`).
+        // The retained command frame is the live-feed equivalent of that
+        // condition; keep the outer save/restore, but do not synthesize a clip.
+        .filter(|_| !retained.commands.is_empty())
+        .map(|bounds| runtime_text_clip_path_commands(bounds, live_world));
+    let needs_outer_save =
+        is_text && (drawable.needs_save_operation || clip_path_commands.is_some());
+    if needs_outer_save {
+        renderer.save();
+    }
+    if let Some(path_commands) = clip_path_commands.as_deref() {
+        // C++ `Text::m_clipPath` is clockwise and retained on the Text.
+        let key =
+            path_cache.retained_world_render_path_key(instance, graph, RenderFillRule::Clockwise);
+        let clip_path = path_cache.text_clip_path(key, drawable_local, factory, path_commands);
+        renderer.clip_path(clip_path.as_ref());
+    }
+
+    let mut temporary_paints = retained
+        .commands
+        .iter()
+        .filter(|paint| paint.uses_temporary_paint && paint.text_paint_pool.is_none())
+        .map(|_| factory.make_render_paint())
+        .collect::<Vec<_>>();
+    let mut temporary_paint_index = 0usize;
+
+    for paint in retained.commands.iter() {
+        let global_id = paint.paint_global_id;
+        let text_paint_pool_slot = paint.text_paint_pool.map(|pool_use| {
+            let key = RuntimeTextPaintPoolKey {
+                graph_global_id: graph.global_id,
+                instance_identity: instance.instance_identity(),
+                text_local: drawable_local,
+                style_local: pool_use.spec.style_local,
+            };
+            let pool = paint_by_global.text_paint_pools.pool_mut(key);
+            while pool.len() < pool_use.spec.paint_count {
+                pool.push(factory.make_render_paint());
+            }
+            (key, pool_use.paint_index)
+        });
+        let temporary_index = if paint.uses_temporary_paint && text_paint_pool_slot.is_none() {
+            let object = runtime
+                .object(global_id as usize)
+                .with_context(|| format!("missing paint global {global_id}"))?;
+            let render_paint = temporary_paints
+                .get_mut(temporary_paint_index)
+                .context("missing temporary text render paint")?;
+            let index = temporary_paint_index;
+            temporary_paint_index += 1;
+            runtime_configure_paint(render_paint.as_mut(), instance, object, paint, None)?;
+            Some(index)
+        } else {
+            let paint_configuration_is_current =
+                paint_configurations
+                    .as_deref()
+                    .is_some_and(|configurations| {
+                        configurations.is_current(
+                            global_id,
+                            runtime_paint_configuration_epoch(instance, paint),
+                        )
+                    });
+            if !paint_configuration_is_current {
+                let object = runtime
+                    .object(global_id as usize)
+                    .with_context(|| format!("missing paint global {global_id}"))?;
+                let render_paint = paint_by_global
+                    .paint_mut(global_id)
+                    .with_context(|| format!("missing render paint for global {global_id}"))?
+                    .as_mut();
+                if let Some(configurations) = paint_configurations.as_mut() {
+                    runtime_configure_paint_with_cache(
+                        render_paint,
+                        configurations,
+                        global_id,
+                        instance,
+                        object,
+                        paint,
+                    )?;
+                } else {
+                    runtime_configure_paint(render_paint, instance, object, paint, None)?;
+                }
+            }
+            None
+        };
+        if let Some((key, paint_index)) = text_paint_pool_slot {
+            let object = runtime
+                .object(global_id as usize)
+                .with_context(|| format!("missing paint global {global_id}"))?;
+            let render_paint = paint_by_global
+                .text_paint_pools
+                .pool_mut(key)
+                .get_mut(paint_index)
+                .context("missing pooled text render paint")?;
+            runtime_configure_paint(render_paint.as_mut(), instance, object, paint, None)?;
+        }
+
+        let draw_path_revision = runtime_draw_path_revision(instance, paint.path_kind);
+        let effect_or_shape_path_commands = if paint.has_effect_path {
+            paint.effect_path_commands.as_slice()
+        } else {
+            paint.path_commands.as_slice()
+        };
+        let draw_path_commands = paint
+            .feather_state
+            .as_ref()
+            .filter(|feather| feather.inner)
+            .map(|feather| feather.inner_path_commands.as_slice())
+            .unwrap_or(effect_or_shape_path_commands);
+        let paint_world = paint.shape_world_override.unwrap_or(live_world);
+        let draw_path_cache_local = if paint.has_effect_path {
+            Some(paint.paint_local)
+        } else {
+            Some(drawable_local)
+        };
+        let inner_feather_path_cache_local = if paint
+            .feather_state
+            .as_ref()
+            .is_some_and(|feather| feather.inner)
+        {
+            Some(paint.paint_local)
+        } else {
+            draw_path_cache_local
+        };
+
+        let mut saved = !paint.needs_save_operation;
+        if let Some(feather) = paint.feather_state.as_ref()
+            && runtime_feather_uses_world_space(feather)
+            && !feather.inner
+            && runtime_feather_has_offset(feather)
+        {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+        }
+        if matches!(
+            paint.path_kind,
+            RuntimeShapePaintPathKind::Local | RuntimeShapePaintPathKind::LocalClockwise
+        ) {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            renderer.transform(runtime_render_mat(paint_world));
+        }
+        if let Some(feather) = paint.feather_state.as_ref() {
+            if feather.inner {
+                if feather.inner_path_commands.is_empty() {
+                    continue;
+                }
+                if !saved {
+                    saved = true;
+                    renderer.save();
+                }
+                let clip_path = path_cache.draw_path(
+                    RuntimeDrawPathCacheKey {
+                        kind: RuntimeDrawPathCacheKind::Draw,
+                        path_kind: runtime_draw_path_cache_path_kind(paint),
+                        local_id: draw_path_cache_local,
+                        path_index: paint.clip_path_slot_index,
+                    },
+                    draw_path_revision,
+                    factory,
+                    effect_or_shape_path_commands,
+                    RenderFillRule::Clockwise,
+                );
+                renderer.clip_path(clip_path.as_ref());
+            } else if !runtime_feather_uses_world_space(feather)
+                && runtime_feather_has_offset(feather)
+            {
+                if !saved {
+                    saved = true;
+                    renderer.save();
+                }
+                renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+            }
+        }
+
+        let replay_fill_rule = (!is_text && paint.paint_type == RuntimeShapePaintKind::Fill)
+            .then_some(paint.fill_rule);
+        let prepared_raw_path = paint.prepared_raw_path.as_ref().filter(|_| {
+            !paint.has_effect_path
+                && !paint
+                    .feather_state
+                    .as_ref()
+                    .is_some_and(|feather| feather.inner)
+        });
+        let path = path_cache.draw_path_with_optional_fill_rule_and_prepared_raw_path(
+            RuntimeDrawPathCacheKey {
+                kind: RuntimeDrawPathCacheKind::Draw,
+                path_kind: runtime_draw_path_cache_path_kind(paint),
+                local_id: inner_feather_path_cache_local,
+                path_index: paint.path_slot_index,
+            },
+            draw_path_revision,
+            factory,
+            draw_path_commands,
+            RenderFillRule::Clockwise,
+            replay_fill_rule,
+            prepared_raw_path,
+        );
+        let render_paint = if let Some((key, paint_index)) = text_paint_pool_slot {
+            paint_by_global
+                .text_paint_pools
+                .pool(key)
+                .and_then(|pool| pool.get(paint_index))
+                .context("missing pooled text render paint")?
+                .as_ref()
+        } else if let Some(index) = temporary_index {
+            temporary_paints[index].as_ref()
+        } else {
+            paint_by_global
+                .paint(global_id)
+                .with_context(|| format!("missing render paint for global {global_id}"))?
+                .as_ref()
+        };
+        renderer.draw_path(path.as_ref(), render_paint);
+        if saved && paint.needs_save_operation {
+            renderer.restore();
+        }
+        if let Some(spec) = paint.ensure_text_paint_pool_after_draw {
+            let key = RuntimeTextPaintPoolKey {
+                graph_global_id: graph.global_id,
+                instance_identity: instance.instance_identity(),
+                text_local: drawable_local,
+                style_local: spec.style_local,
+            };
+            let pool = paint_by_global.text_paint_pools.pool_mut(key);
+            while pool.len() < spec.paint_count {
+                pool.push(factory.make_render_paint());
+            }
+        }
+    }
+
+    if needs_outer_save {
+        renderer.restore();
+    }
+    Ok(())
+}
+
 fn runtime_draw_live_command(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -13125,40 +13499,13 @@ fn runtime_draw_live_command(
         path_cache,
         retained_world_is_current,
     );
-    let draws_text = command.object_kind == RuntimeDrawCommandObjectKind::Text;
-    let text_local = draws_text.then_some(command.local_id).flatten();
-    let text_shape_paints = if draws_text {
-        Some(path_cache.text_shape_paint_commands(
-            runtime,
-            instance,
-            graph,
-            command,
-            layout_bounds,
-        )?)
-    } else {
-        None
-    };
-    let text_clip_path_commands = if text_local.is_some()
-        && text_shape_paints
-            .as_ref()
-            .is_some_and(|paints| !paints.commands.is_empty())
-    {
-        text_shape_paints
-            .as_ref()
-            .and_then(|paints| paints.clip_bounds)
-            .map(|bounds| runtime_text_clip_path_commands(bounds, shape_world))
-    } else {
-        None
-    };
-    let shape_paints = if draws_text {
-        text_shape_paints
-            .as_ref()
-            .expect("text shape paints were just populated")
-            .commands
-            .as_slice()
-    } else {
-        command.shape_paints.as_slice()
-    };
+    // Text and TextInput are dispatched from their clone-owned live objects
+    // before a current-object command adapter is constructed.
+    debug_assert_ne!(command.object_kind, RuntimeDrawCommandObjectKind::Text);
+    let draws_text = false;
+    let text_local = None;
+    let text_clip_path_commands: Option<Vec<RuntimePathCommand>> = None;
+    let shape_paints = command.shape_paints.as_slice();
     let text_needs_save_operation =
         draws_text && (command.needs_save_operation || text_clip_path_commands.is_some());
     if text_needs_save_operation {
@@ -13210,7 +13557,7 @@ fn runtime_draw_live_command(
                     text_local: command.local_id.unwrap_or_default(),
                     style_local: pool_use.spec.style_local,
                 };
-                let pool = paint_by_global.text_paint_pools.entry(key).or_default();
+                let pool = paint_by_global.text_paint_pools.pool_mut(key);
                 while pool.len() < pool_use.spec.paint_count {
                     pool.push(factory.make_render_paint());
                 }
@@ -13282,8 +13629,8 @@ fn runtime_draw_live_command(
                 .with_context(|| format!("missing paint global {global_id}"))?;
             let render_paint = paint_by_global
                 .text_paint_pools
-                .get_mut(&key)
-                .and_then(|pool| pool.get_mut(paint_index))
+                .pool_mut(key)
+                .get_mut(paint_index)
                 .context("missing pooled text render paint")?;
             runtime_configure_paint(render_paint.as_mut(), instance, object, paint, None)?;
         }
@@ -13416,7 +13763,7 @@ fn runtime_draw_live_command(
         let render_paint = if let Some((key, paint_index)) = text_paint_pool_slot {
             paint_by_global
                 .text_paint_pools
-                .get(&key)
+                .pool(key)
                 .and_then(|pool| pool.get(paint_index))
                 .context("missing pooled text render paint")?
                 .as_ref()
@@ -13439,7 +13786,7 @@ fn runtime_draw_live_command(
                 text_local: command.local_id.unwrap_or_default(),
                 style_local: spec.style_local,
             };
-            let pool = paint_by_global.text_paint_pools.entry(key).or_default();
+            let pool = paint_by_global.text_paint_pools.pool_mut(key);
             while pool.len() < spec.paint_count {
                 pool.push(factory.make_render_paint());
             }
@@ -23129,6 +23476,33 @@ mod tests {
             visited_entries, IMAGE_COUNT,
             "catalog lookups must not revisit the imported asset stream"
         );
+    }
+
+    #[test]
+    fn text_draw_owner_rebuilds_only_after_object_local_dirt() {
+        let owner = RuntimeTextDrawOwner::default();
+        let builds = Cell::new(0usize);
+        let build = || {
+            builds.set(builds.get() + 1);
+            Ok(RuntimeCachedTextShapePaints {
+                commands: Arc::new(Vec::new()),
+                clip_bounds: None,
+            })
+        };
+
+        owner
+            .retained_or_build(build)
+            .expect("initial build succeeds");
+        owner
+            .retained_or_build(build)
+            .expect("clean reuse succeeds");
+        assert_eq!(builds.get(), 1);
+
+        owner.mark_dirty();
+        owner
+            .retained_or_build(build)
+            .expect("dirty rebuild succeeds");
+        assert_eq!(builds.get(), 2);
     }
 
     #[test]

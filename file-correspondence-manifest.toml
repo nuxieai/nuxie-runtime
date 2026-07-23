@@ -4612,7 +4612,7 @@ b6_row_id = "B6-0383"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "Consolidated Rust port for text."
+note = "RD-C4 live Text traversal and clone-owned retained shape/style frame implemented; pending orchestrator verification."
 
 [[file]]
 upstream = "src/text/raw_text_input.cpp"
@@ -4624,7 +4624,7 @@ b6_row_id = "B6-0384"
 b6_verdict = "UNKNOWN"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "F2: TextInput rendering is ported; editing behavior remains partial."
+note = "RD-C4 live TextInput rendering is implemented on clone-owned drawable resources; editing behavior remains partial; pending orchestrator verification."
 
 [[file]]
 upstream = "src/text/text.cpp"
@@ -4636,7 +4636,7 @@ b6_row_id = "B6-0385"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "Consolidated Rust port for text."
+note = "RD-C4 ports Text::draw ownership, object-local retained draw frames, and live traversal; pending orchestrator verification."
 
 [[file]]
 upstream = "src/text/text_engine.cpp"
@@ -4696,7 +4696,7 @@ b6_row_id = "B6-0390"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "F2: TextInput rendering is ported; editing behavior remains partial."
+note = "RD-C4 ports TextInputDrawable live drawing; editing behavior remains partial; pending orchestrator verification."
 
 [[file]]
 upstream = "src/text/text_input_selected_text.cpp"
@@ -4840,7 +4840,7 @@ b6_row_id = "B6-0402"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "Consolidated Rust port for text."
+note = "RD-C4 ports TextStylePaint live drawing with dense Text/style backend paint pools; pending orchestrator verification."
 
 [[file]]
 upstream = "src/text/text_target_modifier.cpp"

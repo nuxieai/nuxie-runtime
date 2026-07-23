@@ -86,6 +86,24 @@ The follow-up R4 rerun is explicitly deferred until a quiet host is available.
 The checked-in 12% host-idle-spread fence remains unchanged and no invalid
 bracket is promoted to evidence.
 
+### Post-cutover checkpoint attempts
+
+After RD-C1 through RD-C6 removed current-object command materialization from
+ordinary renderer feed, the checkpoint was rerun with immutable
+source-identified executables:
+
+| Attempt | A source | B source | Host idle spread | Result |
+| --- | --- | --- | ---: | --- |
+| 20260723T072026Z-90912 | `076b4139` | `d335d4a1` | 65.15% | invalid: greater than 12% |
+| 20260723T081932Z-60125 | `076b4139` | `6830602c` | 36.54% | invalid: greater than 12% |
+
+Both used pinned C++ `d788e8ec` and the canonical A-B-B-A sequence. Each
+completed its timed legs but failed closed in `validate-host-load`; neither
+produced an accepted comparison. The second session performed no retry and did
+not run `perf-hot-loop`, following the one-preflight quiet-window rule. These
+rows are provenance records, not performance evidence, and RD-C7 remains
+blocked.
+
 ## Correctness and floors
 
 - Spike slice: 3/3 entries and 7/7 exact segments, zero divergence.

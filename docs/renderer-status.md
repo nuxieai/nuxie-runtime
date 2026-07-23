@@ -3077,6 +3077,14 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-23: The configured post-RD-C6 A-B-B-A checkpoint used immutable
+  C++ `d788e8ec`, pre-live A `076b4139`, and RD-C6 B `6830602c` runners. Its
+  only bracket failed closed in `validate-host-load` at 36.54% idle spread
+  against the unchanged 12% fence
+  (`target/r4-timing-gate/20260723T081932Z-60125`). No comparison,
+  `perf-hot-loop`, or retry followed. The attempt is invalid evidence and
+  RD-C7 remains blocked pending a valid quiet-host number and user review.
+
 - 2026-07-23: #RD-C6 completed live Artboard traversal across the remaining
   component-list, scripted, and virtual drawable families. Ordinary renderer
   feed now performs one live `draw`/`drawInternal` walk with occurrence-owned

@@ -612,6 +612,12 @@ upstream-sync-map registry).
   closed at 65.15% host-idle spread versus the unchanged 12% fence
   (`target/r4-timing-gate/20260723T072026Z-90912`). No comparison or
   `perf-hot-loop` result was accepted, and the measurement was not retried.
+  A later quiet-window session built an immutable RD-C6 runner at `6830602c`
+  and ran one configured A-B-B-A bracket against pre-live A `076b4139` and
+  pinned C++ `d788e8ec`. It likewise failed closed in `validate-host-load` at
+  36.54% idle spread (`target/r4-timing-gate/20260723T081932Z-60125`), before
+  any comparison was accepted. No retry or `perf-hot-loop` followed. RD-C7
+  remains blocked.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -823,6 +829,15 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-23 — The sole configured post-RD-C6 performance checkpoint attempt
+  used immutable C++ `d788e8ec`, pre-live A `076b4139`, and RD-C6 B
+  `6830602c` runners in the canonical A-B-B-A sequence. The unchanged 12%
+  host-idle fence rejected the bracket at 36.54% during
+  `validate-host-load`; no comparison exists. Per the one-attempt rule, no
+  retry and no `perf-hot-loop` followed. This is not performance evidence,
+  does not clear the user checkpoint, and leaves RD-C7 plus every scene-cache
+  deletion blocked.
 
 - 2026-07-23 — #RD-C6 completed the remaining virtual-family and Artboard
   cutover. Ordinary renderer feed now follows one complete live

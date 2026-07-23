@@ -3077,6 +3077,22 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-22: #RD-C1 established the live drawable/order foundation for the
+  renderer-feed restoration. Each ArtboardInstance now owns stable drawable
+  objects, and command construction follows their retained `prev` links;
+  DrawRules/DrawTarget changes relink those same objects under ordinary dirt,
+  and ClippingShape start/end proxies return to an owner pool. Hidden and
+  clipping visibility are live
+  generated-property reads, while imported order and initial values are only
+  construction inputs. The sorted-order prepared frame and draw-order epoch
+  were removed. Command materialization and scene resource caches remain for
+  RD-C2 onward; no RD-C7 demolition has begun. Closeout held the pixel referee
+  at 1468/1468, zero divergences, and zero gated failures.
+- 2026-07-22: The invalid unfenced R4 observation of
+  `gm-bug339297-clockwise-atomic` at 2.129754x C++ is WATCH-only, consistent
+  with the known 1.67x aggregate prepared-Rust gap, and is not evidence. It is
+  deferred to the mandatory post-C1/C2 quiet-host checkpoint. Every future
+  measurement keeps all fences and validity checks intact.
 - 2026-07-17: Closed R4 and Phase R's final open queue item. Generic atomic
   sampler bindings now have pipeline lifetime, reducing bevel bind groups
   4->3 without changing draws, geometry, or bind-group sets. The counter report

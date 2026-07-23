@@ -557,6 +557,21 @@ upstream-sync-map registry).
   slice; both disposable translations were discarded. A second measured user
   checkpoint is binding after C1/C2 remove command materialization and before
   any scene-cache deletion; demolition cannot self-clear that checkpoint.
+  RD-C1 is complete: each `ArtboardInstance` now owns a stable boxed drawable
+  arena whose objects carry the live `prev`/`next` order, target membership,
+  clip proxies, and save intent. Ordinary `DrawOrder`/`Clipping` dirt relinks
+  or refreshes that owner state from live generated properties. Imported graph
+  order and mutable values are construction inputs only; the sorted-order
+  prepared frame and `draw_order_epoch` bridge are deleted. RD-C2 is next; the
+  command-materialization seam and every scene cache remain intact until that
+  lane supplies the complete Shape/path/paint live feed.
+  WATCH: a user-authorized but invalid 2026-07-22 unfenced R4 bracket observed
+  `gm-bug339297-clockwise-atomic` at 2.129754x C++ in its post-tail B leg. The
+  bracket is discarded as evidence because host-idle spread was 58.47% and A
+  repeat drift was 1.225880x. The observation is consistent with the already-
+  known 1.67x prepared-Rust aggregate gap, not classified as a new regression.
+  Settle it only in the mandatory post-C1/C2 checkpoint, run canonically on a
+  quiet host with every fence and validity check intact.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -616,15 +631,17 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. #RD-C1 live drawable and draw-order foundation, followed by #RD-C2 Shape,
-   paths, and paints. RD-1b2's rulebook stress test is complete and both
-   disposable translations are discarded. Port the mapped C++ files directly
-   under RF-1..RF-26; do not reshape the prepared Rust feed. After C1/C2 remove
-   the command-materialization seam, stop for the second measured USER
+1. #RD-C2 Shape, paths, and paints. RD-C1's object-owned live list, target
+   relinking, clip-proxy pool, and save-elision foundation is complete. Port the
+   mapped C++ files directly under RF-1..RF-26; do not reshape the prepared Rust
+   feed. Once C2 removes the command-materialization seam, stop for the second
+   measured USER
    CHECKPOINT. No scene-cache deletion may begin until the new delta is reported
    and reviewed. `r4-timing-gate` remains deferred to a quiet host after four
-   brackets were invalidated by the unchanged 12% host-idle-spread fence; no R4
-   ratio is claimed.
+   canonical brackets were invalidated by the unchanged 12% host-idle-spread
+   fence. A later unfenced bracket is discarded and recorded only as the WATCH
+   above; no R4 ratio is claimed. No future measurement may override a fence or
+   validity check, including a labeled one-off run.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -770,6 +787,21 @@ Decisions log.)
   re-enabled.
 
 ## Log
+
+- 2026-07-22 — #RD-C1 replaced the sorted drawable frame with clone-owned,
+  stable drawable objects linked through live `prev`/`next` ids. DrawTarget and
+  DrawRules mutations now dirt the Artboard exactly like C++; ordinary update
+  relinks the list, pools/reuses ClippingShape proxy objects, and recomputes
+  save elision from live clipping visibility. `willDraw` reads live drawable
+  flags for ordinary and layout-proxy objects, graph topology is construction-
+  only, and the draw-order epoch/cache layer is gone. Focused tests pin object
+  identity, target reassignment/placement, proxy reuse, and live hidden state.
+  No command-materialization seam or scene cache was deleted; RD-C2 and its
+  mandatory post-C1/C2 performance checkpoint remain ahead of RD-C7. Closeout
+  evidence: runtime 402/402; pinned-C++ probe 721/721; ordinary and scripted
+  goldens 317/317 plus 647/647 with zero divergences; renderer pixels
+  1468/1468 with zero divergences and zero gated failures; the probe-armed full
+  workspace suite and CAPI smoke also passed.
 
 - 2026-07-22 — #RD-1b2 codified the live renderer-feed translation rulebook as
   RF-1..RF-26 in `docs/PORTING.md`, then stress-tested it with two independent,

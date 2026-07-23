@@ -53,7 +53,7 @@ use crate::data_bind_graph::{
     RuntimeDataBindGraphValue,
 };
 use crate::draw::{
-    RuntimeInitialNestedLayoutPaintFrame, RuntimeLayoutBounds,
+    RuntimeDrawableList, RuntimeInitialNestedLayoutPaintFrame, RuntimeLayoutBounds,
     runtime_apply_component_list_item_layout_bounds,
 };
 use crate::objects::{InstanceObjectArena, InstanceSlot};
@@ -320,7 +320,9 @@ pub struct ArtboardInstance {
     // is applied. Renderer resources live outside the Rust instance, so retain
     // the equivalent per-mutator revision for a cheap draw-time handoff.
     solid_color_paint_revisions: Vec<u64>,
-    pub(crate) draw_order_epoch: u64,
+    /// C++ `Artboard::m_Drawables`/`m_FirstDrawable`: clone-owned drawable
+    /// objects linked in live draw order. Import graph order only seeds it.
+    pub(crate) runtime_drawables: RuntimeDrawableList,
     pub(crate) did_change: bool,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
@@ -1115,7 +1117,7 @@ impl ArtboardInstance {
             text_epoch: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
-            draw_order_epoch: 1,
+            runtime_drawables: RuntimeDrawableList::from_graph(graph),
             did_change: true,
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
@@ -3808,10 +3810,6 @@ impl ArtboardInstance {
             .unwrap_or_default()
     }
 
-    pub(crate) fn draw_order_epoch(&self) -> u64 {
-        self.draw_order_epoch
-    }
-
     fn mark_changed(&mut self) {
         self.did_change = true;
         self.cache_epoch = self.cache_epoch.wrapping_add(1);
@@ -3902,7 +3900,10 @@ impl ArtboardInstance {
     }
 
     fn mark_draw_order_changed(&mut self) {
-        self.draw_order_epoch = self.draw_order_epoch.wrapping_add(1);
+        self.mark_prepared_changed();
+    }
+
+    fn mark_clipping_changed(&mut self) {
         self.mark_prepared_changed();
     }
 
@@ -4056,6 +4057,9 @@ impl ArtboardInstance {
         }
         if dirt.contains(ComponentDirt::DRAW_ORDER) {
             self.mark_draw_order_changed();
+        }
+        if dirt.contains(ComponentDirt::CLIPPING) {
+            self.mark_clipping_changed();
         }
         self.on_component_dirty(local_id);
 
@@ -4550,6 +4554,12 @@ impl ArtboardInstance {
                 self.mark_render_opacity_changed();
             }
         }
+        if dirt.contains(ComponentDirt::DRAW_ORDER) {
+            self.sort_runtime_draw_order();
+        }
+        if dirt.contains(ComponentDirt::CLIPPING) {
+            self.refresh_runtime_drawable_save_operations();
+        }
     }
 
     pub(crate) fn apply_joysticks(&mut self, can_apply_before_update: bool) -> bool {
@@ -4635,12 +4645,16 @@ impl ArtboardInstance {
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("DrawRules")
             && property_key_for_name("DrawRules", "drawTargetId") == Some(property_key)
         {
-            changed |= self.add_dirt(local_id, ComponentDirt::DRAW_ORDER, false);
+            // C++ `DrawRules::drawTargetIdChanged` dirties the owning
+            // Artboard, not the non-Component DrawRules object.
+            changed |= self.add_dirt(0, ComponentDirt::DRAW_ORDER, false);
         }
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("DrawTarget")
             && property_key_for_name("DrawTarget", "placementValue") == Some(property_key)
         {
-            changed |= self.add_dirt(local_id, ComponentDirt::DRAW_ORDER, false);
+            // C++ `DrawTarget::placementValueChanged` dirties the owning
+            // Artboard, not the non-Component DrawTarget object.
+            changed |= self.add_dirt(0, ComponentDirt::DRAW_ORDER, false);
         }
         if solo_active_component_id_property_key() == Some(property_key) {
             changed |= self.propagate_solo_collapse(local_id);
@@ -4690,6 +4704,13 @@ impl ArtboardInstance {
                 }
                 self.clip = value;
                 true
+            }
+            Some("ClippingShape")
+                if property_key_for_name("ClippingShape", "isVisible") == Some(property_key) =>
+            {
+                // C++ `ClippingShape::isVisibleChanged` dirties the owning
+                // Artboard so its update refreshes save-operation elision.
+                self.add_dirt(0, ComponentDirt::CLIPPING, false)
             }
             Some("NestedArtboard")
                 if property_key_for_name("NestedArtboard", "isPaused") == Some(property_key) =>
@@ -6799,7 +6820,7 @@ mod tests {
             text_epoch: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
-            draw_order_epoch: 1,
+            runtime_drawables: RuntimeDrawableList::default(),
             did_change: true,
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,
@@ -8539,24 +8560,24 @@ mod tests {
     }
 
     #[test]
-    fn draw_order_epoch_tracks_draw_order_dirt() {
+    fn draw_order_dirt_invalidates_the_prepared_command_frame() {
         let component = synthetic_component(0, 0);
         let mut instance = synthetic_instance(vec![component], vec![0]);
 
-        let initial_draw_order_epoch = instance.draw_order_epoch();
+        let initial_command_epoch = instance.command_epoch();
         assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
-        assert_eq!(instance.draw_order_epoch(), initial_draw_order_epoch);
+        assert_eq!(instance.command_epoch(), initial_command_epoch);
 
         assert!(instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
-        assert!(instance.draw_order_epoch() > initial_draw_order_epoch);
+        assert!(instance.command_epoch() > initial_command_epoch);
 
-        let draw_order_epoch = instance.draw_order_epoch();
+        let command_epoch = instance.command_epoch();
         assert!(!instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
-        assert_eq!(instance.draw_order_epoch(), draw_order_epoch);
+        assert_eq!(instance.command_epoch(), command_epoch);
 
         instance.clear_component_dirt(0);
         assert!(instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
-        assert!(instance.draw_order_epoch() > draw_order_epoch);
+        assert!(instance.command_epoch() > command_epoch);
     }
 
     #[test]
@@ -8582,7 +8603,6 @@ mod tests {
         let initial_prepared_epoch = instance.prepared_epoch();
         let initial_path_epoch = instance.path_epoch();
         let initial_layout_epoch = instance.layout_epoch();
-        let initial_draw_order_epoch = instance.draw_order_epoch();
         let initial_paint_revision = instance.solid_color_paint_revision(0);
 
         assert!(instance.set_keyed_solid_color_property(0, color_key, false, 0xff00_ff00));
@@ -8591,7 +8611,6 @@ mod tests {
         assert_eq!(instance.prepared_epoch(), initial_prepared_epoch);
         assert_eq!(instance.path_epoch(), initial_path_epoch);
         assert_eq!(instance.layout_epoch(), initial_layout_epoch);
-        assert_eq!(instance.draw_order_epoch(), initial_draw_order_epoch);
         assert!(instance.solid_color_paint_revision(0) > initial_paint_revision);
     }
 

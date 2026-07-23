@@ -5,7 +5,7 @@ use nuxie_graph::{
     GradientStopNode, MeshGeometryNode, MeshVertexNode, NSlicerAxisNode, NSlicerDetailsNode,
     ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode,
     ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
-    ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
+    ShapePaintStateNode, StrokeEffectNode,
 };
 use nuxie_image_codec::{decoded_rgba_len, preflight_encoded_image};
 use nuxie_render_api::{
@@ -26,6 +26,7 @@ use taffy::prelude::{
 use taffy::style::Direction as TaffyDirection;
 
 use crate::artboard::RuntimeLegacyImageLayoutScaleKey;
+use crate::objects::InstanceObjectArena;
 use crate::properties::{
     RuntimeLayoutComputedProperty, artboard_index_for_graph, cached_property_key_for_name,
     property_key_for_name, runtime_object_explicit_bool_property_by_key,
@@ -606,6 +607,35 @@ fn runtime_component_list_override_property_key_for_name(property_name: &str) ->
 }
 
 impl ArtboardInstance {
+    /// Apply C++ `Artboard::sortDrawOrder` to the clone-owned drawable list.
+    /// Called from the ordinary component update pass for `DrawOrder` dirt.
+    pub(crate) fn sort_runtime_draw_order(&mut self) {
+        let draw_target_id_key = runtime_draw_property_key_for_name("DrawRules", "drawTargetId");
+        let placement_value_key =
+            runtime_draw_property_key_for_name("DrawTarget", "placementValue");
+        let is_visible_key = property_key_for_name("ClippingShape", "isVisible");
+        self.runtime_drawables.sort_draw_order(
+            Some(&self.objects),
+            draw_target_id_key,
+            placement_value_key,
+            is_visible_key,
+            None,
+            None,
+            None,
+        );
+    }
+
+    /// Apply C++ `Artboard::clearRedundantOperations` after clipping
+    /// visibility changes, without rebuilding drawable ownership or order.
+    pub(crate) fn refresh_runtime_drawable_save_operations(&mut self) {
+        let is_visible_key = property_key_for_name("ClippingShape", "isVisible");
+        self.runtime_drawables.clear_redundant_operations(
+            Some(&self.objects),
+            is_visible_key,
+            None,
+        );
+    }
+
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawCommand> {
         let layout_bounds = self.runtime_taffy_layout_bounds(graph, None);
         self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref())
@@ -883,7 +913,7 @@ impl ArtboardInstance {
                             .clipping_shape_local
                             .and_then(|local_id| runtime_clipping_shape(graph, local_id))
                             .map(|clipping_shape| {
-                                if !clipping_shape.is_visible {
+                                if !self.runtime_clipping_shape_is_visible(clipping_shape) {
                                     return true;
                                 }
                                 let commands = path_cache.clipping_shape_path_commands(
@@ -1707,29 +1737,20 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Vec<RuntimeDrawCommand> {
-        let sorted = self.runtime_sorted_drawable_order(graph);
         let mut path_cache = RuntimeRenderPathCache::default();
-        self.draw_commands_with_sorted_drawable_order(
-            graph,
-            layout_bounds,
-            &sorted,
-            &mut path_cache,
-            false,
-        )
+        self.draw_commands_with_live_drawable_order(graph, layout_bounds, &mut path_cache, false)
     }
 
-    fn draw_commands_with_sorted_drawable_order(
+    fn draw_commands_with_live_drawable_order(
         &self,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-        sorted_drawable_order: &[SortedDrawableNode],
         path_cache: &mut RuntimeRenderPathCache,
         include_invisible: bool,
     ) -> Vec<RuntimeDrawCommand> {
-        self.draw_commands_with_sorted_drawable_order_reusing(
+        self.draw_commands_with_live_drawable_order_reusing(
             graph,
             layout_bounds,
-            sorted_drawable_order,
             path_cache,
             include_invisible,
             Vec::new(),
@@ -1740,20 +1761,19 @@ impl ArtboardInstance {
     /// when the caller can hand it back exclusively. Command contents still
     /// come from the current instance, so every prepared-frame invalidation
     /// keeps its existing output and dirt semantics.
-    fn draw_commands_with_sorted_drawable_order_reusing(
+    fn draw_commands_with_live_drawable_order_reusing(
         &self,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-        sorted_drawable_order: &[SortedDrawableNode],
         path_cache: &mut RuntimeRenderPathCache,
         include_invisible: bool,
         mut commands: Vec<RuntimeDrawCommand>,
     ) -> Vec<RuntimeDrawCommand> {
         commands.clear();
-        let mut pending_clip_operations = Vec::<&SortedDrawableNode>::new();
+        let mut pending_clip_operations = Vec::<&RuntimeDrawable>::new();
         let mut empty_clips = 0i32;
 
-        for drawable in sorted_drawable_order {
+        for drawable in self.runtime_drawables.iter() {
             let prev_clips = empty_clips;
             empty_clips += self.runtime_empty_clip_count(drawable, graph);
             if !self.runtime_will_draw(drawable, include_invisible)
@@ -1791,87 +1811,6 @@ impl ArtboardInstance {
         }
 
         commands
-    }
-
-    fn runtime_sorted_drawable_order(&self, graph: &ArtboardGraph) -> Vec<SortedDrawableNode> {
-        let Some(draw_target_id_key) =
-            runtime_draw_property_key_for_name("DrawRules", "drawTargetId")
-        else {
-            return graph.sorted_drawable_order.clone();
-        };
-        let Some(placement_value_key) =
-            runtime_draw_property_key_for_name("DrawTarget", "placementValue")
-        else {
-            return graph.sorted_drawable_order.clone();
-        };
-
-        let draw_targets_by_local = graph
-            .draw_targets
-            .iter()
-            .map(|target| (target.local_id, target))
-            .collect::<BTreeMap<_, _>>();
-        let active_target_by_rules = graph
-            .draw_rules
-            .iter()
-            .filter_map(|rules| {
-                let target_local =
-                    usize::try_from(self.uint_property(rules.local_id, draw_target_id_key)?)
-                        .ok()?;
-                draw_targets_by_local
-                    .contains_key(&target_local)
-                    .then_some((rules.local_id, target_local))
-            })
-            .collect::<BTreeMap<_, _>>();
-        let mut main = Vec::new();
-        let mut grouped = BTreeMap::<usize, Vec<SortedDrawableNode>>::new();
-        for drawable in &graph.drawable_order {
-            let draw_target_local = drawable
-                .flattened_draw_rules_local
-                .and_then(|rules_local| active_target_by_rules.get(&rules_local).copied());
-            let node = runtime_sorted_drawable_node(drawable, draw_target_local);
-            if let Some(draw_target_local) = draw_target_local {
-                grouped.entry(draw_target_local).or_default().push(node);
-            } else {
-                main.push(node);
-            }
-        }
-
-        for draw_target_local in &graph.draw_target_order {
-            let Some(group) = grouped.remove(draw_target_local) else {
-                continue;
-            };
-            if group.is_empty() {
-                continue;
-            }
-            let Some(target) = draw_targets_by_local.get(draw_target_local) else {
-                continue;
-            };
-            let Some(target_drawable_local) = target.drawable_local else {
-                continue;
-            };
-            let Some(target_position) = main
-                .iter()
-                .position(|drawable| drawable.local_id == Some(target_drawable_local))
-            else {
-                continue;
-            };
-            let placement_value = self
-                .uint_property(target.local_id, placement_value_key)
-                .unwrap_or(target.placement_value);
-            let insert_at = match placement_value {
-                0 => target_position,
-                1 => target_position + 1,
-                _ => continue,
-            };
-            main.splice(insert_at..insert_at, group);
-        }
-
-        let mut sorted = runtime_interleave_clipping_proxy_drawables(
-            main.into_iter().rev(),
-            &graph.clipping_shapes,
-        );
-        runtime_apply_save_operation_elision(&mut sorted, &graph.clipping_shapes);
-        sorted
     }
 
     pub fn draw_static_artboard(
@@ -2709,7 +2648,7 @@ impl ArtboardInstance {
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Vec<(usize, RuntimeDrawCommand)> {
         let mut commands = Vec::new();
-        for drawable in &graph.sorted_drawable_order {
+        for drawable in self.runtime_drawables.iter() {
             if drawable.referenced_artboard_global.is_none() {
                 continue;
             }
@@ -3788,7 +3727,7 @@ impl ArtboardInstance {
                 }
                 RuntimeDrawCommandKind::ClipEnd => {
                     if pending_clip_operations.pop().is_none() {
-                        runtime_draw_clip_end(graph, command, renderer);
+                        runtime_draw_clip_end(self, graph, command, renderer);
                     }
                     continue;
                 }
@@ -3835,7 +3774,9 @@ impl ArtboardInstance {
                 prepared.world_dependent,
             )?;
         }
-        debug_assert!(pending_clip_operations.is_empty());
+        // RF-21 / C++ `Artboard::drawInternal`: a trailing clip start is
+        // intentionally discarded when no later live drawable flushes it.
+        pending_clip_operations.clear();
         path_cache.pending_clip_commands = pending_clip_operations;
 
         if needs_save {
@@ -3861,17 +3802,29 @@ impl ArtboardInstance {
             .is_some_and(|component| component.transform.render_opacity != 0.0)
     }
 
-    fn runtime_will_draw(&self, drawable: &SortedDrawableNode, include_invisible: bool) -> bool {
+    fn runtime_clipping_shape_is_visible(&self, clipping_shape: &ClippingShapeNode) -> bool {
+        property_key_for_name("ClippingShape", "isVisible")
+            .and_then(|key| self.bool_property(clipping_shape.local_id, key))
+            .unwrap_or(false)
+    }
+
+    fn runtime_will_draw(&self, drawable: &RuntimeDrawable, include_invisible: bool) -> bool {
         match drawable.kind {
             DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy => true,
             DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
-                if drawable.is_hidden {
-                    return false;
-                }
                 let component_local = match drawable.kind {
                     DrawableOrderKind::LayoutProxy => drawable.layout_local,
                     _ => drawable.local_id,
                 };
+                let live_hidden = component_local
+                    .and_then(|local_id| {
+                        property_key_for_name("Drawable", "drawableFlags")
+                            .and_then(|key| self.uint_property(local_id, key))
+                    })
+                    .is_some_and(|flags| flags & 1 != 0);
+                if live_hidden {
+                    return false;
+                }
                 if component_local
                     .is_some_and(|local_id| self.runtime_component_is_collapsed_for_draw(local_id))
                 {
@@ -3924,11 +3877,7 @@ impl ArtboardInstance {
         }
     }
 
-    fn runtime_empty_clip_count(
-        &self,
-        drawable: &SortedDrawableNode,
-        graph: &ArtboardGraph,
-    ) -> i32 {
+    fn runtime_empty_clip_count(&self, drawable: &RuntimeDrawable, graph: &ArtboardGraph) -> i32 {
         let empty_delta = match drawable.kind {
             DrawableOrderKind::ClipStartProxy => 1,
             DrawableOrderKind::ClipEndProxy => -1,
@@ -3945,7 +3894,7 @@ impl ArtboardInstance {
             return 0;
         };
 
-        if clipping_shape.is_visible
+        if self.runtime_clipping_shape_is_visible(clipping_shape)
             && !self.clipping_shape_has_runtime_clip_path(clipping_shape, &graph.path_composers)
         {
             empty_delta
@@ -4008,7 +3957,7 @@ impl ArtboardInstance {
 
     fn runtime_draw_command_for_node(
         &self,
-        drawable: &SortedDrawableNode,
+        drawable: &RuntimeDrawable,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         path_cache: &mut RuntimeRenderPathCache,
@@ -4087,7 +4036,7 @@ impl ArtboardInstance {
 
     fn runtime_shape_paint_commands(
         &self,
-        drawable: &SortedDrawableNode,
+        drawable: &RuntimeDrawable,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         path_cache: &mut RuntimeRenderPathCache,
@@ -6474,180 +6423,462 @@ impl ArtboardInstance {
     }
 }
 
-fn runtime_sorted_drawable_node(
-    drawable: &DrawableOrderNode,
+/// One clone-owned runtime drawable. This is the direct Rust counterpart of
+/// C++ `Drawable`: mutable draw-order links and save intent live on the object,
+/// while immutable import topology only seeds construction.
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeDrawable {
+    kind: DrawableOrderKind,
+    local_id: Option<usize>,
+    global_id: Option<u32>,
+    type_name: &'static str,
+    resolved_image_asset_global: Option<u32>,
+    referenced_artboard_global: Option<u32>,
+    layout_local: Option<usize>,
+    flattened_draw_rules_local: Option<usize>,
     draw_target_local: Option<usize>,
-) -> SortedDrawableNode {
-    SortedDrawableNode {
-        kind: drawable.kind,
-        local_id: drawable.local_id,
-        global_id: drawable.global_id,
-        type_name: drawable.type_name,
-        is_hidden: drawable.is_hidden,
-        resolved_image_asset_global: drawable.resolved_image_asset_global,
-        referenced_artboard_global: drawable.referenced_artboard_global,
-        layout_local: drawable.layout_local,
-        layout_global: drawable.layout_global,
-        draw_target_local,
-        clipping_shape_local: None,
-        clipping_shape_global: None,
-        needs_save_operation: true,
+    clipping_shape_local: Option<usize>,
+    needs_save_operation: bool,
+    /// C++ `Drawable::prev`; `Artboard::drawInternal` follows this link.
+    prev: Option<usize>,
+    /// C++ `Drawable::next`; maintained for target/proxy splicing.
+    next: Option<usize>,
+}
+
+impl RuntimeDrawable {
+    fn from_imported(drawable: &DrawableOrderNode) -> Self {
+        Self {
+            kind: drawable.kind,
+            local_id: drawable.local_id,
+            global_id: drawable.global_id,
+            type_name: drawable.type_name,
+            resolved_image_asset_global: drawable.resolved_image_asset_global,
+            referenced_artboard_global: drawable.referenced_artboard_global,
+            layout_local: drawable.layout_local,
+            flattened_draw_rules_local: drawable.flattened_draw_rules_local,
+            draw_target_local: None,
+            clipping_shape_local: None,
+            needs_save_operation: true,
+            prev: None,
+            next: None,
+        }
+    }
+
+    fn clipping_proxy(clipping_shape_local: usize, kind: DrawableOrderKind) -> Self {
+        debug_assert!(matches!(
+            kind,
+            DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy
+        ));
+        Self {
+            kind,
+            local_id: None,
+            global_id: None,
+            type_name: "ClippingShapeProxyDrawable",
+            resolved_image_asset_global: None,
+            referenced_artboard_global: None,
+            layout_local: None,
+            flattened_draw_rules_local: None,
+            draw_target_local: None,
+            clipping_shape_local: Some(clipping_shape_local),
+            needs_save_operation: true,
+            prev: None,
+            next: None,
+        }
     }
 }
 
-fn runtime_interleave_clipping_proxy_drawables(
-    sorted_drawables: impl IntoIterator<Item = SortedDrawableNode>,
-    clipping_shapes: &[ClippingShapeNode],
-) -> Vec<SortedDrawableNode> {
-    let mut order = Vec::new();
-    let mut clipping_stack = Vec::<usize>::new();
+#[derive(Debug, Clone)]
+struct RuntimeDrawTarget {
+    local_id: usize,
+    drawable_local: Option<usize>,
+    first: Option<usize>,
+    last: Option<usize>,
+}
 
-    for drawable in sorted_drawables {
-        let drawable_clipping_shapes =
-            runtime_drawable_clipping_shape_locals(&drawable, clipping_shapes);
-        let removing_index = clipping_stack
+/// Clone-owned counterpart of C++ `Artboard::m_Drawables`, `m_DrawTargets`,
+/// and `m_FirstDrawable`. Clip proxies are pooled by their owning clipping
+/// shape, matching `ClippingShape::resetDrawables/createProxyDrawable`.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeDrawableList {
+    drawables: Vec<Box<RuntimeDrawable>>,
+    imported_count: usize,
+    first_drawable: Option<usize>,
+    drawable_by_local: BTreeMap<usize, usize>,
+    draw_targets: Vec<RuntimeDrawTarget>,
+    draw_target_index_by_local: BTreeMap<usize, usize>,
+    draw_target_order: Vec<usize>,
+    clipping_by_drawable: BTreeMap<usize, Vec<usize>>,
+    active_proxies: Vec<usize>,
+    pooled_proxies: BTreeMap<usize, Vec<usize>>,
+}
+
+impl RuntimeDrawableList {
+    pub(crate) fn from_graph(graph: &ArtboardGraph) -> Self {
+        let drawables = graph
+            .drawable_order
             .iter()
-            .position(|clipping_shape_local| {
-                !drawable_clipping_shapes.contains(clipping_shape_local)
+            .map(|drawable| Box::new(RuntimeDrawable::from_imported(drawable)))
+            .collect::<Vec<_>>();
+        let imported_count = drawables.len();
+        let drawable_by_local = drawables
+            .iter()
+            .enumerate()
+            .filter_map(|(index, drawable)| drawable.local_id.map(|local| (local, index)))
+            .collect();
+        let draw_targets = graph
+            .draw_targets
+            .iter()
+            .map(|target| RuntimeDrawTarget {
+                local_id: target.local_id,
+                drawable_local: target.drawable_local,
+                first: None,
+                last: None,
             })
-            .unwrap_or(clipping_stack.len());
+            .collect::<Vec<_>>();
+        let draw_target_index_by_local = draw_targets
+            .iter()
+            .enumerate()
+            .map(|(index, target)| (target.local_id, index))
+            .collect();
+        let initial_draw_targets = graph
+            .draw_rules
+            .iter()
+            .map(|rules| (rules.local_id, rules.active_target_local))
+            .collect::<BTreeMap<_, _>>();
+        let initial_placements = graph
+            .draw_targets
+            .iter()
+            .map(|target| (target.local_id, target.placement_value))
+            .collect::<BTreeMap<_, _>>();
+        let initial_clipping_visibility = graph
+            .clipping_shapes
+            .iter()
+            .map(|shape| (shape.local_id, shape.is_visible))
+            .collect::<BTreeMap<_, _>>();
+        let mut clipping_by_drawable = BTreeMap::<usize, Vec<usize>>::new();
+        for clipping_shape in &graph.clipping_shapes {
+            for drawable_local in &clipping_shape.clipped_drawable_locals {
+                clipping_by_drawable
+                    .entry(*drawable_local)
+                    .or_default()
+                    .push(clipping_shape.local_id);
+            }
+        }
+        let mut result = Self {
+            drawables,
+            imported_count,
+            first_drawable: None,
+            drawable_by_local,
+            draw_targets,
+            draw_target_index_by_local,
+            draw_target_order: graph.draw_target_order.clone(),
+            clipping_by_drawable,
+            active_proxies: Vec::new(),
+            pooled_proxies: BTreeMap::new(),
+        };
+        result.sort_draw_order(
+            None,
+            None,
+            None,
+            None,
+            Some(&initial_draw_targets),
+            Some(&initial_placements),
+            Some(&initial_clipping_visibility),
+        );
+        result
+    }
 
-        if removing_index < clipping_stack.len() {
-            for clipping_shape_local in clipping_stack[removing_index..].iter().rev() {
-                order.push(runtime_clipping_proxy_node(
-                    clipping_shapes,
-                    *clipping_shape_local,
-                    DrawableOrderKind::ClipEndProxy,
-                ));
+    fn sort_draw_order(
+        &mut self,
+        objects: Option<&InstanceObjectArena>,
+        draw_target_id_key: Option<u16>,
+        placement_value_key: Option<u16>,
+        is_visible_key: Option<u16>,
+        initial_draw_targets: Option<&BTreeMap<usize, Option<usize>>>,
+        initial_placements: Option<&BTreeMap<usize, u64>>,
+        initial_clipping_visibility: Option<&BTreeMap<usize, bool>>,
+    ) {
+        // Ported from C++ `Artboard::sortDrawOrder` (artboard.cpp:574-746).
+        self.reset_proxy_drawables();
+        for drawable in &mut self.drawables[..self.imported_count] {
+            drawable.prev = None;
+            drawable.next = None;
+            drawable.draw_target_local = None;
+            drawable.needs_save_operation = true;
+        }
+        for target in &mut self.draw_targets {
+            target.first = None;
+            target.last = None;
+        }
+
+        let mut last_main = None;
+        for drawable_index in 0..self.imported_count {
+            let active_target = self.drawables[drawable_index]
+                .flattened_draw_rules_local
+                .and_then(|rules_local| match objects.zip(draw_target_id_key) {
+                    Some((objects, key)) => objects
+                        .uint_property(rules_local, key)
+                        .and_then(|target| usize::try_from(target).ok())
+                        .filter(|target| self.draw_target_index_by_local.contains_key(target)),
+                    None => initial_draw_targets
+                        .and_then(|targets| targets.get(&rules_local).copied().flatten()),
+                });
+            self.drawables[drawable_index].draw_target_local = active_target;
+            if let Some(target_local) = active_target
+                && let Some(target_index) =
+                    self.draw_target_index_by_local.get(&target_local).copied()
+            {
+                let previous = self.draw_targets[target_index].last;
+                self.drawables[drawable_index].prev = previous;
+                if let Some(previous) = previous {
+                    self.drawables[previous].next = Some(drawable_index);
+                } else {
+                    self.draw_targets[target_index].first = Some(drawable_index);
+                }
+                self.draw_targets[target_index].last = Some(drawable_index);
+                continue;
+            }
+
+            self.drawables[drawable_index].prev = last_main;
+            if let Some(previous) = last_main {
+                self.drawables[previous].next = Some(drawable_index);
+            }
+            last_main = Some(drawable_index);
+        }
+
+        for order_index in 0..self.draw_target_order.len() {
+            let target_local = self.draw_target_order[order_index];
+            let Some(target_index) = self.draw_target_index_by_local.get(&target_local).copied()
+            else {
+                continue;
+            };
+            let Some(group_first) = self.draw_targets[target_index].first else {
+                continue;
+            };
+            let Some(group_last) = self.draw_targets[target_index].last else {
+                continue;
+            };
+            let Some(target_drawable) = self.draw_targets[target_index]
+                .drawable_local
+                .and_then(|local| self.drawable_by_local.get(&local).copied())
+            else {
+                continue;
+            };
+            let placement = objects
+                .zip(placement_value_key)
+                .and_then(|(objects, key)| {
+                    objects.uint_property(self.draw_targets[target_index].local_id, key)
+                })
+                .or_else(|| {
+                    initial_placements.and_then(|placements| {
+                        placements
+                            .get(&self.draw_targets[target_index].local_id)
+                            .copied()
+                    })
+                })
+                .unwrap_or(u64::MAX);
+            match placement {
+                0 => {
+                    let target_prev = self.drawables[target_drawable].prev;
+                    if let Some(target_prev) = target_prev {
+                        self.drawables[target_prev].next = Some(group_first);
+                        self.drawables[group_first].prev = Some(target_prev);
+                    }
+                    self.drawables[target_drawable].prev = Some(group_last);
+                    self.drawables[group_last].next = Some(target_drawable);
+                }
+                1 => {
+                    let target_next = self.drawables[target_drawable].next;
+                    if let Some(target_next) = target_next {
+                        self.drawables[target_next].prev = Some(group_last);
+                        self.drawables[group_last].next = Some(target_next);
+                    }
+                    if last_main == Some(target_drawable) {
+                        last_main = Some(group_last);
+                    }
+                    self.drawables[target_drawable].next = Some(group_first);
+                    self.drawables[group_first].prev = Some(target_drawable);
+                }
+                _ => {}
+            }
+        }
+
+        self.first_drawable = last_main;
+        self.interleave_clipping_proxies();
+        self.clear_redundant_operations(objects, is_visible_key, initial_clipping_visibility);
+    }
+
+    fn reset_proxy_drawables(&mut self) {
+        for proxy in self.active_proxies.drain(..) {
+            let clipping_local = self.drawables[proxy]
+                .clipping_shape_local
+                .expect("active clipping proxy has an owner");
+            self.drawables[proxy].prev = None;
+            self.drawables[proxy].next = None;
+            self.pooled_proxies
+                .entry(clipping_local)
+                .or_default()
+                .push(proxy);
+        }
+    }
+
+    fn create_proxy(&mut self, clipping_local: usize, kind: DrawableOrderKind) -> usize {
+        let proxy = self
+            .pooled_proxies
+            .get_mut(&clipping_local)
+            .and_then(Vec::pop)
+            .unwrap_or_else(|| {
+                self.drawables
+                    .push(Box::new(RuntimeDrawable::clipping_proxy(
+                        clipping_local,
+                        kind,
+                    )));
+                self.drawables.len() - 1
+            });
+        let drawable = &mut self.drawables[proxy];
+        drawable.kind = kind;
+        drawable.prev = None;
+        drawable.next = None;
+        drawable.needs_save_operation = true;
+        self.active_proxies.push(proxy);
+        proxy
+    }
+
+    fn interleave_clipping_proxies(&mut self) {
+        let mut current = self.first_drawable;
+        let mut next_drawable = None;
+        let mut clipping_stack = Vec::<usize>::new();
+        while let Some(current_index) = current {
+            let drawable_local = self.drawables[current_index].local_id;
+            let removing_index = clipping_stack
+                .iter()
+                .position(|clipping| {
+                    !drawable_local
+                        .and_then(|local| self.clipping_by_drawable.get(&local))
+                        .is_some_and(|drawable_clips| drawable_clips.contains(clipping))
+                })
+                .unwrap_or(clipping_stack.len());
+            for stack_index in (removing_index..clipping_stack.len()).rev() {
+                let proxy =
+                    self.create_proxy(clipping_stack[stack_index], DrawableOrderKind::ClipEndProxy);
+                self.insert_proxy_after(current_index, next_drawable, proxy);
+                next_drawable = Some(proxy);
             }
             clipping_stack.truncate(removing_index);
-        }
 
-        for clipping_shape_local in drawable_clipping_shapes {
-            if !clipping_stack.contains(&clipping_shape_local) {
-                order.push(runtime_clipping_proxy_node(
-                    clipping_shapes,
-                    clipping_shape_local,
-                    DrawableOrderKind::ClipStartProxy,
-                ));
-                clipping_stack.push(clipping_shape_local);
+            let drawable_clip_count = drawable_local
+                .and_then(|local| self.clipping_by_drawable.get(&local))
+                .map_or(0, Vec::len);
+            for clip_index in 0..drawable_clip_count {
+                let clipping_local = drawable_local
+                    .and_then(|local| self.clipping_by_drawable.get(&local))
+                    .and_then(|clips| clips.get(clip_index))
+                    .copied()
+                    .expect("drawable clipping index remains stable");
+                if !clipping_stack.contains(&clipping_local) {
+                    let proxy =
+                        self.create_proxy(clipping_local, DrawableOrderKind::ClipStartProxy);
+                    self.insert_proxy_after(current_index, next_drawable, proxy);
+                    if next_drawable.is_none() {
+                        self.first_drawable = Some(proxy);
+                    }
+                    next_drawable = Some(proxy);
+                    clipping_stack.push(clipping_local);
+                }
             }
+            next_drawable = Some(current_index);
+            current = self.drawables[current_index].prev;
         }
 
-        order.push(drawable);
-    }
-
-    for clipping_shape_local in clipping_stack.into_iter().rev() {
-        order.push(runtime_clipping_proxy_node(
-            clipping_shapes,
-            clipping_shape_local,
-            DrawableOrderKind::ClipEndProxy,
-        ));
-    }
-
-    order
-}
-
-fn runtime_drawable_clipping_shape_locals(
-    drawable: &SortedDrawableNode,
-    clipping_shapes: &[ClippingShapeNode],
-) -> Vec<usize> {
-    let Some(drawable_local) = drawable.local_id else {
-        return Vec::new();
-    };
-
-    clipping_shapes
-        .iter()
-        .filter_map(|clipping_shape| {
-            clipping_shape
-                .clipped_drawable_locals
-                .contains(&drawable_local)
-                .then_some(clipping_shape.local_id)
-        })
-        .collect()
-}
-
-fn runtime_clipping_proxy_node(
-    clipping_shapes: &[ClippingShapeNode],
-    clipping_shape_local: usize,
-    kind: DrawableOrderKind,
-) -> SortedDrawableNode {
-    let clipping_shape_global = clipping_shapes
-        .iter()
-        .find(|clipping_shape| clipping_shape.local_id == clipping_shape_local)
-        .map(|clipping_shape| clipping_shape.global_id);
-    debug_assert!(matches!(
-        kind,
-        DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy
-    ));
-
-    SortedDrawableNode {
-        kind,
-        local_id: None,
-        global_id: None,
-        type_name: "ClippingShapeProxyDrawable",
-        is_hidden: false,
-        resolved_image_asset_global: None,
-        referenced_artboard_global: None,
-        layout_local: None,
-        layout_global: None,
-        draw_target_local: None,
-        clipping_shape_local: Some(clipping_shape_local),
-        clipping_shape_global,
-        needs_save_operation: true,
-    }
-}
-
-fn runtime_apply_save_operation_elision(
-    sorted_drawables: &mut [SortedDrawableNode],
-    clipping_shapes: &[ClippingShapeNode],
-) {
-    let clipping_visibility = clipping_shapes
-        .iter()
-        .map(|clipping_shape| (clipping_shape.local_id, clipping_shape.is_visible))
-        .collect::<BTreeMap<_, _>>();
-    let mut prev_applied_save = false;
-    let mut applied_clipping_save_operations = Vec::<bool>::new();
-
-    for index in 0..sorted_drawables.len() {
-        sorted_drawables[index].needs_save_operation = true;
-        if prev_applied_save {
-            if sorted_drawables[index].kind == DrawableOrderKind::ClipStartProxy {
-                applied_clipping_save_operations.push(false);
-                sorted_drawables[index].needs_save_operation = false;
-            } else if sorted_drawables[index].kind == DrawableOrderKind::ClipEndProxy {
-                let operation_applied = applied_clipping_save_operations.pop().unwrap_or(true);
-                sorted_drawables[index].needs_save_operation = operation_applied;
-            } else if sorted_drawables
-                .get(index + 1)
-                .is_some_and(|next| next.kind == DrawableOrderKind::ClipEndProxy)
-            {
-                sorted_drawables[index].needs_save_operation = false;
+        for clipping_local in clipping_stack.into_iter().rev() {
+            let proxy = self.create_proxy(clipping_local, DrawableOrderKind::ClipEndProxy);
+            if let Some(next) = next_drawable {
+                self.drawables[next].prev = Some(proxy);
+                self.drawables[proxy].next = Some(next);
             }
-        } else if sorted_drawables[index].kind == DrawableOrderKind::ClipStartProxy {
-            applied_clipping_save_operations.push(true);
-        } else if sorted_drawables[index].kind == DrawableOrderKind::ClipEndProxy {
-            let operation_applied = applied_clipping_save_operations.pop().unwrap_or(true);
-            sorted_drawables[index].needs_save_operation = operation_applied;
+            self.drawables[proxy].prev = None;
+            next_drawable = Some(proxy);
         }
-
-        prev_applied_save = sorted_drawables[index].kind == DrawableOrderKind::ClipStartProxy
-            && (runtime_sorted_drawable_will_clip(&sorted_drawables[index], &clipping_visibility)
-                || prev_applied_save);
     }
 
-    debug_assert!(applied_clipping_save_operations.is_empty());
+    fn insert_proxy_after(&mut self, current: usize, next_drawable: Option<usize>, proxy: usize) {
+        if let Some(next) = next_drawable {
+            self.drawables[proxy].next = Some(next);
+            self.drawables[next].prev = Some(proxy);
+        }
+        self.drawables[proxy].prev = Some(current);
+        self.drawables[current].next = Some(proxy);
+    }
+
+    fn clear_redundant_operations(
+        &mut self,
+        objects: Option<&InstanceObjectArena>,
+        is_visible_key: Option<u16>,
+        initial_clipping_visibility: Option<&BTreeMap<usize, bool>>,
+    ) {
+        // Ported from C++ `Artboard::clearRedundantOperations`
+        // (artboard.cpp:750-804).
+        let mut current = self.first_drawable;
+        let mut previous_applied_save = false;
+        let mut applied_clipping_saves = Vec::<bool>::new();
+        while let Some(index) = current {
+            self.drawables[index].needs_save_operation = true;
+            if previous_applied_save {
+                if self.drawables[index].kind == DrawableOrderKind::ClipStartProxy {
+                    applied_clipping_saves.push(false);
+                    self.drawables[index].needs_save_operation = false;
+                } else if self.drawables[index].kind == DrawableOrderKind::ClipEndProxy {
+                    let applied = applied_clipping_saves.pop().unwrap_or(true);
+                    self.drawables[index].needs_save_operation = applied;
+                } else if self.drawables[index].prev.is_some_and(|prev| {
+                    self.drawables[prev].kind == DrawableOrderKind::ClipEndProxy
+                }) {
+                    self.drawables[index].needs_save_operation = false;
+                }
+            } else if self.drawables[index].kind == DrawableOrderKind::ClipStartProxy {
+                applied_clipping_saves.push(true);
+            } else if self.drawables[index].kind == DrawableOrderKind::ClipEndProxy {
+                let applied = applied_clipping_saves.pop().unwrap_or(true);
+                self.drawables[index].needs_save_operation = applied;
+            }
+            let will_clip = self.drawables[index]
+                .clipping_shape_local
+                .is_some_and(|local| {
+                    objects
+                        .zip(is_visible_key)
+                        .and_then(|(objects, key)| objects.bool_property(local, key))
+                        .or_else(|| initial_clipping_visibility?.get(&local).copied())
+                        .unwrap_or(false)
+                });
+            previous_applied_save = self.drawables[index].kind == DrawableOrderKind::ClipStartProxy
+                && (will_clip || previous_applied_save);
+            current = self.drawables[index].prev;
+        }
+        debug_assert!(applied_clipping_saves.is_empty());
+    }
+
+    pub(crate) fn iter(&self) -> RuntimeDrawableIter<'_> {
+        RuntimeDrawableIter {
+            list: self,
+            current: self.first_drawable,
+        }
+    }
 }
 
-fn runtime_sorted_drawable_will_clip(
-    drawable: &SortedDrawableNode,
-    clipping_visibility: &BTreeMap<usize, bool>,
-) -> bool {
-    drawable
-        .clipping_shape_local
-        .and_then(|local_id| clipping_visibility.get(&local_id))
-        .copied()
-        .unwrap_or(false)
+pub(crate) struct RuntimeDrawableIter<'a> {
+    list: &'a RuntimeDrawableList,
+    current: Option<usize>,
+}
+
+impl<'a> Iterator for RuntimeDrawableIter<'a> {
+    type Item = &'a RuntimeDrawable;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let index = self.current?;
+        let drawable = self.list.drawables.get(index)?.as_ref();
+        self.current = drawable.prev;
+        Some(drawable)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -9528,7 +9759,6 @@ pub struct RuntimeRenderPathCache {
     // retained so the spike isolates per-frame live-feed traversal cost.
     rd1_live_traversal_spike: bool,
     prepared_artboard: Option<Arc<RuntimePreparedArtboardFrame>>,
-    sorted_drawable_order: Option<RuntimeSortedDrawableOrderFrame>,
     layout_bounds: Option<RuntimeLayoutBoundsFrame>,
     path_composer_lookup: Option<RuntimePathComposerLookupFrame>,
     artboard_clip: Option<RuntimeRetainedRenderPath>,
@@ -9774,18 +10004,6 @@ struct RuntimePreparedBackgroundFrame {
     container_local: usize,
     path_commands: Arc<Vec<RuntimePathCommand>>,
     paints: Arc<Vec<RuntimeShapePaintCommand>>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RuntimeSortedDrawableOrderCacheKey {
-    graph_global_id: u32,
-    draw_order_epoch: u64,
-}
-
-#[derive(Clone)]
-struct RuntimeSortedDrawableOrderFrame {
-    key: RuntimeSortedDrawableOrderCacheKey,
-    order: Arc<Vec<SortedDrawableNode>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -10829,13 +11047,11 @@ impl RuntimeRenderPathCache {
                 mounted_component_list_layout_revision,
             );
             let layout_bounds = layout_frame.bounds.clone();
-            let sorted_drawable_order = self.sorted_drawable_order_frame(instance, graph);
             // Retain invisible drawables so the prepared stream's topology is
             // stable across opacity writes; replay applies the live willDraw.
-            let commands = instance.draw_commands_with_sorted_drawable_order_reusing(
+            let commands = instance.draw_commands_with_live_drawable_order_reusing(
                 graph,
                 layout_bounds.as_ref().as_ref(),
-                sorted_drawable_order.as_slice(),
                 self,
                 true,
                 reusable_commands,
@@ -10878,14 +11094,12 @@ impl RuntimeRenderPathCache {
             mounted_component_list_layout_revision,
         );
         let layout_bounds = layout_frame.bounds.clone();
-        let sorted_drawable_order = self.sorted_drawable_order_frame(instance, graph);
         // C++ retains m_FirstDrawable but walks it every frame. Keep the
-        // established order list for this spike and reify each live node on
-        // every draw rather than replaying the retained scene command frame.
-        let commands = instance.draw_commands_with_sorted_drawable_order_reusing(
+        // clone-owned linked order and reify each live node on every draw
+        // rather than replaying the retained scene command frame.
+        let commands = instance.draw_commands_with_live_drawable_order_reusing(
             graph,
             layout_bounds.as_ref().as_ref(),
-            sorted_drawable_order.as_slice(),
             self,
             true,
             Vec::new(),
@@ -10927,33 +11141,6 @@ impl RuntimeRenderPathCache {
         // the same immutable frame and decide effective visibility at query
         // time without maintaining a second, divergent command cache.
         self.prepared_artboard_frame(instance, graph, Some(runtime))
-    }
-
-    fn sorted_drawable_order_frame(
-        &mut self,
-        instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
-    ) -> Arc<Vec<SortedDrawableNode>> {
-        let key = RuntimeSortedDrawableOrderCacheKey {
-            graph_global_id: graph.global_id,
-            draw_order_epoch: instance.draw_order_epoch(),
-        };
-        if self
-            .sorted_drawable_order
-            .as_ref()
-            .is_none_or(|frame| frame.key != key)
-        {
-            self.sorted_drawable_order = Some(RuntimeSortedDrawableOrderFrame {
-                key,
-                order: Arc::new(instance.runtime_sorted_drawable_order(graph)),
-            });
-        }
-
-        self.sorted_drawable_order
-            .as_ref()
-            .expect("sorted drawable order frame was just populated")
-            .order
-            .clone()
     }
 
     fn layout_bounds_frame(
@@ -15652,7 +15839,7 @@ fn runtime_draw_clip_start(
     else {
         return;
     };
-    if !clipping_shape.is_visible {
+    if !instance.runtime_clipping_shape_is_visible(clipping_shape) {
         return;
     }
     if command.needs_save_operation {
@@ -15677,6 +15864,7 @@ fn runtime_draw_clip_start(
 }
 
 fn runtime_draw_clip_end(
+    instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     command: &RuntimeDrawCommand,
     renderer: &mut dyn Renderer,
@@ -15687,7 +15875,7 @@ fn runtime_draw_clip_end(
     else {
         return;
     };
-    if clipping_shape.is_visible && command.needs_save_operation {
+    if instance.runtime_clipping_shape_is_visible(clipping_shape) && command.needs_save_operation {
         renderer.restore();
     }
 }
@@ -16726,7 +16914,9 @@ fn mat2d_linear_is_identity(mat: Mat2D) -> bool {
 }
 
 fn runtime_blend_mode(value: u32) -> Result<RenderBlendMode> {
-    Ok(match value {
+    // C++ `Drawable::onAddedDirty` casts the generated CoreUint through
+    // `BlendMode : unsigned char`; later property writes keep that narrowing.
+    Ok(match value as u8 {
         3 => RenderBlendMode::SrcOver,
         14 => RenderBlendMode::Screen,
         15 => RenderBlendMode::Overlay,
@@ -22362,6 +22552,187 @@ mod tests {
                 .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
             value,
         }
+    }
+
+    #[test]
+    fn drawable_blend_mode_reads_preserve_cpp_u8_narrowing() {
+        assert!(matches!(
+            runtime_blend_mode(256 + 3),
+            Ok(RenderBlendMode::SrcOver)
+        ));
+        assert!(runtime_blend_mode(256 + 2).is_err());
+    }
+
+    #[test]
+    fn clipping_visibility_dirties_the_owning_artboard() {
+        // Mirrors C++ `ClippingShape::isVisibleChanged`
+        // (`clipping_shape.cpp:175-178`, `artboard.cpp:1166-1169`).
+        let bytes = include_bytes!("../../../fixtures/graph/clipping_and_draw_order.riv");
+        let file = read_runtime_file(bytes).expect("fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let clipping_shape = graph
+            .clipping_shapes
+            .first()
+            .expect("fixture has a clipping shape");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let is_visible_key =
+            property_key_for_name("ClippingShape", "isVisible").expect("visibility key");
+        let is_visible = instance
+            .bool_property(clipping_shape.local_id, is_visible_key)
+            .expect("visibility is live object state");
+
+        assert!(instance.set_bool_property(clipping_shape.local_id, is_visible_key, !is_visible,));
+        assert!(
+            instance
+                .component(0)
+                .expect("artboard component")
+                .dirt
+                .contains(ComponentDirt::CLIPPING)
+        );
+        assert!(instance.update_pass());
+    }
+
+    #[test]
+    fn draw_order_dirt_relinks_retained_drawable_objects() {
+        // Mirrors C++ `DrawTarget::placementValueChanged` ->
+        // `ComponentDirt::DrawOrder` -> `Artboard::sortDrawOrder`
+        // (`draw_target.cpp:28-31`, `artboard.cpp:574-746,1159-1165`).
+        let bytes = include_bytes!("../../../fixtures/graph/clipping_and_draw_order.riv");
+        let file = read_runtime_file(bytes).expect("fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let active_target_local = instance
+            .runtime_drawables
+            .drawables
+            .iter()
+            .take(instance.runtime_drawables.imported_count)
+            .find_map(|drawable| drawable.draw_target_local)
+            .expect("fixture has a drawable group attached to a draw target");
+        let target = graph
+            .draw_targets
+            .iter()
+            .find(|target| target.local_id == active_target_local)
+            .expect("active draw target is retained");
+        let (active_drawable_local, active_rules_local) = instance
+            .runtime_drawables
+            .drawables
+            .iter()
+            .take(instance.runtime_drawables.imported_count)
+            .find(|drawable| drawable.draw_target_local == Some(active_target_local))
+            .and_then(|drawable| Some((drawable.local_id?, drawable.flattened_draw_rules_local?)))
+            .expect("targeted drawable retains its flattened draw rules");
+
+        let identities_before = instance
+            .runtime_drawables
+            .drawables
+            .iter()
+            .take(instance.runtime_drawables.imported_count)
+            .filter_map(|drawable| {
+                drawable
+                    .local_id
+                    .map(|local| (local, drawable.as_ref() as *const RuntimeDrawable as usize))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let order_before = instance
+            .runtime_drawables
+            .iter()
+            .filter_map(|drawable| drawable.local_id)
+            .collect::<Vec<_>>();
+        let placement_key =
+            property_key_for_name("DrawTarget", "placementValue").expect("placement key");
+        let replacement = u64::from(target.placement_value == 0);
+        assert!(instance.set_uint_property(target.local_id, placement_key, replacement));
+        assert_eq!(
+            instance.uint_property(target.local_id, placement_key),
+            Some(replacement)
+        );
+        assert!(instance.update_pass());
+
+        let identities_after = instance
+            .runtime_drawables
+            .drawables
+            .iter()
+            .take(instance.runtime_drawables.imported_count)
+            .filter_map(|drawable| {
+                drawable
+                    .local_id
+                    .map(|local| (local, drawable.as_ref() as *const RuntimeDrawable as usize))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let order_after = instance
+            .runtime_drawables
+            .iter()
+            .filter_map(|drawable| drawable.local_id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(identities_after, identities_before);
+        assert_ne!(
+            order_after, order_before,
+            "target={target:?} active={active_target_local} replacement={replacement}"
+        );
+
+        let drawable_flags_key =
+            property_key_for_name("Drawable", "drawableFlags").expect("drawable flags key");
+        let original_flags = instance
+            .uint_property(active_drawable_local, drawable_flags_key)
+            .expect("drawable flags are live instance state");
+        assert!(instance.set_uint_property(
+            active_drawable_local,
+            drawable_flags_key,
+            original_flags | 1,
+        ));
+        let active_drawable = instance
+            .runtime_drawables
+            .drawables
+            .iter()
+            .take(instance.runtime_drawables.imported_count)
+            .find(|drawable| drawable.local_id == Some(active_drawable_local))
+            .expect("active drawable remains retained");
+        assert!(!instance.runtime_will_draw(active_drawable, false));
+        assert!(instance.set_uint_property(
+            active_drawable_local,
+            drawable_flags_key,
+            original_flags,
+        ));
+
+        let allocation_after_reorder = instance.runtime_drawables.drawables.len();
+        let draw_target_id_key =
+            property_key_for_name("DrawRules", "drawTargetId").expect("draw target id key");
+        assert!(instance.set_uint_property(active_rules_local, draw_target_id_key, u64::MAX));
+        assert!(instance.update_pass());
+        let order_without_target = instance
+            .runtime_drawables
+            .iter()
+            .filter_map(|drawable| drawable.local_id)
+            .collect::<Vec<_>>();
+        assert_ne!(order_without_target, order_after);
+        assert!(instance.set_uint_property(
+            active_rules_local,
+            draw_target_id_key,
+            active_target_local as u64,
+        ));
+        assert!(instance.update_pass());
+        assert_eq!(
+            instance
+                .runtime_drawables
+                .iter()
+                .filter_map(|drawable| drawable.local_id)
+                .collect::<Vec<_>>(),
+            order_after
+        );
+        assert!(instance.set_uint_property(target.local_id, placement_key, target.placement_value));
+        assert!(instance.update_pass());
+        assert!(instance.set_uint_property(target.local_id, placement_key, replacement));
+        assert!(instance.update_pass());
+        assert_eq!(
+            instance.runtime_drawables.drawables.len(),
+            allocation_after_reorder,
+            "ClippingShape proxy objects must return to their owner pool and be reused"
+        );
     }
 
     #[test]

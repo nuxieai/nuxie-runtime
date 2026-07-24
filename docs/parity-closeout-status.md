@@ -736,7 +736,9 @@ upstream-sync-map registry).
   zero divergences/gated cases, C API smoke green, the probe-armed full
   workspace green with 721/721 runtime C++ probes, and the ownership-ledger
   gate green at 39 owners (5 exact, 26 adapted, 4 pending, 4 compensation).
-  The next ownership batch is Text.
+  Lint/format/diff checks are green; the stripped full SDK is 8,267,528 B
+  scripting-off and 9,168,616 B scripting-on, both below the unchanged
+  9,437,184 B budget. The next ownership batch is Text.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive

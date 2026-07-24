@@ -377,8 +377,15 @@ pub struct RuntimeEventProperty {
 
 #[derive(Debug)]
 pub(crate) struct RuntimeNestedArtboardInstance {
+    // Rust drops fields in declaration order. C++ releases nested animations
+    // (including StateMachineInstances that can reference m_Instance) before
+    // destroying m_Instance (`nested_artboard.cpp:48-64`).
+    animations: Vec<RuntimeNestedAnimationInstance>,
     pub(crate) child: Box<ArtboardInstance>,
     pub(crate) render_cache_revision: u64,
+    /// C++ child objects own their backend members. This sidecar follows the
+    /// mounted occurrence through replacement/drop and is rebuilt on clone.
+    pub(crate) render_resources: RefCell<crate::draw::RuntimeOccurrenceRenderResources>,
     /// C++ configures an intermediate shader on the one mounted child before
     /// `NestedArtboardLayout::takeLayoutData()` permanently transfers layout
     /// ownership. Retain only that narrow initial paint state until the paint
@@ -400,7 +407,6 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) data_bind_property_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_image_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_context_source_locals_by_path: BTreeMap<Vec<u32>, usize>,
-    animations: Vec<RuntimeNestedAnimationInstance>,
     is_paused: bool,
     speed: f32,
     quantize: f32,
@@ -418,6 +424,7 @@ impl Clone for RuntimeNestedArtboardInstance {
         Self {
             child: Box::new(child),
             render_cache_revision: self.render_cache_revision,
+            render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             initial_layout_paint_frame: RefCell::new(None),
             layout_data_transferred: false,
             layout_data_transfer_key: None,
@@ -540,8 +547,13 @@ impl std::ops::Index<&usize> for RuntimeNestedArtboards {
 /// artboard and its selected state machines for an owned view-model list item.
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeComponentListItemInstance {
-    pub(crate) child: Box<ArtboardInstance>,
+    // C++ erases row state machines before row ArtboardInstances so listener
+    // groups cannot observe destroyed FocusData
+    // (`artboard_component_list.cpp:1582-1586`).
     pub(crate) state_machines: Vec<StateMachineInstance>,
+    pub(crate) child: Box<ArtboardInstance>,
+    /// Backend members for this one mounted row occurrence.
+    pub(crate) render_resources: RefCell<crate::draw::RuntimeOccurrenceRenderResources>,
     pub(crate) context: RuntimeOwnedViewModelHandle,
     /// Pushed C++ `ViewModelInstance::m_dependents` relink channel. Scalar
     /// cells notify the mounted child's binds directly; ViewModel-reference
@@ -3050,6 +3062,9 @@ impl ArtboardInstance {
             let draw_index_sink = component_list_draw_index_sink(file, &context);
             items.push(RuntimeComponentListItemInstance {
                 child: Box::new(child),
+                render_resources: RefCell::new(
+                    crate::draw::RuntimeOccurrenceRenderResources::default(),
+                ),
                 state_machines,
                 context_rebind_sink,
                 draw_index_sink,
@@ -6565,6 +6580,7 @@ fn build_runtime_nested_artboard_instance(
     Ok(RuntimeNestedArtboardInstance {
         child,
         render_cache_revision: 0,
+        render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
         initial_layout_paint_frame: RefCell::new(None),
         layout_data_transferred: false,
         layout_data_transfer_key: None,
@@ -7274,6 +7290,7 @@ mod tests {
         RuntimeNestedArtboardInstance {
             child: Box::new(child),
             render_cache_revision: 0,
+            render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             initial_layout_paint_frame: RefCell::new(None),
             layout_data_transferred: false,
             layout_data_transfer_key: None,
@@ -7362,6 +7379,7 @@ mod tests {
 
         let row = RuntimeComponentListItemInstance {
             child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
+            render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             state_machines: Vec::new(),
             context_rebind_sink: {
                 let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
@@ -7527,6 +7545,7 @@ mod tests {
         let mut nested = RuntimeNestedArtboardInstance {
             child: Box::new(child),
             render_cache_revision: 0,
+            render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             initial_layout_paint_frame: RefCell::new(None),
             layout_data_transferred: false,
             layout_data_transfer_key: None,
@@ -7931,6 +7950,9 @@ mod tests {
             RuntimeNestedArtboardInstance {
                 child: Box::new(child),
                 render_cache_revision: 0,
+                render_resources: RefCell::new(
+                    crate::draw::RuntimeOccurrenceRenderResources::default(),
+                ),
                 initial_layout_paint_frame: RefCell::new(Some(
                     RuntimeInitialNestedLayoutPaintFrame::default(),
                 )),
@@ -8101,6 +8123,9 @@ mod tests {
             RuntimeNestedArtboardInstance {
                 child: Box::new(child),
                 render_cache_revision: 0,
+                render_resources: RefCell::new(
+                    crate::draw::RuntimeOccurrenceRenderResources::default(),
+                ),
                 initial_layout_paint_frame: RefCell::new(None),
                 layout_data_transferred: false,
                 layout_data_transfer_key: None,
@@ -8153,6 +8178,9 @@ mod tests {
             RuntimeNestedArtboardInstance {
                 child: Box::new(child),
                 render_cache_revision: 0,
+                render_resources: RefCell::new(
+                    crate::draw::RuntimeOccurrenceRenderResources::default(),
+                ),
                 initial_layout_paint_frame: RefCell::new(None),
                 layout_data_transferred: false,
                 layout_data_transfer_key: None,
@@ -9128,6 +9156,9 @@ mod tests {
                     vec![10],
                 )),
                 render_cache_revision: 0,
+                render_resources: RefCell::new(
+                    crate::draw::RuntimeOccurrenceRenderResources::default(),
+                ),
                 initial_layout_paint_frame: RefCell::new(None),
                 layout_data_transferred: false,
                 layout_data_transfer_key: None,
@@ -10590,6 +10621,7 @@ mod tests {
         );
         let row = RuntimeComponentListItemInstance {
             child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
+            render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             state_machines: Vec::new(),
             context_rebind_sink: {
                 let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
@@ -11596,6 +11628,9 @@ mod tests {
             1,
             vec![RuntimeComponentListItemInstance {
                 child: Box::new(child),
+                render_resources: RefCell::new(
+                    crate::draw::RuntimeOccurrenceRenderResources::default(),
+                ),
                 state_machines: vec![state_machine],
                 context_rebind_sink: {
                     let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
@@ -11661,6 +11696,9 @@ mod tests {
             1,
             vec![RuntimeComponentListItemInstance {
                 child: Box::new(child),
+                render_resources: RefCell::new(
+                    crate::draw::RuntimeOccurrenceRenderResources::default(),
+                ),
                 state_machines: vec![state_machine],
                 context_rebind_sink: {
                     let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
@@ -11737,6 +11775,9 @@ mod tests {
             vec![
                 RuntimeComponentListItemInstance {
                     child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
+                    render_resources: RefCell::new(
+                        crate::draw::RuntimeOccurrenceRenderResources::default(),
+                    ),
                     state_machines: Vec::new(),
                     context_rebind_sink: {
                         let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
@@ -11754,6 +11795,9 @@ mod tests {
                 },
                 RuntimeComponentListItemInstance {
                     child: Box::new(child),
+                    render_resources: RefCell::new(
+                        crate::draw::RuntimeOccurrenceRenderResources::default(),
+                    ),
                     state_machines: vec![state_machine],
                     context_rebind_sink: {
                         let sink = crate::view_model_cell::RuntimeCellDirtSink::new();

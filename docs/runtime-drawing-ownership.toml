@@ -7,7 +7,7 @@ phase = "ownership-proof-before-scene-cache-removal"
 # This count is a ratchet, not a completion claim. `make
 # runtime-drawing-port-closed` requires pending=0, compensation=0, and every
 # legacy symbol count below to reach zero.
-expected_status_counts = { exact = 5, adapted = 28, pending = 2, compensation = 4 }
+expected_status_counts = { exact = 5, adapted = 31, pending = 1, compensation = 4 }
 
 [[batch]]
 id = "shape_path_paint"
@@ -576,18 +576,18 @@ clone_drop = ["cpp:include/rive/layout_component.hpp:247", "rust:crates/nuxie-ru
 [[owner]]
 id = "layout.backend_paths"
 batch = "layout_nested"
-status = "pending"
+status = "adapted"
 rule = "RF-30"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "layout_clip_paths: RuntimeRetainedRenderPathSlots"
+rust_anchor = "backend: RefCell<RuntimeLayoutBackendResources>"
 depends_on = ["layout.cpu_paths"]
-legacy_ratchets = ["scene_path_cache_type"]
-note = "Backend paths still live in the scene path cache and must follow the Layout owner."
+legacy_ratchets = []
+note = "Each Layout occurrence owns its clip and draw backend paths beside the retained CPU paths. Clone starts cold, and a changed public backend context rebuilds only those renderer handles."
 [owner.lifecycle]
-construct = ["cpp:src/layout_component.cpp:317-374", "rust:crates/nuxie-runtime/src/draw.rs:10726-10744"]
-update = ["cpp:src/layout_component.cpp:317-374", "rust:crates/nuxie-runtime/src/draw.rs:4571-4607"]
-draw = ["cpp:src/layout_component.cpp:317-374", "rust:crates/nuxie-runtime/src/draw.rs:14048-14117"]
-clone_drop = ["cpp:include/rive/layout_component.hpp:247", "rust:crates/nuxie-runtime/src/draw.rs:10726-10750"]
+construct = ["cpp:include/rive/layout_component.hpp:117-120", "rust:crates/nuxie-runtime/src/draw.rs:8391-8438"]
+update = ["cpp:src/layout_component.cpp:82-122", "cpp:src/layout_component.cpp:348-393", "rust:crates/nuxie-runtime/src/draw.rs:8441-8470"]
+draw = ["cpp:src/layout_component.cpp:317-346", "rust:crates/nuxie-runtime/src/draw.rs:15747-15824"]
+clone_drop = ["cpp:include/rive/layout_component.hpp:117-120", "rust:crates/nuxie-runtime/src/draw.rs:8423-8438"]
 
 [[owner]]
 id = "nested.mounted_child"
@@ -606,6 +606,22 @@ draw = ["cpp:src/nested_artboard.cpp:491-508", "rust:crates/nuxie-runtime/src/dr
 clone_drop = ["cpp:src/nested_artboard.cpp:885-939", "rust:crates/nuxie-runtime/src/artboard.rs:360-431"]
 
 [[owner]]
+id = "nested.child_render_resources"
+batch = "layout_nested"
+status = "adapted"
+rule = "RF-30"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "pub(crate) struct RuntimeOccurrenceRenderResources"
+depends_on = ["nested.mounted_child"]
+legacy_ratchets = []
+note = "The mounted child occurrence owns its complete paint/path sidecar. Preparation follows the live child graph after data-bound replacement, clone/remount starts cold, drop order releases nested machines first, and public backend-context changes rebuild renderer handles without copying occurrence state."
+[owner.lifecycle]
+construct = ["cpp:src/nested_artboard.cpp:88-135", "rust:crates/nuxie-runtime/src/artboard.rs:379-432", "rust:crates/nuxie-runtime/src/draw.rs:11550-11614"]
+update = ["cpp:src/nested_artboard.cpp:228-373", "rust:crates/nuxie-runtime/src/artboard.rs:5583-5651", "rust:crates/nuxie-runtime/src/draw.rs:14650-14700"]
+draw = ["cpp:src/nested_artboard.cpp:491-507", "rust:crates/nuxie-runtime/src/draw.rs:15827-15941"]
+clone_drop = ["cpp:src/nested_artboard.cpp:48-107", "rust:crates/nuxie-runtime/src/artboard.rs:379-432", "rust:crates/nuxie-runtime/src/draw.rs:11565-11570"]
+
+[[owner]]
 id = "component_list.draw_order"
 batch = "layout_nested"
 status = "exact"
@@ -620,6 +636,22 @@ construct = ["cpp:src/artboard_component_list.cpp:1453-1477", "rust:crates/nuxie
 update = ["cpp:src/artboard_component_list.cpp:1528-1543", "rust:crates/nuxie-runtime/src/artboard.rs:523-603"]
 draw = ["cpp:src/artboard_component_list.cpp:977-980", "rust:crates/nuxie-runtime/src/draw.rs:16852-17077"]
 clone_drop = ["cpp:src/artboard_component_list.cpp:1453-1477", "rust:crates/nuxie-runtime/src/artboard.rs:523-603"]
+
+[[owner]]
+id = "component_list.item_render_resources"
+batch = "layout_nested"
+status = "adapted"
+rule = "RF-30"
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "pub(crate) struct RuntimeComponentListItemInstance"
+depends_on = ["component_list.draw_order", "nested.child_render_resources"]
+legacy_ratchets = []
+note = "Each mounted row owns its child ArtboardInstance and complete renderer sidecar. Stable row reuse retains both; replacement/drop discards both; clone starts cold; draw traverses the authoritative child directly with no transient layout clone or host-keyed renderer cache."
+[owner.lifecycle]
+construct = ["cpp:src/artboard_component_list.cpp:1453-1526", "rust:crates/nuxie-runtime/src/artboard.rs:2757-3081"]
+update = ["cpp:src/artboard_component_list.cpp:715-885", "cpp:src/artboard_component_list.cpp:1254-1298", "cpp:src/artboard_component_list.cpp:1528-1547", "rust:crates/nuxie-runtime/src/artboard.rs:2757-3199"]
+draw = ["cpp:src/artboard_component_list.cpp:1147-1195", "rust:crates/nuxie-runtime/src/draw.rs:18550-18717"]
+clone_drop = ["cpp:src/artboard_component_list.cpp:1445-1451", "cpp:src/artboard_component_list.cpp:1549-1586", "rust:crates/nuxie-runtime/src/artboard.rs:549-575", "rust:crates/nuxie-runtime/src/draw.rs:11565-11570"]
 
 [[owner]]
 id = "artboard.first_drawable"

@@ -860,6 +860,30 @@ upstream-sync-map registry).
   segments with zero failures, renderer pixels remain 1,468/1,468 with zero
   divergences/gated cases, and runtime is 411/411. The <=1.0x tier-5 target
   remains open.
+  The second burn-down slice removes two more ownership translations that
+  performed work C++ retains on the owning instance. State-machine layers now
+  evaluate transitions and actions against the instance's live retained
+  script/focus/bindable collections instead of cloning all three per layer;
+  this mirrors `state_machine_instance.cpp:2540-2665`. Artboard settlement
+  now walks retained ShapePaint owners directly, without allocating a
+  temporary owner vector per paint, and leaves dirt parked on collapsed
+  Path/PathComposer owners instead of repeatedly rearming Artboard Components.
+  That follows `artboard.cpp:1214-1230`, `path.cpp:336-380`, and
+  `path_composer.cpp:38-112` under RF-2/RF-5/RF-17. Allocation
+  instrumentation on an unchanged `spotify_kids_demo` frame fell from 99.27
+  allocations/frame to zero incremental allocations. With canonical
+  hot-loop parameters run immediately in the user-approved current
+  environment, `spotify_kids_demo@0` improved from 4.670504x total /
+  6.849367x advance / 2.424020x draw to 1.797236x / 1.301850x / 2.344466x;
+  Rust advance fell from 72.745074 ms to 14.372682 ms per 10,000 iterations.
+  The directional whole-corpus aggregate moved from 3.472473x to 1.802696x
+  (`target/perf-hot-loop-spotify-owner-current-env.json`). Floors are green:
+  runtime 411/411, both golden modes 317/317 entries plus 647/647 exact
+  segments with zero failures, the probe-armed workspace including 721/721
+  C++ probes, renderer pixels 1,468/1,468 with zero divergences/gated cases,
+  C API, ownership closure, lint, format, and Apple product/release checks.
+  The next sorted slice is `advance_blend_mode@0.25` at 2.318720x total /
+  2.296396x advance / 3.291940x draw. The <=1.0x tier-5 target remains open.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -1082,6 +1106,25 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   boundary this phase crosses.
 
 ## Log
+
+- 2026-07-24 — The second post-closeout performance burn-down slice restored
+  C++-shaped retained update ownership. State-machine transition evaluation
+  now reads the live instance collections instead of cloning script, focus,
+  and bindable snapshots per layer (`state_machine_instance.cpp:2540-2665`).
+  Artboard settlement directly walks retained ShapePaint owners and skips
+  collapsed Path/PathComposer owners while their dirt remains parked
+  (`artboard.cpp:1214-1230`, `path.cpp:336-380`,
+  `path_composer.cpp:38-112`), applying RF-2/RF-5/RF-17 rather than adding a
+  Rust-only cache. On unchanged `spotify_kids_demo`, instrumentation moved
+  from 99.27 allocations/frame to zero incremental allocations. Canonical
+  parameters in the user-approved current environment moved that entry from
+  4.670504x total / 6.849367x advance / 2.424020x draw to 1.797236x /
+  1.301850x / 2.344466x, and the directional aggregate from 3.472473x to
+  1.802696x (`target/perf-hot-loop-spotify-owner-current-env.json`). Runtime
+  411/411, ordinary/scripted goldens 317/317 plus 647/647 exact segments,
+  the 721-probe workspace, renderer pixels 1,468/1,468, C API, closure,
+  lint, format, and Apple gates are green. The next sorted entry is
+  `advance_blend_mode@0.25`; the <=1.0x target remains open.
 
 - 2026-07-24 — The first post-closeout performance burn-down slice replaced
   Artboard background reconstruction with the pinned C++ Artboard-owned

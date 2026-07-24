@@ -4796,13 +4796,22 @@ impl ArtboardInstance {
         // ShapePaintPath, EffectPath, and RenderPaint state even when every
         // copied component property was already clean. RuntimeShapeList marks
         // that construction settlement explicitly.
-        let pending_shape_components = self.runtime_shapes.pending_settlement_component_locals();
+        let component_by_local = &self.component_by_local;
+        let components = &self.components;
+        let pending_shape_components =
+            self.runtime_shapes
+                .pending_settlement_component_locals(|local_id| {
+                    component_by_local
+                        .get(&local_id)
+                        .and_then(|index| components.get(*index))
+                        .is_some_and(RuntimeComponent::is_collapsed)
+                });
         if !pending_shape_components.is_empty() {
-            self.dirt |= ComponentDirt::COMPONENTS;
             for local_id in pending_shape_components {
                 let Some(component_index) = self.component_by_local.get(&local_id).copied() else {
                     continue;
                 };
+                self.dirt |= ComponentDirt::COMPONENTS;
                 self.components[component_index].dirt |= ComponentDirt::PATH;
             }
         }

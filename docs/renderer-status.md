@@ -3077,6 +3077,27 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-24: The second user-directed hot-loop slice preserves the existing
+  renderer boundary and removes update-side translations that violated C++
+  ownership. State-machine layers read the instance's retained script,
+  focus, and bindable collections directly
+  (`state_machine_instance.cpp:2540-2665`). Artboard settlement walks
+  ShapePaint owners without per-paint temporary vectors and does not rearm
+  Artboard Components for collapsed Path/PathComposer owners whose dirt C++
+  leaves parked (`artboard.cpp:1214-1230`, `path.cpp:336-380`,
+  `path_composer.cpp:38-112`), under RF-2/RF-5/RF-17. Unchanged
+  `spotify_kids_demo` instrumentation fell from 99.27 allocations/frame to
+  zero incremental allocations. With canonical parameters run immediately
+  in the user-approved current environment, that entry improved from
+  4.670504x total / 6.849367x advance / 2.424020x draw to 1.797236x /
+  1.301850x / 2.344466x; the directional aggregate moved from 3.472473x to
+  1.802696x (`target/perf-hot-loop-spotify-owner-current-env.json`). The
+  pixel referee is green at 1,468/1,468, including 1,370 byte-exact entries
+  and zero divergences/gated cases. Both runtime golden modes remain
+  317/317 entries plus 647/647 exact segments with zero failures. The next
+  sorted entry is `advance_blend_mode@0.25`; the <=1.0x tier-5 target remains
+  open.
+
 - 2026-07-24: The first user-directed post-closeout hot-loop slice ports
   Artboard background geometry and paint retention from pinned C++, without
   changing the existing `Renderer`/`RenderFactory` boundary. Local/world

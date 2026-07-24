@@ -8382,48 +8382,58 @@ impl RuntimeShapeList {
         std::mem::take(&mut *self.pending_backend_paints.borrow_mut())
     }
 
-    pub(crate) fn pending_settlement_component_locals(&self) -> Vec<usize> {
-        let mut locals = self
-            .paths_by_local
-            .iter()
-            .enumerate()
-            .filter_map(|(local_id, path)| {
-                path.as_ref()
-                    .is_some_and(|path| path.runtime_scheduled && path.dirty.get())
-                    .then_some(local_id)
-            })
-            .collect::<Vec<_>>();
-        locals.extend(
-            self.by_local
-                .iter()
-                .enumerate()
-                .filter_map(|(shape_local, shape)| {
-                    shape
-                        .as_ref()
-                        .is_some_and(|shape| {
-                            shape.path_composer_order != usize::MAX
-                                && !shape.path_composer_dirt.get().is_empty()
-                        })
-                        .then_some(shape_local)
-                }),
-        );
-        locals.extend(self.by_local.iter().flatten().flat_map(|shape| {
-            shape.paint_owners.iter().flat_map(|paint| {
-                let mut pending = Vec::with_capacity(3);
+    /// Walk retained Path, PathComposer, and ShapePaint owners for occurrence
+    /// dirt without materializing a temporary collection per owner.
+    ///
+    /// Collapsed C++ dependency nodes retain their dirt but do not re-arm
+    /// Artboard::Components until uncollapse (`artboard.cpp:1214-1230`);
+    /// `Path::update` and `PathComposer::update` consume visible-owner dirt at
+    /// their dependency nodes (`path.cpp:336-380`,
+    /// `path_composer.cpp:38-112`).
+    pub(crate) fn pending_settlement_component_locals(
+        &self,
+        mut is_collapsed: impl FnMut(usize) -> bool,
+    ) -> Vec<usize> {
+        let mut locals = Vec::new();
+        for (local_id, path) in self.paths_by_local.iter().enumerate() {
+            if path
+                .as_ref()
+                .is_some_and(|path| path.runtime_scheduled && path.dirty.get())
+                && !is_collapsed(local_id)
+            {
+                locals.push(local_id);
+            }
+        }
+        for (shape_local, shape) in self.by_local.iter().enumerate() {
+            let Some(shape) = shape.as_ref() else {
+                continue;
+            };
+            if shape.path_composer_order != usize::MAX
+                && !shape.path_composer_dirt.get().is_empty()
+                && !is_collapsed(shape_local)
+            {
+                locals.push(shape_local);
+            }
+            for paint in &shape.paint_owners {
                 if paint.mutator_dirty.get() {
-                    pending.push(paint.mutator_local.unwrap_or(paint.paint_local));
+                    let local_id = paint.mutator_local.unwrap_or(paint.paint_local);
+                    if !is_collapsed(local_id) {
+                        locals.push(local_id);
+                    }
                 }
                 if !paint.effect_paths.is_empty() && paint.effect_dirty_from.get().is_some() {
-                    pending.push(paint.paint_local);
+                    if !is_collapsed(paint.paint_local) {
+                        locals.push(paint.paint_local);
+                    }
                 }
                 if paint.feather_dirty.get()
                     && let Some(feather_local) = paint.feather_local
+                    && !is_collapsed(feather_local)
                 {
-                    pending.push(feather_local);
+                    locals.push(feather_local);
                 }
-                pending
-            })
-        }));
+            }
+        }
         locals.sort_unstable();
         locals.dedup();
         locals
@@ -27925,6 +27935,17 @@ mod tests {
             !Arc::ptr_eq(&before.raw_path, &collapsed.raw_path)
                 && collapsed_commands.len() < before_commands.len(),
             "collapsing the inner Rectangle must recompose the owner without its contour"
+        );
+        assert!(
+            !instance.update_components().did_update,
+            "C++ updateComponents leaves collapsed component dirt parked and \
+             clears Artboard::Components after the dependency pass; the \
+             retained Path owner must not re-arm an unchanged frame \
+             (artboard.cpp:1214-1230)"
+        );
+        assert!(
+            Arc::ptr_eq(&collapsed.raw_path, &owned_local_path(&instance).raw_path),
+            "a clean frame retains the ShapePaintPath owner"
         );
 
         assert!(instance.collapse_component(5, false));

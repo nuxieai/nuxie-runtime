@@ -159,6 +159,7 @@ struct RuntimeStateMachineListenerActionExecutor<'a> {
     owned_data_context: Option<RuntimeOwnedDataContext>,
     file_data_context_instance: Option<RuntimeViewModelInstanceCells>,
     scripted_listener_action_instances: &'a BTreeMap<u32, RuntimeScriptInstanceHandle>,
+    scripted_instances_by_global: &'a BTreeMap<u32, RuntimeScriptInstanceHandle>,
     script_error: &'a mut Option<ScriptError>,
     focus: &'a mut RuntimeFocusTree,
     host: &'a mut dyn ScriptHost,
@@ -488,6 +489,17 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
 }
 
 impl RuntimeScheduledListenerActionExecutor for RuntimeStateMachineListenerActionExecutor<'_> {
+    fn target_has_focus(&self, target_local_id: usize) -> bool {
+        self.focus.target_has_focus(target_local_id)
+    }
+
+    fn evaluate_scripted_condition(&self, global_id: u32) -> bool {
+        super::transition_conditions::evaluate_scripted_condition(
+            global_id,
+            self.scripted_instances_by_global,
+        )
+    }
+
     fn retained_view_model_trigger_source(
         &self,
         bindable_global_id: u32,
@@ -5641,66 +5653,38 @@ impl StateMachineInstance {
             .enumerate()
             .take(self.layers.len())
         {
-            let view_model_trigger_layer_id =
-                self.layers[layer_index].view_model_trigger_layer_id();
-            let scripted_instances = self.scripted_instances_by_global.clone();
-            let focus = self.focus.clone();
-            let bindable_numbers = self.bindable_numbers.clone();
-            let bindable_integers = self.bindable_integers.clone();
-            let bindable_colors = self.bindable_colors.clone();
-            let bindable_strings = self.bindable_strings.clone();
-            let bindable_enums = self.bindable_enums.clone();
-            let bindable_assets = self.bindable_assets.clone();
-            let bindable_artboards = self.bindable_artboards.clone();
-            let bindable_triggers = self.bindable_triggers.clone();
-            let bindable_view_models = self.bindable_view_models.clone();
-            let bindable_booleans = self.bindable_booleans.clone();
-            let evaluation_context = TransitionEvaluationContext {
-                scripted_instances: &scripted_instances,
-                focus: &focus,
-                bindable_numbers: &bindable_numbers,
-                bindable_integers: &bindable_integers,
-                bindable_colors: &bindable_colors,
-                bindable_strings: &bindable_strings,
-                bindable_enums: &bindable_enums,
-                bindable_assets: &bindable_assets,
-                bindable_artboards: &bindable_artboards,
-                bindable_triggers: &bindable_triggers,
-                bindable_view_models: &bindable_view_models,
-                bindable_booleans: &bindable_booleans,
-                data_context_present,
-                layer_index,
-                view_model_trigger_layer_id,
-            };
             let mut executor = RuntimeStateMachineListenerActionExecutor {
                 data_bind_graph: &mut self.data_bind_graph,
                 owned_view_model_context: None,
                 owned_data_context: self.owned_data_context.clone(),
                 file_data_context_instance: file_data_context_instance.clone(),
                 scripted_listener_action_instances: &self.scripted_listener_action_instances,
+                scripted_instances_by_global: &self.scripted_instances_by_global,
                 script_error: &mut self.script_error,
                 focus: &mut self.focus,
                 host,
             };
             let layer_changed = self.layers[layer_index].update_state(
-                &evaluation_context,
                 artboard,
                 layer,
-                &mut self.inputs,
-                &mut self.bindable_numbers,
-                &mut self.bindable_integers,
-                &mut self.bindable_colors,
-                &mut self.bindable_strings,
-                &mut self.bindable_enums,
-                &mut self.bindable_assets,
-                &mut self.bindable_artboards,
-                &mut self.bindable_lists,
-                &mut self.bindable_triggers,
-                &mut self.bindable_view_models,
-                &mut self.bindable_booleans,
-                &mut self.transition_durations,
                 data_context_present,
-                &mut self.reported_events,
+                layer_index,
+                RuntimeScheduledListenerActionTargetsMut {
+                    inputs: &mut self.inputs,
+                    reported_events: &mut self.reported_events,
+                    bindable_numbers: &mut self.bindable_numbers,
+                    bindable_integers: &mut self.bindable_integers,
+                    bindable_colors: &mut self.bindable_colors,
+                    bindable_strings: &mut self.bindable_strings,
+                    bindable_enums: &mut self.bindable_enums,
+                    bindable_assets: &mut self.bindable_assets,
+                    bindable_artboards: &mut self.bindable_artboards,
+                    bindable_lists: &mut self.bindable_lists,
+                    bindable_triggers: &mut self.bindable_triggers,
+                    bindable_view_models: &mut self.bindable_view_models,
+                    bindable_booleans: &mut self.bindable_booleans,
+                    transition_durations: &mut self.transition_durations,
+                },
                 &mut executor,
             )?;
             if layer_changed {
@@ -5790,43 +5774,13 @@ impl StateMachineInstance {
             .enumerate()
             .take(self.layers.len())
         {
-            let view_model_trigger_layer_id =
-                self.layers[layer_index].view_model_trigger_layer_id();
-            let scripted_instances = self.scripted_instances_by_global.clone();
-            let focus = self.focus.clone();
-            let bindable_numbers = self.bindable_numbers.clone();
-            let bindable_integers = self.bindable_integers.clone();
-            let bindable_colors = self.bindable_colors.clone();
-            let bindable_strings = self.bindable_strings.clone();
-            let bindable_enums = self.bindable_enums.clone();
-            let bindable_assets = self.bindable_assets.clone();
-            let bindable_artboards = self.bindable_artboards.clone();
-            let bindable_triggers = self.bindable_triggers.clone();
-            let bindable_view_models = self.bindable_view_models.clone();
-            let bindable_booleans = self.bindable_booleans.clone();
-            let evaluation_context = TransitionEvaluationContext {
-                scripted_instances: &scripted_instances,
-                focus: &focus,
-                bindable_numbers: &bindable_numbers,
-                bindable_integers: &bindable_integers,
-                bindable_colors: &bindable_colors,
-                bindable_strings: &bindable_strings,
-                bindable_enums: &bindable_enums,
-                bindable_assets: &bindable_assets,
-                bindable_artboards: &bindable_artboards,
-                bindable_triggers: &bindable_triggers,
-                bindable_view_models: &bindable_view_models,
-                bindable_booleans: &bindable_booleans,
-                data_context_present,
-                layer_index,
-                view_model_trigger_layer_id,
-            };
             let mut executor = RuntimeStateMachineListenerActionExecutor {
                 data_bind_graph: &mut self.data_bind_graph,
                 owned_view_model_context: owned_context.as_deref_mut(),
                 owned_data_context: self.owned_data_context.clone(),
                 file_data_context_instance: file_data_context_instance.clone(),
                 scripted_listener_action_instances: &self.scripted_listener_action_instances,
+                scripted_instances_by_global: &self.scripted_instances_by_global,
                 script_error: &mut self.script_error,
                 focus: &mut self.focus,
                 host: &mut *host,
@@ -5834,26 +5788,28 @@ impl StateMachineInstance {
             let layer_result = {
                 let layer_instance = &mut self.layers[layer_index];
                 layer_instance.advance(
-                    &evaluation_context,
                     artboard,
                     layer,
                     &self.key_frame_data_bind_graphs,
                     elapsed_seconds,
-                    &mut self.inputs,
-                    &mut self.bindable_numbers,
-                    &mut self.bindable_integers,
-                    &mut self.bindable_colors,
-                    &mut self.bindable_strings,
-                    &mut self.bindable_enums,
-                    &mut self.bindable_assets,
-                    &mut self.bindable_artboards,
-                    &mut self.bindable_lists,
-                    &mut self.bindable_triggers,
-                    &mut self.bindable_view_models,
-                    &mut self.bindable_booleans,
-                    &mut self.transition_durations,
                     data_context_present,
-                    &mut self.reported_events,
+                    layer_index,
+                    RuntimeScheduledListenerActionTargetsMut {
+                        inputs: &mut self.inputs,
+                        reported_events: &mut self.reported_events,
+                        bindable_numbers: &mut self.bindable_numbers,
+                        bindable_integers: &mut self.bindable_integers,
+                        bindable_colors: &mut self.bindable_colors,
+                        bindable_strings: &mut self.bindable_strings,
+                        bindable_enums: &mut self.bindable_enums,
+                        bindable_assets: &mut self.bindable_assets,
+                        bindable_artboards: &mut self.bindable_artboards,
+                        bindable_lists: &mut self.bindable_lists,
+                        bindable_triggers: &mut self.bindable_triggers,
+                        bindable_view_models: &mut self.bindable_view_models,
+                        bindable_booleans: &mut self.bindable_booleans,
+                        transition_durations: &mut self.transition_durations,
+                    },
                     &mut executor,
                 )
             }?;

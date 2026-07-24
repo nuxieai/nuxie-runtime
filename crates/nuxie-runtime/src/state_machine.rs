@@ -5,9 +5,8 @@ use crate::components::TransformProperty;
 use crate::data_bind_graph::{
     RuntimeDataBindGraphConverterBuildCache, data_bind_flags_apply_target_to_source,
 };
-use crate::focus::RuntimeFocusTree;
 use crate::properties::{artboard_index_for_graph, property_key_for_name};
-use crate::scripting::{RuntimeScriptInstanceHandle, ScriptError, ScriptListenerActionDefinition};
+use crate::scripting::{ScriptError, ScriptListenerActionDefinition};
 use crate::view_model_cell::RuntimeViewModelCell;
 use crate::{
     ArtboardInstance, RuntimeGeometryHit, RuntimeGeometryHitOccurrence,
@@ -1182,8 +1181,6 @@ struct RuntimeTransitionAnimationRef<'a> {
 }
 
 pub(crate) struct TransitionEvaluationContext<'a> {
-    scripted_instances: &'a BTreeMap<u32, RuntimeScriptInstanceHandle>,
-    focus: &'a RuntimeFocusTree,
     bindable_numbers: &'a [StateMachineBindableNumberInstance],
     bindable_integers: &'a [StateMachineBindableIntegerInstance],
     bindable_colors: &'a [StateMachineBindableColorInstance],
@@ -1357,17 +1354,13 @@ impl RuntimeStateTransition {
 
     fn use_inputs(
         &self,
-        context: &TransitionEvaluationContext<'_>,
         inputs: &mut [StateMachineInputInstance],
         executor: &dyn RuntimeScheduledListenerActionExecutor,
+        layer_index: usize,
+        view_model_trigger_layer_id: u64,
     ) {
         for condition in &self.conditions {
-            condition.use_input(
-                executor,
-                inputs,
-                context.layer_index,
-                context.view_model_trigger_layer_id,
-            );
+            condition.use_input(executor, inputs, layer_index, view_model_trigger_layer_id);
         }
     }
 }
@@ -2117,9 +2110,46 @@ impl RuntimeScheduledListenerActionTargetsMut<'_> {
             transition_durations: &mut *self.transition_durations,
         }
     }
+
+    fn evaluation_context(
+        &self,
+        data_context_present: bool,
+        layer_index: usize,
+        view_model_trigger_layer_id: u64,
+    ) -> TransitionEvaluationContext<'_> {
+        // Pinned C++ transition evaluation reads the StateMachineInstance's
+        // retained input/bindable owners in place, then listener actions
+        // mutate those same owners after the condition walk
+        // (`state_machine_instance.cpp:2540-2665`). Keep that sequencing as
+        // two Rust reborrows; a cloned evaluation snapshot changes both the
+        // ownership model and clean-frame cost.
+        TransitionEvaluationContext {
+            bindable_numbers: self.bindable_numbers,
+            bindable_integers: self.bindable_integers,
+            bindable_colors: self.bindable_colors,
+            bindable_strings: self.bindable_strings,
+            bindable_enums: self.bindable_enums,
+            bindable_assets: self.bindable_assets,
+            bindable_artboards: self.bindable_artboards,
+            bindable_triggers: self.bindable_triggers,
+            bindable_view_models: self.bindable_view_models,
+            bindable_booleans: self.bindable_booleans,
+            data_context_present,
+            layer_index,
+            view_model_trigger_layer_id,
+        }
+    }
 }
 
 pub(crate) trait RuntimeScheduledListenerActionExecutor {
+    fn target_has_focus(&self, _target_local_id: usize) -> bool {
+        false
+    }
+
+    fn evaluate_scripted_condition(&self, _global_id: u32) -> bool {
+        false
+    }
+
     fn retained_view_model_trigger_source(
         &self,
         _bindable_global_id: u32,
@@ -2772,12 +2802,13 @@ impl StateMachineLayerInstance {
         instance
     }
 
-    pub(crate) fn view_model_trigger_layer_id(&self) -> u64 {
-        self.view_model_trigger_layer_id
-    }
-
     pub(crate) fn refresh_view_model_trigger_layer_id(&mut self) {
         self.view_model_trigger_layer_id = next_view_model_trigger_layer_id();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn view_model_trigger_layer_id(&self) -> u64 {
+        self.view_model_trigger_layer_id
     }
 
     pub(crate) fn has_current_animation(&self) -> bool {
@@ -2790,26 +2821,13 @@ impl StateMachineLayerInstance {
 
     pub(crate) fn advance(
         &mut self,
-        context: &TransitionEvaluationContext<'_>,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
         elapsed_seconds: f32,
-        inputs: &mut [StateMachineInputInstance],
-        bindable_numbers: &mut [StateMachineBindableNumberInstance],
-        bindable_integers: &mut [StateMachineBindableIntegerInstance],
-        bindable_colors: &mut [StateMachineBindableColorInstance],
-        bindable_strings: &mut [StateMachineBindableStringInstance],
-        bindable_enums: &mut [StateMachineBindableEnumInstance],
-        bindable_assets: &mut [StateMachineBindableAssetInstance],
-        bindable_artboards: &mut [StateMachineBindableArtboardInstance],
-        bindable_lists: &mut [StateMachineBindableListInstance],
-        bindable_triggers: &mut [StateMachineBindableTriggerInstance],
-        bindable_view_models: &mut [StateMachineBindableViewModelInstance],
-        bindable_booleans: &mut [StateMachineBindableBooleanInstance],
-        transition_durations: &mut [StateMachineTransitionDurationInstance],
         data_context_present: bool,
-        reported_events: &mut Vec<StateMachineReportedEvent>,
+        layer_index: usize,
+        mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     ) -> Result<StateMachineLayerAdvance, ScriptError> {
         let key_frame_data_bind_keep_going =
@@ -2818,62 +2836,30 @@ impl StateMachineLayerInstance {
             artboard,
             layer,
             elapsed_seconds,
-            inputs,
-            context.bindable_numbers,
-            reported_events,
+            targets.inputs,
+            targets.bindable_numbers,
+            targets.reported_events,
         );
-        let input_changed = self.update_transition_mix(
-            artboard,
-            elapsed_seconds,
-            RuntimeScheduledListenerActionTargetsMut {
-                inputs: &mut *inputs,
-                reported_events: &mut *reported_events,
-                bindable_numbers: &mut *bindable_numbers,
-                bindable_integers: &mut *bindable_integers,
-                bindable_colors: &mut *bindable_colors,
-                bindable_strings: &mut *bindable_strings,
-                bindable_enums: &mut *bindable_enums,
-                bindable_assets: &mut *bindable_assets,
-                bindable_artboards: &mut *bindable_artboards,
-                bindable_lists: &mut *bindable_lists,
-                bindable_triggers: &mut *bindable_triggers,
-                bindable_view_models: &mut *bindable_view_models,
-                bindable_booleans: &mut *bindable_booleans,
-                transition_durations: &mut *transition_durations,
-            },
-            executor,
-        )?;
+        let input_changed =
+            self.update_transition_mix(artboard, elapsed_seconds, targets.reborrow(), executor)?;
         self.advance_transition_source_animation(
             artboard,
             layer,
             elapsed_seconds,
-            inputs,
-            context.bindable_numbers,
-            reported_events,
+            targets.inputs,
+            targets.bindable_numbers,
+            targets.reported_events,
         );
         self.apply_animations(artboard, key_frame_data_bind_graphs);
 
         let mut changed_state = false;
         for _ in 0..100 {
             if !self.update_state(
-                context,
                 artboard,
                 layer,
-                inputs,
-                bindable_numbers,
-                bindable_integers,
-                bindable_colors,
-                bindable_strings,
-                bindable_enums,
-                bindable_assets,
-                bindable_artboards,
-                bindable_lists,
-                bindable_triggers,
-                bindable_view_models,
-                bindable_booleans,
-                transition_durations,
                 data_context_present,
-                reported_events,
+                layer_index,
+                targets.reborrow(),
                 executor,
             )? {
                 break;
@@ -2895,24 +2881,11 @@ impl StateMachineLayerInstance {
 
     pub(crate) fn update_state(
         &mut self,
-        context: &TransitionEvaluationContext<'_>,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
-        inputs: &mut [StateMachineInputInstance],
-        bindable_numbers: &mut [StateMachineBindableNumberInstance],
-        bindable_integers: &mut [StateMachineBindableIntegerInstance],
-        bindable_colors: &mut [StateMachineBindableColorInstance],
-        bindable_strings: &mut [StateMachineBindableStringInstance],
-        bindable_enums: &mut [StateMachineBindableEnumInstance],
-        bindable_assets: &mut [StateMachineBindableAssetInstance],
-        bindable_artboards: &mut [StateMachineBindableArtboardInstance],
-        bindable_lists: &mut [StateMachineBindableListInstance],
-        bindable_triggers: &mut [StateMachineBindableTriggerInstance],
-        bindable_view_models: &mut [StateMachineBindableViewModelInstance],
-        bindable_booleans: &mut [StateMachineBindableBooleanInstance],
-        transition_durations: &mut [StateMachineTransitionDurationInstance],
         data_context_present: bool,
-        reported_events: &mut Vec<StateMachineReportedEvent>,
+        layer_index: usize,
+        mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     ) -> Result<bool, ScriptError> {
         if self.is_transitioning() && !self.transition_enable_early_exit {
@@ -2920,74 +2893,35 @@ impl StateMachineLayerInstance {
         }
         self.waiting_for_exit = false;
         if self.try_change_state(
-            context,
             artboard,
             layer,
             layer.any_state_index,
-            inputs,
-            bindable_numbers,
-            bindable_integers,
-            bindable_colors,
-            bindable_strings,
-            bindable_enums,
-            bindable_assets,
-            bindable_artboards,
-            bindable_lists,
-            bindable_triggers,
-            bindable_view_models,
-            bindable_booleans,
-            transition_durations,
             data_context_present,
-            reported_events,
+            layer_index,
+            targets.reborrow(),
             executor,
         )? {
             return Ok(true);
         }
         self.try_change_state(
-            context,
             artboard,
             layer,
             self.current_state_index,
-            inputs,
-            bindable_numbers,
-            bindable_integers,
-            bindable_colors,
-            bindable_strings,
-            bindable_enums,
-            bindable_assets,
-            bindable_artboards,
-            bindable_lists,
-            bindable_triggers,
-            bindable_view_models,
-            bindable_booleans,
-            transition_durations,
             data_context_present,
-            reported_events,
+            layer_index,
+            targets,
             executor,
         )
     }
 
     fn try_change_state(
         &mut self,
-        context: &TransitionEvaluationContext<'_>,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         state_index: Option<usize>,
-        inputs: &mut [StateMachineInputInstance],
-        bindable_numbers: &mut [StateMachineBindableNumberInstance],
-        bindable_integers: &mut [StateMachineBindableIntegerInstance],
-        bindable_colors: &mut [StateMachineBindableColorInstance],
-        bindable_strings: &mut [StateMachineBindableStringInstance],
-        bindable_enums: &mut [StateMachineBindableEnumInstance],
-        bindable_assets: &mut [StateMachineBindableAssetInstance],
-        bindable_artboards: &mut [StateMachineBindableArtboardInstance],
-        bindable_lists: &mut [StateMachineBindableListInstance],
-        bindable_triggers: &mut [StateMachineBindableTriggerInstance],
-        bindable_view_models: &mut [StateMachineBindableViewModelInstance],
-        bindable_booleans: &mut [StateMachineBindableBooleanInstance],
-        transition_durations: &mut [StateMachineTransitionDurationInstance],
-        _data_context_present: bool,
-        reported_events: &mut Vec<StateMachineReportedEvent>,
+        data_context_present: bool,
+        layer_index: usize,
+        targets: RuntimeScheduledListenerActionTargetsMut<'_>,
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     ) -> Result<bool, ScriptError> {
         let Some(state_index) = state_index else {
@@ -2998,39 +2932,37 @@ impl StateMachineLayerInstance {
         };
 
         if state.uses_random_transition_selection() {
-            let Some((transition_index, state_to_index)) = self.find_random_transition(
-                context,
-                artboard,
-                state,
-                state_index,
-                inputs,
-                executor,
-            ) else {
+            let random_transition = {
+                let context = targets.evaluation_context(
+                    data_context_present,
+                    layer_index,
+                    self.view_model_trigger_layer_id,
+                );
+                self.find_random_transition(
+                    &context,
+                    artboard,
+                    state,
+                    state_index,
+                    targets.inputs,
+                    executor,
+                )
+            };
+            let Some((transition_index, state_to_index)) = random_transition else {
                 return Ok(false);
             };
             let transition = &state.transitions[transition_index];
-            transition.use_inputs(context, inputs, executor);
+            transition.use_inputs(
+                targets.inputs,
+                executor,
+                layer_index,
+                self.view_model_trigger_layer_id,
+            );
             self.change_state(
                 artboard,
                 layer,
                 transition,
                 state_to_index,
-                RuntimeScheduledListenerActionTargetsMut {
-                    inputs: &mut *inputs,
-                    reported_events: &mut *reported_events,
-                    bindable_numbers: &mut *bindable_numbers,
-                    bindable_integers: &mut *bindable_integers,
-                    bindable_colors: &mut *bindable_colors,
-                    bindable_strings: &mut *bindable_strings,
-                    bindable_enums: &mut *bindable_enums,
-                    bindable_assets: &mut *bindable_assets,
-                    bindable_artboards: &mut *bindable_artboards,
-                    bindable_lists: &mut *bindable_lists,
-                    bindable_triggers: &mut *bindable_triggers,
-                    bindable_view_models: &mut *bindable_view_models,
-                    bindable_booleans: &mut *bindable_booleans,
-                    transition_durations: &mut *transition_durations,
-                },
+                targets,
                 executor,
             )?;
             return Ok(true);
@@ -3051,10 +2983,17 @@ impl StateMachineLayerInstance {
                 transition,
                 self.current_state_index == Some(state_index),
             );
-            let allowance = if transition.direct_input_conditions_only {
-                transition.allow_direct_inputs(context, inputs, animation_from)
-            } else {
-                transition.allow(context, artboard, inputs, executor, animation_from)
+            let allowance = {
+                let context = targets.evaluation_context(
+                    data_context_present,
+                    layer_index,
+                    self.view_model_trigger_layer_id,
+                );
+                if transition.direct_input_conditions_only {
+                    transition.allow_direct_inputs(&context, targets.inputs, animation_from)
+                } else {
+                    transition.allow(&context, artboard, targets.inputs, executor, animation_from)
+                }
             };
             match allowance {
                 TransitionAllowance::No => continue,
@@ -3066,28 +3005,18 @@ impl StateMachineLayerInstance {
                     self.waiting_for_exit = false;
                 }
             }
-            transition.use_inputs(context, inputs, executor);
+            transition.use_inputs(
+                targets.inputs,
+                executor,
+                layer_index,
+                self.view_model_trigger_layer_id,
+            );
             self.change_state(
                 artboard,
                 layer,
                 transition,
                 state_to_index,
-                RuntimeScheduledListenerActionTargetsMut {
-                    inputs: &mut *inputs,
-                    reported_events: &mut *reported_events,
-                    bindable_numbers: &mut *bindable_numbers,
-                    bindable_integers: &mut *bindable_integers,
-                    bindable_colors: &mut *bindable_colors,
-                    bindable_strings: &mut *bindable_strings,
-                    bindable_enums: &mut *bindable_enums,
-                    bindable_assets: &mut *bindable_assets,
-                    bindable_artboards: &mut *bindable_artboards,
-                    bindable_lists: &mut *bindable_lists,
-                    bindable_triggers: &mut *bindable_triggers,
-                    bindable_view_models: &mut *bindable_view_models,
-                    bindable_booleans: &mut *bindable_booleans,
-                    transition_durations: &mut *transition_durations,
-                },
+                targets,
                 executor,
             )?;
             return Ok(true);

@@ -983,8 +983,6 @@ impl RuntimeTransitionCondition {
         executor: &dyn RuntimeScheduledListenerActionExecutor,
     ) -> bool {
         let &TransitionEvaluationContext {
-            scripted_instances,
-            focus,
             bindable_numbers,
             bindable_integers,
             bindable_colors,
@@ -1004,16 +1002,14 @@ impl RuntimeTransitionCondition {
                 target_local_id,
                 op,
             } => {
-                let focused = focus.target_has_focus(*target_local_id);
+                let focused = executor.target_has_focus(*target_local_id);
                 if *op == TransitionConditionOp::Equal {
                     focused
                 } else {
                     !focused
                 }
             }
-            Self::Scripted { global_id } => {
-                evaluate_scripted_condition(*global_id, scripted_instances)
-            }
+            Self::Scripted { global_id } => executor.evaluate_scripted_condition(*global_id),
             Self::Bool { input_index, op } => {
                 let Some(value) = inputs
                     .get(*input_index)
@@ -1479,7 +1475,7 @@ impl RuntimeTransitionCondition {
     }
 }
 
-fn evaluate_scripted_condition(
+pub(super) fn evaluate_scripted_condition(
     global_id: u32,
     scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
 ) -> bool {

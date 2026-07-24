@@ -4,7 +4,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-1 dual-translation rulebook validation.
+- Phase: FL-A ready. FL-1 rulebook validation and source shaping are complete;
+  no production owner-family translation has started.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - File closure: 0 / 337 in-scope C++ files.
 - Member closure: 41 / 74 owner/member rows (the imported, already-closed
@@ -71,6 +72,55 @@ runner and is invalid ordinary-golden evidence. Ordinary parity uses only
 `env -u CPP_CONFIG -u RUST_PROFILE make golden-compare` with the checked-in
 debug C++ configuration and its provenance stamp.
 
+## FL-1 rulebook evidence
+
+- Representative sources: complete pinned
+  `src/component.cpp` + `include/rive/component.hpp`,
+  `src/animation/linear_animation_instance.cpp` + header, and
+  `src/animation/state_machine.cpp` + header, including the directly required
+  importer/generated lifecycle sources.
+- Rulebook-strict disposable translation:
+  `translation.rs` SHA-256
+  `b3553b81d013109c50e1d3b4ab967cb6e05ac1737ecbcd6b339f49c5148d4bc6`;
+  `notes.md` SHA-256
+  `8e22ba7f9913f59a12b4bf0e7dc5f49dbfa01f04ca8e16ebeca309acb5c25d2b`.
+- Independent senior-Rust disposable translation:
+  `translation.rs` SHA-256
+  `b43c3203a41493c69e68ca320e37033c35f78793df91f212d79845fb628f4237`;
+  `notes.md` SHA-256
+  `0fdc69ade77bc995b7c15f17f8664dd46aa4cab1bf17a38db06d4f67e743639d`.
+- Adjudication: pinned C++ selected construction-state `Option`/typestate for
+  unset graph order; explicit owner mediation for Artboard back-pointers;
+  preserved nullable state-machine input slots; stable non-owning animation
+  definition identity; raw loop integer storage; literal time arithmetic;
+  exact collection visitation; generated/base-only aggregate clone; and safe,
+  explicitly ordered owner-mediated teardown. An observably uninitialized C++
+  scalar is a gap/decision, not permission to invent a zero value.
+- `docs/PORTING.md` now binds FLR-1..FLR-15 for definition/occurrence
+  separation, owner back-pointers, construction state, dirt order, nullable
+  slots, unique collections, clone, teardown, raw generated enums, literal
+  arithmetic/guards, occurrence ids, lifecycle visitation, first-insert
+  synchronization, event timing, and validated runtime invariants.
+- Source-shaping verdict: no mechanical extraction is required before FL-A.
+  The dependency-ready families already have disjoint primary owners:
+  Component in `components.rs` with Artboard integration, the coupled
+  KeyFrame-through-LinearAnimation family in `animation.rs`, and state-machine
+  definitions/occurrences in `state_machine.rs` plus
+  `state_machine/instance.rs`. Splitting inside those coupled C++ owner
+  families solely for parallelism would create a new seam rather than expose
+  one. Reassess only if a later complete owner family has an independently
+  testable boundary.
+- Both translations are disposable evidence only. Their hashes and the
+  adjudication above are retained. The temporary translation trees were moved
+  recoverably to
+  `/Users/levi/.Trash/nuxie-fl1-disposable.MZH4pp` when FL-1 closed.
+- Verification: all 12 checker unit/negative-control tests pass. The
+  working-tree checker correctly rejects the quarantined KeyFrame experiment
+  because it removes the committed `RuntimeKeyFrameTiming` anchor. Rerunning
+  against clean committed source with the current ledger/gaps reports 337
+  files, 74 members, 8 gaps, and every ratchet at its expected value. This is
+  the only accepted FL-1 structural evidence.
+
 ## Baseline performance
 
 - Last committed-tree canonical hot-loop artifact:
@@ -116,8 +166,11 @@ FL-0 clean committed-tree floor, run from detached worktrees carrying only
 
 ## Next
 
-1. Commit and push this FL-0 evidence ledger.
-2. Run FL-1 dual-translation rulebook validation over representative
-   component/update, animation, and state-machine files.
-3. Fold every translation disagreement into the rulebook, discard both
-   translations, and close FL-1 before starting FL-A production changes.
+1. Commit and push the FL-1 rulebook/source-shaping evidence without the two
+   quarantined production experiments.
+2. Begin FL-A as a complete Component owner-family translation, covering all
+   six pending FL-A member rows and the 52 mapped files before taking the
+   wave-level performance checkpoint.
+3. Preserve the complete behavior/pixel/product/size floor during FL-A.
+   Performance is measured only after the complete wave, never used as its
+   work queue.

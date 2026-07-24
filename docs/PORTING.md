@@ -1050,3 +1050,149 @@ backend below `Renderer`/`RenderFactory` is outside this work.
   only rebuild the whole chain, so it is rejected
   (`include/rive/shapes/paint/stroke_effect.hpp:13-56`,
   `src/shapes/paint/shape_paint.cpp:30-47,193-211`).
+
+## §10 Runtime Frame-Loop Translation Rules
+
+The FL-1 stress test independently translated the same pinned
+`Component`, `LinearAnimationInstance`, and `StateMachine` sources using (a)
+the existing rulebook literally and (b) an unconstrained senior-Rust design.
+The following rules resolve every disagreement from C++ ownership and
+lifecycle. They apply to the complete runtime frame loop through the existing
+`Renderer` / `RenderFactory` boundary.
+
+- **FLR-1 Separate authored definitions from runtime occurrences.** A C++
+  occurrence that retains `const T*` to an artboard-owned definition becomes a
+  stable typed definition handle, not a cloned descriptor. The definition owns
+  its authored children once; occurrences borrow it for their lifetime.
+  Physical immutable sharing such as `Arc` is allowed only when there is still
+  one logical definition owner and C++ clone behavior is unchanged. In
+  particular, `LinearAnimationInstance::m_animation` is retained identity, and
+  a `StateMachine` uniquely owns its layer/input/listener/data-bind vectors
+  while runtime state-machine instances reference the completed definition
+  (`include/rive/animation/linear_animation_instance.hpp:38-39,140-182`;
+  `include/rive/animation/state_machine.hpp:19-29`).
+- **FLR-2 A non-owning owner back-pointer may become explicit owner
+  mediation, never hidden ownership.** A raw C++ pointer to the containing
+  Artboard may be represented either by a stable typed id or by requiring the
+  owning arena at every operation. The implicit form is valid only when the
+  value cannot escape the owner and every callback, dirt notification, and
+  teardown use still occurs at the C++ site. Do not introduce
+  `Rc<RefCell<Artboard>>`, an unsafe self-reference, or a rediscovery lookup to
+  avoid passing the owner. `Component::m_Artboard` and
+  `Scene::m_artboardInstance` are the reference shapes
+  (`include/rive/component.hpp:23-40`; `src/component.cpp:19-29`;
+  `include/rive/scene.hpp:24-32,74-76`).
+- **FLR-3 Model construction-only unset storage; do not manufacture zero.**
+  When C++ leaves a scalar uninitialized and later construction writes it,
+  Rust uses `Option`, typestate, or a separate builder representation until
+  the write is proven. It may become a plain scalar only after that phase.
+  `Component::m_GraphOrder` is unset until `Artboard::sortDependencies`
+  assigns every component (`include/rive/component.hpp:26,54`;
+  `src/artboard.cpp:846-855`). If an uninitialized value is observably
+  readable before any guaranteed write, as `LinearAnimationInstance::m_didLoop`
+  is before its first `advance`, neither arbitrary `false` nor emulated
+  indeterminate storage is a faithful translation. Record a gap and stop for
+  the project safety/API decision
+  (`include/rive/animation/linear_animation_instance.hpp:97-100,150`;
+  `src/animation/linear_animation_instance.cpp:17-30,193-198,356`).
+- **FLR-4 Publish accumulated dirt before any callback and recurse last.**
+  Preserve the duplicate-bit early return, install the complete accumulated
+  dirt value, invoke the object's `onDirty`, notify the dependency root, and
+  only then recurse to dependents. Collapse is a distinct path: toggle only
+  the collapsed bit, run the two callbacks, then notify registered
+  collapsables. A broad invalidation helper may not reorder or combine these
+  sequences (`src/component.cpp:32-54,76-95`).
+- **FLR-5 Preserve nullable serialized slots and their indices.**
+  `StateMachineImporter::readNullObject` appends a null input; Rust must
+  represent that slot through import/validation rather than compacting the
+  vector or shifting later input indices. Indexed lookup returns absent for
+  either a null slot or an out-of-range index, and name lookup skips null
+  slots. Before lifecycle traversal, validation must either resolve every
+  required slot or return a structured import error; production code must not
+  replace C++'s null dereference with `expect`/`unwrap`
+  (`src/importers/state_machine_importer.cpp:35-40`;
+  `src/animation/state_machine.cpp:16-68,102-121`).
+- **FLR-6 Preserve unique collection ownership and insertion order.**
+  `vector<unique_ptr<T>>` becomes one logical by-value owner in retained
+  insertion order. Do not replace first-match lookup with a hash map, clone a
+  collection per occurrence, or infer ownership from convenient immutable
+  sharing. `StateMachine` owns layers, inputs, listeners, and data binds;
+  scripted-object pointers are ordered non-owning references and may contain
+  duplicates (`include/rive/animation/state_machine.hpp:19-45`;
+  `src/animation/state_machine.cpp:82-165`).
+- **FLR-7 Audit the complete C++ copy initializer and generated copy call.**
+  Rust `Clone` copies exactly the bases and members named by C++, and
+  default-constructs every omitted base/member. A
+  `LinearAnimationInstance` copy keeps Scene association and playback scalars
+  but starts with an empty `NestedEventNotifier`, scripted-interpolator cache,
+  cloned-bind list, and keyframe-holder map. `StateMachineBase::clone` creates
+  an empty `StateMachine` and copies only generated/base fields (currently the
+  Animation name); it does not clone child collections. Never derive `Clone`
+  across either aggregate
+  (`src/animation/linear_animation_instance.cpp:32-44`;
+  `src/generated/animation/state_machine_base.cpp:6-10`;
+  `include/rive/generated/animation/animation_base.hpp:46-50`).
+- **FLR-8 Teardown that mutates another owner is owner-mediated and ordered
+  explicitly.** When a C++ destructor first unregisters children from an
+  Artboard or another arena, the Rust owner invokes an explicit
+  `dispose/remove` operation before dropping the value. Do not rely on an
+  unsafe external pointer inside `Drop`. Then release fields in C++ order,
+  using safe `Option::take`, `clear`, or nested owner types where ordinary Rust
+  field order differs. A `LinearAnimationInstance` removes cloned artboard
+  data binds before scripted clones and releases holders only after the
+  state-machine owner removed targeting binds. A `StateMachine` destroys
+  scripted-reference storage, data binds, listeners, inputs, then layers
+  (`src/animation/linear_animation_instance.cpp:46-79`;
+  `include/rive/animation/state_machine.hpp:19-24`;
+  `src/animation/state_machine.cpp:12-14`).
+- **FLR-9 Keep mutable generated enum storage in its serialized integer
+  representation when C++ does.** `LinearAnimationInstance::m_loopValue` is an
+  `int`, its setter accepts arbitrary integers, and only `loop()` casts at the
+  read site. Rust therefore retains the raw integer/sentinel and performs the
+  same cast when read; `Option<Loop>` is not equivalent
+  (`include/rive/animation/linear_animation_instance.hpp:128-132,150-151`;
+  `src/animation/linear_animation_instance.cpp:413-435`).
+- **FLR-10 Literal source arithmetic and missing guards are semantic.** Port
+  expression grouping, units, comparisons, and boundary predicates exactly,
+  even when the expression looks dimensionally surprising. The pinned
+  `LinearAnimationInstance::time(float)` multiplies `workStart` by `fps`
+  before subtracting it from `value`. The advance loop has no Rust-invented
+  `fps == 0` or `range != 0` early return. Such guards require an explicit,
+  documented hostile-input adaptation; they cannot remain in a row claimed
+  faithful (`src/animation/linear_animation_instance.cpp:187-358,360-381`).
+- **FLR-11 Give non-Core runtime pointers typed owner-local occurrence ids.**
+  Non-owning pointers to collapsable DataBinds, cloned bind registrations,
+  nested listeners, keyframes, or bindable holders use separate typed id
+  domains backed by the logical owner. Preserve insertion order, nullability,
+  and pointer-key identity. Clone/remount allocates fresh occurrence identity
+  and remaps every retained edge; copying a payload or reusing a source
+  occurrence id is not equivalent
+  (`include/rive/component.hpp:28,44`;
+  `include/rive/animation/linear_animation_instance.hpp:153-182`;
+  `include/rive/nested_animation.hpp:20-65`).
+- **FLR-12 Lifecycle collection visitation is an explicit contract.**
+  `StateMachine::onAddedDirty` and `onAddedClean` visit inputs, then layers,
+  then listeners, returning the first non-Ok result. They do not visit data
+  binds or scripted objects. Keep the separate loops and early returns; a
+  generic combined iterator or parallel initialization changes observable
+  failure and registration order
+  (`src/animation/state_machine.cpp:16-68`).
+- **FLR-13 Unique registration performs initial synchronization once.**
+  `Component::addCollapsable` has set semantics but calls `collapse` exactly
+  when the pointer is first inserted. Later collapse changes notify the
+  retained registrations in insertion order. A set, deduplicated rebuild, or
+  unconditional re-sync is not equivalent (`src/component.cpp:108-127`).
+- **FLR-14 Preserve callback payload and timing even when parameters are
+  unused.** `LinearAnimationInstance::reportEvent` deliberately ignores
+  `secondsDelay`, forms an immediate one-event batch, and notifies retained
+  listeners in order. Do not honor the unused delay or route it through a
+  generalized event scheduler (`src/animation/linear_animation_instance.cpp:
+  442-446`; `include/rive/nested_animation.hpp:50-60`).
+- **FLR-15 Validation establishes typed runtime invariants without moving
+  lifecycle work.** C++ may validate a pointer/type in one phase and later
+  dereference it without a guard. Rust should preserve the validation site and
+  represent the post-validation value as a typed id/reference. If the phases
+  are not statically separated, repeat a fallible lookup and return a
+  structured error; never panic on imported data. Do not move parenting,
+  registration, or callbacks into validation merely to make the type
+  convenient (`src/component.cpp:13-30`; §3.1).

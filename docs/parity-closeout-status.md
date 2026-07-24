@@ -990,16 +990,17 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. Continue the user-directed runtime-drawing performance burn-down. Commit
-   the completed `advance_blend_mode` SolidColor-owner slice, then take the
-   newly sorted `animated_clipping@0` entry. Each slice instruments, ports the
-   pinned C++ owner/dirt
-   boundary with citations, preserves every floor, re-measures with canonical
-   benchmark parameters, and commits its delta. Stop and ask if <=1.0x would
-   require structural divergence from C++.
+1. Execute the finite C++-corresponding runtime frame-loop port recorded in
+   `docs/runtime-frame-loop-status.md`. FL-0's 337-file/74-member atlas is
+   committed. FL-1's dual translations are adjudicated into FLR-1..FLR-15;
+   source shaping found the existing owner-family module seams sufficient.
+   FL-A Component ownership is next, followed by dependency-ordered animation,
+   state-machine, Artboard/DataBind, and live-draw owner waves. Measure the
+   whole corpus only after a complete wave. The sorted slow-scene list is no
+   longer the implementation queue.
 2. Independent orchestrator verification may promote completed #RD-1
    correspondence rows from `pending-verification`. #B-6 is complete; the
-   next ordinary closeout-spine implementation item after the perf burn-down
+   next ordinary closeout-spine implementation item after the frame-loop port
    remains #B-5. B-6 also opened RB-2/RB-3/RB-4/RB-5; their relative
    scheduling is not inferred by the audit.
 
@@ -1151,6 +1152,13 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   the host cache seam. It stops at the existing `Renderer`/`RenderFactory`
   interface. The renderer backend is accepted as working and is not a
   boundary this phase crosses.
+- 2026-07-24: **Replace scene-sorted performance burn-down with the finite
+  runtime frame-loop port.** The work queue is the machine-checked C++ file and
+  member dependency closure, not the current slowest corpus entry. Complete
+  owner-family translations delete their displaced Rust mechanisms and then
+  take one whole-corpus checkpoint. The renderer backend remains out of scope;
+  if structurally faithful closure cannot reach <=1.0x without a Rust-only
+  optimization, stop for user decision.
 
 ## Log
 

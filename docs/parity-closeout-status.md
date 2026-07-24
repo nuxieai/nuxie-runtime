@@ -762,6 +762,29 @@ upstream-sync-map registry).
   `2dac4178` the stripped full SDK is 8,284,248 B scripting-off and
   9,185,336 B scripting-on, both below the unchanged 9,437,184 B budget. The
   next ownership batch is Layout/nested/component lists.
+  The Layout/nested/component-list ownership batch is now executor-complete
+  pending independent orchestrator verification. Every LayoutComponent
+  occurrence owns its retained CPU geometry and backend clip/draw paths;
+  clone starts cold and a changed public backend context rebuilds renderer
+  handles without crossing the existing `Renderer`/`RenderFactory` boundary.
+  Every mounted nested-artboard and component-list-row occurrence owns its
+  complete child paint/path sidecar. Live traversal uses the authoritative
+  mounted child directly, the transient component-list layout clone and
+  scene-level layout clip-path cache are deleted, and data-bound child
+  replacement preserves pinned C++ construction/allocation and drop order.
+  Correspondence rows remain `pending`/`pending-verification` until the
+  orchestrator's independent run. Executor evidence is runtime 413/413,
+  nuxie scene-authoring 167/167, ordinary and scripted command goldens
+  317/317 entries plus 647/647 exact segments with zero
+  divergences/failures, renderer pixels 1,468/1,468 accepted with 837
+  byte-exact and zero divergences/gated cases, C API smoke green, the
+  probe-armed full workspace green with the complete runtime C++ probe suite,
+  and the ownership-ledger gate green at 41 owners (5 exact, 31 adapted,
+  1 pending, 4 compensation). Canonical lint, format, diff, Apple product,
+  and release panic-firewall gates are green. At committed `bb69ba17` the
+  stripped full SDK is 8,284,232 B scripting-off and 9,185,320 B
+  scripting-on, both below the unchanged 9,437,184 B budget. The final
+  ownership batch is Artboard/facade.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -821,13 +844,14 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. Port the complete Layout/nested/component-list ownership batch from pinned
-   C++ `d788e8ec`: LayoutComponent paint/clip paths, nested Artboard
-   occurrences, mounted component-list rows, intrinsic child bounds, and
-   stable draw-index order across construct, update, draw, clone, and drop.
-   Remove the corresponding scene-cache/command ownership in the same
-   landing, keep the renderer API/backend unchanged, and referee the merge
-   with the full 1,468-row pixel corpus plus both zero-failure golden gates.
+1. Port the final Artboard/facade ownership batch from pinned C++
+   `d788e8ec`: move the remaining first-drawable/traversal, public
+   paint/path-cache lifetime, and geometry-query state to the Artboard
+   occurrence across construct, update, draw, clone, and drop. Delete the
+   remaining prepared-frame/command-stream/facade compensation in the same
+   landing, stop at the existing `Renderer`/`RenderFactory` API, drive the
+   closed ownership ratchets to zero, and referee the merge with the full
+   1,468-row pixel corpus plus both zero-failure golden gates.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -913,7 +937,7 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
 ## Pending USER-GATEs
 
 - None for the current C++ runtime drawing-port queue. The next binding batch
-  is Layout/nested/component lists; completed file rows remain pending until
+  is Artboard/facade; completed file rows remain pending until
   independent verification.
 
 ## Decisions log
@@ -980,6 +1004,26 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   boundary this phase crosses.
 
 ## Log
+
+- 2026-07-24 — The fourth formal C++ runtime drawing ownership batch
+  completed Layout/nested/component lists from pinned C++ `d788e8ec`
+  without crossing the `Renderer`/`RenderFactory` boundary. Layout
+  occurrences now own retained CPU geometry plus backend clip/draw paths;
+  mounted nested children and component-list rows own complete renderer
+  sidecars with cold clone/remount and parent-backend-context reset
+  semantics. Live list traversal consumes the authoritative child, the
+  transient layout clone and scene layout clip cache are absent, and
+  data-bound replacement replays C++'s retired authored-child allocation
+  before the live mounted child. Evidence: runtime 413/413, nuxie
+  scene-authoring 167/167, probe-armed full workspace green, ordinary and
+  scripted goldens each 317/317 entries and 647/647 segments with zero
+  failures, renderer pixels 1,468/1,468 accepted with 837 byte-exact and
+  zero divergences/gated cases, C API smoke, Apple product, release panic
+  firewall, and canonical lint green. Ownership ledger: 41 owners, 5 exact,
+  31 adapted, 1 pending, 4 compensation. Size at committed `bb69ba17` is
+  8,284,232 B scripting-off and 9,185,320 B scripting-on, both under
+  9,437,184 B. Correspondence rows remain `pending-verification`; the final
+  Artboard/facade batch is next.
 
 - 2026-07-23 — The third formal C++ runtime drawing ownership batch completed
   Text from pinned C++ `d788e8ec` without crossing the

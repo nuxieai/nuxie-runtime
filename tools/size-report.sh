@@ -60,6 +60,19 @@ for tool in "$CARGO_BIN" "$RUSTC_BIN" "$CC_BIN" git nm shasum strip size; do
     exit 2
   fi
 done
+RUST_LLVM_MAJOR="$($RUSTC_BIN -vV | sed -n 's/^LLVM version: \([0-9][0-9]*\).*/\1/p')"
+ARCHIVE_NM="${LLVM_NM:-$(command -v llvm-nm || true)}"
+if [[ -z "$RUST_LLVM_MAJOR" || -z "$ARCHIVE_NM" ]]; then
+  echo "size-report requires llvm-nm matching rustc's LLVM to inspect LTO archives" >&2
+  exit 2
+fi
+ARCHIVE_NM_LLVM_MAJOR="$("$ARCHIVE_NM" --version \
+  | sed -n 's/.*LLVM version \([0-9][0-9]*\).*/\1/p' \
+  | sed -n '1p')"
+if [[ "$ARCHIVE_NM_LLVM_MAJOR" != "$RUST_LLVM_MAJOR" ]]; then
+  echo "size-report llvm-nm/rustc mismatch: llvm-nm=${ARCHIVE_NM_LLVM_MAJOR:-unknown}, rustc=${RUST_LLVM_MAJOR}" >&2
+  exit 2
+fi
 RUST_TARGET="$($RUSTC_BIN -vV | sed -n 's/^host: //p')"
 if [[ -z "$RUST_TARGET" || "$RUST_TARGET" != *-apple-darwin ]]; then
   echo "size-report could not resolve a Darwin Rust host target" >&2
@@ -264,7 +277,8 @@ build_full_link() { # profile variant features
   fi
 
   nm -gjU "$cargo_dylib" | grep '^_nux_' | sort -u >"$exports"
-  nm -gjU "$archive" 2>/dev/null | grep -E '_+nuxie_size_report_renderer_roots$' \
+  "$ARCHIVE_NM" -gjU "$archive" 2>/dev/null \
+    | grep -E '_+nuxie_size_report_renderer_roots$' \
     | sort -u >"$renderer_root_symbol_file"
 
   local export_count renderer_root_symbol renderer_root_symbol_count

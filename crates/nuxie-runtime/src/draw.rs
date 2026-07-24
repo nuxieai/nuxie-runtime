@@ -45,7 +45,7 @@ use crate::text::{
     static_text_layout_measure_bounds, static_text_selection_rects, static_text_value,
     text_input_layout_measure_bounds,
 };
-use crate::{ArtboardInstance, ComponentDirt, Mat2D, TransformProperty};
+use crate::{ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, TransformProperty};
 use std::cell::{Cell, RefCell};
 
 struct RuntimeImageAssetCatalog<'a> {
@@ -4300,6 +4300,7 @@ impl ArtboardInstance {
                 runtime_draw_live_owned_shape(
                     self,
                     graph,
+                    drawable,
                     shape_local,
                     layout_bounds,
                     drawable.needs_save_operation,
@@ -4475,9 +4476,23 @@ impl ArtboardInstance {
         ])
     }
 
-    fn runtime_live_render_opacity_is_nonzero(&self, local_id: Option<usize>) -> bool {
-        local_id
-            .and_then(|local_id| self.component(local_id))
+    fn runtime_drawable_component<'a>(
+        &'a self,
+        drawable: &RuntimeDrawable,
+    ) -> Option<&'a RuntimeComponent> {
+        let component_local = match drawable.kind {
+            DrawableOrderKind::LayoutProxy => drawable.layout_local,
+            _ => drawable.local_id,
+        }?;
+        drawable
+            .component_index
+            .and_then(|index| self.components.get(index))
+            .filter(|component| component.local_id == component_local)
+            .or_else(|| self.component(component_local))
+    }
+
+    fn runtime_drawable_render_opacity_is_nonzero(&self, drawable: &RuntimeDrawable) -> bool {
+        self.runtime_drawable_component(drawable)
             .is_some_and(|component| component.transform.render_opacity != 0.0)
     }
 
@@ -4496,15 +4511,14 @@ impl ArtboardInstance {
         match drawable.kind {
             DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy => true,
             DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
-                let component_local = match drawable.kind {
-                    DrawableOrderKind::LayoutProxy => drawable.layout_local,
-                    _ => drawable.local_id,
-                };
                 if drawable.is_hidden {
                     return false;
                 }
-                if component_local
-                    .is_some_and(|local_id| self.runtime_component_is_collapsed_for_draw(local_id))
+                if self
+                    .runtime_drawable_component(drawable)
+                    .is_some_and(|component| {
+                        self.runtime_component_is_collapsed_for_draw_component(component)
+                    })
                 {
                     return false;
                 }
@@ -4536,7 +4550,7 @@ impl ArtboardInstance {
                         )
                         .is_some()
                         && (include_invisible
-                            || self.runtime_live_render_opacity_is_nonzero(drawable.local_id));
+                            || self.runtime_drawable_render_opacity_is_nonzero(drawable));
                 }
 
                 if drawable.family == RuntimeDrawableFamily::NestedArtboard {
@@ -4564,7 +4578,7 @@ impl ArtboardInstance {
                     }
                     // C++ `Shape::willDraw`/`TextInputDrawable::willDraw`:
                     // `Super::willDraw() && renderOpacity() != 0.0f`.
-                    return self.runtime_live_render_opacity_is_nonzero(drawable.local_id);
+                    return self.runtime_drawable_render_opacity_is_nonzero(drawable);
                 }
 
                 true
@@ -4646,11 +4660,20 @@ impl ArtboardInstance {
         let Some(component) = self.component(local_id) else {
             return false;
         };
+        self.runtime_component_is_collapsed_for_draw_component(component)
+    }
+
+    fn runtime_component_is_collapsed_for_draw_component(
+        &self,
+        component: &RuntimeComponent,
+    ) -> bool {
         // Mirrors C++ `Component::isCollapsed` plus
         // `LayoutComponent::isCollapsed`: descendants receive propagated
         // collapse dirt during update, while a layout component's own
         // display:none is checked locally.
-        component.is_collapsed() || self.runtime_layout_component_is_display_none(local_id)
+        component.is_collapsed()
+            || (matches!(component.type_name, "Artboard" | "LayoutComponent")
+                && self.runtime_layout_component_is_display_none(component.local_id))
     }
 
     fn runtime_drawable_dispatch_for_node(
@@ -5781,12 +5804,7 @@ impl ArtboardInstance {
         if component.type_name == "Artboard"
             || (component.type_name != "LayoutComponent"
                 && component.type_name != "NestedArtboardLayout"
-                && (layout_bounds.is_none()
-                    || component.parent_local.is_none_or(|parent_local| {
-                        !self
-                            .component(parent_local)
-                            .is_some_and(|parent| parent.layout_chain_has_layout_component)
-                    })))
+                && (layout_bounds.is_none() || !component.layout_chain_has_layout_component))
         {
             return component.transform.world_transform;
         }
@@ -5852,11 +5870,7 @@ impl ArtboardInstance {
         let Some(parent_local) = component.parent_local else {
             return component.transform.world_transform;
         };
-        if layout_bounds.is_none()
-            || !self
-                .component(parent_local)
-                .is_some_and(|parent| parent.layout_chain_has_layout_component)
-        {
+        if layout_bounds.is_none() || !component.layout_chain_has_layout_component {
             return component.transform.world_transform;
         }
         if let Some(layout_local) = component.constrained_layout_ancestor {
@@ -9165,6 +9179,11 @@ impl RuntimeLayoutDrawOwner {
 pub(crate) struct RuntimeDrawable {
     kind: DrawableOrderKind,
     local_id: Option<usize>,
+    /// C++ `Drawable` inherits `Component`, so draw traversal reads collapse,
+    /// opacity, and world transform on the same concrete object. This stable
+    /// index is the Rust non-owning pointer counterpart; local-id lookup is
+    /// retained only for synthetic compatibility drawables.
+    component_index: Option<usize>,
     global_id: Option<u32>,
     type_name: &'static str,
     family: RuntimeDrawableFamily,
@@ -9192,9 +9211,19 @@ pub(crate) struct RuntimeDrawable {
 
 impl RuntimeDrawable {
     fn from_imported(drawable: &DrawableOrderNode, graph: &ArtboardGraph) -> Self {
+        let component_local = match drawable.kind {
+            DrawableOrderKind::LayoutProxy => drawable.layout_local,
+            _ => drawable.local_id,
+        };
         Self {
             kind: drawable.kind,
             local_id: drawable.local_id,
+            component_index: component_local.and_then(|component_local| {
+                graph
+                    .components
+                    .iter()
+                    .position(|component| component.local_id == component_local)
+            }),
             global_id: drawable.global_id,
             type_name: drawable.type_name,
             family: RuntimeDrawableFamily::from_type_name(drawable.type_name),
@@ -9226,6 +9255,7 @@ impl RuntimeDrawable {
         Self {
             kind,
             local_id: None,
+            component_index: None,
             global_id: None,
             type_name: "ClippingShapeProxyDrawable",
             family: RuntimeDrawableFamily::ClipProxy,
@@ -16626,6 +16656,7 @@ fn runtime_owned_shape_gradient_is_collapsed(
 fn runtime_draw_live_owned_shape(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
+    drawable: &RuntimeDrawable,
     shape_local: usize,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     drawable_needs_save_operation: bool,
@@ -16640,16 +16671,26 @@ fn runtime_draw_live_owned_shape(
     let needs_save_operation = drawable_needs_save_operation || paint_count > 1;
 
     for owner_index in 0..paint_count {
-        // C++ `LayoutComponent::update(WorldTransform)` publishes its Yoga
-        // position into the retained component transform before Shape::draw
-        // (`layout_component.cpp:82-111`). Layout ownership is a later RD
-        // batch in Rust, so read that already-solved runtime transform through
-        // the existing layout owner until that field itself is ported.
-        let shape_world = instance.runtime_component_world_transform_with_bounds(
-            shape_local,
-            graph,
-            layout_bounds,
-        );
+        // C++ `Shape::draw` reads `worldTransform()` directly from the
+        // inherited Component (`shape.cpp:137-159`). Use the retained
+        // Drawable->Component link for the ordinary path. Layout-backed
+        // transforms keep the existing compatibility adapter until their
+        // owner publishes the solved transform into Component.
+        let shape_world = instance
+            .runtime_drawable_component(drawable)
+            .filter(|component| {
+                component.type_name != "LayoutComponent"
+                    && component.type_name != "NestedArtboardLayout"
+                    && (layout_bounds.is_none() || !component.layout_chain_has_layout_component)
+            })
+            .map(|component| component.transform.world_transform)
+            .unwrap_or_else(|| {
+                instance.runtime_component_world_transform_with_bounds(
+                    shape_local,
+                    graph,
+                    layout_bounds,
+                )
+            });
         let Some(owner) = instance
             .runtime_shapes
             .get(shape_local)
@@ -30383,6 +30424,7 @@ mod tests {
         let scripted = RuntimeDrawable {
             kind: DrawableOrderKind::Drawable,
             local_id: Some(0),
+            component_index: Some(0),
             global_id: Some(900),
             type_name: "ScriptedDrawable",
             family: RuntimeDrawableFamily::ScriptedDrawable,
@@ -30436,6 +30478,40 @@ mod tests {
     }
 
     #[test]
+    fn retained_drawable_carries_the_cpp_component_owner_link() {
+        let bytes = include_bytes!("../../../fixtures/graph/dependency_test.riv");
+        let file = read_runtime_file(bytes).expect("fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let artboard = graph.artboards.first().expect("fixture has artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
+        let (shape_local, component_index) = instance
+            .runtime_drawables
+            .iter()
+            .find(|drawable| drawable.family == RuntimeDrawableFamily::Shape)
+            .and_then(|drawable| Some((drawable.local_id?, drawable.component_index?)))
+            .expect("fixture has a retained Shape drawable");
+        assert_eq!(
+            instance.components[component_index].local_id, shape_local,
+            "C++ Drawable/Shape owns its Component fields directly (`artboard.cpp:1652-1698`, `shape.cpp:137-159`)"
+        );
+
+        // The retained non-owning link, not local-id rediscovery, is the live
+        // traversal path. Clearing the compatibility index must not affect it.
+        instance.component_by_local.clear();
+        let drawable = instance
+            .runtime_drawables
+            .iter()
+            .find(|drawable| drawable.local_id == Some(shape_local))
+            .expect("retained drawable remains linked");
+        assert_eq!(
+            instance
+                .runtime_drawable_component(drawable)
+                .map(|component| component.local_id),
+            Some(shape_local)
+        );
+    }
+
+    #[test]
     fn scripted_drawable_restores_cpp_envelope_when_user_draw_fails() {
         let bytes = include_bytes!("../../../fixtures/graph/dependency_test.riv");
         let file = read_runtime_file(bytes).expect("fixture imports");
@@ -30453,6 +30529,7 @@ mod tests {
         let scripted = RuntimeDrawable {
             kind: DrawableOrderKind::Drawable,
             local_id: Some(0),
+            component_index: Some(0),
             global_id: Some(901),
             type_name: "ScriptedDrawable",
             family: RuntimeDrawableFamily::ScriptedDrawable,

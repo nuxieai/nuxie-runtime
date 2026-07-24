@@ -3077,6 +3077,28 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-24: The sixth user-directed hot-loop slice ports the concrete
+  `Drawable` -> `Component` owner link without changing the renderer boundary.
+  C++ draw-list traversal already has collapse, render-opacity, and
+  world-transform state on the `Drawable` object itself; Rust now retains the
+  corresponding component index at construction and reads it directly instead
+  of rediscovering the component through `component_by_local` on every draw.
+  Shape draw also reads the retained component world transform on the ordinary
+  non-layout path; the documented layout compatibility boundary remains
+  (`artboard.cpp:1652-1698`, `shape.cpp:137-159`,
+  `layout_component.cpp:82-111`; RF-2/RF-5/RF-17). With canonical parameters
+  run immediately in the user-approved current environment,
+  `animation_reset_cases@0` improved from 1.771532x total / 1.840812x advance /
+  1.964539x draw to 1.658623x / 1.846382x / 1.931431x, and aggregate moved
+  from 1.556598x to 1.518033x
+  (`target/perf-hot-loop-drawable-component-owner-current-env.json`).
+  Renderer pixels remain 1,468/1,468 with 1,370 byte-exact entries and zero
+  divergences/gated cases; both golden modes remain 317/317 plus 647/647
+  exact segments. The next sorted total entry is
+  `animation_reset_cases@0.5` at 1.670139x;
+  `advance_blend_mode@0.25` remains the worst draw entry at 3.139422x. The
+  <=1.0x tier-5 target remains open.
+
 - 2026-07-24: The fifth user-directed hot-loop slice ports
   `DataBindContainer`'s retained dirty-list ownership without changing the
   renderer boundary. Owned-DataContext presence is no longer treated as work

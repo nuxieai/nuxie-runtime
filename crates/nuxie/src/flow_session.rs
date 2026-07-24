@@ -7,8 +7,8 @@ use std::{
 };
 
 use crate::{
-    ArtboardRenderCache, Factory, File, LinearAnimationInstance, NoopScriptHost,
-    OwnedArtboardInstance, Renderer, StateMachineInstance, ViewModelInstance,
+    Factory, File, LinearAnimationInstance, NoopScriptHost, OwnedArtboardInstance, Renderer,
+    StateMachineInstance, ViewModelInstance,
 };
 #[cfg(feature = "scripting")]
 use crate::{LuaHostCommand, LuaHostValue};
@@ -942,21 +942,21 @@ impl FlowSession {
         }
     }
 
-    /// Create renderer resources scoped to this session's artboard.
-    pub fn new_render_cache(&self) -> ArtboardRenderCache {
-        self.artboard.new_render_cache()
-    }
-
     /// Draw the current settled session state through renderer-neutral traits.
     pub fn draw(
         &mut self,
         factory: &mut dyn Factory,
         renderer: &mut dyn Renderer,
-        cache: &mut ArtboardRenderCache,
     ) -> Result<(), FlowSessionError> {
         self.artboard
-            .draw_with_render_cache(factory, renderer, cache)
+            .draw(factory, renderer)
             .map_err(flow_anyhow_error)
+    }
+
+    /// Drop renderer-owned members before switching this session to a
+    /// replacement backend. The next draw rebuilds them from live state.
+    pub fn reset_renderer(&self) {
+        self.artboard.reset_renderer();
     }
 
     /// Draw the render requested by `result` before that operation result is
@@ -966,7 +966,6 @@ impl FlowSession {
         &mut self,
         factory: &mut dyn Factory,
         renderer: &mut dyn Renderer,
-        cache: &mut ArtboardRenderCache,
         result: &mut FlowResult,
     ) -> Result<(), FlowSessionError> {
         if let Some(failure) = self.terminal_failure.as_ref() {
@@ -988,7 +987,7 @@ impl FlowSession {
             .first()
             .map(|output| output.sequence)
             .unwrap_or(self.next_sequence);
-        let draw_result = self.draw(factory, renderer, cache);
+        let draw_result = self.draw(factory, renderer);
         #[cfg(feature = "scripting")]
         {
             if let Err(error) = draw_result {

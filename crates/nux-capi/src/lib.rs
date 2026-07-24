@@ -5,7 +5,7 @@ mod size_report_roots;
 
 pub use render_callbacks::{NuxImageSampler, NuxRawPathView, NuxRenderCallbacks};
 
-use nuxie::{ArtboardInstance, ArtboardRenderCache, File, StateMachineInstance, ViewModelInstance};
+use nuxie::{ArtboardInstance, File, StateMachineInstance, ViewModelInstance};
 use render_callbacks::{CallbackFactory, CallbackRenderer};
 use std::ffi::{CStr, c_char};
 use std::panic::{self, AssertUnwindSafe};
@@ -13,7 +13,7 @@ use std::ptr;
 use std::slice;
 
 /// Increment only for a breaking change to the exported C contract.
-pub const NUX_CAPI_ABI_VERSION: u32 = 1;
+pub const NUX_CAPI_ABI_VERSION: u32 = 2;
 
 const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SOURCE_REVISION: &str = env!("NUX_RUNTIME_SOURCE_REVISION");
@@ -126,17 +126,11 @@ pub struct NuxFile {
 /// alive (not freed) for as long as this instance exists.
 pub struct NuxArtboardInstance {
     instance: ArtboardInstance<'static>,
+    render_callbacks: Option<NuxRenderCallbacks>,
     /// Originating file pointer, tracked only in debug builds to detect the
     /// use-after-free footgun in [`liveness`].
     #[cfg(debug_assertions)]
     file: *const NuxFile,
-}
-
-/// Render resources retained across draws of one artboard instance.
-pub struct NuxRenderCache {
-    instance: *const NuxArtboardInstance,
-    callbacks: NuxRenderCallbacks,
-    cache: ArtboardRenderCache,
 }
 
 /// Owned state machine instance. Advance it through the
@@ -455,6 +449,7 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                 liveness::register_instance(file);
                 let handle = NuxArtboardInstance {
                     instance,
+                    render_callbacks: None,
                     #[cfg(debug_assertions)]
                     file,
                 };
@@ -505,100 +500,28 @@ pub unsafe extern "C" fn nux_artboard_instance_advance(
 }
 
 /// Draw the artboard through the caller-provided render vtable. See
-/// `NuxRenderCallbacks` for the ownership and handle contract; the callbacks
-/// only need to stay valid for the duration of this call.
+/// `NuxRenderCallbacks` for the ownership and handle contract. The first
+/// draw's binding is retained by the Artboard occurrence, even if that draw
+/// returns an error; its `user_data` must remain valid until the instance is
+/// freed.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_artboard_instance_draw(
     instance: *mut NuxArtboardInstance,
     callbacks: *const NuxRenderCallbacks,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
-        let Some(callbacks) = (unsafe { callbacks.as_ref() }) else {
+        let Some(callbacks) = (unsafe { callbacks.as_ref() }).copied() else {
             return NuxStatus::NullArgument;
         };
         let Some(instance) = (unsafe { instance.as_mut() }) else {
             return NuxStatus::NullArgument;
         };
-        let mut factory = CallbackFactory::new(*callbacks);
-        let mut renderer = CallbackRenderer::new(*callbacks);
+        let retained_callbacks = *instance.render_callbacks.get_or_insert(callbacks);
+        let mut factory = CallbackFactory::new(retained_callbacks);
+        let mut renderer = CallbackRenderer::new(retained_callbacks);
         match instance.instance.draw(&mut factory, &mut renderer) {
             Ok(()) => NuxStatus::Ok,
             Err(_) => NuxStatus::RuntimeError,
-        }
-    })
-}
-
-/// Create a retained render cache for `instance` without invoking renderer callbacks.
-/// Resource creation begins on the first cached draw, and a failed candidate is
-/// discarded so the same cache can retry. The callback table and its `user_data`
-/// must remain valid until `nux_render_cache_free` returns.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nux_render_cache_new(
-    instance: *const NuxArtboardInstance,
-    callbacks: *const NuxRenderCallbacks,
-    out_cache: *mut *mut NuxRenderCache,
-) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
-        if out_cache.is_null() {
-            return NuxStatus::NullArgument;
-        }
-        unsafe {
-            *out_cache = ptr::null_mut();
-        }
-        let Some(instance_ref) = (unsafe { instance.as_ref() }) else {
-            return NuxStatus::NullArgument;
-        };
-        let Some(callbacks) = (unsafe { callbacks.as_ref() }).copied() else {
-            return NuxStatus::NullArgument;
-        };
-        let cache = instance_ref.instance.new_render_cache();
-        unsafe {
-            *out_cache = Box::into_raw(Box::new(NuxRenderCache {
-                instance,
-                callbacks,
-                cache,
-            }));
-        }
-        NuxStatus::Ok
-    })
-}
-
-/// Draw using render handles retained in `cache` from previous calls.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nux_artboard_instance_draw_cached(
-    instance: *mut NuxArtboardInstance,
-    cache: *mut NuxRenderCache,
-) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
-        let Some(instance_ref) = (unsafe { instance.as_mut() }) else {
-            return NuxStatus::NullArgument;
-        };
-        let Some(cache) = (unsafe { cache.as_mut() }) else {
-            return NuxStatus::NullArgument;
-        };
-        if !std::ptr::eq(instance.cast_const(), cache.instance) {
-            return NuxStatus::InvalidArgument;
-        }
-        let mut factory = CallbackFactory::new(cache.callbacks);
-        let mut renderer = CallbackRenderer::new(cache.callbacks);
-        match instance_ref.instance.draw_with_render_cache(
-            &mut factory,
-            &mut renderer,
-            &mut cache.cache,
-        ) {
-            Ok(()) => NuxStatus::Ok,
-            Err(_) => NuxStatus::RuntimeError,
-        }
-    })
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nux_render_cache_free(cache: *mut NuxRenderCache) {
-    ffi_guard((), || {
-        if !cache.is_null() {
-            unsafe {
-                drop(Box::from_raw(cache));
-            }
         }
     })
 }

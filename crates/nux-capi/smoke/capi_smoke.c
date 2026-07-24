@@ -221,32 +221,18 @@ int main(int argc, char** argv)
     callbacks.save = smoke_save;
     callbacks.restore = smoke_restore;
 
-    NuxRenderCache* render_cache = NULL;
-    CHECK(nux_render_cache_new(instance, &callbacks, &render_cache) ==
-          NUX_STATUS_OK);
-    CHECK(render_cache != NULL);
-    CHECK(nux_artboard_instance_draw_cached(instance, render_cache) ==
-          NUX_STATUS_OK);
+    CHECK(nux_artboard_instance_draw(instance, &callbacks) == NUX_STATUS_OK);
     size_t made_after_first_draw = counters.made;
     size_t released_after_first_draw = counters.released;
-    CHECK(nux_artboard_instance_draw_cached(instance, render_cache) ==
-          NUX_STATUS_OK);
+    CHECK(nux_artboard_instance_draw(instance, &callbacks) == NUX_STATUS_OK);
     CHECK(counters.made == made_after_first_draw);
     CHECK(counters.released == released_after_first_draw);
     CHECK(counters.draw_paths > 0);
     CHECK(counters.saves == counters.restores);
     CHECK(counters.made > 0);
-    nux_render_cache_free(render_cache);
-    CHECK(counters.made == counters.released);
-
-    /* A fully NULL vtable must also draw cleanly (null renderer). */
-    NuxRenderCallbacks null_callbacks;
-    memset(&null_callbacks, 0, sizeof(null_callbacks));
-    CHECK(nux_artboard_instance_draw(instance, &null_callbacks) ==
-          NUX_STATUS_OK);
-
     nux_state_machine_instance_free(state_machine);
     nux_artboard_instance_free(instance);
+    CHECK(counters.made == counters.released);
     nux_file_free(file);
 
     printf("capi-smoke ok (draw_paths=%zu objects=%zu)\n",

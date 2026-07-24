@@ -59,8 +59,9 @@ fn fixture_font_bytes() -> Vec<u8> {
 }
 
 fn draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String> {
+    scene.reset_renderer(instance)?;
     let mut factory = RecordingFactory::new();
-    let mut cache = scene.new_render_cache(instance)?;
+    let mut cache = scene.new_draw_token(instance)?;
     let mut renderer = factory.make_renderer();
     scene
         .frame()
@@ -69,8 +70,9 @@ fn draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String>
 }
 
 fn canonical_draw_stream(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<String> {
+    scene.reset_renderer(instance)?;
     let mut factory = RecordingFactory::new();
-    let mut cache = scene.new_render_cache(instance)?;
+    let mut cache = scene.new_draw_token(instance)?;
     let mut renderer = factory.make_renderer();
     scene
         .frame()
@@ -1774,7 +1776,7 @@ fn image_world_bounds_follow_the_successfully_presented_render_image() -> Result
 
     let mut factory = RecordingFactory::new();
     let mut renderer = factory.make_renderer();
-    let mut cache = scene.new_render_cache(instance)?;
+    let mut cache = scene.new_draw_token(instance)?;
     scene
         .frame()
         .draw(instance, &mut factory, &mut renderer, &mut cache)?;
@@ -1868,7 +1870,7 @@ fn decoded_image_dimensions_must_match_registered_intrinsic_dimensions() -> Resu
     let instance = scene.instantiate(artboard)?;
     let mut factory = RecordingFactory::new();
     let mut renderer = factory.make_renderer();
-    let mut cache = scene.new_render_cache(instance)?;
+    let mut cache = scene.new_draw_token(instance)?;
 
     assert_eq!(
         scene
@@ -1992,7 +1994,7 @@ impl Factory for FailFirstImageDecodeFactory {
 }
 
 #[test]
-fn image_decode_failure_is_draw_typed_and_the_same_scene_cache_can_recover() -> Result<()> {
+fn image_decode_failure_is_draw_typed_and_the_same_artboard_occurrence_can_recover() -> Result<()> {
     let mut scene = Scene::new();
     let ((artboard, image), _) = scene.edit(|tx| {
         let asset = tx.create_image_asset(ImageAssetSpec {
@@ -2012,14 +2014,14 @@ fn image_decode_failure_is_draw_typed_and_the_same_scene_cache_can_recover() -> 
     })?;
     let instance = scene.instantiate(artboard)?;
     let x = scene.cursor(instance, image, props::TRANSLATE_X)?;
-    let mut cache = scene.new_render_cache(instance)?;
+    let mut token = scene.new_draw_token(instance)?;
     let mut factory = FailFirstImageDecodeFactory::new();
     let mut renderer = factory.inner.make_renderer();
 
     assert_eq!(
         scene
             .frame()
-            .draw(instance, &mut factory, &mut renderer, &mut cache),
+            .draw(instance, &mut factory, &mut renderer, &mut token),
         Err(DrawError::ImageDecode)
     );
     assert_eq!(scene.frame().get(x)?, 10.0);
@@ -2027,7 +2029,7 @@ fn image_decode_failure_is_draw_typed_and_the_same_scene_cache_can_recover() -> 
 
     scene
         .frame()
-        .draw(instance, &mut factory, &mut renderer, &mut cache)?;
+        .draw(instance, &mut factory, &mut renderer, &mut token)?;
     assert_eq!(scene.frame().get(x)?, 42.0);
     assert!(factory.inner.stream().contains("decodeImage"));
     Ok(())
@@ -9146,7 +9148,7 @@ fn same_artboard_reparent_preserves_subtree_ids_parent_ids_preorder_and_fresh_re
     let instance = scene.instantiate(artboard)?;
     let stale_color = scene.cursor(instance, color_a, props::COLOR_VALUE)?;
     let mut held_factory = RecordingFactory::new();
-    let mut held_cache = scene.new_render_cache(instance)?;
+    let mut held_cache = scene.new_draw_token(instance)?;
     let mut held_renderer = held_factory.make_renderer();
     scene.frame().draw(
         instance,
@@ -9337,7 +9339,7 @@ fn rejected_structural_moves_are_strict_typed_and_preserve_all_live_state() -> R
     let color_cursor = scene.cursor(instance, color_a, props::COLOR_VALUE)?;
     assert!(scene.frame().set(color_cursor, 0xffaa_bbcc)?);
     let mut factory = RecordingFactory::new();
-    let mut cache = scene.new_render_cache(instance)?;
+    let mut cache = scene.new_draw_token(instance)?;
     let mut renderer = factory.make_renderer();
     scene
         .frame()
@@ -9478,13 +9480,13 @@ fn set_artboard_remounts_only_the_touched_artboard_and_retains_instance_identity
     assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
 
     let mut factory_a = RecordingFactory::new();
-    let mut cache_a = scene.new_render_cache(instance_a)?;
+    let mut cache_a = scene.new_draw_token(instance_a)?;
     let mut renderer_a = factory_a.make_renderer();
     scene
         .frame()
         .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b)?;
+    let mut cache_b = scene.new_draw_token(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -9544,7 +9546,8 @@ fn set_artboard_remounts_only_the_touched_artboard_and_retains_instance_identity
 }
 
 #[test]
-fn reorder_artboards_changes_export_order_without_remounting_instances_or_caches() -> Result<()> {
+fn reorder_artboards_changes_export_order_without_remounting_instances_or_renderers() -> Result<()>
+{
     let mut scene = Scene::new();
     let ((artboard_a, _, color_a, artboard_b, _, color_b), _) = scene.edit(|tx| {
         let a = create_card(tx, "A", 0xff11_2233)?;
@@ -9559,7 +9562,7 @@ fn reorder_artboards_changes_export_order_without_remounting_instances_or_caches
     assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
 
     let mut factory_a = RecordingFactory::new();
-    let mut cache_a = scene.new_render_cache(instance_a)?;
+    let mut cache_a = scene.new_draw_token(instance_a)?;
     let mut renderer_a = factory_a.make_renderer();
     scene
         .frame()
@@ -9570,7 +9573,7 @@ fn reorder_artboards_changes_export_order_without_remounting_instances_or_caches
         .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
     let a_before = factory_a.stream();
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b)?;
+    let mut cache_b = scene.new_draw_token(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -9634,13 +9637,13 @@ fn remove_artboard_drops_only_its_materialization_and_instances() -> Result<()> 
     assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
 
     let mut factory_a = RecordingFactory::new();
-    let mut cache_a = scene.new_render_cache(instance_a)?;
+    let mut cache_a = scene.new_draw_token(instance_a)?;
     let mut renderer_a = factory_a.make_renderer();
     scene
         .frame()
         .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b)?;
+    let mut cache_b = scene.new_draw_token(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -9704,7 +9707,7 @@ fn deleting_the_last_artboard_exports_only_backboard_and_allows_recreation() -> 
         vec![ExportedObjectKind::Backboard]
     );
     assert!(matches!(
-        scene.new_render_cache(removed_instance),
+        scene.new_draw_token(removed_instance),
         Err(ResolveError::UnknownInstance)
     ));
 
@@ -9744,7 +9747,7 @@ fn removing_one_artboard_with_an_invalid_retained_candidate_publishes_nothing() 
     assert!(scene.frame().set(cursor_a, 0xffaa_bbcc)?);
     assert!(scene.frame().set(cursor_b, 0xff77_8899)?);
     let mut factory_a = RecordingFactory::new();
-    let mut cache_a = scene.new_render_cache(instance_a)?;
+    let mut cache_a = scene.new_draw_token(instance_a)?;
     let mut renderer_a = factory_a.make_renderer();
     scene
         .frame()
@@ -9755,7 +9758,7 @@ fn removing_one_artboard_with_an_invalid_retained_candidate_publishes_nothing() 
         .draw(instance_a, &mut factory_a, &mut renderer_a, &mut cache_a)?;
     let a_before = factory_a.stream();
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b)?;
+    let mut cache_b = scene.new_draw_token(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -9983,7 +9986,7 @@ fn authored_shape_geometry_queries_follow_the_live_runtime_scene() -> Result<()>
     assert_eq!(
         scene.frame().world_bounds(instance, shape),
         Some(Aabb::new(35.0, 35.0, 65.0, 45.0)),
-        "geometry caches must follow the structurally remounted runtime"
+        "occurrence-owned geometry must follow the structurally remounted runtime"
     );
     Ok(())
 }
@@ -10540,7 +10543,7 @@ fn restoring_a_subtree_into_another_scene_rejects_its_owner_and_rolls_back_the_e
 }
 
 #[test]
-fn removing_from_one_artboard_preserves_another_artboards_hot_state_and_held_cache() -> Result<()> {
+fn removing_from_one_artboard_preserves_another_artboards_hot_state_and_renderer() -> Result<()> {
     let mut scene = Scene::new();
     let ((_, rectangle_a, _, artboard_b, _, color_b), _) = scene.edit(|tx| {
         let (artboard_a, rectangle_a, color_a) = create_card(tx, "A", 0xff112233)?;
@@ -10559,7 +10562,7 @@ fn removing_from_one_artboard_preserves_another_artboards_hot_state_and_held_cac
     assert!(scene.frame().set(old_cursor_b, 0xff556677)?);
 
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b)?;
+    let mut cache_b = scene.new_draw_token(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -10583,7 +10586,7 @@ fn removing_from_one_artboard_preserves_another_artboards_hot_state_and_held_cac
     assert_eq!(
         factory_b.stream(),
         draw_before,
-        "the untouched artboard must retain both its live instance and held cache"
+        "the untouched Artboard occurrence must retain its live renderer members"
     );
     Ok(())
 }
@@ -12409,7 +12412,7 @@ fn failed_materialization_burns_allocated_identity_without_changing_the_scene() 
 }
 
 #[test]
-fn render_cache_held_across_a_structural_remount_matches_a_fresh_cache() -> Result<()> {
+fn occurrence_renderer_held_across_a_structural_remount_matches_a_fresh_draw() -> Result<()> {
     let mut scene = Scene::new();
     let ((artboard, rectangle), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
@@ -12451,13 +12454,13 @@ fn render_cache_held_across_a_structural_remount_matches_a_fresh_cache() -> Resu
     let instance = scene.instantiate(artboard)?;
 
     let mut original_factory = RecordingFactory::new();
-    let mut held_cache = scene.new_render_cache(instance)?;
+    let mut held_token = scene.new_draw_token(instance)?;
     let mut original_renderer = original_factory.make_renderer();
     scene.frame().draw(
         instance,
         &mut original_factory,
         &mut original_renderer,
-        &mut held_cache,
+        &mut held_token,
     )?;
 
     scene.edit(|tx| {
@@ -12471,25 +12474,31 @@ fn render_cache_held_across_a_structural_remount_matches_a_fresh_cache() -> Resu
         instance,
         &mut refreshed_factory,
         &mut refreshed_renderer,
-        &mut held_cache,
+        &mut held_token,
     )?;
 
     let mut fresh_factory = RecordingFactory::new();
-    let mut fresh_cache = scene.new_render_cache(instance)?;
+    let mut fresh_token = scene.new_draw_token(instance)?;
     let mut fresh_renderer = fresh_factory.make_renderer();
     scene.frame().draw(
         instance,
         &mut fresh_factory,
         &mut fresh_renderer,
-        &mut fresh_cache,
+        &mut fresh_token,
     )?;
 
-    assert_eq!(refreshed_factory.stream(), fresh_factory.stream());
+    // A held occurrence draws warm while the fresh backend must construct its
+    // resources first. Canonical recordings compare the complete retained
+    // path/paint state at the draw instead of incidental construction commands.
+    assert_eq!(
+        refreshed_factory.canonical_recording(),
+        fresh_factory.canonical_recording()
+    );
     Ok(())
 }
 
 #[test]
-fn editing_one_artboard_preserves_another_artboards_hot_state_and_held_cache() -> Result<()> {
+fn editing_one_artboard_preserves_another_artboards_hot_state_and_renderer() -> Result<()> {
     let mut scene = Scene::new();
     let ((artboard_a, rectangle_a, color_a, artboard_b, color_b), _) = scene.edit(|tx| {
         let artboard_a = tx.create_artboard(ArtboardSpec {
@@ -12571,7 +12580,7 @@ fn editing_one_artboard_preserves_another_artboards_hot_state_and_held_cache() -
     assert!(scene.frame().set(cursor_b, 0xff445566)?);
 
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b)?;
+    let mut cache_b = scene.new_draw_token(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()
@@ -12600,7 +12609,7 @@ fn editing_one_artboard_preserves_another_artboards_hot_state_and_held_cache() -
     assert_eq!(
         factory_b.stream(),
         b_before,
-        "an unrelated artboard edit must preserve the live instance and its held cache"
+        "an unrelated artboard edit must preserve the live occurrence and its renderer members"
     );
     Ok(())
 }
@@ -12629,7 +12638,7 @@ fn failed_multi_artboard_materialization_publishes_nothing_before_a_valid_commit
     assert!(scene.frame().set(cursor_b, 0xff667788)?);
 
     let mut factory_a = RecordingFactory::new();
-    let mut cache_a = scene.new_render_cache(instance_a)?;
+    let mut cache_a = scene.new_draw_token(instance_a)?;
     let mut renderer_a = factory_a.make_renderer();
     scene
         .frame()
@@ -12641,7 +12650,7 @@ fn failed_multi_artboard_materialization_publishes_nothing_before_a_valid_commit
     let a_before = factory_a.stream();
 
     let mut factory_b = RecordingFactory::new();
-    let mut cache_b = scene.new_render_cache(instance_b)?;
+    let mut cache_b = scene.new_draw_token(instance_b)?;
     let mut renderer_b = factory_b.make_renderer();
     scene
         .frame()

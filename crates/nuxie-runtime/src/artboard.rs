@@ -321,15 +321,19 @@ pub struct ArtboardInstance {
     /// tree. Every clone retains the same file-owned owner list; Images borrow
     /// RenderImage from it and never from a facade scene cache.
     pub(crate) runtime_image_assets: RefCell<Option<Arc<crate::draw::RuntimeImageAssetOwners>>>,
+    /// C++ `ArtboardInstance` owns the concrete renderer-facing members of
+    /// every object in its cloned graph. Rust attaches the backend late, but
+    /// the resulting resources still follow this exact occurrence through
+    /// draw, clone, and drop; the host facade owns no parallel scene cache.
+    pub(crate) render_resources: RefCell<crate::draw::RuntimeOccurrenceRenderResources>,
+    /// Query-only retained geometry follows the Artboard occurrence, matching
+    /// C++ Shape/PathComposer bounds and hit-test members. Hosts do not own or
+    /// synchronize a parallel geometry scene cache.
+    pub(crate) geometry_state: RefCell<crate::draw::RuntimeGeometryState>,
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
     pub(crate) cache_epoch: u64,
     pub(crate) prepared_epoch: u64,
-    /// Retained draw-command contents change less often than live world
-    /// transforms. C++ keeps drawable/ShapePaintPath topology in place while
-    /// components update their transforms, so track that boundary separately
-    /// from `prepared_epoch`, which still invalidates world-baked resources.
-    pub(crate) command_epoch: u64,
     pub(crate) path_epoch: u64,
     pub(crate) layout_epoch: u64,
     text_affecting_locals: Vec<bool>,
@@ -1197,11 +1201,12 @@ impl ArtboardInstance {
             legacy_image_layout_scales: RefCell::new(BTreeMap::new()),
             external_font_assets,
             runtime_image_assets: RefCell::new(None),
+            render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
+            geometry_state: RefCell::new(crate::draw::RuntimeGeometryState::default()),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
             prepared_epoch: 1,
-            command_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
             text_affecting_locals,
@@ -4013,10 +4018,6 @@ impl ArtboardInstance {
         self.prepared_epoch
     }
 
-    pub(crate) fn command_epoch(&self) -> u64 {
-        self.command_epoch
-    }
-
     pub(crate) fn path_epoch(&self) -> u64 {
         self.path_epoch
     }
@@ -4053,7 +4054,6 @@ impl ArtboardInstance {
 
     pub(crate) fn mark_prepared_changed(&mut self) {
         self.prepared_epoch = self.prepared_epoch.wrapping_add(1);
-        self.command_epoch = self.command_epoch.wrapping_add(1);
         self.mark_tree_paint_preparation_changed();
     }
 
@@ -7266,11 +7266,12 @@ mod tests {
             legacy_image_layout_scales: RefCell::new(BTreeMap::new()),
             external_font_assets: Arc::new(BTreeMap::new()),
             runtime_image_assets: RefCell::new(None),
+            render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
+            geometry_state: RefCell::new(crate::draw::RuntimeGeometryState::default()),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
             prepared_epoch: 1,
-            command_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
             text_affecting_locals,
@@ -8930,19 +8931,17 @@ mod tests {
     }
 
     #[test]
-    fn world_transform_dirt_invalidates_prepared_frame_without_rebuilding_paths() {
+    fn world_transform_dirt_invalidates_world_state_without_rebuilding_paths() {
         let component = synthetic_component(0, 0);
         let mut instance = synthetic_instance(vec![component], vec![0]);
 
         let initial_path_epoch = instance.path_epoch();
         let initial_prepared_epoch = instance.prepared_epoch();
-        let initial_command_epoch = instance.command_epoch();
 
         assert!(instance.add_dirt(0, ComponentDirt::WORLD_TRANSFORM, false));
 
         assert_eq!(instance.path_epoch(), initial_path_epoch);
         assert!(instance.prepared_epoch() > initial_prepared_epoch);
-        assert_eq!(instance.command_epoch(), initial_command_epoch);
     }
 
     #[test]
@@ -9027,27 +9026,6 @@ mod tests {
         let layout_epoch = instance.layout_epoch();
         assert!(!instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
         assert_eq!(instance.layout_epoch(), layout_epoch);
-    }
-
-    #[test]
-    fn draw_order_dirt_invalidates_the_prepared_command_frame() {
-        let component = synthetic_component(0, 0);
-        let mut instance = synthetic_instance(vec![component], vec![0]);
-
-        let initial_command_epoch = instance.command_epoch();
-        assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
-        assert_eq!(instance.command_epoch(), initial_command_epoch);
-
-        assert!(instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
-        assert!(instance.command_epoch() > initial_command_epoch);
-
-        let command_epoch = instance.command_epoch();
-        assert!(!instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
-        assert_eq!(instance.command_epoch(), command_epoch);
-
-        instance.clear_component_dirt(0);
-        assert!(instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
-        assert!(instance.command_epoch() > command_epoch);
     }
 
     #[test]

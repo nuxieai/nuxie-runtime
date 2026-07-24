@@ -12,9 +12,9 @@ use nuxie_binary::read_runtime_file;
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_render_api::NullFactory;
 use nuxie_runtime::{
-    preallocate_render_paint_cache_for_artboard_tree, ArtboardInstance,
-    RuntimeOwnedViewModelInstance, RuntimeRenderPathCache, StateMachineInstance,
+    ArtboardInstance, RuntimeOwnedViewModelInstance, StateMachineInstance,
 };
+use std::collections::BTreeMap;
 
 /// A pointer event replayed against the default state machine.
 #[derive(Clone, Copy)]
@@ -72,15 +72,8 @@ fn drive(data: &[u8], pointer_events: &[PointerEvent]) -> Option<()> {
     let mut instance =
         ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards).ok()?;
     let mut factory = NullFactory::new();
-    let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
-        &runtime,
-        &instance,
-        artboard,
-        &graph.artboards,
-        &mut factory,
-    );
-    let mut path_cache = RuntimeRenderPathCache::default();
     let mut renderer = factory.make_renderer();
+    let external_images = BTreeMap::new();
 
     // 4. Default scene selection + state machine instantiation.
     let scene_sm_index = default_state_machine_index(&runtime, artboard_index, artboard);
@@ -125,29 +118,15 @@ fn drive(data: &[u8], pointer_events: &[PointerEvent]) -> Option<()> {
             }
         }
 
-        // prepare + draw through the null renderer.
-        if paint_cache.needs_paint_preparation(&instance, artboard)
-            && instance
-                .prepare_static_artboard_tree_paints(
-                    &runtime,
-                    artboard,
-                    &graph.artboards,
-                    &mut factory,
-                    &mut paint_cache,
-                    &mut path_cache,
-                )
-                .is_err()
-        {
-            return Some(());
-        }
-        let _ = instance.draw_prepared_static_artboard_with_render_cache(
+        let _ = instance.draw_artboard(
             &runtime,
             artboard,
             &graph.artboards,
             &mut factory,
             &mut renderer,
-            &mut paint_cache,
-            &mut path_cache,
+            &external_images,
+            None,
+            true,
         );
     }
 

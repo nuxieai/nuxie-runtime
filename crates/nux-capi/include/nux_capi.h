@@ -13,19 +13,18 @@
  *   NuxFile
  *     |- NuxArtboardInstance
  *          |- NuxStateMachineInstance
- *          |- NuxRenderCache
  *
  * 1. NuxFile must outlive every NuxArtboardInstance created from it.
- * 2. NuxStateMachineInstance and NuxRenderCache must be freed before their
- *    NuxArtboardInstance.
+ * 2. NuxStateMachineInstance must be freed before its NuxArtboardInstance.
  * 3. NuxStringView values borrow their documented owner unless their field is
  *    explicitly documented as process-static. Copy the bytes when a longer
  *    lifetime is needed; views are not NUL-terminated.
  * 4. Handles are not thread-safe and may not be used concurrently.
  * 5. NuxViewModelInstance owns its value copy and does not borrow NuxFile, but
  *    it is only meaningful when bound to the artboard that created it.
- * 6. NuxRenderCache retains callback-created objects. Its callback table and
- *    user_data must remain valid until nux_render_cache_free returns.
+ * 6. NuxArtboardInstance retains callback-created renderer objects. The first
+ *    draw's callback functions and user_data must remain valid until
+ *    nux_artboard_instance_free returns.
  *
  * PANIC SAFETY
  *

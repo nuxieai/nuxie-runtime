@@ -11,29 +11,26 @@ use nuxie_render_api::{
 };
 use nuxie_runtime::{
     ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelContext,
-    RuntimeOwnedViewModelInstance, RuntimeRenderPathCache, StateMachineInstance,
-    preallocate_render_paint_cache_for_artboard_tree, static_text_support_error,
+    RuntimeOwnedViewModelInstance, StateMachineInstance, static_text_support_error,
 };
 #[cfg(feature = "scripting")]
 use nuxie_runtime::{
     NoopScriptHost, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     ScriptArtboard, ScriptError, ScriptMethod, ScriptValue, ScriptViewModel,
-    preallocate_render_paint_cache_for_artboard_instance,
-    preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
-    preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration,
-    preallocate_render_paint_cache_for_unmounted_artboard, preallocate_source_render_paints,
+    preallocate_source_render_paints,
 };
 #[cfg(feature = "scripting")]
 use nuxie_scripting::vm::{DetachedViewModelFrame, ScopeKey, ScriptProgram, ScriptVm};
-#[cfg(feature = "scripting")]
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 #[cfg(feature = "scripting")]
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
 
 const TIME_EPSILON: f32 = 0.000001;
 const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
@@ -186,10 +183,11 @@ fn run() -> Result<String> {
         .any(|object| object.type_name == Some("ScriptInputArtboard"));
     #[cfg(feature = "scripting")]
     let script_assets = extract_script_assets(&runtime);
+    let external_images = BTreeMap::new();
     #[cfg(feature = "scripting")]
     let mut registered_script_file = None;
     #[cfg(feature = "scripting")]
-    let (script_artboard_render_state, mut paint_cache) = if has_scripted_layout {
+    let script_artboard_render_state = if has_scripted_layout {
         let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
         if !script_assets.is_empty() {
             registered_script_file = Some(register_script_file(
@@ -207,14 +205,15 @@ fn run() -> Result<String> {
             factory.as_factory(),
             registered_script_file.as_mut(),
         )?;
-        let cache = preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
+        instance.initialize_scripted_artboard_renderer_after_source_resources(
             &runtime,
-            &instance,
             artboard,
             &graph.artboards,
+            &external_images,
             factory.as_factory(),
-        );
-        (state, cache)
+            None,
+        )?;
+        state
     } else if has_script_artboard_input {
         let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
         if !script_assets.is_empty() {
@@ -234,38 +233,38 @@ fn run() -> Result<String> {
             registered_script_file.as_mut(),
         )
         .context("failed to initialize scripted drawables")?;
-        let cache = preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
+        instance.initialize_scripted_artboard_renderer_after_source_resources(
             &runtime,
-            &instance,
             artboard,
             &graph.artboards,
+            &external_images,
             factory.as_factory(),
-        );
+            None,
+        )?;
         if let Some(state) = state.as_ref() {
             state
                 .borrow_mut()
                 .realize_pending(&runtime, &graph.artboards, factory.as_factory())
                 .context("failed to allocate initialized script artboard paints")?;
         }
-        (state, cache)
+        state
     } else {
         let mut registration_result = None;
-        let cache =
-            preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration(
-                &runtime,
-                &instance,
-                artboard,
-                &graph.artboards,
-                factory.as_factory(),
-                |factory| {
-                    if !script_assets.is_empty() {
-                        registration_result =
-                            Some(register_script_file(&runtime, &script_assets, factory));
-                    }
-                },
-            );
+        instance.initialize_scripted_artboard_renderer_with_file_registration(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            factory.as_factory(),
+            |factory| {
+                if !script_assets.is_empty() {
+                    registration_result =
+                        Some(register_script_file(&runtime, &script_assets, factory));
+                }
+            },
+            None,
+        )?;
         registered_script_file = registration_result.transpose()?;
-        let state = initialize_scripted_drawables_and_realize(
+        initialize_scripted_drawables_and_realize(
             &runtime,
             artboard_index,
             artboard,
@@ -273,17 +272,17 @@ fn run() -> Result<String> {
             &mut instance,
             factory.as_factory(),
             registered_script_file.as_mut(),
-        )?;
-        (state, cache)
+        )?
     };
     #[cfg(not(feature = "scripting"))]
-    let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
+    instance.initialize_artboard_renderer(
         &runtime,
-        &instance,
         artboard,
         &graph.artboards,
+        &external_images,
         factory.as_factory(),
-    );
+        None,
+    )?;
     let scene = select_scene(
         &runtime,
         artboard_index,
@@ -409,7 +408,6 @@ fn run() -> Result<String> {
         );
     }
 
-    let mut path_cache = RuntimeRenderPathCache::default();
     let mut renderer = factory.make_renderer();
 
     let artboard_object = runtime
@@ -525,29 +523,28 @@ fn run() -> Result<String> {
                     factory.as_factory(),
                 )?;
             }
-            if paint_cache.needs_paint_preparation(&instance, artboard) {
-                timed_result(options.benchmark, &mut prepare_elapsed, || {
-                    instance.prepare_static_artboard_tree_paints(
-                        &runtime,
-                        artboard,
-                        &graph.artboards,
-                        factory.as_factory(),
-                        &mut paint_cache,
-                        &mut path_cache,
-                    )
-                })?;
-            }
+            timed_result(options.benchmark, &mut prepare_elapsed, || {
+                instance.synchronize_artboard_renderer(
+                    &runtime,
+                    artboard,
+                    &graph.artboards,
+                    &external_images,
+                    factory.as_factory(),
+                    None,
+                )
+            })?;
             factory.add_sample(*sample);
             timed_result(options.benchmark, &mut draw_elapsed, || {
                 instance
-                    .draw_prepared_static_artboard_with_render_cache(
+                    .draw_artboard(
                         &runtime,
                         artboard,
                         &graph.artboards,
                         factory.as_factory(),
                         &mut *renderer,
-                        &mut paint_cache,
-                        &mut path_cache,
+                        &external_images,
+                        None,
+                        true,
                     )
                     .map_err(unsupported_static_text_draw_error)
             })?;
@@ -716,33 +713,26 @@ fn run_benchmark_repeat_pass(
             None,
         )?;
     }
-    let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
-        runtime,
-        &instance,
-        artboard,
-        &graph.artboards,
-        &mut factory,
-    );
-    let mut path_cache = RuntimeRenderPathCache::default();
+    let external_images = BTreeMap::new();
+    let mut renderer = factory.make_renderer();
     // C++ constructs retained render objects while the artboard instance is
     // loaded, before the benchmark clock starts. Prime Rust's lazy retained
     // topology at the same lifecycle boundary; the first timed advance still
     // invalidates every dynamic value that differs from the authored state.
-    if paint_cache.needs_paint_preparation(&instance, artboard) {
-        instance.prepare_static_artboard_tree_paints(
-            runtime,
-            artboard,
-            &graph.artboards,
-            &mut factory,
-            &mut paint_cache,
-            &mut path_cache,
-        )?;
-    }
-    let mut renderer = factory.make_renderer();
+    instance.draw_artboard(
+        runtime,
+        artboard,
+        &graph.artboards,
+        &mut factory,
+        &mut renderer,
+        &external_images,
+        None,
+        true,
+    )?;
 
     let mut advance_elapsed = Duration::ZERO;
     let input_elapsed = Duration::ZERO;
-    let mut prepare_elapsed = Duration::ZERO;
+    let prepare_elapsed = Duration::ZERO;
     let mut draw_elapsed = Duration::ZERO;
     let mut current_seconds = 0.0;
     let benchmark_start = Instant::now();
@@ -761,28 +751,17 @@ fn run_benchmark_repeat_pass(
                         &mut current_seconds,
                     )
                 })?;
-                if paint_cache.needs_paint_preparation(&instance, artboard) {
-                    timed_result(true, &mut prepare_elapsed, || {
-                        instance.prepare_static_artboard_tree_paints(
-                            runtime,
-                            artboard,
-                            &graph.artboards,
-                            &mut factory,
-                            &mut paint_cache,
-                            &mut path_cache,
-                        )
-                    })?;
-                }
                 timed_result(true, &mut draw_elapsed, || {
                     instance
-                        .draw_prepared_static_artboard_with_render_cache(
+                        .draw_artboard(
                             runtime,
                             artboard,
                             &graph.artboards,
                             &mut factory,
                             &mut renderer,
-                            &mut paint_cache,
-                            &mut path_cache,
+                            &external_images,
+                            None,
+                            true,
                         )
                         .map_err(unsupported_static_text_draw_error)
                 })?;
@@ -797,25 +776,16 @@ fn run_benchmark_repeat_pass(
                     *sample,
                     &mut current_seconds,
                 )?;
-                if paint_cache.needs_paint_preparation(&instance, artboard) {
-                    instance.prepare_static_artboard_tree_paints(
-                        runtime,
-                        artboard,
-                        &graph.artboards,
-                        &mut factory,
-                        &mut paint_cache,
-                        &mut path_cache,
-                    )?;
-                }
                 instance
-                    .draw_prepared_static_artboard_with_render_cache(
+                    .draw_artboard(
                         runtime,
                         artboard,
                         &graph.artboards,
                         &mut factory,
                         &mut renderer,
-                        &mut paint_cache,
-                        &mut path_cache,
+                        &external_images,
+                        None,
+                        true,
                     )
                     .map_err(unsupported_static_text_draw_error)?;
             }
@@ -1764,23 +1734,19 @@ struct RunnerScriptArtboard {
     runtime: RuntimeFile,
     artboards: Vec<ArtboardGraph>,
     artboard_index: usize,
-    instance: ArtboardInstance,
+    instance: Rc<RefCell<ArtboardInstance>>,
     state_machine: Option<StateMachineInstance>,
     view_model: Option<nuxie_runtime::ScriptViewModel>,
     width: f32,
     height: f32,
     frame_origin: bool,
-    render_instance_id: u64,
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
-    path_cache: RuntimeRenderPathCache,
 }
 
 #[cfg(feature = "scripting")]
 #[derive(Default)]
 struct RunnerScriptArtboardRenderState {
-    next_instance_id: u64,
-    pending: Vec<(u64, usize)>,
-    caches: BTreeMap<u64, nuxie_runtime::RuntimeRenderPaintCache>,
+    pending: Vec<(usize, Weak<RefCell<ArtboardInstance>>)>,
     deferred_script_inits: BTreeSet<u32>,
     detached_view_model_frames: Vec<DetachedViewModelFrame>,
 }
@@ -1799,11 +1765,8 @@ impl RunnerScriptArtboardRenderState {
         changed
     }
 
-    fn register(&mut self, artboard_index: usize) -> u64 {
-        let instance_id = self.next_instance_id;
-        self.next_instance_id += 1;
-        self.pending.push((instance_id, artboard_index));
-        instance_id
+    fn register(&mut self, artboard_index: usize, instance: &Rc<RefCell<ArtboardInstance>>) {
+        self.pending.push((artboard_index, Rc::downgrade(instance)));
     }
 
     fn defer_script_init(&mut self, global_id: u32) {
@@ -1820,18 +1783,26 @@ impl RunnerScriptArtboardRenderState {
         artboards: &[ArtboardGraph],
         factory: &mut dyn RenderFactory,
     ) -> Result<()> {
-        for (instance_id, artboard_index) in std::mem::take(&mut self.pending) {
+        for (artboard_index, instance) in std::mem::take(&mut self.pending) {
+            let Some(instance) = instance.upgrade() else {
+                continue;
+            };
             let graph = artboards
                 .get(artboard_index)
                 .with_context(|| format!("missing scripted artboard index {artboard_index}"))?;
-            // Script input registration runs before the trait object exposes
-            // its concrete ArtboardInstance to the renderer. C++ allocates the
-            // occurrence paints at registration; Mesh members are bound to
-            // the concrete occurrence on its first draw.
-            let cache = preallocate_render_paint_cache_for_unmounted_artboard(
-                runtime, graph, artboards, factory,
-            );
-            self.caches.insert(instance_id, cache);
+            instance
+                .borrow()
+                .initialize_scripted_artboard_renderer_after_source_resources(
+                    runtime,
+                    graph,
+                    artboards,
+                    &BTreeMap::new(),
+                    factory,
+                    None,
+                )
+                .with_context(|| {
+                    format!("failed to attach renderer to scripted artboard index {artboard_index}")
+                })?;
         }
         Ok(())
     }
@@ -1860,20 +1831,23 @@ impl RunnerScriptArtboard {
         let graph = artboards
             .get(artboard_index)
             .with_context(|| format!("missing scripted artboard index {artboard_index}"))?;
-        let instance = ArtboardInstance::from_graph_with_artboards(runtime, graph, artboards)
-            .with_context(|| {
-                format!("failed to instantiate scripted artboard index {artboard_index}")
-            })?;
-        instance.set_frame_origin(false);
+        let instance = Rc::new(RefCell::new(
+            ArtboardInstance::from_graph_with_artboards(runtime, graph, artboards).with_context(
+                || format!("failed to instantiate scripted artboard index {artboard_index}"),
+            )?,
+        ));
+        instance.borrow().set_frame_origin(false);
         let state_machine_index = runtime
             .artboard(artboard_index)
             .and_then(|artboard| artboard.uint_property("defaultStateMachineId"))
             .and_then(|index| usize::try_from(index).ok())
             .filter(|index| graph.state_machines.get(*index).is_some());
         let state_machine =
-            state_machine_index.and_then(|index| instance.state_machine_instance(index));
+            state_machine_index.and_then(|index| instance.borrow().state_machine_instance(index));
         let object = runtime.object(graph.global_id as usize);
-        let render_instance_id = render_state.borrow_mut().register(artboard_index);
+        render_state
+            .borrow_mut()
+            .register(artboard_index, &instance);
         Ok(Self {
             runtime: runtime.clone(),
             artboards: artboards.to_vec(),
@@ -1891,9 +1865,7 @@ impl RunnerScriptArtboard {
                 .and_then(|object| object.double_property("height"))
                 .unwrap_or(0.0),
             frame_origin: false,
-            render_instance_id,
             render_state,
-            path_cache: RuntimeRenderPathCache::default(),
         })
     }
 
@@ -1902,7 +1874,7 @@ impl RunnerScriptArtboard {
             return;
         };
         bind_script_view_model_artboard_context(
-            &mut self.instance,
+            &mut self.instance.borrow_mut(),
             &self.runtime,
             self.artboard_index,
             self.state_machine.as_mut(),
@@ -1928,18 +1900,20 @@ impl ScriptArtboard for RunnerScriptArtboard {
     fn set_width(&mut self, width: f32) {
         self.width = width;
         self.instance
+            .borrow_mut()
             .set_artboard_dimensions(self.width, self.height);
     }
 
     fn set_height(&mut self, height: f32) {
         self.height = height;
         self.instance
+            .borrow_mut()
             .set_artboard_dimensions(self.width, self.height);
     }
 
     fn set_frame_origin(&mut self, frame_origin: bool) {
         self.frame_origin = frame_origin;
-        self.instance.set_frame_origin(frame_origin);
+        self.instance.borrow().set_frame_origin(frame_origin);
     }
 
     fn data(&self) -> Option<nuxie_runtime::ScriptViewModel> {
@@ -1966,16 +1940,14 @@ impl ScriptArtboard for RunnerScriptArtboard {
         // Construction paths bind the selected model once. C++ child artboards
         // use advanceAndApply(..., false), so a child step must not consume its
         // data context or the VM-wide detached-model frame.
+        let mut instance = self.instance.borrow_mut();
         let mut changed = if let Some(state_machine) = self.state_machine.as_mut() {
-            self.instance
-                .advance_state_machine_instance(state_machine, seconds)
+            instance.advance_state_machine_instance(state_machine, seconds)
         } else {
-            self.instance.advance_nested_artboards(seconds)
+            instance.advance_nested_artboards(seconds)
         };
-        changed |= self
-            .instance
-            .advance_artboard_data_binds_with_elapsed(seconds);
-        changed |= self.instance.update_pass();
+        changed |= instance.advance_artboard_data_binds_with_elapsed(seconds);
+        changed |= instance.update_pass();
         Ok(changed)
     }
 
@@ -1983,7 +1955,10 @@ impl ScriptArtboard for RunnerScriptArtboard {
         &self,
         name: &str,
     ) -> std::result::Result<Option<nuxie_runtime::ScriptAnimation>, ScriptError> {
-        Ok(nuxie_runtime::ScriptAnimation::named(&self.instance, name))
+        Ok(nuxie_runtime::ScriptAnimation::named(
+            &self.instance.borrow(),
+            name,
+        ))
     }
 
     fn advance_animation(
@@ -1991,7 +1966,7 @@ impl ScriptArtboard for RunnerScriptArtboard {
         animation: &mut nuxie_runtime::ScriptAnimation,
         seconds: f32,
     ) -> std::result::Result<bool, ScriptError> {
-        Ok(animation.advance(&mut self.instance, seconds))
+        Ok(animation.advance(&mut self.instance.borrow_mut(), seconds))
     }
 
     fn set_animation_time(
@@ -2000,7 +1975,7 @@ impl ScriptArtboard for RunnerScriptArtboard {
         value: f32,
         mode: nuxie_runtime::ScriptAnimationTime,
     ) -> std::result::Result<(), ScriptError> {
-        animation.set_time(&mut self.instance, value, mode);
+        animation.set_time(&mut self.instance.borrow_mut(), value, mode);
         Ok(())
     }
 
@@ -2015,7 +1990,7 @@ impl ScriptArtboard for RunnerScriptArtboard {
             ))
         })?;
         Ok(nuxie_runtime::script_node_for_artboard(
-            &self.instance,
+            &self.instance.borrow(),
             graph,
             name,
         ))
@@ -2032,55 +2007,29 @@ impl ScriptArtboard for RunnerScriptArtboard {
                 self.artboard_index
             ))
         })?;
-        let mut paint_cache = self
-            .render_state
-            .borrow_mut()
-            .caches
-            .remove(&self.render_instance_id)
-            .unwrap_or_else(|| {
-                preallocate_render_paint_cache_for_artboard_instance(
-                    &self.runtime,
-                    &self.instance,
-                    graph,
-                    &self.artboards,
-                    factory,
-                )
-            });
-        let result = if paint_cache.needs_paint_preparation(&self.instance, graph) {
-            self.instance
-                .prepare_static_artboard_tree_paints(
-                    &self.runtime,
-                    graph,
-                    &self.artboards,
-                    factory,
-                    &mut paint_cache,
-                    &mut self.path_cache,
-                )
-                .map_err(|error| ScriptError::new(error.to_string()))
-        } else {
-            Ok(())
-        }
-        .and_then(|()| {
-            let result = self
-                .instance
-                .draw_prepared_static_artboard_with_render_cache_and_origin(
-                    &self.runtime,
-                    graph,
-                    &self.artboards,
-                    factory,
-                    renderer,
-                    &mut paint_cache,
-                    &mut self.path_cache,
-                    self.frame_origin,
-                )
-                .map_err(|error| ScriptError::new(error.to_string()));
-            result
-        });
-        self.render_state
-            .borrow_mut()
-            .caches
-            .insert(self.render_instance_id, paint_cache);
-        result
+        let instance = self.instance.borrow();
+        instance
+            .initialize_scripted_artboard_renderer_after_source_resources(
+                &self.runtime,
+                graph,
+                &self.artboards,
+                &BTreeMap::new(),
+                factory,
+                None,
+            )
+            .map_err(|error| ScriptError::new(error.to_string()))?;
+        instance
+            .draw_artboard(
+                &self.runtime,
+                graph,
+                &self.artboards,
+                factory,
+                renderer,
+                &BTreeMap::new(),
+                None,
+                self.frame_origin,
+            )
+            .map_err(|error| ScriptError::new(error.to_string()))
     }
 }
 

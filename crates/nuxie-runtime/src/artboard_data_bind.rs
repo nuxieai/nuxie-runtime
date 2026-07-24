@@ -8047,19 +8047,6 @@ impl ArtboardInstance {
         changed
     }
 
-    pub(crate) fn nested_artboard_host_has_artboard_data_bind(
-        &self,
-        target_local_id: usize,
-    ) -> bool {
-        self.artboard_nested_host_bindings.iter().any(|binding| {
-            binding.target_local_id == target_local_id
-                && matches!(
-                    binding.property,
-                    RuntimeArtboardNestedHostProperty::ArtboardId { .. }
-                )
-        })
-    }
-
     fn apply_artboard_nested_host_binding_value(
         &mut self,
         target_local_id: usize,

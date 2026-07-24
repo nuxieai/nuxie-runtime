@@ -342,7 +342,7 @@ fn draw(
     factory: &mut RecordingFactory,
 ) -> std::result::Result<String, DrawError> {
     let mut cache = scene
-        .new_render_cache(instance)
+        .new_draw_token(instance)
         .map_err(|_| DrawError::UnknownInstance)?;
     let mut renderer = factory.make_renderer();
     scene
@@ -437,12 +437,7 @@ fn only_an_exact_authenticated_artifact_can_execute_imported_scripts() -> Result
 
     let mut trusted_factory = RecordingFactory::new();
     let mut trusted_renderer = trusted_factory.make_renderer();
-    let mut first_cache = first_session.new_render_cache();
-    first_session.draw(
-        &mut trusted_factory,
-        &mut trusted_renderer,
-        &mut first_cache,
-    )?;
+    first_session.draw(&mut trusted_factory, &mut trusted_renderer)?;
     let stream = trusted_factory.stream();
     assert!(stream.contains("color=0xffcc3300"), "{stream}");
     assert!(stream.contains("color=0xff3366cc"), "{stream}");
@@ -450,8 +445,7 @@ fn only_an_exact_authenticated_artifact_can_execute_imported_scripts() -> Result
 
     let mut clone_factory = RecordingFactory::new();
     let mut clone_renderer = clone_factory.make_renderer();
-    let mut second_cache = second_session.new_render_cache();
-    second_session.draw(&mut clone_factory, &mut clone_renderer, &mut second_cache)?;
+    second_session.draw(&mut clone_factory, &mut clone_renderer)?;
     assert!(
         clone_factory.stream().contains("color=0xff3366cc"),
         "two sessions from one source File own fresh script VMs and distinct Factory domains"
@@ -580,8 +574,7 @@ fn factory_bound_session_returns_typed_creation_and_cycle_host_work_in_fifo_orde
         &mut factory,
     )?;
     let mut renderer = factory.make_renderer();
-    let mut render_cache = session.new_render_cache();
-    session.draw_into_result(&mut factory, &mut renderer, &mut render_cache, &mut result)?;
+    session.draw_into_result(&mut factory, &mut renderer, &mut result)?;
     assert_eq!(
         result
             .outputs

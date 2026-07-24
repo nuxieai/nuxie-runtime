@@ -20,10 +20,7 @@ use nuxie_runtime::{
     embedded_font_is_parseable,
 };
 
-use crate::{
-    ArtboardRenderCache, File, OwnedArtboardInstance, RuntimeOwnedViewModelContext,
-    ViewModelInstance,
-};
+use crate::{File, OwnedArtboardInstance, RuntimeOwnedViewModelContext, ViewModelInstance};
 
 /// Stable identity of an authored artboard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -5399,17 +5396,12 @@ static NEXT_SCRIPT_ASSET_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_SHADER_ASSET_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(0);
 
-/// Render resources retained for one mount of one live authored instance.
-///
-/// The wrapper detects a remount of its artboard (and accidental reuse with another scene or
-/// instance) and recreates its underlying runtime cache during the next draw. Structural edits to
-/// another artboard do not invalidate this cache. Failed candidate caches are discarded so a
-/// decode error never poisons this cache or the authored scene.
-pub struct SceneRenderCache {
+/// Host-side capability proving which live authored mount a draw targets.
+/// It carries identity only; renderer resources live on the runtime Artboard.
+pub struct SceneDrawToken {
     scene_identity: Arc<SceneIdentity>,
     instance: InstanceId,
     mount: MountId,
-    inner: Option<ArtboardRenderCache>,
 }
 
 /// Schema-backed object kinds in the deterministic publish record stream.
@@ -8261,27 +8253,38 @@ impl Scene {
         })
     }
 
-    /// Create a renderer-neutral cache handle for one authored instance.
-    ///
-    /// Render resources, including lazily decoded images, are allocated on the first
-    /// [`Frame::draw`]. This keeps decode failures at the draw interface and permits retrying
-    /// with the same scene and cache after a recoverable adapter failure.
-    pub fn new_render_cache(
+    /// Create a host identity token for one authored instance mount.
+    pub fn new_draw_token(
         &self,
         instance: InstanceId,
-    ) -> std::result::Result<SceneRenderCache, ResolveError> {
+    ) -> std::result::Result<SceneDrawToken, ResolveError> {
         let live = self
             .instances
             .iter()
             .filter_map(Option::as_ref)
             .find(|candidate| candidate.id == instance)
             .ok_or(ResolveError::UnknownInstance)?;
-        Ok(SceneRenderCache {
+        Ok(SceneDrawToken {
             scene_identity: Arc::clone(&self.identity),
             instance,
             mount: live.mount,
-            inner: None,
         })
+    }
+
+    /// Drop renderer-owned members for one live Artboard occurrence.
+    ///
+    /// Call this before drawing the occurrence through a replacement backend
+    /// (for example after device loss). The next draw reconstructs the
+    /// occurrence's renderer members from its live runtime state.
+    pub fn reset_renderer(&self, instance: InstanceId) -> std::result::Result<(), ResolveError> {
+        let live = self
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(ResolveError::UnknownInstance)?;
+        live.runtime.reset_renderer();
+        Ok(())
     }
 
     pub fn frame(&mut self) -> Frame<'_> {
@@ -15820,7 +15823,7 @@ impl Frame<'_> {
         instance: InstanceId,
         factory: &mut dyn Factory,
         renderer: &mut dyn Renderer,
-        cache: &mut SceneRenderCache,
+        token: &mut SceneDrawToken,
     ) -> std::result::Result<(), DrawError> {
         let live = self
             .scene
@@ -15829,32 +15832,26 @@ impl Frame<'_> {
             .filter_map(Option::as_mut)
             .find(|candidate| candidate.id == instance)
             .ok_or(DrawError::UnknownInstance)?;
-        let needs_refresh = !Arc::ptr_eq(&cache.scene_identity, &self.scene.identity)
-            || cache.instance != instance
-            || cache.mount != live.mount
-            || cache.inner.is_none();
-        if needs_refresh {
-            let candidate = live.runtime.new_render_cache();
-            cache.scene_identity = Arc::clone(&self.scene.identity);
-            cache.instance = instance;
-            cache.mount = live.mount;
-            cache.inner = Some(candidate);
+        let mismatched_mount = !Arc::ptr_eq(&token.scene_identity, &self.scene.identity)
+            || token.instance != instance
+            || token.mount != live.mount;
+        if mismatched_mount {
+            token.scene_identity = Arc::clone(&self.scene.identity);
+            token.instance = instance;
+            token.mount = live.mount;
         }
-        let inner = cache.inner.as_mut().ok_or(DrawError::RuntimeRejected)?;
-        live.runtime
-            .draw_with_render_cache(factory, renderer, inner)
-            .map_err(|error| {
-                if error.downcast_ref::<ImageDecodeError>().is_some() {
-                    DrawError::ImageDecode
-                } else if error
-                    .downcast_ref::<RuntimeImageDimensionConflict>()
-                    .is_some()
-                {
-                    DrawError::ImageDimensionConflict
-                } else {
-                    DrawError::RuntimeRejected
-                }
-            })
+        live.runtime.draw(factory, renderer).map_err(|error| {
+            if error.downcast_ref::<ImageDecodeError>().is_some() {
+                DrawError::ImageDecode
+            } else if error
+                .downcast_ref::<RuntimeImageDimensionConflict>()
+                .is_some()
+            {
+                DrawError::ImageDimensionConflict
+            } else {
+                DrawError::RuntimeRejected
+            }
+        })
     }
 }
 
@@ -24091,20 +24088,19 @@ mod tests {
             .context("root items source")?;
         let mut factory = RecordingFactory::new();
         let mut renderer = factory.make_renderer();
-        let mut cache = instance.new_render_cache();
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[&a_visible])?;
-        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        instance.draw(&mut factory, &mut renderer)?;
         let initial_a = factory.canonical_recording().stream().to_owned();
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[&b])?;
         factory.clear();
-        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        instance.draw(&mut factory, &mut renderer)?;
         let middle_b = factory.canonical_recording().stream().to_owned();
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[&a_hidden])?;
         factory.clear();
-        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        instance.draw(&mut factory, &mut renderer)?;
         let returned_a = factory.canonical_recording().stream().to_owned();
         let fresh_a = fresh_component_list_draw(&file, &a_hidden)?;
 
@@ -24445,19 +24441,18 @@ mod tests {
             .context("root items source")?;
         let mut factory = RecordingFactory::new();
         let mut renderer = factory.make_renderer();
-        let mut cache = instance.new_render_cache();
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[&a_visible])?;
-        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        instance.draw(&mut factory, &mut renderer)?;
         let initial_a = factory.canonical_recording().stream().to_owned();
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[])?;
         factory.clear();
-        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        instance.draw(&mut factory, &mut renderer)?;
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[&a_hidden])?;
         factory.clear();
-        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        instance.draw(&mut factory, &mut renderer)?;
         let returned_a = factory.canonical_recording().stream().to_owned();
         let fresh_a = fresh_component_list_draw(&file, &a_hidden)?;
 
@@ -29811,18 +29806,21 @@ mod tests {
     }
 
     fn owned_draw_stream(instance: &mut OwnedArtboardInstance) -> Result<String> {
+        // Each helper call creates a new backend. C++ renderer members belong
+        // to the Artboard occurrence and remain bound to the prior factory
+        // until an explicit device/backend reset.
+        instance.reset_renderer();
         let mut factory = RecordingFactory::new();
-        let mut cache = instance.new_render_cache();
         let mut renderer = factory.make_renderer();
-        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        instance.draw(&mut factory, &mut renderer)?;
         Ok(factory.stream())
     }
 
     fn borrowed_draw_stream(instance: &mut crate::ArtboardInstance<'_>) -> Result<String> {
+        instance.reset_renderer();
         let mut factory = RecordingFactory::new();
-        let mut cache = instance.new_render_cache();
         let mut renderer = factory.make_renderer();
-        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        instance.draw(&mut factory, &mut renderer)?;
         Ok(factory.stream())
     }
 
@@ -29877,13 +29875,8 @@ mod tests {
         );
 
         let mut retained_factory = RecordingFactory::new();
-        let mut retained_cache = external.new_render_cache();
         let mut retained_renderer = retained_factory.make_renderer();
-        external.draw_with_render_cache(
-            &mut retained_factory,
-            &mut retained_renderer,
-            &mut retained_cache,
-        )?;
+        external.draw(&mut retained_factory, &mut retained_renderer)?;
         assert!(
             !stream_draws_path(&retained_factory.stream()),
             "the unresolved external font must initially draw no glyph paths"
@@ -29891,11 +29884,7 @@ mod tests {
 
         external.attach_font_asset_bytes(0, fixture_font_bytes())?;
         retained_factory.clear();
-        external.draw_with_render_cache(
-            &mut retained_factory,
-            &mut retained_renderer,
-            &mut retained_cache,
-        )?;
+        external.draw(&mut retained_factory, &mut retained_renderer)?;
         assert!(
             stream_draws_path(&retained_factory.stream()),
             "attachment must invalidate the retained cache and draw glyph paths"
@@ -30159,9 +30148,8 @@ mod tests {
         assert_eq!(file.artboard_count(), 2);
         let mut instance = OwnedArtboardInstance::instantiate(file, 0)?;
         let mut factory = RecordingFactory::new();
-        let mut cache = instance.new_render_cache();
         let mut renderer = factory.make_renderer();
-        instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+        instance.draw(&mut factory, &mut renderer)?;
         let stream = parse_single_frame(&factory.stream())?;
         let commands = &stream.frames[0].commands;
         assert!(
@@ -31756,7 +31744,7 @@ mod tests {
             .into_iter()
             .map(|instance| {
                 let mut factory = RecordingFactory::new();
-                let mut cache = scene.new_render_cache(instance)?;
+                let mut cache = scene.new_draw_token(instance)?;
                 let mut renderer = factory.make_renderer();
                 scene
                     .frame()
@@ -31772,9 +31760,8 @@ mod tests {
         for (index, expected) in live_streams.iter().enumerate() {
             let mut instance = OwnedArtboardInstance::instantiate(Arc::clone(&file), index)?;
             let mut factory = RecordingFactory::new();
-            let mut cache = instance.new_render_cache();
             let mut renderer = factory.make_renderer();
-            instance.draw_with_render_cache(&mut factory, &mut renderer, &mut cache)?;
+            instance.draw(&mut factory, &mut renderer)?;
             let imported = parse_single_frame(&factory.stream())?;
             let live = parse_single_frame(expected)?;
             assert!(imported.resources.is_empty());
@@ -31917,7 +31904,7 @@ mod tests {
         })?;
         let instance = scene.instantiate(artboard)?;
         let mut live_factory = RecordingFactory::new();
-        let mut live_cache = scene.new_render_cache(instance)?;
+        let mut live_cache = scene.new_draw_token(instance)?;
         let mut live_renderer = live_factory.make_renderer();
         scene.frame().draw(
             instance,
@@ -32111,13 +32098,8 @@ mod tests {
         let file = Arc::new(File::from_runtime(runtime)?);
         let mut imported = OwnedArtboardInstance::instantiate(file, 0)?;
         let mut imported_factory = RecordingFactory::new();
-        let mut imported_cache = imported.new_render_cache();
         let mut imported_renderer = imported_factory.make_renderer();
-        imported.draw_with_render_cache(
-            &mut imported_factory,
-            &mut imported_renderer,
-            &mut imported_cache,
-        )?;
+        imported.draw(&mut imported_factory, &mut imported_renderer)?;
 
         assert_eq!(
             imported.world_bounds(1),
@@ -33904,21 +33886,13 @@ mod tests {
             let (mut scene, instance, global_id) = scene_with_failing_protocol(bytes)?;
             let mut factory = RecordingFactory::new();
             let mut renderer = factory.make_renderer();
-            let mut cache = scene.new_render_cache(instance)?;
+            let mut cache = scene.new_draw_token(instance)?;
 
             let error = scene
                 .frame()
                 .draw(instance, &mut factory, &mut renderer, &mut cache)
                 .expect_err(case);
             assert_eq!(error, DrawError::RuntimeRejected, "{case}");
-            assert!(
-                cache
-                    .inner
-                    .as_ref()
-                    .is_some_and(|inner| inner.paint.is_none()),
-                "{case} must discard provisional factory resources"
-            );
-
             let live = scene
                 .instances
                 .iter()
@@ -33945,7 +33919,7 @@ mod tests {
         let (mut scene, instance, global_id) = scene_with_failing_protocol(truthy_table)?;
         let mut factory = RecordingFactory::new();
         let mut renderer = factory.make_renderer();
-        let mut cache = scene.new_render_cache(instance)?;
+        let mut cache = scene.new_draw_token(instance)?;
 
         scene
             .frame()

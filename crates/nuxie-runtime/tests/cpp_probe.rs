@@ -2,7 +2,7 @@ use nuxie_binary::{RuntimeFile, read_runtime_file};
 use nuxie_graph::GraphFile;
 use nuxie_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDataContext,
-    RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDrawCommandKind,
+    RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDrawableDispatchKind,
     RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
@@ -15161,13 +15161,13 @@ fn runtime_update_matches_cpp_for_transform_hierarchy() {
 }
 
 #[test]
-fn runtime_draw_command_stream_filters_hidden_and_opacity_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_filters_hidden_and_opacity_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
     };
 
-    let label = "synthetic/runtime_draw_command_filtering.riv";
+    let label = "synthetic/runtime_drawable_dispatch_filtering.riv";
     let bytes = synthetic_runtime_file(8201, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
         push_object_with_properties(bytes, "Artboard", |_| {});
@@ -15211,7 +15211,7 @@ fn runtime_draw_command_stream_filters_hidden_and_opacity_like_cpp_probe() {
 
     assert_eq!(
         cpp_commands,
-        vec![(Some(1), RuntimeDrawCommandKind::Draw, true)],
+        vec![(Some(1), RuntimeDrawableDispatchKind::Draw, true)],
         "C++ draw command stream should skip hidden and opacity-zero shapes"
     );
     assert_eq!(
@@ -15221,7 +15221,7 @@ fn runtime_draw_command_stream_filters_hidden_and_opacity_like_cpp_probe() {
 }
 
 #[test]
-fn runtime_draw_command_stream_filters_image_and_nested_artboard_will_draw_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_filters_image_and_nested_artboard_will_draw_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -15285,9 +15285,9 @@ fn runtime_draw_command_stream_filters_image_and_nested_artboard_will_draw_like_
     assert_eq!(
         cpp_commands,
         vec![
-            (Some(5), RuntimeDrawCommandKind::Draw, true),
-            (Some(3), RuntimeDrawCommandKind::Draw, true),
-            (Some(1), RuntimeDrawCommandKind::Draw, true),
+            (Some(5), RuntimeDrawableDispatchKind::Draw, true),
+            (Some(3), RuntimeDrawableDispatchKind::Draw, true),
+            (Some(1), RuntimeDrawableDispatchKind::Draw, true),
         ],
         "C++ should only draw the plain shape, image with ImageAsset, and nested artboard with a resolved artboard"
     );
@@ -15298,7 +15298,7 @@ fn runtime_draw_command_stream_filters_image_and_nested_artboard_will_draw_like_
 }
 
 #[test]
-fn runtime_draw_command_stream_suppresses_empty_clips_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_suppresses_empty_clips_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -15350,7 +15350,7 @@ fn runtime_draw_command_stream_suppresses_empty_clips_like_cpp_probe() {
 
     assert_eq!(
         cpp_commands,
-        vec![(Some(1), RuntimeDrawCommandKind::Draw, true)],
+        vec![(Some(1), RuntimeDrawableDispatchKind::Draw, true)],
         "C++ draw command stream should suppress drawables inside an empty visible clipping shape"
     );
     assert_eq!(
@@ -15360,7 +15360,7 @@ fn runtime_draw_command_stream_suppresses_empty_clips_like_cpp_probe() {
 }
 
 #[test]
-fn runtime_draw_command_stream_treats_hidden_clip_paths_as_empty_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_treats_hidden_clip_paths_as_empty_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -15416,7 +15416,7 @@ fn runtime_draw_command_stream_treats_hidden_clip_paths_as_empty_like_cpp_probe(
 
     assert_eq!(
         cpp_commands,
-        vec![(Some(1), RuntimeDrawCommandKind::Draw, true)],
+        vec![(Some(1), RuntimeDrawableDispatchKind::Draw, true)],
         "C++ draw command stream should suppress drawables clipped by a source shape with only hidden paths"
     );
     assert_eq!(
@@ -15426,7 +15426,7 @@ fn runtime_draw_command_stream_treats_hidden_clip_paths_as_empty_like_cpp_probe(
 }
 
 #[test]
-fn runtime_draw_command_stream_treats_collapsed_clip_paths_as_empty_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_treats_collapsed_clip_paths_as_empty_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -15491,7 +15491,7 @@ fn runtime_draw_command_stream_treats_collapsed_clip_paths_as_empty_like_cpp_pro
 
     assert_eq!(
         cpp_commands,
-        vec![(Some(1), RuntimeDrawCommandKind::Draw, true)],
+        vec![(Some(1), RuntimeDrawableDispatchKind::Draw, true)],
         "C++ draw command stream should suppress drawables clipped by a source shape with only collapsed paths"
     );
     assert_eq!(
@@ -15501,7 +15501,7 @@ fn runtime_draw_command_stream_treats_collapsed_clip_paths_as_empty_like_cpp_pro
 }
 
 #[test]
-fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_exposes_shape_paint_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -15704,7 +15704,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
 }
 
 #[test]
-fn runtime_draw_command_stream_exposes_rounded_point_path_payloads_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_exposes_rounded_point_path_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -15848,7 +15848,7 @@ fn runtime_draw_command_stream_exposes_rounded_point_path_payloads_like_cpp_prob
 }
 
 #[test]
-fn runtime_draw_command_stream_deforms_weighted_points_path_payloads_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_deforms_weighted_points_path_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -15984,7 +15984,7 @@ fn runtime_draw_command_stream_deforms_weighted_points_path_payloads_like_cpp_pr
 }
 
 #[test]
-fn runtime_draw_command_stream_exposes_line_trim_path_effect_payloads_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_exposes_line_trim_path_effect_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -16075,7 +16075,7 @@ fn runtime_draw_command_stream_exposes_line_trim_path_effect_payloads_like_cpp_p
 }
 
 #[test]
-fn runtime_draw_command_stream_exposes_gradient_paint_payloads_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_exposes_gradient_paint_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -16194,7 +16194,7 @@ fn runtime_draw_command_stream_exposes_gradient_paint_payloads_like_cpp_probe() 
 }
 
 #[test]
-fn runtime_draw_command_stream_world_stroke_gradient_matches_cpp_probe() {
+fn runtime_drawable_dispatch_stream_world_stroke_gradient_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -16307,7 +16307,7 @@ fn runtime_draw_command_stream_world_stroke_gradient_matches_cpp_probe() {
 }
 
 #[test]
-fn runtime_draw_command_stream_exposes_feather_paint_payloads_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_exposes_feather_paint_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -16407,7 +16407,7 @@ fn runtime_draw_command_stream_exposes_feather_paint_payloads_like_cpp_probe() {
 }
 
 #[test]
-fn runtime_draw_command_stream_exposes_rectangle_parametric_path_payloads_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_exposes_rectangle_parametric_path_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -16477,7 +16477,7 @@ fn runtime_draw_command_stream_exposes_rectangle_parametric_path_payloads_like_c
 }
 
 #[test]
-fn runtime_draw_command_stream_exposes_ellipse_parametric_path_payloads_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_exposes_ellipse_parametric_path_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -16545,7 +16545,7 @@ fn runtime_draw_command_stream_exposes_ellipse_parametric_path_payloads_like_cpp
 }
 
 #[test]
-fn runtime_draw_command_stream_exposes_polygon_parametric_path_payloads_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_exposes_polygon_parametric_path_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -16615,7 +16615,7 @@ fn runtime_draw_command_stream_exposes_polygon_parametric_path_payloads_like_cpp
 }
 
 #[test]
-fn runtime_draw_command_stream_exposes_star_parametric_path_payloads_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_exposes_star_parametric_path_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -16686,7 +16686,7 @@ fn runtime_draw_command_stream_exposes_star_parametric_path_payloads_like_cpp_pr
 }
 
 #[test]
-fn runtime_draw_command_stream_exposes_triangle_parametric_path_payloads_like_cpp_probe() {
+fn runtime_drawable_dispatch_stream_exposes_triangle_parametric_path_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -77326,13 +77326,13 @@ struct CppDrawCommand {
 }
 
 impl CppDrawCommand {
-    fn kind(&self) -> RuntimeDrawCommandKind {
+    fn kind(&self) -> RuntimeDrawableDispatchKind {
         if self.is_clip_start {
-            RuntimeDrawCommandKind::ClipStart
+            RuntimeDrawableDispatchKind::ClipStart
         } else if self.is_clip_end {
-            RuntimeDrawCommandKind::ClipEnd
+            RuntimeDrawableDispatchKind::ClipEnd
         } else {
-            RuntimeDrawCommandKind::Draw
+            RuntimeDrawableDispatchKind::Draw
         }
     }
 }

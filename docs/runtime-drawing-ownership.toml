@@ -2,12 +2,12 @@ version = 1
 title = "C++ runtime drawing port ownership ledger"
 upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 porting_rules_file = "docs/PORTING.md"
-phase = "ownership-proof-before-scene-cache-removal"
+phase = "closed"
 
 # This count is a ratchet, not a completion claim. `make
 # runtime-drawing-port-closed` requires pending=0, compensation=0, and every
 # legacy symbol count below to reach zero.
-expected_status_counts = { exact = 5, adapted = 31, pending = 1, compensation = 4 }
+expected_status_counts = { exact = 5, adapted = 36, pending = 0, compensation = 0 }
 
 [[batch]]
 id = "shape_path_paint"
@@ -43,49 +43,49 @@ boundary = "ArtboardInstance owns the complete runtime drawing object graph; the
 id = "prepared_frame_type"
 globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
 pattern = "\\bRuntimePreparedArtboardFrame\\b"
-max_occurrences = 5
+max_occurrences = 0
 
 [[ratchet]]
 id = "draw_command_type"
 globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
 pattern = "\\bRuntimeDrawCommand\\w*"
-max_occurrences = 85
+max_occurrences = 0
 
 [[ratchet]]
 id = "scene_path_cache_type"
 globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
 pattern = "\\bRuntimeRenderPathCache\\b"
-max_occurrences = 108
+max_occurrences = 0
 
 [[ratchet]]
 id = "scene_paint_cache_type"
 globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
 pattern = "\\bRuntimeRenderPaintCache\\b"
-max_occurrences = 44
+max_occurrences = 0
 
 [[ratchet]]
 id = "facade_cache_type"
 globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
 pattern = "\\bArtboardRenderCache\\b"
-max_occurrences = 13
+max_occurrences = 0
 
 [[ratchet]]
 id = "prepare_tree_api"
 globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
 pattern = "\\bprepare_static_artboard_tree_paints\\w*"
-max_occurrences = 46
+max_occurrences = 0
 
 [[ratchet]]
 id = "prepared_draw_api"
 globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
 pattern = "\\bdraw_prepared_static_artboard\\w*"
-max_occurrences = 42
+max_occurrences = 0
 
 [[ratchet]]
 id = "prepared_frame_accessor"
 globs = ["crates/nuxie-runtime/src/**/*.rs", "crates/nuxie/src/**/*.rs"]
 pattern = "\\bprepared_artboard_frame\\b"
-max_occurrences = 19
+max_occurrences = 0
 
 [[ratchet]]
 id = "draw_time_shape_ensure"
@@ -103,25 +103,25 @@ max_occurrences = 0
 id = "command_layout_paint_adapter"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bruntime_draw_live_layout_paint_commands\\b"
-max_occurrences = 2
+max_occurrences = 0
 
 [[ratchet]]
 id = "generic_command_draw_adapter"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bruntime_draw_live_command\\b"
-max_occurrences = 1
+max_occurrences = 0
 
 [[ratchet]]
 id = "paint_preparation_frame"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bRuntimePaintPreparationFrame\\b"
-max_occurrences = 8
+max_occurrences = 0
 
 [[ratchet]]
 id = "render_paint_configuration_slots"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bRuntimeRenderPaintConfigurationSlots\\b"
-max_occurrences = 25
+max_occurrences = 0
 
 [[ratchet]]
 id = "shape_paint_snapshot_type"
@@ -704,13 +704,13 @@ clone_drop = ["cpp:src/artboard.cpp:1652-1698", "rust:crates/nuxie-runtime/src/d
 [[owner]]
 id = "artboard.prepared_frame"
 batch = "artboard_facade"
-status = "compensation"
+status = "adapted"
 rule = "RF-31"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "struct RuntimePreparedArtboardFrame"
+rust_anchor = "struct RuntimeLiveTraversalFrame"
 depends_on = ["artboard.first_drawable"]
-legacy_ratchets = ["prepared_frame_type", "prepared_frame_accessor", "scene_path_cache_type"]
-note = "No C++ scene-level prepared frame exists; delete rather than translate."
+legacy_ratchets = []
+note = "The cross-frame prepared scene is deleted. Rust retains only per-call layout and diagnostic traversal scratch, which has no cache key, epoch, or renderer feed."
 [owner.lifecycle]
 construct = ["cpp:src/artboard.cpp:1606-1651", "rust:crates/nuxie-runtime/src/draw.rs:10955-10963"]
 update = ["cpp:src/artboard.cpp:1159-1169", "rust:crates/nuxie-runtime/src/draw.rs:2035-2237"]
@@ -720,13 +720,13 @@ clone_drop = ["cpp:include/rive/artboard.hpp:103-105", "rust:crates/nuxie-runtim
 [[owner]]
 id = "artboard.draw_command_stream"
 batch = "artboard_facade"
-status = "compensation"
+status = "adapted"
 rule = "RF-31"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "pub struct RuntimeDrawCommand"
+rust_anchor = "pub struct RuntimeDrawableDispatch"
 depends_on = ["artboard.first_drawable"]
-legacy_ratchets = ["draw_command_type", "command_layout_paint_adapter", "generic_command_draw_adapter"]
-note = "RuntimeDrawCommand survives only as the old diagnostic/replay representation and has no C++ runtime owner."
+legacy_ratchets = []
+note = "The replay command type and every command renderer adapter are deleted. RuntimeDrawableDispatch is a transient inspection/preparation report; production drawing walks the occurrence-owned live list directly."
 [owner.lifecycle]
 construct = ["cpp:src/artboard.cpp:429-840", "rust:crates/nuxie-runtime/src/draw.rs:7837-7854"]
 update = ["cpp:src/artboard.cpp:1159-1169", "rust:crates/nuxie-runtime/src/draw.rs:4208-4376"]
@@ -736,13 +736,13 @@ clone_drop = ["cpp:include/rive/artboard.hpp:103-105", "rust:crates/nuxie-runtim
 [[owner]]
 id = "facade.scene_render_cache"
 batch = "artboard_facade"
-status = "compensation"
+status = "adapted"
 rule = "RF-31"
-rust_file = "crates/nuxie/src/lib.rs"
-rust_anchor = "pub struct ArtboardRenderCache"
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "render_resources: RefCell<crate::draw::RuntimeOccurrenceRenderResources>"
 depends_on = ["artboard.first_drawable"]
-legacy_ratchets = ["facade_cache_type", "scene_path_cache_type", "scene_paint_cache_type"]
-note = "The public cache owns the scene resource lifetime independently from ArtboardInstance; C++ has no counterpart."
+legacy_ratchets = []
+note = "ArtboardInstance now owns every retained draw resource. The facade render cache and draw token are deleted; SceneDrawToken retains mount identity only."
 [owner.lifecycle]
 construct = ["cpp:src/artboard.cpp:1606-1651", "rust:crates/nuxie/src/lib.rs:2399-2431"]
 update = ["cpp:src/artboard.cpp:1159-1169", "rust:crates/nuxie/src/lib.rs:2944-2982"]
@@ -752,13 +752,13 @@ clone_drop = ["cpp:include/rive/artboard.hpp:103-105", "rust:crates/nuxie/src/li
 [[owner]]
 id = "facade.prepare_replay_api"
 batch = "artboard_facade"
-status = "compensation"
+status = "adapted"
 rule = "RF-31"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "pub fn prepare_static_artboard_tree_paints"
+rust_anchor = "pub fn draw_artboard("
 depends_on = ["facade.scene_render_cache", "artboard.prepared_frame"]
-legacy_ratchets = ["prepare_tree_api", "prepared_draw_api", "paint_preparation_frame"]
-note = "The explicit prepare/replay facade is deleted after object owners perform their C++ update work."
+legacy_ratchets = []
+note = "The explicit facade prepare/replay API is deleted. One occurrence-owned Artboard draw entry point performs dirt-gated backend update and then live traversal."
 [owner.lifecycle]
 construct = ["cpp:src/artboard.cpp:1606-1651", "rust:crates/nuxie-runtime/src/draw.rs:2035-2105"]
 update = ["cpp:src/artboard.cpp:1159-1169", "rust:crates/nuxie-runtime/src/draw.rs:2169-2237"]
@@ -768,13 +768,13 @@ clone_drop = ["cpp:include/rive/artboard.hpp:103-105", "rust:crates/nuxie-runtim
 [[owner]]
 id = "geometry.query_state"
 batch = "artboard_facade"
-status = "pending"
+status = "adapted"
 rule = "RF-32"
-rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "pub struct RuntimeGeometryCache"
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "geometry_state: RefCell<crate::draw::RuntimeGeometryState>"
 depends_on = ["shape.world_bounds", "shape.world_length", "layout.cpu_paths"]
-legacy_ratchets = ["scene_path_cache_type"]
-note = "Geometry and semantic hit APIs are valid retained consumers, but their state must stop embedding the render scene cache."
+legacy_ratchets = []
+note = "Geometry and semantic query state follows the concrete Artboard occurrence; host facade geometry caches and the render-scene cache type are deleted."
 [owner.lifecycle]
 construct = ["cpp:include/rive/shapes/shape.hpp:64-95", "rust:crates/nuxie-runtime/src/draw.rs:10752-10760"]
 update = ["cpp:include/rive/shapes/shape.hpp:65-82", "rust:crates/nuxie-runtime/src/draw.rs:10845-10855"]

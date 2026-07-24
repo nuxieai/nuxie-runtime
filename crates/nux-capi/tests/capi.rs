@@ -1,13 +1,12 @@
 use nux_capi::{
-    NUX_CAPI_ABI_VERSION, NuxArtboardInstance, NuxFile, NuxRenderCache, NuxRenderCallbacks,
-    NuxRuntimeInfo, NuxStateMachineInstance, NuxStatus, NuxStringView, NuxViewModelInstance,
+    NUX_CAPI_ABI_VERSION, NuxArtboardInstance, NuxFile, NuxRenderCallbacks, NuxRuntimeInfo,
+    NuxStateMachineInstance, NuxStatus, NuxStringView, NuxViewModelInstance,
     nux_artboard_instance_advance, nux_artboard_instance_bind_view_model,
-    nux_artboard_instance_draw, nux_artboard_instance_draw_cached, nux_artboard_instance_free,
-    nux_artboard_instance_new, nux_capi_abi_version, nux_capi_require_abi, nux_capi_runtime_info,
+    nux_artboard_instance_draw, nux_artboard_instance_free, nux_artboard_instance_new,
+    nux_capi_abi_version, nux_capi_require_abi, nux_capi_runtime_info,
     nux_file_artboard_animation_count, nux_file_artboard_count, nux_file_artboard_name,
     nux_file_artboard_state_machine_count, nux_file_artboard_state_machine_name, nux_file_free,
-    nux_file_import, nux_render_cache_free, nux_render_cache_new,
-    nux_state_machine_instance_advance, nux_state_machine_instance_fire_trigger,
+    nux_file_import, nux_state_machine_instance_advance, nux_state_machine_instance_fire_trigger,
     nux_state_machine_instance_free, nux_state_machine_instance_new,
     nux_state_machine_instance_new_default, nux_state_machine_instance_pointer_down,
     nux_state_machine_instance_pointer_move, nux_state_machine_instance_pointer_up,
@@ -386,13 +385,17 @@ fn c_api_draw_forwards_render_calls_to_vtable() {
     assert_eq!(counters_data.saves, counters_data.restores);
     assert!(counters_data.transforms > 0);
     assert!(counters_data.made > 0);
-    assert_eq!(
-        counters_data.made, counters_data.released,
-        "every created render object must be released exactly once"
+    assert!(
+        counters_data.made > counters_data.released,
+        "the Artboard occurrence retains its live renderer members"
     );
 
     unsafe {
         nux_artboard_instance_free(instance);
+        assert_eq!(
+            counters_data.made, counters_data.released,
+            "every created render object must be released exactly once"
+        );
         nux_file_free(file);
     }
 }
@@ -435,37 +438,29 @@ fn c_api_retained_draw_reuses_and_releases_render_handles() {
         draw_path: Some(counting_draw_path),
         ..NuxRenderCallbacks::default()
     };
-    let mut cache: *mut NuxRenderCache = std::ptr::null_mut();
     assert_eq!(
-        unsafe { nux_render_cache_new(instance, &callbacks, &mut cache) },
-        NuxStatus::Ok
-    );
-    assert!(!cache.is_null());
-
-    assert_eq!(
-        unsafe { nux_artboard_instance_draw_cached(instance, cache) },
+        unsafe { nux_artboard_instance_draw(instance, &callbacks) },
         NuxStatus::Ok
     );
     let made_after_first_draw = counters_data.made;
     let released_after_first_draw = counters_data.released;
     assert!(made_after_first_draw > 0);
     assert_eq!(
-        unsafe { nux_artboard_instance_draw_cached(instance, cache) },
+        unsafe { nux_artboard_instance_draw(instance, &callbacks) },
         NuxStatus::Ok
     );
     assert_eq!(counters_data.made, made_after_first_draw);
     assert_eq!(counters_data.released, released_after_first_draw);
 
-    unsafe { nux_render_cache_free(cache) };
-    assert_eq!(counters_data.released, counters_data.made);
     unsafe {
         nux_artboard_instance_free(instance);
+        assert_eq!(counters_data.released, counters_data.made);
         nux_file_free(file);
     }
 }
 
 #[test]
-fn c_api_retained_cache_retries_a_failed_image_decode_without_poisoning() {
+fn c_api_artboard_retries_a_failed_image_decode_without_poisoning() {
     let bytes = fixture_bytes("in_band_asset.riv");
     let mut file: *mut NuxFile = std::ptr::null_mut();
     assert_eq!(
@@ -495,19 +490,13 @@ fn c_api_retained_cache_retries_a_failed_image_decode_without_poisoning() {
         draw_image_mesh: Some(counting_draw_image_mesh),
         ..NuxRenderCallbacks::default()
     };
-    let mut cache: *mut NuxRenderCache = std::ptr::null_mut();
-    assert_eq!(
-        unsafe { nux_render_cache_new(instance, &callbacks, &mut cache) },
-        NuxStatus::Ok
-    );
-    assert!(!cache.is_null());
     assert_eq!(
         counters_data.image_decode_attempts, 0,
-        "retained C cache creation must be renderer-neutral"
+        "artboard construction must remain renderer-neutral"
     );
 
     assert_eq!(
-        unsafe { nux_artboard_instance_draw_cached(instance, cache) },
+        unsafe { nux_artboard_instance_draw(instance, &callbacks) },
         NuxStatus::RuntimeError
     );
     assert_eq!(counters_data.image_decode_attempts, 1);
@@ -518,24 +507,13 @@ fn c_api_retained_cache_retries_a_failed_image_decode_without_poisoning() {
     assert_eq!(counters_data.made, counters_data.released);
 
     assert_eq!(
-        unsafe { nux_artboard_instance_draw_cached(instance, cache) },
+        unsafe { nux_artboard_instance_draw(instance, &callbacks) },
         NuxStatus::Ok
     );
     assert!(counters_data.image_decode_attempts >= 2);
     assert!(counters_data.draw_images > 0);
     assert!(counters_data.made > counters_data.released);
 
-    unsafe { nux_render_cache_free(cache) };
-    // Pinned C++ retains the decoded RenderImage on ImageAsset itself
-    // (`include/rive/assets/image_asset.hpp:19`,
-    // `src/assets/image_asset.cpp:28-39`). The renderer cache owns paths/paints,
-    // but freeing it must not destroy the file-owned image while the artboard
-    // occurrence that references the file asset is still alive.
-    assert_eq!(
-        counters_data.made,
-        counters_data.released + 1,
-        "the file-owned image must outlive the renderer cache"
-    );
     unsafe { nux_artboard_instance_free(instance) };
     assert_eq!(
         counters_data.made, counters_data.released,

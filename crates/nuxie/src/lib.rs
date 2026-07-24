@@ -22,9 +22,8 @@ use nuxie_binary::{
 };
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_runtime::{
-    ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryCache, RuntimeGeometryHit,
-    RuntimeImageDimensionConflict, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
-    RuntimeRenderPaintCache, RuntimeRenderPathCache, RuntimeSemanticTextHit,
+    ArtboardInstance as RuntimeArtboardInstance, RuntimeGeometryHit, RuntimeImageDimensionConflict,
+    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeSemanticTextHit,
     StateMachineEventContext, embedded_fonts_are_parseable,
 };
 
@@ -931,8 +930,6 @@ struct FileScriptArtboard {
     width: f32,
     height: f32,
     frame_origin: bool,
-    paint_cache: Option<RuntimeRenderPaintCache>,
-    path_cache: RuntimeRenderPathCache,
 }
 
 #[cfg(feature = "scripting")]
@@ -993,8 +990,6 @@ impl FileScriptArtboard {
             width,
             height,
             frame_origin: false,
-            paint_cache: None,
-            path_cache: RuntimeRenderPathCache::default(),
         };
         scripted.bind_view_model();
         Ok(scripted)
@@ -1137,46 +1132,15 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
                     self.artboard_index
                 ))
             })?;
-        if self.paint_cache.is_none() {
-            let candidate =
-                RuntimeRenderPaintCache::preallocate_for_artboard_tree_with_external_images(
-                    &self.file.runtime,
-                    &self.instance,
-                    graph,
-                    &self.file.graph.artboards,
-                    &self.file.external_image_assets,
-                    factory,
-                    self.file.max_retained_decoded_image_bytes,
-                );
-            if let Some(error) = candidate.image_decode_error() {
-                return Err(nuxie_runtime::ScriptError::new(error.to_string()));
-            }
-            self.paint_cache = Some(candidate);
-        }
-        let Some(paint_cache) = self.paint_cache.as_mut() else {
-            return Err(nuxie_runtime::ScriptError::new(
-                "scripted artboard paint cache initialization produced no cache",
-            ));
-        };
         self.instance
-            .prepare_static_artboard_tree_paints(
-                &self.file.runtime,
-                graph,
-                &self.file.graph.artboards,
-                factory,
-                paint_cache,
-                &mut self.path_cache,
-            )
-            .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
-        self.instance
-            .draw_prepared_static_artboard_with_render_cache_and_origin(
+            .draw_artboard(
                 &self.file.runtime,
                 graph,
                 &self.file.graph.artboards,
                 factory,
                 renderer,
-                paint_cache,
-                &mut self.path_cache,
+                &self.file.external_image_assets,
+                self.file.max_retained_decoded_image_bytes,
                 self.frame_origin,
             )
             .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))
@@ -2383,7 +2347,6 @@ impl<'a> Artboard<'a> {
             file: self.file,
             artboard_index: self.index,
             raw,
-            geometry: RuntimeGeometryCache::default(),
         })
     }
 }
@@ -2394,44 +2357,6 @@ pub struct ArtboardInstance<'a> {
     file: &'a File,
     artboard_index: usize,
     raw: RuntimeArtboardInstance,
-    geometry: RuntimeGeometryCache,
-}
-
-/// Render resources retained across draws of one [`ArtboardInstance`].
-///
-/// Create this renderer-neutral handle from [`ArtboardInstance::new_render_cache`].
-/// The first draw lazily allocates resources from its factory. A failed image
-/// decode discards that candidate allocation so a later draw with the same
-/// cache can retry; successfully created resources remain owned until drop.
-pub struct ArtboardRenderCache {
-    paint: Option<RuntimeRenderPaintCache>,
-    path: RuntimeRenderPathCache,
-}
-
-fn ensure_render_paint_cache_for_draw(
-    retained: &mut Option<RuntimeRenderPaintCache>,
-    file: &File,
-    instance: &RuntimeArtboardInstance,
-    artboard: &ArtboardGraph,
-    factory: &mut dyn Factory,
-) -> std::result::Result<(), ImageDecodeError> {
-    if retained.is_some() {
-        return Ok(());
-    }
-    let candidate = RuntimeRenderPaintCache::preallocate_for_artboard_tree_with_external_images(
-        &file.runtime,
-        instance,
-        artboard,
-        &file.graph.artboards,
-        &file.external_image_assets,
-        factory,
-        file.max_retained_decoded_image_bytes,
-    );
-    if let Some(error) = candidate.image_decode_error() {
-        return Err(error);
-    }
-    *retained = Some(candidate);
-    Ok(())
 }
 
 impl<'a> ArtboardInstance<'a> {
@@ -2531,25 +2456,24 @@ impl<'a> ArtboardInstance<'a> {
     /// including descendants reached through nested artboards and
     /// component-list items.
     pub fn hit_test(&mut self, point: Vec2D) -> Vec<usize> {
-        self.raw.geometry_hit_test(point, &mut self.geometry)
+        self.raw.hit_test(point)
     }
 
     /// Return visible Shape and Text local-id paths under `point`, front to
     /// back. Direct hits contain one local id; child-artboard hits are prefixed
     /// with their nested or component-list host local ids.
     pub fn hit_test_paths(&mut self, point: Vec2D) -> Vec<Vec<usize>> {
-        self.raw.geometry_hit_test_paths(point, &mut self.geometry)
+        self.raw.hit_test_paths(point)
     }
 
     /// Return exact logical world bounds for one runtime-local object.
     pub fn world_bounds(&mut self, local_id: usize) -> Option<Aabb> {
-        self.raw.geometry_world_bounds(local_id, &mut self.geometry)
+        self.raw.object_world_bounds(local_id)
     }
 
     /// Return the settled, layout-aware world transform for one runtime-local object.
     pub fn world_transform(&mut self, local_id: usize) -> Option<Mat2D> {
-        self.raw
-            .geometry_world_transform(local_id, &mut self.geometry)
+        self.raw.object_world_transform(local_id)
     }
 
     /// Return the canonical downstream shaped Text caret in source-artboard
@@ -2567,9 +2491,7 @@ impl<'a> ArtboardInstance<'a> {
     /// Geometry v1 supports only `Visible`, `Fit`, and `FitFontSize`; `Hidden`,
     /// `Clipped`, and `Ellipsis` fail closed.
     pub fn text_caret(&mut self, local_id: usize, byte_offset: usize) -> Option<CaretGeometry> {
-        let (top, bottom) =
-            self.raw
-                .geometry_text_caret(local_id, byte_offset, &mut self.geometry)?;
+        let (top, bottom) = self.raw.text_caret(local_id, byte_offset)?;
         Some(CaretGeometry { top, bottom })
     }
 
@@ -2582,8 +2504,7 @@ impl<'a> ArtboardInstance<'a> {
     /// unknown overflow. Geometry v1 supports only `Visible`, `Fit`, and
     /// `FitFontSize`.
     pub fn text_hit(&mut self, local_id: usize, point: Vec2D) -> Option<usize> {
-        self.raw
-            .geometry_text_hit(local_id, point, &mut self.geometry)
+        self.raw.text_hit(local_id, point)
     }
 
     /// Return one source-artboard world-space selection rectangle per shaped
@@ -2602,8 +2523,7 @@ impl<'a> ArtboardInstance<'a> {
         local_id: usize,
         range: std::ops::Range<usize>,
     ) -> Vec<Aabb> {
-        self.raw
-            .geometry_text_selection_rects(local_id, range, &mut self.geometry)
+        self.raw.text_selection_rects(local_id, range)
     }
 
     pub fn linear_animation_instance(&self, index: usize) -> Option<LinearAnimationInstance> {
@@ -2917,35 +2837,6 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {
-        let mut cache = self.new_render_cache();
-        self.draw_with_render_cache(factory, renderer, &mut cache)
-    }
-
-    /// Create a renderer-neutral cache for [`Self::draw_with_render_cache`].
-    ///
-    /// Render resources and image decoding are deferred until draw. Failed
-    /// candidate resources are discarded, leaving this cache reusable. After
-    /// the first successful draw, subsequent draws must use a compatible
-    /// factory and renderer for the retained resources.
-    pub fn new_render_cache(&self) -> ArtboardRenderCache {
-        ArtboardRenderCache {
-            paint: None,
-            path: RuntimeRenderPathCache::default(),
-        }
-    }
-
-    /// Draw while retaining paint and path handles across frames.
-    ///
-    /// `cache` must have been created by this instance. Once a draw succeeds,
-    /// later draws must use a factory and renderer backed by the same renderer
-    /// integration as the retained resources. Scripted Files additionally pin
-    /// the exact live Factory object used for their first successful bootstrap.
-    pub fn draw_with_render_cache(
-        &mut self,
-        factory: &mut dyn Factory,
-        renderer: &mut dyn Renderer,
-        cache: &mut ArtboardRenderCache,
-    ) -> Result<()> {
         let artboard = self
             .file
             .graph
@@ -2953,53 +2844,29 @@ impl<'a> ArtboardInstance<'a> {
             .get(self.artboard_index)
             .context("artboard instance graph is unavailable")?;
         #[cfg(feature = "scripting")]
-        let had_retained_paint = cache.paint.is_some();
-        ensure_render_paint_cache_for_draw(
-            &mut cache.paint,
-            self.file,
-            &self.raw,
-            artboard,
-            factory,
-        )?;
-        #[cfg(feature = "scripting")]
-        if let Err(error) =
-            prepare_scripted_artboard_tree(self.file, artboard, &mut self.raw, factory)
-        {
-            if !had_retained_paint {
-                cache.paint = None;
-            }
-            return Err(error).context("failed to prepare scripted drawables");
-        }
-        let paint = cache
-            .paint
-            .as_mut()
-            .context("render paint cache disappeared after successful allocation")?;
+        prepare_scripted_artboard_tree(self.file, artboard, &mut self.raw, factory)
+            .context("failed to prepare scripted drawables")?;
         self.raw.update_pass();
-        if paint.needs_paint_preparation(&self.raw, artboard) {
-            self.raw
-                .prepare_static_artboard_tree_paints(
-                    &self.file.runtime,
-                    artboard,
-                    &self.file.graph.artboards,
-                    factory,
-                    paint,
-                    &mut cache.path,
-                )
-                .context("failed to prepare Rive paints")?;
-        }
         self.raw
-            .draw_prepared_static_artboard_with_render_cache(
+            .draw_artboard(
                 &self.file.runtime,
                 artboard,
                 &self.file.graph.artboards,
                 factory,
                 renderer,
-                paint,
-                &mut cache.path,
+                &self.file.external_image_assets,
+                self.file.max_retained_decoded_image_bytes,
+                true,
             )
             .context("failed to draw Rive artboard")?;
-        self.geometry.observe_presented_images(&self.raw, paint)?;
+        self.raw.observe_owned_images()?;
         Ok(())
+    }
+
+    /// Drop renderer-owned members before switching this occurrence to a
+    /// replacement backend. The next draw rebuilds them from live state.
+    pub fn reset_renderer(&self) {
+        self.raw.reset_backend_resources();
     }
 }
 
@@ -3012,7 +2879,6 @@ pub struct OwnedArtboardInstance {
     // Raw script-table handles must drop before the final Arc<File> can drop
     // its VM. Field declaration order is drop order.
     raw: RuntimeArtboardInstance,
-    geometry: RuntimeGeometryCache,
     file: Arc<File>,
     artboard_index: usize,
 }
@@ -3041,7 +2907,6 @@ impl OwnedArtboardInstance {
         };
         Ok(Self {
             raw,
-            geometry: RuntimeGeometryCache::default(),
             file,
             artboard_index,
         })
@@ -3233,14 +3098,14 @@ impl OwnedArtboardInstance {
     /// including descendants reached through nested artboards and
     /// component-list items.
     pub fn hit_test(&mut self, point: Vec2D) -> Vec<usize> {
-        self.raw.geometry_hit_test(point, &mut self.geometry)
+        self.raw.hit_test(point)
     }
 
     /// Return visible Shape and Text local-id paths under `point`, front to
     /// back. Direct hits contain one local id; child-artboard hits are prefixed
     /// with their nested or component-list host local ids.
     pub fn hit_test_paths(&mut self, point: Vec2D) -> Vec<Vec<usize>> {
-        self.raw.geometry_hit_test_paths(point, &mut self.geometry)
+        self.raw.hit_test_paths(point)
     }
 
     /// Resolve the frontmost concrete geometry occurrence for a native
@@ -3250,7 +3115,7 @@ impl OwnedArtboardInstance {
     /// hit geometry.
     pub fn pointer_event_context(&mut self, point: Vec2D) -> Option<StateMachineEventContext> {
         self.raw
-            .geometry_hit_test_path_segments_with_bounds(point, &mut self.geometry)
+            .hit_test_segments_with_bounds(point)
             .first()
             .map(StateMachineEventContext::from_geometry_hit)
     }
@@ -3259,32 +3124,28 @@ impl OwnedArtboardInstance {
         &mut self,
         point: Vec2D,
     ) -> Vec<RuntimeGeometryHit> {
-        self.raw
-            .geometry_hit_test_path_segments_with_bounds(point, &mut self.geometry)
+        self.raw.hit_test_segments_with_bounds(point)
     }
 
     pub(crate) fn geometry_path_segments_with_bounds(&mut self) -> Vec<RuntimeGeometryHit> {
-        self.raw
-            .geometry_path_segments_with_bounds(&mut self.geometry)
+        self.raw.visible_geometry_with_bounds()
     }
 
     pub(crate) fn retained_geometry_path_segments_with_bounds(
         &mut self,
     ) -> Vec<RuntimeGeometryHit> {
-        self.raw
-            .retained_geometry_path_segments_with_bounds(&mut self.geometry)
+        self.raw.retained_geometry_with_bounds()
     }
 
     pub(crate) fn semantic_text_path_segments_with_bounds(
         &mut self,
     ) -> Vec<RuntimeSemanticTextHit> {
-        self.raw
-            .semantic_text_path_segments_with_bounds(&mut self.geometry)
+        self.raw.semantic_text_with_bounds()
     }
 
     /// Return exact logical world bounds for one runtime-local object.
     pub fn world_bounds(&mut self, local_id: usize) -> Option<Aabb> {
-        self.raw.geometry_world_bounds(local_id, &mut self.geometry)
+        self.raw.object_world_bounds(local_id)
     }
 
     pub(crate) fn register_intrinsic_image_dimensions(
@@ -3293,14 +3154,13 @@ impl OwnedArtboardInstance {
         width: u32,
         height: u32,
     ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
-        self.geometry
-            .register_image_dimensions(&self.raw, asset_global, width, height)
+        self.raw
+            .register_image_dimensions(asset_global, width, height)
     }
 
     /// Return the settled, layout-aware world transform for one runtime-local object.
     pub fn world_transform(&mut self, local_id: usize) -> Option<Mat2D> {
-        self.raw
-            .geometry_world_transform(local_id, &mut self.geometry)
+        self.raw.object_world_transform(local_id)
     }
 
     /// Return the canonical downstream shaped Text caret in source-artboard
@@ -3310,9 +3170,7 @@ impl OwnedArtboardInstance {
     /// the same invalid-offset, target-kind, shaping, finite-geometry,
     /// overflow, soft-wrap, and trailing-static-separator behavior.
     pub fn text_caret(&mut self, local_id: usize, byte_offset: usize) -> Option<CaretGeometry> {
-        let (top, bottom) =
-            self.raw
-                .geometry_text_caret(local_id, byte_offset, &mut self.geometry)?;
+        let (top, bottom) = self.raw.text_caret(local_id, byte_offset)?;
         Some(CaretGeometry { top, bottom })
     }
 
@@ -3323,8 +3181,7 @@ impl OwnedArtboardInstance {
     /// same nonfinite-point, target-kind, shaping, finite-geometry, and
     /// unsupported-or-unknown-overflow failure behavior.
     pub fn text_hit(&mut self, local_id: usize, point: Vec2D) -> Option<usize> {
-        self.raw
-            .geometry_text_hit(local_id, point, &mut self.geometry)
+        self.raw.text_hit(local_id, point)
     }
 
     /// Return one source-artboard world-space selection rectangle per shaped
@@ -3338,8 +3195,7 @@ impl OwnedArtboardInstance {
         local_id: usize,
         range: std::ops::Range<usize>,
     ) -> Vec<Aabb> {
-        self.raw
-            .geometry_text_selection_rects(local_id, range, &mut self.geometry)
+        self.raw.text_selection_rects(local_id, range)
     }
 
     pub fn linear_animation_instance(&self, index: usize) -> Option<LinearAnimationInstance> {
@@ -3614,25 +3470,6 @@ impl OwnedArtboardInstance {
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {
-        let mut cache = self.new_render_cache();
-        self.draw_with_render_cache(factory, renderer, &mut cache)
-    }
-
-    /// See [`ArtboardInstance::new_render_cache`].
-    pub fn new_render_cache(&self) -> ArtboardRenderCache {
-        ArtboardRenderCache {
-            paint: None,
-            path: RuntimeRenderPathCache::default(),
-        }
-    }
-
-    /// See [`ArtboardInstance::draw_with_render_cache`].
-    pub fn draw_with_render_cache(
-        &mut self,
-        factory: &mut dyn Factory,
-        renderer: &mut dyn Renderer,
-        cache: &mut ArtboardRenderCache,
-    ) -> Result<()> {
         let artboard = self
             .file
             .graph
@@ -3640,53 +3477,29 @@ impl OwnedArtboardInstance {
             .get(self.artboard_index)
             .context("owned artboard instance graph is unavailable")?;
         #[cfg(feature = "scripting")]
-        let had_retained_paint = cache.paint.is_some();
-        ensure_render_paint_cache_for_draw(
-            &mut cache.paint,
-            &self.file,
-            &self.raw,
-            artboard,
-            factory,
-        )?;
-        #[cfg(feature = "scripting")]
-        if let Err(error) =
-            prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)
-        {
-            if !had_retained_paint {
-                cache.paint = None;
-            }
-            return Err(error).context("failed to prepare scripted drawables");
-        }
-        let paint = cache
-            .paint
-            .as_mut()
-            .context("render paint cache disappeared after successful allocation")?;
+        prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)
+            .context("failed to prepare scripted drawables")?;
         self.raw.update_pass();
-        if paint.needs_paint_preparation(&self.raw, artboard) {
-            self.raw
-                .prepare_static_artboard_tree_paints(
-                    &self.file.runtime,
-                    artboard,
-                    &self.file.graph.artboards,
-                    factory,
-                    paint,
-                    &mut cache.path,
-                )
-                .context("failed to prepare Rive paints")?;
-        }
         self.raw
-            .draw_prepared_static_artboard_with_render_cache(
+            .draw_artboard(
                 &self.file.runtime,
                 artboard,
                 &self.file.graph.artboards,
                 factory,
                 renderer,
-                paint,
-                &mut cache.path,
+                &self.file.external_image_assets,
+                self.file.max_retained_decoded_image_bytes,
+                true,
             )
             .context("failed to draw Rive artboard")?;
-        self.geometry.observe_presented_images(&self.raw, paint)?;
+        self.raw.observe_owned_images()?;
         Ok(())
+    }
+
+    /// Drop renderer-owned members before switching this occurrence to a
+    /// replacement backend. The next draw rebuilds them from live state.
+    pub fn reset_renderer(&self) {
+        self.raw.reset_backend_resources();
     }
 }
 

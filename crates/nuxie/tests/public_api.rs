@@ -522,7 +522,7 @@ fn public_api_imports_lists_instantiates_and_draws() {
 }
 
 #[test]
-fn retained_public_render_cache_retries_a_failed_image_decode_without_poisoning() {
+fn artboard_owned_renderer_retries_a_failed_image_decode_without_poisoning() {
     let file = File::import(&external_fixture("in_band_asset.riv")).expect("import image fixture");
     let mut instance = file
         .default_artboard()
@@ -530,15 +530,14 @@ fn retained_public_render_cache_retries_a_failed_image_decode_without_poisoning(
         .instantiate()
         .expect("instantiate image artboard");
     let mut factory = FailFirstImageDecodeFactory::new();
-    let mut cache = instance.new_render_cache();
 
     assert_eq!(
         factory.decode_attempts, 0,
-        "retained cache creation must be renderer-neutral"
+        "Artboard construction must be renderer-neutral"
     );
     let mut renderer = factory.inner.make_renderer();
     let first = instance
-        .draw_with_render_cache(&mut factory, &mut renderer, &mut cache)
+        .draw(&mut factory, &mut renderer)
         .expect_err("first image decode fails at draw time");
     assert!(first.downcast_ref::<ImageDecodeError>().is_some());
     assert_eq!(factory.decode_attempts, 1);
@@ -550,23 +549,27 @@ fn retained_public_render_cache_retries_a_failed_image_decode_without_poisoning(
     assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
 
     instance
-        .draw_with_render_cache(&mut factory, &mut renderer, &mut cache)
-        .expect("the same retained cache retries and draws");
+        .draw(&mut factory, &mut renderer)
+        .expect("the same Artboard occurrence retries and draws");
     assert!(factory.decode_attempts >= 2);
     assert!(factory.images_created.get() > factory.images_dropped.get());
     assert!(factory.paints_created.get() > factory.paints_dropped.get());
 
-    drop(cache);
-    // Pinned C++ stores the decoded image on ImageAsset, not on the renderer
-    // cache (`include/rive/assets/image_asset.hpp:19`,
+    // Pinned C++ retains both ImageAsset::m_RenderImage and the ShapePaint
+    // renderer member on the owning Artboard occurrence
+    // (`include/rive/assets/image_asset.hpp:19`,
     // `src/assets/image_asset.cpp:28-39`).
     assert_eq!(
         factory.images_created.get(),
         factory.images_dropped.get() + 1
     );
-    assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
+    assert_eq!(
+        factory.paints_created.get(),
+        factory.paints_dropped.get() + 1
+    );
     drop(instance);
     assert_eq!(factory.images_created.get(), factory.images_dropped.get());
+    assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
 }
 
 #[test]
@@ -600,12 +603,11 @@ fn file_owned_external_images_decode_lazily_and_retry_without_poisoning() {
         .instantiate()
         .expect("instantiate image artboard");
     let mut factory = FailFirstImageDecodeFactory::failing_on_attempt(2);
-    let mut cache = instance.new_render_cache();
     assert_eq!(factory.decode_attempts, 0, "attachment stays decode-free");
 
     let mut renderer = factory.inner.make_renderer();
     let first = instance
-        .draw_with_render_cache(&mut factory, &mut renderer, &mut cache)
+        .draw(&mut factory, &mut renderer)
         .expect_err("first external image decode fails at draw time");
     assert!(first.downcast_ref::<ImageDecodeError>().is_some());
     assert_eq!(factory.decode_attempts, 2);
@@ -621,11 +623,10 @@ fn file_owned_external_images_decode_lazily_and_retry_without_poisoning() {
     assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
 
     instance
-        .draw_with_render_cache(&mut factory, &mut renderer, &mut cache)
-        .expect("the same cache retries external image decoding");
+        .draw(&mut factory, &mut renderer)
+        .expect("the same Artboard occurrence retries external image decoding");
     assert!(factory.decode_attempts >= 4);
     assert!(factory.images_created.get() > factory.images_dropped.get());
-    drop(cache);
     assert!(factory.images_created.get() > factory.images_dropped.get());
     drop(instance);
     assert_eq!(factory.images_created.get(), factory.images_dropped.get());

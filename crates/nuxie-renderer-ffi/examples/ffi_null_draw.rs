@@ -2,7 +2,8 @@ use anyhow::{Context, Result, bail};
 use nuxie_binary::read_runtime_file;
 use nuxie_graph::GraphFile;
 use nuxie_renderer_ffi::FfiFactory;
-use nuxie_runtime::{ArtboardInstance, RuntimeRenderPathCache, preallocate_render_paints};
+use nuxie_runtime::ArtboardInstance;
+use std::collections::BTreeMap;
 use std::env;
 use std::path::PathBuf;
 
@@ -40,30 +41,19 @@ fn run() -> Result<()> {
     let height = frame_dimension(artboard_object.double_property("height").unwrap_or(0.0));
     let mut factory =
         FfiFactory::new_null(width, height).context("failed to create FFI factory")?;
-    let mut paint_by_global = preallocate_render_paints(&runtime, artboard, &mut factory);
-    let mut path_cache = RuntimeRenderPathCache::default();
-    instance
-        .prepare_static_artboard_paints(
-            &runtime,
-            artboard,
-            &mut factory,
-            &mut paint_by_global,
-            &mut path_cache,
-        )
-        .context("failed to prepare paints")?;
-
     let mut frame = factory
         .begin_frame(0x00000000)
         .context("failed to begin FFI frame")?;
     instance
-        .draw_prepared_static_artboard_with_path_cache(
+        .draw_artboard(
             &runtime,
             artboard,
             std::slice::from_ref(artboard),
             &mut factory,
             &mut frame,
-            &mut paint_by_global,
-            &mut path_cache,
+            &BTreeMap::new(),
+            None,
+            true,
         )
         .context("failed to draw through FFI frame")?;
     let draw_count = frame.end();

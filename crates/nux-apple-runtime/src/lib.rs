@@ -24,8 +24,8 @@ use artifact::{
 };
 #[cfg(feature = "apple-product")]
 use nuxie::{
-    ApplePresentationCompletion, AppleSurface, ArtboardRenderCache, File, Mat2D, RenderMode,
-    Renderer, SurfaceDisposition, WgpuFactory,
+    ApplePresentationCompletion, AppleSurface, File, Mat2D, RenderMode, Renderer,
+    SurfaceDisposition, WgpuFactory,
     flow_session::{FlowPlayerSelector, FlowSession, FlowSessionConfig, FlowSessionErrorKind},
 };
 #[cfg(feature = "apple-product")]
@@ -433,7 +433,6 @@ struct SessionState {
     // factory belongs to the logical session, not to its optional surface.
     factory: Box<WgpuFactory>,
     renderer_generation: u64,
-    render_cache: Option<ArtboardRenderCache>,
     legacy_timestamp_seconds: f64,
     #[cfg(test)]
     render_attempts: usize,
@@ -741,7 +740,6 @@ impl WorkerState {
             factory.as_mut(),
         )
         .map_err(runtime_failure_from_flow_session)?;
-        let render_cache = flow_session.new_render_cache();
         let id = self.allocate_session_id()?;
         self.sessions.insert(
             id,
@@ -751,7 +749,6 @@ impl WorkerState {
                 flow_session,
                 factory,
                 renderer_generation,
-                render_cache: Some(render_cache),
                 legacy_timestamp_seconds: 0.0,
                 #[cfg(test)]
                 render_attempts: 0,
@@ -936,7 +933,7 @@ impl WorkerState {
         }
         *session.factory = candidate_factory;
         session.renderer_generation = candidate_generation;
-        session.render_cache = None;
+        session.flow_session.reset_renderer();
         attachment.surface = candidate_surface;
         #[cfg(test)]
         {
@@ -1981,13 +1978,9 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                 {
                     session.render_attempts = session.render_attempts.saturating_add(1);
                 }
-                let render_cache = session
-                    .render_cache
-                    .get_or_insert_with(|| session.flow_session.new_render_cache());
                 let draw_result = session.flow_session.draw_into_result(
                     session.factory.as_mut(),
                     &mut frame,
-                    render_cache,
                     &mut result,
                 );
                 if let Err(error) = draw_result {
@@ -4157,7 +4150,6 @@ mod tests {
                     assert_eq!(session.legacy_timestamp_seconds, 0.25);
                     assert!(session.injected_device_loss);
                     assert!(!session.is_fatal);
-                    assert!(session.render_cache.is_some());
                     assert!(
                         session
                             .attachment
@@ -4200,7 +4192,6 @@ mod tests {
                     assert_eq!(gpu_generation, recovered_generation);
                     assert!(!session.injected_device_loss);
                     assert!(!session.is_fatal);
-                    assert!(session.render_cache.is_none());
                     Ok::<(), RuntimeFailure>(())
                 })
                 .expect("worker inspects successful recovery")

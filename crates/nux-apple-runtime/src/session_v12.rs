@@ -2640,7 +2640,6 @@ mod configured_session_seam {
                 flow_session: session,
                 factory,
                 renderer_generation,
-                render_cache: None,
                 legacy_timestamp_seconds: 0.0,
                 #[cfg(test)]
                 render_attempts: 0,
@@ -2864,13 +2863,9 @@ mod configured_session_seam {
         {
             session.render_attempts = session.render_attempts.saturating_add(1);
         }
-        let render_cache = session
-            .render_cache
-            .get_or_insert_with(|| session.flow_session.new_render_cache());
         let draw_result = session.flow_session.draw_into_result(
             session.factory.as_mut(),
             &mut frame,
-            render_cache,
             &mut core_result,
         );
         if let Err(error) = draw_result {

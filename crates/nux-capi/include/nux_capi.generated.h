@@ -12,7 +12,7 @@
 /**
  * Increment only for a breaking change to the exported C contract.
  */
-#define NUX_CAPI_ABI_VERSION 1
+#define NUX_CAPI_ABI_VERSION 2
 
 typedef enum NuxStatus {
   NUX_STATUS_OK = 0,
@@ -31,11 +31,6 @@ typedef enum NuxStatus {
 typedef struct NuxArtboardInstance NuxArtboardInstance;
 
 typedef struct NuxFile NuxFile;
-
-/**
- * Render resources retained across draws of one artboard instance.
- */
-typedef struct NuxRenderCache NuxRenderCache;
 
 /**
  * Owned state machine instance. Advance it through the
@@ -185,17 +180,13 @@ enum NuxStatus nux_artboard_instance_bind_view_model(struct NuxArtboardInstance 
 
 /**
  * Draw the artboard through the caller-provided render vtable. See
- * `NuxRenderCallbacks` for the ownership and handle contract; the callbacks
- * only need to stay valid for the duration of this call.
+ * `NuxRenderCallbacks` for the ownership and handle contract. The first
+ * draw's binding is retained by the Artboard occurrence, even if that draw
+ * returns an error; its `user_data` must remain valid until the instance is
+ * freed.
  */
 enum NuxStatus nux_artboard_instance_draw(struct NuxArtboardInstance *instance,
                                           const struct NuxRenderCallbacks *callbacks);
-
-/**
- * Draw using render handles retained in `cache` from previous calls.
- */
-enum NuxStatus nux_artboard_instance_draw_cached(struct NuxArtboardInstance *instance,
-                                                 struct NuxRenderCache *cache);
 
 void nux_artboard_instance_free(struct NuxArtboardInstance *instance);
 
@@ -240,18 +231,6 @@ enum NuxStatus nux_file_artboard_state_machine_name(const struct NuxFile *file,
 void nux_file_free(struct NuxFile *file);
 
 enum NuxStatus nux_file_import(const uint8_t *bytes, size_t len, struct NuxFile **out_file);
-
-void nux_render_cache_free(struct NuxRenderCache *cache);
-
-/**
- * Create a retained render cache for `instance` without invoking renderer callbacks.
- * Resource creation begins on the first cached draw, and a failed candidate is
- * discarded so the same cache can retry. The callback table and its `user_data`
- * must remain valid until `nux_render_cache_free` returns.
- */
-enum NuxStatus nux_render_cache_new(const struct NuxArtboardInstance *instance,
-                                    const struct NuxRenderCallbacks *callbacks,
-                                    struct NuxRenderCache **out_cache);
 
 /**
  * Advance the artboard while driving `state_machine`. The state machine must

@@ -317,6 +317,10 @@ pub struct ArtboardInstance {
     has_legacy_image_layout_scales: Cell<bool>,
     legacy_image_layout_scales: RefCell<BTreeMap<usize, RuntimeLegacyImageLayoutScaleState>>,
     external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
+    /// C++ File/ImageAsset ownership projected into the runtime occurrence
+    /// tree. Every clone retains the same file-owned owner list; Images borrow
+    /// RenderImage from it and never from a facade scene cache.
+    pub(crate) runtime_image_assets: RefCell<Option<Arc<crate::draw::RuntimeImageAssetOwners>>>,
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
     pub(crate) cache_epoch: u64,
@@ -339,6 +343,10 @@ pub struct ArtboardInstance {
     /// C++ `Shape::{m_PathComposer,m_Paths}` plus
     /// `ShapePaintContainer::m_ShapePaints`: clone-owned ordered memberships.
     pub(crate) runtime_shapes: RuntimeShapeList,
+    /// Clone-owned C++ `Mesh` objects and NSlicer-owned `SliceMesh` objects.
+    /// Backend buffers are members of these occurrences, not the facade paint
+    /// cache; `RuntimeMeshList::clone` implements C++ Mesh/NSlicer clone rules.
+    pub(crate) runtime_meshes: crate::draw::RuntimeMeshList,
     pub(crate) did_change: Cell<bool>,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
@@ -1176,6 +1184,7 @@ impl ArtboardInstance {
             has_legacy_image_layout_scales: Cell::new(false),
             legacy_image_layout_scales: RefCell::new(BTreeMap::new()),
             external_font_assets,
+            runtime_image_assets: RefCell::new(None),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
@@ -1187,6 +1196,7 @@ impl ArtboardInstance {
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::from_graph(graph),
             runtime_shapes: RuntimeShapeList::from_graph(graph),
+            runtime_meshes: crate::draw::RuntimeMeshList::from_graph(graph),
             did_change: Cell::new(true),
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
@@ -4263,6 +4273,7 @@ impl ArtboardInstance {
                 self.dirt_depth = composer_order;
             }
         }
+        self.runtime_meshes.mark_component_dirt(local_id, dirt);
         self.components[index].dirt |= dirt;
         if dirt.contains(ComponentDirt::LAYOUT_STYLE) {
             self.mark_layout_changed();
@@ -4801,6 +4812,12 @@ impl ArtboardInstance {
                                 &graphs[*graph_index],
                                 layout_bounds.as_deref(),
                             );
+                            self.update_runtime_mesh_owner(
+                                local_id,
+                                dirt,
+                                &graphs[*graph_index],
+                                layout_bounds.as_deref(),
+                            );
                         }
                         if record_updated_locals {
                             report.updated_locals.push(local_id);
@@ -5307,6 +5324,31 @@ impl ArtboardInstance {
         }
 
         match self.slot(local_id).and_then(|slot| slot.type_name) {
+            Some("MeshVertex")
+                if property_key_for_name("Vertex", "x") == Some(property_key)
+                    || property_key_for_name("Vertex", "y") == Some(property_key) =>
+            {
+                // `MeshVertex::markGeometryDirty` calls its parent Mesh's
+                // `markDrawableDirty`, which pushes Vertices dirt
+                // (`src/shapes/mesh_vertex.cpp:5-8`,
+                // `src/shapes/mesh.cpp:14-23`).
+                self.component(local_id)
+                    .and_then(|component| component.parent_local)
+                    .is_some_and(|mesh_local| {
+                        self.add_dirt(mesh_local, ComponentDirt::VERTICES, false)
+                    })
+            }
+            Some("AxisX" | "AxisY")
+                if property_key_for_name("Axis", "offset") == Some(property_key) =>
+            {
+                // `Axis::offsetChanged` resolves NSlicerDetails from the
+                // parent and pushes NSlicer dirt (`src/layout/axis.cpp:23-29`).
+                self.component(local_id)
+                    .and_then(|component| component.parent_local)
+                    .is_some_and(|slicer_local| {
+                        self.add_dirt(slicer_local, ComponentDirt::N_SLICER, false)
+                    })
+            }
             Some("Artboard")
                 if local_id == 0
                     && property_key_for_name("Artboard", "originX") == Some(property_key) =>
@@ -7207,6 +7249,7 @@ mod tests {
             has_legacy_image_layout_scales: Cell::new(false),
             legacy_image_layout_scales: RefCell::new(BTreeMap::new()),
             external_font_assets: Arc::new(BTreeMap::new()),
+            runtime_image_assets: RefCell::new(None),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
@@ -7218,6 +7261,7 @@ mod tests {
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::default(),
             runtime_shapes: RuntimeShapeList::default(),
+            runtime_meshes: crate::draw::RuntimeMeshList::default(),
             did_change: Cell::new(true),
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,

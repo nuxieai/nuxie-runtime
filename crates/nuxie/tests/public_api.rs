@@ -557,8 +557,16 @@ fn retained_public_render_cache_retries_a_failed_image_decode_without_poisoning(
     assert!(factory.paints_created.get() > factory.paints_dropped.get());
 
     drop(cache);
-    assert_eq!(factory.images_created.get(), factory.images_dropped.get());
+    // Pinned C++ stores the decoded image on ImageAsset, not on the renderer
+    // cache (`include/rive/assets/image_asset.hpp:19`,
+    // `src/assets/image_asset.cpp:28-39`).
+    assert_eq!(
+        factory.images_created.get(),
+        factory.images_dropped.get() + 1
+    );
     assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
+    drop(instance);
+    assert_eq!(factory.images_created.get(), factory.images_dropped.get());
 }
 
 #[test]
@@ -602,7 +610,13 @@ fn file_owned_external_images_decode_lazily_and_retry_without_poisoning() {
     assert!(first.downcast_ref::<ImageDecodeError>().is_some());
     assert_eq!(factory.decode_attempts, 2);
     assert!(factory.images_created.get() > 0);
-    assert_eq!(factory.images_created.get(), factory.images_dropped.get());
+    // ImageAsset::decode installs each successful RenderImage immediately
+    // (`src/assets/image_asset.cpp:28-39`), so a later asset's decode failure
+    // does not roll back an earlier file-owned image.
+    assert_eq!(
+        factory.images_created.get(),
+        factory.images_dropped.get() + 1
+    );
     assert!(factory.paints_created.get() > 0);
     assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
 
@@ -611,6 +625,10 @@ fn file_owned_external_images_decode_lazily_and_retry_without_poisoning() {
         .expect("the same cache retries external image decoding");
     assert!(factory.decode_attempts >= 4);
     assert!(factory.images_created.get() > factory.images_dropped.get());
+    drop(cache);
+    assert!(factory.images_created.get() > factory.images_dropped.get());
+    drop(instance);
+    assert_eq!(factory.images_created.get(), factory.images_dropped.get());
 }
 
 #[test]

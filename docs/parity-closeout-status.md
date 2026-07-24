@@ -713,7 +713,30 @@ upstream-sync-map registry).
   paths are deleted from live traversal in the same landing. The renderer
   backend remains untouched. File-correspondence rows stay
   `pending-verification` until the orchestrator's independent battery. The
-  next ownership batch is Image/mesh.
+  Image/mesh ownership batch is now executor-complete pending independent
+  orchestrator verification. A file-scoped `RuntimeImageAssetOwners` retains
+  each decoded `RenderImage` and each source-artboard Mesh's shared UV/index
+  buffers; every artboard occurrence retains that file owner list. Each Mesh
+  clone owns a fresh dynamic vertex buffer while sharing its file/source
+  handles, and each NSlicer clone owns a fresh unique SliceMesh buffer set.
+  MeshVertex and NSlicer-axis dirt flow through component update into those
+  owners; draw maps only dirty occurrence buffers and reads the retained
+  ImageAsset directly. The former scene-cache image table and Mesh/SliceMesh
+  buffer tables are deleted, including their traversal parameters. A C API
+  compensation test was corrected to require the C++ lifetime
+  (`include/rive/assets/image_asset.hpp:19`,
+  `src/assets/image_asset.cpp:28-39`): a decoded image outlives the renderer
+  cache and releases with its owning occurrence. The renderer API/backend is
+  untouched. Correspondence rows for `image_asset.cpp`, `image.cpp`,
+  `mesh.cpp`, and `slice_mesh.cpp` are `faithful` with
+  `pending-verification`; they move no further until the orchestrator's
+  independent run. Executor evidence is runtime 411/411, nuxie 167/167,
+  ordinary and scripted command goldens 317/317 entries plus 647/647 exact
+  segments with zero divergences/failures, renderer pixels 1,468/1,468 with
+  zero divergences/gated cases, C API smoke green, the probe-armed full
+  workspace green with 721/721 runtime C++ probes, and the ownership-ledger
+  gate green at 39 owners (5 exact, 26 adapted, 4 pending, 4 compensation).
+  The next ownership batch is Text.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -773,12 +796,13 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. Port the complete Image/mesh ownership batch from pinned C++
-   `d788e8ec`: ImageAsset RenderImage, Image-to-Mesh/NSlicer relationship, and
-   occurrence-owned Mesh/SliceMesh buffers across construct, update, draw,
-   clone, and drop. Remove the corresponding scene-cache ownership in the same
-   landing, keep the renderer API/backend unchanged, and referee the merge
-   with the full 1,468-row pixel corpus plus both zero-failure golden gates.
+1. Port the complete Text ownership batch from pinned C++ `d788e8ec`: shaped
+   lines/runs, render styles, modifiers, clipping/overflow state, and
+   TextInput's retained relationship across construct, update, draw, clone,
+   and drop. Remove the corresponding scene-cache/command ownership in the
+   same landing, keep the renderer API/backend unchanged, and referee the
+   merge with the full 1,468-row pixel corpus plus both zero-failure golden
+   gates.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare

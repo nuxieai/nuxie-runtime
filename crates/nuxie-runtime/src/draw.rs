@@ -16,6 +16,7 @@ use nuxie_render_api::{
     Vec2D as RenderVec2D,
 };
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 use std::sync::{
     Arc, OnceLock,
     atomic::{AtomicU64, Ordering},
@@ -2091,6 +2092,7 @@ impl ArtboardInstance {
         paint_cache: &mut RuntimeRenderPaintCache,
         render_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
+        self.attach_runtime_image_assets_tree(Arc::clone(&paint_cache.image_assets));
         // C++ Artboard::drawInternal returns before touching retained paths
         // when the artboard itself is transparent. Besides avoiding needless
         // work, this keeps an as-yet unsettled instance from retaining local
@@ -2123,8 +2125,6 @@ impl ArtboardInstance {
                 runtime,
                 graph,
                 factory,
-                &paint_cache.images,
-                &mut paint_cache.meshes,
                 render_cache,
             );
         }
@@ -2138,8 +2138,6 @@ impl ArtboardInstance {
                 runtime,
                 graph,
                 factory,
-                &paint_cache.images,
-                &mut paint_cache.meshes,
                 render_cache,
             );
         }
@@ -2181,14 +2179,7 @@ impl ArtboardInstance {
         if paint_cache.paint_preparation_is_solid_only_tree {
             paint_cache.solid_only_tree_structure_epoch = nested_structure_epoch;
         }
-        self.prepare_static_artboard_slice_meshes(
-            runtime,
-            graph,
-            factory,
-            &paint_cache.images,
-            &mut paint_cache.meshes,
-            render_cache,
-        )
+        self.prepare_static_artboard_slice_meshes(runtime, graph, factory, render_cache)
     }
 
     fn prepare_static_artboard_slice_meshes(
@@ -2196,8 +2187,6 @@ impl ArtboardInstance {
         runtime: &RuntimeFile,
         graph: &ArtboardGraph,
         factory: &mut dyn RenderFactory,
-        image_by_global: &RuntimeRenderImages,
-        mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
         // C++ only enters NSlicer mesh preparation for authored slicers. Keep
@@ -2216,16 +2205,7 @@ impl ArtboardInstance {
             mounted_component_list_layout_revision,
         );
         let layout_bounds = layout_frame.bounds.as_ref().as_ref();
-        runtime_prepare_slice_meshes(
-            runtime,
-            self,
-            graph,
-            layout_bounds,
-            factory,
-            image_by_global,
-            mesh_by_local,
-            path_cache,
-        )
+        runtime_prepare_slice_meshes(runtime, self, graph, layout_bounds, factory, path_cache)
     }
 
     fn prepare_static_artboard_tree_paints_internal(
@@ -2523,6 +2503,7 @@ impl ArtboardInstance {
                         cache_key,
                         preallocate_render_paint_cache_for_artboard_instance(
                             runtime,
+                            item.child.as_ref(),
                             child_graph,
                             artboards,
                             factory,
@@ -2666,6 +2647,7 @@ impl ArtboardInstance {
                 cache_key,
                 preallocate_render_paint_cache_for_artboard_instance(
                     runtime,
+                    nested_instance.child.as_ref(),
                     child_graph,
                     artboards,
                     factory,
@@ -2864,6 +2846,7 @@ impl ArtboardInstance {
                                 cache_key,
                                 preallocate_render_paint_cache_for_artboard_instance(
                                     runtime,
+                                    item.child.as_ref(),
                                     child_graph,
                                     artboards,
                                     factory,
@@ -2952,6 +2935,7 @@ impl ArtboardInstance {
                     cache_key,
                     preallocate_render_paint_cache_for_artboard_instance(
                         runtime,
+                        nested.child.as_ref(),
                         child_graph,
                         artboards,
                         factory,
@@ -3086,15 +3070,23 @@ impl ArtboardInstance {
         let child_paint_caches = match nested_paint_caches {
             Some(caches) => {
                 if !caches.contains_key(&cache_key) {
-                    caches.insert(
-                        cache_key,
+                    let child_cache = if let Some(nested) = nested_instance {
                         preallocate_render_paint_cache_for_artboard_instance(
+                            runtime,
+                            nested.child.as_ref(),
+                            child_graph,
+                            artboards,
+                            factory,
+                        )
+                    } else {
+                        preallocate_render_paint_cache_for_unmounted_artboard(
                             runtime,
                             child_graph,
                             artboards,
                             factory,
-                        ),
-                    );
+                        )
+                    };
+                    caches.insert(cache_key, child_cache);
                 }
                 let child_paint_cache = caches.entry(cache_key).or_default();
                 Some((
@@ -3644,6 +3636,39 @@ impl ArtboardInstance {
         )
     }
 
+    fn attach_runtime_image_assets_tree(&self, owners: Arc<RuntimeImageAssetOwners>) {
+        self.runtime_image_assets.replace(Some(Arc::clone(&owners)));
+        for local_id in &self.nested_artboard_locals {
+            if let Some(nested) = self.nested_artboards.get(local_id) {
+                nested
+                    .child
+                    .attach_runtime_image_assets_tree(Arc::clone(&owners));
+            }
+        }
+        for items in self.component_list_items.values() {
+            for item in items {
+                item.child
+                    .attach_runtime_image_assets_tree(Arc::clone(&owners));
+            }
+        }
+    }
+
+    fn runtime_render_image(&self, asset_global: u32) -> Option<Rc<dyn RenderImage>> {
+        self.runtime_image_assets
+            .borrow()
+            .as_ref()?
+            .get(asset_global)
+    }
+
+    fn runtime_image_backend_context_id(&self) -> Option<u64> {
+        Some(
+            self.runtime_image_assets
+                .borrow()
+                .as_ref()?
+                .backend_context_id(),
+        )
+    }
+
     pub fn draw_prepared_static_artboard_with_path_cache(
         &self,
         runtime: &RuntimeFile,
@@ -3654,8 +3679,13 @@ impl ArtboardInstance {
         paint_by_global: &mut RuntimeRenderPaints,
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
-        let mut mesh_buffers = RuntimeMeshRenderBufferSlots::default();
-        let images = RuntimeRenderImages::default();
+        let images = self
+            .runtime_image_assets
+            .borrow()
+            .as_ref()
+            .map(Arc::clone)
+            .unwrap_or_else(|| Arc::new(RuntimeImageAssetOwners::default()));
+        self.attach_runtime_image_assets_tree(Arc::clone(&images));
         self.begin_draw_frame();
         // Seed the nested-artboard cycle guard with this artboard's global id.
         let nested_ancestors = [graph.global_id];
@@ -3666,8 +3696,6 @@ impl ArtboardInstance {
             factory,
             renderer,
             paint_by_global,
-            &images,
-            &mut mesh_buffers,
             path_cache,
             None,
             None,
@@ -3710,6 +3738,7 @@ impl ArtboardInstance {
         apply_origin_transform: bool,
     ) -> Result<()> {
         self.set_frame_origin(apply_origin_transform);
+        self.attach_runtime_image_assets_tree(Arc::clone(&paint_cache.image_assets));
         self.begin_draw_frame();
         // Seed the nested-artboard cycle guard with this artboard's global id.
         let nested_ancestors = [graph.global_id];
@@ -3720,8 +3749,6 @@ impl ArtboardInstance {
             factory,
             renderer,
             &mut paint_cache.paints,
-            &paint_cache.images,
-            &mut paint_cache.meshes,
             path_cache,
             Some(&mut paint_cache.paint_configurations),
             Some(&mut paint_cache.nested_artboards),
@@ -3737,8 +3764,6 @@ impl ArtboardInstance {
         factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
         paint_by_global: &mut RuntimeRenderPaints,
-        image_by_global: &RuntimeRenderImages,
-        mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
         path_cache: &mut RuntimeRenderPathCache,
         mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
         mut nested_paint_caches: Option<
@@ -3875,8 +3900,7 @@ impl ArtboardInstance {
                     graph,
                     drawable,
                     layout_bounds,
-                    image_by_global,
-                    mesh_by_local,
+                    factory,
                     path_cache,
                     renderer,
                 )?;
@@ -3945,8 +3969,6 @@ impl ArtboardInstance {
                     factory,
                     renderer,
                     paint_by_global,
-                    image_by_global,
-                    mesh_by_local,
                     path_cache,
                     paint_configurations.as_deref_mut(),
                     match &mut nested_paint_caches {
@@ -3971,8 +3993,6 @@ impl ArtboardInstance {
                     factory,
                     renderer,
                     paint_by_global,
-                    image_by_global,
-                    mesh_by_local,
                     path_cache,
                     paint_configurations.as_deref_mut(),
                     match &mut nested_paint_caches {
@@ -7304,6 +7324,43 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Option<WeightedPathContext> {
         self.runtime_weighted_skinnable_context(mesh.local_id, graph, layout_bounds)
+    }
+
+    /// Direct port of `Mesh::update(ComponentDirt::Vertices)`
+    /// (`src/shapes/mesh.cpp:162-173`). Skin deformation/render translations
+    /// settle during the dependency update; draw only maps those settled
+    /// values into the occurrence's dynamic buffer when its C++ dirty bit is
+    /// set.
+    pub(crate) fn update_runtime_mesh_owner(
+        &self,
+        local_id: usize,
+        dirt: ComponentDirt,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) {
+        if dirt.contains(ComponentDirt::VERTICES)
+            && let Some(mesh) = graph.meshes.iter().find(|mesh| mesh.local_id == local_id)
+            && let Some(owner) = self.runtime_meshes.mesh(local_id)
+            && let Some(runtime) = self.runtime_file()
+        {
+            let weighted_context = self.runtime_weighted_mesh_context(mesh, graph, layout_bounds);
+            if let Ok(bytes) =
+                runtime_mesh_vertex_buffer_bytes(runtime, self, mesh, weighted_context.as_ref())
+            {
+                *owner.settled_vertex_bytes.borrow_mut() = Some(bytes);
+                owner.vertex_render_buffer_dirty.set(true);
+            }
+        }
+
+        // C++ `NSlicer::update` invokes its unique SliceMesh for either dirt
+        // family. The CPU calculation needs decoded image dimensions, which
+        // Rust cannot have before its factory-late asset realization; retain
+        // the exact update event on the owner and settle it at that boundary.
+        if !(dirt & (ComponentDirt::N_SLICER | ComponentDirt::WORLD_TRANSFORM)).is_empty()
+            && let Some(owner) = self.runtime_meshes.slice(local_id)
+        {
+            owner.borrow_mut().dirty = true;
+        }
     }
 
     fn runtime_weighted_skinnable_context(
@@ -11397,8 +11454,7 @@ pub struct RuntimeRenderPaintCache {
     paint_configurations: RuntimeRenderPaintConfigurationSlots,
     preparation_without_nested_layout: Option<RuntimePaintPreparationFrame>,
     preparation: Option<RuntimePaintPreparationFrame>,
-    images: RuntimeRenderImages,
-    meshes: RuntimeMeshRenderBufferSlots,
+    image_assets: Arc<RuntimeImageAssetOwners>,
     nested_artboards: BTreeMap<RuntimeNestedRenderCacheKey, RuntimeRenderPaintCache>,
     // Nested layout hosts require C++'s deferred-gradient preparation pass.
     // This is a conservative file-level fact, so compute it once while the
@@ -11549,6 +11605,7 @@ impl RuntimeRenderPaintCache {
     /// candidate cache and retry. Serialized `FileAssetContents` always wins.
     pub fn preallocate_for_artboard_tree_with_external_images(
         runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
         graph: &ArtboardGraph,
         artboards: &[ArtboardGraph],
         external_images: &BTreeMap<u32, Arc<[u8]>>,
@@ -11557,6 +11614,7 @@ impl RuntimeRenderPaintCache {
     ) -> Self {
         preallocate_render_paint_cache_for_artboard_tree_internal(
             runtime,
+            instance,
             graph,
             artboards,
             Some(external_images),
@@ -11573,8 +11631,8 @@ impl RuntimeRenderPaintCache {
         &mut self.paints
     }
 
-    pub fn root_images_mut(&mut self) -> &mut RuntimeRenderImages {
-        &mut self.images
+    pub fn root_image_assets(&self) -> &RuntimeImageAssetOwners {
+        self.image_assets.as_ref()
     }
 
     pub fn image_decode_error(&self) -> Option<ImageDecodeError> {
@@ -11582,13 +11640,23 @@ impl RuntimeRenderPaintCache {
     }
 }
 
+/// File-owned C++ `ImageAsset` occurrences and their `m_RenderImage` members.
+///
+/// Dense global-id addressing is only the runtime arena representation
+/// (AF-1). Each slot is a concrete owner object; artboard occurrences retain
+/// the shared list and Images borrow the exact asset-owned RenderImage.
+pub struct RuntimeImageAssetOwners {
+    backend_context_id: u64,
+    state: RefCell<RuntimeImageAssetOwnerState>,
+}
+
 #[derive(Default)]
-pub struct RuntimeRenderImages {
-    // RF-14 backend sidecar: each dense slot is owned one-to-one by the
-    // file's ImageAsset global id. It has no scene epoch or prepared-frame
-    // lifetime and is shared by every Image referencer like C++
-    // ImageAsset::m_RenderImage.
-    images_by_global: Vec<Option<RuntimeRenderImageEntry>>,
+struct RuntimeImageAssetOwnerState {
+    owners_by_global: Vec<Option<RuntimeImageAssetOwner>>,
+    /// Source-artboard Mesh members retained by the file. Concrete artboard
+    /// clones copy the UV/index `rcp`s from these owners and allocate only a
+    /// fresh dynamic vertex buffer (`Mesh::clone`, mesh.cpp:87-99).
+    source_meshes: BTreeMap<(u32, usize), Rc<RefCell<RuntimeMeshSharedRenderBuffers>>>,
     retained_decoded_bytes: usize,
     // `None` retains every decoded image, matching pinned C++, which has no
     // aggregate decoded-image ceiling. Bounded admission is a host import
@@ -11597,31 +11665,65 @@ pub struct RuntimeRenderImages {
     max_retained_decoded_bytes: Option<usize>,
 }
 
-struct RuntimeRenderImageEntry {
-    image: Box<dyn RenderImage>,
+struct RuntimeImageAssetOwner {
+    global_id: u32,
+    render_image: Option<Rc<dyn RenderImage>>,
     decoded_byte_length: usize,
 }
 
-impl RuntimeRenderImages {
+impl Default for RuntimeImageAssetOwners {
+    fn default() -> Self {
+        Self {
+            backend_context_id: next_render_backend_context_id(),
+            state: RefCell::new(RuntimeImageAssetOwnerState::default()),
+        }
+    }
+}
+
+impl std::fmt::Debug for RuntimeImageAssetOwners {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let state = self.state.borrow();
+        formatter
+            .debug_struct("RuntimeImageAssetOwners")
+            .field(
+                "materialized",
+                &state.owners_by_global.iter().flatten().count(),
+            )
+            .field("retained_decoded_bytes", &state.retained_decoded_bytes)
+            .finish()
+    }
+}
+
+impl RuntimeImageAssetOwners {
     /// An image cache whose aggregate decoded-byte admission follows the
     /// caller's import policy. Compressed assets can be tiny while their
     /// canonical RGBA textures are large, so the encoded FileAsset budget
     /// cannot substitute for this post-header, pre-decode reservation.
     pub fn with_max_retained_decoded_bytes(max_retained_decoded_bytes: Option<usize>) -> Self {
         Self {
-            max_retained_decoded_bytes,
-            ..Self::default()
+            backend_context_id: next_render_backend_context_id(),
+            state: RefCell::new(RuntimeImageAssetOwnerState {
+                max_retained_decoded_bytes,
+                ..RuntimeImageAssetOwnerState::default()
+            }),
         }
     }
 
-    pub fn get(&self, global_id: u32) -> Option<&dyn RenderImage> {
-        self.images_by_global
+    pub fn get(&self, global_id: u32) -> Option<Rc<dyn RenderImage>> {
+        self.state
+            .borrow()
+            .owners_by_global
             .get(global_id as usize)
-            .and_then(|entry| entry.as_ref())
-            .map(|entry| entry.image.as_ref())
+            .and_then(|owner| owner.as_ref())
+            .and_then(|owner| owner.render_image.as_ref())
+            .map(Rc::clone)
     }
 
-    pub fn insert(&mut self, global_id: u32, image: Box<dyn RenderImage>) {
+    fn backend_context_id(&self) -> u64 {
+        self.backend_context_id
+    }
+
+    pub fn insert(&self, global_id: u32, image: Box<dyn RenderImage>) {
         let Some(decoded_byte_length) = decoded_rgba_len(image.width(), image.height()) else {
             return;
         };
@@ -11635,64 +11737,99 @@ impl RuntimeRenderImages {
     }
 
     fn try_reserve_replacement_decoded_bytes(
-        &mut self,
+        &self,
         global_id: u32,
         decoded_byte_length: usize,
     ) -> Option<usize> {
-        let replaced_decoded_byte_length = self
-            .images_by_global
+        let mut state = self.state.borrow_mut();
+        let replaced_decoded_byte_length = state
+            .owners_by_global
             .get(global_id as usize)
-            .and_then(|entry| entry.as_ref())
-            .map_or(0, |entry| entry.decoded_byte_length);
-        let next_retained_decoded_bytes = self
+            .and_then(|owner| owner.as_ref())
+            .map_or(0, |owner| owner.decoded_byte_length);
+        let next_retained_decoded_bytes = state
             .retained_decoded_bytes
             .checked_sub(replaced_decoded_byte_length)?
             .checked_add(decoded_byte_length)?;
-        if self
+        if state
             .max_retained_decoded_bytes
             .is_some_and(|budget| next_retained_decoded_bytes > budget)
         {
             return None;
         }
-        let previous_retained_decoded_bytes = self.retained_decoded_bytes;
-        self.retained_decoded_bytes = next_retained_decoded_bytes;
+        let previous_retained_decoded_bytes = state.retained_decoded_bytes;
+        state.retained_decoded_bytes = next_retained_decoded_bytes;
         Some(previous_retained_decoded_bytes)
     }
 
-    fn cancel_decoded_byte_reservation(&mut self, previous_retained_decoded_bytes: usize) {
-        self.retained_decoded_bytes = previous_retained_decoded_bytes;
+    fn cancel_decoded_byte_reservation(&self, previous_retained_decoded_bytes: usize) {
+        self.state.borrow_mut().retained_decoded_bytes = previous_retained_decoded_bytes;
     }
 
     fn insert_reserved(
-        &mut self,
+        &self,
         global_id: u32,
         image: Box<dyn RenderImage>,
         decoded_byte_length: usize,
     ) {
+        let mut state = self.state.borrow_mut();
         let slot = global_id as usize;
-        if self.images_by_global.len() <= slot {
-            self.images_by_global.resize_with(slot + 1, || None);
+        if state.owners_by_global.len() <= slot {
+            state.owners_by_global.resize_with(slot + 1, || None);
         }
-        self.images_by_global[slot] = Some(RuntimeRenderImageEntry {
-            image,
+        state.owners_by_global[slot] = Some(RuntimeImageAssetOwner {
+            global_id,
+            render_image: Some(Rc::from(image)),
             decoded_byte_length,
         });
     }
 
-    fn dimensions(&self) -> impl Iterator<Item = (u32, u32, u32, usize)> + '_ {
-        self.images_by_global
+    fn dimensions(&self) -> std::vec::IntoIter<(u32, u32, u32, usize)> {
+        self.state
+            .borrow()
+            .owners_by_global
             .iter()
-            .enumerate()
-            .filter_map(|(global_id, entry)| {
-                let global_id = u32::try_from(global_id).ok()?;
-                let image = entry.as_ref()?.image.as_ref();
+            .filter_map(|owner| {
+                let owner = owner.as_ref()?;
+                let image = owner.render_image.as_ref()?;
                 Some((
-                    global_id,
+                    owner.global_id,
                     image.width(),
                     image.height(),
-                    runtime_render_image_identity(image),
+                    runtime_render_image_identity(image.as_ref()),
                 ))
             })
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+
+    fn insert_source_mesh(
+        &self,
+        graph_global_id: u32,
+        local_id: usize,
+        source: Rc<RefCell<RuntimeMeshSharedRenderBuffers>>,
+    ) {
+        self.state
+            .borrow_mut()
+            .source_meshes
+            .insert((graph_global_id, local_id), source);
+    }
+
+    fn source_mesh(
+        &self,
+        graph_global_id: u32,
+        local_id: usize,
+    ) -> Option<Rc<RefCell<RuntimeMeshSharedRenderBuffers>>> {
+        self.state
+            .borrow()
+            .source_meshes
+            .get(&(graph_global_id, local_id))
+            .map(Rc::clone)
+    }
+
+    #[cfg(test)]
+    fn retained_decoded_bytes(&self) -> usize {
+        self.state.borrow().retained_decoded_bytes
     }
 }
 
@@ -11767,87 +11904,216 @@ enum RuntimeRenderPaintShaderConfiguration {
     PreserveGradientShader,
 }
 
-struct RuntimeSourceMeshRenderBuffers {
-    source_vertices: Box<dyn RenderBuffer>,
-    uv_coords: Box<dyn RenderBuffer>,
-    indices: Box<dyn RenderBuffer>,
+struct RuntimeMeshSharedRenderBuffers {
+    context_id: Option<u64>,
+    source_vertices: Option<Box<dyn RenderBuffer>>,
+    uv_coords: Option<Box<dyn RenderBuffer>>,
+    indices: Option<Box<dyn RenderBuffer>>,
     vertex_count: u32,
     index_count: u32,
 }
 
-struct RuntimeMeshRenderBuffers {
-    _source_vertices: Box<dyn RenderBuffer>,
-    vertices: Box<dyn RenderBuffer>,
-    uv_coords: Box<dyn RenderBuffer>,
-    indices: Box<dyn RenderBuffer>,
-    vertex_count: u32,
-    index_count: u32,
-    last_vertex_bytes: Option<Vec<u8>>,
+impl Default for RuntimeMeshSharedRenderBuffers {
+    fn default() -> Self {
+        Self {
+            context_id: None,
+            source_vertices: None,
+            uv_coords: None,
+            indices: None,
+            vertex_count: 0,
+            index_count: 0,
+        }
+    }
 }
 
-struct RuntimeSliceMeshRenderBuffers {
+/// C++ `Mesh` keeps one dynamic vertex buffer on every cloned occurrence,
+/// while clones share the source mesh's immutable UV and index buffers.
+///
+/// The shared cell is the Rust counterpart of the two copied `rcp` members in
+/// `Mesh::clone`; it is not an artboard/scene cache. Backend handles are
+/// rematerialized only when Rust's factory-late public API changes renderer
+/// context (RF-28).
+struct RuntimeMeshOwner {
+    local_id: usize,
+    shared: RefCell<Rc<RefCell<RuntimeMeshSharedRenderBuffers>>>,
+    vertices: RefCell<Option<(u64, Box<dyn RenderBuffer>)>>,
+    vertex_render_buffer_dirty: Cell<bool>,
+    settled_vertex_bytes: RefCell<Option<Vec<u8>>>,
+}
+
+impl RuntimeMeshOwner {
+    fn new(local_id: usize) -> Self {
+        Self {
+            local_id,
+            shared: RefCell::new(Rc::new(RefCell::new(
+                RuntimeMeshSharedRenderBuffers::default(),
+            ))),
+            vertices: RefCell::new(None),
+            vertex_render_buffer_dirty: Cell::new(true),
+            settled_vertex_bytes: RefCell::new(None),
+        }
+    }
+}
+
+impl Clone for RuntimeMeshOwner {
+    fn clone(&self) -> Self {
+        // Direct port of `Mesh::clone` (`src/shapes/mesh.cpp:87-99`): the
+        // dynamic vertex buffer is fresh and dirty; UV/index retain the
+        // source-owned reference-counted buffers.
+        Self {
+            local_id: self.local_id,
+            shared: RefCell::new(Rc::clone(&self.shared.borrow())),
+            vertices: RefCell::new(None),
+            vertex_render_buffer_dirty: Cell::new(true),
+            settled_vertex_bytes: RefCell::new(None),
+        }
+    }
+}
+
+impl std::fmt::Debug for RuntimeMeshOwner {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RuntimeMeshOwner")
+            .field("local_id", &self.local_id)
+            .field(
+                "vertex_render_buffer_dirty",
+                &self.vertex_render_buffer_dirty.get(),
+            )
+            .finish()
+    }
+}
+
+struct RuntimeSliceMeshOwner {
+    local_id: usize,
     vertices: Option<Box<dyn RenderBuffer>>,
     uv_coords: Option<Box<dyn RenderBuffer>>,
     indices: Option<Box<dyn RenderBuffer>>,
     vertex_count: u32,
     index_count: u32,
-    last_update: Option<RuntimeSliceMeshUpdate>,
+    context_id: Option<u64>,
+    dirty: bool,
+    settled_update: Option<RuntimeSliceMeshUpdate>,
 }
 
-impl Default for RuntimeSliceMeshRenderBuffers {
-    fn default() -> Self {
+impl RuntimeSliceMeshOwner {
+    fn new(local_id: usize) -> Self {
         Self {
+            local_id,
             vertices: None,
             uv_coords: None,
             indices: None,
             vertex_count: 0,
             index_count: 0,
-            last_update: None,
+            context_id: None,
+            dirty: true,
+            settled_update: None,
         }
+    }
+}
+
+impl Clone for RuntimeSliceMeshOwner {
+    fn clone(&self) -> Self {
+        // `NSlicer` constructs a new uniquely-owned `SliceMesh`; none of its
+        // CPU or backend state is copied to the new artboard occurrence.
+        Self::new(self.local_id)
+    }
+}
+
+impl std::fmt::Debug for RuntimeSliceMeshOwner {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RuntimeSliceMeshOwner")
+            .field("local_id", &self.local_id)
+            .field("dirty", &self.dirty)
+            .finish()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RuntimeSliceMeshUpdate {
-    world_bits: [u32; 6],
-    input_words: Vec<u64>,
     vertex_bytes: Vec<u8>,
     uv_bytes: Vec<u8>,
     index_bytes: Vec<u8>,
 }
 
-#[derive(Default)]
-struct RuntimeMeshRenderBufferSlots {
-    // RF-14 clone sidecar: each slot belongs one-to-one to the live Mesh or
-    // NSlicer-owned SliceMesh at the same local id. No scene key or replay
-    // command owns these buffers.
-    buffers_by_local: Vec<Option<RuntimeMeshRenderBuffers>>,
-    slice_buffers_by_local: Vec<Option<RuntimeSliceMeshRenderBuffers>>,
+/// Clone-owned Mesh and NSlicer resource members. Dense local-id slots are
+/// merely the arena representation of the concrete C++ objects (AF-1); the
+/// backend buffers live on those objects, never on a scene paint cache.
+#[derive(Debug, Default)]
+pub(crate) struct RuntimeMeshList {
+    meshes_by_local: Vec<Option<RuntimeMeshOwner>>,
+    slices_by_local: Vec<Option<RefCell<RuntimeSliceMeshOwner>>>,
 }
 
-impl RuntimeMeshRenderBufferSlots {
-    fn insert(&mut self, local_id: usize, buffers: RuntimeMeshRenderBuffers) {
-        if self.buffers_by_local.len() <= local_id {
-            self.buffers_by_local.resize_with(local_id + 1, || None);
+impl Clone for RuntimeMeshList {
+    fn clone(&self) -> Self {
+        Self {
+            meshes_by_local: self.meshes_by_local.clone(),
+            slices_by_local: self
+                .slices_by_local
+                .iter()
+                .map(|owner| {
+                    owner
+                        .as_ref()
+                        .map(|owner| RefCell::new(owner.borrow().clone()))
+                })
+                .collect(),
         }
-        self.buffers_by_local[local_id] = Some(buffers);
     }
+}
 
-    fn get_mut(&mut self, local_id: usize) -> Option<&mut RuntimeMeshRenderBuffers> {
-        self.buffers_by_local.get_mut(local_id)?.as_mut()
-    }
-
-    fn slice_mut(&mut self, local_id: usize) -> &mut RuntimeSliceMeshRenderBuffers {
-        if self.slice_buffers_by_local.len() <= local_id {
-            self.slice_buffers_by_local
-                .resize_with(local_id + 1, || None);
+impl RuntimeMeshList {
+    pub(crate) fn from_graph(graph: &ArtboardGraph) -> Self {
+        let mut owners = Self::default();
+        if let Some(maximum) = graph.meshes.iter().map(|mesh| mesh.local_id).max() {
+            owners
+                .meshes_by_local
+                .resize_with(maximum.saturating_add(1), || None);
+            for mesh in &graph.meshes {
+                owners.meshes_by_local[mesh.local_id] = Some(RuntimeMeshOwner::new(mesh.local_id));
+            }
         }
-        self.slice_buffers_by_local[local_id]
-            .get_or_insert_with(RuntimeSliceMeshRenderBuffers::default)
+        if let Some(maximum) = graph
+            .n_slicer_details
+            .iter()
+            .filter(|details| details.type_name == "NSlicer")
+            .map(|details| details.local_id)
+            .max()
+        {
+            owners
+                .slices_by_local
+                .resize_with(maximum.saturating_add(1), || None);
+            for details in graph
+                .n_slicer_details
+                .iter()
+                .filter(|details| details.type_name == "NSlicer")
+            {
+                owners.slices_by_local[details.local_id] =
+                    Some(RefCell::new(RuntimeSliceMeshOwner::new(details.local_id)));
+            }
+        }
+        owners
     }
 
-    fn slice(&self, local_id: usize) -> Option<&RuntimeSliceMeshRenderBuffers> {
-        self.slice_buffers_by_local.get(local_id)?.as_ref()
+    pub(crate) fn mark_component_dirt(&self, local_id: usize, dirt: ComponentDirt) {
+        if dirt.contains(ComponentDirt::VERTICES)
+            && let Some(mesh) = self.meshes_by_local.get(local_id).and_then(Option::as_ref)
+        {
+            mesh.vertex_render_buffer_dirty.set(true);
+        }
+        if !(dirt & (ComponentDirt::N_SLICER | ComponentDirt::WORLD_TRANSFORM)).is_empty()
+            && let Some(slice) = self.slices_by_local.get(local_id).and_then(Option::as_ref)
+        {
+            slice.borrow_mut().dirty = true;
+        }
+    }
+
+    fn mesh(&self, local_id: usize) -> Option<&RuntimeMeshOwner> {
+        self.meshes_by_local.get(local_id)?.as_ref()
+    }
+
+    fn slice(&self, local_id: usize) -> Option<&RefCell<RuntimeSliceMeshOwner>> {
+        self.slices_by_local.get(local_id)?.as_ref()
     }
 }
 
@@ -12054,7 +12320,7 @@ impl RuntimeGeometryCache {
         paint_cache: &RuntimeRenderPaintCache,
     ) -> std::result::Result<(), RuntimeImageDimensionConflict> {
         self.retain_instance(instance);
-        for (asset_global, width, height, _) in paint_cache.images.dimensions() {
+        for (asset_global, width, height, _) in paint_cache.image_assets.dimensions() {
             let actual = (width, height);
             if let Some(expected) = self
                 .registered_image_dimensions
@@ -12072,7 +12338,7 @@ impl RuntimeGeometryCache {
         self.presented_image_dimensions.clear();
         self.presented_image_dimensions.extend(
             paint_cache
-                .images
+                .image_assets
                 .dimensions()
                 .map(|(global_id, width, height, identity)| (global_id, (width, height, identity))),
         );
@@ -13529,11 +13795,22 @@ pub fn preallocate_render_paints_for_artboard_tree(
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaints {
-    preallocate_render_paint_cache_for_artboard_tree(runtime, graph, artboards, factory).paints
+    let mut cache = Default::default();
+    preallocate_artboard_render_paint_tree_batch_into(
+        runtime,
+        graph,
+        artboards,
+        factory,
+        &mut cache,
+        &mut BTreeSet::new(),
+        false,
+    );
+    cache.paints
 }
 
 pub fn preallocate_render_paint_cache_for_artboard_tree(
     runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
@@ -13543,7 +13820,7 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     // meshes are cloned. Script-enabled callers use the dedicated helpers and
     // realize script-hosted children at the point the script requests them.
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, None, factory, false, true, false, None, None,
+        runtime, instance, graph, artboards, None, factory, false, true, false, None, None,
     )
 }
 
@@ -13554,6 +13831,7 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
 /// remain authoritative when both are present.
 pub fn preallocate_render_paint_cache_for_artboard_tree_with_external_images(
     runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
@@ -13561,6 +13839,7 @@ pub fn preallocate_render_paint_cache_for_artboard_tree_with_external_images(
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
         runtime,
+        instance,
         graph,
         artboards,
         Some(external_image_bytes),
@@ -13575,12 +13854,13 @@ pub fn preallocate_render_paint_cache_for_artboard_tree_with_external_images(
 
 pub fn preallocate_render_paint_cache_for_scripted_artboard_tree(
     runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, None, factory, false, true, true, None, None,
+        runtime, instance, graph, artboards, None, factory, false, true, true, None, None,
     )
 }
 
@@ -13588,6 +13868,7 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree(
 /// artboard instance clones its retained paints and mesh buffers.
 pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration(
     runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
@@ -13595,6 +13876,7 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_regis
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
         runtime,
+        instance,
         graph,
         artboards,
         None,
@@ -13609,17 +13891,19 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_regis
 
 pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
     runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, None, factory, false, false, true, None, None,
+        runtime, instance, graph, artboards, None, factory, false, false, true, None, None,
     )
 }
 
 fn preallocate_render_paint_cache_for_artboard_tree_internal(
     runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     external_images: Option<&BTreeMap<u32, Arc<[u8]>>>,
@@ -13641,8 +13925,8 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         &image_assets,
         scripting_file_assets,
     );
-    let mut images =
-        RuntimeRenderImages::with_max_retained_decoded_bytes(max_retained_decoded_image_bytes);
+    let images =
+        RuntimeImageAssetOwners::with_max_retained_decoded_bytes(max_retained_decoded_image_bytes);
     let mut image_decode_error = None;
     for asset_global in image_assets
         .globals
@@ -13657,7 +13941,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
                 asset_global,
                 external_images,
                 factory,
-                &mut images,
+                &images,
             )
             .err();
         }
@@ -13677,28 +13961,40 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
                 asset_global,
                 external_images,
                 factory,
-                &mut images,
+                &images,
             )
             .err();
         }
     }
-    let mut source_meshes =
-        preallocate_source_mesh_render_buffers_for_artboards(runtime, artboards, factory, &images);
+    // C++ resolves every source-artboard Mesh against the file-owned
+    // ImageAsset before registering scripts or cloning an artboard
+    // (`Mesh::onAssetLoaded`, src/shapes/mesh.cpp:101-150).
+    preallocate_file_source_mesh_owners(
+        runtime,
+        artboards,
+        factory,
+        &images,
+        images.backend_context_id(),
+    );
     if let Some(register_file_scripts) = file_registration {
         register_file_scripts(factory);
     }
     let mut cache = RuntimeRenderPaintCache::default();
+    let image_assets = Arc::new(images);
+    cache.image_assets = Arc::clone(&image_assets);
+    instance.attach_runtime_image_assets_tree(Arc::clone(&image_assets));
     cache.requires_nested_layout_prepass =
         runtime_artboard_set_contains_nested_layout(graph, artboards);
     cache.paint_preparation_is_noop = runtime_artboard_paint_preparation_is_noop(graph);
     cache.paint_preparation_is_solid_only_tree =
         runtime_artboard_set_paint_preparation_is_solid_only(artboards);
-    preallocate_artboard_mesh_render_buffer_tree_batch_into(
+    preallocate_artboard_instance_mesh_owner_tree(
         runtime,
+        instance,
         graph,
         artboards,
         factory,
-        &mut source_meshes,
+        &image_assets,
         &mut cache,
         &mut BTreeSet::new(),
         include_script_input_artboards,
@@ -13712,7 +14008,6 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         &mut BTreeSet::new(),
         include_script_input_artboards,
     );
-    cache.images = images;
     cache.image_decode_error = image_decode_error;
     cache
 }
@@ -13723,6 +14018,54 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
 /// render paint from the file's existing factory. File-level source paints and
 /// decoded assets are not recreated for every clone.
 pub fn preallocate_render_paint_cache_for_artboard_instance(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+) -> RuntimeRenderPaintCache {
+    let mut cache = RuntimeRenderPaintCache::default();
+    let image_assets = instance
+        .runtime_image_assets
+        .borrow()
+        .as_ref()
+        .map(Arc::clone)
+        .unwrap_or_else(|| Arc::new(RuntimeImageAssetOwners::default()));
+    cache.image_assets = Arc::clone(&image_assets);
+    instance.attach_runtime_image_assets_tree(Arc::clone(&image_assets));
+    cache.requires_nested_layout_prepass =
+        runtime_artboard_set_contains_nested_layout(graph, artboards);
+    cache.paint_preparation_is_noop = runtime_artboard_paint_preparation_is_noop(graph);
+    cache.paint_preparation_is_solid_only_tree =
+        runtime_artboard_set_paint_preparation_is_solid_only(artboards);
+    preallocate_artboard_instance_mesh_owner_tree(
+        runtime,
+        instance,
+        graph,
+        artboards,
+        factory,
+        &image_assets,
+        &mut cache,
+        &mut BTreeSet::new(),
+        true,
+    );
+    preallocate_artboard_render_paint_tree_batch_into(
+        runtime,
+        graph,
+        artboards,
+        factory,
+        &mut cache,
+        &mut BTreeSet::new(),
+        true,
+    );
+    cache
+}
+
+/// Paint-only fallback for a graph reference that has no mounted artboard
+/// occurrence. C++ cannot clone Mesh members without an Artboard instance
+/// either; the mounted paths always use
+/// `preallocate_render_paint_cache_for_artboard_instance`.
+pub fn preallocate_render_paint_cache_for_unmounted_artboard(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
@@ -13942,7 +14285,7 @@ fn predecode_render_image(
     asset_global: u32,
     external_images: Option<&BTreeMap<u32, Arc<[u8]>>>,
     factory: &mut dyn RenderFactory,
-    images: &mut RuntimeRenderImages,
+    images: &RuntimeImageAssetOwners,
 ) -> std::result::Result<(), ImageDecodeError> {
     let bytes = image_assets.embedded_bytes(asset_global).or_else(|| {
         let semantic_id = runtime
@@ -13982,121 +14325,46 @@ fn push_f32_pair_bytes(bytes: &mut Vec<u8>, x: f32, y: f32) {
     bytes.extend_from_slice(&y.to_le_bytes());
 }
 
-fn preallocate_artboard_mesh_render_buffer_tree_batch_into(
+fn preallocate_file_source_mesh_owners(
     runtime: &RuntimeFile,
-    graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
-    source_meshes: &mut BTreeMap<(u32, usize), RuntimeSourceMeshRenderBuffers>,
-    cache: &mut RuntimeRenderPaintCache,
-    visiting: &mut BTreeSet<u32>,
-    include_script_input_artboards: bool,
+    image_assets: &RuntimeImageAssetOwners,
+    backend_context_id: u64,
 ) {
-    if !visiting.insert(graph.global_id) {
-        return;
-    }
-
-    cache.meshes = preallocate_artboard_mesh_render_buffers(graph, factory, source_meshes);
-
-    for local_object in &graph.local_objects {
-        if !include_script_input_artboards && local_object.type_name == Some("ScriptInputArtboard")
-        {
-            continue;
-        }
-        if let Some(child_graph) =
-            referenced_artboard_graph_for_local_object(runtime, artboards, local_object.global_id)
-        {
-            let cache_key = nested_render_cache_key(
-                Some(local_object.global_id),
-                Some(local_object.local_id),
-                child_graph.global_id,
-                0,
-            );
-            let child_cache = cache.nested_artboards.entry(cache_key).or_default();
-            preallocate_artboard_mesh_render_buffer_tree_batch_into(
-                runtime,
-                child_graph,
-                artboards,
-                factory,
-                source_meshes,
-                child_cache,
-                visiting,
-                include_script_input_artboards,
-            );
-        }
-    }
-
-    visiting.remove(&graph.global_id);
-}
-
-fn preallocate_source_mesh_render_buffers_for_artboards(
-    runtime: &RuntimeFile,
-    artboards: &[ArtboardGraph],
-    factory: &mut dyn RenderFactory,
-    image_by_global: &RuntimeRenderImages,
-) -> BTreeMap<(u32, usize), RuntimeSourceMeshRenderBuffers> {
-    // Ported from C++ `src/shapes/mesh.cpp::Mesh::onAssetLoaded`: source
-    // artboards allocate their mesh vertex/UV/index buffers before cloned
-    // artboard instances allocate the dynamic vertex buffers they draw with.
-    let mut source_meshes = BTreeMap::new();
+    // Direct port of `Mesh::onAssetLoaded` before any Artboard clone is
+    // created (`src/shapes/mesh.cpp:101-150`). Source-artboard buffers are
+    // file-owned; each later occurrence shares UV/index from these owners.
     for graph in artboards {
         for mesh in &graph.meshes {
-            if let Some(source) = preallocate_source_mesh_render_buffers(
+            let Some(image) = runtime_source_mesh_image(runtime, graph, mesh, image_assets) else {
+                continue;
+            };
+            let source = Rc::new(RefCell::new(RuntimeMeshSharedRenderBuffers {
+                context_id: Some(backend_context_id),
+                ..RuntimeMeshSharedRenderBuffers::default()
+            }));
+            if runtime_realize_mesh_shared_buffers(
                 runtime,
-                graph,
                 mesh,
+                image.as_ref(),
                 factory,
-                image_by_global,
-            ) {
-                source_meshes.insert((graph.global_id, mesh.local_id), source);
+                &mut source.borrow_mut(),
+            )
+            .is_ok()
+            {
+                image_assets.insert_source_mesh(graph.global_id, mesh.local_id, source);
             }
         }
     }
-    source_meshes
 }
 
-fn preallocate_artboard_mesh_render_buffers(
-    graph: &ArtboardGraph,
-    factory: &mut dyn RenderFactory,
-    source_meshes: &mut BTreeMap<(u32, usize), RuntimeSourceMeshRenderBuffers>,
-) -> RuntimeMeshRenderBufferSlots {
-    let mut source_buffers = Vec::new();
-    for mesh in &graph.meshes {
-        if let Some(source) = source_meshes.remove(&(graph.global_id, mesh.local_id)) {
-            source_buffers.push((mesh.local_id, source));
-        }
-    }
-
-    let mut buffers_by_local = RuntimeMeshRenderBufferSlots::default();
-    for (mesh_local, source) in source_buffers {
-        let vertices = factory.make_render_buffer(
-            RenderBufferType::Vertex,
-            RenderBufferFlags::None,
-            source.vertex_count as usize * 8,
-        );
-        buffers_by_local.insert(
-            mesh_local,
-            RuntimeMeshRenderBuffers {
-                _source_vertices: source.source_vertices,
-                vertices,
-                uv_coords: source.uv_coords,
-                indices: source.indices,
-                vertex_count: source.vertex_count,
-                index_count: source.index_count,
-                last_vertex_bytes: None,
-            },
-        );
-    }
-    buffers_by_local
-}
-
-fn preallocate_source_mesh_render_buffers(
+fn runtime_source_mesh_image(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
     mesh: &MeshGeometryNode,
-    factory: &mut dyn RenderFactory,
-    image_by_global: &RuntimeRenderImages,
-) -> Option<RuntimeSourceMeshRenderBuffers> {
+    image_assets: &RuntimeImageAssetOwners,
+) -> Option<Rc<dyn RenderImage>> {
     let mesh_object = runtime.object(mesh.global_id as usize)?;
     let parent_id_key = runtime_draw_property_key_for_name("Component", "parentId")
         .or_else(|| runtime_draw_property_key_for_name("WorldTransformComponent", "parentId"))?;
@@ -14112,53 +14380,87 @@ fn preallocate_source_mesh_render_buffers(
         .global_id;
     let image_object = runtime.object(image_global as usize)?;
     let image_asset = runtime.resolved_file_asset_for_referencer(image_object)?;
-    let image = image_by_global.get(image_asset.id)?;
-    let indices = mesh_object.mesh_triangle_indices()?;
-    let vertex_count = u32::try_from(mesh.vertices.len()).ok()?;
-    let index_count = u32::try_from(indices.len()).ok()?;
+    image_assets.get(image_asset.id)
+}
 
-    let source_vertices = factory.make_render_buffer(
-        RenderBufferType::Vertex,
-        RenderBufferFlags::None,
-        mesh.vertices.len() * 8,
-    );
-    let mut uv_coords = factory.make_render_buffer(
-        RenderBufferType::Vertex,
-        RenderBufferFlags::MappedOnceAtInitialization,
-        mesh.vertices.len() * 8,
-    );
-    let uv_transform = image.uv_transform();
-    let u_key = runtime_draw_property_key_for_name("MeshVertex", "u")?;
-    let v_key = runtime_draw_property_key_for_name("MeshVertex", "v")?;
-    let mut uv_bytes = Vec::with_capacity(mesh.vertices.len() * 8);
-    for vertex in &mesh.vertices {
-        let vertex_object = runtime.object(vertex.global_id as usize)?;
-        let uv = uv_transform.transform_point(RenderVec2D::new(
-            runtime_object_explicit_double_property_by_key(vertex_object, u_key).unwrap_or(0.0),
-            runtime_object_explicit_double_property_by_key(vertex_object, v_key).unwrap_or(0.0),
-        ));
-        push_f32_pair_bytes(&mut uv_bytes, uv.x, uv.y);
+#[allow(clippy::too_many_arguments)]
+fn preallocate_artboard_instance_mesh_owner_tree(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+    image_assets: &Arc<RuntimeImageAssetOwners>,
+    cache: &mut RuntimeRenderPaintCache,
+    visiting: &mut BTreeSet<u32>,
+    include_script_input_artboards: bool,
+) {
+    if !visiting.insert(graph.global_id) {
+        return;
     }
-    write_render_buffer_bytes(uv_coords.as_mut(), &uv_bytes);
+    cache.image_assets = Arc::clone(image_assets);
 
-    let mut index_buffer = factory.make_render_buffer(
-        RenderBufferType::Index,
-        RenderBufferFlags::MappedOnceAtInitialization,
-        indices.len() * 2,
-    );
-    let mut index_bytes = Vec::with_capacity(indices.len() * 2);
-    for index in indices {
-        index_bytes.extend_from_slice(&index.to_le_bytes());
+    for mesh in &graph.meshes {
+        let Some(owner) = instance.runtime_meshes.mesh(mesh.local_id) else {
+            continue;
+        };
+        let Some(source) = image_assets.source_mesh(graph.global_id, mesh.local_id) else {
+            continue;
+        };
+        *owner.shared.borrow_mut() = source;
+        let backend_context_id = image_assets.backend_context_id();
+        let vertex_byte_length = mesh.vertices.len().saturating_mul(8);
+        let mut vertices = owner.vertices.borrow_mut();
+        let must_allocate = vertices.as_ref().is_none_or(|(context_id, buffer)| {
+            *context_id != backend_context_id || buffer.size_in_bytes() != vertex_byte_length
+        });
+        if must_allocate {
+            *vertices = Some((
+                backend_context_id,
+                factory.make_render_buffer(
+                    RenderBufferType::Vertex,
+                    RenderBufferFlags::None,
+                    vertex_byte_length,
+                ),
+            ));
+            owner.vertex_render_buffer_dirty.set(true);
+        }
     }
-    write_render_buffer_bytes(index_buffer.as_mut(), &index_bytes);
 
-    Some(RuntimeSourceMeshRenderBuffers {
-        source_vertices,
-        uv_coords,
-        indices: index_buffer,
-        vertex_count,
-        index_count,
-    })
+    for local_object in &graph.local_objects {
+        if !include_script_input_artboards && local_object.type_name == Some("ScriptInputArtboard")
+        {
+            continue;
+        }
+        let Some(child_graph) =
+            referenced_artboard_graph_for_local_object(runtime, artboards, local_object.global_id)
+        else {
+            continue;
+        };
+        let Some(nested) = instance.nested_artboards.get(&local_object.local_id) else {
+            continue;
+        };
+        let cache_key = nested_render_cache_key(
+            Some(local_object.global_id),
+            Some(local_object.local_id),
+            child_graph.global_id,
+            nested.render_cache_revision,
+        );
+        let child_cache = cache.nested_artboards.entry(cache_key).or_default();
+        preallocate_artboard_instance_mesh_owner_tree(
+            runtime,
+            nested.child.as_ref(),
+            child_graph,
+            artboards,
+            factory,
+            image_assets,
+            child_cache,
+            visiting,
+            include_script_input_artboards,
+        );
+    }
+
+    visiting.remove(&graph.global_id);
 }
 
 fn preallocate_render_paint_batch(
@@ -15130,8 +15432,6 @@ fn runtime_draw_live_nested_artboard(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
-    image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
     nested_paint_caches: Option<
@@ -15216,8 +15516,6 @@ fn runtime_draw_live_nested_artboard(
                 runtime,
                 child_graph,
                 factory,
-                image_by_global,
-                &mut child_paint_cache.meshes,
                 child_cache,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
@@ -15227,8 +15525,6 @@ fn runtime_draw_live_nested_artboard(
                 factory,
                 renderer,
                 &mut child_paint_cache.paints,
-                image_by_global,
-                &mut child_paint_cache.meshes,
                 child_cache,
                 Some(&mut child_paint_cache.paint_configurations),
                 Some(&mut child_paint_cache.nested_artboards),
@@ -15253,8 +15549,6 @@ fn runtime_draw_live_nested_artboard(
                 runtime,
                 child_graph,
                 factory,
-                image_by_global,
-                mesh_by_local,
                 child_cache,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
@@ -15264,8 +15558,6 @@ fn runtime_draw_live_nested_artboard(
                 factory,
                 renderer,
                 paint_by_global,
-                image_by_global,
-                mesh_by_local,
                 child_cache,
                 paint_configurations.as_deref_mut(),
                 None,
@@ -15292,8 +15584,6 @@ fn runtime_draw_live_command(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
-    image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
     nested_paint_caches: Option<
@@ -15340,8 +15630,6 @@ fn runtime_draw_live_command(
             factory,
             renderer,
             paint_by_global,
-            image_by_global,
-            mesh_by_local,
             path_cache,
             paint_configurations.as_deref_mut(),
             nested_paint_caches,
@@ -15365,8 +15653,6 @@ fn runtime_draw_live_command(
             factory,
             renderer,
             paint_by_global,
-            image_by_global,
-            mesh_by_local,
             path_cache,
             paint_configurations.as_deref_mut(),
             nested_paint_caches,
@@ -16554,10 +16840,11 @@ fn runtime_prepare_slice_meshes(
     graph: &ArtboardGraph,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     factory: &mut dyn RenderFactory,
-    image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
 ) -> Result<()> {
+    let Some(backend_context_id) = instance.runtime_image_backend_context_id() else {
+        return Ok(());
+    };
     for details in graph
         .n_slicer_details
         .iter()
@@ -16575,11 +16862,23 @@ fn runtime_prepare_slice_meshes(
             .and_then(|drawable| drawable.resolved_image_asset_global);
         let resolved_image_asset_global =
             instance.resolved_image_asset_global(Some(image_local), authored_image_asset_global);
-        let Some(image) =
-            resolved_image_asset_global.and_then(|asset_global| image_by_global.get(asset_global))
+        let Some(image) = resolved_image_asset_global
+            .and_then(|asset_global| instance.runtime_render_image(asset_global))
         else {
             continue;
         };
+        let Some(owner) = instance.runtime_meshes.slice(details.local_id) else {
+            continue;
+        };
+        let needs_update = {
+            let owner = owner.borrow();
+            owner.dirty
+                || owner.context_id != Some(backend_context_id)
+                || owner.settled_update.is_none()
+        };
+        if !needs_update {
+            continue;
+        }
         let image_object = instance
             .component(image_local)
             .and_then(|component| runtime.object(component.global_id as usize));
@@ -16590,20 +16889,10 @@ fn runtime_prepare_slice_meshes(
             image_local,
             image_object,
             resolved_image_asset_global,
-            image,
+            image.as_ref(),
             layout_bounds,
             false,
         )?;
-        let world_transform = layout_state
-            .map(|state| state.world_transform)
-            .unwrap_or_else(|| {
-                path_cache.component_world_transform_with_bounds(
-                    instance,
-                    graph,
-                    image_local,
-                    layout_bounds,
-                )
-            });
         let render_scale_x = layout_state
             .map(|state| state.render_scale_x)
             .unwrap_or_else(|| {
@@ -16618,105 +16907,23 @@ fn runtime_prepare_slice_meshes(
                     .transform_property(image_local, TransformProperty::ScaleY)
                     .unwrap_or(1.0)
             });
-        let input_words = runtime_slice_mesh_input_words(
-            runtime,
-            instance,
-            graph,
-            details,
-            image_local,
-            resolved_image_asset_global,
-            runtime_render_image_identity(image),
-            image.width(),
-            image.height(),
-            render_scale_x,
-            render_scale_y,
-            layout_bounds,
-        );
-        let world_bits = world_transform.0.map(f32::to_bits);
-        if mesh_by_local
-            .slice(details.local_id)
-            .and_then(|buffers| buffers.last_update.as_ref())
-            .is_some_and(|last| last.world_bits == world_bits && last.input_words == input_words)
-        {
-            continue;
+        let mut owner = owner.borrow_mut();
+        if owner.dirty || owner.settled_update.is_none() {
+            let geometry = runtime_slice_mesh_geometry(
+                runtime,
+                instance,
+                details,
+                image.width() as f32,
+                image.height() as f32,
+                render_scale_x.abs(),
+                render_scale_y.abs(),
+            );
+            owner.settled_update = Some(runtime_slice_mesh_update(geometry, image.uv_transform()));
+            owner.dirty = false;
         }
-        let geometry = runtime_slice_mesh_geometry(
-            runtime,
-            instance,
-            details,
-            image.width() as f32,
-            image.height() as f32,
-            render_scale_x.abs(),
-            render_scale_y.abs(),
-        );
-        let update =
-            runtime_slice_mesh_update(geometry, world_transform, image.uv_transform(), input_words);
-        let buffers = mesh_by_local.slice_mut(details.local_id);
-        runtime_update_slice_mesh_render_buffers(factory, buffers, update);
+        runtime_update_slice_mesh_render_buffers(factory, &mut owner, backend_context_id);
     }
     Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-fn runtime_slice_mesh_input_words(
-    runtime: &RuntimeFile,
-    instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
-    details: &NSlicerDetailsNode,
-    image_local: usize,
-    resolved_image_asset_global: Option<u32>,
-    image_identity: usize,
-    image_width: u32,
-    image_height: u32,
-    render_scale_x: f32,
-    render_scale_y: f32,
-    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-) -> Vec<u64> {
-    let mut words = vec![
-        u64::from(resolved_image_asset_global.unwrap_or(u32::MAX)),
-        image_identity as u64,
-        u64::from(image_width),
-        u64::from(image_height),
-        u64::from(render_scale_x.to_bits()),
-        u64::from(render_scale_y.to_bits()),
-    ];
-    for property in [
-        TransformProperty::X,
-        TransformProperty::Y,
-        TransformProperty::Rotation,
-        TransformProperty::ScaleX,
-        TransformProperty::ScaleY,
-    ] {
-        words.push(u64::from(
-            instance
-                .transform_property(image_local, property)
-                .unwrap_or_else(|| property.default_value())
-                .to_bits(),
-        ));
-    }
-    let layout_size = instance
-        .component(image_local)
-        .and_then(|component| component.parent_local)
-        .and_then(|parent_local| layout_bounds.and_then(|bounds| bounds.get(&parent_local)))
-        .map(|bounds| (bounds.width.to_bits(), bounds.height.to_bits()));
-    words.push(u64::from(layout_size.map_or(u32::MAX, |(width, _)| width)));
-    words.push(u64::from(
-        layout_size.map_or(u32::MAX, |(_, height)| height),
-    ));
-    for axis in details.x_axes.iter().chain(&details.y_axes) {
-        words.push(u64::from(
-            runtime_axis_offset(runtime, instance, axis).to_bits(),
-        ));
-        words.push(u64::from(runtime_axis_normalized(runtime, instance, axis)));
-    }
-    for tile_mode in &details.tile_modes {
-        words.push(tile_mode.patch_index);
-        words.push(tile_mode.style);
-    }
-    // The graph identity prevents retained slots with coincident local ids and
-    // identical values from being reused across a remounted child artboard.
-    words.push(u64::from(graph.global_id));
-    words
 }
 
 fn runtime_nslicer_image_local(
@@ -16953,9 +17160,7 @@ fn runtime_slice_mesh_push_triangulation(indices: &mut Vec<u16>, start: u16) {
 
 fn runtime_slice_mesh_update(
     geometry: RuntimeSliceMeshGeometry,
-    world_transform: Mat2D,
     uv_transform: RenderMat2D,
-    input_words: Vec<u64>,
 ) -> RuntimeSliceMeshUpdate {
     let mut vertex_bytes = Vec::with_capacity(geometry.vertices.len() * 8);
     for (x, y) in geometry.vertices {
@@ -16971,8 +17176,6 @@ fn runtime_slice_mesh_update(
         index_bytes.extend_from_slice(&index.to_le_bytes());
     }
     RuntimeSliceMeshUpdate {
-        world_bits: world_transform.0.map(f32::to_bits),
-        input_words,
         vertex_bytes,
         uv_bytes,
         index_bytes,
@@ -16981,30 +17184,38 @@ fn runtime_slice_mesh_update(
 
 fn runtime_update_slice_mesh_render_buffers(
     factory: &mut dyn RenderFactory,
-    buffers: &mut RuntimeSliceMeshRenderBuffers,
-    update: RuntimeSliceMeshUpdate,
+    owner: &mut RuntimeSliceMeshOwner,
+    backend_context_id: u64,
 ) {
+    if owner.context_id != Some(backend_context_id) {
+        owner.vertices = None;
+        owner.uv_coords = None;
+        owner.indices = None;
+        owner.context_id = Some(backend_context_id);
+    }
+    let Some(update) = owner.settled_update.as_ref() else {
+        return;
+    };
     runtime_update_slice_mesh_render_buffer(
         factory,
-        &mut buffers.vertices,
+        &mut owner.vertices,
         RenderBufferType::Vertex,
         &update.vertex_bytes,
     );
     runtime_update_slice_mesh_render_buffer(
         factory,
-        &mut buffers.uv_coords,
+        &mut owner.uv_coords,
         RenderBufferType::Vertex,
         &update.uv_bytes,
     );
     runtime_update_slice_mesh_render_buffer(
         factory,
-        &mut buffers.indices,
+        &mut owner.indices,
         RenderBufferType::Index,
         &update.index_bytes,
     );
-    buffers.vertex_count = u32::try_from(update.vertex_bytes.len() / 8).unwrap_or(u32::MAX);
-    buffers.index_count = u32::try_from(update.index_bytes.len() / 2).unwrap_or(u32::MAX);
-    buffers.last_update = Some(update);
+    owner.vertex_count = u32::try_from(update.vertex_bytes.len() / 8).unwrap_or(u32::MAX);
+    owner.index_count = u32::try_from(update.index_bytes.len() / 2).unwrap_or(u32::MAX);
 }
 
 fn runtime_update_slice_mesh_render_buffer(
@@ -17035,8 +17246,7 @@ fn runtime_draw_live_image(
     graph: &ArtboardGraph,
     drawable: &RuntimeDrawable,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
+    factory: &mut dyn RenderFactory,
     path_cache: &mut RuntimeRenderPathCache,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
@@ -17053,8 +17263,7 @@ fn runtime_draw_live_image(
         drawable.image_mesh,
         drawable.needs_save_operation,
         layout_bounds,
-        image_by_global,
-        mesh_by_local,
+        factory,
         path_cache,
         renderer,
     )
@@ -17071,16 +17280,15 @@ fn runtime_draw_image_with_owner(
     image_mesh: Option<RuntimeImageMeshOwner>,
     needs_save_operation: bool,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
+    factory: &mut dyn RenderFactory,
     path_cache: &mut RuntimeRenderPathCache,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
     // Direct port of C++ `Image::draw`; the live path supplies the retained
     // Image-to-Mesh pointer instead of materializing a RuntimeDrawCommand.
     let image_object = image_global_id.and_then(|global_id| runtime.object(global_id as usize));
-    let Some(image) =
-        resolved_image_asset_global.and_then(|asset_global| image_by_global.get(asset_global))
+    let Some(image) = resolved_image_asset_global
+        .and_then(|asset_global| instance.runtime_render_image(asset_global))
     else {
         // C++ `Image::draw` returns before saving when the asset has no
         // decoded RenderImage, e.g. hosted images with no loader.
@@ -17097,7 +17305,8 @@ fn runtime_draw_image_with_owner(
             .iter()
             .find(|details| details.local_id == slice_local)
             .with_context(|| format!("missing slice mesh owner for local {slice_local}"))?;
-        if let Some(buffers) = mesh_by_local.slice(details.local_id) {
+        if let Some(owner) = instance.runtime_meshes.slice(details.local_id) {
+            let owner = owner.borrow();
             runtime_draw_slice_mesh_image(
                 runtime,
                 instance,
@@ -17105,9 +17314,9 @@ fn runtime_draw_image_with_owner(
                 local_id,
                 image_object,
                 resolved_image_asset_global,
-                buffers,
+                &owner,
                 layout_bounds,
-                image,
+                image.as_ref(),
                 path_cache,
                 renderer,
             )?;
@@ -17124,9 +17333,13 @@ fn runtime_draw_image_with_owner(
             .iter()
             .find(|mesh| mesh.local_id == mesh_local)
             .with_context(|| format!("missing mesh owner for local {mesh_local}"))?;
-        let buffers = mesh_by_local
-            .get_mut(mesh.local_id)
-            .with_context(|| format!("missing mesh render buffers for local {}", mesh.local_id))?;
+        let owner = instance
+            .runtime_meshes
+            .mesh(mesh.local_id)
+            .with_context(|| format!("missing mesh owner for local {}", mesh.local_id))?;
+        let backend_context_id = instance
+            .runtime_image_backend_context_id()
+            .context("mesh image owner is missing its file backend context")?;
         runtime_draw_mesh_image(
             runtime,
             instance,
@@ -17135,9 +17348,11 @@ fn runtime_draw_image_with_owner(
             image_object,
             resolved_image_asset_global,
             mesh,
-            buffers,
+            owner,
             layout_bounds,
-            image,
+            image.as_ref(),
+            backend_context_id,
+            factory,
             path_cache,
             renderer,
         )?;
@@ -17175,7 +17390,7 @@ fn runtime_draw_image_with_owner(
             local_id,
             image_object,
             resolved_image_asset_global,
-            image,
+            image.as_ref(),
             layout_bounds,
             false,
         )?
@@ -17213,7 +17428,7 @@ fn runtime_draw_image_with_owner(
         .map(|component| component.transform.render_opacity)
         .unwrap_or(1.0);
     renderer.draw_image(
-        Some(image),
+        Some(image.as_ref()),
         RenderImageSampler::LINEAR_CLAMP,
         runtime_blend_mode(u32::try_from(blend_mode_value).unwrap_or(3))?,
         opacity,
@@ -17248,16 +17463,16 @@ fn runtime_draw_slice_mesh_image(
     image_local: usize,
     image_object: Option<&RuntimeObject>,
     resolved_image_asset_global: Option<u32>,
-    buffers: &RuntimeSliceMeshRenderBuffers,
+    owner: &RuntimeSliceMeshOwner,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     image: &dyn RenderImage,
     path_cache: &mut RuntimeRenderPathCache,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
     let (Some(vertices), Some(uv_coords), Some(indices)) = (
-        buffers.vertices.as_deref(),
-        buffers.uv_coords.as_deref(),
-        buffers.indices.as_deref(),
+        owner.vertices.as_deref(),
+        owner.uv_coords.as_deref(),
+        owner.indices.as_deref(),
     ) else {
         return Ok(());
     };
@@ -17332,8 +17547,8 @@ fn runtime_draw_slice_mesh_image(
         Some(vertices),
         Some(uv_coords),
         Some(indices),
-        buffers.vertex_count,
-        buffers.index_count,
+        owner.vertex_count,
+        owner.index_count,
         runtime_blend_mode(u32::try_from(blend_mode_value).unwrap_or(3))?,
         opacity,
     );
@@ -17348,9 +17563,11 @@ fn runtime_draw_mesh_image(
     image_object: Option<&RuntimeObject>,
     resolved_image_asset_global: Option<u32>,
     mesh: &MeshGeometryNode,
-    buffers: &mut RuntimeMeshRenderBuffers,
+    owner: &RuntimeMeshOwner,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     image: &dyn RenderImage,
+    backend_context_id: u64,
+    factory: &mut dyn RenderFactory,
     path_cache: &mut RuntimeRenderPathCache,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
@@ -17379,7 +17596,26 @@ fn runtime_draw_mesh_image(
         renderer.transform(runtime_render_mat(world));
     }
 
-    runtime_update_mesh_vertex_buffer(runtime, instance, mesh, weighted_context.as_ref(), buffers)?;
+    runtime_realize_mesh_owner(
+        runtime,
+        instance,
+        mesh,
+        weighted_context.as_ref(),
+        image,
+        backend_context_id,
+        factory,
+        owner,
+    )?;
+    let vertices = owner.vertices.borrow();
+    let Some((_, vertices)) = vertices.as_ref() else {
+        return Ok(());
+    };
+    let shared_handle = Rc::clone(&owner.shared.borrow());
+    let shared = shared_handle.borrow();
+    let (Some(uv_coords), Some(indices)) = (shared.uv_coords.as_deref(), shared.indices.as_deref())
+    else {
+        return Ok(());
+    };
 
     let blend_mode_key = runtime_draw_property_key_for_name("Drawable", "blendModeValue")
         .context("missing Drawable.blendModeValue")?;
@@ -17398,30 +17634,136 @@ fn runtime_draw_mesh_image(
     renderer.draw_image_mesh(
         Some(image),
         RenderImageSampler::LINEAR_CLAMP,
-        Some(buffers.vertices.as_ref()),
-        Some(buffers.uv_coords.as_ref()),
-        Some(buffers.indices.as_ref()),
-        buffers.vertex_count,
-        buffers.index_count,
+        Some(vertices.as_ref()),
+        Some(uv_coords),
+        Some(indices),
+        shared.vertex_count,
+        shared.index_count,
         runtime_blend_mode(u32::try_from(blend_mode_value).unwrap_or(3))?,
         opacity,
     );
     Ok(())
 }
 
-fn runtime_update_mesh_vertex_buffer(
+fn runtime_realize_mesh_owner(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     mesh: &MeshGeometryNode,
     weighted_context: Option<&WeightedPathContext>,
-    buffers: &mut RuntimeMeshRenderBuffers,
+    image: &dyn RenderImage,
+    backend_context_id: u64,
+    factory: &mut dyn RenderFactory,
+    owner: &RuntimeMeshOwner,
 ) -> Result<()> {
-    let bytes = runtime_mesh_vertex_buffer_bytes(runtime, instance, mesh, weighted_context)?;
-    if buffers.last_vertex_bytes.as_ref() == Some(&bytes) {
-        return Ok(());
+    {
+        let shared_handle = Rc::clone(&owner.shared.borrow());
+        let mut shared = shared_handle.borrow_mut();
+        if shared.context_id != Some(backend_context_id) {
+            shared.context_id = Some(backend_context_id);
+            shared.source_vertices = None;
+            shared.uv_coords = None;
+            shared.indices = None;
+            shared.vertex_count = 0;
+            shared.index_count = 0;
+        }
+        if shared.source_vertices.is_none()
+            || shared.uv_coords.is_none()
+            || shared.indices.is_none()
+        {
+            runtime_realize_mesh_shared_buffers(runtime, mesh, image, factory, &mut shared)?;
+        }
     }
-    write_render_buffer_bytes(buffers.vertices.as_mut(), &bytes);
-    buffers.last_vertex_bytes = Some(bytes);
+
+    let vertex_byte_length = mesh.vertices.len().saturating_mul(8);
+    let mut vertices = owner.vertices.borrow_mut();
+    if vertices.as_ref().is_some_and(|(context_id, buffer)| {
+        *context_id != backend_context_id || buffer.size_in_bytes() != vertex_byte_length
+    }) {
+        *vertices = None;
+        owner.vertex_render_buffer_dirty.set(true);
+    }
+    if vertices.is_none() {
+        *vertices = Some((
+            backend_context_id,
+            factory.make_render_buffer(
+                RenderBufferType::Vertex,
+                RenderBufferFlags::None,
+                vertex_byte_length,
+            ),
+        ));
+        owner.vertex_render_buffer_dirty.set(true);
+    }
+    if owner.vertex_render_buffer_dirty.get()
+        && let Some((_, buffer)) = vertices.as_mut()
+    {
+        let bytes = if let Some(bytes) = owner.settled_vertex_bytes.borrow().as_ref() {
+            bytes.clone()
+        } else {
+            runtime_mesh_vertex_buffer_bytes(runtime, instance, mesh, weighted_context)?
+        };
+        write_render_buffer_bytes(buffer.as_mut(), &bytes);
+        *owner.settled_vertex_bytes.borrow_mut() = Some(bytes);
+        owner.vertex_render_buffer_dirty.set(false);
+    }
+    Ok(())
+}
+
+fn runtime_realize_mesh_shared_buffers(
+    runtime: &RuntimeFile,
+    mesh: &MeshGeometryNode,
+    image: &dyn RenderImage,
+    factory: &mut dyn RenderFactory,
+    shared: &mut RuntimeMeshSharedRenderBuffers,
+) -> Result<()> {
+    let mesh_object = runtime
+        .object(mesh.global_id as usize)
+        .with_context(|| format!("missing mesh global {}", mesh.global_id))?;
+    let indices = mesh_object
+        .mesh_triangle_indices()
+        .context("mesh missing triangle indices")?;
+    let u_key =
+        runtime_draw_property_key_for_name("MeshVertex", "u").context("missing MeshVertex.u")?;
+    let v_key =
+        runtime_draw_property_key_for_name("MeshVertex", "v").context("missing MeshVertex.v")?;
+    let source_vertices = factory.make_render_buffer(
+        RenderBufferType::Vertex,
+        RenderBufferFlags::None,
+        mesh.vertices.len().saturating_mul(8),
+    );
+    let mut uv_bytes = Vec::with_capacity(mesh.vertices.len() * 8);
+    for vertex in &mesh.vertices {
+        let vertex_object = runtime
+            .object(vertex.global_id as usize)
+            .with_context(|| format!("missing mesh vertex global {}", vertex.global_id))?;
+        let uv = image.uv_transform().transform_point(RenderVec2D::new(
+            runtime_object_explicit_double_property_by_key(vertex_object, u_key).unwrap_or(0.0),
+            runtime_object_explicit_double_property_by_key(vertex_object, v_key).unwrap_or(0.0),
+        ));
+        push_f32_pair_bytes(&mut uv_bytes, uv.x, uv.y);
+    }
+    let mut uv_coords = factory.make_render_buffer(
+        RenderBufferType::Vertex,
+        RenderBufferFlags::MappedOnceAtInitialization,
+        uv_bytes.len(),
+    );
+    write_render_buffer_bytes(uv_coords.as_mut(), &uv_bytes);
+
+    let mut index_bytes = Vec::with_capacity(indices.len() * 2);
+    for index in indices {
+        index_bytes.extend_from_slice(&index.to_le_bytes());
+    }
+    let mut index_buffer = factory.make_render_buffer(
+        RenderBufferType::Index,
+        RenderBufferFlags::MappedOnceAtInitialization,
+        index_bytes.len(),
+    );
+    write_render_buffer_bytes(index_buffer.as_mut(), &index_bytes);
+
+    shared.source_vertices = Some(source_vertices);
+    shared.uv_coords = Some(uv_coords);
+    shared.indices = Some(index_buffer);
+    shared.vertex_count = u32::try_from(mesh.vertices.len()).unwrap_or(u32::MAX);
+    shared.index_count = u32::try_from(index_bytes.len() / 2).unwrap_or(u32::MAX);
     Ok(())
 }
 
@@ -17897,7 +18239,6 @@ fn runtime_component_list_item_local_transforms(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 fn runtime_draw_live_component_list(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -17907,8 +18248,6 @@ fn runtime_draw_live_component_list(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
-    image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
     paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
     nested_paint_caches: Option<
@@ -17932,8 +18271,6 @@ fn runtime_draw_live_component_list(
         factory,
         renderer,
         paint_by_global,
-        image_by_global,
-        mesh_by_local,
         path_cache,
         paint_configurations,
         nested_paint_caches,
@@ -17956,8 +18293,6 @@ fn runtime_draw_component_list_with_state(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
-    image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
     mut nested_paint_caches: Option<
@@ -18080,6 +18415,7 @@ fn runtime_draw_component_list_with_state(
                     cache_key,
                     preallocate_render_paint_cache_for_artboard_instance(
                         runtime,
+                        child,
                         child_graph,
                         artboards,
                         factory,
@@ -18105,8 +18441,6 @@ fn runtime_draw_component_list_with_state(
                 runtime,
                 child_graph,
                 factory,
-                image_by_global,
-                &mut child_paint_cache.meshes,
                 child_cache,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
@@ -18116,8 +18450,6 @@ fn runtime_draw_component_list_with_state(
                 factory,
                 renderer,
                 &mut child_paint_cache.paints,
-                image_by_global,
-                &mut child_paint_cache.meshes,
                 child_cache,
                 Some(&mut child_paint_cache.paint_configurations),
                 Some(&mut child_paint_cache.nested_artboards),
@@ -18142,8 +18474,6 @@ fn runtime_draw_component_list_with_state(
                 runtime,
                 child_graph,
                 factory,
-                image_by_global,
-                mesh_by_local,
                 child_cache,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
@@ -18153,8 +18483,6 @@ fn runtime_draw_component_list_with_state(
                 factory,
                 renderer,
                 paint_by_global,
-                image_by_global,
-                mesh_by_local,
                 child_cache,
                 paint_configurations.as_deref_mut(),
                 None,
@@ -18179,8 +18507,6 @@ fn runtime_draw_nested_artboard(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
-    image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
     nested_paint_caches: Option<
@@ -18331,8 +18657,6 @@ fn runtime_draw_nested_artboard(
                 runtime,
                 child_graph,
                 factory,
-                image_by_global,
-                &mut child_paint_cache.meshes,
                 child_cache,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
@@ -18342,8 +18666,6 @@ fn runtime_draw_nested_artboard(
                 factory,
                 renderer,
                 &mut child_paint_cache.paints,
-                image_by_global,
-                &mut child_paint_cache.meshes,
                 child_cache,
                 Some(&mut child_paint_cache.paint_configurations),
                 Some(&mut child_paint_cache.nested_artboards),
@@ -18368,8 +18690,6 @@ fn runtime_draw_nested_artboard(
                 runtime,
                 child_graph,
                 factory,
-                image_by_global,
-                mesh_by_local,
                 child_cache,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
@@ -18379,8 +18699,6 @@ fn runtime_draw_nested_artboard(
                 factory,
                 renderer,
                 paint_by_global,
-                image_by_global,
-                mesh_by_local,
                 child_cache,
                 paint_configurations.as_deref_mut(),
                 None,
@@ -18416,14 +18734,7 @@ fn runtime_draw_nested_artboard(
             true,
             child_ancestors,
         )?;
-        child.prepare_static_artboard_slice_meshes(
-            runtime,
-            child_graph,
-            factory,
-            image_by_global,
-            &mut child_paint_cache.meshes,
-            child_cache,
-        )?;
+        child.prepare_static_artboard_slice_meshes(runtime, child_graph, factory, child_cache)?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
             child_graph,
@@ -18431,8 +18742,6 @@ fn runtime_draw_nested_artboard(
             factory,
             renderer,
             &mut child_paint_cache.paints,
-            image_by_global,
-            &mut child_paint_cache.meshes,
             child_cache,
             Some(&mut child_paint_cache.paint_configurations),
             Some(&mut child_paint_cache.nested_artboards),
@@ -18453,14 +18762,7 @@ fn runtime_draw_nested_artboard(
             true,
             child_ancestors,
         )?;
-        child.prepare_static_artboard_slice_meshes(
-            runtime,
-            child_graph,
-            factory,
-            image_by_global,
-            mesh_by_local,
-            child_cache,
-        )?;
+        child.prepare_static_artboard_slice_meshes(runtime, child_graph, factory, child_cache)?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
             child_graph,
@@ -18468,8 +18770,6 @@ fn runtime_draw_nested_artboard(
             factory,
             renderer,
             paint_by_global,
-            image_by_global,
-            mesh_by_local,
             child_cache,
             paint_configurations.as_deref_mut(),
             None,
@@ -26304,18 +26604,23 @@ mod tests {
     #[test]
     fn slice_mesh_buffers_reuse_equal_sizes_and_replace_only_the_resized_buffer() {
         let mut factory = nuxie_render_api::RecordingFactory::new();
-        let mut buffers = RuntimeSliceMeshRenderBuffers::default();
+        let mut owner = RuntimeSliceMeshOwner::new(4);
         let update = |vertex_len, fill| RuntimeSliceMeshUpdate {
-            world_bits: [fill; 6],
-            input_words: vec![u64::from(fill)],
             vertex_bytes: vec![fill as u8; vertex_len],
             uv_bytes: vec![fill as u8; 16],
             index_bytes: vec![fill as u8; 12],
         };
 
-        runtime_update_slice_mesh_render_buffers(&mut factory, &mut buffers, update(16, 1));
-        runtime_update_slice_mesh_render_buffers(&mut factory, &mut buffers, update(16, 2));
-        runtime_update_slice_mesh_render_buffers(&mut factory, &mut buffers, update(24, 3));
+        // Directly exercise C++ `SliceMesh::updateBuffers`
+        // (`src/shapes/slice_mesh.cpp:56-147`): each NSlicer update maps all
+        // three owner buffers, reusing equal sizes and replacing only a buffer
+        // whose byte length changed.
+        owner.settled_update = Some(update(16, 1));
+        runtime_update_slice_mesh_render_buffers(&mut factory, &mut owner, 1);
+        owner.settled_update = Some(update(16, 2));
+        runtime_update_slice_mesh_render_buffers(&mut factory, &mut owner, 1);
+        owner.settled_update = Some(update(24, 3));
+        runtime_update_slice_mesh_render_buffers(&mut factory, &mut owner, 1);
 
         let stream = factory.stream();
         assert_eq!(stream.matches("makeRenderBuffer").count(), 4);
@@ -26326,7 +26631,7 @@ mod tests {
     }
 
     #[test]
-    fn slice_mesh_invalidation_keeps_cpp_axis_dirt_when_clamped_geometry_is_unchanged() {
+    fn slice_mesh_owner_keeps_cpp_axis_dirt_when_clamped_geometry_is_unchanged() {
         let bytes = synthetic_image_nslicer_riv();
         let file = read_runtime_file(&bytes).expect("synthetic image NSlicer imports");
         let graphs = GraphFile::from_runtime_file(&file).expect("synthetic image NSlicer graphs");
@@ -26338,41 +26643,33 @@ mod tests {
         assert!(instance.set_double_property(3, offset_key, 400.0));
         let first_geometry =
             runtime_slice_mesh_geometry(&file, &instance, details, 300.0, 300.0, 1.5, 1.5);
-        let first_key = runtime_slice_mesh_input_words(
-            &file,
-            &instance,
-            graph,
-            details,
-            1,
-            Some(7),
-            11,
-            300,
-            300,
-            1.5,
-            1.5,
-            None,
-        );
+        instance.update_pass();
+        instance
+            .runtime_meshes
+            .slice(details.local_id)
+            .expect("slice owner")
+            .borrow_mut()
+            .dirty = false;
 
         assert!(instance.set_double_property(3, offset_key, 500.0));
         let second_geometry =
             runtime_slice_mesh_geometry(&file, &instance, details, 300.0, 300.0, 1.5, 1.5);
-        let second_key = runtime_slice_mesh_input_words(
-            &file,
-            &instance,
-            graph,
-            details,
-            1,
-            Some(7),
-            11,
-            300,
-            300,
-            1.5,
-            1.5,
-            None,
-        );
+        instance.update_pass();
 
         assert_eq!(first_geometry, second_geometry);
-        assert_ne!(first_key, second_key);
+        // C++ `Axis::offsetChanged` pushes NSlicer dirt and
+        // `NSlicer::update` invokes SliceMesh::update even when clamping makes
+        // the resulting vertices byte-identical (`axis.cpp:23-29`,
+        // `n_slicer.cpp:43-55`). The owner dirt event—not a polled value
+        // snapshot—therefore remains observable here.
+        assert!(
+            instance
+                .runtime_meshes
+                .slice(details.local_id)
+                .expect("slice owner")
+                .borrow()
+                .dirty
+        );
     }
 
     #[test]
@@ -27149,6 +27446,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -27401,6 +27699,7 @@ mod tests {
         let mut factory = nuxie_render_api::NullFactory::new();
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -27470,6 +27769,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -27556,6 +27856,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -27755,6 +28056,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -27874,6 +28176,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -27958,6 +28261,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -28074,10 +28378,8 @@ mod tests {
         let solid_instance =
             ArtboardInstance::from_graph(&solid_file, solid_graph).expect("solid instance builds");
 
-        let mut flat_cache = RuntimeRenderPaintCache {
-            paint_preparation_is_noop: true,
-            ..RuntimeRenderPaintCache::default()
-        };
+        let mut flat_cache = RuntimeRenderPaintCache::default();
+        flat_cache.paint_preparation_is_noop = true;
         assert!(!flat_cache.needs_paint_preparation(&solid_instance, solid_graph));
 
         flat_cache.paint_preparation_is_noop = false;
@@ -28104,10 +28406,8 @@ mod tests {
         let nslicer_graph = nslicer_graphs.artboards.first().expect("NSlicer artboard");
         let nslicer_instance = ArtboardInstance::from_graph(&nslicer_file, nslicer_graph)
             .expect("NSlicer instance builds");
-        let nslicer_cache = RuntimeRenderPaintCache {
-            paint_preparation_is_noop: true,
-            ..RuntimeRenderPaintCache::default()
-        };
+        let mut nslicer_cache = RuntimeRenderPaintCache::default();
+        nslicer_cache.paint_preparation_is_noop = true;
         assert!(
             nslicer_cache.needs_paint_preparation(&nslicer_instance, nslicer_graph),
             "authored NSlicer mesh work must never be hidden by the paint fast path"
@@ -28132,6 +28432,7 @@ mod tests {
         let mut renderer = factory.make_renderer();
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -28254,6 +28555,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -28364,6 +28666,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -29630,6 +29933,105 @@ mod tests {
     const HOST_BOUNDED_DECODED_IMAGE_BYTES: usize = 64 * 1024 * 1024;
 
     #[test]
+    fn artboard_clone_shares_file_image_and_mesh_source_but_not_occurrence_buffers() {
+        let bytes = include_bytes!("../../../fixtures/graph/dependency_test.riv");
+        let file = read_runtime_file(bytes).expect("fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let image_assets = Arc::new(RuntimeImageAssetOwners::default());
+        image_assets.insert(7, Box::new(TestRenderImage));
+        instance
+            .runtime_image_assets
+            .replace(Some(Arc::clone(&image_assets)));
+
+        let shared = Rc::new(RefCell::new(RuntimeMeshSharedRenderBuffers::default()));
+        let mesh = RuntimeMeshOwner {
+            local_id: 1,
+            shared: RefCell::new(Rc::clone(&shared)),
+            vertices: RefCell::new(Some((
+                image_assets.backend_context_id(),
+                nuxie_render_api::NullFactory::new().make_render_buffer(
+                    RenderBufferType::Vertex,
+                    RenderBufferFlags::None,
+                    16,
+                ),
+            ))),
+            vertex_render_buffer_dirty: Cell::new(false),
+            settled_vertex_bytes: RefCell::new(Some(vec![0; 16])),
+        };
+        instance.runtime_meshes = RuntimeMeshList {
+            meshes_by_local: vec![None, Some(mesh)],
+            slices_by_local: vec![None, Some(RefCell::new(RuntimeSliceMeshOwner::new(1)))],
+        };
+
+        let cloned = instance.clone();
+        let original_assets = instance
+            .runtime_image_assets
+            .borrow()
+            .as_ref()
+            .map(Arc::clone)
+            .expect("source occurrence retains the file owner list");
+        let cloned_assets = cloned
+            .runtime_image_assets
+            .borrow()
+            .as_ref()
+            .map(Arc::clone)
+            .expect("clone retains the same file owner list");
+        assert!(Arc::ptr_eq(&original_assets, &cloned_assets));
+        assert!(Rc::ptr_eq(
+            &instance
+                .runtime_meshes
+                .mesh(1)
+                .expect("source mesh")
+                .shared
+                .borrow(),
+            &cloned
+                .runtime_meshes
+                .mesh(1)
+                .expect("cloned mesh")
+                .shared
+                .borrow(),
+        ));
+        assert!(
+            instance
+                .runtime_meshes
+                .mesh(1)
+                .expect("source mesh")
+                .vertices
+                .borrow()
+                .is_some()
+        );
+        assert!(
+            cloned
+                .runtime_meshes
+                .mesh(1)
+                .expect("cloned mesh")
+                .vertices
+                .borrow()
+                .is_none(),
+            "Mesh::clone creates a fresh dynamic vertex-buffer member",
+        );
+        assert!(
+            cloned
+                .runtime_meshes
+                .mesh(1)
+                .expect("cloned mesh")
+                .vertex_render_buffer_dirty
+                .get()
+        );
+        assert!(
+            cloned
+                .runtime_meshes
+                .slice(1)
+                .expect("cloned slicer")
+                .borrow()
+                .dirty,
+            "NSlicer clone constructs a fresh unique SliceMesh",
+        );
+    }
+
+    #[test]
     fn retained_images_reserve_one_aggregate_decoded_budget_before_decode() {
         const WIDTH: u32 = 4_096;
         const HEIGHT: u32 = 2_048;
@@ -29698,7 +30100,7 @@ mod tests {
             stats: Rc::clone(&stats),
             next_path_id: 0,
         };
-        let mut images = RuntimeRenderImages::with_max_retained_decoded_bytes(Some(
+        let images = RuntimeImageAssetOwners::with_max_retained_decoded_bytes(Some(
             HOST_BOUNDED_DECODED_IMAGE_BYTES,
         ));
 
@@ -29709,19 +30111,23 @@ mod tests {
                 image_globals[0],
                 Some(&external_images),
                 &mut factory,
-                &mut images,
+                &images,
             ),
             Err(ImageDecodeError),
             "a codec failure propagates"
         );
-        assert_eq!(images.retained_decoded_bytes, 0, "failed decode rolls back");
+        assert_eq!(
+            images.retained_decoded_bytes(),
+            0,
+            "failed decode rolls back"
+        );
         predecode_render_image(
             &file,
             &image_assets,
             image_globals[0],
             Some(&external_images),
             &mut factory,
-            &mut images,
+            &images,
         )
         .expect("embedded image retry decodes");
         predecode_render_image(
@@ -29730,11 +30136,11 @@ mod tests {
             image_globals[1],
             Some(&external_images),
             &mut factory,
-            &mut images,
+            &images,
         )
         .expect("external image fills the remaining budget");
         assert_eq!(
-            images.retained_decoded_bytes,
+            images.retained_decoded_bytes(),
             HOST_BOUNDED_DECODED_IMAGE_BYTES
         );
         assert_eq!(
@@ -29744,7 +30150,7 @@ mod tests {
                 image_globals[2],
                 Some(&external_images),
                 &mut factory,
-                &mut images,
+                &images,
             ),
             Err(ImageDecodeError),
             "the third individually valid compressed image exceeds the aggregate budget"
@@ -29764,7 +30170,7 @@ mod tests {
         const HALF_BUDGET_WIDTH: u32 = 4_096;
         const HALF_BUDGET_HEIGHT: u32 = 2_048;
 
-        let mut images = RuntimeRenderImages::with_max_retained_decoded_bytes(Some(
+        let images = RuntimeImageAssetOwners::with_max_retained_decoded_bytes(Some(
             HOST_BOUNDED_DECODED_IMAGE_BYTES,
         ));
         for global_id in [7, 8] {
@@ -29777,7 +30183,8 @@ mod tests {
             );
         }
         assert_eq!(
-            images.retained_decoded_bytes, HOST_BOUNDED_DECODED_IMAGE_BYTES,
+            images.retained_decoded_bytes(),
+            HOST_BOUNDED_DECODED_IMAGE_BYTES,
             "two half-budget images fill the aggregate exactly",
         );
 
@@ -29794,7 +30201,7 @@ mod tests {
             .expect("half-budget dimensions are valid")
             .checked_add(decoded_rgba_len(1, 1).expect("one pixel is valid"))
             .expect("test dimensions fit usize");
-        assert_eq!(images.retained_decoded_bytes, retained_after_replacement);
+        assert_eq!(images.retained_decoded_bytes(), retained_after_replacement);
 
         images.insert(
             7,
@@ -29812,7 +30219,8 @@ mod tests {
             "the other half-budget image plus a 48 MiB replacement exceeds the aggregate",
         );
         assert_eq!(
-            images.retained_decoded_bytes, retained_after_replacement,
+            images.retained_decoded_bytes(),
+            retained_after_replacement,
             "a rejected replacement must not mutate aggregate accounting",
         );
     }
@@ -29822,7 +30230,7 @@ mod tests {
         const HALF_BUDGET_WIDTH: u32 = 4_096;
         const HALF_BUDGET_HEIGHT: u32 = 2_048;
 
-        let mut images = RuntimeRenderImages::default();
+        let images = RuntimeImageAssetOwners::default();
         for global_id in [7, 8, 9] {
             images.insert(
                 global_id,
@@ -29838,7 +30246,7 @@ mod tests {
                 "the unbounded compatibility path retains every image, like C++",
             );
         }
-        assert!(images.retained_decoded_bytes > HOST_BOUNDED_DECODED_IMAGE_BYTES);
+        assert!(images.retained_decoded_bytes() > HOST_BOUNDED_DECODED_IMAGE_BYTES);
     }
 
     #[test]
@@ -31211,6 +31619,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -31358,6 +31767,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -31618,6 +32028,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             graph,
             &graphs.artboards,
             &mut factory,
@@ -31712,6 +32123,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             artboard,
             &graph.artboards,
             &mut factory,
@@ -31772,6 +32184,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             artboard,
             &graph.artboards,
             &mut factory,
@@ -31867,6 +32280,7 @@ mod tests {
         };
         let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
             &file,
+            &instance,
             artboard,
             &graph.artboards,
             &mut factory,

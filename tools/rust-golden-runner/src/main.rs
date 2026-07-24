@@ -21,7 +21,7 @@ use nuxie_runtime::{
     preallocate_render_paint_cache_for_artboard_instance,
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
     preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration,
-    preallocate_source_render_paints,
+    preallocate_render_paint_cache_for_unmounted_artboard, preallocate_source_render_paints,
 };
 #[cfg(feature = "scripting")]
 use nuxie_scripting::vm::{DetachedViewModelFrame, ScopeKey, ScriptProgram, ScriptVm};
@@ -209,6 +209,7 @@ fn run() -> Result<String> {
         )?;
         let cache = preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
             &runtime,
+            &instance,
             artboard,
             &graph.artboards,
             factory.as_factory(),
@@ -235,6 +236,7 @@ fn run() -> Result<String> {
         .context("failed to initialize scripted drawables")?;
         let cache = preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
             &runtime,
+            &instance,
             artboard,
             &graph.artboards,
             factory.as_factory(),
@@ -251,6 +253,7 @@ fn run() -> Result<String> {
         let cache =
             preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration(
                 &runtime,
+                &instance,
                 artboard,
                 &graph.artboards,
                 factory.as_factory(),
@@ -276,6 +279,7 @@ fn run() -> Result<String> {
     #[cfg(not(feature = "scripting"))]
     let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
         &runtime,
+        &instance,
         artboard,
         &graph.artboards,
         factory.as_factory(),
@@ -714,6 +718,7 @@ fn run_benchmark_repeat_pass(
     }
     let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
         runtime,
+        &instance,
         artboard,
         &graph.artboards,
         &mut factory,
@@ -1819,7 +1824,11 @@ impl RunnerScriptArtboardRenderState {
             let graph = artboards
                 .get(artboard_index)
                 .with_context(|| format!("missing scripted artboard index {artboard_index}"))?;
-            let cache = preallocate_render_paint_cache_for_artboard_instance(
+            // Script input registration runs before the trait object exposes
+            // its concrete ArtboardInstance to the renderer. C++ allocates the
+            // occurrence paints at registration; Mesh members are bound to
+            // the concrete occurrence on its first draw.
+            let cache = preallocate_render_paint_cache_for_unmounted_artboard(
                 runtime, graph, artboards, factory,
             );
             self.caches.insert(instance_id, cache);
@@ -2031,6 +2040,7 @@ impl ScriptArtboard for RunnerScriptArtboard {
             .unwrap_or_else(|| {
                 preallocate_render_paint_cache_for_artboard_instance(
                     &self.runtime,
+                    &self.instance,
                     graph,
                     &self.artboards,
                     factory,

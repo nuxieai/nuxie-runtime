@@ -1256,7 +1256,7 @@ note = "Consolidated Rust port for assets."
 
 [[file]]
 upstream = "src/assets/image_asset.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
 rust_module = "crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"
@@ -4064,7 +4064,7 @@ note = "Consolidated Rust port for shapes."
 
 [[file]]
 upstream = "src/shapes/image.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
 rust_module = "crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"
@@ -4088,7 +4088,7 @@ note = "F10: generic handling exists but still needs a parity fixture."
 
 [[file]]
 upstream = "src/shapes/mesh.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
 rust_module = "crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"
@@ -4448,7 +4448,7 @@ note = "Consolidated Rust port for shapes."
 
 [[file]]
 upstream = "src/shapes/slice_mesh.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
 rust_module = "crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"

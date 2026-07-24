@@ -74,6 +74,7 @@ fn drive(data: &[u8], pointer_events: &[PointerEvent]) -> Option<()> {
     let mut factory = NullFactory::new();
     let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
         &runtime,
+        &instance,
         artboard,
         &graph.artboards,
         &mut factory,

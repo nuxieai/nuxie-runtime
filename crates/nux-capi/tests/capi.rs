@@ -526,14 +526,22 @@ fn c_api_retained_cache_retries_a_failed_image_decode_without_poisoning() {
     assert!(counters_data.made > counters_data.released);
 
     unsafe { nux_render_cache_free(cache) };
+    // Pinned C++ retains the decoded RenderImage on ImageAsset itself
+    // (`include/rive/assets/image_asset.hpp:19`,
+    // `src/assets/image_asset.cpp:28-39`). The renderer cache owns paths/paints,
+    // but freeing it must not destroy the file-owned image while the artboard
+    // occurrence that references the file asset is still alive.
+    assert_eq!(
+        counters_data.made,
+        counters_data.released + 1,
+        "the file-owned image must outlive the renderer cache"
+    );
+    unsafe { nux_artboard_instance_free(instance) };
     assert_eq!(
         counters_data.made, counters_data.released,
-        "all successful image handles release exactly once"
+        "the file-owned image releases exactly once with its owning occurrence"
     );
-    unsafe {
-        nux_artboard_instance_free(instance);
-        nux_file_free(file);
-    }
+    unsafe { nux_file_free(file) };
 }
 
 #[test]

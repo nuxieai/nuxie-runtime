@@ -7,7 +7,7 @@ phase = "ownership-proof-before-scene-cache-removal"
 # This count is a ratchet, not a completion claim. `make
 # runtime-drawing-port-closed` requires pending=0, compensation=0, and every
 # legacy symbol count below to reach zero.
-expected_status_counts = { exact = 5, adapted = 24, pending = 6, compensation = 4 }
+expected_status_counts = { exact = 5, adapted = 26, pending = 4, compensation = 4 }
 
 [[batch]]
 id = "shape_path_paint"
@@ -464,18 +464,18 @@ clone_drop = ["cpp:include/rive/shapes/shape.hpp:21-24", "rust:crates/nuxie-runt
 [[owner]]
 id = "image_asset.render_image"
 batch = "image_mesh"
-status = "pending"
+status = "adapted"
 rule = "RF-30"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "images: RuntimeRenderImages"
+rust_anchor = "pub struct RuntimeImageAssetOwners {"
 depends_on = []
-legacy_ratchets = ["scene_paint_cache_type"]
-note = "C++ ImageAsset owns the RenderImage; Rust still retains image resources inside the facade-created paint cache."
+legacy_ratchets = []
+note = "Every file ImageAsset occurrence owns its decoded RenderImage in the shared file owner list. Artboard occurrences retain that file list, and Image draw reaches the exact asset owner; the facade cache only transports the shared construction handle and owns no image."
 [owner.lifecycle]
-construct = ["cpp:src/assets/image_asset.cpp:34-45", "rust:crates/nuxie-runtime/src/draw.rs:10233-10241"]
-update = ["cpp:src/assets/image_asset.cpp:34-45", "rust:crates/nuxie-runtime/src/draw.rs:10233-10259"]
-draw = ["cpp:src/shapes/image.cpp:28-48", "rust:crates/nuxie-runtime/src/draw.rs:15983-16080"]
-clone_drop = ["cpp:include/rive/assets/image_asset.hpp:19", "rust:crates/nuxie-runtime/src/draw.rs:10233-10259"]
+construct = ["cpp:src/assets/image_asset.cpp:28-39", "rust:crates/nuxie-runtime/src/draw.rs:13928-13985", "rust:crates/nuxie-runtime/src/draw.rs:14282-14313"]
+update = ["cpp:src/assets/image_asset.cpp:37-49", "rust:crates/nuxie-runtime/src/draw.rs:11721-11782"]
+draw = ["cpp:src/shapes/image.cpp:20-51", "rust:crates/nuxie-runtime/src/draw.rs:17273-17440"]
+clone_drop = ["cpp:include/rive/assets/image_asset.hpp:18-31", "rust:crates/nuxie-runtime/src/draw.rs:11648-11675"]
 
 [[owner]]
 id = "image.mesh_link"
@@ -496,18 +496,18 @@ clone_drop = ["cpp:include/rive/shapes/image.hpp:31", "rust:crates/nuxie-runtime
 [[owner]]
 id = "mesh.render_buffers"
 batch = "image_mesh"
-status = "pending"
+status = "adapted"
 rule = "RF-30"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "struct RuntimeMeshRenderBufferSlots"
+rust_anchor = "pub(crate) struct RuntimeMeshList {"
 depends_on = ["image.mesh_link"]
-legacy_ratchets = ["scene_paint_cache_type"]
-note = "Slots are one-to-one by local id, but their lifetime is still the outer scene paint cache rather than the Mesh/NSlicer owner."
+legacy_ratchets = []
+note = "Each cloned Artboard occurrence owns its Mesh and NSlicer backend members. Mesh clones allocate a fresh dynamic vertex buffer while sharing the file/source Mesh UV and index handles; NSlicer clones construct a fresh unique SliceMesh. Update dirt settles occurrence CPU state, and draw maps only dirty buffers."
 [owner.lifecycle]
-construct = ["cpp:src/shapes/image.cpp:149-154", "rust:crates/nuxie-runtime/src/draw.rs:10655-10670"]
-update = ["cpp:src/shapes/image.cpp:111-126", "rust:crates/nuxie-runtime/src/draw.rs:10664-10687"]
-draw = ["cpp:src/shapes/image.cpp:28-48", "rust:crates/nuxie-runtime/src/draw.rs:15983-16080"]
-clone_drop = ["cpp:include/rive/shapes/image.hpp:31", "rust:crates/nuxie-runtime/src/draw.rs:10233-10259"]
+construct = ["cpp:src/shapes/mesh.cpp:87-150", "rust:crates/nuxie-runtime/src/draw.rs:14328-14459"]
+update = ["cpp:src/shapes/mesh.cpp:14-23", "cpp:src/shapes/mesh.cpp:162-172", "rust:crates/nuxie-runtime/src/draw.rs:7329-7368"]
+draw = ["cpp:src/shapes/mesh.cpp:175-206", "rust:crates/nuxie-runtime/src/draw.rs:17330-17362", "rust:crates/nuxie-runtime/src/draw.rs:17558-17767"]
+clone_drop = ["cpp:src/shapes/mesh.cpp:87-99", "rust:crates/nuxie-runtime/src/draw.rs:11907-12057"]
 
 [[owner]]
 id = "text.draw_commands"

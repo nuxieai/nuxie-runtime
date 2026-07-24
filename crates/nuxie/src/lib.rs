@@ -1141,6 +1141,7 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
             let candidate =
                 RuntimeRenderPaintCache::preallocate_for_artboard_tree_with_external_images(
                     &self.file.runtime,
+                    &self.instance,
                     graph,
                     &self.file.graph.artboards,
                     &self.file.external_image_assets,
@@ -2410,6 +2411,7 @@ pub struct ArtboardRenderCache {
 fn ensure_render_paint_cache_for_draw(
     retained: &mut Option<RuntimeRenderPaintCache>,
     file: &File,
+    instance: &RuntimeArtboardInstance,
     artboard: &ArtboardGraph,
     factory: &mut dyn Factory,
 ) -> std::result::Result<(), ImageDecodeError> {
@@ -2418,6 +2420,7 @@ fn ensure_render_paint_cache_for_draw(
     }
     let candidate = RuntimeRenderPaintCache::preallocate_for_artboard_tree_with_external_images(
         &file.runtime,
+        instance,
         artboard,
         &file.graph.artboards,
         &file.external_image_assets,
@@ -2951,7 +2954,13 @@ impl<'a> ArtboardInstance<'a> {
             .context("artboard instance graph is unavailable")?;
         #[cfg(feature = "scripting")]
         let had_retained_paint = cache.paint.is_some();
-        ensure_render_paint_cache_for_draw(&mut cache.paint, self.file, artboard, factory)?;
+        ensure_render_paint_cache_for_draw(
+            &mut cache.paint,
+            self.file,
+            &self.raw,
+            artboard,
+            factory,
+        )?;
         #[cfg(feature = "scripting")]
         if let Err(error) =
             prepare_scripted_artboard_tree(self.file, artboard, &mut self.raw, factory)
@@ -3632,7 +3641,13 @@ impl OwnedArtboardInstance {
             .context("owned artboard instance graph is unavailable")?;
         #[cfg(feature = "scripting")]
         let had_retained_paint = cache.paint.is_some();
-        ensure_render_paint_cache_for_draw(&mut cache.paint, &self.file, artboard, factory)?;
+        ensure_render_paint_cache_for_draw(
+            &mut cache.paint,
+            &self.file,
+            &self.raw,
+            artboard,
+            factory,
+        )?;
         #[cfg(feature = "scripting")]
         if let Err(error) =
             prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)

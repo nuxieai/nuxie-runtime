@@ -40,8 +40,8 @@ pub use draw::{
     RuntimeContourMeasure, RuntimeDrawCommand, RuntimeDrawCommandKind,
     RuntimeDrawCommandObjectKind, RuntimeFeatherState, RuntimeGeometryCache, RuntimeGeometryHit,
     RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment, RuntimeGradientStop,
-    RuntimeImageDimensionConflict, RuntimeLayoutBoundsReport, RuntimePathCommand,
-    RuntimePathMeasure, RuntimePathSample, RuntimeRenderImages, RuntimeRenderPaintCache,
+    RuntimeImageAssetOwners, RuntimeImageDimensionConflict, RuntimeLayoutBoundsReport,
+    RuntimePathCommand, RuntimePathMeasure, RuntimePathSample, RuntimeRenderPaintCache,
     RuntimeRenderPaints, RuntimeRenderPathCache, RuntimeSemanticTextHit, RuntimeShapePaintCommand,
     RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
     preallocate_render_paint_cache_for_artboard_instance,
@@ -50,8 +50,9 @@ pub use draw::{
     preallocate_render_paint_cache_for_scripted_artboard_tree,
     preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
     preallocate_render_paint_cache_for_scripted_artboard_tree_with_file_registration,
-    preallocate_render_paints, preallocate_render_paints_for_artboard_tree,
-    preallocate_source_render_paints, runtime_path_commands_from_raw_path,
+    preallocate_render_paint_cache_for_unmounted_artboard, preallocate_render_paints,
+    preallocate_render_paints_for_artboard_tree, preallocate_source_render_paints,
+    runtime_path_commands_from_raw_path,
 };
 pub use focus::{
     FocusBounds, FocusDirection, FocusEdgeBehavior, FocusEvent, FocusEventKind, FocusManager,

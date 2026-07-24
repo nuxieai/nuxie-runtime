@@ -1914,6 +1914,11 @@ impl ArtboardInstance {
         self.mark_artboard_data_bind_work_dirty();
         self.mark_changed();
         self.mark_layout_changed();
+        // C++ layout settlement adds Path dirt when the solved width or
+        // height changes, before LayoutComponent::update rebuilds the
+        // Artboard-owned local/world paths
+        // (`layout_component.cpp:1116-1124`, `artboard.cpp:1138-1157`).
+        self.add_dirt(0, ComponentDirt::PATH | ComponentDirt::COMPONENTS, false);
         true
     }
 
@@ -2023,7 +2028,7 @@ impl ArtboardInstance {
             self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         }
         self.mark_changed();
-        self.runtime_shapes.mark_property_changed(local_id, false);
+        self.runtime_shapes.mark_solid_color_changed(local_id);
         // Pinned C++ `SolidColor::colorValueChanged` immediately calls
         // `renderOpacityChanged` and mutates the ShapePaint-owned paint
         // (`solid_color.cpp:23-54`). This callback is not a dependency-node
@@ -2047,13 +2052,15 @@ impl ArtboardInstance {
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
-        self.runtime_shapes.mark_property_changed(local_id, false);
         self.mark_text_changed_for_local(local_id);
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("SolidColor")
             && solid_color_value_property_key() == Some(property_key)
         {
+            self.runtime_shapes.mark_solid_color_changed(local_id);
             // Pinned C++ `SolidColor::colorValueChanged` immediately calls
-            // `renderOpacityChanged` (`solid_color.cpp:54`).
+            // `renderOpacityChanged`, which mutates the already-owned
+            // RenderPaint in place (`solid_color.cpp:23-54`). It does not
+            // queue a complete ShapePaint reconstruction for draw time.
             self.settle_runtime_solid_color_callback(local_id);
             if let Some(revision) = self.solid_color_paint_revisions.get_mut(local_id) {
                 *revision = revision.wrapping_add(1);
@@ -2062,6 +2069,8 @@ impl ArtboardInstance {
             // invalidate local prepared geometry. A parent preparation frame
             // still needs to observe the nested paint value change.
             self.mark_tree_paint_preparation_changed();
+        } else {
+            self.runtime_shapes.mark_property_changed(local_id, false);
         }
         self.mark_prepared_changed_for_color_property(local_id, property_key, previous, value);
         self.apply_color_property_changed(local_id, property_key);
@@ -2092,6 +2101,26 @@ impl ArtboardInstance {
 
     pub(crate) fn bool_property(&self, local_id: usize, property_key: u16) -> Option<bool> {
         self.objects.bool_property(local_id, property_key)
+    }
+
+    pub(crate) fn shape_paint_is_visible(&self, local_id: usize) -> Option<bool> {
+        self.objects.shape_paint_is_visible(local_id)
+    }
+
+    pub(crate) fn shape_paint_blend_mode_value(&self, local_id: usize) -> Option<u64> {
+        self.objects.shape_paint_blend_mode_value(local_id)
+    }
+
+    pub(crate) fn fill_rule(&self, local_id: usize) -> Option<u64> {
+        self.objects.fill_rule(local_id)
+    }
+
+    pub(crate) fn stroke_transform_affects_stroke(&self, local_id: usize) -> Option<bool> {
+        self.objects.stroke_transform_affects_stroke(local_id)
+    }
+
+    pub(crate) fn stroke_thickness(&self, local_id: usize) -> Option<f32> {
+        self.objects.stroke_thickness(local_id)
     }
 
     /// Typed property write with dirt propagation — the write path the
@@ -4821,6 +4850,12 @@ impl ArtboardInstance {
                                 &graphs[*graph_index],
                                 layout_bounds.as_deref(),
                             );
+                            self.update_runtime_artboard_render_paths(
+                                local_id,
+                                dirt,
+                                &graphs[*graph_index],
+                                layout_bounds.as_deref(),
+                            );
                             self.update_runtime_shape_paints_at_dependency_node(
                                 local_id,
                                 dirt,
@@ -5380,6 +5415,26 @@ impl ArtboardInstance {
                     && property_key_for_name("Artboard", "originY") == Some(property_key) =>
             {
                 self.origin_y = value;
+                self.add_dirt(
+                    local_id,
+                    ComponentDirt::PATH | ComponentDirt::COMPONENTS,
+                    false,
+                )
+            }
+            Some("Artboard")
+                if local_id == 0
+                    && (property_key_for_name("LayoutComponent", "width")
+                        == Some(property_key)
+                        || property_key_for_name("LayoutComponent", "height")
+                            == Some(property_key)) =>
+            {
+                // Generated width/height callbacks mark the Yoga node dirty;
+                // when the solved size changes C++ adds Path dirt and then
+                // rebuilds the retained Artboard render paths in the same
+                // update pass (`layout_component.cpp:1116-1124,1564-1565`,
+                // `artboard.cpp:1138-1157`). Rust's layout solver is not a
+                // dependency node, so publish that owner dirt at the callback
+                // boundary.
                 self.add_dirt(
                     local_id,
                     ComponentDirt::PATH | ComponentDirt::COMPONENTS,

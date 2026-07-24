@@ -14,7 +14,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.88 MiB OFF / 8.76 MiB ON vs user-approved 9 MiB budget (both variants green at `5901c1fe`) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 410/410, nuxie lib 167/167,
+Regression floor (must stay green): runtime lib 411/411, nuxie lib 167/167,
 C++ probe 721/721, both runtime golden gates 317/317 exact / 647/647 segments;
 ordinary and scripted both have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
@@ -829,6 +829,37 @@ upstream-sync-map registry).
   9,184,984 B scripting-on, both below the unchanged 9,437,184 B budget.
   File-correspondence rows remain `pending-verification` until the
   orchestrator's independent battery; no executor work remains in #RD-1.
+  A user-directed, post-closeout performance burn-down is now active against
+  the completed ownership port. It works the canonical hot-loop residuals
+  top-down, one C++-corresponding ownership/dirt defect per committed slice;
+  the renderer API and backend remain out of scope. The first
+  `advance_blend_mode` slice ports Artboard background geometry and
+  ShapePaint state onto the concrete Artboard occurrence. Artboard
+  local/world paths now rebuild only under Path dirt, LocalClockwise aliases
+  Local exactly, retained paints receive direct SolidColor callbacks, and a
+  clean `draw_artboard` does not re-enter synchronization. This follows
+  `artboard.cpp:1138-1157,1630-1698`,
+  `layout_component.cpp:91-120,1116-1124,1564-1571`,
+  `shape.cpp:137-159`, and `shape_paint.cpp:12-74,78-191`, applying
+  RF-2/RF-5/RF-17/RF-29 rather than adding a Rust-only cache.
+  At the user's explicit direction, the post-fix `perf-hot-loop` ran
+  immediately in the current environment with every benchmark parameter and
+  provenance guard unchanged; only the output path changed
+  (`target/perf-hot-loop-artboard-owner-20260724.json`). Against the prior
+  canonical artifact, `advance_blend_mode@0` total fell
+  3.855891x -> 2.820281x and draw fell 10.851590x -> 3.270529x;
+  `advance_blend_mode@0.25` total fell 3.843199x -> 2.829086x and draw fell
+  11.020004x -> 3.313557x. Rust draw minima fell
+  2.706202/2.724685 ms -> 0.814365/0.815009 ms per 10,000 iterations while
+  C++ draw remained 0.249001/0.245962 ms. The current-run aggregate
+  3.535223x is recorded, but is not used to claim a whole-corpus regression
+  or checkpoint pass because unrelated entries and Rust advance time moved
+  adversely on this host. The defect class is structural and fixed by the
+  pinned C++ ownership boundary; it is not an architectural exception.
+  Ordinary/scripted goldens remain 317/317 entries and 647/647 exact
+  segments with zero failures, renderer pixels remain 1,468/1,468 with zero
+  divergences/gated cases, and runtime is 411/411. The <=1.0x tier-5 target
+  remains open.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -888,10 +919,17 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. No executor work remains for #RD-1 or #B-6. Independent orchestrator
-   verification may promote correspondence rows from `pending-verification`;
-   the next closeout-spine implementation item remains #B-5. B-6 also opened
-   the explicit RB-2/RB-3/RB-4/RB-5 rebuild follow-ups; their relative
+1. Continue the user-directed runtime-drawing performance burn-down. Commit
+   the completed `advance_blend_mode` Artboard-owner slice first, then
+   re-sort the residual list from the committed runner and take exactly one
+   next entry. Each slice instruments, ports the pinned C++ owner/dirt
+   boundary with citations, preserves every floor, re-measures with canonical
+   benchmark parameters, and commits its delta. Stop and ask if <=1.0x would
+   require structural divergence from C++.
+2. Independent orchestrator verification may promote completed #RD-1
+   correspondence rows from `pending-verification`. #B-6 is complete; the
+   next ordinary closeout-spine implementation item after the perf burn-down
+   remains #B-5. B-6 also opened RB-2/RB-3/RB-4/RB-5; their relative
    scheduling is not inferred by the audit.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
@@ -1044,6 +1082,24 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   boundary this phase crosses.
 
 ## Log
+
+- 2026-07-24 — The first post-closeout performance burn-down slice replaced
+  Artboard background reconstruction with the pinned C++ Artboard-owned
+  path/paint lifecycle. Allocation instrumentation fell from eight draw-time
+  allocations per unchanged frame to zero. With canonical hot-loop
+  parameters run immediately in the user-approved current environment,
+  `advance_blend_mode@0` improved from 3.855891x total / 10.851590x draw to
+  2.820281x / 3.270529x, and sample 0.25 improved from
+  3.843199x / 11.020004x to 2.829086x / 3.313557x. The current artifact is
+  `target/perf-hot-loop-artboard-owner-20260724.json`; its 3.535223x
+  whole-corpus aggregate is recorded without treating unrelated host movement
+  as a regression or a passed checkpoint. The port cites
+  `artboard.cpp:1138-1157,1630-1698`,
+  `layout_component.cpp:91-120,1116-1124,1564-1571`,
+  `shape.cpp:137-159`, and `shape_paint.cpp:12-74,78-191`, under
+  RF-2/RF-5/RF-17/RF-29. Runtime 411/411, both golden modes 317/317 plus
+  647/647 with zero failures, and renderer pixels 1,468/1,468 with zero
+  divergences/gated cases are green. The <=1.0x target remains open.
 
 - 2026-07-24 — #B-6 second pass closed the structural fidelity audit.
   All 36 formerly `UNKNOWN` rows now have evidence-backed dispositions:

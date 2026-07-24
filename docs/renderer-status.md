@@ -3077,6 +3077,27 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-24: The first user-directed post-closeout hot-loop slice ports
+  Artboard background geometry and paint retention from pinned C++, without
+  changing the existing `Renderer`/`RenderFactory` boundary. Local/world
+  paths rebuild only under Path dirt, LocalClockwise shares Local's backend
+  owner, retained SolidColor changes mutate the Artboard-owned RenderPaint,
+  and unchanged draws skip synchronization. This mirrors
+  `artboard.cpp:1138-1157,1630-1698`,
+  `layout_component.cpp:91-120,1116-1124,1564-1571`,
+  `shape.cpp:137-159`, and `shape_paint.cpp:12-74,78-191` under
+  RF-2/RF-5/RF-17/RF-29. In the user-approved current environment, with
+  canonical hot-loop parameters unchanged,
+  `advance_blend_mode@0` moved from 3.855891x total / 10.851590x draw to
+  2.820281x / 3.270529x, and sample 0.25 moved from
+  3.843199x / 11.020004x to 2.829086x / 3.313557x
+  (`target/perf-hot-loop-artboard-owner-20260724.json`). The artifact's
+  3.535223x aggregate is recorded but does not establish a whole-corpus
+  regression or checkpoint pass because unrelated entries moved adversely on
+  this host. Pixels remain 1,468/1,468 exact with zero divergences/gated
+  cases, and both runtime golden modes remain 317/317 entries plus 647/647
+  segments with zero failures. The <=1.0x tier-5 target remains open.
+
 - 2026-07-23: The post-checkpoint redraw defect was localized to ordinary
   Shape traversal rebuilding path/effect command state on unchanged draws.
   The corrective file-corresponding port now gives clone-owned Shape,

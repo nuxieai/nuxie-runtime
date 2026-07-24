@@ -205,6 +205,93 @@ fn render_runtime_objects() -> String {
     out.push_str("        }\n");
     out.push_str("    }\n\n");
 
+    let shape_paint_property_key = |name: &str| {
+        definitions
+            .iter()
+            .find(|definition| definition.name == "Fill")
+            .and_then(|definition| {
+                properties_in_resolution_order(definition)
+                    .into_iter()
+                    .find(|property| property.name == name)
+            })
+            .unwrap_or_else(|| panic!("ShapePaint.{name} is present in generated schema"))
+            .key
+            .int
+    };
+    let stroke_property_key = |name: &str| {
+        definitions
+            .iter()
+            .find(|definition| definition.name == "Stroke")
+            .and_then(|definition| {
+                properties_in_resolution_order(definition)
+                    .into_iter()
+                    .find(|property| property.name == name)
+            })
+            .unwrap_or_else(|| panic!("Stroke.{name} is present in generated schema"))
+            .key
+            .int
+    };
+    let shape_paint_visible_key = shape_paint_property_key("isVisible");
+    let shape_paint_blend_mode_key = shape_paint_property_key("blendModeValue");
+    let fill_rule_key = shape_paint_property_key("fillRule");
+    let stroke_transform_key = stroke_property_key("transformAffectsStroke");
+    let stroke_thickness_key = stroke_property_key("thickness");
+
+    // ShapePaint::draw is virtual on a concrete Fill/Stroke, so pinned C++
+    // reads these generated members without redispatching through
+    // CoreRegistry. Emit the same concrete-object accessors for the retained
+    // Rust owner handle.
+    out.push_str("    pub(crate) fn shape_paint_is_visible(&self) -> Option<bool> {\n");
+    out.push_str("        match self {\n");
+    out.push_str(&format!(
+        "            Self::Fill(object) => object.bool_property({shape_paint_visible_key}),\n"
+    ));
+    out.push_str(&format!(
+        "            Self::Stroke(object) => object.bool_property({shape_paint_visible_key}),\n"
+    ));
+    out.push_str("            _ => None,\n");
+    out.push_str("        }\n");
+    out.push_str("    }\n\n");
+
+    out.push_str("    pub(crate) fn shape_paint_blend_mode_value(&self) -> Option<u64> {\n");
+    out.push_str("        match self {\n");
+    out.push_str(&format!(
+        "            Self::Fill(object) => object.uint_property({shape_paint_blend_mode_key}),\n"
+    ));
+    out.push_str(&format!(
+        "            Self::Stroke(object) => object.uint_property({shape_paint_blend_mode_key}),\n"
+    ));
+    out.push_str("            _ => None,\n");
+    out.push_str("        }\n");
+    out.push_str("    }\n\n");
+
+    out.push_str("    pub(crate) fn fill_rule(&self) -> Option<u64> {\n");
+    out.push_str("        match self {\n");
+    out.push_str(&format!(
+        "            Self::Fill(object) => object.uint_property({fill_rule_key}),\n"
+    ));
+    out.push_str("            _ => None,\n");
+    out.push_str("        }\n");
+    out.push_str("    }\n\n");
+
+    out.push_str("    pub(crate) fn stroke_transform_affects_stroke(&self) -> Option<bool> {\n");
+    out.push_str("        match self {\n");
+    out.push_str(&format!(
+        "            Self::Stroke(object) => object.bool_property({stroke_transform_key}),\n"
+    ));
+    out.push_str("            _ => None,\n");
+    out.push_str("        }\n");
+    out.push_str("    }\n\n");
+
+    out.push_str("    pub(crate) fn stroke_thickness(&self) -> Option<f32> {\n");
+    out.push_str("        match self {\n");
+    out.push_str(&format!(
+        "            Self::Stroke(object) => object.double_property({stroke_thickness_key}),\n"
+    ));
+    out.push_str("            _ => None,\n");
+    out.push_str("        }\n");
+    out.push_str("    }\n\n");
+
     render_enum_getter(
         &mut out,
         &definitions,

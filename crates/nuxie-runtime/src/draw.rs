@@ -2057,7 +2057,7 @@ impl ArtboardInstance {
                     inherited_opacity: render_opacity,
                     opacity_local,
                     paint_space_transform: command.paint_space_transform,
-                    is_owned_shape: container.type_name == "Shape",
+                    is_owned_shape: runtime_shape_paint_container_is_occurrence_owned(container),
                 });
             }
         }
@@ -2100,7 +2100,7 @@ impl ArtboardInstance {
                 if !filter.includes_container(container) {
                     continue;
                 }
-                if container.type_name == "Shape" {
+                if runtime_shape_paint_container_is_occurrence_owned(container) {
                     if runtime_owned_shape_gradient_is_collapsed(self, container, paint)
                         || !runtime_mark_seen_u32(&mut prepared, paint.global_id)
                     {
@@ -3647,7 +3647,7 @@ impl ArtboardInstance {
             if !filter.includes_container(container) {
                 continue;
             }
-            if container.type_name == "Shape" {
+            if runtime_shape_paint_container_is_occurrence_owned(container) {
                 if runtime_owned_shape_gradient_is_collapsed(self, container, paint)
                     || !runtime_mark_seen_u32(prepared, paint.global_id)
                 {
@@ -3824,14 +3824,27 @@ impl ArtboardInstance {
         apply_origin_transform: bool,
     ) -> Result<()> {
         self.set_frame_origin(apply_origin_transform);
-        self.synchronize_artboard_renderer(
-            runtime,
-            graph,
-            artboards,
-            external_images,
-            factory,
-            max_retained_decoded_image_bytes,
-        )?;
+        let needs_renderer_sync = {
+            let resources = self.render_resources.borrow();
+            !resources.initialized || resources.needs_paint_preparation(self, graph)
+        };
+        // Pinned C++ attaches the factory and constructs renderer members at
+        // Artboard initialization, then lets dirt-driven component updates
+        // mutate those owners. `Artboard::drawInternal` never re-enters that
+        // synchronization path (`artboard.cpp:1630-1698`). Rust's late
+        // factory seam therefore runs only while the occurrence is unbound or
+        // has actual preparation dirt, not on every clean draw (RF-2/RF-5/
+        // RF-17/RF-29).
+        if needs_renderer_sync {
+            self.synchronize_artboard_renderer(
+                runtime,
+                graph,
+                artboards,
+                external_images,
+                factory,
+                max_retained_decoded_image_bytes,
+            )?;
+        }
         let mut resources = self.render_resources.borrow_mut();
 
         self.begin_draw_frame();
@@ -4233,20 +4246,12 @@ impl ArtboardInstance {
             mounted_component_list_layout_revision,
         );
         let layout_bounds = layout_frame.bounds.as_ref().as_ref();
-        let background = runtime_prepared_background_frame(self, graph, layout_bounds);
-        if let Some(background) = background.as_ref() {
-            runtime_draw_background(
-                runtime,
-                self,
-                graph,
-                background,
-                factory,
-                renderer,
-                paint_by_global,
-                path_cache,
-                paint_configurations.as_deref_mut(),
-            )?;
-        }
+        runtime_draw_live_owned_artboard_paints(
+            self,
+            factory,
+            renderer,
+            paint_by_global.backend_context_id,
+        )?;
 
         // Ported from C++ `Artboard::drawInternal`
         // (`src/artboard.cpp:1652-1698`): traverse the clone-owned linked list
@@ -4290,7 +4295,7 @@ impl ArtboardInstance {
             }
 
             if drawable.kind == DrawableOrderKind::Drawable
-                && drawable.type_name == "Shape"
+                && drawable.family == RuntimeDrawableFamily::Shape
                 && let Some(shape_local) = drawable.local_id
             {
                 runtime_draw_live_owned_shape(
@@ -4306,7 +4311,9 @@ impl ArtboardInstance {
                 continue;
             }
 
-            if drawable.kind == DrawableOrderKind::Drawable && drawable.type_name == "Image" {
+            if drawable.kind == DrawableOrderKind::Drawable
+                && drawable.family == RuntimeDrawableFamily::Image
+            {
                 runtime_draw_live_image(
                     runtime,
                     self,
@@ -4321,7 +4328,10 @@ impl ArtboardInstance {
             }
 
             if drawable.kind == DrawableOrderKind::Drawable
-                && (drawable.type_name == "Text" || is_text_input_drawable_type(drawable.type_name))
+                && matches!(
+                    drawable.family,
+                    RuntimeDrawableFamily::Text | RuntimeDrawableFamily::TextInputConcrete
+                )
             {
                 runtime_draw_live_text_family(
                     runtime,
@@ -4343,7 +4353,7 @@ impl ArtboardInstance {
             // drawables. Their C++ draw methods contribute no pixels; the
             // concrete child subclasses above own the live rendering.
             if drawable.kind == DrawableOrderKind::Drawable
-                && matches!(drawable.type_name, "TextInput" | "TextInputDrawable")
+                && drawable.family == RuntimeDrawableFamily::TextInputContainer
             {
                 continue;
             }
@@ -4351,8 +4361,9 @@ impl ArtboardInstance {
             if drawable.kind == DrawableOrderKind::LayoutProxy
                 || (drawable.kind == DrawableOrderKind::Drawable
                     && matches!(
-                        drawable.type_name,
-                        "LayoutComponent" | "ForegroundLayoutDrawable"
+                        drawable.family,
+                        RuntimeDrawableFamily::LayoutComponent
+                            | RuntimeDrawableFamily::ForegroundLayoutDrawable
                     ))
             {
                 runtime_draw_live_layout_family(
@@ -4371,7 +4382,7 @@ impl ArtboardInstance {
             }
 
             if drawable.kind == DrawableOrderKind::Drawable
-                && sorted_drawable_is_nested_artboard(drawable.type_name)
+                && drawable.family == RuntimeDrawableFamily::NestedArtboard
             {
                 runtime_draw_live_nested_artboard(
                     runtime,
@@ -4395,7 +4406,7 @@ impl ArtboardInstance {
             }
 
             if drawable.kind == DrawableOrderKind::Drawable
-                && drawable.type_name == "ArtboardComponentList"
+                && drawable.family == RuntimeDrawableFamily::ArtboardComponentList
             {
                 runtime_draw_live_component_list(
                     runtime,
@@ -4420,7 +4431,7 @@ impl ArtboardInstance {
             }
 
             if drawable.kind == DrawableOrderKind::Drawable
-                && matches!(drawable.type_name, "ScriptedDrawable" | "ScriptedLayout")
+                && drawable.family == RuntimeDrawableFamily::ScriptedDrawable
             {
                 runtime_draw_live_scripted_drawable(
                     self,
@@ -4494,7 +4505,7 @@ impl ArtboardInstance {
                     return false;
                 }
 
-                if drawable.type_name == "ArtboardComponentList" {
+                if drawable.family == RuntimeDrawableFamily::ArtboardComponentList {
                     return drawable.local_id.is_some_and(|local_id| {
                         self.component_list_items
                             .get(&local_id)
@@ -4502,7 +4513,7 @@ impl ArtboardInstance {
                     });
                 }
 
-                if matches!(drawable.type_name, "ScriptedDrawable" | "ScriptedLayout")
+                if drawable.family == RuntimeDrawableFamily::ScriptedDrawable
                     && !drawable
                         .global_id
                         .is_some_and(|global_id| self.has_script_instance_for_global(global_id))
@@ -4510,7 +4521,7 @@ impl ArtboardInstance {
                     return false;
                 }
 
-                if drawable.type_name == "Image" {
+                if drawable.family == RuntimeDrawableFamily::Image {
                     // C++ `Image::willDraw` also requires a nonzero render
                     // opacity; the retained (include_invisible) stream defers
                     // that check to replay like the opacity types below.
@@ -4524,7 +4535,7 @@ impl ArtboardInstance {
                             || self.runtime_live_render_opacity_is_nonzero(drawable.local_id));
                 }
 
-                if sorted_drawable_is_nested_artboard(drawable.type_name) {
+                if drawable.family == RuntimeDrawableFamily::NestedArtboard {
                     // The public command-stream compatibility surface can be
                     // constructed from one graph without mounting the full
                     // artboard tree. In that case the successfully resolved
@@ -4537,7 +4548,7 @@ impl ArtboardInstance {
                     });
                 }
 
-                if sorted_drawable_uses_render_opacity(drawable.type_name) {
+                if drawable.family.uses_render_opacity() {
                     if include_invisible {
                         // Retain the drawable/paint topology across opacity
                         // updates. The prepared-frame replay applies C++'s
@@ -4559,7 +4570,7 @@ impl ArtboardInstance {
 
     fn runtime_will_draw_live_traversal(&self, drawable: &RuntimeDrawable) -> bool {
         self.runtime_will_draw(drawable, false)
-            && (!sorted_drawable_is_nested_artboard(drawable.type_name)
+            && (drawable.family != RuntimeDrawableFamily::NestedArtboard
                 || drawable
                     .local_id
                     .is_some_and(|local_id| self.nested_artboards.get(&local_id).is_some()))
@@ -5113,6 +5124,87 @@ impl ArtboardInstance {
         }
     }
 
+    /// Direct port of `LayoutComponent::update` ->
+    /// `Artboard::updateRenderPath`
+    /// (`src/layout_component.cpp:91-120`, `src/artboard.cpp:1138-1157`).
+    ///
+    /// C++ retains the background rectangle on the Artboard and rewinds it
+    /// only at this dependency/update node. It is not reconstructed by
+    /// `Artboard::drawInternal`.
+    pub(crate) fn update_runtime_artboard_render_paths(
+        &self,
+        local_id: usize,
+        dirt: ComponentDirt,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) {
+        if local_id != 0
+            || (dirt
+                & (ComponentDirt::PATH
+                    | ComponentDirt::WORLD_TRANSFORM
+                    | ComponentDirt::LAYOUT_STYLE))
+                .is_empty()
+        {
+            return;
+        }
+        if !graph
+            .shape_paint_containers
+            .iter()
+            .any(|container| container.type_name == "Artboard" && container.local_id == local_id)
+        {
+            return;
+        }
+        let Some(owner) = self.runtime_shapes.get(local_id) else {
+            return;
+        };
+        let bounds = layout_bounds
+            .and_then(|bounds| bounds.get(&local_id).copied())
+            .or_else(|| self.runtime_root_artboard_layout_bounds(graph))
+            .unwrap_or(RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: self.width,
+                height: self.height,
+            });
+        let left = -bounds.width * self.origin_x;
+        let top = -bounds.height * self.origin_y;
+        let local_commands =
+            runtime_rect_commands(left, top, left + bounds.width, top + bounds.height);
+        let local_path = Arc::new(runtime_raw_path_from_commands(&local_commands));
+        for path_kind in [
+            RuntimeShapePaintPathKind::Local,
+            RuntimeShapePaintPathKind::LocalClockwise,
+        ] {
+            owner.paint_paths[runtime_shape_paint_path_kind_slot(path_kind)].replace_retained(
+                RuntimeShapePathState {
+                    raw_path: Arc::clone(&local_path),
+                },
+            );
+        }
+
+        // Artboard::m_worldPath is the clip/non-scaling-stroke path. Preserve
+        // the exact frame-origin branch from `Artboard::updateRenderPath`.
+        let (world_left, world_top) = if self.frame_origin() {
+            (0.0, 0.0)
+        } else {
+            (left, top)
+        };
+        let world_commands = runtime_rect_commands(
+            world_left,
+            world_top,
+            world_left + bounds.width,
+            world_top + bounds.height,
+        );
+        owner.paint_paths[runtime_shape_paint_path_kind_slot(RuntimeShapePaintPathKind::World)]
+            .replace_retained(RuntimeShapePathState {
+                raw_path: Arc::new(runtime_raw_path_from_commands(&world_commands)),
+            });
+        for paint in &owner.paint_owners {
+            paint.invalidate_all_effects();
+            paint.mark_feather_dirty();
+        }
+    }
+
     /// Direct port of `Shape::update(RenderOpacity)` ->
     /// `ShapePaintContainer::propagateOpacity` ->
     /// `ShapePaintMutator::renderOpacity`
@@ -5125,7 +5217,8 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) {
         let Some(container) = graph.shape_paint_containers.iter().find(|container| {
-            container.type_name == "Shape" && container.local_id == container_local
+            runtime_shape_paint_container_is_occurrence_owned(container)
+                && container.local_id == container_local
         }) else {
             return;
         };
@@ -5183,7 +5276,7 @@ impl ArtboardInstance {
         for container in graph
             .shape_paint_containers
             .iter()
-            .filter(|container| container.type_name == "Shape")
+            .filter(|container| runtime_shape_paint_container_is_occurrence_owned(container))
         {
             let shape_local = container.local_id;
             let Some(shape) = self.runtime_shapes.get(shape_local) else {
@@ -5293,12 +5386,34 @@ impl ArtboardInstance {
                 .and_then(|shape| shape.paint_owners.get(owner.owner_index))
                 .is_some_and(|paint| paint.mutator_local == Some(local_id));
             if is_solid_color {
-                self.update_runtime_shape_paint_mutator(
+                let updated = self.update_runtime_shape_paint_mutator(
                     owner.shape_local,
                     owner.owner_index,
                     graph,
                     self.layout_constraint_bounds.as_deref(),
                 );
+                if !updated {
+                    continue;
+                }
+                let Some(paint) = self
+                    .runtime_shapes
+                    .get(owner.shape_local)
+                    .and_then(|shape| shape.paint_owners.get(owner.owner_index))
+                else {
+                    continue;
+                };
+                let render_color = match paint.paint_state.borrow().as_ref() {
+                    Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => *render_color,
+                    _ => continue,
+                };
+                // Direct port of `SolidColor::renderOpacityChanged`: once the
+                // ShapePaint has a RenderPaint, the callback changes only its
+                // color (`src/shapes/paint/solid_color.cpp:23-54`). Factory
+                // construction remains queued for an owner that has not yet
+                // reached `ShapePaint::initRenderPaint`.
+                if let Some(render_paint) = paint.backend.value.borrow_mut().paint.as_mut() {
+                    render_paint.color(render_color);
+                }
             }
         }
     }
@@ -5659,6 +5774,21 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Mat2D {
+        let Some(component) = self.component(local_id) else {
+            return Mat2D::IDENTITY;
+        };
+        if component.type_name == "Artboard"
+            || (component.type_name != "LayoutComponent"
+                && component.type_name != "NestedArtboardLayout"
+                && (layout_bounds.is_none()
+                    || component.parent_local.is_none_or(|parent_local| {
+                        !self
+                            .component(parent_local)
+                            .is_some_and(|parent| parent.layout_chain_has_layout_component)
+                    })))
+        {
+            return component.transform.world_transform;
+        }
         // Cycle guard: the parent walk below recurses on `parent_local`, which a
         // malformed-but-accepted file can make cyclic -> unbounded recursion.
         // Thread a visited set (C++'s DependencySorter::visit idiom,
@@ -8223,6 +8353,11 @@ struct RuntimeShapeEffectOwnerRef {
 }
 
 impl RuntimeShapeList {
+    fn backend_paints_need_realization(&self, context_id: u64) -> bool {
+        self.backend_context_id.get() != Some(context_id)
+            || !self.pending_backend_paints.borrow().is_empty()
+    }
+
     fn activate_backend_context(&self, context_id: u64) {
         if self.backend_context_id.replace(Some(context_id)) == Some(context_id) {
             return;
@@ -8350,7 +8485,7 @@ impl RuntimeShapeList {
             }
         }
         for (container_index, container) in graph.shape_paint_containers.iter().enumerate() {
-            if container.type_name != "Shape" {
+            if !runtime_shape_paint_container_is_occurrence_owned(container) {
                 continue;
             }
             let shape = shapes.slot_mut(container.local_id);
@@ -8652,6 +8787,24 @@ impl RuntimeShapeList {
             }
         }
     }
+
+    /// `SolidColor::colorValueChanged` is an immediate property callback, not
+    /// a request to reconstruct the complete ShapePaint on the next draw
+    /// (`src/shapes/paint/solid_color.cpp:23-54`). Preserve the mutator dirt
+    /// needed to refresh the retained CPU state without queuing backend work;
+    /// the callback writes the already-owned RenderPaint directly.
+    pub(crate) fn mark_solid_color_changed(&self, local_id: usize) {
+        if let Some(owners) = self.paint_owners_by_component_local.get(local_id) {
+            for owner in owners {
+                if let Some(paint) = self
+                    .get(owner.shape_local)
+                    .and_then(|shape| shape.paint_owners.get(owner.owner_index))
+                {
+                    paint.mark_mutator_dirty();
+                }
+            }
+        }
+    }
 }
 
 /// One clone-owned runtime drawable. This is the direct Rust counterpart of
@@ -8791,6 +8944,54 @@ struct RuntimeTextPathOwnerKey {
     slot: usize,
 }
 
+/// Concrete virtual draw family retained with each cloned Drawable. Pinned
+/// C++ pays one vtable dispatch from `Artboard::drawInternal`; it does not
+/// rediscover the subclass through strings on every frame
+/// (`src/artboard.cpp:1652-1698`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeDrawableFamily {
+    Shape,
+    Image,
+    Text,
+    TextInputConcrete,
+    TextInputContainer,
+    LayoutComponent,
+    ForegroundLayoutDrawable,
+    NestedArtboard,
+    ArtboardComponentList,
+    ScriptedDrawable,
+    ClipProxy,
+    Other,
+}
+
+impl RuntimeDrawableFamily {
+    fn from_type_name(type_name: &str) -> Self {
+        match type_name {
+            "Shape" => Self::Shape,
+            "Image" => Self::Image,
+            "Text" => Self::Text,
+            "TextInputCursor"
+            | "TextInputSelectedText"
+            | "TextInputSelection"
+            | "TextInputText" => Self::TextInputConcrete,
+            "TextInput" | "TextInputDrawable" => Self::TextInputContainer,
+            "LayoutComponent" => Self::LayoutComponent,
+            "ForegroundLayoutDrawable" => Self::ForegroundLayoutDrawable,
+            "NestedArtboard" | "NestedArtboardLeaf" | "NestedArtboardLayout" => {
+                Self::NestedArtboard
+            }
+            "ArtboardComponentList" => Self::ArtboardComponentList,
+            "ScriptedDrawable" | "ScriptedLayout" => Self::ScriptedDrawable,
+            "ClippingShapeProxyDrawable" => Self::ClipProxy,
+            _ => Self::Other,
+        }
+    }
+
+    fn uses_render_opacity(self) -> bool {
+        matches!(self, Self::Shape | Self::TextInputContainer)
+    }
+}
+
 /// Clone-owned counterpart of `LayoutComponent::m_backgroundRect`,
 /// `m_localPath`, and `m_worldPath`.
 #[derive(Debug, Clone)]
@@ -8879,6 +9080,7 @@ pub(crate) struct RuntimeDrawable {
     local_id: Option<usize>,
     global_id: Option<u32>,
     type_name: &'static str,
+    family: RuntimeDrawableFamily,
     resolved_image_asset_global: Option<u32>,
     referenced_artboard_global: Option<u32>,
     layout_local: Option<usize>,
@@ -8908,6 +9110,7 @@ impl RuntimeDrawable {
             local_id: drawable.local_id,
             global_id: drawable.global_id,
             type_name: drawable.type_name,
+            family: RuntimeDrawableFamily::from_type_name(drawable.type_name),
             resolved_image_asset_global: drawable.resolved_image_asset_global,
             referenced_artboard_global: drawable.referenced_artboard_global,
             layout_local: drawable.layout_local,
@@ -8938,6 +9141,7 @@ impl RuntimeDrawable {
             local_id: None,
             global_id: None,
             type_name: "ClippingShapeProxyDrawable",
+            family: RuntimeDrawableFamily::ClipProxy,
             resolved_image_asset_global: None,
             referenced_artboard_global: None,
             layout_local: None,
@@ -12773,7 +12977,6 @@ pub(crate) struct RuntimeArtboardPathState {
     layout_bounds: Option<RuntimeLayoutBoundsFrame>,
     path_composer_lookup: Option<RuntimePathComposerLookupFrame>,
     artboard_clip: Option<RuntimeRetainedRenderPath>,
-    background_paths: RuntimeRetainedRenderPathSlots,
     clip_paths: RuntimeRetainedRenderPathSlots,
     draw_paths: RuntimeDrawPathSlots,
     path_geometry_commands: RuntimePathGeometryCommandSlots,
@@ -12990,13 +13193,6 @@ struct RuntimeLiveTraversalFrame {
     layout_bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
     component_list_item_bounds: Arc<BTreeMap<usize, Vec<RuntimeLayoutBounds>>>,
     commands: Vec<RuntimeDrawableDispatch>,
-}
-
-#[derive(Clone)]
-struct RuntimePreparedBackgroundFrame {
-    container_local: usize,
-    path_commands: Arc<Vec<RuntimePathCommand>>,
-    paints: Arc<Vec<RuntimeShapePaintCommand>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14234,19 +14430,6 @@ impl RuntimeArtboardPathState {
         runtime_cached_retained_render_path(slot, key, factory, commands)
     }
 
-    fn background_path(
-        &mut self,
-        key: RuntimeRetainedRenderPathCacheKey,
-        local_id: usize,
-        factory: &mut dyn RenderFactory,
-        commands: &[RuntimePathCommand],
-    ) -> &mut Box<dyn RenderPath> {
-        let slot = self
-            .background_paths
-            .slot_mut(key.graph_global_id, local_id);
-        runtime_cached_retained_render_path(slot, key, factory, commands)
-    }
-
     fn draw_path(
         &mut self,
         key: RuntimeDrawPathCacheKey,
@@ -15334,215 +15517,62 @@ fn preallocate_render_paint_for_instance(
     }
 }
 
-fn runtime_draw_background(
-    runtime: &RuntimeFile,
+/// Direct port of the Artboard ShapePaint loop in
+/// `Artboard::drawInternal` (`src/artboard.cpp:1630-1650`). The Artboard owns
+/// both its ordered paints and the paths selected by each paint. Clean draws
+/// only read those retained owners.
+fn runtime_draw_live_owned_artboard_paints(
     instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
-    background: &RuntimePreparedBackgroundFrame,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
-    paint_by_global: &mut RuntimeRenderPaints,
-    path_cache: &mut RuntimeArtboardPathState,
-    mut paint_configurations: Option<&mut RuntimePaintOwnerSlots>,
+    backend_context_id: u64,
 ) -> Result<()> {
-    for runtime_paint in background.paints.iter() {
-        let global_id = runtime_paint.paint_global_id;
-        let paint_configuration_is_current =
-            paint_configurations
-                .as_deref()
-                .is_some_and(|configurations| {
-                    configurations.is_current(
-                        global_id,
-                        runtime_paint_configuration_epoch(instance, runtime_paint),
-                    )
-                });
-        if !paint_configuration_is_current {
-            let object = runtime
-                .object(global_id as usize)
-                .with_context(|| format!("missing paint global {global_id}"))?;
-            let render_paint = paint_by_global
-                .paint_mut(global_id)
-                .with_context(|| format!("missing render paint for global {global_id}"))?
-                .as_mut();
-            if let Some(configurations) = paint_configurations.as_mut() {
-                runtime_configure_paint_with_cache(
-                    render_paint,
-                    configurations,
-                    global_id,
-                    instance,
-                    object,
-                    runtime_paint,
-                )?;
-            } else {
-                runtime_configure_paint(render_paint, instance, object, runtime_paint, None)?;
-            }
-        }
-        renderer.save();
-        renderer.transform(RenderMat2D::IDENTITY);
-        if let Some(feather) = runtime_paint.feather_state.as_ref()
-            && runtime_feather_uses_world_space(feather)
-            && !feather.inner
-            && runtime_feather_has_offset(feather)
+    let artboard_local = 0;
+    let Some(artboard) = instance.runtime_shapes.get(artboard_local) else {
+        return Ok(());
+    };
+    let shape_world = instance
+        .component(artboard_local)
+        .map_or(Mat2D::IDENTITY, |component| {
+            component.transform.world_transform
+        });
+    for owner in &artboard.paint_owners {
+        if !runtime_owned_shape_paint_is_visible(instance, owner)
+            || !runtime_shape_paint_state_is_visible(&owner.paint_state.borrow())
         {
-            renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+            continue;
         }
-        let fill_rule = runtime_paint.fill_rule;
-        // C++ retains one artboard background path independently of each
-        // ShapePaint's fill rule. Individual fills only mutate the path at
-        // draw time; the inner-feather clip observes the retained default.
-        let key = path_cache.retained_render_path_key(instance, graph, RenderFillRule::NonZero);
-        let background_path = path_cache.background_path(
-            key,
-            background.container_local,
-            factory,
-            background.path_commands.as_slice(),
-        );
-        let path = if let Some(feather) = runtime_paint.feather_state.as_ref()
-            && feather.inner
-        {
-            renderer.clip_path(background_path.as_ref());
-            path_cache.draw_path(
-                RuntimeDrawPathCacheKey {
-                    kind: RuntimeDrawPathCacheKind::Draw,
-                    path_kind: runtime_draw_path_cache_path_kind(runtime_paint),
-                    local_id: Some(runtime_paint.paint_local),
-                    path_index: runtime_paint.path_slot_index,
-                },
-                runtime_draw_path_revision(instance, runtime_paint.path_kind),
-                factory,
-                feather.inner_path_commands.as_slice(),
-                RenderFillRule::Clockwise,
-            )
+        let path_kind = runtime_live_owned_shape_paint_path_kind(instance, owner);
+        // LayoutComponent::localClockwisePath returns the exact same
+        // ShapePaintPath owner as localPath; Artboard inherits that contract
+        // (`layout_component.cpp:1569-1571`). Keep the shared backend owner,
+        // not merely shared geometry, so an even-odd/background fill followed
+        // by a clockwise inner-feather clip reuses the same RenderPath just
+        // like C++ (RF-2/RF-5/RF-17).
+        let owner_path_kind = if path_kind == RuntimeShapePaintPathKind::LocalClockwise {
+            RuntimeShapePaintPathKind::Local
         } else {
-            if let Some(feather) = runtime_paint.feather_state.as_ref()
-                && !runtime_feather_uses_world_space(feather)
-                && runtime_feather_has_offset(feather)
-            {
-                renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
-            }
-            background_path
+            path_kind
         };
-        if runtime_paint.paint_type == RuntimeShapePaintKind::Fill {
-            path.fill_rule(fill_rule);
-        }
-        renderer.draw_path(
-            path.as_ref(),
-            paint_by_global
-                .paint(global_id)
-                .with_context(|| format!("missing render paint for global {global_id}"))?
-                .as_ref(),
-        );
-        renderer.restore();
+        let Some(path) = instance
+            .runtime_shapes
+            .paint_path_owner(artboard_local, owner_path_kind)
+        else {
+            continue;
+        };
+        runtime_draw_live_owned_shape_paint(
+            instance,
+            shape_world,
+            owner,
+            path,
+            path_kind,
+            true,
+            backend_context_id,
+            factory,
+            renderer,
+        )?;
     }
     Ok(())
-}
-
-fn runtime_prepared_background_frame(
-    instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
-    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-) -> Option<RuntimePreparedBackgroundFrame> {
-    let container = graph
-        .shape_paint_containers
-        .iter()
-        .find(|container| container.local_id == 0)?;
-    let background_bounds = layout_bounds
-        .and_then(|bounds| bounds.get(&0).copied())
-        .or_else(|| instance.runtime_root_artboard_layout_bounds(graph))
-        .unwrap_or(RuntimeLayoutBounds {
-            x: 0.0,
-            y: 0.0,
-            width: instance.width,
-            height: instance.height,
-        });
-    // Preserve C++ Artboard::updateRenderPath's multiplication order,
-    // including the signed zero visible to renderer streams.
-    let left = -background_bounds.width * instance.origin_x;
-    let top = -background_bounds.height * instance.origin_y;
-    let path_commands = Arc::new(runtime_rect_commands(
-        left,
-        top,
-        left + background_bounds.width,
-        top + background_bounds.height,
-    ));
-    let paints = container
-        .paints
-        .iter()
-        .filter_map(|paint| {
-            runtime_background_shape_paint_command(
-                instance,
-                paint,
-                container.blend_mode_value,
-                path_commands.as_slice(),
-            )
-        })
-        .collect::<Vec<_>>();
-    if paints.is_empty() {
-        return None;
-    }
-    Some(RuntimePreparedBackgroundFrame {
-        container_local: container.local_id,
-        path_commands,
-        paints: Arc::new(paints),
-    })
-}
-
-fn runtime_background_shape_paint_command(
-    instance: &ArtboardInstance,
-    paint: &ShapePaintNode,
-    container_blend_mode_value: u32,
-    path_commands: &[RuntimePathCommand],
-) -> Option<RuntimeShapePaintCommand> {
-    if !runtime_shape_paint_is_visible(instance, paint) {
-        return None;
-    }
-    let render_opacity = instance
-        .component(0)
-        .map(|component| component.transform.render_opacity)
-        .unwrap_or(1.0);
-    let paint_state = runtime_shape_paint_state(instance, paint, render_opacity);
-    if !runtime_shape_paint_state_is_visible(&paint_state) {
-        return None;
-    }
-    let mut feather_state = runtime_feather_state(
-        instance,
-        paint.feather.as_ref(),
-        path_commands,
-        Mat2D::IDENTITY,
-    );
-    if let Some(feather_state) = feather_state.as_mut() {
-        prune_empty_path_segments(&mut feather_state.inner_path_commands);
-    }
-    Some(RuntimeShapePaintCommand {
-        paint_local: paint.local_id,
-        paint_global_id: paint.global_id,
-        mutator_local: paint.mutator_local,
-        paint_type: runtime_shape_paint_kind(paint.paint_type),
-        fill_rule: runtime_live_shape_paint_fill_rule(instance, paint),
-        path_kind: RuntimeShapePaintPathKind::Local,
-        path_slot_index: 0,
-        clip_path_slot_index: 0,
-        blend_mode_value: paint.blend_mode_value,
-        render_blend_mode_value: runtime_shape_paint_blend_mode_value(
-            paint.blend_mode_value,
-            container_blend_mode_value,
-        ),
-        render_opacity,
-        paint_state,
-        feather_state,
-        paint_space_transform: None,
-        path_commands: Vec::new(),
-        effect_path_commands: Vec::new(),
-        has_effect_path: false,
-        needs_save_operation: true,
-        shape_world_override: None,
-        aliases_local_clockwise_path: false,
-        uses_temporary_paint: false,
-        text_path_bucket_slot: None,
-        text_paint_pool: None,
-        ensure_text_paint_pool_after_draw: None,
-        prepared_raw_path: None,
-    })
 }
 
 fn runtime_prepare_gradient_paint_command(
@@ -16382,6 +16412,17 @@ fn runtime_realize_owned_shape_paints(
     paint_by_global: &mut RuntimeRenderPaints,
 ) -> Result<()> {
     let backend_context_id = paint_by_global.backend_context_id;
+    // C++ `ShapePaint::draw` reads the already-owned RenderPaint directly;
+    // construction/configuration happens only in `onAdded` or a property
+    // callback (`shape_paint.cpp:50-74`, `solid_color.cpp:23-54`). Keep the
+    // Rust backend-context seam behind the same owner dirt gate so a clean
+    // draw does not even enter realization work (RF-2/RF-5/RF-17).
+    if !instance
+        .runtime_shapes
+        .backend_paints_need_realization(backend_context_id)
+    {
+        return Ok(());
+    }
     instance
         .runtime_shapes
         .activate_backend_context(backend_context_id);
@@ -16617,7 +16658,7 @@ fn runtime_realize_owned_shape_gradients_in_dependency_order(
             else {
                 continue;
             };
-            if container.type_name != "Shape" {
+            if !runtime_shape_paint_container_is_occurrence_owned(container) {
                 continue;
             }
             let Some(paint) = container.paints.get(paint_ref.paint_index) else {
@@ -16863,8 +16904,8 @@ fn runtime_draw_live_owned_shape_paint(
         (&source_path.backend, source_retained.raw_path.as_ref())
     };
     let draw_fill_rule = (owner.paint_type == RuntimeShapePaintKind::Fill).then(|| {
-        runtime_draw_property_key_for_name("Fill", "fillRule")
-            .and_then(|key| instance.uint_property(owner.paint_local, key))
+        instance
+            .fill_rule(owner.paint_local)
             .map(runtime_fill_rule_for_value)
             .unwrap_or(owner.authored_fill_rule)
     });
@@ -20399,12 +20440,15 @@ fn runtime_owned_shape_paint_is_visible(
     artboard: &ArtboardInstance,
     paint: &RuntimeShapePaintOwner,
 ) -> bool {
-    let visible = shape_paint_is_visible_property_key()
-        .and_then(|key| artboard.bool_property(paint.paint_local, key))
+    // Pinned C++ reaches the concrete generated Fill/Stroke members through
+    // the retained ShapePaint pointer (`shape_paint.cpp:78-191`). The typed
+    // arena accessor is that same owner read; no CoreRegistry redispatch.
+    let visible = artboard
+        .shape_paint_is_visible(paint.paint_local)
         .unwrap_or(true);
     visible
         && (paint.paint_type != RuntimeShapePaintKind::Stroke
-            || runtime_stroke_thickness_for_local(artboard, paint.paint_local).unwrap_or(1.0) > 0.0)
+            || artboard.stroke_thickness(paint.paint_local).unwrap_or(1.0) > 0.0)
 }
 
 fn runtime_stroke_thickness(
@@ -20479,8 +20523,8 @@ fn runtime_live_owned_shape_paint_blend_mode_value(
     instance: &ArtboardInstance,
     paint: &RuntimeShapePaintOwner,
 ) -> u32 {
-    let paint_blend_mode_value = runtime_draw_property_key_for_name("ShapePaint", "blendModeValue")
-        .and_then(|key| instance.uint_property(paint.paint_local, key))
+    let paint_blend_mode_value = instance
+        .shape_paint_blend_mode_value(paint.paint_local)
         .and_then(|value| u32::try_from(value).ok())
         .unwrap_or(paint.authored_blend_mode_value);
     let container_blend_mode_value =
@@ -20497,6 +20541,10 @@ fn runtime_shape_paint_kind(kind: ShapePaintKind) -> RuntimeShapePaintKind {
         ShapePaintKind::Stroke => RuntimeShapePaintKind::Stroke,
         ShapePaintKind::Unknown => RuntimeShapePaintKind::Unknown,
     }
+}
+
+fn runtime_shape_paint_container_is_occurrence_owned(container: &ShapePaintContainerNode) -> bool {
+    matches!(container.type_name, "Shape" | "Artboard")
 }
 
 fn runtime_shape_paint_path_kind(kind: ShapePaintPathKind) -> Option<RuntimeShapePaintPathKind> {
@@ -20540,8 +20588,8 @@ fn runtime_live_owned_shape_paint_path_kind(
 ) -> RuntimeShapePaintPathKind {
     match paint.paint_type {
         RuntimeShapePaintKind::Fill => {
-            let fill_rule = runtime_draw_property_key_for_name("Fill", "fillRule")
-                .and_then(|key| artboard.uint_property(paint.paint_local, key))
+            let fill_rule = artboard
+                .fill_rule(paint.paint_local)
                 .map(runtime_fill_rule_for_value)
                 .unwrap_or(paint.authored_fill_rule);
             if fill_rule == RenderFillRule::Clockwise {
@@ -20551,14 +20599,12 @@ fn runtime_live_owned_shape_paint_path_kind(
             }
         }
         RuntimeShapePaintKind::Stroke => {
-            let transform_affects_stroke =
-                runtime_draw_property_key_for_name("Stroke", "transformAffectsStroke")
-                    .and_then(|key| artboard.bool_property(paint.paint_local, key))
-                    .unwrap_or(matches!(
-                        paint.authored_path_kind,
-                        RuntimeShapePaintPathKind::Local
-                            | RuntimeShapePaintPathKind::LocalClockwise
-                    ));
+            let transform_affects_stroke = artboard
+                .stroke_transform_affects_stroke(paint.paint_local)
+                .unwrap_or(matches!(
+                    paint.authored_path_kind,
+                    RuntimeShapePaintPathKind::Local | RuntimeShapePaintPathKind::LocalClockwise
+                ));
             if transform_affects_stroke {
                 RuntimeShapePaintPathKind::Local
             } else {
@@ -25965,21 +26011,10 @@ fn path_needs_clockwise_reversal(path: &PathGeometryNode, transform: Mat2D) -> b
     is_not_clockwise != path.is_hole
 }
 
-fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
-    matches!(type_name, "Shape" | "TextInputDrawable")
-}
-
 fn is_text_input_drawable_type(type_name: &str) -> bool {
     matches!(
         type_name,
         "TextInputCursor" | "TextInputSelectedText" | "TextInputSelection" | "TextInputText"
-    )
-}
-
-fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
-    matches!(
-        type_name,
-        "NestedArtboard" | "NestedArtboardLeaf" | "NestedArtboardLayout"
     )
 }
 
@@ -27757,6 +27792,101 @@ mod tests {
             runtime_path_commands_from_raw_path(after.raw_path.as_ref()),
             "the owner rebuilds its local geometry without baking the changed \
              world transform into that geometry"
+        );
+    }
+
+    #[test]
+    fn artboard_background_path_is_retained_until_artboard_path_dirt() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9662);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 50.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 0);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+
+        let file = read_runtime_file(&bytes).expect("synthetic background imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic background graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+        fn retained_background(instance: &ArtboardInstance) -> RuntimeShapePathState {
+            instance
+                .runtime_shapes
+                .paint_path_owner(0, RuntimeShapePaintPathKind::Local)
+                .and_then(|owner| owner.retained.borrow().clone())
+                .expect("Artboard owns its settled local background path")
+        }
+        let before = retained_background(&instance);
+
+        let mut factory = CountingFactory {
+            stats: Rc::new(CountingStats::default()),
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            &instance,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeArtboardPathState::default();
+        let mut renderer = RecordingRenderer {
+            ops: Rc::new(RefCell::new(Vec::new())),
+        };
+        for _ in 0..2 {
+            instance
+                .draw_artboard_internal_with_render_cache(
+                    &file,
+                    graph,
+                    &graphs.artboards,
+                    &mut factory,
+                    &mut renderer,
+                    &mut paint_cache,
+                    &mut path_cache,
+                )
+                .expect("unchanged background draw succeeds");
+        }
+        let after_clean_draws = retained_background(&instance);
+        assert!(
+            Arc::ptr_eq(&before.raw_path, &after_clean_draws.raw_path),
+            "Artboard::drawInternal reads m_ShapePaints and m_localPath; only \
+             LayoutComponent::update calls Artboard::updateRenderPath \
+             (artboard.cpp:1138-1157,1630-1650; layout_component.cpp:91-120)"
+        );
+
+        let origin_x = property_key_for_name("Artboard", "originX").expect("Artboard.originX key");
+        assert!(instance.set_double_property(0, origin_x, 0.25));
+        instance.update_components();
+        let after_path_dirt = retained_background(&instance);
+        assert!(
+            !Arc::ptr_eq(&before.raw_path, &after_path_dirt.raw_path),
+            "Artboard::originXChanged adds Path dirt before updateRenderPath \
+             rebuilds the owner-local rectangle (artboard.cpp:1755-1768)"
+        );
+
+        let width =
+            property_key_for_name("LayoutComponent", "width").expect("LayoutComponent.width key");
+        assert!(instance.set_double_property(0, width, 150.0));
+        instance.update_components();
+        let after_width_dirt = retained_background(&instance);
+        assert!(
+            !Arc::ptr_eq(&after_path_dirt.raw_path, &after_width_dirt.raw_path),
+            "LayoutComponent widthChanged dirties layout; a changed solved \
+             width adds Path dirt before Artboard::updateRenderPath \
+             (layout_component.cpp:1116-1124,1564-1565; \
+             artboard.cpp:1138-1157)"
         );
     }
 
@@ -30373,6 +30503,7 @@ mod tests {
             local_id: Some(0),
             global_id: Some(900),
             type_name: "ScriptedDrawable",
+            family: RuntimeDrawableFamily::ScriptedDrawable,
             resolved_image_asset_global: None,
             referenced_artboard_global: None,
             layout_local: None,
@@ -30442,6 +30573,7 @@ mod tests {
             local_id: Some(0),
             global_id: Some(901),
             type_name: "ScriptedDrawable",
+            family: RuntimeDrawableFamily::ScriptedDrawable,
             resolved_image_asset_global: None,
             referenced_artboard_global: None,
             layout_local: None,
@@ -31955,12 +32087,12 @@ mod tests {
         let unmounted_drawable = unmounted
             .runtime_drawables
             .iter()
-            .find(|drawable| sorted_drawable_is_nested_artboard(drawable.type_name))
+            .find(|drawable| drawable.family == RuntimeDrawableFamily::NestedArtboard)
             .expect("nested drawable");
         let mounted_drawable = mounted
             .runtime_drawables
             .iter()
-            .find(|drawable| sorted_drawable_is_nested_artboard(drawable.type_name))
+            .find(|drawable| drawable.family == RuntimeDrawableFamily::NestedArtboard)
             .expect("nested drawable");
 
         assert!(

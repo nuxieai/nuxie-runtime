@@ -141,6 +141,31 @@ impl InstanceObjectArena {
             .and_then(|object| object.bool_property(property_key))
     }
 
+    pub(crate) fn shape_paint_is_visible(&self, local_id: usize) -> Option<bool> {
+        self.object(local_id)
+            .and_then(InstanceObjectStorage::shape_paint_is_visible)
+    }
+
+    pub(crate) fn shape_paint_blend_mode_value(&self, local_id: usize) -> Option<u64> {
+        self.object(local_id)
+            .and_then(InstanceObjectStorage::shape_paint_blend_mode_value)
+    }
+
+    pub(crate) fn fill_rule(&self, local_id: usize) -> Option<u64> {
+        self.object(local_id)
+            .and_then(InstanceObjectStorage::fill_rule)
+    }
+
+    pub(crate) fn stroke_transform_affects_stroke(&self, local_id: usize) -> Option<bool> {
+        self.object(local_id)
+            .and_then(InstanceObjectStorage::stroke_transform_affects_stroke)
+    }
+
+    pub(crate) fn stroke_thickness(&self, local_id: usize) -> Option<f32> {
+        self.object(local_id)
+            .and_then(InstanceObjectStorage::stroke_thickness)
+    }
+
     pub(crate) fn set_bool_property(
         &mut self,
         local_id: usize,

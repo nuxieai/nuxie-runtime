@@ -1,5 +1,9 @@
 # #B-6 Execution Plan — Structural Fidelity Audit (447 rows)
 
+Status: **COMPLETE.** Phases 0–3 completed on 2026-07-21. The
+post-RB-1/RD-1 Phase 4 second pass completed on 2026-07-24; see
+`SECOND_PASS.md`. `make b6-audit-check` is the permanent closure ratchet.
+
 Roles: a PLANNER session (the parity orchestrator) owns rules, triage, and
 remediation decisions. An EXECUTOR session (cheaper model, e.g.
 Sonnet-class) performs the mechanical audit sweep described here. The
@@ -70,6 +74,14 @@ The planner reviews SUMMARY.md, spot-verifies a sample of DIVERGENT and
 ISOMORPHIC rows (adversarial re-check), then converts findings into:
 rebuild tickets (RB-n, like RB-1), explicit D-rows (user decision), or
 rulebook amendments when a "violation" recurs because the rule was wrong.
+
+## Phase 4 — Post-rebuild second pass (planner, completed 2026-07-24)
+
+Re-audit the 36 UNKNOWN rows and the five Family C mechanism families after
+RB-1/RD-1. Missing/incomplete Rust lifecycles use TRACKED-GAP with an existing
+register owner; they do not fabricate a DIVERGENT mechanism. Update the
+correspondence manifest, summary, triage, register, and closeout status, then
+install a mechanical zero-UNKNOWN/count/ownership ratchet.
 
 ## Escalation rules (executor)
 

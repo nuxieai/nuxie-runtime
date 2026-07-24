@@ -35,7 +35,7 @@ it has no retained replay caches"), with the standing rule that any epoch
 later found compensating for a missed PORT (not bridging to the renderer)
 is carved out and fixed individually. USER APPROVED 2026-07-21 — recorded as register D-12; the ~60-70 Family B rows are closed as documented-and-intentional.
 
-## Family C — New rebuild candidates (planner-verified or pending)
+## Family C — New rebuild candidates (second pass resolved 2026-07-24)
 
 - **RB-2 (open): focus system** (focus-input cluster, 3/3 rows, high
   confidence, spot-verified): C++ FocusNode retains live Focusable
@@ -44,18 +44,24 @@ is carved out and fixed individually. USER APPROVED 2026-07-21 — recorded as r
   possible behavior gap: no non-test consumer of take_events, no mapped
   key/text/gamepad focus dispatch — intersects #FT-TEXT's keyboard work.
   Small subsystem; rebuild after RB-1's pattern.
-- **Pending planner verification** (one pass each before ticketing):
-  scripting `deferred_script_advance_queue` (3), mesh/slice vertex
-  snapshot family (3-5), `script input kind/name/default` snapshots (4),
-  `solid-color revision handoff` (1), `target_lookup_rebuild` (1).
+- **RB-3:** `deferred_script_advance_queue` remains live on ScriptedDrawable,
+  ScriptedObject, and ScriptedPathEffect.
+- **Resolved ADAPTED:** the five mesh/slice rows no longer compare copied
+  source snapshots after RD-1. Their owner-local settled bytes are RF-28
+  factory-late backend state behind direct C++ dirt, not drift polling.
+- **RB-4:** import-time ScriptInput kind/name/default metadata is valid AF-5,
+  but scalar scene-rebind rehydration remains live and divergent.
+- **RB-5:** the solid-color revision handoff remains live and delays the
+  C++-owned retained paint mutation.
+- **RB-2:** the focus target lookup rebuild remains live and stays with the
+  already-open focus rebuild.
 
-## Family D — UNKNOWN (36) and N/A (48)
+## Family D — UNKNOWN second pass (closed 2026-07-24)
 
-N/A rows are the manifest's absent/not-applicable files — correct. The 36
-UNKNOWNs (9 animation, 9 text, 4 assets-importers, 4 constraints, 3
-lua-scripting, 3 scripted, rest scattered) get a focused second pass with
-the blockers named in each record; schedule after RB-1 lands so the
-data-adjacent ones audit against stable code.
+The focused post-RB-1/RD-1 pass is recorded in `SECOND_PASS.md`: 30 rows are
+register-owned TRACKED-GAP, 5 are ADAPTED, and the unreferenced pinned-C++
+`Mat2D::findMaxScale` helper is N/A. UNKNOWN is mechanically ratcheted to zero
+by `make b6-audit-check`.
 
 ## Judge feedback (for the spec)
 

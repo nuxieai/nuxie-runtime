@@ -98,6 +98,20 @@ API, text caret/hit/selection geometry richer than upstream public headers.
 | C2 | Only ~14/317 entries exercise any pointer input; `structural` verification mode used by zero entries (fine — but means it's untested machinery). | Grow input-script corpus alongside V5. |
 | C3 | Corpus is upstream test assets + a few demos; no systematic ingestion of *production Nuxie flow files*. | Add a private product-corpus lane: every shipped Nuxie flow runs the golden compare in CI. This is the strongest "verifiable replacement *for our product*" gate available. |
 
+## RB — Structural rebuild follow-ups
+
+These are architecture findings with live mutation-gated Rust mechanisms.
+They are implementation tickets, not UNKNOWN audit rows. Closing one requires
+porting the pinned C++ ownership/update lifecycle and deleting the named
+mechanism under the ordinary, scripted, probe, and applicable pixel floors.
+
+| id | subsystem | named mechanism | status |
+|---|---|---|---|
+| RB-2 | Focus ownership/projection | `RuntimeFocusTree::sync` descriptor projection plus `target_nodes` rebuild instead of retained live `Focusable`/`FocusData` relationships | OPEN |
+| RB-3 | Scripted-object advance | `script_advance_queue` stores elapsed steps during component advance and replays them later at a factory-bearing facade | OPEN |
+| RB-4 | Scalar ScriptInput binding | `rehydrate_script_listener_actions` rescans and hydrates scalar inputs at scene rebind instead of retaining the C++ `ScriptInput`/`DataBindContext` push relationship | OPEN |
+| RB-5 | SolidColor paint mutation | `solid_color_paint_revisions` defers the C++ `SolidColor::colorValueChanged` retained-paint mutation to a later draw handoff | OPEN |
+
 ## D — Deliberate-divergence register (declare, don't fix)
 
 These are recorded choices. A public "verifiable replacement" claim should

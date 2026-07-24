@@ -43,7 +43,11 @@ subsystem must state which sibling files were swept and cleared.
 **Verdict thresholds:** ADAPTED requires naming the idiom rule (see
 PORTING.md architecture-fidelity rules). DIVERGENT requires >=1 mechanism
 passing the mutation-timing gate; keyword matches alone downgrade to
-ADAPTED with the explaining idiom rule.
+ADAPTED with the explaining idiom rule. TRACKED-GAP is reserved for a C++
+lifecycle that the mapped Rust runtime does not implement completely: it must
+cite an existing F/A/C/RB register owner and must not invent a mutation-gated
+mechanism merely to obtain DIVERGENT. N/A means there is no applicable live
+runtime seam at the pinned C++ ref.
 
 ## Named idiom rules (seed set; grow in PORTING.md)
 
@@ -74,7 +78,7 @@ ADAPTED with the explaining idiom rule.
 ```
 row_id, cpp_files[], rust_module, subsystem_cluster,
 sibling_files_swept[],
-verdict: ISOMORPHIC | ADAPTED | DIVERGENT,
+verdict: ISOMORPHIC | ADAPTED | DIVERGENT | TRACKED-GAP | N/A,
 axes:
   retained_identity: {status, idiom_rule?, evidence[file:line]},
   push_vs_poll:      {status, cpp_pushes: bool, evidence},
@@ -90,7 +94,11 @@ idiom_rules_invoked[], confidence: high|med|low, notes
 Hard validity rules: DIVERGENT requires >=1 `mutation_gated: true`
 mechanism; ADAPTED/ISOMORPHIC on a multi-file cluster requires non-empty
 `sibling_files_swept`; every keyword match that did not become a mechanism
-must appear under `import_time_constants` with an idiom rule.
+must appear under `import_time_constants` with an idiom rule. TRACKED-GAP
+requires a register owner and explicit evidence that the comparable Rust
+lifecycle is absent or incomplete. The 2026-07-24 second-pass record in
+`docs/b6-audit/SECOND_PASS.md` supersedes the initial records for every row it
+names.
 
 ## Calibration record
 

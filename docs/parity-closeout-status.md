@@ -511,7 +511,7 @@ upstream-sync-map registry).
     CI-shaped workspace, and all 1,468 renderer rows pass. Independent
     Standards and Spec passes are clean, and scripted comparison is rerun
     immediately before the RB-1 push. #RD-1 is now unblocked.
-- [ ] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
+- [x] #B-6 structural fidelity audit (user-directed 2026-07-21, adopted
   from Anthropic's migration methodology) — sweep all 447 port-manifest
   rows comparing each C++ file's ARCHITECTURE against its Rust module:
   (a) retained identity vs copies, (b) push/dependents vs polling,
@@ -526,20 +526,42 @@ upstream-sync-map registry).
   447-row fan-out is trusted. Batch fan-out over the #B-2 manifest in
   dependency order; findings feed the ticket queue mechanically.
   SWEEP COMPLETE + TRIAGED 2026-07-21 (executor session, e528fe2b):
-  447/447 rows recorded — 19 ISOMORPHIC / 182 ADAPTED / 162 DIVERGENT /
-  36 UNKNOWN / 48 N/A. Planner triage (docs/b6-audit/TRIAGE.md) collapses
+  the initial 447/447-row census was 19 ISOMORPHIC / 182 ADAPTED /
+  162 DIVERGENT / 36 UNKNOWN / 48 N/A. Planner triage
+  (docs/b6-audit/TRIAGE.md) collapsed
   DIVERGENT into: ~65 rows = RB-1 scope (keyframe data-bind graphs now
   explicitly included); ~60-70 rows = retained-renderer invalidation
   epochs → APPROVED as register D-12 (accepted architecture); RB-2
   opened (focus system, spot-verified, ties into #FT-TEXT keyboard gap);
-  5 small families pending planner verification; 36 UNKNOWNs re-pass
+  five small families pending planner verification; 36 UNKNOWNs re-pass
   after RB-1. JUDGE VALIDATED 2026-07-21: caught the known-bad pre-RB1 data binds
   (independent rediscovery of the in-file compensation family), cleared
   keyed animation, and produced two binding amendments — the
   mutation-timing gate on axis (e) and the cross-file coverage clause
   with subsystem-clustered batching. Spec landed as
-  docs/b6-structural-audit-spec.md; remaining: PORTING.md
-  architecture-fidelity rules section, then the ~40-55 batch fan-out.
+  docs/b6-structural-audit-spec.md. SECOND PASS CLOSED 2026-07-24:
+  `docs/b6-audit/SECOND_PASS.md` resolves every parked item. Final census is
+  19 ISOMORPHIC / 192 ADAPTED / 157 DIVERGENT / 30 TRACKED-GAP /
+  0 UNKNOWN / 49 N/A. RD-1 cleared the five mesh/slice snapshot rows under
+  RF-27/RF-28. The remaining small families are explicit owners, not parked
+  questions: RB-2 focus projection, RB-3 deferred script advance, RB-4 scalar
+  ScriptInput rehydration, and RB-5 solid-color paint mutation. Every former
+  UNKNOWN is idiom-backed ADAPTED/N/A or mapped to an existing F/A/C/RB owner.
+  `make b6-audit-check` ratchets 447 unique rows, the pin, exact census,
+  every second-pass disposition, zero UNKNOWN, and TRACKED-GAP ownership.
+  Manifest `status`/`verification` values remain unchanged except for prior
+  RD evidence; only the orchestrator may promote pending-verification rows.
+- [ ] #RB-2 focus ownership/projection rebuild — B-6-confirmed; replace
+  descriptor projection and target lookup rebuild with retained C++-shaped
+  Focusable/FocusData relationships.
+- [ ] #RB-3 scripted-object advance rebuild — B-6-confirmed; remove the
+  deferred elapsed-step queue and restore direct component-owned script
+  advance ordering.
+- [ ] #RB-4 scalar ScriptInput binding rebuild — B-6-confirmed; replace
+  scene-rebind scalar hydration scans with retained ScriptInput/DataBindContext
+  push ownership.
+- [ ] #RB-5 SolidColor paint mutation rebuild — B-6-confirmed; remove the
+  revision handoff and mutate the retained owner paint at the C++ callback.
 - [x] #RD-1 C++ runtime drawing port (historical internal code; renderer
   backend unchanged)
   (user-directed 2026-07-21, P0 AFTER #RB-1; supersedes D-12) — see map
@@ -866,9 +888,11 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. No executor work remains for #RD-1. Independent orchestrator verification
-   may promote the correspondence rows from `pending-verification`; the next
-   closeout-spine implementation item is #B-5.
+1. No executor work remains for #RD-1 or #B-6. Independent orchestrator
+   verification may promote correspondence rows from `pending-verification`;
+   the next closeout-spine implementation item remains #B-5. B-6 also opened
+   the explicit RB-2/RB-3/RB-4/RB-5 rebuild follow-ups; their relative
+   scheduling is not inferred by the audit.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -1020,6 +1044,26 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   boundary this phase crosses.
 
 ## Log
+
+- 2026-07-24 — #B-6 second pass closed the structural fidelity audit.
+  All 36 formerly `UNKNOWN` rows now have evidence-backed dispositions:
+  30 `TRACKED-GAP`, 5 `ADAPTED`, and 1 `N/A`. The five parked mechanism
+  families were re-audited after RB-1/RD-1: mesh/slice ownership is
+  `ADAPTED`; deferred script advance, scalar ScriptInput rehydration, and
+  solid-color paint mutation remain explicit divergences owned by RB-3,
+  RB-4, and RB-5; focus projection remains owned by RB-2. Final census:
+  19 `ISOMORPHIC`, 192 `ADAPTED`, 157 `DIVERGENT`, 30 `TRACKED-GAP`,
+  0 `UNKNOWN`, and 49 `N/A`, totaling 447. `make b6-audit-check` now
+  ratchets the row count, pin, census, exact second-pass dispositions,
+  zero-UNKNOWN state, and gap owners through `cpp-oracle-workspace-tests`.
+  Evidence: runtime 410/410, nuxie 167/167, C++ probe 721/721, ordinary and
+  scripted goldens each 317/317 entries and 647/647 segments with zero
+  failures, C API smoke, and the probe-armed full workspace green. Renderer
+  pixels are not applicable because this pass changes audit evidence and
+  harness wiring only.
+  `make port-manifest-check` separately remains red on the pre-existing
+  B-2 inventory omission `src/core/field_types/core_uint64_type.cpp`; its
+  17 checker unit tests pass, and B-6 does not reclassify that inventory.
 
 - 2026-07-24 — The fifth and final formal C++ runtime drawing ownership batch
   completed Artboard/facade from pinned C++ `d788e8ec`, stopping at the

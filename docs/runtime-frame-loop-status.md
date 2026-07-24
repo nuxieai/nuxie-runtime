@@ -4,14 +4,15 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-A ready. FL-1 rulebook validation and source shaping are complete;
-  no production owner-family translation has started.
+- Phase: FL-A source audit/specification in progress. FL-1 rulebook validation,
+  source shaping, and clean-floor verification are complete; no production
+  owner-family translation has started.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - File closure: 0 / 337 in-scope C++ files.
 - Member closure: 41 / 74 owner/member rows (the imported, already-closed
   runtime-drawing ledger); 33 frame-loop rows pending.
 - Open mechanism gaps: 7 / 8.
-- Current dependency wave: none; production translation is blocked on FL-1.
+- Current dependency wave: FL-A, Component/update ownership.
 - Current experimental changes: uncommitted KeyFrame retained-seconds and
   Component-handle candidates remain quarantined. They are not standalone
   slices and must be re-derived in FL-B/FL-A or discarded.
@@ -164,13 +165,44 @@ FL-0 clean committed-tree floor, run from detached worktrees carrying only
   (7.88 MiB); scripting on 9,168,392 bytes (8.74 MiB); both below the
   9,437,184-byte budget.
 
+FL-1 clean committed-tree floor at `bb9ad75d`:
+
+- `cargo test -p nuxie-runtime --lib`: 414 passed, 0 failed.
+- `cargo test -p nuxie --lib`: 140 passed, 0 failed.
+- `env -u CPP_CONFIG -u RUST_PROFILE make golden-compare`: 317 / 317
+  entries and 647 / 647 segments exact; 0 divergences or failures.
+- `env -u CPP_CONFIG -u RUST_PROFILE make scripted-golden-compare`: 317 /
+  317 entries and 647 / 647 segments exact; 0 divergences or failures.
+  `data_viz_demo` and `db_health_tracker` both matched.
+- `env -u CPP_CONFIG -u RUST_PROFILE make cpp-oracle-workspace-tests`:
+  passed with the probe built and exported for the workspace run; the pinned
+  721-test probe suite ran.
+- `make runtime-frame-loop-port-check`: all 12 checker controls passed on
+  clean committed source; 337 file rows, 74 member rows, and 8 gap rows match
+  their ratchets.
+- `make renderer-golden`: 1,468 / 1,468 entries accepted, 837 byte-exact,
+  0 divergences, and 0 gated failures on Apple M5 Max.
+- `make capi-smoke`: passed (`draw_paths=2`, `objects=4`).
+- `make apple-runtime-check`: passed, including product tests, artifact
+  validation, generated-header smoke, deny clippy, and the release panic
+  firewall.
+- `make lint-gate`, `cargo fmt --all -- --check`, and `git diff --check`:
+  passed.
+- `make size-report`: scripting off 8,267,336 bytes (7.88 MiB), SHA-256
+  `4d35c3917a16ff98c6f3bbc6677d7333582dff3ab5b803b969725708db8e8d7e`;
+  scripting on 9,168,392 bytes (8.74 MiB), SHA-256
+  `47cf0e95bb8c8f9abc04676b3ae802ca3b4aaf401037579194c7bfaf9ca85d51`;
+  both below the unchanged 9,437,184-byte budget.
+
 ## Next
 
-1. Commit and push the FL-1 rulebook/source-shaping evidence without the two
-   quarantined production experiments.
-2. Begin FL-A as a complete Component owner-family translation, covering all
-   six pending FL-A member rows and the 52 mapped files before taking the
-   wave-level performance checkpoint.
+1. Complete the read-only, member-level comparison of all 52 FL-A C++ source
+   rows and their headers against the committed Rust owners; record the
+   dependency-ordered implementation specification before production edits.
+2. Translate FL-A as one complete Component owner-family wave, covering all
+   six pending member rows and closing or rule-backing every mapped file row.
+   Delete the copied-id/rediscovery mechanisms displaced by retained
+   occurrence-owned links and exact dirt/update ownership in the same landing.
 3. Preserve the complete behavior/pixel/product/size floor during FL-A.
    Performance is measured only after the complete wave, never used as its
    work queue.

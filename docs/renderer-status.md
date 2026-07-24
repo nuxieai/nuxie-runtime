@@ -3077,6 +3077,24 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-24: The third user-directed hot-loop slice ports keyed SolidColor
+  writes to the concrete callback owner without changing the renderer
+  boundary. The generated equality return matches
+  `solid_color_base.hpp:38-46`; a genuine write mutates the retained CPU paint
+  state and the attached RenderPaint directly, as in
+  `solid_color.cpp:23-54`, `shape_paint_mutator.cpp:7-26`, and
+  `shape_paint.cpp:50-57`. No ShapePaint dirt, reverse-owner-row clone, or
+  complete paint-state reconstruction remains on that callback path
+  (RF-2/RF-5/RF-17). With canonical parameters run immediately in the
+  user-approved current environment, `advance_blend_mode@0.25` improved from
+  2.299280x total / 2.203175x advance / 3.179372x draw to 1.800802x /
+  1.691065x / 3.246902x, and the aggregate moved from 1.823738x to 1.776569x
+  (`target/perf-hot-loop-solid-color-direct-owner-current-env.json`).
+  Renderer pixels remain 1,468/1,468 with 1,370 byte-exact entries and zero
+  divergences/gated cases; both golden modes remain 317/317 plus 647/647
+  exact segments. The next sorted entry is `animated_clipping@0`; the <=1.0x
+  tier-5 target remains open.
+
 - 2026-07-24: The second user-directed hot-loop slice preserves the existing
   renderer boundary and removes update-side translations that violated C++
   ownership. State-machine layers read the instance's retained script,

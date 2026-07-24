@@ -5371,30 +5371,23 @@ impl ArtboardInstance {
     pub(crate) fn settle_runtime_solid_color_callback_with_graph(
         &self,
         local_id: usize,
+        value: u32,
         graph: &ArtboardGraph,
     ) {
-        let owners = self
+        let Some(owners) = self
             .runtime_shapes
             .paint_owners_by_component_local
             .get(local_id)
-            .cloned()
-            .unwrap_or_default();
-        for owner in owners {
+        else {
+            return;
+        };
+        for owner in owners.iter().copied() {
             let is_solid_color = self
                 .runtime_shapes
                 .get(owner.shape_local)
                 .and_then(|shape| shape.paint_owners.get(owner.owner_index))
                 .is_some_and(|paint| paint.mutator_local == Some(local_id));
             if is_solid_color {
-                let updated = self.update_runtime_shape_paint_mutator(
-                    owner.shape_local,
-                    owner.owner_index,
-                    graph,
-                    self.layout_constraint_bounds.as_deref(),
-                );
-                if !updated {
-                    continue;
-                }
                 let Some(paint) = self
                     .runtime_shapes
                     .get(owner.shape_local)
@@ -5402,10 +5395,33 @@ impl ArtboardInstance {
                 else {
                     continue;
                 };
-                let render_color = match paint.paint_state.borrow().as_ref() {
-                    Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => *render_color,
-                    _ => continue,
+                let render_color = color_modulate_opacity(value, paint.render_opacity.get());
+                let settled = match paint.paint_state.borrow_mut().as_mut() {
+                    Some(RuntimeShapePaintState::SolidColor {
+                        color,
+                        render_color: retained_render_color,
+                    }) => {
+                        *color = value;
+                        *retained_render_color = render_color;
+                        true
+                    }
+                    _ => false,
                 };
+                if !settled {
+                    // Rust's factory arrives after clone construction. If a
+                    // callback precedes that late seam, initialize the same
+                    // owner once; the normal post-initialize path above is the
+                    // direct C++ SolidColor::renderOpacityChanged mutation.
+                    paint.mark_mutator_dirty();
+                    if !self.update_runtime_shape_paint_mutator(
+                        owner.shape_local,
+                        owner.owner_index,
+                        graph,
+                        self.layout_constraint_bounds.as_deref(),
+                    ) {
+                        continue;
+                    }
+                }
                 // Direct port of `SolidColor::renderOpacityChanged`: once the
                 // ShapePaint has a RenderPaint, the callback changes only its
                 // color (`src/shapes/paint/solid_color.cpp:23-54`). Factory
@@ -8793,24 +8809,6 @@ impl RuntimeShapeList {
                     .and_then(|shape| shape.paint_owners.get(effect.owner_index))
                 {
                     paint.invalidate_effects_from(effect.effect_index);
-                }
-            }
-        }
-    }
-
-    /// `SolidColor::colorValueChanged` is an immediate property callback, not
-    /// a request to reconstruct the complete ShapePaint on the next draw
-    /// (`src/shapes/paint/solid_color.cpp:23-54`). Preserve the mutator dirt
-    /// needed to refresh the retained CPU state without queuing backend work;
-    /// the callback writes the already-owned RenderPaint directly.
-    pub(crate) fn mark_solid_color_changed(&self, local_id: usize) {
-        if let Some(owners) = self.paint_owners_by_component_local.get(local_id) {
-            for owner in owners {
-                if let Some(paint) = self
-                    .get(owner.shape_local)
-                    .and_then(|shape| shape.paint_owners.get(owner.owner_index))
-                {
-                    paint.mark_mutator_dirty();
                 }
             }
         }

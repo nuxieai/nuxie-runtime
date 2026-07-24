@@ -2024,16 +2024,22 @@ impl ArtboardInstance {
         let Some(previous) = self.objects.replace_solid_color_value(local_id, value) else {
             return false;
         };
+        // Generated C++ setters return before the property callback when the
+        // stored value is unchanged (`solid_color_base.hpp:38-46`). Active
+        // animations may apply the same keyed value every frame; do not
+        // rebuild or reconfigure the retained ShapePaint owner in that case.
+        if previous == value {
+            return false;
+        }
         if data_bind_observed {
             self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         }
         self.mark_changed();
-        self.runtime_shapes.mark_solid_color_changed(local_id);
         // Pinned C++ `SolidColor::colorValueChanged` immediately calls
         // `renderOpacityChanged` and mutates the ShapePaint-owned paint
-        // (`solid_color.cpp:23-54`). This callback is not a dependency-node
-        // update.
-        self.settle_runtime_solid_color_callback(local_id);
+        // (`solid_color.cpp:23-54`). It does not dirty or reconstruct the
+        // ShapePaint owner.
+        self.settle_runtime_solid_color_callback(local_id, value);
         if let Some(revision) = self.solid_color_paint_revisions.get_mut(local_id) {
             *revision = revision.wrapping_add(1);
         }
@@ -2056,12 +2062,11 @@ impl ArtboardInstance {
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("SolidColor")
             && solid_color_value_property_key() == Some(property_key)
         {
-            self.runtime_shapes.mark_solid_color_changed(local_id);
             // Pinned C++ `SolidColor::colorValueChanged` immediately calls
             // `renderOpacityChanged`, which mutates the already-owned
             // RenderPaint in place (`solid_color.cpp:23-54`). It does not
             // queue a complete ShapePaint reconstruction for draw time.
-            self.settle_runtime_solid_color_callback(local_id);
+            self.settle_runtime_solid_color_callback(local_id, value);
             if let Some(revision) = self.solid_color_paint_revisions.get_mut(local_id) {
                 *revision = revision.wrapping_add(1);
             }
@@ -2077,7 +2082,7 @@ impl ArtboardInstance {
         true
     }
 
-    fn settle_runtime_solid_color_callback(&self, local_id: usize) {
+    fn settle_runtime_solid_color_callback(&self, local_id: usize, value: u32) {
         let Some(context) = self.build_context.as_ref() else {
             return;
         };
@@ -2096,7 +2101,7 @@ impl ArtboardInstance {
         let Some(graph) = graphs.get(graph_index) else {
             return;
         };
-        self.settle_runtime_solid_color_callback_with_graph(local_id, graph);
+        self.settle_runtime_solid_color_callback_with_graph(local_id, value, graph);
     }
 
     pub(crate) fn bool_property(&self, local_id: usize, property_key: u16) -> Option<bool> {
@@ -9124,6 +9129,15 @@ mod tests {
         assert_eq!(instance.path_epoch(), initial_path_epoch);
         assert_eq!(instance.layout_epoch(), initial_layout_epoch);
         assert!(instance.solid_color_paint_revision(0) > initial_paint_revision);
+
+        let settled_cache_epoch = instance.cache_epoch();
+        let settled_paint_revision = instance.solid_color_paint_revision(0);
+        assert!(!instance.set_keyed_solid_color_property(0, color_key, false, 0xff00_ff00));
+        assert_eq!(instance.cache_epoch(), settled_cache_epoch);
+        assert_eq!(
+            instance.solid_color_paint_revision(0),
+            settled_paint_revision
+        );
     }
 
     #[test]

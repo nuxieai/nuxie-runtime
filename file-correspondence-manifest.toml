@@ -4144,7 +4144,7 @@ b6_row_id = "B6-0344"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 corrective owner port is executor-gate-green pending independent orchestrator verification: DashPath effect output is retained per live ShapePaint owner and rebuilt only through exact effect/path dirt; whole-file status remains pending."
+note = "Shape/path/paint ownership batch is executor-gate-green pending independent orchestrator verification: DashPath effect output is retained per live ShapePaint owner and rebuilt only through exact effect/path dirt; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/effects_container.cpp"
@@ -4180,7 +4180,7 @@ b6_row_id = "B6-0347"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: Fill is dispatched from the live Shape paint membership with the C++ path/paint ordering; whole-file status remains pending."
+note = "Shape/path/paint ownership batch implemented and executor-gate-green pending independent orchestrator verification: Fill is dispatched from the live Shape paint membership with the C++ path/paint ordering; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/gradient_stop.cpp"
@@ -4216,7 +4216,7 @@ b6_row_id = "B6-0350"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: linear-gradient paint state is read while dispatching the live owning Shape; whole-file status remains pending."
+note = "Shape/path/paint ownership batch implemented and executor-gate-green pending independent orchestrator verification: linear-gradient paint state is read while dispatching the live owning Shape; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/radial_gradient.cpp"
@@ -4228,7 +4228,7 @@ b6_row_id = "B6-0351"
 b6_verdict = "ISOMORPHIC"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: radial-gradient paint state is read while dispatching the live owning Shape; whole-file status remains pending."
+note = "Shape/path/paint ownership batch implemented and executor-gate-green pending independent orchestrator verification: radial-gradient paint state is read while dispatching the live owning Shape; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/shape_paint.cpp"
@@ -4240,7 +4240,7 @@ b6_row_id = "B6-0352"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 corrective owner port is executor-gate-green pending independent orchestrator verification: ShapePaint retains live visibility, paint state, selected source/effect path, and its one-to-one RenderPaint sidecar configuration, then draws directly without a RuntimeDrawCommand; whole-file status remains pending."
+note = "Shape/path/paint ownership batch is executor-gate-green pending independent orchestrator verification: each ShapePaint occurrence owns mutator and feather state, one EffectPath per StrokeEffect provider, and one-to-one RenderPaint/shader sidecars; live visibility/path properties are read directly and no RuntimeDrawCommand is built."
 
 [[file]]
 upstream = "src/shapes/paint/shape_paint_mutator.cpp"
@@ -4264,7 +4264,7 @@ b6_row_id = "B6-0354"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 corrective owner port is executor-gate-green pending independent orchestrator verification: Shape owns three retained ShapePaintPath source variants and their backend RenderPaths, rebuilt only from live PathComposer dirt while preserving shared fill-rule behavior; whole-file status remains pending."
+note = "Shape/path/paint ownership batch is executor-gate-green pending independent orchestrator verification: Shape owns three retained ShapePaintPath source variants and their backend RenderPaths, rebuilt only from live PathComposer dirt while preserving shared fill-rule behavior; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/solid_color.cpp"
@@ -4276,7 +4276,7 @@ b6_row_id = "B6-0355"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: solid-color paint state is read while dispatching the live owning Shape; whole-file status remains pending."
+note = "Shape/path/paint ownership batch implemented and executor-gate-green pending independent orchestrator verification: solid-color paint state is read while dispatching the live owning Shape; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/stroke.cpp"
@@ -4288,7 +4288,7 @@ b6_row_id = "B6-0356"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: Stroke is dispatched from the live Shape paint membership with C++ transform/path semantics; whole-file status remains pending."
+note = "Shape/path/paint ownership batch implemented and executor-gate-green pending independent orchestrator verification: Stroke is dispatched from the live Shape paint membership with C++ transform/path semantics; whole-file status remains pending."
 
 [[file]]
 upstream = "src/shapes/paint/stroke_effect.cpp"
@@ -4300,7 +4300,7 @@ b6_row_id = "B6-0357"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 corrective owner port is executor-gate-green pending independent orchestrator verification: StrokeEffect invalidation dirties the owning ShapePaint's retained effect result and clean draws reuse it; whole-file status remains pending."
+note = "Shape/path/paint ownership batch is executor-gate-green pending independent orchestrator verification: each StrokeEffect retains its own provider-keyed EffectPath; dirt at effect N preserves the clean prefix and rebuilds only N and the later suffix."
 
 [[file]]
 upstream = "src/shapes/paint/target_effect.cpp"
@@ -4312,7 +4312,7 @@ b6_row_id = "B6-0358"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "Shape/path/paint ownership batch is executor-gate-green pending independent orchestrator verification: TargetEffect applies its nested effect chain through the owning ShapePaint's provider-specific EffectPaths."
 
 [[file]]
 upstream = "src/shapes/paint/trim_path.cpp"
@@ -4348,7 +4348,7 @@ b6_row_id = "B6-0361"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "Shape/path/paint ownership batch is executor-gate-green pending independent orchestrator verification: each Path occurrence owns its current RawPath and settles before the explicit PathComposer update node."
 
 [[file]]
 upstream = "src/shapes/path_composer.cpp"
@@ -4360,7 +4360,7 @@ b6_row_id = "B6-0362"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 implemented and executor-gate-green pending independent orchestrator verification: PathComposer order is retained by the clone-owned Shape and ordinary draw reads live path flags/collapse state; whole-file status remains pending."
+note = "Shape/path/paint ownership batch is executor-gate-green pending independent orchestrator verification: PathComposer is an explicit dependency node that rebuilds local, local-clockwise, and world ShapePaintPaths before effects; clean draw performs no composition."
 
 [[file]]
 upstream = "src/shapes/path_vertex.cpp"
@@ -4432,7 +4432,7 @@ b6_row_id = "B6-0368"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "RD-C2 corrective owner port is executor-gate-green pending independent orchestrator verification: Shape owns stable ordered path/paint membership, retained ShapePaintPaths, and live world transform, then dispatches those owners directly during traversal; whole-file status remains pending."
+note = "Shape/path/paint ownership batch is executor-gate-green pending independent orchestrator verification: Shape owns ordered path/paint membership, three ShapePaintPaths, world-bounds and world-length sentinels, reads the live world transform, and traverses those owners directly."
 
 [[file]]
 upstream = "src/shapes/shape_paint_container.cpp"

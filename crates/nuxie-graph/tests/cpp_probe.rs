@@ -2024,6 +2024,24 @@ fn graph_dependency_order_matches_cpp_front_insert_graph_order() {
         16,
         "the synthetic PathComposer consumes C++ graph-order slot 5 between PointsPath local 5 and Stroke local 13"
     );
+    assert_eq!(
+        artboard.runtime_dependency_node_order,
+        vec![
+            dependency_node_for_component(artboard, 0),
+            dependency_node_for_component(artboard, 1),
+            dependency_node_for_component(artboard, 2),
+            dependency_node_for_component(artboard, 4),
+            dependency_node_for_component(artboard, 5),
+            dependency_node_for_path_composer(artboard, 4),
+            dependency_node_for_component(artboard, 13),
+            dependency_node_for_component(artboard, 3),
+        ],
+        "the runtime schedule retains the root-reachable C++ order and inserts the embedded PathComposer at its exact graph slot"
+    );
+    assert!(
+        artboard.dependency_node_order.len() > artboard.runtime_dependency_node_order.len(),
+        "the diagnostic order must continue to include unattached import-only components without scheduling them at runtime"
+    );
 }
 
 #[test]

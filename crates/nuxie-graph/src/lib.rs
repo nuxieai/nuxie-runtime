@@ -81,6 +81,11 @@ pub struct ArtboardGraph {
     pub state_machines: Vec<StateMachineGraph>,
     pub dependency_order: Vec<usize>,
     pub dependency_insertion_order: Vec<usize>,
+    /// Root-reachable C++ dependency traversal, including embedded nodes such
+    /// as PathComposer and TextVariationHelper.
+    pub runtime_dependency_node_order: Vec<usize>,
+    /// Complete dependency-node order, including unattached components kept
+    /// for diagnostics and graph inspection.
     pub dependency_node_order: Vec<usize>,
     pub diagnostics: Vec<GraphDiagnostic>,
     pub lifecycle: LifecycleSummary,
@@ -314,6 +319,7 @@ impl ArtboardGraph {
             state_machines,
             dependency_order: dependency_order.component_order,
             dependency_insertion_order: dependency_insertion_order.component_order,
+            runtime_dependency_node_order: dependency_order.runtime_node_order,
             dependency_node_order: dependency_order.node_order,
             diagnostics,
             lifecycle,
@@ -5254,6 +5260,7 @@ fn dependency_component_cycles(
 
 struct DependencyOrder {
     component_order: Vec<usize>,
+    runtime_node_order: Vec<usize>,
     node_order: Vec<usize>,
     cycles: Vec<DependencyCycle>,
     node_cycles: Vec<DependencyNodeCycle>,
@@ -5344,6 +5351,7 @@ fn build_dependency_order(
 
     DependencyOrder {
         component_order,
+        runtime_node_order: graph_node_order,
         node_order: complete_node_order,
         cycles,
         node_cycles,

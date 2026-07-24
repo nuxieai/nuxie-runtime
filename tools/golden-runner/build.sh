@@ -19,6 +19,17 @@ if [[ "$config" != "debug" && "$config" != "release" ]]; then
     exit 2
 fi
 
+# Rive's macOS release archives contain LLVM bitcode. Letting PATH select a
+# Homebrew LLVM while the final link targets the Xcode SDK can produce archives
+# that Apple ld cannot consume (and has failed here as "Unsupported stack
+# probing method"). Use the platform toolchain by default while preserving an
+# explicit caller override.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    : "${CC:=/usr/bin/clang}"
+    : "${CXX:=/usr/bin/clang++}"
+    export CC CXX
+fi
+
 jobs="$(sysctl -n hw.logicalcpu 2>/dev/null || nproc)"
 "$provenance" source "$rive_runtime"
 
@@ -68,6 +79,10 @@ if [[ "$runtime_mode" == "scripted" ]]; then
             --file=premake5_v2.lua \
             --config="$config" \
             --out="$decoders_out"
+        # The decoder output has no independent provenance stamp. Premake
+        # dependency files do not notice a compiler switch, so rebuild rather
+        # than allowing incompatible bitcode objects to survive.
+        make -C "$decoders_out" clean
         make -C "$decoders_out" -j"$jobs" \
             rive_decoders libpng zlib libjpeg libwebp
     )

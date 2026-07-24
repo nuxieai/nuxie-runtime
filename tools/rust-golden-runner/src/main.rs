@@ -2898,19 +2898,13 @@ fn hydrate_script_inputs(
                 .with_context(|| format!("failed to hydrate artboard script input '{name}'"))?;
             continue;
         }
-        let value = match type_name {
-            "ScriptInputBoolean" => object.bool_property("propertyValue").map(ScriptValue::Bool),
-            "ScriptInputColor" => object
-                .color_property("propertyValue")
-                .map(|value| ScriptValue::Number(value as f64)),
-            "ScriptInputNumber" => object
-                .double_property("propertyValue")
-                .map(|value| ScriptValue::Number(f64::from(value))),
-            "ScriptInputString" => object
-                .string_property("propertyValue")
-                .map(|value| ScriptValue::String(value.to_owned())),
-            _ => None,
-        };
+        // Generated C++ input objects always hydrate their inherited default
+        // cell, even when `propertyValue` was omitted from the file
+        // (`custom_property_number_base.hpp:32-38` and sibling generated
+        // bases). Leaving the VM's script-authored default in place makes
+        // different ScriptedPathEffect occurrences share the wrong effective
+        // inputs.
+        let value = default_script_input_value(object);
         if let Some(value) = value {
             script_instance
                 .set_input(name, value)
@@ -2966,6 +2960,9 @@ fn bind_scripted_drawable_context(
             Rc::clone(render_state),
             owned_view_model_context.as_ref(),
         )?;
+        if local_object.type_name == Some("ScriptedPathEffect") {
+            instance.did_hydrate_script_inputs_for_global(local_object.global_id);
+        }
         // C++'s `hydrateScriptInputs` calls user `init` only until it has
         // succeeded once. A plain root view-model bind therefore must not
         // replay `init` for every drawable; only scripts whose cold hydration
@@ -3059,19 +3056,12 @@ fn rehydrate_script_inputs(
             }
             None => None,
         };
-        let value = bound_value.or_else(|| match type_name {
-            "ScriptInputBoolean" => object.bool_property("propertyValue").map(ScriptValue::Bool),
-            "ScriptInputColor" => object
-                .color_property("propertyValue")
-                .map(|value| ScriptValue::Number(value as f64)),
-            "ScriptInputNumber" => object
-                .double_property("propertyValue")
-                .map(|value| ScriptValue::Number(f64::from(value))),
-            "ScriptInputString" => object
-                .string_property("propertyValue")
-                .map(|value| ScriptValue::String(value.to_owned())),
-            _ => None,
-        });
+        // C++ `ScriptedObject::hydrateScriptInputs` replays every generated
+        // ScriptInput cell on each bind, while `m_userLuaInitDone` prevents
+        // user `init` from replaying (`scripted_object.cpp:399-436`). This
+        // second hydration therefore restores omitted generated defaults
+        // after an `init` callback has mutated the public input field.
+        let value = bound_value.or_else(|| default_script_input_value(object));
         if let Some(value) = value {
             instance
                 .set_script_input_for_global(scripted_global_id, name, value)

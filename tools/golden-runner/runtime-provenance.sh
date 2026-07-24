@@ -2,7 +2,7 @@
 set -euo pipefail
 
 expected_runtime_revision="d788e8ec6e8b598526607d6a1e8818e8b637b60c"
-schema="nuxie-golden-librive-provenance-v1"
+schema="nuxie-golden-librive-provenance-v2"
 
 usage() {
     echo "usage: $0 source <runtime-dir>" >&2
@@ -16,6 +16,14 @@ sha256_file() {
     else
         shasum -a 256 "$1" | awk '{print $1}'
     fi
+}
+
+compiler_path() {
+    command -v "${CXX:-clang++}"
+}
+
+compiler_version() {
+    "$(compiler_path)" --version | sed -n '1p'
 }
 
 normalize_defines() {
@@ -137,6 +145,8 @@ write_stamp() {
         echo "config=$config"
         echo "mode=$mode"
         echo "defines=$(normalize_defines "$makefile")"
+        echo "compiler_path=$(compiler_path)"
+        echo "compiler_version=$(compiler_version)"
         echo "archive_sha256=$(sha256_file "$archive")"
     } >"$temporary"
     mv "$temporary" "$stamp"
@@ -156,13 +166,15 @@ verify_stamp() {
     fi
 
     local field expected
-    for field in schema runtime_revision config mode defines archive_sha256; do
+    for field in schema runtime_revision config mode defines compiler_path compiler_version archive_sha256; do
         case "$field" in
             schema) expected="$schema" ;;
             runtime_revision) expected="$expected_runtime_revision" ;;
             config) expected="$config" ;;
             mode) expected="$mode" ;;
             defines) expected="$(normalize_defines "$makefile")" ;;
+            compiler_path) expected="$(compiler_path)" ;;
+            compiler_version) expected="$(compiler_version)" ;;
             archive_sha256) expected="$(sha256_file "$archive")" ;;
         esac
         local actual

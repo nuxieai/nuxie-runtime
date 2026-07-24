@@ -7,7 +7,7 @@ phase = "ownership-proof-before-scene-cache-removal"
 # This count is a ratchet, not a completion claim. `make
 # runtime-drawing-port-closed` requires pending=0, compensation=0, and every
 # legacy symbol count below to reach zero.
-expected_status_counts = { exact = 5, adapted = 7, pending = 10, compensation = 15 }
+expected_status_counts = { exact = 5, adapted = 24, pending = 6, compensation = 4 }
 
 [[batch]]
 id = "shape_path_paint"
@@ -91,18 +91,18 @@ max_occurrences = 19
 id = "draw_time_shape_ensure"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bensure_runtime_shape_paint_owner\\b"
-max_occurrences = 2
+max_occurrences = 0
 
 [[ratchet]]
 id = "global_shape_paint_configuration"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bshape_owner_configured_by_global\\b"
-max_occurrences = 8
+max_occurrences = 0
 
 [[ratchet]]
-id = "command_shape_draw_adapter"
+id = "command_layout_paint_adapter"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
-pattern = "\\bruntime_draw_live_shape_commands\\b"
+pattern = "\\bruntime_draw_live_layout_paint_commands\\b"
 max_occurrences = 2
 
 [[ratchet]]
@@ -127,62 +127,78 @@ max_occurrences = 25
 id = "shape_paint_snapshot_type"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bRuntimeOwnedShapePaint\\b"
-max_occurrences = 5
+max_occurrences = 0
 
 [[ratchet]]
 id = "shape_world_transform_copy"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bworld_transform: Cell<Mat2D>"
-max_occurrences = 1
+max_occurrences = 0
 
 [[ratchet]]
 id = "shape_paint_visibility_copy"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bis_visible: Cell<bool>"
-max_occurrences = 1
+max_occurrences = 0
+
+[[owner]]
+id = "path.source_raw_path"
+batch = "shape_path_paint"
+status = "adapted"
+rule = "RF-29"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "struct RuntimeOwnedPath {"
+depends_on = []
+legacy_ratchets = []
+note = "Each runtime Path occurrence owns its rebuilt RawPath; the explicit PathComposer dependency node reads that owner directly before ShapePaint updates."
+[owner.lifecycle]
+construct = ["cpp:include/rive/shapes/path.hpp:25-35", "rust:crates/nuxie-runtime/src/draw.rs:6905-6931"]
+update = ["cpp:src/shapes/path.cpp:336-380", "rust:crates/nuxie-runtime/src/draw.rs:6569-6629"]
+draw = ["cpp:src/shapes/path_composer.cpp:38-112", "rust:crates/nuxie-runtime/src/draw.rs:6452-6560"]
+clone_drop = ["cpp:include/rive/shapes/path.hpp:25-35", "rust:crates/nuxie-runtime/src/draw.rs:6916-6931"]
 
 [[owner]]
 id = "shape.path_composer"
 batch = "shape_path_paint"
-status = "compensation"
+status = "adapted"
 rule = "RF-29"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "struct RuntimeShape {"
+rust_anchor = "fn update_runtime_path_composer"
 depends_on = []
-legacy_ratchets = ["draw_time_shape_ensure"]
-note = "Rust retains PathComposer-shaped data on RuntimeShape but omits the C++ synthetic Component from the executable dependency/update list, so its work is recovered from draw."
+legacy_ratchets = []
+note = "The C++ synthetic PathComposer is an explicit Rust dependency/update target and settles all three Shape paths before ShapePaint effects."
 [owner.lifecycle]
-construct = ["cpp:src/shapes/shape.cpp:20", "rust:crates/nuxie-runtime/src/draw.rs:7024-7035"]
-update = ["cpp:src/shapes/path_composer.cpp:40-117", "rust:crates/nuxie-runtime/src/draw.rs:7052-7071"]
-draw = ["cpp:src/shapes/shape.cpp:137-159", "rust:crates/nuxie-runtime/src/draw.rs:14739-14800"]
-clone_drop = ["cpp:include/rive/shapes/shape.hpp:18-24", "rust:crates/nuxie-runtime/src/draw.rs:6800-6810"]
+construct = ["cpp:src/shapes/shape.cpp:20", "rust:crates/nuxie-runtime/src/artboard.rs:992-1007"]
+update = ["cpp:src/shapes/path_composer.cpp:40-117", "rust:crates/nuxie-runtime/src/draw.rs:6631-6685"]
+draw = ["cpp:src/shapes/shape.cpp:137-159", "rust:crates/nuxie-runtime/src/draw.rs:15064-15117"]
+clone_drop = ["cpp:include/rive/shapes/shape.hpp:18-24", "rust:crates/nuxie-runtime/src/draw.rs:6954-6967"]
 
 [[owner]]
 id = "shape.inherited_world_transform"
 batch = "shape_path_paint"
-status = "compensation"
+status = "adapted"
 rule = "RF-34"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "world_transform: Cell<Mat2D>"
+rust_anchor = "component.transform.world_transform"
 depends_on = ["shape.path_composer"]
-legacy_ratchets = ["shape_world_transform_copy"]
-note = "C++ inherits one live WorldTransformComponent value. Rust copies it into RuntimeShape, creating the second source of truth rejected by the stress test."
+legacy_ratchets = []
+note = "Shape draw and paint update read the single live component world transform; RuntimeShape carries no copied transform."
 [owner.lifecycle]
-construct = ["cpp:include/rive/shapes/shape.hpp:13-18", "rust:crates/nuxie-runtime/src/draw.rs:7014-7035"]
-update = ["cpp:src/shapes/shape.cpp:54-62", "rust:crates/nuxie-runtime/src/draw.rs:7041-7050"]
-draw = ["cpp:src/shapes/shape.cpp:137-159", "rust:crates/nuxie-runtime/src/draw.rs:14739-14800"]
-clone_drop = ["cpp:include/rive/shapes/shape.hpp:13-24", "rust:crates/nuxie-runtime/src/draw.rs:6792-6810"]
+construct = ["cpp:include/rive/shapes/shape.hpp:13-18", "rust:crates/nuxie-runtime/src/draw.rs:6938-6952"]
+update = ["cpp:src/shapes/shape.cpp:54-62", "rust:crates/nuxie-runtime/src/draw.rs:4563-4614"]
+draw = ["cpp:src/shapes/shape.cpp:137-159", "rust:crates/nuxie-runtime/src/draw.rs:15078-15084"]
+clone_drop = ["cpp:include/rive/shapes/shape.hpp:13-24", "rust:crates/nuxie-runtime/src/draw.rs:6954-6967"]
 
 [[owner]]
 id = "shape.path.local"
 batch = "shape_path_paint"
-status = "compensation"
+status = "adapted"
 rule = "RF-29"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
 rust_anchor = "paint_paths: [RuntimeShapePaintPathOwner; 3]"
 depends_on = ["shape.path_composer"]
-legacy_ratchets = ["draw_time_shape_ensure", "shape_paint_snapshot_type"]
-note = "Slot 0 retains local-path data, but the current draw-time builder substitutes for PathComposer update."
+legacy_ratchets = []
+note = "PathComposer update retains the local path in slot 0; clean draw only reads the owner."
 [owner.lifecycle]
 construct = ["cpp:src/shapes/path_composer.cpp:11-17", "rust:crates/nuxie-runtime/src/draw.rs:7028-7034"]
 update = ["cpp:src/shapes/path_composer.cpp:51-66", "rust:crates/nuxie-runtime/src/draw.rs:7052-7061"]
@@ -192,13 +208,13 @@ clone_drop = ["cpp:include/rive/shapes/path_composer.hpp:29-35", "rust:crates/nu
 [[owner]]
 id = "shape.path.world"
 batch = "shape_path_paint"
-status = "compensation"
+status = "adapted"
 rule = "RF-29"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
 rust_anchor = "paint_paths: [RuntimeShapePaintPathOwner; 3]"
 depends_on = ["shape.path_composer"]
-legacy_ratchets = ["draw_time_shape_ensure", "shape_paint_snapshot_type"]
-note = "Slot 2 retains world-path data, but the current draw-time builder substitutes for PathComposer update."
+legacy_ratchets = []
+note = "PathComposer update retains the world path in slot 2; clean draw only reads the owner."
 [owner.lifecycle]
 construct = ["cpp:src/shapes/path_composer.cpp:11-17", "rust:crates/nuxie-runtime/src/draw.rs:7028-7034"]
 update = ["cpp:src/shapes/path_composer.cpp:102-114", "rust:crates/nuxie-runtime/src/draw.rs:7052-7061"]
@@ -208,13 +224,13 @@ clone_drop = ["cpp:include/rive/shapes/path_composer.hpp:29-35", "rust:crates/nu
 [[owner]]
 id = "shape.path.local_clockwise"
 batch = "shape_path_paint"
-status = "compensation"
+status = "adapted"
 rule = "RF-29"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
 rust_anchor = "paint_paths: [RuntimeShapePaintPathOwner; 3]"
 depends_on = ["shape.path_composer"]
-legacy_ratchets = ["draw_time_shape_ensure", "shape_paint_snapshot_type"]
-note = "Slot 1 retains local-clockwise data, but the current draw-time builder substitutes for PathComposer update."
+legacy_ratchets = []
+note = "PathComposer update retains the local-clockwise path in slot 1; clean draw only reads the owner."
 [owner.lifecycle]
 construct = ["cpp:src/shapes/path_composer.cpp:11-17", "rust:crates/nuxie-runtime/src/draw.rs:7028-7034"]
 update = ["cpp:src/shapes/path_composer.cpp:67-101", "rust:crates/nuxie-runtime/src/draw.rs:7052-7061"]
@@ -224,13 +240,13 @@ clone_drop = ["cpp:include/rive/shapes/path_composer.hpp:29-35", "rust:crates/nu
 [[owner]]
 id = "shape_paint_path.raw_path"
 batch = "shape_path_paint"
-status = "compensation"
+status = "adapted"
 rule = "RF-29"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "struct RuntimePreparedShapePaintPath {"
+rust_anchor = "struct RuntimeShapePathState {"
 depends_on = ["shape.path.local", "shape.path.world", "shape.path.local_clockwise"]
-legacy_ratchets = ["draw_time_shape_ensure", "shape_paint_snapshot_type"]
-note = "The raw path is retained in a Shape-owned slot, but Rust currently creates it through the draw-time prepared-path seam rather than the C++ update node."
+legacy_ratchets = []
+note = "ShapePaintPath CPU commands and RawPath are retained together by the exact Shape path/effect occurrence during dependency update."
 [owner.lifecycle]
 construct = ["cpp:include/rive/shapes/shape_paint_path.hpp:78-84", "rust:crates/nuxie-runtime/src/draw.rs:11058-11060"]
 update = ["cpp:src/shapes/paint/shape_paint_path.cpp:13-50", "rust:crates/nuxie-runtime/src/draw.rs:6830-6848"]
@@ -256,13 +272,13 @@ clone_drop = ["cpp:include/rive/shapes/shape_paint_path.hpp:78-84", "rust:crates
 [[owner]]
 id = "shape_paint_path.render_path"
 batch = "shape_path_paint"
-status = "pending"
+status = "adapted"
 rule = "RF-30"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "struct RuntimeOwnedShapeRenderPathSlots"
+rust_anchor = "backend: RuntimePathBackendSlot"
 depends_on = ["shape_paint_path.raw_path", "shape_paint_path.render_dirty"]
-legacy_ratchets = ["scene_path_cache_type"]
-note = "C++ stores the RenderPath on ShapePaintPath. Rust still stores the backend object inside RuntimeRenderPathCache."
+legacy_ratchets = []
+note = "A one-to-one backend slot lives on each ShapePaintPath and EffectPath owner; clone creates an empty slot and first factory-bearing preparation materializes it."
 [owner.lifecycle]
 construct = ["cpp:src/shapes/paint/shape_paint_path.cpp:58-67", "rust:crates/nuxie-runtime/src/draw.rs:11317-11332"]
 update = ["cpp:src/shapes/paint/shape_paint_path.cpp:68-73", "rust:crates/nuxie-runtime/src/draw.rs:12323-12340"]
@@ -304,45 +320,45 @@ clone_drop = ["cpp:include/rive/shapes/shape_paint_container.hpp:26-28", "rust:c
 [[owner]]
 id = "shape_paint.mutator"
 batch = "shape_path_paint"
-status = "compensation"
+status = "adapted"
 rule = "RF-34"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
 rust_anchor = "paint_local: usize"
 depends_on = ["shape.paint_membership"]
-legacy_ratchets = ["shape_paint_snapshot_type", "draw_time_shape_ensure"]
-note = "The non-owning mutator identity is copied into the draw-time RuntimeOwnedShapePaint snapshot instead of living on one generated ShapePaint object."
+legacy_ratchets = []
+note = "The ShapePaint occurrence retains its stable mutator/component identity and update registration; no draw-time paint snapshot exists."
 [owner.lifecycle]
-construct = ["cpp:src/shapes/paint/shape_paint.cpp:50-58", "rust:crates/nuxie-runtime/src/draw.rs:6867-6878"]
-update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:7064-7071"]
-draw = ["cpp:include/rive/shapes/paint/shape_paint.hpp:61-69", "rust:crates/nuxie-runtime/src/draw.rs:14778-14799"]
-clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:24-27", "rust:crates/nuxie-runtime/src/draw.rs:6863-6878"]
+construct = ["cpp:src/shapes/paint/shape_paint.cpp:50-58", "rust:crates/nuxie-runtime/src/draw.rs:7169-7218"]
+update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:4473-4630"]
+draw = ["cpp:include/rive/shapes/paint/shape_paint.hpp:61-69", "rust:crates/nuxie-runtime/src/draw.rs:15064-15117"]
+clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:24-27", "rust:crates/nuxie-runtime/src/draw.rs:7142-7167"]
 
 [[owner]]
 id = "shape_paint.mutable_state"
 batch = "shape_path_paint"
-status = "compensation"
+status = "adapted"
 rule = "RF-34"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "struct RuntimeOwnedShapePaint"
+rust_anchor = "struct RuntimeShapePaintOwner {"
 depends_on = ["shape_paint.mutator"]
-legacy_ratchets = ["shape_paint_snapshot_type", "global_shape_paint_configuration", "render_paint_configuration_slots", "draw_time_shape_ensure"]
-note = "Fill rule, blend, stroke/gradient state, path selection, and other generated properties are copied into a command-shaped snapshot assembled from several C++ owners."
+legacy_ratchets = []
+note = "Authored identity, mutator output, feather state, effect owners, and backend slots live directly on one ShapePaint occurrence; live generated properties remain in the instance object arena."
 [owner.lifecycle]
-construct = ["cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crates/nuxie-runtime/src/draw.rs:6867-6878"]
-update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:4380-4530"]
-draw = ["cpp:src/shapes/paint/shape_paint.cpp:60-72", "rust:crates/nuxie-runtime/src/draw.rs:14811-14903"]
-clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crates/nuxie-runtime/src/draw.rs:6851-6878"]
+construct = ["cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crates/nuxie-runtime/src/draw.rs:7121-7218"]
+update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:4404-4630"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:60-72", "rust:crates/nuxie-runtime/src/draw.rs:15064-15220"]
+clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crates/nuxie-runtime/src/draw.rs:7142-7167"]
 
 [[owner]]
 id = "shape_paint.visibility"
 batch = "shape_path_paint"
-status = "compensation"
+status = "adapted"
 rule = "RF-34"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "is_visible: Cell<bool>"
+rust_anchor = "fn runtime_owned_shape_paint_is_visible"
 depends_on = ["shape_paint.mutable_state"]
-legacy_ratchets = ["shape_paint_visibility_copy"]
-note = "C++ has one generated live visibility property. Rust seeds a second Cell on RuntimeShapePaintOwner and later mutates that copy."
+legacy_ratchets = []
+note = "Shape draw reads the generated visibility property live; RuntimeShapePaintOwner contains no visibility copy."
 [owner.lifecycle]
 construct = ["cpp:src/shapes/paint/shape_paint.cpp:12-27", "rust:crates/nuxie-runtime/src/draw.rs:6880-6889"]
 update = ["cpp:src/shapes/paint/shape_paint.cpp:60-72", "rust:crates/nuxie-runtime/src/draw.rs:7037-7071"]
@@ -352,45 +368,61 @@ clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crate
 [[owner]]
 id = "shape_paint.render_paint"
 batch = "shape_path_paint"
-status = "pending"
+status = "adapted"
 rule = "RF-30"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "paints_by_global: Vec<Option<Box<dyn RenderPaint>>>"
+rust_anchor = "backend: RuntimePaintBackendSlot"
 depends_on = ["shape_paint.mutator"]
-legacy_ratchets = ["scene_paint_cache_type", "draw_time_shape_ensure", "global_shape_paint_configuration", "render_paint_configuration_slots"]
-note = "C++ ShapePaint owns its RenderPaint. Rust still keys it globally and repairs/configures it from the draw path."
+legacy_ratchets = []
+note = "Each ShapePaint occurrence owns one RenderPaint backend slot. Allocation/configuration completes before renderer side effects and clone/remount starts with an empty slot."
 [owner.lifecycle]
-construct = ["cpp:src/shapes/paint/shape_paint.cpp:50-58", "rust:crates/nuxie-runtime/src/draw.rs:10262-10270"]
-update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:4380-4424"]
-draw = ["cpp:src/shapes/paint/shape_paint.cpp:173-185", "rust:crates/nuxie-runtime/src/draw.rs:14895-14899"]
-clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:25", "rust:crates/nuxie-runtime/src/draw.rs:10233-10259"]
+construct = ["cpp:src/shapes/paint/shape_paint.cpp:50-58", "rust:crates/nuxie-runtime/src/draw.rs:7044-7090"]
+update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:14936-15061"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:173-185", "rust:crates/nuxie-runtime/src/draw.rs:15203-15217"]
+clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:25", "rust:crates/nuxie-runtime/src/draw.rs:7142-7167"]
+
+[[owner]]
+id = "shape_paint.gradient_shader"
+batch = "shape_path_paint"
+status = "adapted"
+rule = "RF-30"
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "shader: Option<Box<dyn RenderShader>>"
+depends_on = ["shape_paint.render_paint", "shape_paint.mutator"]
+legacy_ratchets = []
+note = "The gradient shader and its settled mutator state live in the same occurrence-local backend slot as ShapePaint's RenderPaint; no global-id shader cache participates in Shape draw."
+[owner.lifecycle]
+construct = ["cpp:src/shapes/paint/linear_gradient.cpp:18-33", "rust:crates/nuxie-runtime/src/draw.rs:10736-10745"]
+update = ["cpp:src/shapes/paint/linear_gradient.cpp:86-126", "rust:crates/nuxie-runtime/src/draw.rs:14920-15050"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:173-185", "rust:crates/nuxie-runtime/src/draw.rs:14895-14903"]
+clone_drop = ["cpp:include/rive/shapes/paint/linear_gradient.hpp:15-49", "rust:crates/nuxie-runtime/src/draw.rs:7190-7300"]
 
 [[owner]]
 id = "shape_paint.effects"
 batch = "shape_path_paint"
-status = "compensation"
+status = "adapted"
 rule = "RF-35"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "retained_effect_path"
+rust_anchor = "struct RuntimeShapeEffectPathOwner"
 depends_on = ["shape.paint_membership", "shape_paint_path.raw_path"]
-legacy_ratchets = ["shape_paint_snapshot_type"]
-note = "Rust retains one final effect result on the paint owner; it does not preserve C++'s per-(StrokeEffect, PathProvider) EffectPath ownership."
+legacy_ratchets = []
+note = "Every top-level StrokeEffect owns a distinct EffectPath for this ShapePaint PathProvider; invalidation preserves a clean prefix and rebuilds only the dirty suffix."
 [owner.lifecycle]
-construct = ["cpp:src/shapes/paint/shape_paint.cpp:207-211", "rust:crates/nuxie-runtime/src/draw.rs:6851-6889"]
-update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:6892-6907"]
-draw = ["cpp:src/shapes/paint/shape_paint.cpp:115-119", "rust:crates/nuxie-runtime/src/draw.rs:14842-14859"]
-clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crates/nuxie-runtime/src/draw.rs:6851-6878"]
+construct = ["cpp:src/shapes/paint/shape_paint.cpp:207-211", "rust:crates/nuxie-runtime/src/draw.rs:7095-7118"]
+update = ["cpp:src/shapes/paint/shape_paint.cpp:30-47", "rust:crates/nuxie-runtime/src/draw.rs:4523-4562"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:115-119", "rust:crates/nuxie-runtime/src/draw.rs:15133-15176"]
+clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:20-27", "rust:crates/nuxie-runtime/src/draw.rs:7101-7118"]
 
 [[owner]]
 id = "shape_paint.feather"
 batch = "shape_path_paint"
-status = "compensation"
+status = "adapted"
 rule = "RF-34"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "feather_state: Option<RuntimeFeatherState>"
+rust_anchor = "feather_state: RefCell<Option<RuntimeFeatherState>>"
 depends_on = ["shape_paint.effects"]
-legacy_ratchets = ["shape_paint_snapshot_type"]
-note = "The current snapshot copies selected Feather state instead of retaining the C++ non-owning relationship on the generated ShapePaint."
+legacy_ratchets = []
+note = "The generated ShapePaint occurrence retains its Feather relationship and settled inner-path state; clean draw reads those owner fields directly."
 [owner.lifecycle]
 construct = ["cpp:src/shapes/paint/shape_paint.cpp:74-76", "rust:crates/nuxie-runtime/src/draw.rs:6867-6878"]
 update = ["cpp:src/shapes/paint/shape_paint.cpp:193-201", "rust:crates/nuxie-runtime/src/draw.rs:6892-6907"]
@@ -400,34 +432,34 @@ clone_drop = ["cpp:include/rive/shapes/paint/shape_paint.hpp:89-91", "rust:crate
 [[owner]]
 id = "shape.world_bounds"
 batch = "shape_path_paint"
-status = "pending"
+status = "adapted"
 rule = "RF-32"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "pub struct RuntimeGeometryCache"
+rust_anchor = "world_bounds: Cell<Option<RenderAabb>>"
 depends_on = ["shape.path_membership"]
-legacy_ratchets = ["scene_path_cache_type"]
-note = "C++ stores bounds on Shape. Rust geometry queries still borrow the scene path cache and must be split into independently justified owner/query state."
+legacy_ratchets = []
+note = "The Shape occurrence owns the lazy world-bounds cell, invalidated with PathComposer dirt; Shape bounds queries read the owned world path without scene-cache geometry."
 [owner.lifecycle]
-construct = ["cpp:include/rive/shapes/shape.hpp:23", "rust:crates/nuxie-runtime/src/draw.rs:10752-10760"]
-update = ["cpp:include/rive/shapes/shape.hpp:65-82", "rust:crates/nuxie-runtime/src/draw.rs:10845-10855"]
-draw = ["cpp:src/shapes/shape.cpp:161-163", "rust:crates/nuxie-runtime/src/draw.rs:10783-10824"]
-clone_drop = ["cpp:include/rive/shapes/shape.hpp:21-24", "rust:crates/nuxie/src/lib.rs:2390-2397"]
+construct = ["cpp:include/rive/shapes/shape.hpp:23", "rust:crates/nuxie-runtime/src/draw.rs:6938-6952"]
+update = ["cpp:include/rive/shapes/shape.hpp:65-82", "rust:crates/nuxie-runtime/src/draw.rs:6631-6685"]
+draw = ["cpp:src/shapes/shape.cpp:161-163", "rust:crates/nuxie-runtime/src/draw.rs:1559-1640"]
+clone_drop = ["cpp:include/rive/shapes/shape.hpp:21-24", "rust:crates/nuxie-runtime/src/draw.rs:6954-6967"]
 
 [[owner]]
 id = "shape.world_length"
 batch = "shape_path_paint"
-status = "pending"
+status = "adapted"
 rule = "RF-32"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "pub struct RuntimeGeometryCache"
+rust_anchor = "world_length: Cell<Option<f32>>"
 depends_on = ["shape.path_membership"]
-legacy_ratchets = ["scene_path_cache_type"]
-note = "The C++ -1 sentinel is Shape-owned; any retained Rust query value must move to the same owner and invalidation sites."
+legacy_ratchets = []
+note = "The Shape occurrence owns the C++ -1 sentinel as Option<f32>; path dirt clears it and the first length read measures the retained world path."
 [owner.lifecycle]
-construct = ["cpp:include/rive/shapes/shape.hpp:24", "rust:crates/nuxie-runtime/src/draw.rs:10752-10760"]
-update = ["cpp:src/shapes/shape.cpp:74-107", "rust:crates/nuxie-runtime/src/draw.rs:10845-10855"]
-draw = ["cpp:src/shapes/shape.cpp:74-97", "rust:crates/nuxie-runtime/src/draw.rs:10783-10824"]
-clone_drop = ["cpp:include/rive/shapes/shape.hpp:21-24", "rust:crates/nuxie/src/lib.rs:2390-2397"]
+construct = ["cpp:include/rive/shapes/shape.hpp:24", "rust:crates/nuxie-runtime/src/draw.rs:6938-6952"]
+update = ["cpp:src/shapes/shape.cpp:74-107", "rust:crates/nuxie-runtime/src/draw.rs:7395-7415"]
+draw = ["cpp:src/shapes/shape.cpp:74-97", "rust:crates/nuxie-runtime/src/draw.rs:6433-6450"]
+clone_drop = ["cpp:include/rive/shapes/shape.hpp:21-24", "rust:crates/nuxie-runtime/src/draw.rs:6954-6967"]
 
 [[owner]]
 id = "image_asset.render_image"
@@ -661,7 +693,7 @@ rule = "RF-31"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
 rust_anchor = "pub struct RuntimeDrawCommand"
 depends_on = ["artboard.first_drawable"]
-legacy_ratchets = ["draw_command_type", "command_shape_draw_adapter", "generic_command_draw_adapter"]
+legacy_ratchets = ["draw_command_type", "command_layout_paint_adapter", "generic_command_draw_adapter"]
 note = "RuntimeDrawCommand survives only as the old diagnostic/replay representation and has no C++ runtime owner."
 [owner.lifecycle]
 construct = ["cpp:src/artboard.cpp:429-840", "rust:crates/nuxie-runtime/src/draw.rs:7837-7854"]

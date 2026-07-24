@@ -7,7 +7,7 @@ use std::sync::{
 
 use anyhow::{Context, Result};
 use nuxie_binary::RuntimeFile;
-use nuxie_graph::ArtboardGraph;
+use nuxie_graph::{ArtboardGraph, DependencyNodeKind};
 use nuxie_render_api::Factory as RenderFactory;
 
 use crate::animation::{
@@ -254,6 +254,10 @@ pub struct ArtboardInstance {
     pub(crate) ik_constraints: Vec<RuntimeIkConstraint>,
     pub(crate) joysticks_apply_before_update: bool,
     pub(crate) update_order: Vec<usize>,
+    /// C++ dependency traversal includes embedded runtime-only nodes such as
+    /// `Shape::m_PathComposer`. `update_order` remains the public
+    /// component-only view; this is the actual runtime schedule.
+    runtime_update_order: Vec<RuntimeUpdateTarget>,
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
     pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
     pub(crate) script_instances_by_global:
@@ -338,6 +342,13 @@ pub struct ArtboardInstance {
     pub(crate) did_change: Cell<bool>,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeUpdateTarget {
+    Component(usize),
+    PathComposer(usize),
+    TextVariationHelper,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -978,6 +989,24 @@ impl ArtboardInstance {
             .into_iter()
             .map(|(_, local_id)| local_id)
             .collect::<Vec<_>>();
+        let runtime_update_order = graph
+            .runtime_dependency_node_order
+            .iter()
+            .filter_map(|node_id| {
+                let node = graph.dependency_nodes.get(*node_id)?;
+                match &node.kind {
+                    DependencyNodeKind::Component { local_id, .. } => {
+                        Some(RuntimeUpdateTarget::Component(*local_id))
+                    }
+                    DependencyNodeKind::PathComposer { shape_local, .. } => {
+                        Some(RuntimeUpdateTarget::PathComposer(*shape_local))
+                    }
+                    DependencyNodeKind::TextVariationHelper { .. } => {
+                        Some(RuntimeUpdateTarget::TextVariationHelper)
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
         let mut converter_cache = RuntimeDataBindGraphConverterBuildCache::default();
         let solos = build_runtime_solos(file, graph);
         let mut linear_animations =
@@ -1093,6 +1122,7 @@ impl ArtboardInstance {
             ik_constraints,
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
             update_order,
+            runtime_update_order,
             linear_animations,
             state_machines: Arc::new(state_machines),
             script_instances_by_global: RuntimeScriptState::default(),
@@ -1162,6 +1192,7 @@ impl ArtboardInstance {
             layout_constraint_bounds: None,
         };
         instance.apply_initial_layout_component_display_collapses();
+        instance.initialize_runtime_shape_paint_owners(graph);
         let nested_host_locals = instance.nested_artboard_locals.clone();
         for host_local_id in nested_host_locals {
             instance.sync_nested_artboard_root_opacity(host_local_id);
@@ -1283,6 +1314,36 @@ impl ArtboardInstance {
     ) {
         self.script_path_effect_globals.insert(global_id);
         self.set_script_instance_for_global(global_id, instance);
+        if let Some(local_id) = self
+            .components
+            .iter()
+            .find(|component| component.global_id == global_id)
+            .map(|component| component.local_id)
+        {
+            // Cold hydration happened before the VM instance could be attached
+            // to this ArtboardInstance. Replay the component dirt left by
+            // C++ `setNumberInput`/siblings and
+            // `ScriptedPathEffect::didHydrateScriptInputs`.
+            self.add_dirt(local_id, ComponentDirt::SCRIPT_UPDATE, false);
+            self.add_dirt(local_id, ComponentDirt::PAINT, true);
+        }
+    }
+
+    /// Complete C++ `ScriptedPathEffect::didHydrateScriptInputs` after a
+    /// bind-time input replay (`scripted_path_effect.cpp:15-19`).
+    pub fn did_hydrate_script_inputs_for_global(&mut self, global_id: u32) -> bool {
+        if !self.script_path_effect_globals.contains(&global_id) {
+            return false;
+        }
+        let Some(local_id) = self
+            .components
+            .iter()
+            .find(|component| component.global_id == global_id)
+            .map(|component| component.local_id)
+        else {
+            return false;
+        };
+        self.add_dirt(local_id, ComponentDirt::PAINT, true)
     }
 
     /// Runs the C++ `ScriptedDrawable::update` phase for scripts dirtied by
@@ -1571,6 +1632,18 @@ impl ArtboardInstance {
             self.script_advances_active.insert(global_id);
         }
         self.script_updates_pending.insert(global_id);
+        if let Some(local_id) = self
+            .components
+            .iter()
+            .find(|component| component.global_id == global_id)
+            .map(|component| component.local_id)
+        {
+            // Direct counterpart of `ScriptedObject::setNumberInput` and its
+            // sibling setters: every authored input write schedules
+            // `ScriptUpdate` on component-backed scripted objects
+            // (`scripted_object.cpp:61-117`).
+            self.add_dirt(local_id, ComponentDirt::SCRIPT_UPDATE, false);
+        }
         Ok(())
     }
 
@@ -1924,6 +1997,11 @@ impl ArtboardInstance {
         }
         self.mark_changed();
         self.runtime_shapes.mark_property_changed(local_id, false);
+        // Pinned C++ `SolidColor::colorValueChanged` immediately calls
+        // `renderOpacityChanged` and mutates the ShapePaint-owned paint
+        // (`solid_color.cpp:23-54`). This callback is not a dependency-node
+        // update.
+        self.settle_runtime_solid_color_callback(local_id);
         if let Some(revision) = self.solid_color_paint_revisions.get_mut(local_id) {
             *revision = revision.wrapping_add(1);
         }
@@ -1947,6 +2025,9 @@ impl ArtboardInstance {
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("SolidColor")
             && solid_color_value_property_key() == Some(property_key)
         {
+            // Pinned C++ `SolidColor::colorValueChanged` immediately calls
+            // `renderOpacityChanged` (`solid_color.cpp:54`).
+            self.settle_runtime_solid_color_callback(local_id);
             if let Some(revision) = self.solid_color_paint_revisions.get_mut(local_id) {
                 *revision = revision.wrapping_add(1);
             }
@@ -1958,6 +2039,28 @@ impl ArtboardInstance {
         self.mark_prepared_changed_for_color_property(local_id, property_key, previous, value);
         self.apply_color_property_changed(local_id, property_key);
         true
+    }
+
+    fn settle_runtime_solid_color_callback(&self, local_id: usize) {
+        let Some(context) = self.build_context.as_ref() else {
+            return;
+        };
+        let Ok(graph_global_id) = usize::try_from(self.graph_global_id) else {
+            return;
+        };
+        let Some(graph_index) = context
+            .artboard_index_by_global
+            .get(graph_global_id)
+            .copied()
+            .flatten()
+        else {
+            return;
+        };
+        let graphs = Arc::clone(&context.artboards);
+        let Some(graph) = graphs.get(graph_index) else {
+            return;
+        };
+        self.settle_runtime_solid_color_callback_with_graph(local_id, graph);
     }
 
     pub(crate) fn bool_property(&self, local_id: usize, property_key: u16) -> Option<bool> {
@@ -1989,6 +2092,7 @@ impl ArtboardInstance {
             .mark_property_changed(local_id, affects_effect_path);
         if affects_effect_path {
             self.mark_path_changed();
+            self.add_dirt(local_id, ComponentDirt::PATH, false);
         }
         self.apply_bool_property_changed(local_id, property_key, value);
         true
@@ -2267,6 +2371,7 @@ impl ArtboardInstance {
             .mark_property_changed(local_id, affects_effect_path);
         if affects_effect_path {
             self.mark_path_changed();
+            self.add_dirt(local_id, ComponentDirt::PATH, false);
         }
         self.apply_double_property_changed(local_id, property_key, value);
         true
@@ -2299,6 +2404,7 @@ impl ArtboardInstance {
             .mark_property_changed(local_id, affects_effect_path);
         if affects_effect_path {
             self.mark_path_changed();
+            self.add_dirt(local_id, ComponentDirt::PATH, false);
         }
         self.apply_uint_property_changed(local_id, property_key);
         true
@@ -4151,7 +4257,12 @@ impl ArtboardInstance {
             self.runtime_drawables
                 .mark_text_resource_dirty_for_local(local_id);
         }
-        self.runtime_shapes.mark_component_dirt(local_id, dirt);
+        if let Some(composer_order) = self.runtime_shapes.mark_component_dirt(local_id, dirt) {
+            self.dirt |= ComponentDirt::COMPONENTS;
+            if composer_order < self.dirt_depth {
+                self.dirt_depth = composer_order;
+            }
+        }
         self.components[index].dirt |= dirt;
         if dirt.contains(ComponentDirt::LAYOUT_STYLE) {
             self.mark_layout_changed();
@@ -4210,6 +4321,22 @@ impl ArtboardInstance {
             self.components[index].dirt &= !ComponentDirt::COLLAPSED;
             if self.nested_artboards.contains_key(&local_id) {
                 self.newly_uncollapsed_nested_artboards.insert(local_id);
+            }
+        }
+        // Pinned C++ `Path::collapse` forwards every visibility transition
+        // through `Shape::pathCollapseChanged` to
+        // `PathComposer::pathCollapseChanged` (`path.cpp:384-390`,
+        // `shape.cpp:330`, `path_composer.cpp:119-133`). That last method
+        // explicitly dirties the composer's dependents even when the
+        // composer already carries Path dirt, so do not route this through
+        // the ordinary duplicate-dirt early return.
+        if let Some((composer_order, dependent_paint_locals)) =
+            self.runtime_shapes.path_collapse_changed(local_id)
+        {
+            self.dirt |= ComponentDirt::COMPONENTS;
+            self.dirt_depth = self.dirt_depth.min(composer_order);
+            for paint_local in dependent_paint_locals {
+                self.add_dirt(paint_local, ComponentDirt::PATH, true);
             }
         }
         self.mark_path_changed();
@@ -4527,6 +4654,31 @@ impl ArtboardInstance {
             }
             if let Some(nested) = self.nested_artboards.get_mut(&host_local_id) {
                 changed |= nested.child.update_pass();
+                if dirt.contains(ComponentDirt::RENDER_OPACITY) {
+                    if let Some(frame) = nested.initial_layout_paint_frame.borrow().as_ref() {
+                        // C++ consumes the initial nested-layout shader wave in
+                        // `NestedArtboard::update(Filthy)`, after the mounted
+                        // child's `updatePass(false)` has propagated inherited
+                        // opacity (`nested_artboard.cpp:634-652`). The isolated
+                        // Rust frame stands in for precisely that wave, so clear
+                        // owner events only here; a later Components-only update
+                        // remains live and produces the next shader event.
+                        nested
+                            .child
+                            .transfer_owned_shape_gradient_events_to_initial_frame(frame);
+                    } else {
+                        // C++ mounts the child with the host's current render
+                        // opacity, then performs this one recursive update from
+                        // `NestedArtboard::update(Filthy)`
+                        // (`nested_artboard.cpp:110-135, 626-652`). Rust's
+                        // renderer factory attaches later, so any owner states
+                        // observed before that host update are implementation
+                        // history, not additional C++ shader events. Preserve
+                        // the post-update retained state that the factory would
+                        // have observed at this exact ownership boundary.
+                        nested.child.retain_latest_unrealized_shape_gradient_state();
+                    }
+                }
             }
         }
         changed
@@ -4577,34 +4729,106 @@ impl ArtboardInstance {
         F: FnMut(&mut Self, usize, ComponentDirt),
     {
         let mut report = UpdateComponentsReport::default();
+        let graph_owner = self.build_context.as_ref().and_then(|context| {
+            let graph_index = context
+                .artboard_index_by_global
+                .get(usize::try_from(self.graph_global_id).ok()?)
+                .copied()
+                .flatten()?;
+            Some((Arc::clone(&context.artboards), graph_index))
+        });
+        // A cloned C++ artboard rebuilds clone-owned PathComposer,
+        // ShapePaintPath, EffectPath, and RenderPaint state even when every
+        // copied component property was already clean. RuntimeShapeList marks
+        // that construction settlement explicitly.
+        let pending_shape_components = self.runtime_shapes.pending_settlement_component_locals();
+        if !pending_shape_components.is_empty() {
+            self.dirt |= ComponentDirt::COMPONENTS;
+            for local_id in pending_shape_components {
+                let Some(component_index) = self.component_by_local.get(&local_id).copied() else {
+                    continue;
+                };
+                self.components[component_index].dirt |= ComponentDirt::PATH;
+            }
+        }
         if !self.has_dirt(ComponentDirt::COMPONENTS) {
             return report;
         }
 
+        // C++ layout propagation settles control sizes before Path::update.
+        // Root occurrences do not use `layout_constraint_bounds` as a durable
+        // nested-layout override, so compute the same solved frame locally for
+        // this dependency traversal. Keep this after the clean-frame return:
+        // an unchanged C++ update does not solve the layout tree.
+        let layout_bounds = self.layout_constraint_bounds.clone().or_else(|| {
+            let (graphs, graph_index) = graph_owner.as_ref()?;
+            self.runtime_taffy_layout_bounds(&graphs[*graph_index], self.runtime_file())
+                .map(Arc::new)
+        });
+
         report.did_update = true;
         let max_steps = 100;
-        let update_order_len = self.update_order.len();
+        let update_order_len = self.runtime_update_order.len();
 
         while self.has_dirt(ComponentDirt::COMPONENTS) && report.steps < max_steps {
             self.dirt &= !ComponentDirt::COMPONENTS;
 
             for order_index in 0..update_order_len {
-                let local_id = self.update_order[order_index];
                 self.dirt_depth = order_index;
-                let Some(component_index) = self.component_by_local.get(&local_id).copied() else {
-                    continue;
-                };
-                let dirt = self.components[component_index].dirt;
-                if dirt.is_empty() || dirt.contains(ComponentDirt::COLLAPSED) {
-                    continue;
-                }
+                match self.runtime_update_order[order_index] {
+                    RuntimeUpdateTarget::Component(local_id) => {
+                        let Some(component_index) = self.component_by_local.get(&local_id).copied()
+                        else {
+                            continue;
+                        };
+                        let dirt = self.components[component_index].dirt;
+                        if dirt.is_empty() || dirt.contains(ComponentDirt::COLLAPSED) {
+                            continue;
+                        }
 
-                self.components[component_index].dirt = ComponentDirt::NONE;
-                self.update_component(component_index, dirt);
-                if record_updated_locals {
-                    report.updated_locals.push(local_id);
+                        self.components[component_index].dirt = ComponentDirt::NONE;
+                        self.update_component(component_index, dirt);
+                        if let Some((graphs, graph_index)) = graph_owner.as_ref() {
+                            self.update_runtime_path_owner(
+                                local_id,
+                                dirt,
+                                &graphs[*graph_index],
+                                layout_bounds.as_deref(),
+                            );
+                            self.update_runtime_shape_paints_at_dependency_node(
+                                local_id,
+                                dirt,
+                                &graphs[*graph_index],
+                                layout_bounds.as_deref(),
+                            );
+                        }
+                        if record_updated_locals {
+                            report.updated_locals.push(local_id);
+                        }
+                        hook(self, local_id, dirt);
+                    }
+                    RuntimeUpdateTarget::PathComposer(shape_local) => {
+                        if self
+                            .component(shape_local)
+                            .is_some_and(RuntimeComponent::is_collapsed)
+                        {
+                            continue;
+                        }
+                        let dirt = self.runtime_shapes.take_path_composer_dirt(shape_local);
+                        if dirt.is_empty() {
+                            continue;
+                        }
+                        if let Some((graphs, graph_index)) = graph_owner.as_ref() {
+                            self.update_runtime_path_composer(
+                                shape_local,
+                                dirt,
+                                &graphs[*graph_index],
+                                layout_bounds.as_deref(),
+                            );
+                        }
+                    }
+                    RuntimeUpdateTarget::TextVariationHelper => {}
                 }
-                hook(self, local_id, dirt);
 
                 if self.dirt_depth < order_index {
                     break;
@@ -4612,6 +4836,17 @@ impl ArtboardInstance {
             }
 
             report.steps += 1;
+        }
+
+        if let Some((graphs, graph_index)) = graph_owner.as_ref() {
+            // SolidColor mutates its RenderPaint from property/on-added
+            // callbacks and can legitimately be absent from the rooted
+            // Component update graph. Any mutator still dirty after the real
+            // traversal is that callback-owned case, not deferred draw work.
+            self.settle_runtime_shape_paint_callback_mutators(
+                &graphs[*graph_index],
+                layout_bounds.as_deref(),
+            );
         }
 
         report.max_steps_reached = self.has_dirt(ComponentDirt::COMPONENTS);
@@ -5037,6 +5272,23 @@ impl ArtboardInstance {
         property_key: u16,
         value: f32,
     ) -> bool {
+        let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        if path_vertex_property_affects_geometry(type_name, property_key) {
+            // Direct port of the concrete Vertex callbacks through
+            // PathVertex::markGeometryDirty and Path::markPathDirty. The
+            // vertex never owns path dirt; its parent PointsPath does
+            // (`vertex.cpp:14-15`, `straight_vertex.cpp:5`,
+            // `cubic_{mirrored,asymmetric,detached}_vertex.cpp`,
+            // `path_vertex.cpp:21-30`, `path.cpp:327-334`).
+            if let Some(path_local) = self
+                .component(local_id)
+                .and_then(|component| component.parent_local)
+            {
+                self.add_dirt(path_local, ComponentDirt::PATH, false);
+            }
+            return true;
+        }
+
         if let Some(property) = transform_property_for_key(property_key) {
             match property {
                 TransformProperty::Opacity => {
@@ -6396,6 +6648,36 @@ fn component_dirt_affects_path_epoch(dirt: ComponentDirt) -> bool {
         .is_empty()
 }
 
+fn path_vertex_property_affects_geometry(type_name: Option<&str>, property_key: u16) -> bool {
+    let Some(
+        type_name @ ("StraightVertex"
+        | "CubicMirroredVertex"
+        | "CubicAsymmetricVertex"
+        | "CubicDetachedVertex"),
+    ) = type_name
+    else {
+        return false;
+    };
+
+    let properties: &[&str] = match type_name {
+        "StraightVertex" => &["x", "y", "radius"],
+        "CubicMirroredVertex" => &["x", "y", "rotation", "distance"],
+        "CubicAsymmetricVertex" => &["x", "y", "rotation", "inDistance", "outDistance"],
+        "CubicDetachedVertex" => &[
+            "x",
+            "y",
+            "inRotation",
+            "inDistance",
+            "outRotation",
+            "outDistance",
+        ],
+        _ => unreachable!("path-vertex type was filtered above"),
+    };
+    properties
+        .iter()
+        .any(|name| property_key_for_name(type_name, name) == Some(property_key))
+}
+
 fn property_affects_effect_path_epoch(type_name: Option<&str>, property_key: u16) -> bool {
     match type_name {
         Some("TrimPath") => ["start", "end", "offset", "modeValue"]
@@ -6869,6 +7151,11 @@ mod tests {
             component_list_sources: BTreeMap::new(),
             ik_constraints: Vec::new(),
             joysticks_apply_before_update: true,
+            runtime_update_order: update_order
+                .iter()
+                .copied()
+                .map(RuntimeUpdateTarget::Component)
+                .collect(),
             update_order,
             linear_animations: Vec::new(),
             state_machines: Arc::new(Vec::new()),
@@ -9392,6 +9679,42 @@ mod tests {
     }
 
     #[test]
+    fn keyed_path_vertex_geometry_mutation_dirties_parent_path() {
+        // C++ routes Vertex::xChanged through
+        // PathVertex::markGeometryDirty to Path::markPathDirty; the parent
+        // PointsPath owns the rebuilt RawPath (`vertex.cpp:14-15`,
+        // `path_vertex.cpp:21-30`, `path.cpp:327-334`).
+        let vertex_x_key = property_key_for_name("StraightVertex", "x").expect("StraightVertex.x");
+        let mut path = synthetic_component(0, 0);
+        path.type_name = "PointsPath";
+        path.capabilities = RuntimeComponentCapabilities::default();
+        let mut vertex = synthetic_component(1, 1);
+        vertex.type_name = "StraightVertex";
+        vertex.parent_local = Some(0);
+        vertex.capabilities = RuntimeComponentCapabilities::default();
+        let mut instance = synthetic_instance(vec![path, vertex], vec![0, 1]);
+        instance.clear_component_dirt(0);
+        instance.clear_component_dirt(1);
+        instance.dirt = ComponentDirt::NONE;
+
+        assert!(instance.set_keyed_double_property(1, vertex_x_key, 14.0));
+        assert!(
+            instance
+                .component(0)
+                .expect("PointsPath component")
+                .dirt
+                .contains(ComponentDirt::PATH)
+        );
+        assert!(
+            !instance
+                .component(1)
+                .expect("StraightVertex component")
+                .dirt
+                .contains(ComponentDirt::PATH)
+        );
+    }
+
+    #[test]
     fn transform_property_mutation_only_recurses_world_transform_to_dependents() {
         let mut source = synthetic_component(0, 0);
         source.dependent_locals.push(1);
@@ -9502,6 +9825,21 @@ mod tests {
                 .components()
                 .iter()
                 .all(|component| component.dirt == ComponentDirt::FILTHY)
+        );
+    }
+
+    #[test]
+    fn unattached_import_only_paths_do_not_rearm_runtime_traversal() {
+        let bytes = include_bytes!("../../../fixtures/graph/dependency_test.riv");
+        let file = read_runtime_file(bytes).expect("fixture should import");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture should graph");
+        let artboard = graph.artboards.first().expect("fixture has artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
+
+        assert!(instance.update_components().did_update);
+        assert!(
+            !instance.update_components().did_update,
+            "C++ leaves unattached import-only components out of the rooted runtime schedule; their cold Path owners must not re-arm Artboard dirt"
         );
     }
 

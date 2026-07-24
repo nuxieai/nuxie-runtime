@@ -92,3 +92,17 @@ rule = "RF-33"
 citations = ["rust:file-correspondence-manifest.toml:4234-4234", "rust:crates/nuxie-runtime/src/draw.rs:4380-4424"]
 decision = "A whole C++ file remains pending until every state-bearing member and lifecycle row in this ledger is exact/adapted and the independent gate run passes. File-level notes cannot override open member rows."
 closure_test = "The checker reports zero pending/compensation ownership rows before any corresponding file row moves to faithful."
+
+[[gap]]
+id = "G14.path_raw_path_owner"
+rule = "RF-29"
+citations = ["cpp:include/rive/shapes/path.hpp:25-35", "cpp:src/shapes/path.cpp:336-380", "rust:crates/nuxie-runtime/src/draw.rs:10720-10745", "rust:crates/nuxie-runtime/src/draw.rs:12327-12361"]
+decision = "Each runtime Path occurrence owns the RawPath rebuilt by its dependency update. PathComposer reads that owner directly; RuntimeRenderPathCache may not retain or supply Shape source geometry."
+closure_test = "Path dirt rebuilds the owner before PathComposer, an unchanged draw performs no source-geometry work, and Shape drawing/query call graphs do not reference RuntimePathGeometryCommandSlots."
+
+[[gap]]
+id = "G15.shape_gradient_shader_owner"
+rule = "RF-30"
+citations = ["cpp:include/rive/shapes/paint/linear_gradient.hpp:15-49", "cpp:src/shapes/paint/linear_gradient.cpp:86-126", "rust:crates/nuxie-runtime/src/draw.rs:7070-7300", "rust:crates/nuxie-runtime/src/draw.rs:14920-15050"]
+decision = "A Shape gradient shader is retained by the same occurrence-local paint backend state as its ShapePaint-owned RenderPaint. It is never keyed by file-global id or owned by RuntimeRenderPathCache."
+closure_test = "CountingFactory proves one shader lifecycle per ShapePaint occurrence; clone/remount creates a distinct shader and replacing the scene cache does not affect it."

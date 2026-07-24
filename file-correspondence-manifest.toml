@@ -4604,15 +4604,15 @@ note = "Consolidated Rust port for text."
 
 [[file]]
 upstream = "src/text/raw_text.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/text.rs"
+rust_module = "crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0383"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "RD-C4 live Text traversal and clone-owned retained shape/style frame implemented; pending orchestrator verification."
+note = "The Text ownership batch ports RawText/Text occurrence construction and clone-owned retained shape/style draw state; pending orchestrator verification."
 
 [[file]]
 upstream = "src/text/raw_text_input.cpp"
@@ -4628,15 +4628,15 @@ note = "RD-C4 live TextInput rendering is implemented on clone-owned drawable re
 
 [[file]]
 upstream = "src/text/text.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/text.rs"
+rust_module = "crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0385"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "RD-C4 ports Text::draw ownership, object-local retained draw frames, and live traversal; pending orchestrator verification."
+note = "The Text ownership batch ports Text's construct/update/draw/clone/drop lifecycle with occurrence-local commands, paths, paints, and clip state; pending orchestrator verification."
 
 [[file]]
 upstream = "src/text/text_engine.cpp"
@@ -4688,15 +4688,15 @@ note = "F2: TextInput rendering is ported; editing behavior remains partial."
 
 [[file]]
 upstream = "src/text/text_input_drawable.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/text.rs"
+rust_module = "crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "partial"
 b6_row_id = "B6-0390"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "RD-C4 ports TextInputDrawable live drawing; editing behavior remains partial; pending orchestrator verification."
+note = "The Text ownership batch ports TextInputDrawable drawing through its clone-owned drawable resources; TextInput editing behavior remains a separate scope; pending orchestrator verification."
 
 [[file]]
 upstream = "src/text/text_input_selected_text.cpp"
@@ -4832,15 +4832,15 @@ note = "Consolidated Rust port for text."
 
 [[file]]
 upstream = "src/text/text_style_paint.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/text.rs"
+rust_module = "crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0402"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "RD-C4 ports TextStylePaint live drawing with dense Text/style backend paint pools; pending orchestrator verification."
+note = "The Text ownership batch ports TextStylePaint-owned paths, authored paint/shader state, and complete dense opacity pools per occurrence; pending orchestrator verification."
 
 [[file]]
 upstream = "src/text/text_target_modifier.cpp"

@@ -7,7 +7,7 @@ phase = "ownership-proof-before-scene-cache-removal"
 # This count is a ratchet, not a completion claim. `make
 # runtime-drawing-port-closed` requires pending=0, compensation=0, and every
 # legacy symbol count below to reach zero.
-expected_status_counts = { exact = 5, adapted = 26, pending = 4, compensation = 4 }
+expected_status_counts = { exact = 5, adapted = 28, pending = 2, compensation = 4 }
 
 [[batch]]
 id = "shape_path_paint"
@@ -520,42 +520,42 @@ depends_on = ["shape_paint_path.raw_path"]
 legacy_ratchets = []
 note = "Text's object-local command frame is preserved; it is not the scene RuntimeDrawCommand stream."
 [owner.lifecycle]
-construct = ["cpp:include/rive/text/text.hpp:290", "rust:crates/nuxie-runtime/src/draw.rs:7166-7205"]
-update = ["cpp:src/text/text.cpp:195", "rust:crates/nuxie-runtime/src/draw.rs:7166-7205"]
-draw = ["cpp:src/text/text.cpp:845-875", "rust:crates/nuxie-runtime/src/draw.rs:13773-14047"]
-clone_drop = ["cpp:include/rive/text/text.hpp:290", "rust:crates/nuxie-runtime/src/draw.rs:7166-7205"]
+construct = ["cpp:include/rive/text/text.hpp:290", "rust:crates/nuxie-runtime/src/draw.rs:8428-8475"]
+update = ["cpp:src/text/text.cpp:1111-1233", "rust:crates/nuxie-runtime/src/draw.rs:8314-8334", "rust:crates/nuxie-runtime/src/draw.rs:8622-8636"]
+draw = ["cpp:src/text/text.cpp:845-875", "rust:crates/nuxie-runtime/src/draw.rs:15027-15097", "rust:crates/nuxie-runtime/src/draw.rs:15272-15534"]
+clone_drop = ["cpp:src/generated/text/text_base.cpp:6-10", "cpp:include/rive/generated/text/text_base.hpp:244-262", "rust:crates/nuxie-runtime/src/draw.rs:8291-8311", "rust:crates/nuxie-runtime/src/draw.rs:26415-26447"]
 
 [[owner]]
 id = "text.style_render_paints"
 batch = "text"
-status = "pending"
+status = "adapted"
 rule = "RF-30"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "struct RuntimeTextPaintPools"
+rust_anchor = "struct RuntimeTextBackendResources"
 depends_on = ["text.draw_commands"]
-legacy_ratchets = ["scene_paint_cache_type"]
-note = "Dense style pools are object-shaped, but still live inside the scene RuntimeRenderPaints cache."
+legacy_ratchets = []
+note = "Each Text occurrence owns its authored RenderPaint and gradient shader state plus the complete dense TextStylePaint opacity pool. Draw grows the whole pool before iterating non-opaque buckets, matching C++, and clone/drop starts with fresh backend resources instead of copying scene cache entries."
 [owner.lifecycle]
-construct = ["cpp:src/text/text_style_paint.cpp:53-70", "rust:crates/nuxie-runtime/src/draw.rs:10272-10292"]
-update = ["cpp:src/text/text_style_paint.cpp:89-116", "rust:crates/nuxie-runtime/src/draw.rs:10278-10301"]
-draw = ["cpp:src/text/text.cpp:845-875", "rust:crates/nuxie-runtime/src/draw.rs:14694-14723"]
-clone_drop = ["cpp:include/rive/text/text.hpp:290", "rust:crates/nuxie-runtime/src/draw.rs:10262-10276"]
+construct = ["cpp:src/text/text_style_paint.cpp:13-19", "cpp:src/text/text_style_paint.cpp:51-81", "rust:crates/nuxie-runtime/src/draw.rs:8337-8374", "rust:crates/nuxie-runtime/src/draw.rs:15312-15385"]
+update = ["cpp:src/text/text_style_paint.cpp:22-48", "cpp:src/text/text_style_paint.cpp:88-99", "rust:crates/nuxie-runtime/src/draw.rs:15152-15269"]
+draw = ["cpp:src/text/text.cpp:845-875", "cpp:src/text/text_style_paint.cpp:51-102", "rust:crates/nuxie-runtime/src/draw.rs:15330-15527"]
+clone_drop = ["cpp:src/text/text_style_paint.cpp:125-134", "cpp:src/generated/text/text_style_paint_base.cpp:6-10", "rust:crates/nuxie-runtime/src/draw.rs:8291-8311", "rust:crates/nuxie-runtime/src/draw.rs:26415-26447"]
 
 [[owner]]
 id = "text.clip_path"
 batch = "text"
-status = "pending"
+status = "adapted"
 rule = "RF-30"
 rust_file = "crates/nuxie-runtime/src/draw.rs"
-rust_anchor = "text_clip_paths: RuntimeRetainedRenderPathSlots"
+rust_anchor = "clip_path: Option<RuntimeTextPathBackend>"
 depends_on = ["text.draw_commands"]
-legacy_ratchets = ["scene_path_cache_type"]
-note = "The retained clip path remains in RuntimeRenderPathCache instead of the Text occurrence."
+legacy_ratchets = []
+note = "The Text occurrence retains its clip RawPath and its backend RenderPath; empty shaped frames preserve C++'s early-return behavior, and clone/drop starts with no copied clip resource."
 [owner.lifecycle]
-construct = ["cpp:src/text/text.cpp:620-742", "rust:crates/nuxie-runtime/src/draw.rs:10726-10744"]
-update = ["cpp:src/text/text.cpp:620-742", "rust:crates/nuxie-runtime/src/draw.rs:13773-14047"]
-draw = ["cpp:src/text/text.cpp:845-875", "rust:crates/nuxie-runtime/src/draw.rs:13773-14047"]
-clone_drop = ["cpp:include/rive/text/text.hpp:290", "rust:crates/nuxie-runtime/src/draw.rs:10726-10750"]
+construct = ["cpp:src/text/text.cpp:534-543", "cpp:src/text/text.cpp:620-742", "rust:crates/nuxie-runtime/src/draw.rs:15027-15097"]
+update = ["cpp:src/text/text.cpp:1111-1233", "rust:crates/nuxie-runtime/src/draw.rs:8314-8334", "rust:crates/nuxie-runtime/src/draw.rs:8622-8636"]
+draw = ["cpp:src/text/text.cpp:845-875", "rust:crates/nuxie-runtime/src/draw.rs:15303-15328"]
+clone_drop = ["cpp:src/generated/text/text_base.cpp:6-10", "cpp:include/rive/generated/text/text_base.hpp:244-262", "rust:crates/nuxie-runtime/src/draw.rs:8291-8311", "rust:crates/nuxie-runtime/src/draw.rs:26415-26447"]
 
 [[owner]]
 id = "layout.cpu_paths"

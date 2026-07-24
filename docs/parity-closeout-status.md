@@ -1154,6 +1154,25 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
 
 ## Log
 
+- 2026-07-24 — The fifth post-closeout performance burn-down slice ports the
+  retained `DataBindContainer` dirty-list ownership into the Artboard-owned
+  runtime state. A clean zero-time frame no longer enters owned-DataContext
+  source collection merely because the context exists; authored binds,
+  formula operands, subordinate converter operands, and structural rebinds
+  enroll work at their retained owner, matching
+  `data_bind_container.cpp:156-171,245-267` and
+  `data_bind.cpp:502-547` (RF-2/RF-17). With canonical parameters run
+  immediately in the user-approved current environment,
+  `advance_blend_mode@0.25` moved from 1.816703x total / 1.710952x advance /
+  3.161242x draw to 1.605710x / 1.433424x / 3.103916x, and aggregate moved
+  from 1.605x to 1.545676x
+  (`target/perf-hot-loop-databind-owner-current-env.json`). Runtime 412/412,
+  nuxie 167/167, both golden modes 317/317 plus 647/647 exact segments, the
+  721-probe workspace, renderer pixels 1,468/1,468, C API, ownership closure,
+  lint, format, and Apple product/release checks are green. The next sorted
+  total entry is `animation_reset_cases@0`; `advance_blend_mode@0` remains the
+  worst draw entry. The <=1.0x target remains open.
+
 - 2026-07-24 — The fourth post-closeout performance burn-down slice ports
   retained ClippingShape dependency paths to their concrete Artboard
   occurrence. Source membership, composed CPU path, fill rule, visibility,

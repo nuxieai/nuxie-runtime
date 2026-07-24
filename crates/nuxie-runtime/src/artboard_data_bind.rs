@@ -538,6 +538,10 @@ impl RuntimeArtboardAuthoredDataBindStates {
         std::mem::take(&mut self.source_dirt_indices)
     }
 
+    fn has_pending_source_dirt(&self) -> bool {
+        !self.source_dirt_queue.is_empty() || !self.pending_source_dirt_indices.is_empty()
+    }
+
     fn recycle_source_dirt_indices(&mut self, mut indices: Vec<usize>) {
         indices.clear();
         self.source_dirt_indices = indices;
@@ -761,6 +765,10 @@ impl RuntimeArtboardRetainedSubordinateConverterOperands {
 
     fn take_dirt(&self) -> bool {
         self.sink.take_dirt().contains(RuntimeCellDirt::BINDINGS)
+    }
+
+    fn has_dirt(&self) -> bool {
+        self.sink.peek_dirt().contains(RuntimeCellDirt::BINDINGS)
     }
 }
 
@@ -2069,6 +2077,10 @@ impl RuntimeArtboardFormulaTokenBindingStates {
         self.source_dirt_queue
             .swap_into(&mut self.source_dirt_indices);
         std::mem::take(&mut self.source_dirt_indices)
+    }
+
+    fn has_source_dirt(&self) -> bool {
+        !self.source_dirt_queue.is_empty()
     }
 
     fn recycle_source_dirt_indices(&mut self, mut indices: Vec<usize>) {
@@ -6393,6 +6405,20 @@ impl ArtboardInstance {
         changed
     }
 
+    fn has_retained_owned_view_model_artboard_work(&self) -> bool {
+        self.artboard_authored_data_bind_states
+            .has_pending_source_dirt()
+            || self.artboard_formula_token_bindings.has_source_dirt()
+            || self
+                .artboard_owned_view_model_rebind_sink
+                .peek_dirt()
+                .contains(RuntimeCellDirt::BINDINGS)
+            || self
+                .artboard_retained_subordinate_converter_operands
+                .iter()
+                .any(RuntimeArtboardRetainedSubordinateConverterOperands::has_dirt)
+    }
+
     #[inline]
     pub(crate) fn advance_artboard_data_binds_with_root_transform(
         &mut self,
@@ -6400,17 +6426,16 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
     ) -> bool {
         // Match C++'s cheap clean `DataBindContainer::updateDataBinds` return
-        // before entering the active reconciliation routine. An owned-context
-        // refresh can itself dirty this epoch, so only bypass that refresh when
-        // no owned context exists and always re-read the epoch afterwards.
+        // before entering the active reconciliation routine. Source cells,
+        // converter operands, and structural owners enroll their retained
+        // DataBind in a dirty list, so the presence of an owned context alone
+        // is not work (`data_bind_container.cpp:156-171,245-267`;
+        // `data_bind.cpp:502-547`).
         let clean_identity_pass = elapsed_seconds == 0.0
             && root_transform == Mat2D::IDENTITY
             && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
             && self.artboard_list_bindings.is_empty();
-        if clean_identity_pass
-            && self.artboard_owned_data_context.is_none()
-            && self.artboard_owned_view_model_handle.is_none()
-        {
+        if clean_identity_pass && !self.has_retained_owned_view_model_artboard_work() {
             return false;
         }
         // Subordinate converter-property/formula operands push their own
@@ -8650,6 +8675,32 @@ mod tests {
 
         assert_eq!(states.take_pending_source_dirt_indices(), vec![2]);
         assert!(states[2].retained.take_pending_source_dirt());
+    }
+
+    #[test]
+    fn clean_owned_context_uses_the_cpp_container_dirty_list_gate() {
+        let file = font_binding_fixture();
+        let graphs = nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graph");
+        let graph = graphs.artboards.first().expect("fixture artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard");
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("owned Model instance"),
+        );
+        artboard.bind_owned_view_model_artboard_handle(&file, &context);
+        while artboard.advance_artboard_data_binds() {}
+
+        assert!(artboard.artboard_owned_data_context.is_some());
+        assert!(!artboard.has_retained_owned_view_model_artboard_work());
+        assert!(
+            !artboard.advance_artboard_data_binds(),
+            "C++ DataBindContainer returns before reconciliation when its retained dirty lists are empty, even while it owns a DataContext (`data_bind_container.cpp:156-171`)"
+        );
+
+        artboard
+            .artboard_owned_view_model_rebind_sink
+            .add_dirt(RuntimeCellDirt::BINDINGS);
+        assert!(artboard.has_retained_owned_view_model_artboard_work());
+        assert!(artboard.advance_artboard_data_binds());
     }
 
     #[test]

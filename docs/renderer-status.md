@@ -3077,6 +3077,24 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-24: The fifth user-directed hot-loop slice ports
+  `DataBindContainer`'s retained dirty-list ownership without changing the
+  renderer boundary. Owned-DataContext presence is no longer treated as work
+  on a clean zero-time frame. Authored binds, formula operands, subordinate
+  converter operands, and structural rebinds enroll at their retained owner,
+  matching `data_bind_container.cpp:156-171,245-267` and
+  `data_bind.cpp:502-547` (RF-2/RF-17). With canonical parameters run
+  immediately in the user-approved current environment,
+  `advance_blend_mode@0.25` improved from 1.816703x total / 1.710952x advance /
+  3.161242x draw to 1.605710x / 1.433424x / 3.103916x, and aggregate moved
+  from 1.605x to 1.545676x
+  (`target/perf-hot-loop-databind-owner-current-env.json`). Renderer pixels
+  remain 1,468/1,468 with 1,370 byte-exact entries and zero
+  divergences/gated cases; both golden modes remain 317/317 plus 647/647
+  exact segments. The next sorted total entry is
+  `animation_reset_cases@0`; `advance_blend_mode@0` remains the worst draw
+  entry. The <=1.0x tier-5 target remains open.
+
 - 2026-07-24: The fourth user-directed hot-loop slice ports ClippingShape's
   retained dependency path to the concrete Artboard occurrence without
   changing the renderer boundary. Source membership, composed CPU path, fill

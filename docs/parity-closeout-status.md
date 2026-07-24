@@ -738,7 +738,30 @@ upstream-sync-map registry).
   gate green at 39 owners (5 exact, 26 adapted, 4 pending, 4 compensation).
   Lint/format/diff checks are green; the stripped full SDK is 8,267,528 B
   scripting-off and 9,168,616 B scripting-on, both below the unchanged
-  9,437,184 B budget. The next ownership batch is Text.
+  9,437,184 B budget.
+  The Text ownership batch is now executor-complete pending independent
+  orchestrator verification. Every Text or TextInputDrawable occurrence owns
+  a fresh retained command/path frame plus its authored RenderPaint and
+  gradient shader state, complete dense TextStylePaint opacity pools, backend
+  draw paths, and clip path. Object-local Text shape/paint/world dirt rebuilds
+  that retained state; clone creates fresh custom/backend resources, and drop
+  releases them with the drawable occurrence. Live traversal reads those
+  owners directly. The former scene-wide Text paint pools, scene clip-path
+  slots, and generic command-adapter Text branches are deleted in the same
+  landing; the existing `Renderer`/`RenderFactory` boundary is unchanged.
+  Correspondence rows for `raw_text.cpp`, `text.cpp`,
+  `text_input_drawable.cpp`, and `text_style_paint.cpp` are `faithful` with
+  `pending-verification`; they move no further until the orchestrator's
+  independent run. Executor evidence is runtime 412/412, nuxie 167/167,
+  ordinary and scripted command goldens 317/317 entries plus 647/647 exact
+  segments with zero divergences/failures, renderer pixels 1,468/1,468
+  accepted with 837 byte-exact and zero divergences/gated cases, C API smoke
+  green, the probe-armed full workspace green with 721/721 runtime C++ probes,
+  and the ownership-ledger gate green at 39 owners (5 exact, 28 adapted,
+  2 pending, 4 compensation). Lint/format/diff checks are green; at committed
+  `2dac4178` the stripped full SDK is 8,284,248 B scripting-off and
+  9,185,336 B scripting-on, both below the unchanged 9,437,184 B budget. The
+  next ownership batch is Layout/nested/component lists.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -798,13 +821,13 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. Port the complete Text ownership batch from pinned C++ `d788e8ec`: shaped
-   lines/runs, render styles, modifiers, clipping/overflow state, and
-   TextInput's retained relationship across construct, update, draw, clone,
-   and drop. Remove the corresponding scene-cache/command ownership in the
-   same landing, keep the renderer API/backend unchanged, and referee the
-   merge with the full 1,468-row pixel corpus plus both zero-failure golden
-   gates.
+1. Port the complete Layout/nested/component-list ownership batch from pinned
+   C++ `d788e8ec`: LayoutComponent paint/clip paths, nested Artboard
+   occurrences, mounted component-list rows, intrinsic child bounds, and
+   stable draw-index order across construct, update, draw, clone, and drop.
+   Remove the corresponding scene-cache/command ownership in the same
+   landing, keep the renderer API/backend unchanged, and referee the merge
+   with the full 1,468-row pixel corpus plus both zero-failure golden gates.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -890,7 +913,8 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
 ## Pending USER-GATEs
 
 - None for the current C++ runtime drawing-port queue. The next binding batch
-  is Image/mesh; file rows remain pending until independent verification.
+  is Layout/nested/component lists; completed file rows remain pending until
+  independent verification.
 
 ## Decisions log
 
@@ -956,6 +980,24 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   boundary this phase crosses.
 
 ## Log
+
+- 2026-07-23 — The third formal C++ runtime drawing ownership batch completed
+  Text from pinned C++ `d788e8ec` without crossing the
+  `Renderer`/`RenderFactory` boundary. Every Text or TextInputDrawable
+  occurrence now owns a fresh retained command/path frame, authored
+  RenderPaint and gradient shader state, the complete dense TextStylePaint
+  opacity pools, backend paths, and clip path. Object-local dirt rebuilds
+  owner state; generated-style clone semantics start custom/backend state
+  fresh, and live traversal reads it directly. Scene-wide Text paint pools,
+  scene clip-path slots, and generic command-adapter Text branches are absent.
+  Evidence: runtime 412/412, nuxie 167/167, the probe-armed full workspace
+  green with 721/721 runtime C++ probes, ordinary and scripted goldens each
+  317/317 entries and 647/647 segments with zero failures, renderer pixels
+  1,468/1,468 accepted with 837 byte-exact and zero divergences/gated cases,
+  C API smoke and lint green. Size at committed `2dac4178` is 8,284,248 B
+  scripting-off and 9,185,336 B scripting-on, both under 9,437,184 B.
+  Correspondence rows remain `pending-verification`;
+  Layout/nested/component lists is next.
 
 - 2026-07-23 — The first formal C++ runtime drawing ownership batch completed
   Shape/path/paint from pinned C++ `d788e8ec` without crossing the

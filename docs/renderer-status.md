@@ -3077,6 +3077,26 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-24: The fourth user-directed hot-loop slice ports ClippingShape's
+  retained dependency path to the concrete Artboard occurrence without
+  changing the renderer boundary. Source membership, composed CPU path, fill
+  rule, visibility, backend path, and composer reverse dependencies now have
+  the C++ owner and lifecycle. `Path::onDirty` and composer settlement
+  propagate Path/NSlicer dirt in dependency order
+  (`path.cpp:328-350`, `shape.cpp:99-108`,
+  `path_composer.cpp:19-112`, `clipping_shape.cpp:35-66,91-173`);
+  unchanged draw, hit testing, and empty-clip counting no longer scan the
+  graph or recompose the path (RF-2/RF-4/RF-5/RF-10/RF-17/RF-29). With
+  canonical parameters run immediately in the user-approved current
+  environment, `animated_clipping@0` improved from 2.171215x total /
+  1.337240x advance / 2.787739x draw to 1.712940x / 1.383196x /
+  2.159816x, and aggregate moved from 1.756790x to 1.606826x
+  (`target/perf-hot-loop-clipping-owner-current-env.json`). Renderer pixels
+  remain 1,468/1,468 with 837 byte-exact entries and zero divergences/gated
+  cases; both golden modes remain 317/317 plus 647/647 exact segments. The
+  next sorted entry is `advance_blend_mode@0.25`; the <=1.0x tier-5 target
+  remains open.
+
 - 2026-07-24: The third user-directed hot-loop slice ports keyed SolidColor
   writes to the concrete callback owner without changing the renderer
   boundary. The generated equality return matches

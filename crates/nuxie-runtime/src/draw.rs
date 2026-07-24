@@ -921,25 +921,26 @@ impl ArtboardInstance {
                     let contains = point.is_none_or(|point| {
                         command
                             .clipping_shape_local
-                            .and_then(|local_id| runtime_clipping_shape(graph, local_id))
-                            .map(|clipping_shape| {
-                                if !self.runtime_clipping_shape_is_visible(clipping_shape) {
+                            .and_then(|local_id| {
+                                self.runtime_clipping_shapes
+                                    .get(local_id)
+                                    .map(|owner| (local_id, owner))
+                            })
+                            .map(|(local_id, clipping_shape)| {
+                                if !self.runtime_clipping_shape_is_visible_local(local_id) {
                                     return true;
                                 }
-                                let commands = path_cache.clipping_shape_path_commands(
-                                    self,
-                                    graph,
-                                    clipping_shape,
-                                    layout_bounds,
+                                if !clipping_shape.has_path.get() {
+                                    return false;
+                                }
+                                let commands = runtime_path_commands_from_raw_path(
+                                    &clipping_shape.path.borrow(),
                                 );
                                 runtime_path_contains(
                                     commands.as_slice(),
                                     point,
-                                    runtime_geometry_fill_rule(
-                                        runtime_live_clipping_shape_fill_rule_value(
-                                            self,
-                                            clipping_shape,
-                                        ),
+                                    runtime_geometry_fill_rule_from_render(
+                                        clipping_shape.fill_rule.get(),
                                     ),
                                 )
                             })
@@ -1899,7 +1900,7 @@ impl ArtboardInstance {
 
         for drawable in self.runtime_drawables.iter() {
             let prev_clips = empty_clips;
-            empty_clips += self.runtime_empty_clip_count(drawable, graph);
+            empty_clips += self.runtime_empty_clip_count(drawable);
             if !self.runtime_will_draw(drawable, include_invisible)
                 || empty_clips != prev_clips
                 || empty_clips > 0
@@ -4263,7 +4264,7 @@ impl ArtboardInstance {
         let mut empty_clips = 0i32;
         for drawable in self.runtime_drawables.iter() {
             let previous_empty_clips = empty_clips;
-            empty_clips += self.runtime_empty_clip_count(drawable, graph);
+            empty_clips += self.runtime_empty_clip_count(drawable);
             if !self.runtime_will_draw_live_traversal(drawable)
                 || empty_clips != previous_empty_clips
                 || empty_clips > 0
@@ -4284,12 +4285,10 @@ impl ArtboardInstance {
                 for pending_clip in pending_clip_operations.drain(..) {
                     runtime_draw_live_clip_start(
                         self,
-                        graph,
                         pending_clip,
-                        layout_bounds,
+                        paint_by_global.backend_context_id,
                         factory,
                         renderer,
-                        path_cache,
                     );
                 }
             }
@@ -4446,7 +4445,7 @@ impl ArtboardInstance {
             }
 
             if drawable.kind == DrawableOrderKind::ClipEndProxy {
-                runtime_draw_live_clip_end(self, graph, drawable, renderer);
+                runtime_draw_live_clip_end(self, drawable, renderer);
                 continue;
             }
 
@@ -4482,9 +4481,14 @@ impl ArtboardInstance {
             .is_some_and(|component| component.transform.render_opacity != 0.0)
     }
 
-    fn runtime_clipping_shape_is_visible(&self, clipping_shape: &ClippingShapeNode) -> bool {
+    fn runtime_clipping_shape_is_visible_local(&self, local_id: usize) -> bool {
         property_key_for_name("ClippingShape", "isVisible")
-            .and_then(|key| self.bool_property(clipping_shape.local_id, key))
+            .and_then(|key| self.bool_property(local_id, key))
+            .or_else(|| {
+                self.runtime_clipping_shapes
+                    .get(local_id)
+                    .map(|owner| owner.authored_is_visible)
+            })
             .unwrap_or(false)
     }
 
@@ -4576,7 +4580,7 @@ impl ArtboardInstance {
                     .is_some_and(|local_id| self.nested_artboards.get(&local_id).is_some()))
     }
 
-    fn runtime_empty_clip_count(&self, drawable: &RuntimeDrawable, graph: &ArtboardGraph) -> i32 {
+    fn runtime_empty_clip_count(&self, drawable: &RuntimeDrawable) -> i32 {
         let empty_delta = match drawable.kind {
             DrawableOrderKind::ClipStartProxy => 1,
             DrawableOrderKind::ClipEndProxy => -1,
@@ -4585,36 +4589,17 @@ impl ArtboardInstance {
         let Some(clipping_shape_local) = drawable.clipping_shape_local else {
             return 0;
         };
-        let Some(clipping_shape) = graph
-            .clipping_shapes
-            .iter()
-            .find(|clipping_shape| clipping_shape.local_id == clipping_shape_local)
-        else {
+        let Some(clipping_shape) = self.runtime_clipping_shapes.get(clipping_shape_local) else {
             return 0;
         };
 
-        if self.runtime_clipping_shape_is_visible(clipping_shape)
-            && !self.clipping_shape_has_runtime_clip_path(clipping_shape, graph)
+        if self.runtime_clipping_shape_is_visible_local(clipping_shape_local)
+            && !clipping_shape.has_path.get()
         {
             empty_delta
         } else {
             0
         }
-    }
-
-    fn clipping_shape_has_runtime_clip_path(
-        &self,
-        clipping_shape: &ClippingShapeNode,
-        graph: &ArtboardGraph,
-    ) -> bool {
-        clipping_shape.shape_locals.iter().any(|shape_local| {
-            self.runtime_shapes.get(*shape_local).is_some_and(|shape| {
-                shape
-                    .path_locals
-                    .iter()
-                    .any(|path_local| self.runtime_shape_path_is_visible(*path_local, graph))
-            })
-        })
     }
 
     fn runtime_shape_path_is_visible(&self, path_local: usize, graph: &ArtboardGraph) -> bool {
@@ -7726,77 +7711,46 @@ impl ArtboardInstance {
         }
     }
 
-    fn runtime_clipping_shape_path_commands_uncached(
-        &self,
-        clipping_shape: &ClippingShapeNode,
-        graph: &ArtboardGraph,
-        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-        path_cache: &mut RuntimeArtboardPathState,
-    ) -> Vec<RuntimePathCommand> {
-        let mut commands = Vec::new();
-        let path_lookup = path_cache.path_composer_lookup_frame(graph);
-        for shape_local in &clipping_shape.shape_locals {
+    /// Direct port of pinned C++ `ClippingShape::update`
+    /// (`src/shapes/clipping_shape.cpp:151-173`). The dependency node rewinds
+    /// its occurrence-owned world path only under Path/WorldTransform/NSlicer
+    /// dirt; `emptyClipCount` and draw read the retained pointer thereafter.
+    pub(crate) fn update_runtime_clipping_shape_owner(&self, local_id: usize, dirt: ComponentDirt) {
+        if (dirt & (ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER))
+            .is_empty()
+        {
+            return;
+        }
+        let Some(owner) = self.runtime_clipping_shapes.get(local_id) else {
+            return;
+        };
+
+        let fill_rule = runtime_draw_property_key_for_name("ClippingShape", "fillRule")
+            .and_then(|key| self.uint_property(local_id, key))
+            .unwrap_or(owner.authored_fill_rule);
+        owner.fill_rule.set(runtime_fill_rule_for_value(fill_rule));
+
+        let mut path = owner.path.borrow_mut();
+        path.rewind();
+        let mut has_path = false;
+        for shape_local in &owner.shape_locals {
             let Some(shape) = self.runtime_shapes.get(*shape_local) else {
                 continue;
             };
-            let shape_world = path_cache.component_world_transform_with_bounds(
-                self,
-                graph,
-                *shape_local,
-                layout_bounds,
-            );
-            let inverse_shape_world = shape_world.invert_or_identity();
-            let nsliced_context =
-                runtime_nsliced_node_context_for_shape(self, graph, *shape_local, layout_bounds);
-
-            for path_local in &shape.path_locals {
-                if !self.runtime_shape_path_is_visible(*path_local, graph) {
-                    continue;
-                }
-                let Some(path) = path_lookup.path(graph, *path_local) else {
-                    continue;
-                };
-                let path_world = path_cache.component_world_transform_with_bounds(
-                    self,
-                    graph,
-                    path.local_id,
-                    layout_bounds,
-                );
-                let path_frame =
-                    path_cache.path_geometry_commands_frame(self, graph, path, layout_bounds);
-                let path_transform = if path_frame.has_weighted_context {
-                    Mat2D::IDENTITY
-                } else {
-                    path_world
-                };
-                if nsliced_context.is_none() {
-                    let start = commands.len();
-                    append_transformed_path_commands(
-                        &mut commands,
-                        path_frame.commands.as_ref(),
-                        path_transform,
-                    );
-                    prune_empty_path_segments_from(&mut commands, start);
-                    continue;
-                }
-
-                let mut path_commands = path_frame.commands.as_ref().clone();
-                transform_path_commands(&mut path_commands, path_transform);
-                if let Some(nsliced_context) = nsliced_context.as_ref() {
-                    runtime_deform_path_commands_with_nsliced_node(
-                        &mut path_commands,
-                        nsliced_context,
-                        ShapePaintPathKind::World,
-                        shape_world,
-                        inverse_shape_world,
-                    );
-                }
-                prune_empty_path_segments(&mut path_commands);
-                commands.extend(path_commands);
+            let world_path = shape.paint_paths
+                [runtime_shape_paint_path_kind_slot(RuntimeShapePaintPathKind::World)]
+            .retained
+            .borrow();
+            let Some(world_path) = world_path.as_ref() else {
+                continue;
+            };
+            if world_path.raw_path.verbs().is_empty() {
+                continue;
             }
+            path.add_path(world_path.raw_path.as_ref(), RenderMat2D::IDENTITY);
+            has_path = true;
         }
-
-        commands
+        owner.has_path.set(has_path);
     }
 
     fn runtime_path_geometry_with_layout_control(
@@ -8760,12 +8714,23 @@ impl RuntimeShapeList {
 
     fn add_path_composer_dirt(&self, shape_local: usize, dirt: ComponentDirt) -> Option<usize> {
         let shape = self.get(shape_local)?;
-        let composer_dirt = dirt
+        let source_path_dirt = dirt
             & (ComponentDirt::PATH
                 | ComponentDirt::VERTICES
                 | ComponentDirt::WORLD_TRANSFORM
                 | ComponentDirt::N_SLICER
                 | ComponentDirt::LAYOUT_STYLE);
+        if source_path_dirt.is_empty() {
+            return None;
+        }
+        // Pinned C++ `Path::markPathDirty` and `Path::onDirty`
+        // (`src/shapes/path.cpp:328-350`) call `Shape::pathChanged`, which
+        // adds recursive Path dirt to the embedded composer
+        // (`src/shapes/shape.cpp:99-108`). Preserve NSlicer alongside that
+        // normalized Path bit; storing raw WorldTransform on the composer
+        // would be inert because `PathComposer::update` intentionally only
+        // rebuilds for Path/NSlicer (`path_composer.cpp:38-112`).
+        let composer_dirt = ComponentDirt::PATH | (source_path_dirt & ComponentDirt::N_SLICER);
         if composer_dirt.is_empty() || shape.path_composer_dirt.get().contains(composer_dirt) {
             return None;
         }
@@ -8811,6 +8776,120 @@ impl RuntimeShapeList {
                     paint.invalidate_effects_from(effect.effect_index);
                 }
             }
+        }
+    }
+}
+
+/// Clone-owned counterpart of C++ `ClippingShape::{m_Shapes,m_path,m_clipPath}`.
+/// Source membership is fixed by `onAddedClean`; the CPU path and backend
+/// RenderPath remain on the concrete occurrence and start cold on clone.
+#[derive(Debug, Default)]
+pub(crate) struct RuntimeClippingShapeList {
+    by_local: Vec<Option<RuntimeClippingShapeOwner>>,
+    /// Pinned C++ `ClippingShape::buildDependencies`
+    /// (`src/shapes/clipping_shape.cpp:140-147`): retained reverse topology
+    /// from each concrete Shape::PathComposer to dependent ClippingShapes.
+    dependents_by_shape_local: Vec<Vec<usize>>,
+}
+
+impl Clone for RuntimeClippingShapeList {
+    fn clone(&self) -> Self {
+        Self {
+            by_local: self
+                .by_local
+                .iter()
+                .map(|owner| owner.as_ref().map(RuntimeClippingShapeOwner::clone_cold))
+                .collect(),
+            dependents_by_shape_local: self.dependents_by_shape_local.clone(),
+        }
+    }
+}
+
+impl RuntimeClippingShapeList {
+    pub(crate) fn from_graph(graph: &ArtboardGraph) -> Self {
+        let mut owners = Self::default();
+        if let Some(maximum) = graph
+            .clipping_shapes
+            .iter()
+            .map(|shape| shape.local_id)
+            .max()
+        {
+            owners
+                .by_local
+                .resize_with(maximum.saturating_add(1), || None);
+            for shape in &graph.clipping_shapes {
+                owners.by_local[shape.local_id] = Some(RuntimeClippingShapeOwner::new(shape));
+                for shape_local in &shape.shape_locals {
+                    if owners.dependents_by_shape_local.len() <= *shape_local {
+                        owners
+                            .dependents_by_shape_local
+                            .resize_with(shape_local.saturating_add(1), Vec::new);
+                    }
+                    let dependents = &mut owners.dependents_by_shape_local[*shape_local];
+                    if !dependents.contains(&shape.local_id) {
+                        dependents.push(shape.local_id);
+                    }
+                }
+            }
+        }
+        owners
+    }
+
+    fn get(&self, local_id: usize) -> Option<&RuntimeClippingShapeOwner> {
+        self.by_local.get(local_id)?.as_ref()
+    }
+
+    pub(crate) fn dependent_count(&self, shape_local: usize) -> usize {
+        self.dependents_by_shape_local
+            .get(shape_local)
+            .map_or(0, Vec::len)
+    }
+
+    pub(crate) fn dependent_local(
+        &self,
+        shape_local: usize,
+        dependent_index: usize,
+    ) -> Option<usize> {
+        self.dependents_by_shape_local
+            .get(shape_local)?
+            .get(dependent_index)
+            .copied()
+    }
+}
+
+#[derive(Debug)]
+struct RuntimeClippingShapeOwner {
+    shape_locals: Vec<usize>,
+    authored_fill_rule: u64,
+    authored_is_visible: bool,
+    path: RefCell<RawPath>,
+    has_path: Cell<bool>,
+    fill_rule: Cell<RenderFillRule>,
+    backend: RuntimePathBackendSlot,
+}
+
+impl RuntimeClippingShapeOwner {
+    fn new(shape: &ClippingShapeNode) -> Self {
+        Self {
+            shape_locals: shape.shape_locals.clone(),
+            authored_fill_rule: shape.fill_rule,
+            authored_is_visible: shape.is_visible,
+            path: RefCell::new(RawPath::new()),
+            has_path: Cell::new(false),
+            fill_rule: Cell::new(runtime_fill_rule_for_value(shape.fill_rule)),
+            backend: RuntimePathBackendSlot::default(),
+        }
+    }
+
+    fn clone_cold(&self) -> Self {
+        Self {
+            shape_locals: self.shape_locals.clone(),
+            authored_fill_rule: self.authored_fill_rule,
+            authored_is_visible: self.authored_is_visible,
+            path: RefCell::new(RawPath::new()),
+            has_path: Cell::new(false),
+            fill_rule: Cell::new(runtime_fill_rule_for_value(self.authored_fill_rule)),
+            backend: RuntimePathBackendSlot::default(),
         }
     }
 }
@@ -12983,12 +13062,9 @@ impl RuntimeArtboardPaintDirtState {
 #[derive(Default)]
 pub(crate) struct RuntimeArtboardPathState {
     layout_bounds: Option<RuntimeLayoutBoundsFrame>,
-    path_composer_lookup: Option<RuntimePathComposerLookupFrame>,
     artboard_clip: Option<RuntimeRetainedRenderPath>,
-    clip_paths: RuntimeRetainedRenderPathSlots,
     draw_paths: RuntimeDrawPathSlots,
     path_geometry_commands: RuntimePathGeometryCommandSlots,
-    clipping_shape_commands: RuntimeClippingShapeCommandSlots,
     world_transforms: RuntimeWorldTransformSlots,
     image_layout_transforms: RuntimeImageLayoutTransformSlots,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
@@ -13218,33 +13294,6 @@ struct RuntimeLayoutBoundsFrame {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RuntimePathComposerLookupCacheKey {
-    graph_global_id: u32,
-    graph_identity: usize,
-}
-
-#[derive(Clone)]
-struct RuntimePathComposerLookupFrame {
-    key: RuntimePathComposerLookupCacheKey,
-    path_index_by_local: Arc<Vec<Option<usize>>>,
-}
-
-impl RuntimePathComposerLookupFrame {
-    fn path<'a>(
-        &self,
-        graph: &'a ArtboardGraph,
-        path_local: usize,
-    ) -> Option<&'a PathGeometryNode> {
-        graph.paths.get(
-            self.path_index_by_local
-                .get(path_local)?
-                .as_ref()
-                .copied()?,
-        )
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimePathGeometryCommandsCacheKey {
     path_epoch: u64,
     layout_epoch: u64,
@@ -13292,64 +13341,6 @@ fn runtime_shape_paint_path_kind_slot(path_kind: RuntimeShapePaintPathKind) -> u
 #[derive(Debug, Clone, PartialEq)]
 struct RuntimeShapePathState {
     raw_path: Arc<RawPath>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RuntimeClippingShapeCommandsCacheKey {
-    path_epoch: u64,
-    layout_epoch: u64,
-    world_epoch: u64,
-}
-
-#[derive(Default)]
-struct RuntimeClippingShapeCommandSlots {
-    graph_global_id: Option<u32>,
-    by_clipping_shape_local: Vec<Option<RuntimeCachedClippingShapeCommands>>,
-}
-
-impl RuntimeClippingShapeCommandSlots {
-    fn get(
-        &mut self,
-        graph_global_id: u32,
-        clipping_shape_local: usize,
-        key: RuntimeClippingShapeCommandsCacheKey,
-    ) -> Option<Arc<Vec<RuntimePathCommand>>> {
-        if self.graph_global_id != Some(graph_global_id) {
-            self.graph_global_id = Some(graph_global_id);
-            self.by_clipping_shape_local.clear();
-            return None;
-        }
-        self.by_clipping_shape_local
-            .get(clipping_shape_local)
-            .and_then(|cached| cached.as_ref())
-            .filter(|cached| cached.key == key)
-            .map(|cached| cached.commands.clone())
-    }
-
-    fn insert(
-        &mut self,
-        graph_global_id: u32,
-        clipping_shape_local: usize,
-        key: RuntimeClippingShapeCommandsCacheKey,
-        commands: Arc<Vec<RuntimePathCommand>>,
-    ) {
-        if self.graph_global_id != Some(graph_global_id) {
-            self.graph_global_id = Some(graph_global_id);
-            self.by_clipping_shape_local.clear();
-        }
-        if self.by_clipping_shape_local.len() <= clipping_shape_local {
-            self.by_clipping_shape_local
-                .resize_with(clipping_shape_local + 1, || None);
-        }
-        self.by_clipping_shape_local[clipping_shape_local] =
-            Some(RuntimeCachedClippingShapeCommands { key, commands });
-    }
-}
-
-#[derive(Clone)]
-struct RuntimeCachedClippingShapeCommands {
-    key: RuntimeClippingShapeCommandsCacheKey,
-    commands: Arc<Vec<RuntimePathCommand>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13575,29 +13566,6 @@ struct RuntimeRetainedRenderPathCacheKey {
     layout_epoch: u64,
     world_epoch: u64,
     fill_rule: RenderFillRule,
-}
-
-#[derive(Default)]
-struct RuntimeRetainedRenderPathSlots {
-    graph_global_id: Option<u32>,
-    by_local: Vec<Option<RuntimeRetainedRenderPath>>,
-}
-
-impl RuntimeRetainedRenderPathSlots {
-    fn slot_mut(
-        &mut self,
-        graph_global_id: u32,
-        local_id: usize,
-    ) -> &mut Option<RuntimeRetainedRenderPath> {
-        if self.graph_global_id != Some(graph_global_id) {
-            self.graph_global_id = Some(graph_global_id);
-            self.by_local.clear();
-        }
-        if self.by_local.len() <= local_id {
-            self.by_local.resize_with(local_id + 1, || None);
-        }
-        &mut self.by_local[local_id]
-    }
 }
 
 #[derive(Default)]
@@ -14230,37 +14198,6 @@ impl RuntimeArtboardPathState {
             .clone()
     }
 
-    fn path_composer_lookup_frame(
-        &mut self,
-        graph: &ArtboardGraph,
-    ) -> RuntimePathComposerLookupFrame {
-        let key = RuntimePathComposerLookupCacheKey {
-            graph_global_id: graph.global_id,
-            graph_identity: graph as *const ArtboardGraph as usize,
-        };
-        if self
-            .path_composer_lookup
-            .as_ref()
-            .is_none_or(|frame| frame.key != key)
-        {
-            self.path_composer_lookup = Some(RuntimePathComposerLookupFrame {
-                key,
-                path_index_by_local: Arc::new(runtime_local_index_lookup(
-                    graph
-                        .paths
-                        .iter()
-                        .enumerate()
-                        .map(|(index, path)| (path.local_id, index)),
-                )),
-            });
-        }
-
-        self.path_composer_lookup
-            .as_ref()
-            .expect("path composer lookup frame was just populated")
-            .clone()
-    }
-
     fn path_geometry_commands_frame(
         &mut self,
         instance: &ArtboardInstance,
@@ -14367,52 +14304,6 @@ impl RuntimeArtboardPathState {
         }
     }
 
-    fn retained_world_render_path_key(
-        &self,
-        instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
-        fill_rule: RenderFillRule,
-    ) -> RuntimeRetainedRenderPathCacheKey {
-        RuntimeRetainedRenderPathCacheKey {
-            world_epoch: instance.prepared_epoch(),
-            ..self.retained_render_path_key(instance, graph, fill_rule)
-        }
-    }
-
-    fn clipping_shape_path_commands(
-        &mut self,
-        instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
-        clipping_shape: &ClippingShapeNode,
-        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    ) -> Arc<Vec<RuntimePathCommand>> {
-        let key = RuntimeClippingShapeCommandsCacheKey {
-            path_epoch: instance.path_epoch(),
-            layout_epoch: instance.layout_epoch(),
-            world_epoch: instance.prepared_epoch(),
-        };
-        if let Some(commands) =
-            self.clipping_shape_commands
-                .get(graph.global_id, clipping_shape.local_id, key)
-        {
-            return commands;
-        }
-
-        let commands = Arc::new(instance.runtime_clipping_shape_path_commands_uncached(
-            clipping_shape,
-            graph,
-            layout_bounds,
-            self,
-        ));
-        self.clipping_shape_commands.insert(
-            graph.global_id,
-            clipping_shape.local_id,
-            key,
-            commands.clone(),
-        );
-        commands
-    }
-
     fn artboard_clip_path(
         &mut self,
         key: RuntimeRetainedRenderPathCacheKey,
@@ -14425,17 +14316,6 @@ impl RuntimeArtboardPathState {
             factory,
             commands,
         )
-    }
-
-    fn clipping_shape_path(
-        &mut self,
-        key: RuntimeRetainedRenderPathCacheKey,
-        local_id: usize,
-        factory: &mut dyn RenderFactory,
-        commands: &[RuntimePathCommand],
-    ) -> &mut Box<dyn RenderPath> {
-        let slot = self.clip_paths.slot_mut(key.graph_global_id, local_id);
-        runtime_cached_retained_render_path(slot, key, factory, commands)
     }
 
     fn draw_path(
@@ -14490,19 +14370,6 @@ impl RuntimeArtboardPathState {
                 prepared_raw_path,
             )
     }
-}
-
-fn runtime_local_index_lookup(
-    entries: impl IntoIterator<Item = (usize, usize)>,
-) -> Vec<Option<usize>> {
-    let mut lookup = Vec::new();
-    for (local_id, index) in entries {
-        if lookup.len() <= local_id {
-            lookup.resize(local_id + 1, None);
-        }
-        lookup[local_id] = Some(index);
-    }
-    lookup
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19077,65 +18944,45 @@ fn runtime_settle_nested_artboard_layout_child(child: &mut ArtboardInstance) {
 
 fn runtime_draw_live_clip_start(
     instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
     drawable: &RuntimeDrawable,
-    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    backend_context_id: u64,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
-    path_cache: &mut RuntimeArtboardPathState,
 ) {
-    let Some(clipping_shape) = drawable
-        .clipping_shape_local
-        .and_then(|local_id| runtime_clipping_shape(graph, local_id))
-    else {
+    let Some(local_id) = drawable.clipping_shape_local else {
         return;
     };
-    if !instance.runtime_clipping_shape_is_visible(clipping_shape) {
+    let Some(clipping_shape) = instance.runtime_clipping_shapes.get(local_id) else {
+        return;
+    };
+    if !instance.runtime_clipping_shape_is_visible_local(local_id) || !clipping_shape.has_path.get()
+    {
         return;
     }
     if drawable.needs_save_operation {
         renderer.save();
     }
-    let path_commands =
-        path_cache.clipping_shape_path_commands(instance, graph, clipping_shape, layout_bounds);
-    // Ported from src/shapes/clipping_shape.cpp: each ClippingShape owns a
-    // cached clip path, so repeated clip-start proxies reuse the same RenderPath.
-    let fill_rule = runtime_fill_rule_for_value(runtime_live_clipping_shape_fill_rule_value(
-        instance,
-        clipping_shape,
-    ));
-    let key = path_cache.retained_world_render_path_key(instance, graph, fill_rule);
-    let path = path_cache.clipping_shape_path(
-        key,
-        clipping_shape.local_id,
+    let path = clipping_shape.path.borrow();
+    clipping_shape.backend.with_path(
+        backend_context_id,
         factory,
-        path_commands.as_slice(),
+        &path,
+        Some(clipping_shape.fill_rule.get()),
+        |path| renderer.clip_path(path),
     );
-    renderer.clip_path(path.as_ref());
 }
 
 fn runtime_draw_live_clip_end(
     instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
     drawable: &RuntimeDrawable,
     renderer: &mut dyn Renderer,
 ) {
-    let Some(clipping_shape) = drawable
-        .clipping_shape_local
-        .and_then(|local_id| runtime_clipping_shape(graph, local_id))
-    else {
+    let Some(local_id) = drawable.clipping_shape_local else {
         return;
     };
-    if instance.runtime_clipping_shape_is_visible(clipping_shape) && drawable.needs_save_operation {
+    if instance.runtime_clipping_shape_is_visible_local(local_id) && drawable.needs_save_operation {
         renderer.restore();
     }
-}
-
-fn runtime_clipping_shape(graph: &ArtboardGraph, local_id: usize) -> Option<&ClippingShapeNode> {
-    graph
-        .clipping_shapes
-        .iter()
-        .find(|clipping_shape| clipping_shape.local_id == local_id)
 }
 
 fn assign_shape_paint_path_slot_indices(commands: &mut [RuntimeShapePaintCommand]) {
@@ -19881,17 +19728,6 @@ fn runtime_live_shape_paint_fill_rule(
         .and_then(|key| instance.uint_property(paint.local_id, key))
         .unwrap_or(paint.fill_rule);
     runtime_fill_rule_for_value(live_value)
-}
-
-// C++ `ClippingShape::update` rewinds its cached world path with the live
-// animatable/data-bound fillRule. The graph node is only an import snapshot.
-fn runtime_live_clipping_shape_fill_rule_value(
-    instance: &ArtboardInstance,
-    clipping_shape: &ClippingShapeNode,
-) -> u64 {
-    runtime_draw_property_key_for_name("ClippingShape", "fillRule")
-        .and_then(|key| instance.uint_property(clipping_shape.local_id, key))
-        .unwrap_or(clipping_shape.fill_rule)
 }
 
 fn runtime_make_path_from_raw_path(
@@ -21084,14 +20920,6 @@ enum RuntimeGeometryFillRule {
     NonZero,
     EvenOdd,
     Clockwise,
-}
-
-fn runtime_geometry_fill_rule(value: u64) -> RuntimeGeometryFillRule {
-    match value {
-        1 => RuntimeGeometryFillRule::EvenOdd,
-        2 => RuntimeGeometryFillRule::Clockwise,
-        _ => RuntimeGeometryFillRule::NonZero,
-    }
 }
 
 fn runtime_geometry_fill_rule_from_render(fill_rule: RenderFillRule) -> RuntimeGeometryFillRule {
@@ -28428,7 +28256,9 @@ mod tests {
     }
 
     #[test]
-    fn clipping_render_path_uses_live_fill_rule() {
+    fn clipping_fill_rule_applies_on_the_next_path_dependency_update() {
+        use crate::TransformProperty;
+
         let bytes = synthetic_clip_geometry_riv(Some(20.0));
         let file = read_runtime_file(&bytes).expect("synthetic live-clip riv imports");
         let graphs = GraphFile::from_runtime_file(&file).expect("synthetic live-clip graphs");
@@ -28511,8 +28341,41 @@ mod tests {
             .expect("second draw succeeds");
         assert_eq!(
             renderer.clip_fill_rules.last(),
+            Some(&RenderFillRule::NonZero),
+            "pinned C++ `ClippingShapeBase::fillRule` only stores/notifies \
+             (`include/rive/generated/shapes/clipping_shape_base.hpp:55-63`); \
+             it does not dirty the retained path"
+        );
+
+        assert!(instance.set_transform_property(1, TransformProperty::X, 70.0));
+        instance.update_components();
+        instance
+            .update_artboard_backend_tree(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("dependency-dirt prepare succeeds");
+        instance
+            .draw_artboard_internal_with_render_cache(
+                &file,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("dependency-dirt draw succeeds");
+        assert_eq!(
+            renderer.clip_fill_rules.last(),
             Some(&RenderFillRule::Clockwise),
-            "C++ rewinds ClippingShape paths with the live fillRule"
+            "pinned C++ `ClippingShape::update` consumes the live fillRule \
+             when Path/WorldTransform/NSlicer dirt rebuilds `m_path` \
+             (`src/shapes/clipping_shape.cpp:151-173`)"
         );
     }
 
@@ -30908,85 +30771,57 @@ mod tests {
     }
 
     #[test]
-    fn retained_local_path_slots_skip_rebuild_until_key_changes() {
-        let stats = Rc::new(CountingStats::default());
-        let mut factory = CountingFactory {
-            stats: Rc::clone(&stats),
-            next_path_id: 0,
-        };
-        let mut cache = RuntimeArtboardPathState::default();
-        let key = RuntimeRetainedRenderPathCacheKey {
-            graph_global_id: 42,
-            path_epoch: 10,
-            layout_epoch: 20,
-            world_epoch: 0,
-            fill_rule: RenderFillRule::Clockwise,
-        };
-        let commands = vec![
-            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Line { x: 1.0, y: 1.0 },
-        ];
-        let changed_commands = vec![
-            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Line { x: 2.0, y: 2.0 },
-            RuntimePathCommand::Close,
-        ];
+    fn clipping_shape_owner_rebuilds_only_under_dependency_dirt() {
+        use crate::TransformProperty;
 
-        let first_id = {
-            let path = cache.clipping_shape_path(key, 7, &mut factory, &commands);
-            path.as_any()
-                .downcast_ref::<CountingRenderPath>()
-                .expect("counting path")
-                .id
-        };
+        let bytes = synthetic_clip_geometry_riv(Some(20.0));
+        let file = read_runtime_file(&bytes).expect("synthetic moving-clip riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic moving-clip graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let clipping_shape_local = graph
+            .clipping_shapes
+            .first()
+            .expect("synthetic riv has a clipping shape")
+            .local_id;
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
 
-        assert_eq!(stats.make_empty_paths.get(), 1);
-        assert_eq!(stats.rewinds.get(), 1);
-        assert_eq!(stats.add_raw_paths.get(), 1);
-        assert_eq!(stats.lines.get(), 0);
+        let owner = instance
+            .runtime_clipping_shapes
+            .get(clipping_shape_local)
+            .expect("clipping owner exists");
+        assert!(owner.has_path.get());
+        let settled_mutation = owner.path.borrow().mutation_id();
 
-        let second_id = {
-            let path = cache.clipping_shape_path(key, 7, &mut factory, &commands);
-            path.as_any()
-                .downcast_ref::<CountingRenderPath>()
-                .expect("counting path")
-                .id
-        };
+        assert!(!instance.update_components().did_update);
+        assert_eq!(
+            instance
+                .runtime_clipping_shapes
+                .get(clipping_shape_local)
+                .expect("clipping owner remains")
+                .path
+                .borrow()
+                .mutation_id(),
+            settled_mutation,
+            "a clean frame reuses ClippingShape::m_path"
+        );
 
-        assert_eq!(second_id, first_id);
-        assert_eq!(stats.make_empty_paths.get(), 1);
-        assert_eq!(stats.rewinds.get(), 1);
-        assert_eq!(stats.add_raw_paths.get(), 1);
-        assert_eq!(stats.lines.get(), 0);
-
-        let (third_id, third_verbs, third_points) = {
-            let path = cache.clipping_shape_path(
-                RuntimeRetainedRenderPathCacheKey {
-                    path_epoch: 11,
-                    ..key
-                },
-                7,
-                &mut factory,
-                &changed_commands,
-            );
-            let path = path
-                .as_any()
-                .downcast_ref::<CountingRenderPath>()
-                .expect("counting path");
-            (
-                path.id,
-                path.raw_path.verbs().len(),
-                path.raw_path.points().len(),
-            )
-        };
-
-        assert_eq!(third_id, first_id);
-        assert_eq!(stats.make_empty_paths.get(), 1);
-        assert_eq!(stats.rewinds.get(), 2);
-        assert_eq!(stats.add_raw_paths.get(), 2);
-        assert_eq!(stats.lines.get(), 0);
-        assert_eq!(third_verbs, 3);
-        assert_eq!(third_points, 2);
+        assert!(instance.set_transform_property(1, TransformProperty::X, 70.0));
+        assert!(instance.update_components().did_update);
+        assert_ne!(
+            instance
+                .runtime_clipping_shapes
+                .get(clipping_shape_local)
+                .expect("clipping owner remains")
+                .path
+                .borrow()
+                .mutation_id(),
+            settled_mutation,
+            "source WorldTransform dirt rebuilds ClippingShape::m_path"
+        );
     }
 
     fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {

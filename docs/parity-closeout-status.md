@@ -905,6 +905,32 @@ upstream-sync-map registry).
   lint, format, and Apple product/release checks. The newly sorted next slice
   is `animated_clipping@0` at 2.238538x total / 1.440977x advance /
   2.754722x draw. The <=1.0x tier-5 target remains open.
+  The fourth burn-down slice ports `ClippingShape`'s retained dependency path
+  to the concrete Artboard occurrence. Each clipping occurrence owns its
+  source membership, composed CPU path, fill rule, visibility, and backend
+  path slot; the Artboard retains the composer-to-clipping reverse topology
+  once. `Path::onDirty` translates source world-transform/path/slicer changes
+  into the exact Path/NSlicer dirt consumed by `PathComposer`, whose settled
+  update then dirties dependent clipping owners. Draw, hit testing, and
+  empty-clip counting read that owner directly, so no graph scan or path
+  recomposition remains on an unchanged draw. Direct `fillRule` assignment
+  retains C++ timing: the new rule is applied when the next source dependency
+  update rebuilds the path. This follows `path.cpp:328-350`,
+  `shape.cpp:99-108`, `path_composer.cpp:19-112`, and
+  `clipping_shape.cpp:35-66,91-173` under
+  RF-2/RF-4/RF-5/RF-10/RF-17/RF-29, not a Rust-only cache. With canonical
+  parameters run immediately in the user-approved current environment,
+  `animated_clipping@0` improved from 2.171215x total / 1.337240x advance /
+  2.787739x draw to 1.712940x / 1.383196x / 2.159816x. The directional
+  whole-corpus aggregate moved from 1.756790x to 1.606826x
+  (`target/perf-hot-loop-clipping-owner-current-env.json`). Floors are green:
+  runtime 411/411, nuxie 140/140, both golden modes 317/317 entries plus
+  647/647 exact segments with zero failures, the probe-armed workspace
+  including 721/721 C++ probes, renderer pixels 1,468/1,468 with 837
+  byte-exact and zero divergences/gated cases, C API, ownership closure,
+  Apple product, and release panic-firewall checks. The next sorted slice is
+  `advance_blend_mode@0.25` at 1.827105x total / 1.778717x advance /
+  3.251249x draw. The <=1.0x tier-5 target remains open.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -1127,6 +1153,25 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   boundary this phase crosses.
 
 ## Log
+
+- 2026-07-24 — The fourth post-closeout performance burn-down slice ports
+  retained ClippingShape dependency paths to their concrete Artboard
+  occurrence. Source membership, composed CPU path, fill rule, visibility,
+  backend path, and composer reverse dependencies now have the C++ owner and
+  lifecycle. `Path::onDirty` and composer settlement propagate Path/NSlicer
+  dirt in dependency order (`path.cpp:328-350`, `shape.cpp:99-108`,
+  `path_composer.cpp:19-112`, `clipping_shape.cpp:35-66,91-173`), so draw,
+  hit testing, and empty-clip counting do not scan the graph or recompose an
+  unchanged path (RF-2/RF-4/RF-5/RF-10/RF-17/RF-29). With canonical
+  parameters run immediately in the user-approved current environment,
+  `animated_clipping@0` moved from 2.171215x total / 1.337240x advance /
+  2.787739x draw to 1.712940x / 1.383196x / 2.159816x, and aggregate moved
+  from 1.756790x to 1.606826x
+  (`target/perf-hot-loop-clipping-owner-current-env.json`). Runtime 411/411,
+  nuxie 140/140, both golden modes 317/317 plus 647/647 exact segments, the
+  721-probe workspace, renderer pixels 1,468/1,468, C API, ownership closure,
+  and Apple product/release checks are green. The next sorted entry is
+  `advance_blend_mode@0.25`; the <=1.0x target remains open.
 
 - 2026-07-24 — The third post-closeout performance burn-down slice ports
   keyed SolidColor writes to the exact C++ callback owner. Generated setter

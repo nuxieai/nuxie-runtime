@@ -988,7 +988,16 @@ backend below `Renderer`/`RenderFactory` is outside this work.
   query a graph to refresh inherited values, or compensate for an omitted
   synthetic update node (`src/shapes/path_composer.cpp:19-117`,
   `src/shapes/paint/shape_paint.cpp:30-47`,
-  `src/shapes/shape.cpp:54-62,137-159`).
+  `src/shapes/shape.cpp:54-62,137-159`). Build the synthetic node's reverse
+  dependency topology once and retain it with the owning occurrence; do not
+  rediscover dependents during update or draw. Preserve C++ `onDirty`
+  translation as part of the node contract: upstream world-transform,
+  slicer, or source-path dirt becomes the exact `Path`/`NSlicer` dirt that
+  `PathComposer` consumes, and a settled composer then propagates that dirt
+  to its retained dependents in dependency order. Storing an inert upstream
+  bit or compensating with a draw-time graph walk is not equivalent
+  (`src/shapes/path.cpp:328-350`, `src/shapes/shape.cpp:99-108`,
+  `src/shapes/clipping_shape.cpp:140-173`).
 - **RF-30 A physical sidecar must have the logical owner's identity and
   lifetime.** Non-cloneable backend trait objects may live in a typed physical
   table rather than inline in a cloneable Rust struct, but the slot is created

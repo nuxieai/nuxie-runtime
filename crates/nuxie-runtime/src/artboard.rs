@@ -53,8 +53,8 @@ use crate::data_bind_graph::{
     RuntimeDataBindGraphValue,
 };
 use crate::draw::{
-    RuntimeDrawableList, RuntimeInitialNestedLayoutPaintFrame, RuntimeLayoutBounds,
-    RuntimeShapeList, runtime_apply_component_list_item_layout_bounds,
+    RuntimeClippingShapeList, RuntimeDrawableList, RuntimeInitialNestedLayoutPaintFrame,
+    RuntimeLayoutBounds, RuntimeShapeList, runtime_apply_component_list_item_layout_bounds,
     runtime_component_list_item_layout_size,
 };
 use crate::objects::{InstanceObjectArena, InstanceSlot};
@@ -347,6 +347,10 @@ pub struct ArtboardInstance {
     /// C++ `Shape::{m_PathComposer,m_Paths}` plus
     /// `ShapePaintContainer::m_ShapePaints`: clone-owned ordered memberships.
     pub(crate) runtime_shapes: RuntimeShapeList,
+    /// C++ `ClippingShape::{m_Shapes,m_path,m_clipPath}`: clone-owned source
+    /// membership and retained CPU/backend clip path, rebuilt only by the
+    /// ClippingShape dependency node.
+    pub(crate) runtime_clipping_shapes: RuntimeClippingShapeList,
     /// Clone-owned C++ `Mesh` objects and NSlicer-owned `SliceMesh` objects.
     /// Backend buffers are members of these occurrences, not the facade paint
     /// cache; `RuntimeMeshList::clone` implements C++ Mesh/NSlicer clone rules.
@@ -1213,6 +1217,7 @@ impl ArtboardInstance {
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::from_graph(graph),
             runtime_shapes: RuntimeShapeList::from_graph(graph),
+            runtime_clipping_shapes: RuntimeClippingShapeList::from_graph(graph),
             runtime_meshes: crate::draw::RuntimeMeshList::from_graph(graph),
             did_change: Cell::new(true),
             layout_constraint_bounds_enabled,
@@ -4864,6 +4869,7 @@ impl ArtboardInstance {
                                 &graphs[*graph_index],
                                 layout_bounds.as_deref(),
                             );
+                            self.update_runtime_clipping_shape_owner(local_id, dirt);
                             self.update_runtime_artboard_render_paths(
                                 local_id,
                                 dirt,
@@ -4906,6 +4912,27 @@ impl ArtboardInstance {
                                 &graphs[*graph_index],
                                 layout_bounds.as_deref(),
                             );
+                        }
+                        // Pinned C++ `PathComposer::buildDependencies` and
+                        // `ClippingShape::buildDependencies`
+                        // (`path_composer.cpp:19-31`,
+                        // `clipping_shape.cpp:140-147`) make the concrete
+                        // PathComposer the source of Path dirt for every
+                        // ClippingShape that retains its world path. The
+                        // composer has just settled, and graph order places
+                        // those dependent components after it in this walk.
+                        let dependent_dirt = dirt & (ComponentDirt::PATH | ComponentDirt::N_SLICER);
+                        if !dependent_dirt.is_empty() {
+                            let dependent_count =
+                                self.runtime_clipping_shapes.dependent_count(shape_local);
+                            for dependent_index in 0..dependent_count {
+                                if let Some(dependent_local) = self
+                                    .runtime_clipping_shapes
+                                    .dependent_local(shape_local, dependent_index)
+                                {
+                                    self.add_dirt(dependent_local, dependent_dirt, true);
+                                }
+                            }
                         }
                     }
                     RuntimeUpdateTarget::TextVariationHelper => {}
@@ -7347,6 +7374,7 @@ mod tests {
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::default(),
             runtime_shapes: RuntimeShapeList::default(),
+            runtime_clipping_shapes: RuntimeClippingShapeList::default(),
             runtime_meshes: crate::draw::RuntimeMeshList::default(),
             did_change: Cell::new(true),
             layout_constraint_bounds_enabled: false,

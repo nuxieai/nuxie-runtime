@@ -14,7 +14,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 406/406, nuxie lib 140/140,
+Regression floor (must stay green): runtime lib 410/410, nuxie lib 140/140,
 C++ probe 721/721, both runtime golden gates 317/317 exact / 647/647 segments;
 ordinary and scripted both have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
@@ -703,6 +703,17 @@ upstream-sync-map registry).
   correctly rejects every open ownership row and nonzero legacy-symbol
   ratchet. No scene cache or production drawing path was deleted in this
   prerequisite slice.
+  The first approved ownership batch, Shape/path/paint, is now executor-
+  complete pending independent orchestrator verification. Runtime Path
+  occurrences own their rebuilt RawPath; PathComposer is an explicit
+  dependency/update node; Shape owns its three ShapePaintPaths plus bounds and
+  length sentinels; and each ShapePaint occurrence owns its mutator, feather,
+  per-provider EffectPaths, RenderPaint, gradient shader, and backend paths.
+  The global-id paint/shader ownership and draw-time Shape reconstruction
+  paths are deleted from live traversal in the same landing. The renderer
+  backend remains untouched. File-correspondence rows stay
+  `pending-verification` until the orchestrator's independent battery. The
+  next ownership batch is Image/mesh.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -762,12 +773,12 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. Review the completed C++ runtime drawing-port prerequisite and its
-   five-batch order: Shape/path/paint; Image/mesh; Text; Layout/nested/list;
-   Artboard/facade. Production work begins with the complete Shape/path/paint
-   owner lifecycle only after this review. Each batch must remove its old
-   ownership representation in the same landing; no scene-cache demolition
-   may precede the owning family.
+1. Port the complete Image/mesh ownership batch from pinned C++
+   `d788e8ec`: ImageAsset RenderImage, Image-to-Mesh/NSlicer relationship, and
+   occurrence-owned Mesh/SliceMesh buffers across construct, update, draw,
+   clone, and drop. Remove the corresponding scene-cache ownership in the same
+   landing, keep the renderer API/backend unchanged, and referee the merge
+   with the full 1,468-row pixel corpus plus both zero-failure golden gates.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -852,8 +863,8 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
 
 ## Pending USER-GATEs
 
-- Review the C++ runtime drawing-port prerequisite and five-batch order before
-  the first production Shape/path/paint replacement begins.
+- None for the current C++ runtime drawing-port queue. The next binding batch
+  is Image/mesh; file rows remain pending until independent verification.
 
 ## Decisions log
 
@@ -919,6 +930,29 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   boundary this phase crosses.
 
 ## Log
+
+- 2026-07-23 — The first formal C++ runtime drawing ownership batch completed
+  Shape/path/paint from pinned C++ `d788e8ec` without crossing the
+  `Renderer`/`RenderFactory` boundary. Path owns its rebuilt RawPath;
+  PathComposer now occupies its exact embedded dependency slot and settles
+  local, local-clockwise, and world ShapePaintPaths before paint/effect
+  updates. Shape owns bounds and length query state. Every ShapePaint
+  occurrence owns its mutator/feather state, per-provider EffectPaths,
+  RenderPaint, gradient shader, and backend paths; clean draws only read that
+  state. Global-id Shape paint/shader ownership, draw-time Shape owner
+  construction, copied world-transform/visibility snapshots, and the
+  diagnostic-command Shape adapter are absent from live traversal. Nested and
+  scripted initial hydration preserve the exact post-host C++ gradient
+  lifecycle. Evidence: runtime 410/410, nuxie 140/140, pinned C++ probes
+  721/721 directly and in the probe-armed full workspace, ordinary and
+  scripted goldens each 317/317 entries and 647/647 segments with zero
+  failures, renderer pixels 1,468/1,468 with zero divergences/gated failures,
+  C API smoke and lint green. Size at committed `54528216` is 8,267,496 B
+  scripting-off and 9,168,584 B scripting-on, both under 9,437,184 B.
+  Homebrew Rust 1.97's LLVM-22 LTO archive exposed an Xcode LLVM-21 `nm`
+  incompatibility; the size harness now fails closed unless archive `llvm-nm`
+  matches rustc's LLVM major. Correspondence rows remain
+  `pending-verification`; Image/mesh is next.
 
 - 2026-07-23 — The C++ runtime drawing-port prerequisite was executed without
   production runtime or renderer changes. The member-level ownership ledger

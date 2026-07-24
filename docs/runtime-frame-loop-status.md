@@ -4,13 +4,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-0 execution atlas.
+- Phase: FL-1 dual-translation rulebook validation.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - File closure: 0 / 337 in-scope C++ files.
 - Member closure: 41 / 74 owner/member rows (the imported, already-closed
   runtime-drawing ledger); 33 frame-loop rows pending.
 - Open mechanism gaps: 7 / 8.
-- Current dependency wave: none; production translation is blocked on FL-0.
+- Current dependency wave: none; production translation is blocked on FL-1.
 - Current experimental changes: uncommitted KeyFrame retained-seconds and
   Component-handle candidates remain quarantined. They are not standalone
   slices and must be re-derived in FL-B/FL-A or discarded.
@@ -63,8 +63,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   uses a dedicated Cargo target and feature. Both runners reject unavailable
   instrumentation and repeated benchmark mode rather than emitting misleading
   evidence. Ordinary runner paths remain untouched.
-- Map/checker commit: this FL-0 slice. No production behavior change may land
-  until its clean committed-tree floor is recorded.
+- Map/checker commit: `2c858676`. The clean-tree anchor correction is
+  `69e89b3c`. No production behavior changed in either commit.
 
 The prior sampled seven-divergence run used a release-linked C++ ordinary
 runner and is invalid ordinary-golden evidence. Ordinary parity uses only
@@ -81,19 +81,43 @@ debug C++ configuration and its provenance stamp.
 
 ## Gate ledger
 
-No FL-0 commit gate has run yet. Before push, record exact results here for:
+FL-0 clean committed-tree floor, run from detached worktrees carrying only
+`2c858676` plus the `69e89b3c` anchor correction:
 
-- runtime and nuxie library tests;
-- ordinary/scripted/probe oracle gates;
-- renderer pixels when applicable;
-- capi, Apple, lint, formatting, diff check;
-- runtime-frame-loop structural checker;
-- committed-tree size report.
+- `cargo test -p nuxie-runtime --lib`: 414 passed, 0 failed.
+- `cargo test -p nuxie --lib`: 140 passed, 0 failed.
+- `env -u CPP_CONFIG -u RUST_PROFILE make golden-compare`: 317 / 317
+  entries and 647 / 647 segments exact; 0 divergences, unsupported, or
+  not-yet entries.
+- `env -u CPP_CONFIG -u RUST_PROFILE make scripted-golden-compare`: 317 /
+  317 entries and 647 / 647 segments exact; 0 divergences, unsupported, or
+  not-yet entries. `data_viz_demo` and `db_health_tracker` both matched.
+- `env -u CPP_CONFIG -u RUST_PROFILE make cpp-oracle-workspace-tests`:
+  passed with the probe built and `RIVE_CPP_PROBE` set for the workspace run.
+  The explicit probe-only confirmation passed 721 / 721, 0 failed.
+- `make renderer-golden`: 1,468 / 1,468 entries accepted; 0 divergences and
+  0 gated failures (837 byte-exact), Apple M5 Max.
+- `make capi-smoke`: passed (`draw_paths=2`, `objects=4`).
+- `make apple-runtime-check`: passed, including the release panic firewall,
+  66 product tests, 15 artifact-validator tests, header smoke, and deny
+  clippy surface.
+- `make lint-gate`: passed.
+- `cargo fmt --all -- --check`: passed.
+- `git diff --check`: passed.
+- `make runtime-frame-loop-port-check`: 12 / 12 checker controls passed;
+  337 file rows, 74 member rows, 8 gap rows, and all three compensation
+  ratchets validated. A first clean-tree run correctly exposed one ledger
+  anchor that referred to the quarantined animation experiment; `69e89b3c`
+  retargets it to the committed `RuntimeKeyFrameTiming` owner and the clean
+  rerun passes.
+- `make size-report` at `69e89b3c`: scripting off 8,267,336 bytes
+  (7.88 MiB); scripting on 9,168,392 bytes (8.74 MiB); both below the
+  9,437,184-byte budget.
 
 ## Next
 
-1. Run all applicable FL-0 floors from a clean `13aedd6d` worktree carrying
-   only the atlas/harness patch.
-2. Record the clean floor in a follow-up FL-0 evidence commit and push both.
-3. Begin FL-1 dual-translation rulebook validation; do not start FL-A
-   production changes before FL-1 closes.
+1. Commit and push this FL-0 evidence ledger.
+2. Run FL-1 dual-translation rulebook validation over representative
+   component/update, animation, and state-machine files.
+3. Fold every translation disagreement into the rulebook, discard both
+   translations, and close FL-1 before starting FL-A production changes.

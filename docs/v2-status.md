@@ -13,9 +13,13 @@ the only memory the next session has. Update it every commit.
 - Non-manifest Phase S deferrals: the unavailable newer luaur VM engine and
   the baseline-unported optional ORE scripted-GPU host. Neither is an observed
   corpus divergence; both have explicit re-entry criteria in the cycle triage.
-- Current milestone: **Phase S manual cycle 2 complete; the write-capable
-  worker is active after satisfying its trust-count threshold. With no
-  standing approvals, it fails closed and may only report blockers.**
+- Current milestone: **#RD-1 C++ runtime drawing port is executor-complete at
+  `5901c1fe`, pending the orchestrator's independent battery.** All five
+  ownership batches stop at the existing `Renderer`/`RenderFactory` API; the
+  closed ledger is 41 owners (5 exact, 36 adapted) with no pending or
+  compensation rows and all 17 legacy ratchets at zero. The historical public
+  `ArtboardRenderCache`/cached-draw surface is removed and C ABI v2 binds
+  render callbacks to the Artboard occurrence lifetime.
 
 ## Runtime Perf Fence
 

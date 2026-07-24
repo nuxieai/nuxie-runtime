@@ -140,7 +140,18 @@ Negative controls must also prove the judges reject:
 
 ## Current checkpoint
 
-The ownership ledger, gap inventory, checker, and disposable Shape/path/paint
-translation stress test are prerequisites. They change no production drawing
-code and remove no scene cache. The ordered replacement batches begin only
-after this map and the stress-test resolutions are reviewed.
+All five dependency-ordered ownership batches are executor-complete at
+`5901c1fe`: Shape/path/paint; Image/mesh; Text;
+Layout/nested/component lists; and Artboard/facade. The port stops at the
+existing `Renderer`/`RenderFactory` interface; no renderer backend, shader,
+atlas, tessellation, batching, or GPU-algorithm source changed.
+
+The closed ownership gate reports 41 owners (5 exact, 36 adapted, 0 pending,
+0 compensation) and all 17 legacy-symbol ratchets at zero. The final referee
+evidence is ordinary and scripted goldens at 317/317 entries and 647/647
+segments with zero failures, the probe-armed workspace with 721/721 C++
+probes, and renderer pixels at 1,468/1,468 accepted (837 byte-exact, zero
+divergences/gated cases). The immutable size report is 8,267,384 B
+scripting-off and 9,184,984 B scripting-on, both below 9,437,184 B.
+File-correspondence rows stay `pending-verification` until the orchestrator's
+independent battery; no executor implementation work remains in #RD-1.

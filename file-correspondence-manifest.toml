@@ -1144,7 +1144,7 @@ b6_row_id = "B6-0094"
 b6_verdict = "DIVERGENT"
 b6_cluster = "artboard"
 audit_record = "docs/b6-audit/results/artboard.md"
-note = "RD-C1 through RD-C6 executor-green pending independent orchestrator verification: Artboard owns the complete live drawable topology and ordinary draw/drawInternal traversal no longer materializes current objects into RuntimeDrawCommand; Artboard::volume and the RD-C7 scene facade/cache surface keep the whole-file row pending."
+note = "All five C++ runtime drawing ownership batches are executor-complete at 5901c1fe pending independent orchestrator verification: the Artboard occurrence owns live traversal, retained renderer resources, and geometry-query state across construct/update/draw/clone/drop; prepared/replay and facade cache compensation is deleted; the existing Renderer/RenderFactory boundary is unchanged. Keep this whole-file row pending until the independent battery."
 
 [[file]]
 upstream = "src/artboard_component_list.cpp"

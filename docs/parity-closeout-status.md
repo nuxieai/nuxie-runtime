@@ -12,9 +12,9 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 2 Interaction parity | RED | side-channel: gate not built; fuzz-clean-nights: 0 | #OR-1/2/3/7 |
 | 3 SDK parity | RED | A-rows closed 0/8 | register A-table |
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
-| 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.84 MiB OFF / 8.70 MiB ON vs user-approved 9 MiB budget (both variants block; CI recording re-enabled, first green recording pending) | #OR-9 |
+| 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.88 MiB OFF / 8.76 MiB ON vs user-approved 9 MiB budget (both variants green at `5901c1fe`) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 410/410, nuxie lib 140/140,
+Regression floor (must stay green): runtime lib 410/410, nuxie lib 167/167,
 C++ probe 721/721, both runtime golden gates 317/317 exact / 647/647 segments;
 ordinary and scripted both have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
@@ -540,7 +540,7 @@ upstream-sync-map registry).
   with subsystem-clustered batching. Spec landed as
   docs/b6-structural-audit-spec.md; remaining: PORTING.md
   architecture-fidelity rules section, then the ~40-55 batch fan-out.
-- [ ] #RD-1 C++ runtime drawing port (historical internal code; renderer
+- [x] #RD-1 C++ runtime drawing port (historical internal code; renderer
   backend unchanged)
   (user-directed 2026-07-21, P0 AFTER #RB-1; supersedes D-12) — see map
   Phase RD: measured spike, then lane-by-lane live-traversal migration
@@ -785,6 +785,28 @@ upstream-sync-map registry).
   stripped full SDK is 8,284,232 B scripting-off and 9,185,320 B
   scripting-on, both below the unchanged 9,437,184 B budget. The final
   ownership batch is Artboard/facade.
+  The Artboard/facade ownership batch is now executor-complete pending
+  independent orchestrator verification. Each concrete Artboard occurrence
+  owns its retained renderer resources and geometry-query state across
+  construct, update, draw, clone, and drop. The host facade has no parallel
+  render/path/paint cache, prepared frame, replay stream, or cached-draw API;
+  `SceneDrawToken` identifies a mounted occurrence only. Backend loss is an
+  explicit renderer reset. The C ABI is version 2: the first draw callback
+  table and `user_data` are pinned to the Artboard occurrence through its
+  lifetime, including a first-draw error, and the obsolete render-cache C
+  surface is removed. The existing `Renderer`/`RenderFactory` API and renderer
+  backend remain untouched. The ownership ledger is closed at 41 owners
+  (5 exact, 36 adapted, 0 pending, 0 compensation), with all 17 legacy-symbol
+  ratchets at zero. Executor evidence is runtime 410/410, nuxie 167/167,
+  ordinary and scripted goldens 317/317 entries plus 647/647 exact segments
+  with zero failures, the probe-armed workspace green with 721/721 C++ probes,
+  renderer pixels 1,468/1,468 accepted with 837 byte-exact and zero
+  divergences/gated cases, C API smoke, Apple product and release panic
+  firewall, canonical lint, formatting, and diff checks green. At committed
+  `5901c1fe` the stripped full SDK is 8,267,384 B scripting-off and
+  9,184,984 B scripting-on, both below the unchanged 9,437,184 B budget.
+  File-correspondence rows remain `pending-verification` until the
+  orchestrator's independent battery; no executor work remains in #RD-1.
 - [ ] #B-5 editor-cutover parity audit (user-directed 2026-07-21) — scout
   report complete, 12 findings. VERDICT: broadly parity-aligned with
   isolated slips, not structurally off-course — most bytes are additive
@@ -844,14 +866,9 @@ upstream-sync-map registry).
 
 ## Next queue (top = next; orchestrator maintains)
 
-1. Port the final Artboard/facade ownership batch from pinned C++
-   `d788e8ec`: move the remaining first-drawable/traversal, public
-   paint/path-cache lifetime, and geometry-query state to the Artboard
-   occurrence across construct, update, draw, clone, and drop. Delete the
-   remaining prepared-frame/command-stream/facade compensation in the same
-   landing, stop at the existing `Renderer`/`RenderFactory` API, drive the
-   closed ownership ratchets to zero, and referee the merge with the full
-   1,468-row pixel corpus plus both zero-failure golden gates.
+1. No executor work remains for #RD-1. Independent orchestrator verification
+   may promote the correspondence rows from `pending-verification`; the next
+   closeout-spine implementation item is #B-5.
 
 ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
    subsumed by #RB-1) — FOUR scripted-golden-compare
@@ -936,9 +953,8 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
 
 ## Pending USER-GATEs
 
-- None for the current C++ runtime drawing-port queue. The next binding batch
-  is Artboard/facade; completed file rows remain pending until
-  independent verification.
+- None for the completed C++ runtime drawing port. Independent orchestrator
+  verification is pending; it is not an executor USER-GATE.
 
 ## Decisions log
 
@@ -1004,6 +1020,24 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   boundary this phase crosses.
 
 ## Log
+
+- 2026-07-24 — The fifth and final formal C++ runtime drawing ownership batch
+  completed Artboard/facade from pinned C++ `d788e8ec`, stopping at the
+  existing `Renderer`/`RenderFactory` interface. Artboard occurrences now own
+  renderer resources and geometry-query state; facade render/path/paint
+  caches, prepared/replay APIs, cached-draw C ABI, and command/epoch bridges
+  are deleted. The C ABI is version 2 and pins the first callback binding to
+  the occurrence lifetime. Evidence: runtime 410/410, nuxie 167/167,
+  probe-armed full workspace with 721/721 C++ probes, ordinary and scripted
+  goldens each 317/317 entries and 647/647 segments with zero failures,
+  renderer pixels 1,468/1,468 accepted with 837 byte-exact and zero
+  divergences/gated cases, C API smoke, Apple product, release panic
+  firewall, canonical lint, formatting, and diff checks green. The closed
+  ledger has 41 owners (5 exact, 36 adapted, 0 pending, 0 compensation) and
+  all 17 legacy ratchets at zero. Size at committed `5901c1fe` is
+  8,267,384 B scripting-off and 9,184,984 B scripting-on, both below
+  9,437,184 B. #RD-1 is executor-complete; correspondence rows remain
+  `pending-verification` for the orchestrator's independent battery.
 
 - 2026-07-24 — The fourth formal C++ runtime drawing ownership batch
   completed Layout/nested/component lists from pinned C++ `d788e8ec`

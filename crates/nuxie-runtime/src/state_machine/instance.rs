@@ -52,6 +52,14 @@ use nuxie_binary::RuntimeFile;
 #[derive(Debug)]
 pub struct StateMachineInstance {
     state_machine_index: usize,
+    /// Retained authored definition owner. C++ stores `const StateMachine*
+    /// m_machine` on the instance and reuses it for every advance
+    /// (`state_machine_instance.hpp:123,386`;
+    /// `state_machine_instance.cpp:1707-1711`).
+    ///
+    /// Rust retains the immutable definition arena as well as the index so
+    /// the matching definition address remains stable for this occurrence.
+    state_machine_definitions: Option<Arc<Vec<RuntimeStateMachine>>>,
     default_view_model_index: Option<usize>,
     /// Shared authored instances for bare default/serialized binds. The C++
     /// probe retains `ViewModel::instance(index)` directly (`main.cpp:4683-4721`).
@@ -610,6 +618,7 @@ impl Clone for StateMachineInstance {
             .collect();
         let mut cloned = Self {
             state_machine_index: self.state_machine_index,
+            state_machine_definitions: self.state_machine_definitions.as_ref().map(Arc::clone),
             default_view_model_index: self.default_view_model_index,
             file_view_model_instances,
             default_view_model_trigger_instance,
@@ -830,6 +839,11 @@ impl StateMachineInstance {
         state_machine: &RuntimeStateMachine,
         artboard: &ArtboardInstance,
     ) -> Self {
+        let state_machine_definitions = artboard
+            .state_machines
+            .get(state_machine_index)
+            .filter(|definition| std::ptr::eq(*definition, state_machine))
+            .map(|_| Arc::clone(&artboard.state_machines));
         let inputs = state_machine
             .inputs
             .iter()
@@ -949,6 +963,7 @@ impl StateMachineInstance {
             .collect();
         Self {
             state_machine_index,
+            state_machine_definitions,
             default_view_model_index: state_machine.default_view_model_index,
             file_view_model_instances,
             default_view_model_trigger_instance,
@@ -1133,6 +1148,13 @@ impl StateMachineInstance {
 
     pub fn state_machine_index(&self) -> usize {
         self.state_machine_index
+    }
+
+    pub(crate) fn retained_state_machine_ptr(&self) -> Option<*const RuntimeStateMachine> {
+        self.state_machine_definitions
+            .as_ref()?
+            .get(self.state_machine_index)
+            .map(std::ptr::from_ref)
     }
 
     pub(crate) fn requires_post_update_state_probe(&self) -> bool {

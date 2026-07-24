@@ -3257,10 +3257,16 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        let state_machines = Arc::clone(&self.state_machines);
-        let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
+        let Some(state_machine_ptr) = self.state_machine_definition_ptr(instance) else {
             return false;
         };
+        // SAFETY: normal instances retain the immutable definition arena that
+        // owns this address. Compatibility instances borrow the same immutable
+        // arena from `self`, which is never replaced during this call. This is
+        // the Rust ownership translation of C++ `StateMachineInstance::
+        // m_machine` (`state_machine_instance.hpp:386`;
+        // `state_machine_instance.cpp:1707-1711`).
+        let state_machine = unsafe { &*state_machine_ptr };
         let mut owned_context = owned_context;
         // C++ `applyEvents()` consumes only reports not delivered to
         // listeners yet, at new-frame start, and loops chained reports before
@@ -3295,10 +3301,11 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        let state_machines = Arc::clone(&self.state_machines);
-        let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
+        let Some(state_machine_ptr) = self.state_machine_definition_ptr(instance) else {
             return false;
         };
+        // SAFETY: see `advance_state_machine_instance_with_context`.
+        let state_machine = unsafe { &*state_machine_ptr };
         // This is C++'s `newFrame=false` follow-up after direct nested-event
         // notification. It advances layers but does not call `applyEvents`;
         // reports created here remain queued for the next ordinary frame
@@ -3316,10 +3323,11 @@ impl ArtboardInstance {
         instance: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
-        let state_machines = Arc::clone(&self.state_machines);
-        let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
+        let Some(state_machine_ptr) = self.state_machine_definition_ptr(instance) else {
             return false;
         };
+        // SAFETY: see `advance_state_machine_instance_with_context`.
+        let state_machine = unsafe { &*state_machine_ptr };
         instance.advance_after_state_probe(self, state_machine, elapsed_seconds)
     }
 
@@ -3330,11 +3338,23 @@ impl ArtboardInstance {
         if !state_machine_requires_outer_update_probe(instance) {
             return false;
         }
-        let state_machines = Arc::clone(&self.state_machines);
-        let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
+        let Some(state_machine_ptr) = self.state_machine_definition_ptr(instance) else {
             return false;
         };
+        // SAFETY: see `advance_state_machine_instance_with_context`.
+        let state_machine = unsafe { &*state_machine_ptr };
         instance.try_change_state(self, state_machine)
+    }
+
+    fn state_machine_definition_ptr(
+        &self,
+        instance: &StateMachineInstance,
+    ) -> Option<*const RuntimeStateMachine> {
+        instance.retained_state_machine_ptr().or_else(|| {
+            self.state_machines
+                .get(instance.state_machine_index())
+                .map(std::ptr::from_ref)
+        })
     }
 
     /// Advance several state-machine instances on this artboard while
@@ -7527,6 +7547,23 @@ mod tests {
             transition_duration_bindings: Arc::new(Vec::new()),
             scripted_listener_actions: Vec::new(),
         }
+    }
+
+    #[test]
+    fn state_machine_instance_retains_the_cpp_authored_definition_owner() {
+        let mut artboard = synthetic_instance(Vec::new(), Vec::new());
+        artboard.state_machines = Arc::new(vec![empty_state_machine(11)]);
+
+        let instance = artboard.state_machine_instance(0).expect("state machine");
+        let retained = instance
+            .retained_state_machine_ptr()
+            .expect("artboard-created instances retain the definition");
+        let authored = artboard.state_machine(0).expect("authored definition");
+
+        // C++ stores this exact authored `StateMachine*` on the instance
+        // (`state_machine_instance.hpp:123,386`;
+        // `state_machine_instance.cpp:1707-1711`).
+        assert!(std::ptr::eq(retained, authored));
     }
 
     fn direct_input_blend_state_machine(global_id: u32) -> RuntimeStateMachine {

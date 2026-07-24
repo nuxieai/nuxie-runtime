@@ -3077,6 +3077,26 @@ E. **Timing-defined acceptance harness (retained for disputes).** The timing
 
 ## Log
 
+- 2026-07-24: The seventh user-directed hot-loop slice ports
+  `StateMachineInstance`'s authored definition owner without changing the
+  renderer boundary. C++ stores the immutable `StateMachine*` at instance
+  construction; Rust now retains the matching immutable Artboard definition
+  arena and stable definition address instead of cloning and searching the
+  state-machine collection on every advance, event-preserving advance, probe,
+  and try-change path (`state_machine_instance.hpp:123,386`,
+  `state_machine_instance.cpp:1707-1711`; RF-2/RF-5/RF-17). With canonical
+  parameters run immediately in the user-approved current environment,
+  `animation_reset_cases@0.5` moved from 1.670139x total to 1.666077x, with
+  1.862539x advance / 1.882101x draw, and aggregate moved from 1.518033x to
+  1.496757x
+  (`target/perf-hot-loop-retained-state-machine-current-env-2.json`). A
+  1,000,000-repeat focused run measured 1.644x total. Renderer pixels remain
+  1,468/1,468 with 837 byte-exact entries and zero divergences/gated cases;
+  both golden modes remain 317/317 plus 647/647 exact segments. The next
+  sorted total entry is `animation_reset_cases@0` at 1.741300x;
+  `advance_blend_mode@0` is the worst draw entry at 3.482031x. The <=1.0x
+  tier-5 target remains open.
+
 - 2026-07-24: The sixth user-directed hot-loop slice ports the concrete
   `Drawable` -> `Component` owner link without changing the renderer boundary.
   C++ draw-list traversal already has collapse, render-opacity, and

@@ -2964,7 +2964,7 @@ id = "keyframe.seconds"
 wave = "FL-B"
 cpp_files = ["src/animation/keyframe.cpp"]
 rust_file = "crates/nuxie-runtime/src/animation.rs"
-rust_anchor = "pub(crate) struct RuntimeKeyFrameSeconds"
+rust_anchor = "trait RuntimeKeyFrameTiming"
 status = "pending"
 
 [[member]]

@@ -1,0 +1,116 @@
+version = 1
+title = "Runtime frame-loop mechanism and gap inventory"
+upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+
+# User-approved deliberate divergences are recorded here and cited by their
+# parity-gap-register D-row. There are none for the frame-loop port.
+decision = []
+
+[[gap]]
+id = "FL-G01"
+status = "open"
+mechanism = "KeyFrame seconds are represented separately from the authored keyframe values in the current retained-seconds experiment; the complete KeyFrame owner translation must decide the exact Rust owner."
+citations = [
+  "cpp:src/animation/keyframe.cpp:10",
+  "rust:crates/nuxie-runtime/src/animation.rs:1055",
+]
+closure = "FL-B either lands the complete C++ KeyFrame owner with retained seconds or removes the experiment."
+
+[[gap]]
+id = "FL-G02"
+status = "open"
+counter = "component_add_dirt"
+mechanism = "Component identity is split across local ids, component vectors, and subsystem sidecars; repeated id-to-owner resolution has not yet been structurally counted against C++ pointers."
+citations = [
+  "cpp:src/component.cpp:17",
+  "rust:crates/nuxie-runtime/src/components.rs:478",
+]
+closure = "FL-A records identity counters and ports the complete retained component/dependent lifecycle."
+
+[[gap]]
+id = "FL-G03"
+status = "open"
+counter = "state_machine_transition_search"
+mechanism = "State-machine definition and instance collections must be checked for per-frame clone and name/id search work against C++ retained vectors and pointers."
+citations = [
+  "cpp:src/animation/state_machine_instance.cpp:2583",
+  "rust:crates/nuxie-runtime/src/state_machine/instance.rs:53",
+]
+closure = "FL-C reaches counter parity for collection clones/searches and deletes any displaced lookup path."
+
+[[gap]]
+id = "FL-G04"
+status = "open"
+counter = "databind_artboard_batch"
+mechanism = "DataBind target/source queues and ViewModel relay state are Rust adaptations whose batch identity and dirt consumption need member-level correspondence."
+citations = [
+  "cpp:src/artboard.cpp:1153",
+  "rust:crates/nuxie-runtime/src/artboard_data_bind.rs:1329",
+]
+closure = "FL-D proves one owner and one consume path for every C++ dirty DataBind batch."
+
+[[gap]]
+id = "FL-G05"
+status = "open"
+mechanism = "Artboard update and geometry state still expose Rust epoch/key mechanisms; each must be classified as owner-local adaptation or deleted if it compensates for missing C++ dirt ownership."
+citations = [
+  "cpp:src/artboard.cpp:1161",
+  "rust:crates/nuxie-runtime/src/artboard.rs:4359",
+]
+closure = "FL-A/FL-D classifies every epoch and leaves no unowned per-frame invalidation mechanism."
+
+[[gap]]
+id = "FL-G06"
+status = "closed"
+mechanism = "Scene-level draw materialization and replay were displaced by live traversal; retained backend objects are occurrence-owned adaptations."
+citations = [
+  "cpp:src/artboard.cpp:1652",
+  "rust:crates/nuxie-runtime/src/draw.rs:13306",
+]
+closure = "The imported runtime-drawing ledger is closed with zero legacy scene-cache ratchets."
+
+[[gap]]
+id = "FL-G07"
+status = "open"
+counter = "per_frame_allocations"
+mechanism = "Per-frame allocation, path/text/bounds/layout rebuild, and unchanged-frame work counts are not yet emitted by both runners."
+citations = [
+  "cpp:src/artboard.cpp:1652",
+  "rust:crates/nuxie-runtime/src/draw.rs:3816",
+]
+closure = "The deterministic structural oracle records equal owner, dirt, rebuild, allocation, event, and clone/remount counts for the canonical corpus."
+
+[[gap]]
+id = "FL-G08"
+status = "open"
+counters = [
+  "draw_order_sort",
+  "clipping_redundancy_clear",
+  "drawable_owner_lookup",
+]
+mechanism = "The Rust Artboard update integration repeatedly refreshes drawable ordering, clipping proxies, and local-id owner lookups where C++ retains linked Drawable ownership and dirt-gates sort/clear work."
+citations = [
+  "cpp:src/artboard.cpp:1161",
+  "cpp:src/artboard.cpp:1652",
+  "rust:crates/nuxie-runtime/src/artboard.rs:4816",
+  "rust:crates/nuxie-runtime/src/draw.rs:9290",
+]
+closure = "FL-A/FL-E ports the retained Drawable link and exact DrawOrder/Clipping dirt lifecycle; the three counters match C++ or cite a binding adaptation."
+
+[[ratchet]]
+id = "legacy_image_layout_scale"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bRuntimeLegacyImageLayoutScale(?:Key|State)\\b"
+max_occurrences = 13
+
+[[ratchet]]
+id = "path_epoch_compensation"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bpath_epoch\\b"
+max_occurrences = 72
+
+[[ratchet]]
+id = "nested_render_cache_key"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bRuntimeNestedRenderCacheKey\\b"
+max_occurrences = 22

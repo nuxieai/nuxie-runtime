@@ -1,0 +1,3210 @@
+version = 1
+title = "C++-corresponding runtime frame-loop ownership ledger"
+upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+porting_rules_file = "docs/PORTING.md"
+file_correspondence_manifest = "file-correspondence-manifest.toml"
+trace_evidence_file = "docs/runtime-frame-loop-trace.json"
+phase = "atlas-open"
+
+# Counts are ratchets. Source-set globs expand against the pinned checkout, so
+# a new, removed, or multiply-owned C++ file changes the count and fails.
+[expected_file_status_counts]
+faithful = 0
+adapted = 0
+divergent-by-decision = 0
+pending = 337
+compensation = 0
+
+# The 41 closed runtime-drawing owners are imported below. The remaining rows
+# are the state-bearing frame-loop owners still requiring member-level proof.
+[expected_member_status_counts]
+faithful = 5
+adapted = 36
+divergent-by-decision = 0
+pending = 33
+compensation = 0
+
+[[wave]]
+id = "FL-A"
+sequence = 1
+depends_on = []
+boundary = "Component identity, dirt propagation, dependency order, transforms, constraints, and clone identity."
+
+[[wave]]
+id = "FL-B"
+sequence = 2
+depends_on = ["FL-A"]
+boundary = "KeyFrame through LinearAnimation, AnimationReset, and blend-animation retained ownership."
+
+[[wave]]
+id = "FL-C"
+sequence = 3
+depends_on = ["FL-A", "FL-B"]
+boundary = "StateMachineInstance, layer, transition, action, listener, and input ownership."
+
+[[wave]]
+id = "FL-D"
+sequence = 4
+depends_on = ["FL-A", "FL-B", "FL-C"]
+boundary = "Event/DataBind/ViewModel settlement and Artboard update traversal."
+
+[[wave]]
+id = "FL-E"
+sequence = 5
+depends_on = ["FL-A", "FL-D"]
+boundary = "Live Artboard draw integration through the existing Renderer/RenderFactory API."
+
+[[import_ledger]]
+id = "runtime-drawing"
+path = "docs/runtime-drawing-ownership.toml"
+expected_owner_count = 41
+note = "Already-closed draw-owner proof; do not re-port it merely for consistency."
+
+[[source_set]]
+id = "component-update-graph"
+wave = "FL-A"
+include = [
+  "src/advancing_component.cpp",
+  "src/component.cpp",
+  "src/container_component.cpp",
+  "src/dependency_sorter.cpp",
+  "src/drawable.cpp",
+  "src/node.cpp",
+  "src/parent_traversal.cpp",
+  "src/resetting_component.cpp",
+  "src/transform_component.cpp",
+  "src/virtualizing_component.cpp",
+  "src/world_transform_component.cpp",
+  "src/bones/*.cpp",
+  "src/constraints/*.cpp",
+  "src/constraints/**/*.cpp",
+  "src/math/*.cpp",
+]
+exclude = []
+rust_modules = [
+  "crates/nuxie-runtime/src/lib.rs",
+  "crates/nuxie-runtime/src/components.rs",
+  "crates/nuxie-runtime/src/constraints.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
+static_closure = "Component virtual update dispatch, dependency sorting, transforms, bones, and constraints are reachable from Artboard dirt/update traversal."
+
+[[source_set]]
+id = "animation-values"
+wave = "FL-B"
+include = ["src/animation/*.cpp", "src/animation/**/*.cpp"]
+exclude = [
+  "src/animation/*state*.cpp",
+  "src/animation/*transition*.cpp",
+  "src/animation/listener*.cpp",
+  "src/animation/listener_types/*.cpp",
+  "src/animation/focus*.cpp",
+  "src/animation/*listener_group.cpp",
+  "src/animation/system_state_instance.cpp",
+  "src/animation/blend_state*.cpp",
+  "src/animation/animation_state*.cpp",
+]
+rust_modules = [
+  "crates/nuxie-runtime/src/animation.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+]
+static_closure = "Animation definitions, keyed values, interpolators, and reset owners are reachable from animation/state-machine advance even when absent from the sampled corpus."
+
+[[source_set]]
+id = "blend-animation-states"
+wave = "FL-B"
+include = [
+  "src/animation/blend_state*.cpp",
+  "src/animation/animation_state*.cpp",
+]
+exclude = []
+rust_modules = [
+  "crates/nuxie-runtime/src/animation.rs",
+  "crates/nuxie-runtime/src/state_machine.rs",
+]
+static_closure = "Blend-state definitions and instances are virtual animation owners reached through state-machine layer advance."
+
+[[source_set]]
+id = "state-machine"
+wave = "FL-C"
+include = [
+  "src/animation/*state*.cpp",
+  "src/animation/*transition*.cpp",
+  "src/animation/listener*.cpp",
+  "src/animation/listener_types/*.cpp",
+  "src/animation/focus*.cpp",
+  "src/animation/*listener_group.cpp",
+  "src/animation/system_state_instance.cpp",
+]
+exclude = [
+  "src/animation/blend_state*.cpp",
+  "src/animation/animation_state*.cpp",
+]
+rust_modules = [
+  "crates/nuxie-runtime/src/animation.rs",
+  "crates/nuxie-runtime/src/state_machine.rs",
+  "crates/nuxie-runtime/src/state_machine/instance.rs",
+  "crates/nuxie-runtime/src/state_machine/transition_conditions.rs",
+  "crates/nuxie-runtime/src/focus.rs",
+]
+static_closure = "State, transition, condition, listener, focus, and input subclasses are virtual-dispatch branches of StateMachineInstance advance and event processing."
+
+[[source_set]]
+id = "databind-artboard-settlement"
+wave = "FL-D"
+include = [
+  "src/data_bind/*.cpp",
+  "src/data_bind/**/*.cpp",
+  "src/viewmodel/*.cpp",
+  "src/viewmodel/**/*.cpp",
+  "src/artboard.cpp",
+  "src/artboard_component_list.cpp",
+  "src/artboard_list_map_rule.cpp",
+  "src/artboard_referencer.cpp",
+  "src/bindable_artboard.cpp",
+  "src/data_bind_path_referencer.cpp",
+  "src/event.cpp",
+  "src/listener_group.cpp",
+  "src/nested_artboard*.cpp",
+  "src/script_input_*.cpp",
+]
+exclude = []
+rust_modules = [
+  "crates/nuxie-runtime/src/lib.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+  "crates/nuxie-runtime/src/artboard_data_bind.rs",
+  "crates/nuxie-runtime/src/data_bind_graph.rs",
+  "crates/nuxie-runtime/src/retained_data_bind.rs",
+  "crates/nuxie-runtime/src/view_model.rs",
+  "crates/nuxie-runtime/src/state_machine.rs",
+  "crates/nuxie-runtime/src/state_machine/instance.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
+static_closure = "DataBind, ViewModel, event, nested-artboard, and script-input owners participate in Artboard/StateMachine settlement through retained polymorphic collections."
+
+[[source_set]]
+id = "live-draw-boundary"
+wave = "FL-E"
+include = [
+  "src/shapes/*.cpp",
+  "src/shapes/**/*.cpp",
+  "src/text/*.cpp",
+  "src/text/**/*.cpp",
+  "src/layout/*.cpp",
+  "src/layout/**/*.cpp",
+  "src/draw_rules.cpp",
+  "src/draw_target.cpp",
+  "src/foreground_layout_drawable.cpp",
+  "src/intrinsically_sizeable.cpp",
+  "src/joystick.cpp",
+  "src/layout.cpp",
+  "src/layout_component.cpp",
+  "src/solo.cpp",
+  "src/assets/image_asset.cpp",
+]
+exclude = []
+rust_modules = [
+  "crates/nuxie-runtime/src/lib.rs",
+  "crates/nuxie-runtime/src/objects.rs",
+  "crates/nuxie-runtime/src/components.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+  "crates/nuxie-runtime/src/text.rs",
+  "crates/nuxie-runtime/src/animation.rs",
+]
+static_closure = "Drawable, shape, text, layout, image, and related virtual update/draw owners are reachable from live Artboard traversal before the Renderer boundary."
+
+[[file]]
+upstream = "src/advancing_component.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/animation_reset.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/animation_reset_factory.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/animation_state.cpp"
+source_set = "blend-animation-states"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/animation_state_instance.cpp"
+source_set = "blend-animation-states"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/blend_animation.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/blend_animation_1d.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/blend_animation_direct.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/blend_state.cpp"
+source_set = "blend-animation-states"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/blend_state_1d.cpp"
+source_set = "blend-animation-states"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/blend_state_1d_input.cpp"
+source_set = "blend-animation-states"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/blend_state_1d_instance.cpp"
+source_set = "blend-animation-states"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/blend_state_1d_viewmodel.cpp"
+source_set = "blend-animation-states"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/blend_state_direct.cpp"
+source_set = "blend-animation-states"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/blend_state_direct_instance.cpp"
+source_set = "blend-animation-states"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/blend_state_transition.cpp"
+source_set = "blend-animation-states"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/cubic_ease_interpolator.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/cubic_interpolator.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/cubic_interpolator_component.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/cubic_interpolator_solver.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/cubic_value_interpolator.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/elastic_ease.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/elastic_interpolator.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/focus_action_clear.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/focus_action_target.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/focus_action_traversal.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/focus_listener_group.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/gamepad_listener_group.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/interpolating_keyframe.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyboard_listener_group.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyed_object.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyed_property.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyframe.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyframe_bool.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyframe_callback.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyframe_color.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyframe_double.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyframe_id.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyframe_interpolator.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyframe_string.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/keyframe_uint.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/layer_state.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/linear_animation.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/linear_animation_instance.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_action.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_align_target.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_bool_change.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_fire_event.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_input_change.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_invocation.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_number_change.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_trigger_change.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_types/listener_input_type.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_types/listener_input_type_gamepad.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_types/listener_input_type_keyboard.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_types/listener_input_type_semantic.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_types/listener_input_type_viewmodel.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/listener_viewmodel_change.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/nested_animation.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/nested_bool.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/nested_linear_animation.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/nested_number.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/nested_remap_animation.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/nested_simple_animation.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/nested_state_machine.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/nested_trigger.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/property_recorder.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/scripted_listener_action.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/scripted_transition_condition.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/semantic_listener_group.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/state_instance.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/state_machine.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/state_machine_fire_action.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/state_machine_fire_trigger.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/state_machine_input.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/state_machine_input_instance.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/state_machine_instance.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/state_machine_layer.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/state_machine_listener.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/state_machine_listener_single.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/state_transition.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/system_state_instance.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/text_input_listener_group.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/transition_bool_condition.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/animation/transition_comparator.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/transition_condition.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/transition_focus_condition.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/transition_input_condition.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/transition_number_condition.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/transition_property_comparator.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/transition_property_viewmodel_comparator.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/transition_trigger_condition.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/animation/transition_viewmodel_condition.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/artboard.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/artboard_component_list.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/artboard_list_map_rule.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/artboard_referencer.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/assets/image_asset.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/bindable_artboard.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/bones/bone.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/bones/root_bone.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/bones/skin.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/bones/skinnable.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/bones/tendon.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/bones/weight.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/component.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/constrainable_list.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/distance_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/draggable_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/follow_path_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/ik_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/list_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/list_follow_path_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/rotation_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/scale_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/scrolling/clamped_scroll_physics.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/scrolling/elastic_scroll_physics.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/scrolling/scroll_bar_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/scrolling/scroll_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/scrolling/scroll_constraint_proxy.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/scrolling/scroll_physics.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/scrolling/scroll_virtualizer.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/targeted_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/transform_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/constraints/translation_constraint.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/container_component.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_target_value.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_any.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_artboard.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_asset_font.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_asset_image.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_boolean.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_color.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_enum.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_list.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_number.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_string.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_symbol_list_index.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_trigger.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/context/context_value_viewmodel.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_boolean_negate.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_formula.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_group.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_group_item.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_interpolator.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_list_to_length.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_number_to_list.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_operation.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_operation_value.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_operation_viewmodel.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_range_mapper.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_rounder.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_string_pad.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_string_remove_zeros.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_string_trim.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_system_degs_to_rads.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_system_normalizer.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_to_number.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_to_string.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/data_converter_trigger.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/converters/formula/formula_token.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/data_bind.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/data_bind_container.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/data_bind_context.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/data_bind_list_item_consumer.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/data_bind_path.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/data_bind_viewmodel_consumer.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind/data_context.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/data_bind_path_referencer.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/dependency_sorter.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/draw_rules.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/artboard.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/draw_target.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/artboard.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/drawable.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/event.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/foreground_layout_drawable.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/intrinsically_sizeable.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/joystick.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/layout.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/layout/artboard_component_list_override.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/layout/axis.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/layout/axis_x.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/layout/axis_y.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/layout/layout_component_style.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/layout/layout_node_provider.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/layout/n_sliced_node.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/layout/n_slicer.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/layout/n_slicer_details.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/layout/n_slicer_tile_mode.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/layout_component.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/listener_group.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/math/aabb.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/math/bezier_utils.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/math/bit_field_loc.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/math/contour_measure.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/math/hit_test.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/math/mat2d.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/math/mat2d_find_max_scale.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/math/n_slicer_helpers.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/math/path_measure.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/math/random.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/math/raw_path.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/math/raw_path_utils.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/math/rectangles_to_contour.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/math/vec2d.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/nested_artboard.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/nested_artboard_layout.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/nested_artboard_leaf.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/nested_artboard_origin.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/node.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/parent_traversal.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/resetting_component.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/script_input_artboard.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/script_input_boolean.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/script_input_color.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/script_input_number.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/script_input_string.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/script_input_trigger.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/script_input_viewmodel_property.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/clipping_shape.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/cubic_asymmetric_vertex.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/cubic_detached_vertex.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/cubic_mirrored_vertex.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/cubic_vertex.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/deformer.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/ellipse.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/image.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/list_path.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/mesh.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/mesh_vertex.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/color.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/dash.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/dash_path.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/effects_container.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/feather.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/fill.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/gradient_stop.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/group_effect.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/linear_gradient.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/radial_gradient.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/shape_paint.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/shape_paint_mutator.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/shape_paint_path.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/solid_color.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/stroke.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/stroke_effect.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/target_effect.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/paint/trim_path.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/parametric_path.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/path.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/path_composer.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/path_vertex.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/points_common_path.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/points_path.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/polygon.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/rectangle.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/shape.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/shape_paint_container.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/slice_mesh.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/star.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/straight_vertex.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/triangle.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/shapes/vertex.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/solo.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/cursor.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/font_hb.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/text/fully_shaped_text.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/glyph_lookup.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/text/line_breaker.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/text/raw_text.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/raw_text_input.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_engine.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_follow_path_modifier.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_input.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_input_cursor.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_input_drawable.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_input_selected_text.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_input_selection.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_input_text.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_interface.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_modifier.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_modifier_group.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_modifier_range.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_selection_path.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_style.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_style_axis.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_style_feature.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_style_paint.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_target_modifier.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_value_run.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_variation_helper.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/text/text_variation_modifier.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/text/utf.cpp"
+source_set = "live-draw-boundary"
+wave = "FL-E"
+rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/transform_component.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/data_enum.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/data_enum_value.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/property_symbol_dependent.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_artboard_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_asset_font_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_asset_image_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_boolean_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_color_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_enum_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_list_index_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_list_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_number_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_string_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_trigger_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_value_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/runtime/viewmodel_runtime.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_artboard.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_asset.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_asset_font.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_asset_image.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_boolean.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_color.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_enum.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_list.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_list_item.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_number.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_string.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_symbol_list_index.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_trigger.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_value.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_viewmodel.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_property.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_property_enum.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_property_enum_system.cpp"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
+rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/virtualizing_component.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/world_transform_component.cpp"
+source_set = "component-update-graph"
+wave = "FL-A"
+rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+dynamically_reached = true
+status = "pending"
+
+[[member]]
+id = "component.identity"
+wave = "FL-A"
+cpp_files = ["src/component.cpp", "src/artboard.cpp"]
+rust_file = "crates/nuxie-runtime/src/components.rs"
+rust_anchor = "pub struct RuntimeComponent"
+status = "pending"
+
+[[member]]
+id = "component.dirt"
+wave = "FL-A"
+cpp_files = ["src/component.cpp"]
+rust_file = "crates/nuxie-runtime/src/components.rs"
+rust_anchor = "pub struct ComponentDirt"
+status = "pending"
+
+[[member]]
+id = "component.dependents"
+wave = "FL-A"
+cpp_files = ["src/component.cpp", "src/dependency_sorter.cpp"]
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "pub fn add_dirt("
+status = "pending"
+
+[[member]]
+id = "component.update_order"
+wave = "FL-A"
+cpp_files = ["src/artboard.cpp", "src/dependency_sorter.cpp"]
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "fn update_components_with_hook_recording"
+status = "pending"
+
+[[member]]
+id = "component.transforms"
+wave = "FL-A"
+cpp_files = ["src/transform_component.cpp", "src/world_transform_component.cpp"]
+rust_file = "crates/nuxie-runtime/src/components.rs"
+rust_anchor = "pub(crate) struct TransformComponents"
+status = "pending"
+
+[[member]]
+id = "component.clone_drop"
+wave = "FL-A"
+cpp_files = ["src/artboard.cpp", "src/component.cpp"]
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "pub struct ArtboardInstance"
+status = "pending"
+
+[[member]]
+id = "keyframe.seconds"
+wave = "FL-B"
+cpp_files = ["src/animation/keyframe.cpp"]
+rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_anchor = "pub(crate) struct RuntimeKeyFrameSeconds"
+status = "pending"
+
+[[member]]
+id = "keyframe.values"
+wave = "FL-B"
+cpp_files = [
+  "src/animation/keyframe_bool.cpp",
+  "src/animation/keyframe_color.cpp",
+  "src/animation/keyframe_double.cpp",
+  "src/animation/keyframe_string.cpp",
+  "src/animation/keyframe_uint.cpp",
+]
+rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_anchor = "pub struct RuntimeKeyFrameDouble"
+status = "pending"
+
+[[member]]
+id = "keyed_property.targets"
+wave = "FL-B"
+cpp_files = ["src/animation/keyed_property.cpp"]
+rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_anchor = "pub struct RuntimeKeyedProperty"
+status = "pending"
+
+[[member]]
+id = "keyed_object.membership"
+wave = "FL-B"
+cpp_files = ["src/animation/keyed_object.cpp"]
+rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_anchor = "pub struct RuntimeKeyedObject"
+status = "pending"
+
+[[member]]
+id = "linear_animation.definition"
+wave = "FL-B"
+cpp_files = ["src/animation/linear_animation.cpp"]
+rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_anchor = "pub struct RuntimeLinearAnimation"
+status = "pending"
+
+[[member]]
+id = "linear_animation.instance"
+wave = "FL-B"
+cpp_files = ["src/animation/linear_animation_instance.cpp"]
+rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_anchor = "pub struct LinearAnimationInstance"
+status = "pending"
+
+[[member]]
+id = "animation.reset"
+wave = "FL-B"
+cpp_files = [
+  "src/animation/animation_reset.cpp",
+  "src/animation/animation_reset_factory.cpp",
+]
+rust_file = "crates/nuxie-runtime/src/state_machine.rs"
+rust_anchor = "struct AnimationReset"
+status = "pending"
+
+[[member]]
+id = "blend_animation.owners"
+wave = "FL-B"
+cpp_files = [
+  "src/animation/blend_animation_1d.cpp",
+  "src/animation/blend_animation_direct.cpp",
+  "src/animation/blend_state_1d.cpp",
+  "src/animation/blend_state_direct.cpp",
+]
+rust_file = "crates/nuxie-runtime/src/state_machine.rs"
+rust_anchor = "pub(crate) struct RuntimeBlendState1D"
+status = "pending"
+
+[[member]]
+id = "state_machine.collections"
+wave = "FL-C"
+cpp_files = ["src/animation/state_machine.cpp", "src/animation/state_machine_instance.cpp"]
+rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
+rust_anchor = "pub struct StateMachineInstance"
+status = "pending"
+
+[[member]]
+id = "state_machine.advance"
+wave = "FL-C"
+cpp_files = ["src/animation/state_machine_instance.cpp"]
+rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
+rust_anchor = "fn advance_with_report_mode"
+status = "pending"
+
+[[member]]
+id = "state_machine.events"
+wave = "FL-C"
+cpp_files = ["src/animation/state_machine_instance.cpp", "src/animation/listener_action.cpp"]
+rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
+rust_anchor = "reported_events"
+status = "pending"
+
+[[member]]
+id = "state_machine.layer"
+wave = "FL-C"
+cpp_files = ["src/animation/state_machine_layer.cpp", "src/animation/state_instance.cpp"]
+rust_file = "crates/nuxie-runtime/src/state_machine.rs"
+rust_anchor = "pub(crate) struct StateMachineLayerInstance"
+status = "pending"
+
+[[member]]
+id = "state_machine.transitions"
+wave = "FL-C"
+cpp_files = ["src/animation/state_transition.cpp", "src/animation/blend_state_transition.cpp"]
+rust_file = "crates/nuxie-runtime/src/state_machine.rs"
+rust_anchor = "pub(crate) struct RuntimeStateTransition"
+status = "pending"
+
+[[member]]
+id = "state_machine.conditions"
+wave = "FL-C"
+cpp_files = [
+  "src/animation/transition_bool_condition.cpp",
+  "src/animation/transition_number_condition.cpp",
+  "src/animation/transition_property_viewmodel_comparator.cpp",
+]
+rust_file = "crates/nuxie-runtime/src/state_machine/transition_conditions.rs"
+rust_anchor = "TransitionEvaluationContext"
+status = "pending"
+
+[[member]]
+id = "state_machine.actions"
+wave = "FL-C"
+cpp_files = [
+  "src/animation/listener_action.cpp",
+  "src/animation/state_machine_fire_action.cpp",
+  "src/animation/state_machine_fire_trigger.cpp",
+]
+rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
+rust_anchor = "RuntimeStateMachineListenerActionExecutor"
+status = "pending"
+
+[[member]]
+id = "state_machine.inputs"
+wave = "FL-C"
+cpp_files = [
+  "src/animation/state_machine_input.cpp",
+  "src/animation/state_machine_input_instance.cpp",
+]
+rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
+rust_anchor = "inputs: Vec<StateMachineInputInstance>"
+status = "pending"
+
+[[member]]
+id = "databind.context"
+wave = "FL-D"
+cpp_files = [
+  "src/data_bind/data_context.cpp",
+  "src/data_bind/data_bind_context.cpp",
+]
+rust_file = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_anchor = "pub(crate) struct RuntimeOwnedDataContext"
+status = "pending"
+
+[[member]]
+id = "databind.owner"
+wave = "FL-D"
+cpp_files = ["src/data_bind/data_bind.cpp", "src/data_bind/data_bind_container.cpp"]
+rust_file = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_anchor = "RuntimeArtboardAuthoredDataBindState"
+status = "pending"
+
+[[member]]
+id = "databind.queues"
+wave = "FL-D"
+cpp_files = ["src/data_bind/data_bind_container.cpp", "src/artboard.cpp"]
+rust_file = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_anchor = "RuntimeArtboardDataBindTargetQueues"
+status = "pending"
+
+[[member]]
+id = "databind.converters"
+wave = "FL-D"
+cpp_files = [
+  "src/data_bind/converters/data_converter.cpp",
+  "src/data_bind/converters/data_converter_group.cpp",
+]
+rust_file = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_anchor = "RuntimeArtboardAuthoredSharedConverterState"
+status = "pending"
+
+[[member]]
+id = "viewmodel.owner"
+wave = "FL-D"
+cpp_files = [
+  "src/viewmodel/viewmodel_instance.cpp",
+  "src/viewmodel/runtime/viewmodel_instance_runtime.cpp",
+]
+rust_file = "crates/nuxie-runtime/src/view_model.rs"
+rust_anchor = "pub struct RuntimeOwnedViewModelInstance"
+status = "pending"
+
+[[member]]
+id = "artboard.advance"
+wave = "FL-D"
+cpp_files = ["src/artboard.cpp", "src/nested_artboard.cpp"]
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "settle_state_machine_update_passes_after_main_advance"
+status = "pending"
+
+[[member]]
+id = "artboard.update_pass"
+wave = "FL-D"
+cpp_files = ["src/artboard.cpp"]
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "pub fn update_pass("
+status = "pending"
+
+[[member]]
+id = "nested_artboard.advance"
+wave = "FL-D"
+cpp_files = ["src/nested_artboard.cpp", "src/nested_artboard_layout.cpp"]
+rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_anchor = "pub(crate) struct RuntimeNestedArtboardInstance"
+status = "pending"
+
+[[member]]
+id = "event.reporting"
+wave = "FL-D"
+cpp_files = ["src/event.cpp", "src/animation/state_machine_instance.cpp"]
+rust_file = "crates/nuxie-runtime/src/state_machine.rs"
+rust_anchor = "pub struct StateMachineReportedEvent"
+status = "pending"
+
+[[member]]
+id = "artboard.live_draw"
+wave = "FL-E"
+cpp_files = ["src/artboard.cpp", "src/drawable.cpp"]
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "pub fn draw_artboard("
+status = "pending"
+
+[[member]]
+id = "renderer.interface_boundary"
+wave = "FL-E"
+cpp_files = ["src/shapes/paint/shape_paint.cpp"]
+rust_file = "crates/nuxie-runtime/src/draw.rs"
+rust_anchor = "renderer: &mut dyn Renderer"
+status = "pending"

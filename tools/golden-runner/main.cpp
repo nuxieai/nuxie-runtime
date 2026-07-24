@@ -23,6 +23,7 @@
 #include "rive/static_scene.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <cmath>
@@ -38,8 +39,80 @@
 #include <string>
 #include <vector>
 
+#if defined(RIVE_GOLDEN_COVERAGE_TRACE)
 namespace
 {
+std::atomic<bool> g_countFrameLoopAllocations = false;
+std::atomic<uint64_t> g_frameLoopAllocations = 0;
+}
+
+void* operator new(std::size_t size)
+{
+    if (g_countFrameLoopAllocations.load(std::memory_order_relaxed))
+    {
+        g_frameLoopAllocations.fetch_add(1, std::memory_order_relaxed);
+    }
+    if (void* value = std::malloc(size))
+    {
+        return value;
+    }
+    throw std::bad_alloc();
+}
+
+void* operator new[](std::size_t size)
+{
+    return ::operator new(size);
+}
+#endif
+
+namespace
+{
+#if defined(RIVE_GOLDEN_COVERAGE_TRACE)
+extern "C" int __llvm_profile_write_file(void);
+extern "C" void __llvm_profile_reset_counters(void);
+#endif
+
+void flushCoverageProfileIfRequested()
+{
+#if defined(RIVE_GOLDEN_COVERAGE_TRACE)
+    if (std::getenv("RIVE_GOLDEN_COVERAGE_FLUSH") != nullptr)
+    {
+        __llvm_profile_write_file();
+    }
+#endif
+}
+
+void resetCoverageProfileForFrameLoopIfRequested()
+{
+#if defined(RIVE_GOLDEN_COVERAGE_TRACE)
+    if (std::getenv("RIVE_GOLDEN_COVERAGE_FRAME_ONLY") != nullptr)
+    {
+        __llvm_profile_reset_counters();
+    }
+#endif
+}
+
+void resetFrameLoopAllocationCounterIfRequested()
+{
+#if defined(RIVE_GOLDEN_COVERAGE_TRACE)
+    if (std::getenv("RIVE_GOLDEN_ALLOCATION_COUNTER") != nullptr)
+    {
+        g_frameLoopAllocations.store(0, std::memory_order_relaxed);
+        g_countFrameLoopAllocations.store(true, std::memory_order_relaxed);
+    }
+#endif
+}
+
+uint64_t stopFrameLoopAllocationCounter()
+{
+#if defined(RIVE_GOLDEN_COVERAGE_TRACE)
+    g_countFrameLoopAllocations.store(false, std::memory_order_relaxed);
+    return g_frameLoopAllocations.load(std::memory_order_relaxed);
+#else
+    return 0;
+#endif
+}
+
 constexpr float kTimeEpsilon = 0.000001f;
 
 class CliError : public std::runtime_error
@@ -81,6 +154,41 @@ struct Options
     std::vector<float> samples = {0.0f};
     size_t benchmarkRepeat = 1;
 };
+
+void validateTraceOptions(const Options& options)
+{
+    const bool frameOnly =
+        std::getenv("RIVE_GOLDEN_COVERAGE_FRAME_ONLY") != nullptr;
+    const bool allocations =
+        std::getenv("RIVE_GOLDEN_ALLOCATION_COUNTER") != nullptr;
+
+#if !defined(RIVE_GOLDEN_COVERAGE_TRACE)
+    const bool flush =
+        std::getenv("RIVE_GOLDEN_COVERAGE_FLUSH") != nullptr;
+    if (frameOnly || flush)
+    {
+        throw CliError(
+            "coverage tracing requires RIVE_GOLDEN_COVERAGE_TRACE and LLVM "
+            "coverage instrumentation at build time");
+    }
+#endif
+
+#if !defined(RIVE_GOLDEN_COVERAGE_TRACE)
+    if (allocations)
+    {
+        throw CliError(
+            "RIVE_GOLDEN_ALLOCATION_COUNTER requires "
+            "RIVE_GOLDEN_COVERAGE_TRACE at build time");
+    }
+#endif
+
+    if (options.benchmarkRepeat > 1 && (frameOnly || allocations))
+    {
+        throw CliError(
+            "frame-only coverage and allocation tracing require "
+            "--benchmark-repeat 1");
+    }
+}
 
 std::string usage()
 {
@@ -764,6 +872,8 @@ BenchmarkTimings runBenchmarkPass(const Options& options, bool collectPhases)
     };
 
     float currentSeconds = 0.0f;
+    resetCoverageProfileForFrameLoopIfRequested();
+    resetFrameLoopAllocationCounterIfRequested();
     const auto benchmarkStart = std::chrono::steady_clock::now();
     for (size_t repeat = 0; repeat < options.benchmarkRepeat; repeat++)
     {
@@ -806,6 +916,7 @@ int runSmoke()
 
 int runFile(const Options& options)
 {
+    validateTraceOptions(options);
     if (!options.viewModelScript.empty())
     {
         throw CliError(
@@ -852,6 +963,7 @@ int runFile(const Options& options)
         std::cout.flush();
         std::fflush(nullptr);
 #ifndef WITH_RIVE_SCRIPTING
+        flushCoverageProfileIfRequested();
         std::_Exit(0);
 #endif
         return 0;
@@ -879,6 +991,8 @@ int runFile(const Options& options)
                                    frameDimension(scene->height()));
     }
 
+    resetCoverageProfileForFrameLoopIfRequested();
+    resetFrameLoopAllocationCounterIfRequested();
     const auto benchmarkStart = std::chrono::steady_clock::now();
     std::chrono::steady_clock::duration advanceElapsed{};
     std::chrono::steady_clock::duration inputElapsed{};
@@ -938,6 +1052,11 @@ int runFile(const Options& options)
     }
     const auto benchmarkElapsed =
         std::chrono::steady_clock::now() - benchmarkStart;
+    const uint64_t frameLoopAllocations = stopFrameLoopAllocationCounter();
+    if (std::getenv("RIVE_GOLDEN_ALLOCATION_COUNTER") != nullptr)
+    {
+        std::cerr << "frame_loop_allocations=" << frameLoopAllocations << "\n";
+    }
 
     if (options.benchmark)
     {
@@ -965,6 +1084,7 @@ int runFile(const Options& options)
     std::cout.flush();
     std::fflush(nullptr);
 #ifndef WITH_RIVE_SCRIPTING
+    flushCoverageProfileIfRequested();
     std::_Exit(0);
 #endif
     return 0;

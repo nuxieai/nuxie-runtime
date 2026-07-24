@@ -21,10 +21,14 @@ use nuxie_runtime::{
 };
 #[cfg(feature = "scripting")]
 use nuxie_scripting::vm::{DetachedViewModelFrame, ScopeKey, ScriptProgram, ScriptVm};
+#[cfg(feature = "coverage-trace")]
+use std::alloc::{GlobalAlloc, Layout, System};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+#[cfg(feature = "coverage-trace")]
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 #[cfg(feature = "scripting")]
 use std::{
@@ -35,6 +39,108 @@ use std::{
 const TIME_EPSILON: f32 = 0.000001;
 const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
 const DATA_BIND_FLAG_TWO_WAY: u64 = 1 << 1;
+
+#[cfg(feature = "coverage-trace")]
+struct FrameLoopCountingAllocator;
+
+#[cfg(feature = "coverage-trace")]
+static COUNT_FRAME_LOOP_ALLOCATIONS: AtomicBool = AtomicBool::new(false);
+#[cfg(feature = "coverage-trace")]
+static FRAME_LOOP_ALLOCATIONS: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(feature = "coverage-trace")]
+unsafe impl GlobalAlloc for FrameLoopCountingAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if COUNT_FRAME_LOOP_ALLOCATIONS.load(Ordering::Relaxed) {
+            FRAME_LOOP_ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+        }
+        // SAFETY: this allocator delegates the unchanged layout to System.
+        unsafe { System.alloc(layout) }
+    }
+
+    unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
+        // SAFETY: `pointer` was allocated by the delegated System allocator.
+        unsafe { System.dealloc(pointer, layout) }
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        if COUNT_FRAME_LOOP_ALLOCATIONS.load(Ordering::Relaxed) {
+            FRAME_LOOP_ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+        }
+        // SAFETY: this allocator delegates the unchanged layout to System.
+        unsafe { System.alloc_zeroed(layout) }
+    }
+
+    unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, size: usize) -> *mut u8 {
+        if COUNT_FRAME_LOOP_ALLOCATIONS.load(Ordering::Relaxed) {
+            FRAME_LOOP_ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+        }
+        // SAFETY: `pointer` and `layout` came from the delegated allocator.
+        unsafe { System.realloc(pointer, layout, size) }
+    }
+}
+
+#[cfg(feature = "coverage-trace")]
+#[global_allocator]
+static FRAME_LOOP_COUNTING_ALLOCATOR: FrameLoopCountingAllocator = FrameLoopCountingAllocator;
+
+#[cfg(feature = "coverage-trace")]
+unsafe extern "C" {
+    fn __llvm_profile_reset_counters();
+}
+
+fn reset_coverage_profile_for_frame_loop_if_requested() {
+    #[cfg(feature = "coverage-trace")]
+    if env::var_os("RIVE_GOLDEN_COVERAGE_FRAME_ONLY").is_some() {
+        // SAFETY: this feature is only linked with `-Cinstrument-coverage`;
+        // the symbol is supplied by that compiler runtime.
+        unsafe {
+            __llvm_profile_reset_counters();
+        }
+    }
+}
+
+fn reset_frame_loop_allocation_counter_if_requested() {
+    #[cfg(feature = "coverage-trace")]
+    if env::var_os("RIVE_GOLDEN_ALLOCATION_COUNTER").is_some() {
+        FRAME_LOOP_ALLOCATIONS.store(0, Ordering::Relaxed);
+        COUNT_FRAME_LOOP_ALLOCATIONS.store(true, Ordering::Relaxed);
+    }
+}
+
+fn stop_frame_loop_allocation_counter() -> u64 {
+    #[cfg(feature = "coverage-trace")]
+    {
+        COUNT_FRAME_LOOP_ALLOCATIONS.store(false, Ordering::Relaxed);
+        return FRAME_LOOP_ALLOCATIONS.load(Ordering::Relaxed);
+    }
+    #[cfg(not(feature = "coverage-trace"))]
+    0
+}
+
+fn validate_trace_options(options: &Options) -> Result<()> {
+    let frame_only = env::var_os("RIVE_GOLDEN_COVERAGE_FRAME_ONLY").is_some();
+    let allocations = env::var_os("RIVE_GOLDEN_ALLOCATION_COUNTER").is_some();
+
+    #[cfg(not(feature = "coverage-trace"))]
+    if frame_only || allocations {
+        bail!(
+            "frame-loop coverage/allocation tracing requires \
+             --features coverage-trace and RUSTFLAGS=-Cinstrument-coverage"
+        );
+    }
+
+    if options.benchmark_repeat > 1 && (frame_only || allocations) {
+        bail!(
+            "frame-only coverage and allocation tracing require \
+             --benchmark-repeat 1"
+        );
+    }
+    if options.layout_bounds && (frame_only || allocations) {
+        bail!("frame-loop tracing cannot be combined with --layout-bounds");
+    }
+    Ok(())
+}
 
 trait RunnerBackend {
     fn as_factory(&mut self) -> &mut dyn RenderFactory;
@@ -148,6 +254,7 @@ fn scripting_unsupported_feature(error: &anyhow::Error) -> Option<&'static str> 
 
 fn run() -> Result<String> {
     let options = Options::parse(env::args().skip(1).collect())?;
+    validate_trace_options(&options)?;
     let input_events = options
         .input_script
         .as_deref()
@@ -419,6 +526,8 @@ fn run() -> Result<String> {
     factory.source(&options.file.to_string_lossy(), &artboard_name, &scene.name);
     factory.frame_size(frame_dimension(width), frame_dimension(height));
 
+    reset_coverage_profile_for_frame_loop_if_requested();
+    reset_frame_loop_allocation_counter_if_requested();
     let benchmark_start = Instant::now();
     let mut advance_elapsed = Duration::ZERO;
     let mut input_elapsed = Duration::ZERO;
@@ -552,6 +661,10 @@ fn run() -> Result<String> {
         }
     }
     let benchmark_elapsed = benchmark_start.elapsed();
+    let frame_loop_allocations = stop_frame_loop_allocation_counter();
+    if env::var_os("RIVE_GOLDEN_ALLOCATION_COUNTER").is_some() {
+        eprintln!("frame_loop_allocations={frame_loop_allocations}");
+    }
 
     if options.benchmark {
         let accounted_elapsed = advance_elapsed + input_elapsed + prepare_elapsed + draw_elapsed;

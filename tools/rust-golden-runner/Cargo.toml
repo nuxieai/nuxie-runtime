@@ -8,6 +8,7 @@ repository.workspace = true
 [features]
 default = []
 scripting = ["dep:nuxie-scripting"]
+coverage-trace = []
 
 [dependencies]
 anyhow = "1"

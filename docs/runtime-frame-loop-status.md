@@ -8,8 +8,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   checkout. The six Component member rows are closed locally; the candidate
   publish battery and candidate commit are green. Rebase onto the final
   LOC-009/main boundary is complete, and the post-rebase retained DataBind
-  target-dirt remediation plus every local publish gate are green. Final
-  independent reviews, explicit push, and orchestrator verification remain.
+  target-dirt remediation plus every local publish gate are green. Explicit
+  push and orchestrator verification remain.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - File closure: formally 0 / 338 until the file-correspondence manifest's
   52 FL-A rows receive the required orchestrator-verified promotion. Their

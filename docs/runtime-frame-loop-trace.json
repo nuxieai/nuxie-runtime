@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "7e5f85f80ff3aa63773e2495af24304dd53afed7fe5ab7dba73c07457d28a6bf",
+    "cpp_binary_sha256": "ef10380577775eed45f801ae75ffd60417dd1b3b9f6ccc49ab48d88b63ac135b",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "bc83f26286dfd94a9da54558417bb8d24a6187c691deb2009484de009fa2b5e9",
-    "rust_coverage_sha256": "49db15080f63deca792faa69aa9118bcfc8f98bee46093fcf643742e8ee9f5e2",
-    "rust_mechanism_coverage_sha256": "9fe6f6f6852893a0e2cfb01bd9634c59c3bf84efaff61ffa7e3ad7c22f2c5893",
-    "rust_steady_coverage_sha256": "ccac049908edb9b03c9fc836211af3eea6942a160e654d8a79b450d8bcbc7908"
+    "rust_binary_sha256": "cb62bb49d69eb1a016a82bdbe1d4ce0a85027be9c3d16c4f9367645abbd1c2ea",
+    "rust_coverage_sha256": "f96d5989feaf049f0150a87d9ba229132394f92271b0d3498fce9b81fb6ab61b",
+    "rust_mechanism_coverage_sha256": "fabba4ab31f0bc50cdd5f45bfeb6fa1205970dc474d417d82208545759d63eb8",
+    "rust_steady_coverage_sha256": "67002a18d602b6575c16491e4d131e661b17e47bf4938a1f50626dfeaee8329a"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -3137,22 +3137,6 @@
         {
           "count": 62,
           "name": "nuxie_runtime::artboard::property_affects_effect_path_epoch"
-        },
-        {
-          "count": 62,
-          "name": "nuxie_runtime::artboard::property_affects_effect_path_epoch::{closure#0}"
-        },
-        {
-          "count": 62,
-          "name": "nuxie_runtime::artboard::property_affects_effect_path_epoch::{closure#0}::{closure#0}"
-        },
-        {
-          "count": 124,
-          "name": "nuxie_runtime::artboard::property_marks_parametric_path_dirty"
-        },
-        {
-          "count": 124,
-          "name": "nuxie_runtime::artboard::property_marks_parametric_path_dirty::{closure#0}"
         },
         {
           "count": 62,
@@ -7168,14 +7152,14 @@
   "rust_candidate_source": {
     "file_count": 7147,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "be8dd2bb648315ee40c29506bd81835ed871635ce85308d68cfd52888ab70083"
+    "sha256": "29de14643d2b7849de4be837fe4e4ca18fd9fbd2cbec4b4394d4260f2c424b3a"
   },
-  "rust_ref": "0a57aac0fd3d53e152a4143a15118e0419afed22",
+  "rust_ref": "28c2aad5942154324f8149ff8e86ddabafa9a6aa",
   "rust_runner_provenance": {
     "candidate_source": {
       "file_count": 7147,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "be8dd2bb648315ee40c29506bd81835ed871635ce85308d68cfd52888ab70083"
+      "sha256": "29de14643d2b7849de4be837fe4e4ca18fd9fbd2cbec4b4394d4260f2c424b3a"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -7200,7 +7184,7 @@
     },
     "dynamic_cpp_functions": 461,
     "dynamic_rust_files": 18,
-    "dynamic_rust_functions": 1196,
+    "dynamic_rust_functions": 1192,
     "static_cpp_files": 338
   },
   "steady_allocation_counts": {

@@ -7442,7 +7442,7 @@ struct CppComponent {
     // C++ `Component::m_GraphOrder` has no construction default. The ordinary
     // import snapshot must not read it for components outside the retained
     // dependency schedule; the runtime-update probe owns that scheduled-only
-    // comparison (`component.hpp:26,54`, `artboard.cpp:781-802`).
+    // comparison (`component.hpp:26,54`, `artboard.cpp:846-855`).
     #[serde(default, rename = "childrenLocal")]
     children_local: Vec<usize>,
     #[serde(default, rename = "constraintsLocal")]

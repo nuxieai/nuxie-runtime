@@ -2112,10 +2112,14 @@ widening. Universal byte identity is not part of that stop condition.
   `BrowserFrame::finish_with_readback`, which returns the bounded
   `width * height * 4` RGBA result without presenting. The real-browser gate
   counts both prohibited calls on normal frames, checks exact capture bytes,
-  proves a 13x9 resize through the canvas surface, and retries a one-shot
-  acquisition loss on the same factory. Browser surfaces are explicitly
-  premultiplied and the compositor oracle blends half-alpha red over blue;
-  Apple retains the existing straight-alpha drawable contract.
+  proves a 13x9 resize through the canvas surface, recreates a lost surface
+  from the retained canvas, retries the original half-alpha frame once, and
+  reruns the compositor oracle over blue on that recovered surface. A
+  persistent loss proves the retry is bounded and returns a typed error. A
+  focused lifecycle driver test proves the corresponding Outdated
+  reconfigure/retry sequence, which Chrome's WebGPU backend cannot synthesize
+  directly. Browser surfaces are explicitly premultiplied; Apple retains the
+  existing straight-alpha drawable contract.
 
 - 2026-07-17: At the user's direction, the R4 timing gate no longer requires
   any absolute host-idle percentage. Stable low-idle brackets are admissible;

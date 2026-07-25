@@ -34,6 +34,69 @@ rg -q 'queue\.present\(surface_texture\)' "$browser_source"
 rg -q 'pub async fn finish_with_readback\(self\)' "$browser_source"
 rg -q 'configuration\.alpha_mode = wgpu::CompositeAlphaMode::PreMultiplied' "$browser_source"
 
+current_texture_body=$(
+  sed -n \
+    '/fn current_texture(&self)/,/fn acquire_current_texture(/p' \
+    "$browser_source"
+)
+rg -Fq 'acquire_surface_texture(' <<<"$current_texture_body"
+rg -Fq \
+  'SurfaceRecoveryAction::ReconfigureAndRetry => self.reconfigure_surface()' \
+  <<<"$current_texture_body"
+rg -Fq \
+  'SurfaceRecoveryAction::RecreateAndRetry => self.recreate_surface()' \
+  <<<"$current_texture_body"
+
+surface_failure_body=$(
+  sed -n '/fn surface_failure(/,$p' "$browser_source"
+)
+rg -Fq \
+  'wgpu::CurrentSurfaceTexture::Outdated => SurfaceAcquisitionFailure::Outdated' \
+  <<<"$surface_failure_body"
+rg -Fq \
+  'wgpu::CurrentSurfaceTexture::Lost => SurfaceAcquisitionFailure::Lost' \
+  <<<"$surface_failure_body"
+
+recreate_surface_body=$(
+  sed -n \
+    '/fn recreate_surface(&self)/,/fn create_browser_surface(/p' \
+    "$browser_source"
+)
+rg -Fq \
+  'create_browser_surface(&self.instance, self.canvas.clone(), "recreation")' \
+  <<<"$recreate_surface_body"
+rg -Fq \
+  'surface.configure(&self.device, &self.configuration.borrow());' \
+  <<<"$recreate_surface_body"
+
+lifecycle_source="$repo_dir/crates/nuxie-renderer/src/browser_surface_lifecycle.rs"
+rg -q 'SurfaceRecoveryAction::ReconfigureAndRetry' "$lifecycle_source"
+rg -q 'SurfaceRecoveryAction::RecreateAndRetry' "$lifecycle_source"
+rg -q 'second_failure_returns_typed_error_without_a_third_acquisition' \
+  "$lifecycle_source"
+
+surface_recovery_action_body=$(
+  sed -n \
+    '/fn surface_recovery_action(/,/^}/p' \
+    "$lifecycle_source"
+)
+rg -Fq \
+  'SurfaceAcquisitionFailure::Outdated => Some(SurfaceRecoveryAction::ReconfigureAndRetry)' \
+  <<<"$surface_recovery_action_body"
+rg -Fq \
+  'SurfaceAcquisitionFailure::Lost => Some(SurfaceRecoveryAction::RecreateAndRetry)' \
+  <<<"$surface_recovery_action_body"
+
+retry_body=$(
+  sed -n \
+    '/pub async fn assert_surface_acquisition_retry(/,/pub async fn assert_persistent_surface_acquisition_failure(/p' \
+    "$repo_dir/tools/browser-renderer-smoke/src/lib.rs"
+)
+if rg -n '\.resize\(' <<<"$retry_body"; then
+  echo "browser-webgpu-only check found an external resize masquerading as surface recovery" >&2
+  exit 1
+fi
+
 present_body=$(
   sed -n \
     '/pub async fn present(self)/,/pub async fn finish_with_readback(self)/p' \
@@ -65,4 +128,4 @@ rg -Fq 'finish_internal(false, false, true, false, Some' <<<"$direct_submit_body
 test ! -e "$repo_dir/crates/nuxie-renderer/src/webgl2.rs"
 test ! -e "$repo_dir/crates/nuxie-renderer/src/webgl2_limits.rs"
 
-echo "browser-webgpu-only summary: browser-smoke=pass gpu-smoke=pass prohibited-surface=0 prohibited-cpu-presentation=0 typed-readback=1 surface-alpha=premultiplied"
+echo "browser-webgpu-only summary: browser-smoke=pass gpu-smoke=pass prohibited-surface=0 prohibited-cpu-presentation=0 typed-readback=1 surface-alpha=premultiplied recovered-surface-alpha=premultiplied surface-recovery=bounded"

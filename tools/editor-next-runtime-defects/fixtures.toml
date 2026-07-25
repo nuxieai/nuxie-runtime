@@ -1,0 +1,233 @@
+schema = "nuxie.editor-next.runtime-defect-fixtures/v1"
+version = 1
+upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+expected_fixtures = 25
+
+[[fixture]]
+id = "fed.rt_ed_001.data_viz_demo"
+defect_id = "RT-ED-001"
+kind = "three-layer"
+status = "qualified"
+driver = "scripted-golden:data_viz_demo"
+stimulus_files = [
+  { root = "rive", path = "tests/unit_tests/assets/data_viz_demo.riv", sha256 = "7e50bfe3a47824908d71c5959f7ab6ccc96f78c0c24cb056ed0f772dc3ddae0c" },
+  { root = "repo", path = "corpus.toml", sha256 = "b99484406d8a9748f25357d8645cba95429733b5ce3adc14fe93e8c58c95dd99" },
+]
+
+[[fixture]]
+id = "fed.rt_ed_002.db_health_tracker"
+defect_id = "RT-ED-002"
+kind = "three-layer"
+status = "qualified"
+driver = "scripted-golden:db_health_tracker"
+stimulus_files = [
+  { root = "rive", path = "tests/unit_tests/assets/db_health_tracker.riv", sha256 = "bbd78d53e1402e76460314a1eee3d29e153d1907cbb4cc0c8ee31daa1c48b4cf" },
+  { root = "repo", path = "corpus.toml", sha256 = "b99484406d8a9748f25357d8645cba95429733b5ce3adc14fe93e8c58c95dd99" },
+]
+
+[[fixture]]
+id = "fed.rt_ed_003.browser_present_readback"
+defect_id = "RT-ED-003"
+kind = "browser-renderer"
+status = "registered"
+driver = "pending:F-ED-06"
+
+[[fixture]]
+id = "fed.rt_ed_004.webgl2_rounded_clip_402x874_r57"
+defect_id = "RT-ED-004"
+kind = "historical"
+status = "historical"
+driver = "evidence-only:webgpu-only-product-decision"
+
+[[fixture]]
+id = "fed.rt_ed_005.generic_visual_property_bind"
+defect_id = "RT-ED-005"
+kind = "three-layer"
+status = "registered"
+driver = "cargo-test:F-ED-03 exact generic property binding"
+stimulus_files = [
+  { root = "rive", path = "include/rive/generated/data_bind/data_bind_base.hpp", sha256 = "b8e07204517b2cd27908f3afff8afc218e50b66cda40b6a6a807b1e9a3428049" },
+  { root = "rive", path = "include/rive/data_bind/data_bind.hpp", sha256 = "c3230767b2293e946f9beec380c3516b8ce5cb7cdf76a39746b1c420baf715f2" },
+  { root = "rive", path = "include/rive/scripted/scripted_data_converter.hpp", sha256 = "6cd69c7c0c48e6089e14f155334d0113ee19e6c52ab9b81e4557a3e19f6eeef8" },
+  { root = "rive", path = "include/rive/data_bind/converters/data_converter_group.hpp", sha256 = "44013eec89001de62a54316e3f5a6dd26735b1796bd9a03ec5bcee3ba50e4d35" },
+  { root = "rive", path = "src/file.cpp", sha256 = "0bf51f08b7a77366a164ecb13de142a890b91fcfd400da379d2e6e36c4bcb47c" },
+  { root = "rive", path = "src/data_bind/data_bind.cpp", sha256 = "5499d70ae8911465c1560f1461ad2cfdf9597b4d40bac1bc0fda8190ca94098e" },
+  { root = "rive", path = "src/data_bind/context/context_value_number.cpp", sha256 = "e8ebd1056ab0a4bde2c527ac3b7d932e3f2c555cd54014c2afe99debdf3d9947" },
+  { root = "rive", path = "src/data_bind/context/context_value_color.cpp", sha256 = "f3320c45ef50ee573d5fdd13c3dfc2bc4471376a49474962283e644554353b5e" },
+  { root = "rive", path = "tests/unit_tests/runtime/data_binding_test.cpp", sha256 = "b370dc111015e8b7ed2bdee102e0b4f15ee792927b93aa45c552e0b3d4014a60" },
+  { root = "repo", path = "crates/nuxie/build.rs", sha256 = "74dd6d592dbd4f26cb9ef3105c7551e40ac928190b8939fa91b7fd316a3b3124" },
+  { root = "repo", path = "crates/nuxie/src/scene.rs", sha256 = "d9a3c549fe01424230420b36385080aa4afaa34ee2b1ee5907500aeb315de894" },
+  { root = "repo", path = "crates/nuxie/tests/scene_authoring.rs", sha256 = "506688d22c1521cbd56975a7efdb7caafd27aa591090b2dfe4b539d61c059dae" },
+  { root = "repo", path = "crates/nuxie/tests/data_converter_authoring.rs", sha256 = "3baf67d902a60ea87b45cd59e184b30e3313e174af5e9efb7f80cee8e0ad23d1" },
+  { root = "repo", path = "docs/f-ed-03-generic-property-binding-spec.md", sha256 = "48ec8844d56f51381685cdb69f97d9daad033037b0f7bf851508e324979d61b4" },
+]
+
+[[fixture]]
+id = "fed.rt_ed_006.retracted_symbol_attribution"
+defect_id = "RT-ED-006"
+kind = "historical"
+status = "historical"
+driver = "evidence-only:runtime-defects"
+
+[[fixture]]
+id = "fed.rt_ed_007.nested_transition_duration"
+defect_id = "RT-ED-007"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_001.extended_view_model_owner"
+defect_id = "LOC-001"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_002.current_source_relation"
+defect_id = "LOC-002"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_003.long_press_listener"
+defect_id = "LOC-003"
+kind = "three-layer"
+status = "qualified"
+driver = "source-audit+editor-compiler-test:interaction_animation_lowering::tests::projectdo_long_press_fails_closed_with_a_duration_specific_diagnostic"
+stimulus_files = [
+  { root = "rive", path = "include/rive/listener_type.hpp", sha256 = "57e7273b348ac16c622d19377442c57379aa974fab866092522ad089f3bdb8c3" },
+  { root = "rive", path = "src/listener_group.cpp", sha256 = "7ad6417074fbcda656d09e9885facf8b2d146f9e33217ead475af22bdb71559e" },
+  { root = "repo", path = "crates/nuxie/src/scene.rs", sha256 = "d9a3c549fe01424230420b36385080aa4afaa34ee2b1ee5907500aeb315de894" },
+  { root = "repo", path = "crates/nuxie-runtime/src/state_machine.rs", sha256 = "fc1eb4c82bbe3aed79546da376f54ddc366cf4c7d9fa84cd87dfb5b58950b728" },
+  { root = "editor", path = "tools/rive-compiler/scene-shared/src/interaction_animation_lowering.rs", sha256 = "aaffae5dec57d0e452e376eb884fbc319db5b47b9334690e327278868539feac" },
+]
+
+[[fixture]]
+id = "fed.loc_004.scoped_animation_remount"
+defect_id = "LOC-004"
+kind = "historical"
+status = "historical"
+driver = "evidence-only:editor-fix"
+
+[[fixture]]
+id = "fed.loc_005.shared_view_model_owner"
+defect_id = "LOC-005"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_006.webgl2_stale_pixels"
+defect_id = "LOC-006"
+kind = "historical"
+status = "historical"
+driver = "evidence-only:webgpu-only-product-decision"
+
+[[fixture]]
+id = "fed.loc_007.parametric_path_dirt"
+defect_id = "LOC-007"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_008.text_measurement_facade"
+defect_id = "LOC-008"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_009.gpu_canvas_records"
+defect_id = "LOC-009"
+kind = "browser-renderer"
+status = "qualified"
+driver = "cargo-test:F-ED-11 exact target-0/16 decode, direct authored-WGSL draw, and imported GPU-canvas pixels"
+stimulus_files = [
+  { root = "rive", path = "src/assets/shader_asset.cpp", sha256 = "fadff3f2fbb73574e47080a032b34f35046890de09d3fd7b38e42a7b27071437" },
+  { root = "rive", path = "src/lua/renderer/lua_gpu.cpp", sha256 = "2b36c01d2fa21f4886cf1063f6ea4a1396eee8fe45c491baf7326778743d035c" },
+  { root = "rive", path = "renderer/include/rive/renderer/ore/ore_context_wgpu.hpp", sha256 = "905e38d3e78df123c33810bb69539e1d0f39edbc173ecd72618b0d8097dc6e1d" },
+  { root = "rive", path = "renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp", sha256 = "68a641f2451da8067e0568f3892d2eebd69052bd3d7d9283aa12f3889527c335" },
+  { root = "rive", path = "renderer/src/ore/ore_binding_map.cpp", sha256 = "1ca7fa820ceab888e763e4860408bbe8046de9fb869b672cc9dc1d79de608d69" },
+  { root = "rive", path = "tests/unit_tests/runtime/shader_asset_test.cpp", sha256 = "9599bc8be79a81ef513153ac0dc1f1d30904c73e34bea08c2c146dc1388a9f7c" },
+  { root = "rive", path = "tests/unit_tests/renderer/ore_binding_map_test.cpp", sha256 = "fe9173805bc58c8ade3ef87602e6c0933a6d90bade7b582b3cc72ddb6457dda6" },
+  { root = "rive", path = "tests/unit_tests/renderer/ore_rstb_entry_container_test.cpp", sha256 = "83804d5a4de64ff33f6422fc8c8c41d52607d712c31b6f8167d95df56ccbdb2e" },
+  { root = "repo", path = "crates/nuxie-scripting/src/shader_asset.rs", sha256 = "16e5a9e436ec2ac8447d1d6669901fc70f1f6e109838485248b07a4a3d333b7b" },
+  { root = "repo", path = "crates/nuxie-scripting/tests/fixtures/loc009-ubo-triangle.wgsl", sha256 = "ae1aa970ef1ff3926f18edbba5ae519c62ffb320360ee371553302b16b2bdb8b" },
+  { root = "repo", path = "crates/nuxie-render-api/src/lib.rs", sha256 = "5e263d8f641050fb631bcd28bd8b7a8863829de45eb27e9650a06510fdc0c2c0" },
+  { root = "repo", path = "crates/nuxie-renderer/src/gpu_canvas.rs", sha256 = "5e7cb3218a82a835876d1ebbdf76528b39c37473fff372fbd661bebbf15c6543" },
+  { root = "repo", path = "crates/nuxie/tests/imported_gpu_canvas.rs", sha256 = "4de28dd82a0ffbf48c3303248afcaf97dcba9140ed79d278327e1842a8bab64e" },
+  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "1ddb1368e5250c3941ae16f401471e26d1cf76877491936dc0d4cf1ae3a3ca46" },
+]
+
+[[fixture]]
+id = "fed.loc_011.empty_text_pipeline"
+defect_id = "LOC-011"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_012.backend_raster_decomposition"
+defect_id = "LOC-012"
+kind = "browser-renderer"
+status = "registered"
+driver = "pending:F-ED-10"
+
+[[fixture]]
+id = "fed.loc_013.variable_font_pipeline"
+defect_id = "LOC-013"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_014.feather_owner"
+defect_id = "LOC-014"
+kind = "browser-renderer"
+status = "registered"
+driver = "pending:F-ED-10"
+
+[[fixture]]
+id = "fed.loc_015.apple_abi_1_6_draw"
+defect_id = "LOC-015"
+kind = "artifact"
+status = "registered"
+driver = "pending:F-ED-12"
+
+[[fixture]]
+id = "fed.loc_016.apple_abi_1_6_animation_selector"
+defect_id = "LOC-016"
+kind = "artifact"
+status = "registered"
+driver = "pending:F-ED-12"
+
+[[fixture]]
+id = "fed.loc_017.apple_abi_1_6_native_corpus"
+defect_id = "LOC-017"
+kind = "artifact"
+status = "registered"
+driver = "pending:F-ED-12"
+
+[[fixture]]
+id = "fed.loc_018.record_normalization"
+defect_id = "LOC-018"
+kind = "editor-product"
+status = "registered"
+driver = "pending:F-ED-13"
+
+[[fixture]]
+id = "fed.loc_019.webgpu_clean_error_scope"
+defect_id = "LOC-019"
+kind = "browser-renderer"
+status = "implemented"
+driver = "make browser-webgpu-only-check"
+stimulus_files = [
+  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "1ddb1368e5250c3941ae16f401471e26d1cf76877491936dc0d4cf1ae3a3ca46" },
+  { root = "repo", path = "tools/browser-renderer-smoke/gpu-only.html", sha256 = "03c98e7c098f779e35b65d630f77035d0daff45f57daa3501943f082a36e7c9d" },
+  { root = "repo", path = "tools/browser-renderer-smoke/run-browser.cjs", sha256 = "60eb1059d55f426b768369849749ca8a27c9850eff87f356bd30555aec1ed7de" },
+  { root = "repo", path = "vendor/wgpu-30.0.0/src/backend/webgpu.rs", sha256 = "b248630d054a1948e10413845a4b5913aa70b68d2ac52d4d51323aa3bd55491e" },
+  { root = "repo", path = "vendor/wgpu-30.0.0/NUXIE_PATCH.md", sha256 = "e71602da453fc396b6c04975b9d70136348a7bf032f5de2b92e88aef2fb6de44" },
+]

@@ -8,7 +8,8 @@ budget because its minimal stable Rust toolchain does not install `llvm-nm`.
 tool: LTO archives must be inspected by the LLVM tools shipped with the exact
 `rustc` that built them.
 
-This is an independent CI-environment defect and must land in its own PR.
+This is an independent CI-environment defect. It is not part of LOC-009 and
+must land in its own PR.
 
 ## Required behavior
 

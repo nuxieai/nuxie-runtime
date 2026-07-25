@@ -10,8 +10,6 @@ mod atlas_pipeline;
 #[cfg(test)]
 mod atlas_placement_oracle;
 mod atomic_pipeline;
-#[cfg(any(test, target_arch = "wasm32"))]
-mod browser_surface_lifecycle;
 mod clockwise_atomic_pipeline;
 mod composite_pipeline;
 #[cfg(test)]
@@ -33,8 +31,6 @@ mod msaa_atlas_pipeline;
 mod msaa_image_mesh_pipeline;
 mod msaa_stencil_pipeline;
 mod path_pipeline;
-#[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
-mod present_pipeline;
 mod skyline;
 mod storage_texture;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -3226,16 +3222,16 @@ impl WgpuFrame {
     pub(crate) fn finish_to_texture_view(
         self,
         target: &wgpu::TextureView,
-        presenter: &present_pipeline::PresentPipeline,
+        presenter: &surface::PresentPipeline,
     ) -> Result<WgpuFrameMetrics, RendererError> {
         pollster::block_on(self.finish_to_texture_view_async(target, presenter))
     }
 
-    #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
-    pub(crate) async fn finish_to_texture_view_async(
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    async fn finish_to_texture_view_async(
         self,
         target: &wgpu::TextureView,
-        presenter: &present_pipeline::PresentPipeline,
+        presenter: &surface::PresentPipeline,
     ) -> Result<WgpuFrameMetrics, RendererError> {
         let mut metrics = self.metrics();
         let (_, _, _, _, _, backend_work, _) = self
@@ -3251,10 +3247,11 @@ impl WgpuFrame {
         capture_atomic_planes: bool,
         schedule_msaa_draws: bool,
         read_pixels: bool,
-        #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
-        presentation: Option<(&wgpu::TextureView, &present_pipeline::PresentPipeline)>,
-        #[cfg(not(any(target_arch = "wasm32", target_os = "ios", target_os = "macos")))]
-        _presentation: Option<()>,
+        #[cfg(any(target_os = "ios", target_os = "macos"))] presentation: Option<(
+            &wgpu::TextureView,
+            &surface::PresentPipeline,
+        )>,
+        #[cfg(not(any(target_os = "ios", target_os = "macos")))] _presentation: Option<()>,
     ) -> Result<
         (
             Vec<u8>,
@@ -6782,7 +6779,7 @@ impl WgpuFrame {
 
         if !read_pixels {
             debug_assert!(!capture_clockwise_atomic_coverage && !capture_atomic_planes);
-            #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+            #[cfg(any(target_os = "ios", target_os = "macos"))]
             if let Some((target, presenter)) = presentation {
                 presenter.encode(&self.context.device, &mut encoder, target, &view);
             }
@@ -6793,11 +6790,11 @@ impl WgpuFrame {
             if let Some(backing) = clockwise_atomic_backing.borrow_mut().as_mut() {
                 backing.did_submit();
             }
-            #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+            #[cfg(any(target_os = "ios", target_os = "macos"))]
             if presentation.is_none() {
                 wait_for_submitted_work(&self.context, submission).await?;
             }
-            #[cfg(not(any(target_arch = "wasm32", target_os = "ios", target_os = "macos")))]
+            #[cfg(not(any(target_os = "ios", target_os = "macos")))]
             wait_for_submitted_work(&self.context, submission).await?;
             return_uncaptured_device_error(&self.context)?;
             tessellation_texture_frame.borrow_mut().recycle();

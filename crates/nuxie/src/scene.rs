@@ -1889,14 +1889,8 @@ impl RecordDefinition {
 
 #[derive(Debug, Clone)]
 enum RecordSpec {
-    Visual {
-        parent: Parent,
-        node: NodeSpec,
-    },
-    LayoutComponentStyle {
-        owner: ObjectId,
-        spec: LayoutComponentStyleSpec,
-    },
+    Visual { parent: Parent, node: NodeSpec },
+    LayoutComponentStyle { owner: ObjectId },
     Animation(AnimationRecordSpec),
     Machine(MachineRecordSpec),
     VisibilityBind(VisibilityBindSpec),
@@ -2050,7 +2044,7 @@ impl RecordSpec {
                 parent: Parent::Artboard(_),
                 ..
             } => None,
-            Self::LayoutComponentStyle { owner, .. } => Some(*owner),
+            Self::LayoutComponentStyle { owner } => Some(*owner),
             Self::Animation(spec) => spec.owner(),
             Self::Machine(spec) => spec.owner(),
             Self::VisibilityBind(spec) => Some(spec.target),
@@ -3940,19 +3934,14 @@ impl Hierarchy<'_> {
                         ));
                     }
                 }
-                RecordSpec::LayoutComponentStyle { owner, .. } => {
+                RecordSpec::LayoutComponentStyle { owner } => {
                     let Some(owner_kind) = resolve_kind(*owner) else {
                         return Err(self.abort(
                             vec![EditId::Object(id), EditId::Object(*owner)],
                             EditReason::UnknownObject,
                         ));
                     };
-                    if !matches!(
-                        owner_kind,
-                        AuthoredObjectKind::Visual(
-                            NodeKind::ArtboardComponentList | NodeKind::LayoutComponent
-                        )
-                    ) {
+                    if owner_kind != AuthoredObjectKind::Visual(NodeKind::ArtboardComponentList) {
                         return Err(self.abort(
                             vec![EditId::Object(id), EditId::Object(*owner)],
                             EditReason::InternalInvariant,
@@ -4517,7 +4506,7 @@ impl Hierarchy<'_> {
         for artboard in &definitions.artboards {
             let mut styles_by_owner = BTreeMap::new();
             for record in &artboard.records {
-                let RecordSpec::LayoutComponentStyle { owner, .. } = record.spec else {
+                let RecordSpec::LayoutComponentStyle { owner } = record.spec else {
                     continue;
                 };
                 if styles_by_owner.insert(owner, record.id).is_some() {
@@ -4536,7 +4525,7 @@ impl Hierarchy<'_> {
                                     flow: Some(_),
                                     ..
                                 })
-                            )) | Some((_, NodeSpec::LayoutComponent(_)))
+                            ))
                         )
                 });
                 if !valid_owner {
@@ -5779,9 +5768,6 @@ pub enum ExportedObjectKind {
     MeshVertex,
     LinearAnimation,
     CubicEaseInterpolator,
-    CubicValueInterpolator,
-    ElasticInterpolator,
-    ScriptedInterpolator,
     KeyedObject,
     KeyedProperty,
     KeyFrameDouble,
@@ -5963,11 +5949,7 @@ pub enum ExportedProperty {
     ClippingShapeIsVisible(bool),
     LayoutWidth(f32),
     LayoutHeight(f32),
-    LayoutClip(bool),
-    LayoutFractionalWidth(f32),
-    LayoutFractionalHeight(f32),
     LayoutComponentStyleId(u32),
-    LayoutComponentStyle(LayoutComponentStyleProperty),
     LayoutGapHorizontal(f32),
     LayoutGapVertical(f32),
     LayoutFlexDirection(u32),
@@ -6061,10 +6043,6 @@ pub enum ExportedProperty {
     CubicEaseY1(f32),
     CubicEaseX2(f32),
     CubicEaseY2(f32),
-    ElasticEasing(SceneLayoutElasticEasing),
-    ElasticAmplitude(f32),
-    ElasticPeriod(f32),
-    ScriptedInterpolatorScriptAssetId(u32),
     StateMachineComponentName(String),
     LayerStateFlags(u32),
     StateAnimationId(u32),
@@ -6201,11 +6179,7 @@ impl ExportedProperty {
             Self::ClippingShapeIsVisible(_) => PROPERTY_CLIPPING_SHAPE_IS_VISIBLE,
             Self::LayoutWidth(_) => PROPERTY_LAYOUT_WIDTH,
             Self::LayoutHeight(_) => PROPERTY_LAYOUT_HEIGHT,
-            Self::LayoutClip(_) => PROPERTY_LAYOUT_CLIP,
-            Self::LayoutFractionalWidth(_) => PROPERTY_LAYOUT_FRACTIONAL_WIDTH,
-            Self::LayoutFractionalHeight(_) => PROPERTY_LAYOUT_FRACTIONAL_HEIGHT,
             Self::LayoutComponentStyleId(_) => PROPERTY_LAYOUT_COMPONENT_STYLE_ID,
-            Self::LayoutComponentStyle(property) => property.schema_key(),
             Self::LayoutGapHorizontal(_) => PROPERTY_LAYOUT_GAP_HORIZONTAL,
             Self::LayoutGapVertical(_) => PROPERTY_LAYOUT_GAP_VERTICAL,
             Self::LayoutFlexDirection(_) => PROPERTY_LAYOUT_FLEX_DIRECTION,
@@ -6300,12 +6274,6 @@ impl ExportedProperty {
             Self::CubicEaseY1(_) => PROPERTY_CUBIC_EASE_Y1,
             Self::CubicEaseX2(_) => PROPERTY_CUBIC_EASE_X2,
             Self::CubicEaseY2(_) => PROPERTY_CUBIC_EASE_Y2,
-            Self::ElasticEasing(_) => PROPERTY_ELASTIC_EASING,
-            Self::ElasticAmplitude(_) => PROPERTY_ELASTIC_AMPLITUDE,
-            Self::ElasticPeriod(_) => PROPERTY_ELASTIC_PERIOD,
-            Self::ScriptedInterpolatorScriptAssetId(_) => {
-                PROPERTY_SCRIPTED_INTERPOLATOR_SCRIPT_ASSET_ID
-            }
             Self::StateMachineComponentName(_) => PROPERTY_STATE_MACHINE_COMPONENT_NAME,
             Self::LayerStateFlags(_) => PROPERTY_LAYER_STATE_FLAGS,
             Self::StateAnimationId(_) => PROPERTY_STATE_ANIMATION_ID,
@@ -6433,9 +6401,6 @@ impl ExportedProperty {
     }
 
     fn into_authoring_property(self) -> AuthoringProperty {
-        if let Self::LayoutComponentStyle(property) = self {
-            return property.into_authoring_property();
-        }
         let key = self.schema_key();
         let value = match self {
             Self::ComponentName(value)
@@ -6470,7 +6435,6 @@ impl ExportedProperty {
             | Self::NestedArtboardId(value)
             | Self::ImageAssetId(value)
             | Self::ScriptedDrawableScriptAssetId(value)
-            | Self::ScriptedInterpolatorScriptAssetId(value)
             | Self::ImageFit(value)
             | Self::TextValueRunStyleId(value)
             | Self::TextStyleFontAssetId(value)
@@ -6564,7 +6528,6 @@ impl ExportedProperty {
             Self::KeyedProperty(property) => AuthoringValue::Uint(u64::from(property.schema_key())),
             Self::KeyFrameInterpolationLinear => AuthoringValue::Uint(1),
             Self::KeyFrameInterpolationCubic => AuthoringValue::Uint(2),
-            Self::ElasticEasing(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
             Self::ClippingShapeFillRule(value) => {
                 AuthoringValue::Uint(u64::from(value.wire_value()))
             }
@@ -6578,8 +6541,6 @@ impl ExportedProperty {
             Self::StrokeJoin(value) => AuthoringValue::Uint(u64::from(value.wire_value())),
             Self::LayoutWidth(value)
             | Self::LayoutHeight(value)
-            | Self::LayoutFractionalWidth(value)
-            | Self::LayoutFractionalHeight(value)
             | Self::LayoutGapHorizontal(value)
             | Self::LayoutGapVertical(value)
             | Self::TranslateX(value)
@@ -6634,8 +6595,6 @@ impl ExportedProperty {
             | Self::CubicEaseY1(value)
             | Self::CubicEaseX2(value)
             | Self::CubicEaseY2(value)
-            | Self::ElasticAmplitude(value)
-            | Self::ElasticPeriod(value)
             | Self::StateMachineNumberValue(value)
             | Self::ListenerNumberValue(value)
             | Self::NestedNumberValue(value)
@@ -6649,7 +6608,6 @@ impl ExportedProperty {
             | Self::DataConverterRangeMaxOutput(value)
             | Self::FormulaTokenValue(value) => AuthoringValue::Double(value),
             Self::RectangleLinkCornerRadius(value)
-            | Self::LayoutClip(value)
             | Self::PointsPathIsClosed(value)
             | Self::ClippingShapeIsVisible(value)
             | Self::FeatherInner(value)
@@ -6669,7 +6627,6 @@ impl ExportedProperty {
             | Self::KeyFrameColorValue(value)
             | Self::BindablePropertyColorValue(value)
             | Self::ViewModelColorValue(value) => AuthoringValue::Color(value),
-            Self::LayoutComponentStyle(_) => unreachable!("handled before schema-key lowering"),
         };
         AuthoringProperty { key, value }
     }
@@ -6748,9 +6705,6 @@ impl ExportedRecord {
             ExportedObjectKind::MeshVertex => TYPE_MESH_VERTEX,
             ExportedObjectKind::LinearAnimation => TYPE_LINEAR_ANIMATION,
             ExportedObjectKind::CubicEaseInterpolator => TYPE_CUBIC_EASE_INTERPOLATOR,
-            ExportedObjectKind::CubicValueInterpolator => TYPE_CUBIC_VALUE_INTERPOLATOR,
-            ExportedObjectKind::ElasticInterpolator => TYPE_ELASTIC_INTERPOLATOR,
-            ExportedObjectKind::ScriptedInterpolator => TYPE_SCRIPTED_INTERPOLATOR,
             ExportedObjectKind::KeyedObject => TYPE_KEYED_OBJECT,
             ExportedObjectKind::KeyedProperty => TYPE_KEYED_PROPERTY,
             ExportedObjectKind::KeyFrameDouble => TYPE_KEY_FRAME_DOUBLE,
@@ -9176,13 +9130,8 @@ impl SceneTx<'_> {
     ) -> std::result::Result<ObjectId, EditAbort> {
         let operation_index = self.begin_operation()?;
         let kind = spec.kind();
-        let layout_style = match &spec {
-            NodeSpec::LayoutComponent(spec) => Some(spec.style.clone()),
-            NodeSpec::ArtboardComponentList(spec) if spec.flow.is_some() => {
-                Some(LayoutComponentStyleSpec::default())
-            }
-            _ => None,
-        };
+        let needs_layout_style =
+            matches!(&spec, NodeSpec::ArtboardComponentList(spec) if spec.flow.is_some());
         let artboard_id = self
             .definition_index
             .validate_parent(operation_index, parent, kind)?;
@@ -9249,8 +9198,8 @@ impl SceneTx<'_> {
         self.created_objects.push(id);
         self.touched_artboards.insert(artboard_id, operation_index);
         self.spec_origins.nodes.insert(id, operation_index);
-        if let Some(style) = layout_style {
-            self.create_layout_component_style(id, style)?;
+        if needs_layout_style {
+            self.create_component_list_style(ArtboardComponentListId(id))?;
         }
         Ok(id)
     }
@@ -9276,14 +9225,9 @@ impl SceneTx<'_> {
         &self,
         list: ArtboardComponentListId,
     ) -> Option<LayoutComponentStyleId> {
-        self.layout_component_style(list.object_id())
-    }
-
-    /// Resolve the stable authored style child owned by a layout component.
-    pub fn layout_component_style(&self, layout: ObjectId) -> Option<LayoutComponentStyleId> {
         self.definition_index
             .owned
-            .get(&layout)
+            .get(&list.object_id())
             .into_iter()
             .flatten()
             .copied()
@@ -9296,24 +9240,19 @@ impl SceneTx<'_> {
             .map(LayoutComponentStyleId)
     }
 
-    fn create_layout_component_style(
+    fn create_component_list_style(
         &mut self,
-        owner: ObjectId,
-        spec: LayoutComponentStyleSpec,
+        list: ArtboardComponentListId,
     ) -> std::result::Result<LayoutComponentStyleId, EditAbort> {
         let operation_index = self.begin_operation()?;
+        let owner = list.object_id();
         let owner_record = self
             .definition_index
             .objects
             .get(&owner)
             .copied()
             .filter(|indexed| {
-                matches!(
-                    indexed.kind,
-                    AuthoredObjectKind::Visual(
-                        NodeKind::ArtboardComponentList | NodeKind::LayoutComponent
-                    )
-                )
+                indexed.kind == AuthoredObjectKind::Visual(NodeKind::ArtboardComponentList)
             })
             .ok_or_else(|| {
                 EditAbort::new(
@@ -9322,7 +9261,7 @@ impl SceneTx<'_> {
                     EditReason::UnknownObject,
                 )
             })?;
-        if self.layout_component_style(owner).is_some() {
+        if self.component_list_style(list).is_some() {
             return Err(EditAbort::new(
                 operation_index,
                 vec![EditId::Object(owner)],
@@ -9351,7 +9290,7 @@ impl SceneTx<'_> {
         let record_index = artboard.records.len();
         artboard.records.push(RecordDefinition {
             id,
-            spec: RecordSpec::LayoutComponentStyle { owner, spec },
+            spec: RecordSpec::LayoutComponentStyle { owner },
         });
         self.definition_index.objects.insert(
             id,
@@ -14953,8 +14892,7 @@ fn normalize_optional_machine_name(name: &mut Option<String>) {
 fn valid_artboard_child(child: NodeKind) -> bool {
     matches!(
         child,
-        NodeKind::LayoutComponent
-            | NodeKind::Shape
+        NodeKind::Shape
             | NodeKind::NestedArtboard
             | NodeKind::Image
             | NodeKind::Text
@@ -14967,8 +14905,7 @@ fn valid_object_parent(parent: NodeKind, child: NodeKind) -> bool {
     if child == NodeKind::ClippingShape
         && matches!(
             parent,
-            NodeKind::LayoutComponent
-                | NodeKind::Shape
+            NodeKind::Shape
                 | NodeKind::NestedArtboard
                 | NodeKind::Image
                 | NodeKind::ScriptedDrawable
@@ -14993,15 +14930,6 @@ fn valid_object_parent(parent: NodeKind, child: NodeKind) -> bool {
                 | NodeKind::PointsPath
                 | NodeKind::Fill
                 | NodeKind::Stroke
-        ) | (
-            NodeKind::LayoutComponent,
-            NodeKind::LayoutComponent
-                | NodeKind::Shape
-                | NodeKind::NestedArtboard
-                | NodeKind::Image
-                | NodeKind::Text
-                | NodeKind::ScriptedDrawable
-                | NodeKind::ArtboardComponentList
         ) | (NodeKind::PointsPath, NodeKind::CubicDetachedVertex)
             | (
                 NodeKind::Fill,
@@ -21445,13 +21373,12 @@ fn lower_artboard(
         .copied()
         .flatten();
     let mut records = vec![artboard_record(&artboard.spec, default_view_model)];
-    let visual_records = artboard.visual_records().collect::<Vec<_>>();
     let mut all_kinds = BTreeMap::new();
     let mut all_parents = BTreeMap::new();
     let mut all_local_ids = BTreeMap::new();
     let mut next_visual_local_id = 1usize;
     let mut component_list_wrapper_local_ids = BTreeMap::new();
-    for node in &visual_records {
+    for node in artboard.visual_records() {
         if all_kinds.insert(node.id, node.spec.kind()).is_some() {
             return Err(EditDiagnostic::new(
                 origins.object(node.id, fallback_operation_index),
@@ -21480,40 +21407,12 @@ fn lower_artboard(
         })?;
     }
 
-    let mut layout_component_style_local_ids = BTreeMap::new();
-    let mut layout_component_style_interpolator_local_ids = BTreeMap::new();
-    let mut next_ordinary_style_local_id = next_visual_local_id;
-    for node in &visual_records {
-        if let NodeSpec::LayoutComponent(spec) = node.spec {
-            layout_component_style_local_ids.insert(node.id, next_ordinary_style_local_id);
-            next_ordinary_style_local_id =
-                next_ordinary_style_local_id.checked_add(1).ok_or_else(|| {
-                    EditDiagnostic::new(
-                        origins.object(node.id, fallback_operation_index),
-                        vec![EditId::Object(node.id)],
-                        EditReason::CapacityExceeded,
-                    )
-                })?;
-            if spec.style.interpolator.is_some() {
-                layout_component_style_interpolator_local_ids
-                    .insert(node.id, next_ordinary_style_local_id);
-                next_ordinary_style_local_id =
-                    next_ordinary_style_local_id.checked_add(1).ok_or_else(|| {
-                        EditDiagnostic::new(
-                            origins.object(node.id, fallback_operation_index),
-                            vec![EditId::Object(node.id)],
-                            EditReason::CapacityExceeded,
-                        )
-                    })?;
-            }
-        }
-    }
-
-    // C++ resolves LayoutComponent::styleId from the complete artboard object
-    // table, so ordinary styles form one deterministic phase after visuals.
-    // Both directions use the preplanned owner/style tables; no adjacency or
-    // local-id arithmetic is part of the contract.
-    let mut next_component_list_style_local_id = next_ordinary_style_local_id;
+    // LayoutComponent::styleId is a local-id reference. Flow wrappers and
+    // runtime style records are lowering products; their durable semantic
+    // style identity is retained separately in RecordSpec. Reserve style
+    // locals after the complete visual range; each flowed list already
+    // reserved a wrapper immediately before its durable list local.
+    let mut next_component_list_style_local_id = next_visual_local_id;
     let mut component_list_style_local_ids = BTreeMap::new();
     for node in artboard.visual_records() {
         let NodeSpec::ArtboardComponentList(spec) = node.spec else {
@@ -21586,19 +21485,6 @@ fn lower_artboard(
         })?;
         let mut nested_artboard_data_bind_path = None;
         match node.spec {
-            NodeSpec::LayoutComponent(spec) => {
-                if let Some(SceneLayoutInterpolator::Scripted(interpolator)) =
-                    spec.style.interpolator.as_ref()
-                    && let Some(script) = interpolator.script
-                    && !catalogs.file_assets.script_indices.contains_key(&script)
-                {
-                    return Err(EditDiagnostic::new(
-                        origins.object(node.id, fallback_operation_index),
-                        vec![EditId::Object(node.id), EditId::ScriptAsset(script)],
-                        EditReason::UnknownScriptAsset,
-                    ));
-                }
-            }
             NodeSpec::ClippingShape(spec) => {
                 let actual = all_kinds.get(&spec.source).copied();
                 if actual != Some(NodeKind::Shape) {
@@ -21820,7 +21706,6 @@ fn lower_artboard(
             node_record(
                 node,
                 runtime_parent_id,
-                layout_component_style_local_ids.get(&node.id).copied(),
                 &all_local_ids,
                 &catalogs.file_assets.font_indices,
                 &catalogs.file_assets.image_indices,
@@ -22041,128 +21926,6 @@ fn lower_artboard(
         objects_by_local.push(Some(node.id));
     }
 
-    for node in &visual_records {
-        let NodeSpec::LayoutComponent(layout_spec) = node.spec else {
-            continue;
-        };
-        let style_owner = node.id;
-        let style_local_id = layout_component_style_local_ids
-            .get(&style_owner)
-            .copied()
-            .ok_or_else(|| {
-                EditDiagnostic::new(
-                    origins.object(style_owner, fallback_operation_index),
-                    vec![EditId::Object(style_owner)],
-                    EditReason::InternalInvariant,
-                )
-            })?;
-        if objects_by_local.len() != style_local_id {
-            return Err(EditDiagnostic::new(
-                origins.object(style_owner, fallback_operation_index),
-                vec![EditId::Object(style_owner)],
-                EditReason::InternalInvariant,
-            ));
-        }
-        let style_record = artboard
-            .records
-            .iter()
-            .find_map(|record| match &record.spec {
-                RecordSpec::LayoutComponentStyle { owner, spec } if *owner == style_owner => {
-                    Some((record.id, spec))
-                }
-                _ => None,
-            });
-        let (style_id, style) = style_record.ok_or_else(|| {
-            EditDiagnostic::new(
-                origins.object(style_owner, fallback_operation_index),
-                vec![EditId::Object(style_owner)],
-                EditReason::InternalInvariant,
-            )
-        })?;
-        let parent_id = all_local_ids.get(&style_owner).copied().ok_or_else(|| {
-            EditDiagnostic::new(
-                origins.object(style_owner, fallback_operation_index),
-                vec![EditId::Object(style_owner)],
-                EditReason::InternalInvariant,
-            )
-        })?;
-        records.push(
-            layout_component_style_record(
-                style,
-                &layout_spec.name,
-                parent_id,
-                layout_component_style_interpolator_local_ids
-                    .get(&style_owner)
-                    .copied(),
-            )
-            .map_err(|reason| {
-                EditDiagnostic::new(
-                    origins.object(style_owner, fallback_operation_index),
-                    vec![EditId::Object(style_owner)],
-                    reason,
-                )
-            })?,
-        );
-        objects_by_local.push(None);
-        if let Some(interpolator_local_id) = layout_component_style_interpolator_local_ids
-            .get(&style_owner)
-            .copied()
-        {
-            if objects_by_local.len() != interpolator_local_id {
-                return Err(EditDiagnostic::new(
-                    origins.object(style_owner, fallback_operation_index),
-                    vec![EditId::Object(style_owner)],
-                    EditReason::InternalInvariant,
-                ));
-            }
-            let interpolator = style.interpolator.as_ref().ok_or_else(|| {
-                EditDiagnostic::new(
-                    origins.object(style_owner, fallback_operation_index),
-                    vec![EditId::Object(style_owner)],
-                    EditReason::InternalInvariant,
-                )
-            })?;
-            records.push(
-                layout_style_interpolator_record(
-                    interpolator,
-                    &catalogs.file_assets.script_indices,
-                )
-                .map_err(|reason| {
-                    EditDiagnostic::new(
-                        origins.object(style_owner, fallback_operation_index),
-                        vec![EditId::Object(style_owner)],
-                        reason,
-                    )
-                })?,
-            );
-            objects_by_local.push(None);
-        }
-        if let Some(binds) = property_binds.get(&PropertyBindTarget::LayoutComponentStyle(
-            LayoutComponentStyleId(style_id),
-        )) {
-            for (bind_id, bind) in binds {
-                append_property_bind_record(
-                    &mut records,
-                    *bind_id,
-                    bind,
-                    default_view_model,
-                    artboard.id,
-                    catalogs,
-                    fallback_operation_index,
-                    origins,
-                )?;
-                nonlocal_data_bind_count =
-                    nonlocal_data_bind_count.checked_add(1).ok_or_else(|| {
-                        EditDiagnostic::new(
-                            origins.object(*bind_id, fallback_operation_index),
-                            vec![EditId::Object(*bind_id)],
-                            EditReason::CapacityExceeded,
-                        )
-                    })?;
-            }
-        }
-    }
-
     for node in artboard.visual_records() {
         let NodeSpec::ArtboardComponentList(spec) = node.spec else {
             continue;
@@ -22225,7 +21988,7 @@ fn lower_artboard(
         let style_target = artboard.records.iter().find_map(|record| {
             matches!(
                 record.spec,
-                RecordSpec::LayoutComponentStyle { owner, .. } if owner == node.id
+                RecordSpec::LayoutComponentStyle { owner } if owner == node.id
             )
             .then_some(PropertyBindTarget::LayoutComponentStyle(
                 LayoutComponentStyleId(record.id),
@@ -23948,27 +23711,6 @@ fn validate_key_interpolation(
 
 fn validate_node_spec(spec: &NodeSpec) -> std::result::Result<(), EditReason> {
     match spec {
-        NodeSpec::LayoutComponent(spec) => {
-            for (property, value) in [
-                ("x", spec.x),
-                ("y", spec.y),
-                ("opacity", spec.opacity),
-                ("rotation", spec.rotation),
-                ("scale_x", spec.scale_x),
-                ("scale_y", spec.scale_y),
-                ("width", spec.width),
-                ("height", spec.height),
-                ("fractional_width", spec.fractional_width),
-                ("fractional_height", spec.fractional_height),
-            ] {
-                if !value.is_finite() {
-                    return Err(EditReason::NonFiniteProperty { property });
-                }
-            }
-            if let Some(property) = spec.style.first_non_finite_property() {
-                return Err(EditReason::NonFiniteProperty { property });
-            }
-        }
         NodeSpec::Shape(spec) => {
             if !spec.x.is_finite() {
                 return Err(EditReason::NonFiniteProperty { property: "x" });
@@ -24259,7 +24001,6 @@ fn component_list_layout_record(
 fn node_record(
     node: VisualRecordRef<'_>,
     parent_id: usize,
-    layout_component_style_local_id: Option<usize>,
     local_ids: &BTreeMap<ObjectId, usize>,
     font_asset_indices: &BTreeMap<FontAssetId, u32>,
     image_asset_indices: &BTreeMap<ImageAssetId, u32>,
@@ -24278,41 +24019,6 @@ fn node_record(
         properties.push(ExportedProperty::ParentId(parent_id));
     }
     let kind = match node.spec {
-        NodeSpec::LayoutComponent(spec) => {
-            let style_local_id = layout_component_style_local_id
-                .ok_or(EditReason::InternalInvariant)
-                .and_then(|id| u32::try_from(id).map_err(|_| EditReason::CapacityExceeded))?;
-            properties.push(ExportedProperty::ComponentName(spec.name.clone()));
-            if spec.x != 0.0 {
-                properties.push(ExportedProperty::TranslateX(spec.x));
-            }
-            if spec.y != 0.0 {
-                properties.push(ExportedProperty::TranslateY(spec.y));
-            }
-            if spec.opacity != 1.0 {
-                properties.push(ExportedProperty::WorldOpacity(spec.opacity));
-            }
-            if spec.rotation != 0.0 {
-                properties.push(ExportedProperty::Rotation(spec.rotation));
-            }
-            if spec.scale_x != 1.0 {
-                properties.push(ExportedProperty::ScaleX(spec.scale_x));
-            }
-            if spec.scale_y != 1.0 {
-                properties.push(ExportedProperty::ScaleY(spec.scale_y));
-            }
-            properties.push(ExportedProperty::LayoutWidth(spec.width));
-            properties.push(ExportedProperty::LayoutHeight(spec.height));
-            properties.push(ExportedProperty::LayoutClip(spec.clip));
-            properties.push(ExportedProperty::LayoutComponentStyleId(style_local_id));
-            properties.push(ExportedProperty::LayoutFractionalWidth(
-                spec.fractional_width,
-            ));
-            properties.push(ExportedProperty::LayoutFractionalHeight(
-                spec.fractional_height,
-            ));
-            ExportedObjectKind::LayoutComponent
-        }
         NodeSpec::Shape(spec) => {
             properties.push(ExportedProperty::ComponentName(spec.name.clone()));
             if spec.x != 0.0 {
@@ -24639,129 +24345,6 @@ fn node_record(
     Ok(ExportedRecord { kind, properties })
 }
 
-fn layout_component_style_record(
-    spec: &LayoutComponentStyleSpec,
-    owner_name: &str,
-    parent_id: usize,
-    interpolator_local_id: Option<usize>,
-) -> std::result::Result<ExportedRecord, EditReason> {
-    let parent_id = u32::try_from(parent_id).map_err(|_| EditReason::CapacityExceeded)?;
-    let interpolator_local_id = interpolator_local_id
-        .map(u32::try_from)
-        .transpose()
-        .map_err(|_| EditReason::CapacityExceeded)?;
-    let mut properties = vec![
-        ExportedProperty::ComponentName(
-            spec.name
-                .clone()
-                .unwrap_or_else(|| format!("{owner_name} Style")),
-        ),
-        ExportedProperty::ParentId(parent_id),
-    ];
-    properties.extend(
-        spec.exported_properties(interpolator_local_id)
-            .into_iter()
-            .map(ExportedProperty::LayoutComponentStyle),
-    );
-    Ok(ExportedRecord {
-        kind: ExportedObjectKind::LayoutComponentStyle,
-        properties,
-    })
-}
-
-fn layout_style_interpolator_record(
-    spec: &SceneLayoutInterpolator,
-    script_asset_indices: &BTreeMap<ScriptAssetId, u32>,
-) -> std::result::Result<ExportedRecord, EditReason> {
-    let cubic_properties = |spec: &SceneLayoutCubicInterpolator| {
-        let mut properties = Vec::new();
-        if spec.x1 != 0.42
-            || spec
-                .present
-                .contains(&SceneLayoutCubicInterpolatorField::X1)
-        {
-            properties.push(ExportedProperty::CubicEaseX1(spec.x1));
-        }
-        if spec.y1 != 0.0
-            || spec
-                .present
-                .contains(&SceneLayoutCubicInterpolatorField::Y1)
-        {
-            properties.push(ExportedProperty::CubicEaseY1(spec.y1));
-        }
-        if spec.x2 != 0.58
-            || spec
-                .present
-                .contains(&SceneLayoutCubicInterpolatorField::X2)
-        {
-            properties.push(ExportedProperty::CubicEaseX2(spec.x2));
-        }
-        if spec.y2 != 1.0
-            || spec
-                .present
-                .contains(&SceneLayoutCubicInterpolatorField::Y2)
-        {
-            properties.push(ExportedProperty::CubicEaseY2(spec.y2));
-        }
-        properties
-    };
-    let (kind, properties) = match spec {
-        SceneLayoutInterpolator::CubicEase(spec) => (
-            ExportedObjectKind::CubicEaseInterpolator,
-            cubic_properties(spec),
-        ),
-        SceneLayoutInterpolator::CubicValue(spec) => (
-            ExportedObjectKind::CubicValueInterpolator,
-            cubic_properties(spec),
-        ),
-        SceneLayoutInterpolator::Elastic(spec) => {
-            let mut properties = Vec::new();
-            if spec.easing != SceneLayoutElasticEasing::EaseOut
-                || spec
-                    .present
-                    .contains(&SceneLayoutElasticInterpolatorField::Easing)
-            {
-                properties.push(ExportedProperty::ElasticEasing(spec.easing));
-            }
-            if spec.amplitude != 1.0
-                || spec
-                    .present
-                    .contains(&SceneLayoutElasticInterpolatorField::Amplitude)
-            {
-                properties.push(ExportedProperty::ElasticAmplitude(spec.amplitude));
-            }
-            if spec.period != 1.0
-                || spec
-                    .present
-                    .contains(&SceneLayoutElasticInterpolatorField::Period)
-            {
-                properties.push(ExportedProperty::ElasticPeriod(spec.period));
-            }
-            (ExportedObjectKind::ElasticInterpolator, properties)
-        }
-        SceneLayoutInterpolator::Scripted(spec) => {
-            let mut properties = Vec::new();
-            if let Some(script) = spec.script {
-                properties.push(ExportedProperty::ScriptedInterpolatorScriptAssetId(
-                    script_asset_indices
-                        .get(&script)
-                        .copied()
-                        .ok_or(EditReason::UnknownScriptAsset)?,
-                ));
-            } else if spec
-                .present
-                .contains(&SceneLayoutScriptedInterpolatorField::ScriptAssetId)
-            {
-                properties.push(ExportedProperty::ScriptedInterpolatorScriptAssetId(
-                    u32::MAX,
-                ));
-            }
-            (ExportedObjectKind::ScriptedInterpolator, properties)
-        }
-    };
-    Ok(ExportedRecord { kind, properties })
-}
-
 fn canonicalize_exported_records(records: &mut [ExportedRecord]) {
     for record in records {
         record.properties.sort_by_key(ExportedProperty::schema_key);
@@ -24774,8 +24357,7 @@ mod tests {
 
     use anyhow::{Context, Result};
     use nuxie_binary::{
-        FieldValue, RuntimeConvertedDataValue, RuntimeDataConverterInterpolatorState,
-        RuntimeDataValue,
+        RuntimeConvertedDataValue, RuntimeDataConverterInterpolatorState, RuntimeDataValue,
     };
     use nuxie_render_stream::{Command, RenderStream};
     use nuxie_runtime::RuntimeOwnedViewModelListSourceHandle;
@@ -25445,322 +25027,6 @@ mod tests {
             push_var_uint(&mut bytes, 0);
         }
         bytes
-    }
-
-    fn reexport_imported_authoring_records(runtime: &RuntimeFile) -> Result<Vec<AuthoringRecord>> {
-        runtime
-            .objects
-            .iter()
-            .enumerate()
-            .map(|(index, object)| {
-                let object = object
-                    .as_ref()
-                    .with_context(|| format!("authored record {index} imported as a null slot"))?;
-                let properties = object
-                    .properties
-                    .iter()
-                    .map(|property| {
-                        let value = match &property.value {
-                            FieldValue::Bool(value) => AuthoringValue::Bool(*value),
-                            FieldValue::Bytes(value) => {
-                                AuthoringValue::Bytes(value.as_bytes().to_vec())
-                            }
-                            FieldValue::Callback => {
-                                anyhow::bail!(
-                                    "authored record {index} property {} imported as a callback",
-                                    property.key
-                                );
-                            }
-                            FieldValue::Color(value) => AuthoringValue::Color(*value),
-                            FieldValue::Double(value) => AuthoringValue::Double(*value),
-                            FieldValue::String(value) => AuthoringValue::String(
-                                value
-                                    .as_str()
-                                    .with_context(|| {
-                                        format!(
-                                            "authored record {index} property {} is not UTF-8",
-                                            property.key
-                                        )
-                                    })?
-                                    .to_owned(),
-                            ),
-                            FieldValue::Uint(value) => AuthoringValue::Uint(*value),
-                        };
-                        Ok(AuthoringProperty {
-                            key: property.key,
-                            value,
-                        })
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(AuthoringRecord {
-                    type_key: object.type_key,
-                    properties,
-                })
-            })
-            .collect()
-    }
-
-    #[test]
-    fn ordinary_layout_interpolator_family_reimports_with_exact_links_and_fixpoint() -> Result<()> {
-        let mut scene = Scene::new();
-        scene.edit(|tx| {
-            tx.create_script_asset(ScriptAssetSpec {
-                name: "preceding-script".into(),
-                bytes: Vec::new(),
-                is_module: true,
-            })?;
-            let target_script = tx.create_script_asset(ScriptAssetSpec {
-                name: "target-script".into(),
-                bytes: Vec::new(),
-                is_module: true,
-            })?;
-            let artboard = tx.create_artboard(ArtboardSpec {
-                name: "Layout fixpoint".into(),
-                width: 100.0,
-                height: 100.0,
-            })?;
-            let layout = |name: &str, style: LayoutComponentStyleSpec| {
-                NodeSpec::LayoutComponent(LayoutComponentSpec {
-                    name: name.into(),
-                    x: 0.0,
-                    y: 0.0,
-                    opacity: 1.0,
-                    rotation: 0.0,
-                    scale_x: 1.0,
-                    scale_y: 1.0,
-                    clip: false,
-                    width: 0.0,
-                    height: 0.0,
-                    fractional_width: 1.0,
-                    fractional_height: 1.0,
-                    style,
-                })
-            };
-            let parent = tx.create(
-                Parent::Artboard(artboard),
-                layout(
-                    "Parent",
-                    LayoutComponentStyleSpec {
-                        interpolator: Some(SceneLayoutInterpolator::CubicEase(
-                            SceneLayoutCubicInterpolator {
-                                x1: 0.25,
-                                y1: 0.1,
-                                x2: 0.25,
-                                ..SceneLayoutCubicInterpolator::default()
-                            },
-                        )),
-                        ..LayoutComponentStyleSpec::default()
-                    },
-                ),
-            )?;
-            tx.create(
-                Parent::Artboard(artboard),
-                NodeSpec::Shape(ShapeSpec {
-                    name: "Intervening direct child".into(),
-                    x: 0.0,
-                    y: 0.0,
-                    opacity: 1.0,
-                    rotation: 0.0,
-                    scale_x: 1.0,
-                    scale_y: 1.0,
-                }),
-            )?;
-            let child = tx.create(
-                Parent::Object(parent),
-                layout(
-                    "Child",
-                    LayoutComponentStyleSpec {
-                        padding_left: 8.0,
-                        padding_left_units: SceneLayoutUnit::Point,
-                        interpolator: Some(SceneLayoutInterpolator::CubicValue(
-                            SceneLayoutCubicInterpolator {
-                                x1: -0.25,
-                                x2: 1.25,
-                                present: BTreeSet::from([
-                                    SceneLayoutCubicInterpolatorField::Y1,
-                                    SceneLayoutCubicInterpolatorField::Y2,
-                                ]),
-                                ..SceneLayoutCubicInterpolator::default()
-                            },
-                        )),
-                        ..LayoutComponentStyleSpec::default()
-                    },
-                ),
-            )?;
-            tx.create(
-                Parent::Artboard(artboard),
-                layout(
-                    "Elastic",
-                    LayoutComponentStyleSpec {
-                        interpolator: Some(SceneLayoutInterpolator::Elastic(
-                            SceneLayoutElasticInterpolator {
-                                easing: SceneLayoutElasticEasing::EaseInOut,
-                                amplitude: 1.5,
-                                period: 0.25,
-                                ..SceneLayoutElasticInterpolator::default()
-                            },
-                        )),
-                        ..LayoutComponentStyleSpec::default()
-                    },
-                ),
-            )?;
-            tx.create(
-                Parent::Artboard(artboard),
-                layout(
-                    "Scripted",
-                    LayoutComponentStyleSpec {
-                        interpolator: Some(SceneLayoutInterpolator::Scripted(
-                            SceneLayoutScriptedInterpolator {
-                                script: Some(target_script),
-                                ..SceneLayoutScriptedInterpolator::default()
-                            },
-                        )),
-                        ..LayoutComponentStyleSpec::default()
-                    },
-                ),
-            )?;
-            let child_style = tx
-                .layout_component_style(child)
-                .expect("child layout owns a style");
-            let mut view_models = tx.view_models();
-            let model = view_models.create(ViewModelSpec {
-                scope: ViewModelScope::Local,
-                name: "Layout model".into(),
-            })?;
-            let padding = view_models.create_number(
-                model,
-                ViewModelNumberSpec {
-                    name: "padding".into(),
-                },
-            )?;
-            let defaults =
-                view_models.create_instance(model, ViewModelInstanceSpec { name: None })?;
-            view_models.set_number(defaults, padding, 8.0)?;
-            view_models.set_artboard_default(artboard, defaults)?;
-            view_models.bind_number(
-                child_style,
-                props::LAYOUT_PADDING_LEFT,
-                ViewModelNumberSource::direct(padding),
-            )?;
-            Ok(())
-        })?;
-
-        let first = scene.export_records();
-        let second = scene.export_records();
-        assert_eq!(first, second);
-        let canonical_records = first.clone().into_authoring_records();
-        assert_eq!(
-            canonical_records
-                .iter()
-                .filter_map(|record| {
-                    matches!(
-                        record.type_key,
-                        TYPE_CUBIC_EASE_INTERPOLATOR
-                            | TYPE_CUBIC_VALUE_INTERPOLATOR
-                            | TYPE_ELASTIC_INTERPOLATOR
-                            | TYPE_SCRIPTED_INTERPOLATOR
-                    )
-                    .then_some(record.type_key)
-                })
-                .collect::<Vec<_>>(),
-            vec![
-                TYPE_CUBIC_EASE_INTERPOLATOR,
-                TYPE_CUBIC_VALUE_INTERPOLATOR,
-                TYPE_ELASTIC_INTERPOLATOR,
-                TYPE_SCRIPTED_INTERPOLATOR,
-            ]
-        );
-        let first_bytes = encode_authoring_records(canonical_records.clone());
-        let second_bytes = encode_authoring_records(second.into_authoring_records());
-        assert_eq!(first_bytes, second_bytes);
-
-        let imported = nuxie_binary::read_runtime_file(&first_bytes)?;
-        let reexported_records = reexport_imported_authoring_records(&imported)?;
-        assert_eq!(reexported_records, canonical_records);
-        let reexported_bytes = encode_authoring_records(reexported_records.clone());
-        assert_eq!(reexported_bytes, first_bytes);
-        let reimported = nuxie_binary::read_runtime_file(&reexported_bytes)?;
-        let second_reexported_records = reexport_imported_authoring_records(&reimported)?;
-        assert_eq!(second_reexported_records, reexported_records);
-        let locals = imported
-            .artboard_local_object_slots(0)
-            .context("layout artboard local table")?;
-        assert_eq!(
-            locals
-                .iter()
-                .map(|object| object.map(|object| object.type_name))
-                .collect::<Vec<_>>(),
-            vec![
-                Some("Artboard"),
-                Some("LayoutComponent"),
-                Some("Shape"),
-                Some("LayoutComponent"),
-                Some("LayoutComponent"),
-                Some("LayoutComponent"),
-                Some("LayoutComponentStyle"),
-                Some("CubicEaseInterpolator"),
-                Some("LayoutComponentStyle"),
-                Some("CubicValueInterpolator"),
-                Some("LayoutComponentStyle"),
-                Some("ElasticInterpolator"),
-                Some("LayoutComponentStyle"),
-                Some("ScriptedInterpolator"),
-            ]
-        );
-        for (owner, style, interpolator, kind) in [
-            (1, 6, 7, "CubicEaseInterpolator"),
-            (3, 8, 9, "CubicValueInterpolator"),
-            (4, 10, 11, "ElasticInterpolator"),
-            (5, 12, 13, "ScriptedInterpolator"),
-        ] {
-            assert_eq!(
-                locals[owner].and_then(|object| object.uint_property("styleId")),
-                Some(u64::try_from(style)?)
-            );
-            assert_eq!(
-                locals[style].and_then(|object| object.uint_property("parentId")),
-                Some(u64::try_from(owner)?)
-            );
-            assert_eq!(
-                locals[style].and_then(|object| object.uint_property("interpolatorId")),
-                Some(u64::try_from(interpolator)?)
-            );
-            assert_eq!(
-                locals[interpolator].map(|object| object.type_name),
-                Some(kind)
-            );
-        }
-        assert_eq!(
-            locals[3].and_then(|object| object.uint_property("parentId")),
-            Some(1),
-            "noncontiguous nested child must resolve its authored parent"
-        );
-        assert_eq!(
-            locals[9].and_then(|object| object.double_property("x1")),
-            Some(-0.25)
-        );
-        assert_eq!(
-            locals[9].and_then(|object| object.double_property("x2")),
-            Some(1.25)
-        );
-        assert_eq!(
-            locals[11].and_then(|object| object.uint_property("easingValue")),
-            Some(2)
-        );
-        assert_eq!(
-            locals[11].and_then(|object| object.double_property("amplitude")),
-            Some(1.5)
-        );
-        assert_eq!(
-            locals[11].and_then(|object| object.double_property("period")),
-            Some(0.25)
-        );
-        assert_eq!(
-            locals[13].and_then(|object| object.uint_property("scriptAssetId")),
-            Some(1),
-            "semantic ScriptAssetId must resolve through canonical FileAsset order"
-        );
-        Ok(())
     }
 
     #[test]

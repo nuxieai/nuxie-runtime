@@ -56,7 +56,7 @@ ceilings from `v2-status.md` are merged in.
 |---|---|---|---|---|
 | F1 | **Audio** — `src/audio/**` engine/source/sound/reader, `audio_event.cpp` firing, `Artboard::volume` | 1,030+ | ABSENT | Only schema/object-model stubs. Any `.riv` with sound is silent. Planned engine: cpal/rodio/kira (paper decision only). |
 | F2 | **Text input editing** — cursor motion, selection, keyboard routing (`raw_text_input.cpp` 992, `text_input.cpp` 777, `cursor.cpp` 359, selection/selected-text files) | ~2,400 | PARTIAL | Rendering/layout of TextInput **is** ported; interaction is not. Upstream is actively improving TextInput (commit `1b4df2ad`, past our pin) — this gap is *widening*. |
-| F3 | **Command queue/server** — threaded host command API (`command_server.cpp` 3,821 + `command_queue.cpp` 2,321) | 6,142 | ABSENT | The model rive-ios/flutter bindings drive. FlowSession is the Nuxie analog but single-threaded; its product C boundary is owned by `nuxie-ios` (see A-tier). Decide: port, or declare FlowSession the supported architecture (D-row + docs). |
+| F3 | **Command queue/server** — threaded host command API (`command_server.cpp` 3,821 + `command_queue.cpp` 2,321) | 6,142 | ABSENT | The model rive-ios/flutter bindings drive. FlowSession is the Nuxie analog but single-threaded and Apple-ABI-only (see A-tier). Decide: port, or declare FlowSession the supported architecture (D-row + docs). |
 | F4 | **Scroll physics** — `elastic_scroll_physics.cpp` (303), `scroll_bar_constraint(.proxy)` (237+), momentum/virtualized scroll | ~700 | PARTIAL | Clamped/core scroll constraint ported at sample-0; interactive momentum, elastic overscroll, scrollbars absent. Paywall-relevant (scrolling lists). |
 | F5 | **Keyboard/gamepad/semantic/text-input listener groups + input runtime** (`*_listener_group.cpp` 481, `gamepad_batch.cpp` 363, inputs/) | ~930 | ABSENT | Pointer listeners only. Blocks F2 interaction and any keyboard-driven content. |
 | F6 | **Semantics/accessibility** — `semantic_manager` 1,109, `semantic_data` 572, provider, inference registry | 1,926 | ABSENT | Screen-reader tree, semantic actions/focus. Product/App-Store relevance for embedded flows is real even if corpus never touches it. |
@@ -73,16 +73,15 @@ ceilings from `v2-status.md` are merged in.
 
 The runtime behavior often exists; the surface doesn't. Structural finding:
 **capability fragmentation** — events-with-properties, text runs, VM lists,
-multi-touch batches live only in FlowSession. The product C boundary exposing
-them is owned by `nuxie-ios`; portable `nux_capi.h` remains a minimal surface
-in this repository.
+multi-touch batches live only in FlowSession, whose C ABI ships only in the
+Apple/Metal `nux_runtime.h`; portable `nux_capi.h` is a minimal surface.
 
 | id | gap | tier |
 |---|---|---|
 | A1 | **No `FileAssetLoader` callback** — no lazy/out-of-band/CDN asset resolution; host must pre-resolve all bytes at import; `cdnUuid`/`cdnBaseUrl` never consulted. | 1 |
 | A2 | **Audio control absent everywhere** (volume, engine start/stop) — pairs with F1. | 1 |
-| A3 | **Text run set/get not in the portable surface** — runtime primitive exists (`set_root_text_value_run`) but is surfaced only via the `nuxie-ios` FlowSession boundary; reading a run's text is exposed nowhere. Most common SDK write after inputs. | 1 |
-| A4 | **Event custom properties missing from the low-level surface** — `StateMachineReportedEvent` carries name/url/target/delay only; properties exist only in FlowSession output. Portable embedders lose them. | 2 |
+| A3 | **Text run set/get not in the portable surface** — runtime primitive exists (`set_root_text_value_run`) but is surfaced only via Apple FlowSession; reading a run's text exposed nowhere. Most common SDK write after inputs. | 1 |
+| A4 | **Event custom properties missing from the low-level surface** — `StateMachineReportedEvent` carries name/url/target/delay only; properties exist only in FlowSession output. Non-Apple embedders lose them. | 2 |
 | A5 | **`nux-capi` cannot read events at all**; VM coverage is bool/number/string set-only (no color/enum/trigger/image/artboard/list, no getters/observers); no `pointer_exit`; no input reads. | 2 |
 | A6 | **No thread-safe command-server model** — FlowSession is explicitly single-threaded. Either port F3 or document the threading contract embedders must own (decision row). | 2 |
 | A7 | **Artboard resize/layout override not first-class** (`width(x)`, `layoutWidth/Height`, `updateLayoutBounds`, `resetArtboardSize`) — only `raw_mut().set_artboard_dimensions`. Responsive hosts need this. | 2 |

@@ -16,6 +16,13 @@ binding for existing visual property tokens leaves P09-C01 partially open.
 
 Pin: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 
+The transferred Editor localization used historical pin
+`f4bb3025e263ad1a646ef6971358577a0aa6bfa2`. It remains provenance, not the
+F-ED oracle: the relevant source set is not byte-identical because the later
+pin adds property notifications, target observation, and explicit
+source-first/target-first reconcile handling. Per `COR-01`, every assertion
+below and every registered source hash is revalidated at `d788e8ec`.
+
 - Serialized bind state is `propertyKey`, flags, and converter ID:
   `include/rive/generated/data_bind/data_bind_base.hpp:30-96`.
 - The source path belongs to `DataBindContext`:
@@ -107,7 +114,9 @@ C++ target adjacency.
    - optional converter;
    - direction.
 2. Expose public numeric and color bind methods using `Prop<f32>` and
-   `Prop<u32>`. Do not expose raw schema keys.
+   `Prop<u32>`. Direct binds accept an explicit direction without requiring a
+   converter; `ToTarget` convenience methods remain available. Do not expose
+   raw schema keys.
 3. Keep current opacity methods as compatibility wrappers over
    `props::WORLD_OPACITY`.
 4. Key collision/uniqueness by `(target, property.key)`, allowing two
@@ -170,9 +179,9 @@ RED→GREEN behavior at a time:
    `(target, propertyKey)` fails atomically.
 3. Color tracer: bind one color source to multiple `SolidColor.colorValue`
    targets and prove exact export/import/runtime application.
-4. Converter and TwoWay variants preserve converter ID and C++ direction
-   flags, including source-first semantics where the semantic Scene contract
-   requests it.
+4. Converter-bearing and converter-free direction variants preserve the
+   independent optional converter ID and C++ direction flags. Exact-import
+   tests cover direct `ToSource` plus source-first `TwoWay` reconciliation.
 5. Layout owner: bind all four padding properties; assert each DataBind is
    adjacent to its exact `LayoutComponentStyle`, never the component list.
 6. Relative/list-item source: two occurrences update independently through

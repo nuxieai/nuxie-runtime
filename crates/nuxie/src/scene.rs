@@ -11972,6 +11972,22 @@ impl VmTx<'_> {
         property: Prop<f32>,
         source: ViewModelNumberSource,
     ) -> std::result::Result<DataBindId, EditAbort> {
+        self.bind_number_with_direction(
+            target,
+            property,
+            source,
+            ViewModelDataBindingDirection::ToTarget,
+        )
+    }
+
+    /// Bind one typed numeric path with an explicit direction and no converter.
+    pub fn bind_number_with_direction(
+        &mut self,
+        target: impl Into<PropertyBindTarget>,
+        property: Prop<f32>,
+        source: ViewModelNumberSource,
+        direction: ViewModelDataBindingDirection,
+    ) -> std::result::Result<DataBindId, EditAbort> {
         self.bind_property_value(
             target,
             PropertyBindValue::Number {
@@ -11979,7 +11995,7 @@ impl VmTx<'_> {
                 source: source.into(),
             },
             None,
-            ViewModelDataBindingDirection::ToTarget,
+            direction,
         )
     }
 
@@ -12007,6 +12023,22 @@ impl VmTx<'_> {
         property: Prop<u32>,
         source: ViewModelColorSource,
     ) -> std::result::Result<DataBindId, EditAbort> {
+        self.bind_color_with_direction(
+            target,
+            property,
+            source,
+            ViewModelDataBindingDirection::ToTarget,
+        )
+    }
+
+    /// Bind one typed color path with an explicit direction and no converter.
+    pub fn bind_color_with_direction(
+        &mut self,
+        target: impl Into<PropertyBindTarget>,
+        property: Prop<u32>,
+        source: ViewModelColorSource,
+        direction: ViewModelDataBindingDirection,
+    ) -> std::result::Result<DataBindId, EditAbort> {
         self.bind_property_value(
             target,
             PropertyBindValue::Color {
@@ -12014,7 +12046,7 @@ impl VmTx<'_> {
                 source: source.into(),
             },
             None,
-            ViewModelDataBindingDirection::ToTarget,
+            direction,
         )
     }
 
@@ -34452,6 +34484,237 @@ mod tests {
             view_model.raw().number_value_by_property_name("opacity"),
             Some(0.0),
             "exact-import TwoWay reverse execution applies the inverse converter"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn generic_property_binds_round_trip_exact_riv_without_converter_directions() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Direct property directions".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Card".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let rectangle = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Rectangle(RectangleSpec::new("Bounds", 10.0, 20.0)),
+            )?;
+            let fill = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Fill(FillSpec {
+                    name: "Fill".into(),
+                }),
+            )?;
+            let color = tx.create(
+                Parent::Object(fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Color".into(),
+                    color: 0xffaa_bbcc,
+                }),
+            )?;
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Values".into(),
+            })?;
+            let target_owned_width = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "targetOwnedWidth".into(),
+                },
+            )?;
+            let source_owned_height = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "sourceOwnedHeight".into(),
+                },
+            )?;
+            let source_owned_tint = view_models.create_color(
+                model,
+                ViewModelColorSpec {
+                    name: "sourceOwnedTint".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                model,
+                ViewModelInstanceSpec {
+                    name: Some("Defaults".into()),
+                },
+            )?;
+            view_models.set_number(defaults, target_owned_width, 80.0)?;
+            view_models.set_number(defaults, source_owned_height, 30.0)?;
+            view_models.set_color(defaults, source_owned_tint, 0xff11_2233)?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            view_models.bind_number_with_direction(
+                rectangle,
+                props::PATH_WIDTH,
+                ViewModelNumberSource::direct(target_owned_width),
+                ViewModelDataBindingDirection::ToSource,
+            )?;
+            view_models.bind_number_with_direction(
+                rectangle,
+                props::PATH_HEIGHT,
+                ViewModelNumberSource::direct(source_owned_height),
+                ViewModelDataBindingDirection::TwoWay,
+            )?;
+            view_models.bind_color_with_direction(
+                color,
+                props::COLOR_VALUE,
+                ViewModelColorSource::direct(source_owned_tint),
+                ViewModelDataBindingDirection::TwoWay,
+            )?;
+            Ok(())
+        })?;
+
+        let records = scene.export_records();
+        let rectangle_index = records
+            .records()
+            .iter()
+            .position(|record| {
+                record.kind == ExportedObjectKind::Rectangle
+                    && record
+                        .properties
+                        .contains(&ExportedProperty::ComponentName("Bounds".into()))
+            })
+            .context("bound rectangle record")?;
+        assert_eq!(
+            records.records()[rectangle_index + 1].properties,
+            [
+                ExportedProperty::DataBindPropertyKey(u32::from(props::PATH_WIDTH.key)),
+                ExportedProperty::DataBindFlags(1),
+                ExportedProperty::DataBindSourcePath(vec![0, 0]),
+            ]
+        );
+        assert_eq!(
+            records.records()[rectangle_index + 2].properties,
+            [
+                ExportedProperty::DataBindPropertyKey(u32::from(props::PATH_HEIGHT.key)),
+                ExportedProperty::DataBindFlags((1 << 1) | (1 << 3)),
+                ExportedProperty::DataBindSourcePath(vec![0, 1]),
+            ]
+        );
+        let color_index = records
+            .records()
+            .iter()
+            .position(|record| {
+                record.kind == ExportedObjectKind::SolidColor
+                    && record
+                        .properties
+                        .contains(&ExportedProperty::ComponentName("Color".into()))
+            })
+            .context("bound color record")?;
+        assert_eq!(
+            records.records()[color_index + 1].properties,
+            [
+                ExportedProperty::DataBindPropertyKey(u32::from(props::COLOR_VALUE.key)),
+                ExportedProperty::DataBindFlags((1 << 1) | (1 << 3)),
+                ExportedProperty::DataBindSourcePath(vec![0, 2]),
+            ]
+        );
+
+        let bytes = encode_authoring_records(records.into_authoring_records());
+        let file = Arc::new(File::import(&bytes)?);
+        let rectangle = file
+            .runtime()
+            .artboard_local_object_slots(0)
+            .context("exact .riv artboard-local table")?
+            .iter()
+            .position(|object| {
+                object.and_then(|object| object.string_property("name")) == Some("Bounds")
+            })
+            .context("exact .riv retains the bound rectangle")?;
+        let color = file
+            .runtime()
+            .artboard_local_object_slots(0)
+            .context("exact .riv artboard-local table")?
+            .iter()
+            .position(|object| {
+                object.and_then(|object| object.string_property("name")) == Some("Color")
+            })
+            .context("exact .riv retains the bound color")?;
+        let mut instance = OwnedArtboardInstance::instantiate(file, 0)?;
+        let view_model = instance
+            .instantiate_view_model_instance(0)
+            .context("exact .riv retains the authored default ViewModel")?;
+        assert!(instance.bind_view_model(&view_model));
+        instance.advance(0.0);
+
+        assert_eq!(
+            instance
+                .raw()
+                .double_property(rectangle, props::PATH_WIDTH.key),
+            Some(10.0),
+            "ToSource leaves the target value authoritative"
+        );
+        assert_eq!(
+            view_model
+                .raw()
+                .number_value_by_property_name("targetOwnedWidth"),
+            Some(10.0),
+            "ToSource initializes the source from the target"
+        );
+        assert_eq!(
+            instance
+                .raw()
+                .double_property(rectangle, props::PATH_HEIGHT.key),
+            Some(30.0),
+            "TwoWay source-first initialization applies the source to the target"
+        );
+        assert_eq!(
+            instance.raw().color_property(color, props::COLOR_VALUE.key),
+            Some(0xff11_2233),
+            "converter-free color TwoWay initializes source-first"
+        );
+
+        assert!(
+            instance
+                .raw_mut()
+                .set_double_property(rectangle, props::PATH_WIDTH.key, 14.0)
+        );
+        assert!(
+            instance
+                .raw_mut()
+                .set_double_property(rectangle, props::PATH_HEIGHT.key, 44.0)
+        );
+        assert!(
+            instance
+                .raw_mut()
+                .set_color_property(color, props::COLOR_VALUE.key, 0xff44_5566)
+        );
+        instance.advance(0.0);
+        assert_eq!(
+            view_model
+                .raw()
+                .number_value_by_property_name("targetOwnedWidth"),
+            Some(14.0)
+        );
+        assert_eq!(
+            view_model
+                .raw()
+                .number_value_by_property_name("sourceOwnedHeight"),
+            Some(44.0),
+            "converter-free TwoWay propagates target edits back to the source"
+        );
+        assert_eq!(
+            view_model
+                .raw()
+                .color_value_by_property_name("sourceOwnedTint"),
+            Some(0xff44_5566),
+            "converter-free color TwoWay propagates target edits back to the source"
         );
         Ok(())
     }

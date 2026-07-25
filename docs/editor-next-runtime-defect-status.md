@@ -1,8 +1,9 @@
 # Editor Next Runtime Defect Status
 
 This is the resume ledger for
-`docs/editor-next-runtime-defect-port-map.md`. The machine-readable source of
-truth is `docs/editor-next-runtime-defect-atlas.toml`.
+`docs/editor-next-runtime-defect-goal.md`. The detailed ownership plan is
+`docs/editor-next-runtime-defect-port-map.md`, and the machine-readable source
+of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
@@ -21,6 +22,8 @@ truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - correction rows: 12.
 - fixture rows: 25 total, with `RT-ED-001`, `RT-ED-002`, and `LOC-003`
   directly qualified.
+- supported browser backend: WebGPU only, landed in runtime PR #47 at
+  `95027109c89f651835c76646ebf4d8734f032f07`.
 
 The active FL executor owns FL-A and the complete reservation recorded in the
 atlas. F-ED may write only its new evidence/checker/fixture paths until that
@@ -28,19 +31,20 @@ lease changes.
 
 ## Editor source snapshot
 
-The Editor executor committed and pushed the reviewed source snapshot at
-`8fb90154af8d50847f4efea71ad56a1da6d9e8bf`. It includes the intentional
-correction moving `P04-C12` off `RT-ED-004` and linking it to `LOC-018`. The
+The Editor executor committed and pushed the current reviewed source snapshot
+at `27ef7d471c3034aba4a4b839d2c8150d3bcb40c3`. It includes the intentional
+correction moving `P04-C12` off `RT-ED-004` and linking it to `LOC-018`, the
+WebGPU-only Editor support state, and the current product-child results. The
 three source artifacts are clean at that checkpoint.
 
 The landed snapshot hashes are:
 
 - proposal:
-  `2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130`;
+  `148d11f206edc41caad1f48cae0810b268456b2e220ba6253ac6d04ef450b9db`;
 - runtime defects:
-  `6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055`;
+  `a610201cc34c95bd5ff0838d95228af3983f38327ebbef87b253c3e49a357b9c`;
 - parity ledger:
-  `da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4`.
+  `d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c97`.
 
 The earlier reviewed hashes remain in this file's Git history, but their formal
 dependency map is stale and must not be used for qualification. Any later
@@ -81,12 +85,18 @@ the unsupported duration and its fully qualified regression test passes 1/1.
 
 ## Next queue
 
-1. run `F-ED-07`'s exact 402×874 radius-57 current-pin rounded-clip
-   qualification;
-2. qualify `F-ED-03` and `F-ED-04` against their existing low-level runtime
-   paths without touching reserved modules;
-3. qualify `F-ED-06`'s browser presentation/readback seam;
-4. fan out the remaining direct evidence while routing every runtime-owner
-   finding to the active FL executor.
+1. have Editor consume merged runtime
+   `95027109c89f651835c76646ebf4d8734f032f07`, adapt the two
+   `BrowserFactory` call sites, and rerun the unchanged WebGPU product gates;
+2. qualify and close `F-ED-03` and `F-ED-04` against their existing
+   low-level runtime paths without touching reserved modules;
+3. requalify `F-ED-06`, `F-ED-07`, `F-ED-08`, and `F-ED-11` under the
+   WebGPU-only support contract—no WebGL2 repair or fallback;
+4. keep `LOC-007` and every other reserved runtime-owner finding with the
+   active FL executor while file-disjoint evidence/API work proceeds;
+5. burn down the remaining queues in
+   `docs/editor-next-runtime-defect-goal.md` through Editor consumption and
+   the complete 27-child product matrix.
 
-No production defect repair is authorized by this status file alone.
+No production defect repair is authorized by this status file alone. The goal,
+atlas classification, and live writer lease must all authorize the slice.

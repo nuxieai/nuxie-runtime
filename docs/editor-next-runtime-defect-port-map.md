@@ -50,7 +50,7 @@ There are 25 unique handoff IDs:
 - one resolved editor-owned `LOC-*`;
 - one retracted `RT-ED-*`.
 
-Nine parity children currently name runtime dependencies. Six of those are
+Eight parity children currently name runtime dependencies. Five of those are
 blocked by `RT-ED-004`; two name `RT-ED-003`; one names `RT-ED-005`; and one
 names `RT-ED-007`. `P04-C01` names both `RT-ED-003` and `RT-ED-004`.
 
@@ -701,16 +701,14 @@ The lifecycle proof covers construction, resize, nested clip allocation,
 composite order, repeated-frame reuse, allocation failure, context loss/reset,
 and teardown.
 
-Acceptance requires the focused clip test plus linked `P04-C01`, `P04-C12`,
-`P05-C01`, `P10-C01`, `P12-C01`, and `P15-C01`, with no resource-budget or
+Acceptance requires the focused clip test plus linked `P04-C01`, `P05-C01`,
+`P10-C01`, `P12-C01`, and `P15-C01`, with no resource-budget or
 error-path weakening. Each rerun must prove the `RT-ED-004` signature is gone;
 a child with another recorded dependency does not close until all dependencies
 are consumed.
 
-The source artifacts conflict on `P04-C12`: the JSON still names
-`RT-ED-004`, while the prose says the case now reaches complete pixels and is
-not linked. `F-ED-00` must adjudicate that exact child before this acceptance
-set or the formal dependency count becomes binding.
+The landed Editor checkpoint resolves the former `P04-C12` conflict: it has no
+formal `RT-ED-004` dependency and remains candidate-linked only to `LOC-018`.
 
 ### `F-ED-08` — Conditional stale WebGL2 pixels
 
@@ -833,7 +831,7 @@ This is a two-owner handoff:
    reruns the product commands, and updates the Editor parity/defect artifacts
    with exact commands, hashes, and results.
 
-The current artifact snapshot has nine children with formal
+The landed artifact snapshot has eight children with formal
 `runtimeDependencies`, but that is not the complete product rerun set. The
 candidate matrix currently maps as follows:
 
@@ -857,10 +855,12 @@ candidate matrix currently maps as follows:
 | `LOC-018` | `P04-C12`, `P07-C04` |
 | `LOC-019` | `P14-C06` |
 
-The candidate set contains 20 unique children. Unioning it with the nine
+The candidate set contains 20 unique children. Unioning it with the eight
 formal children yields 27 unique directly affected child IDs because
-`P04-C12` and `P09-C01` overlap. `F-ED-00` must adjudicate the
-`P04-C12` source-artifact conflict before ratcheting the final count. Broad
+`P09-C01` overlaps. The Editor checkpoint at
+`8fb90154af8d50847f4efea71ad56a1da6d9e8bf` resolved the earlier
+`P04-C12` conflict by removing its formal `RT-ED-004` dependency and linking
+it only to candidate `LOC-018`. Broad
 aggregate gates such as `P08-C01` and `P11-C01` rerun after their focused
 children. The executable atlas owns the complete
 defect → child → aggregate-command matrix.
@@ -1022,14 +1022,12 @@ Exact baseline counts may rise when a slice adds tests; they may never fall.
 No test, expected value, corpus entry, tolerance, resource ceiling, error
 contract, provenance guard, or gate is weakened to admit a repair.
 
-The nine children currently carrying formal JSON `runtimeDependencies` are
-shown below; `F-ED-00` must resolve the `P04-C12` prose/JSON conflict before
-ratcheting this snapshot:
+The eight children carrying formal JSON `runtimeDependencies` in the landed
+Editor checkpoint are:
 
 | child | dependencies |
 |---|---|
 | `P04-C01` | `RT-ED-003`, `RT-ED-004` |
-| `P04-C12` | `RT-ED-004` |
 | `P05-C01` | `RT-ED-004` |
 | `P09-C01` | `RT-ED-005` |
 | `P10-C01` | `RT-ED-004` |

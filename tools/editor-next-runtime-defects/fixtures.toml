@@ -1,0 +1,194 @@
+schema = "nuxie.editor-next.runtime-defect-fixtures/v1"
+version = 1
+upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+expected_fixtures = 25
+
+[[fixture]]
+id = "fed.rt_ed_001.data_viz_demo"
+defect_id = "RT-ED-001"
+kind = "three-layer"
+status = "qualified"
+driver = "scripted-golden:data_viz_demo"
+stimulus_files = [
+  { root = "rive", path = "tests/unit_tests/assets/data_viz_demo.riv", sha256 = "7e50bfe3a47824908d71c5959f7ab6ccc96f78c0c24cb056ed0f772dc3ddae0c" },
+  { root = "repo", path = "corpus.toml", sha256 = "b99484406d8a9748f25357d8645cba95429733b5ce3adc14fe93e8c58c95dd99" },
+]
+
+[[fixture]]
+id = "fed.rt_ed_002.db_health_tracker"
+defect_id = "RT-ED-002"
+kind = "three-layer"
+status = "qualified"
+driver = "scripted-golden:db_health_tracker"
+stimulus_files = [
+  { root = "rive", path = "tests/unit_tests/assets/db_health_tracker.riv", sha256 = "bbd78d53e1402e76460314a1eee3d29e153d1907cbb4cc0c8ee31daa1c48b4cf" },
+  { root = "repo", path = "corpus.toml", sha256 = "b99484406d8a9748f25357d8645cba95429733b5ce3adc14fe93e8c58c95dd99" },
+]
+
+[[fixture]]
+id = "fed.rt_ed_003.browser_present_readback"
+defect_id = "RT-ED-003"
+kind = "browser-renderer"
+status = "registered"
+driver = "pending:F-ED-06"
+
+[[fixture]]
+id = "fed.rt_ed_004.webgl2_rounded_clip_402x874_r57"
+defect_id = "RT-ED-004"
+kind = "browser-renderer"
+status = "registered"
+driver = "pending:F-ED-07"
+
+[[fixture]]
+id = "fed.rt_ed_005.generic_visual_property_bind"
+defect_id = "RT-ED-005"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.rt_ed_006.retracted_symbol_attribution"
+defect_id = "RT-ED-006"
+kind = "historical"
+status = "historical"
+driver = "evidence-only:runtime-defects"
+
+[[fixture]]
+id = "fed.rt_ed_007.nested_transition_duration"
+defect_id = "RT-ED-007"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_001.extended_view_model_owner"
+defect_id = "LOC-001"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_002.current_source_relation"
+defect_id = "LOC-002"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_003.long_press_listener"
+defect_id = "LOC-003"
+kind = "three-layer"
+status = "qualified"
+driver = "source-audit+editor-compiler-test:interaction_animation_lowering::tests::projectdo_long_press_fails_closed_with_a_duration_specific_diagnostic"
+stimulus_files = [
+  { root = "rive", path = "include/rive/listener_type.hpp", sha256 = "57e7273b348ac16c622d19377442c57379aa974fab866092522ad089f3bdb8c3" },
+  { root = "rive", path = "src/listener_group.cpp", sha256 = "7ad6417074fbcda656d09e9885facf8b2d146f9e33217ead475af22bdb71559e" },
+  { root = "repo", path = "crates/nuxie/src/scene.rs", sha256 = "84e98a0a162a8c7592f41a70de01356f711e625d0f8b24fab68a78d747c8198b" },
+  { root = "repo", path = "crates/nuxie-runtime/src/state_machine.rs", sha256 = "fc1eb4c82bbe3aed79546da376f54ddc366cf4c7d9fa84cd87dfb5b58950b728" },
+  { root = "editor", path = "tools/rive-compiler/scene-shared/src/interaction_animation_lowering.rs", sha256 = "aaffae5dec57d0e452e376eb884fbc319db5b47b9334690e327278868539feac" },
+]
+
+[[fixture]]
+id = "fed.loc_004.scoped_animation_remount"
+defect_id = "LOC-004"
+kind = "historical"
+status = "historical"
+driver = "evidence-only:editor-fix"
+
+[[fixture]]
+id = "fed.loc_005.shared_view_model_owner"
+defect_id = "LOC-005"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_006.webgl2_stale_pixels"
+defect_id = "LOC-006"
+kind = "browser-renderer"
+status = "registered"
+driver = "pending:F-ED-08"
+
+[[fixture]]
+id = "fed.loc_007.parametric_path_dirt"
+defect_id = "LOC-007"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_008.text_measurement_facade"
+defect_id = "LOC-008"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_009.gpu_canvas_records"
+defect_id = "LOC-009"
+kind = "browser-renderer"
+status = "registered"
+driver = "pending:F-ED-11"
+
+[[fixture]]
+id = "fed.loc_011.empty_text_pipeline"
+defect_id = "LOC-011"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_012.backend_raster_decomposition"
+defect_id = "LOC-012"
+kind = "browser-renderer"
+status = "registered"
+driver = "pending:F-ED-10"
+
+[[fixture]]
+id = "fed.loc_013.variable_font_pipeline"
+defect_id = "LOC-013"
+kind = "three-layer"
+status = "registered"
+driver = "cpp_probe/registry.cpp"
+
+[[fixture]]
+id = "fed.loc_014.feather_owner"
+defect_id = "LOC-014"
+kind = "browser-renderer"
+status = "registered"
+driver = "pending:F-ED-10"
+
+[[fixture]]
+id = "fed.loc_015.apple_abi_1_6_draw"
+defect_id = "LOC-015"
+kind = "artifact"
+status = "registered"
+driver = "pending:F-ED-12"
+
+[[fixture]]
+id = "fed.loc_016.apple_abi_1_6_animation_selector"
+defect_id = "LOC-016"
+kind = "artifact"
+status = "registered"
+driver = "pending:F-ED-12"
+
+[[fixture]]
+id = "fed.loc_017.apple_abi_1_6_native_corpus"
+defect_id = "LOC-017"
+kind = "artifact"
+status = "registered"
+driver = "pending:F-ED-12"
+
+[[fixture]]
+id = "fed.loc_018.record_normalization"
+defect_id = "LOC-018"
+kind = "editor-product"
+status = "registered"
+driver = "pending:F-ED-13"
+
+[[fixture]]
+id = "fed.loc_019.webgpu_setup_fallback"
+defect_id = "LOC-019"
+kind = "browser-renderer"
+status = "registered"
+driver = "pending:F-ED-11"

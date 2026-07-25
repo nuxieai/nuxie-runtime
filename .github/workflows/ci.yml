@@ -83,7 +83,7 @@ jobs:
           path: rive-runtime
 
       - name: Install Rust stable
-        run: rustup toolchain install stable --profile minimal --no-self-update
+        run: rustup toolchain install stable --profile minimal --component llvm-tools --no-self-update
 
       - name: Install Python
         uses: actions/setup-python@v5
@@ -139,6 +139,20 @@ jobs:
         if: always()
         working-directory: ${{ github.workspace }}/rive-rust
         run: |
+          rustc="$(rustup which --toolchain "${RUSTUP_TOOLCHAIN}" rustc)"
+          host="$("${rustc}" -vV | sed -n 's/^host: //p')"
+          sysroot="$("${rustc}" --print sysroot)"
+          if [[ -z "${host}" ]]; then
+            echo "resolved stable rustc reported an empty host triple" >&2
+            exit 1
+          fi
+          llvm_nm="${sysroot}/lib/rustlib/${host}/bin/llvm-nm"
+          if [[ ! -x "${llvm_nm}" ]]; then
+            echo "rustc-matched llvm-nm is not executable: ${llvm_nm}" >&2
+            exit 1
+          fi
+          export RUSTC="${rustc}"
+          export LLVM_NM="${llvm_nm}"
           python3 tools/parity-scorecard/parity_scorecard.py record \
             --gate size-report \
             --output target/parity-scorecard/evidence/size-report.json \

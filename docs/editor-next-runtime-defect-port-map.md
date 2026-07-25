@@ -318,7 +318,7 @@ fixture in `F-ED-00`.
 | `LOC-006` | WebGL2 clip/composite candidate | logical draw/hit state is correct; qualify independently now |
 | `LOC-007` | high-confidence missing C++ dirt callback | ParametricPath width/height/origin setters through Path, Shape, and retained paint-path invalidation |
 | `LOC-008` | candidate public API-surface gap | establish the C++ ownership contract, then expose the exact runtime path only if runtime owns it |
-| `LOC-009` | unproven scripted GPU-canvas execution defect | identical persisted bytes/resources through C++ scripted drawable and Rust typed WebGPU |
+| `LOC-009` | proven structural WebGPU shader-consumer mistranslation | consume authored target-0 whole-module WGSL and mandatory target-16 `BindingMap` directly, preserving C++ entry selection and shared-module semantics |
 | `LOC-011` | real product symptom, owner unproven | inspect authored text, live VM value, post-bind target, shaped runs, then pixels |
 | `LOC-012` | renderer-backend differential | compare WebGPU, WebGL2, and the applicable C++ reference only after text/feather rows are separated |
 | `LOC-013` | text/font-pipeline candidate, exact stage unproven | same font bytes, axes, glyph IDs, advances, and outlines through C++ and Rust |
@@ -790,11 +790,8 @@ backend is wrong.
 
 ### `F-ED-11` — WebGPU setup and GPU-canvas qualification
 
-Qualification targets: `LOC-019`, `LOC-009`.
-
-Qualify both rows independently. `LOC-009` already reaches a selected WebGPU
-backend and typed draw, so its direct C++/Rust record oracle is not blocked by
-`LOC-019`.
+Qualification targets: `LOC-019`, `LOC-009`. They are independently localized
+and repaired; neither row is an Editor workaround or a WebGL2 fallback.
 
 `LOC-019` is no longer an adapter-selection or fallback hypothesis. At runtime
 `95027109`, real Chrome creates the WebGPU device and executes a valid draw.
@@ -808,12 +805,43 @@ error conversion. This is the `AF-10` foreign-platform-binding case and stays
 at Nuxie's existing vendored BrowserWebGpu compatibility boundary; it does
 not add a dependency fork, downgrade wasm-bindgen, or restore WebGL2 fallback.
 
-For `LOC-009`, feed identical persisted GPU-canvas records, scripts, WGSL,
-resources, and time through C++ and Rust. `RuntimeRejected` alone is not a
-diagnosis.
+`LOC-009` was a separate structural consumer mistranslation. The exact
+compiler-produced one-UBO RSTB reached Rust before any device call with only
+retired WebGL2 variants at the old producer checkpoint; its minimized target-1
+GLSL path then failed in Rust's invented GLSL-to-WGSL translator. Pinned C++
+WebGPU instead selects target 0, requires target 16, parses one authored WGSL
+module with arbitrary logical/physical entry records in declaration order,
+resolves omitted entries to the first stage declaration and named entries
+from logical to physical names, and creates one shared module. The binding-map
+sidecar remains authoritative for backend identity and visibility.
 
-Production serialization between the two rows is imposed only if the atlas
-proves a shared module or adjacent WebGPU setup/draw lifecycle.
+The repaired Rust lifecycle now matches that contract end to end:
+
+- `ShaderAsset` coalesces target descriptors with C++ last-wins semantics,
+  validates the final descriptor for each target, and preserves target 0 plus
+  target 16 without interpreting retired target 1;
+- scripting accepts a bare `Shader` or
+  `{ module = Shader, entryPoint = string? }`, retains the exact selected
+  logical/physical pair, and uses declaration order for omitted or empty entry
+  names;
+- the renderer parses authored WGSL once, retains Naga `ModuleInfo`, rejects a
+  target-16 visibility mask that underdeclares actual entry-point usage, allows
+  the broader visibility C++/WebGPU permits, creates one shared module, and
+  submits the selected physical vertex and fragment entries directly;
+- the target-1 GLSL cross-translator, split-stage representation, discarded
+  sidecars, `wgpu` GLSL feature, and `pp-rs`/`unicode-xid` closure are deleted.
+
+The runtime row is executor-green at
+`22e4900243ee92a436afc1609f456525e8312352`. The producer is pinned at Editor
+checkpoint `f9d798dd3b1f9b2dfdbeb74dcdf4485aae4519f6`, whose exact inner RSTB is
+SHA-256
+`546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d`.
+Independent re-review is clean with no P0/P1/P2 findings. Runtime merge and
+the unchanged Editor `P14-C01` rerun remain before handoff.
+
+The two rows share a real-Chrome smoke harness but not a defect mechanism:
+`LOC-019` owns nullable WebIDL error-scope decoding, while `LOC-009` owns RSTB
+and authored-WGSL consumption.
 
 ### `F-ED-12` — Apple ABI 1.6 publication and requalification
 

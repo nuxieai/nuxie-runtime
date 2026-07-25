@@ -1122,6 +1122,7 @@ name = "nuxie-scripting"
 version = "0.1.0"
 dependencies = [
  "luaur-common",
+ "luaur-compiler",
  "luaur-rt",
  "luaur-vm",
  "nuxie-binary",

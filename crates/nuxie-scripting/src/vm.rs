@@ -20,7 +20,7 @@ mod resource_limits;
 mod view_model;
 
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
 use std::rc::Rc;
 
@@ -38,12 +38,13 @@ use nuxie_runtime::{
     ScriptListenerActionMethod, ScriptListenerInvocation, ScriptMethod, ScriptValue,
     ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
 };
-use renderer::RendererBindings;
+pub(crate) use renderer::RendererBindings;
 use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
 
 use crate::envelope::SignedContent;
-use crate::gpu_canvas::ImportedGpuCanvasInstance;
-use crate::shader_asset::decode_shader_asset;
+use crate::gpu_canvas::{
+    ImportedGpuCanvasInstance, ImportedGpuCanvasShaderAssets, RegisteredGpuCanvasShaderAsset,
+};
 
 pub use host_commands::{HostCommand, HostCycleCheckpoint, HostEffectCheckpoint, HostValue};
 pub use luaur_rt::{Error, Result};
@@ -182,7 +183,7 @@ pub struct ScriptVm {
     script_safepoints: Rc<Cell<usize>>,
     host_cycle_active: Rc<Cell<bool>>,
     resource_limits: resource_limits::ResourceLimitTracker,
-    gpu_canvas_shaders: Rc<RefCell<BTreeMap<String, nuxie_render_api::GpuCanvasShader>>>,
+    gpu_canvas_shaders: ImportedGpuCanvasShaderAssets,
 }
 
 /// Cloneable handle for the detached view-model roots owned by one scripting
@@ -560,8 +561,10 @@ impl ScriptVm {
             let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
             let context_missing_requested_data = Rc::new(Cell::new(false));
             let context_parent_view_models = self.default_context_parent_view_models.clone();
-            let (gpu_canvas, gpu_canvas_context) =
-                ImportedGpuCanvasInstance::new(Rc::clone(&self.gpu_canvas_shaders));
+            let (gpu_canvas, gpu_canvas_context) = ImportedGpuCanvasInstance::new(
+                Rc::clone(&self.gpu_canvas_shaders),
+                self.renderer_bindings.clone(),
+            );
             let context = self
                 .lua
                 .create_userdata(ScriptedContext::new(
@@ -685,22 +688,49 @@ impl ScriptVm {
         }
     }
 
-    /// Decode and register one imported ShaderAsset before protocol generators
-    /// execute. Names are the exact `context:shader(name)` lookup keys.
+    /// Retain one imported ShaderAsset before protocol generators execute.
+    /// Neutral decoding/indexing is attempted once and an invalid state is
+    /// retained, matching the C++ file importer that ignores the decoder
+    /// boolean. Backend target selection is attempted only if this exact name
+    /// is requested; any lookup failure is exposed to Luau as nil.
     pub fn register_gpu_canvas_shader_asset(
         &self,
         name: &str,
         payload: &[u8],
     ) -> std::result::Result<(), ScriptError> {
-        let shader =
-            decode_shader_asset(name, payload).map_err(|error| self.script_error(error))?;
-        let mut shaders = self.gpu_canvas_shaders.borrow_mut();
-        if shaders.contains_key(name) {
-            return Err(ScriptError::new(format!(
-                "ShaderAsset name '{name}' is duplicated"
-            )));
+        self.register_gpu_canvas_shader_asset_aliases(&[name], payload)
+    }
+
+    /// Retain one imported ShaderAsset owner under all of its file lookup
+    /// aliases. Every alias is preflighted before the registry is changed.
+    pub fn register_gpu_canvas_shader_asset_aliases(
+        &self,
+        aliases: &[&str],
+        payload: &[u8],
+    ) -> std::result::Result<(), ScriptError> {
+        let Some(owner_name) = aliases.first().copied() else {
+            return Err(ScriptError::new(
+                "ShaderAsset registration requires at least one alias",
+            ));
+        };
+        let shaders = self.gpu_canvas_shaders.borrow();
+        let mut requested_aliases = BTreeSet::new();
+        for alias in aliases {
+            if !requested_aliases.insert(*alias) || shaders.contains_key(*alias) {
+                return Err(ScriptError::new(format!(
+                    "ShaderAsset name '{alias}' is duplicated"
+                )));
+            }
         }
-        shaders.insert(name.to_owned(), shader);
+        drop(shaders);
+
+        let owner = Rc::new(RefCell::new(RegisteredGpuCanvasShaderAsset::new(
+            owner_name, payload,
+        )));
+        let mut shaders = self.gpu_canvas_shaders.borrow_mut();
+        for alias in aliases {
+            shaders.insert((*alias).to_owned(), Rc::clone(&owner));
+        }
         Ok(())
     }
 
@@ -1569,8 +1599,10 @@ impl RuntimeScriptingVm for ScriptVm {
         let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
         let context_missing_requested_data = Rc::new(Cell::new(false));
         let context_parent_view_models = self.default_context_parent_view_models.clone();
-        let (gpu_canvas, gpu_canvas_context) =
-            ImportedGpuCanvasInstance::new(Rc::clone(&self.gpu_canvas_shaders));
+        let (gpu_canvas, gpu_canvas_context) = ImportedGpuCanvasInstance::new(
+            Rc::clone(&self.gpu_canvas_shaders),
+            self.renderer_bindings.clone(),
+        );
         let context = self
             .lua
             .create_userdata(ScriptedContext::new(
@@ -2189,53 +2221,37 @@ mod gpu_canvas_tests {
         bytes.extend_from_slice(&value.to_le_bytes());
     }
 
-    fn put_string(bytes: &mut Vec<u8>, value: &str) {
-        put_u16(bytes, value.len() as u16);
-        bytes.extend_from_slice(value.as_bytes());
-    }
-
-    fn shader_payload(fragment_color: &str) -> Vec<u8> {
-        const EMPTY_BINDING_MAP: &[u8] = &[2, 1, 14, 0, 0, 0, 0, 0];
-        let module = format!(
-            "@vertex\nfn vs_main() -> @builtin(position) vec4<f32> {{ return vec4<f32>(0.0); }}\n\
-             @fragment\nfn fs_main() -> @location(0) vec4<f32> {{ return {fragment_color}; }}"
-        );
-        let mut source = vec![2];
-        for (stage, entry) in [(0, "vs_main"), (1, "fs_main")] {
-            source.push(stage);
-            put_string(&mut source, entry);
-            put_string(&mut source, entry);
-        }
-        put_u32(&mut source, module.len() as u32);
-        source.extend_from_slice(module.as_bytes());
-
+    #[test]
+    fn malformed_shader_container_registration_retains_invalid_state() {
+        let vm = ScriptVm::new();
         let mut payload = vec![0];
         put_u32(&mut payload, 0x5253_5442);
         put_u16(&mut payload, 4);
-        payload.extend_from_slice(&[2, 0]);
-        payload.push(0);
-        put_u32(&mut payload, 0);
-        put_u32(&mut payload, source.len() as u32);
-        payload.push(16);
-        put_u32(&mut payload, source.len() as u32);
-        put_u32(&mut payload, EMPTY_BINDING_MAP.len() as u32);
-        payload.extend(source);
-        payload.extend_from_slice(EMPTY_BINDING_MAP);
-        payload
+        payload.extend_from_slice(&[1, 0, 0]);
+        payload.extend_from_slice(&[0, 0, 0]);
+
+        vm.register_gpu_canvas_shader_asset("broken", &payload)
+            .expect("the C++ file importer ignores neutral decode failure");
+
+        assert!(vm.gpu_canvas_shaders.borrow().contains_key("broken"));
     }
 
     #[test]
-    fn duplicate_shader_registration_preserves_the_first_shader() {
+    fn multi_alias_shader_registration_shares_one_owner_and_rejects_atomically() {
         let vm = ScriptVm::new();
-        vm.register_gpu_canvas_shader_asset("scene", &shader_payload("vec4<f32>(1.0)"))
-            .expect("first shader registers");
-        let first = vm.gpu_canvas_shaders.borrow()["scene"].clone();
+        vm.register_gpu_canvas_shader_asset_aliases(&["scene", "effects/scene"], &[0, 1, 2, 3])
+            .expect("aliases register");
 
-        let error = vm
-            .register_gpu_canvas_shader_asset("scene", &shader_payload("vec4<f32>(0.0)"))
-            .expect_err("duplicate shader name is rejected");
+        let shaders = vm.gpu_canvas_shaders.borrow();
+        assert!(Rc::ptr_eq(&shaders["scene"], &shaders["effects/scene"]));
+        drop(shaders);
 
-        assert!(error.to_string().contains("duplicated"));
-        assert_eq!(vm.gpu_canvas_shaders.borrow()["scene"], first);
+        vm.register_gpu_canvas_shader_asset_aliases(&["unused/new-alias", "scene"], &[4, 5, 6, 7])
+            .expect_err("a duplicate alias rejects the whole registration");
+        assert!(
+            !vm.gpu_canvas_shaders
+                .borrow()
+                .contains_key("unused/new-alias")
+        );
     }
 }

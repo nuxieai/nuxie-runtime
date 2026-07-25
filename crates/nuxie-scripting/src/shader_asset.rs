@@ -1,13 +1,16 @@
-//! Bounded decoder for the WebGPU RSTB v4 payload in `ShaderAsset`.
+//! Bounded decoder for the backend-neutral RSTB v4 payload in `ShaderAsset`.
 //!
-//! Mirrors pinned C++ `src/assets/shader_asset.cpp::ShaderAsset::decode` plus
-//! `src/lua/renderer/lua_gpu.cpp::buildShaderEntries`: WebGPU selects authored
-//! whole-module WGSL target 0 and requires its `BindingMap` target 16 sidecar.
+//! Mirrors pinned C++ `src/assets/shader_asset.cpp::ShaderAsset::decode` at
+//! registration, then `src/lua/renderer/lua_gpu.cpp::buildShaderEntries` when
+//! WebGPU selects authored whole-module WGSL target 0 and its mandatory
+//! `BindingMap` target 16 sidecar.
 
 use nuxie_render_api::{
     GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderResourceKind,
     GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension,
 };
+use std::array;
+use std::ops::Range;
 
 use crate::envelope::SignedContent;
 use crate::vm::{Error, Result};
@@ -28,6 +31,104 @@ struct VariantDescriptor {
     target: u8,
     offset: usize,
     size: usize,
+}
+
+/// File-owned, backend-neutral `ShaderAsset` container.
+///
+/// Decoding validates SignedContent, RSTB structure, sections, and every final
+/// last-descriptor-wins range. The public importer retains an invalid state if
+/// this returns an error. Backend selection is deferred to exact lookup.
+#[derive(Debug)]
+pub(crate) struct ShaderAsset {
+    blob_data: Vec<u8>,
+    variants: [Option<Range<usize>>; 256],
+}
+
+impl ShaderAsset {
+    pub(crate) fn decode(name: &str, payload: &[u8]) -> Result<Self> {
+        let envelope = SignedContent::parse(payload)
+            .map_err(|error| Error::runtime(format!("ShaderAsset '{name}': {error}")))?;
+        let rstb = envelope.content;
+        if rstb.len() > MAX_RSTB_BYTES {
+            return Err(Error::runtime(format!(
+                "ShaderAsset '{name}' RSTB exceeds {MAX_RSTB_BYTES} bytes"
+            )));
+        }
+
+        let mut cursor = Cursor::new(rstb);
+        if cursor.read_u32("magic")? != RSTB_MAGIC {
+            return Err(Error::runtime(format!(
+                "ShaderAsset '{name}' has invalid RSTB magic"
+            )));
+        }
+        if cursor.read_u16("version")? != RSTB_VERSION {
+            return Err(Error::runtime(format!(
+                "ShaderAsset '{name}' must use RSTB version {RSTB_VERSION}"
+            )));
+        }
+        let variant_count = usize::from(cursor.read_u8("variant count")?);
+        let section_count = usize::from(cursor.read_u8("section count")?);
+
+        let mut descriptors = Vec::with_capacity(variant_count);
+        for _ in 0..variant_count {
+            descriptors.push(VariantDescriptor {
+                target: cursor.read_u8("variant target")?,
+                offset: usize::try_from(cursor.read_u32("variant offset")?)
+                    .map_err(|_| Error::runtime("RSTB variant offset is not addressable"))?,
+                size: usize::try_from(cursor.read_u32("variant size")?)
+                    .map_err(|_| Error::runtime("RSTB variant size is not addressable"))?,
+            });
+        }
+        for _ in 0..section_count {
+            let _tag = cursor.read_u8("section tag")?;
+            let length = usize::from(cursor.read_u16("section length")?);
+            cursor.read_bytes(length, "section payload")?;
+        }
+
+        let blob_data = cursor.read_bytes(cursor.remaining(), "blob data")?;
+        // `ShaderAsset::decode` first indexes descriptors by target, so a
+        // later duplicate replaces an earlier descriptor before any range is
+        // checked.
+        let mut final_descriptors = [None; 256];
+        for descriptor in descriptors {
+            final_descriptors[usize::from(descriptor.target)] = Some(descriptor);
+        }
+        let mut variants: [Option<Range<usize>>; 256] = array::from_fn(|_| None);
+        for descriptor in final_descriptors.into_iter().flatten() {
+            let end = descriptor
+                .offset
+                .checked_add(descriptor.size)
+                .filter(|end| *end <= blob_data.len())
+                .ok_or_else(|| {
+                    Error::runtime(format!("ShaderAsset '{name}' RSTB variant is truncated"))
+                })?;
+            variants[usize::from(descriptor.target)] = Some(descriptor.offset..end);
+        }
+        Ok(Self {
+            blob_data: blob_data.to_vec(),
+            variants,
+        })
+    }
+
+    pub(crate) fn decode_webgpu(&self, name: &str) -> Result<GpuCanvasShader> {
+        let wgsl = self.variant(WGSL_SOURCE_TARGET).ok_or_else(|| {
+            Error::runtime(format!(
+                "ShaderAsset '{name}' has no WebGPU RSTB target-0 WGSL source"
+            ))
+        })?;
+        let binding_map = self.variant(WGSL_BINDING_MAP_TARGET).ok_or_else(|| {
+            Error::runtime(format!(
+                "ShaderAsset '{name}' has no mandatory WebGPU RSTB target-16 binding map"
+            ))
+        })?;
+        decode_whole_module_wgsl(name, wgsl, binding_map)
+    }
+
+    fn variant(&self, target: u8) -> Option<&[u8]> {
+        self.variants[usize::from(target)]
+            .as_ref()
+            .map(|range| &self.blob_data[range.clone()])
+    }
 }
 
 struct Cursor<'a> {
@@ -84,85 +185,9 @@ impl<'a> Cursor<'a> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn decode_shader_asset(name: &str, payload: &[u8]) -> Result<GpuCanvasShader> {
-    let envelope = SignedContent::parse(payload)
-        .map_err(|error| Error::runtime(format!("ShaderAsset '{name}': {error}")))?;
-    let rstb = envelope.content;
-    if rstb.len() > MAX_RSTB_BYTES {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' RSTB exceeds {MAX_RSTB_BYTES} bytes"
-        )));
-    }
-
-    let mut cursor = Cursor::new(rstb);
-    if cursor.read_u32("magic")? != RSTB_MAGIC {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' has invalid RSTB magic"
-        )));
-    }
-    if cursor.read_u16("version")? != RSTB_VERSION {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' must use RSTB version {RSTB_VERSION}"
-        )));
-    }
-    let variant_count = usize::from(cursor.read_u8("variant count")?);
-    let section_count = usize::from(cursor.read_u8("section count")?);
-
-    let mut descriptors = Vec::with_capacity(variant_count);
-    for _ in 0..variant_count {
-        descriptors.push(VariantDescriptor {
-            target: cursor.read_u8("variant target")?,
-            offset: usize::try_from(cursor.read_u32("variant offset")?)
-                .map_err(|_| Error::runtime("RSTB variant offset is not addressable"))?,
-            size: usize::try_from(cursor.read_u32("variant size")?)
-                .map_err(|_| Error::runtime("RSTB variant size is not addressable"))?,
-        });
-    }
-    for _ in 0..section_count {
-        let _tag = cursor.read_u8("section tag")?;
-        let length = usize::from(cursor.read_u16("section length")?);
-        cursor.read_bytes(length, "section payload")?;
-    }
-
-    let blob_data = cursor.read_bytes(cursor.remaining(), "blob data")?;
-    // `ShaderAsset::decode` first indexes descriptors by target, so a later
-    // duplicate replaces an earlier descriptor before any range is checked.
-    // Validate the final descriptor for every target (including retired
-    // targets) after that coalescing step.
-    let mut final_descriptors = [None; 256];
-    for descriptor in descriptors {
-        final_descriptors[usize::from(descriptor.target)] = Some(descriptor);
-    }
-    let mut wgsl = None;
-    let mut binding_map = None;
-    for descriptor in final_descriptors.into_iter().flatten() {
-        let end = descriptor
-            .offset
-            .checked_add(descriptor.size)
-            .filter(|end| *end <= blob_data.len())
-            .ok_or_else(|| {
-                Error::runtime(format!("ShaderAsset '{name}' RSTB variant is truncated"))
-            })?;
-        let bytes = &blob_data[descriptor.offset..end];
-        match descriptor.target {
-            // `ShaderAsset::decode` indexes by target and the last descriptor
-            // wins. Preserve that deterministic replacement behavior.
-            WGSL_SOURCE_TARGET => wgsl = Some(bytes),
-            WGSL_BINDING_MAP_TARGET => binding_map = Some(bytes),
-            _ => {}
-        }
-    }
-    let wgsl = wgsl.ok_or_else(|| {
-        Error::runtime(format!(
-            "ShaderAsset '{name}' has no WebGPU RSTB target-0 WGSL source"
-        ))
-    })?;
-    let binding_map = binding_map.ok_or_else(|| {
-        Error::runtime(format!(
-            "ShaderAsset '{name}' has no mandatory WebGPU RSTB target-16 binding map"
-        ))
-    })?;
-    decode_whole_module_wgsl(name, wgsl, binding_map)
+    ShaderAsset::decode(name, payload)?.decode_webgpu(name)
 }
 
 fn decode_whole_module_wgsl(

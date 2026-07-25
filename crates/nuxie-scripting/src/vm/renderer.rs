@@ -184,7 +184,10 @@ impl RendererBindings {
         Ok(())
     }
 
-    fn with_factory<R>(&self, f: impl FnOnce(&mut dyn RenderFactory) -> Result<R>) -> Result<R> {
+    pub(crate) fn with_factory<R>(
+        &self,
+        f: impl FnOnce(&mut dyn RenderFactory) -> Result<R>,
+    ) -> Result<R> {
         let Some(mut factory) = self.factory.get() else {
             return Err(Error::runtime(
                 "Paint allocation requires an active scripted draw context",

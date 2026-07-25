@@ -1100,27 +1100,27 @@ reason = "P08-C06 shares text symptoms with LOC-011 and awaits stage localizatio
 id = "LOC-009"
 title = "Persisted GPU-canvas scene is rejected by typed WebGPU draw"
 source_class = "candidate"
-state = "reported"
+state = "executor-green"
 owner_class = "renderer"
-classification = "unqualified"
+classification = "structural-mistranslation"
 ticket = "F-ED-11"
 fixture_id = "fed.loc_009.gpu_canvas_records"
-preliminary_disposition = "Scripted GPU-canvas execution defect; typed backend selection already succeeds."
-reproduction_sha256 = "43a4bec0b5d6e2cecec82e28666ae6d995dc7b327309fe0bb15a7ab7d1d8b78e"
-rust_stimulus = "pending: F-ED-11 must minimize the direct Rust stimulus for LOC-009"
-cpp_stimulus = "pending: F-ED-11 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-009"
-source_files = ["pending: F-ED-11 source-file correspondence"]
-source_members = ["pending: F-ED-11 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-11 lifecycle qualification"]
-rust_owner = "pending: F-ED-11 exact Rust owner"
-displaced_mechanism = "pending: F-ED-11 displaced-mechanism inventory"
+preliminary_disposition = "Exact WebGPU RSTB consumer repair at 22e4900243ee92a436afc1609f456525e8312352: select authored whole-module WGSL target 0 plus mandatory BindingMap target 16, preserve arbitrary logical/physical entry records and declaration-order defaults, validate sidecar visibility against Naga's retained per-entry usage, create one shared shader module, and delete the invented target-1 GLSL cross-translation path."
+reproduction_sha256 = "29de3ecca5b3a072479f41a80721739f56cfe23f1f345c1aca026e4bf54a2654"
+rust_stimulus = "The exact one-UBO RSTB emitted by Editor checkpoint f9d798dd3b1f9b2dfdbeb74dcdf4485aae4519f6 (inner SHA-256 546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d), plus malformed/missing/duplicate/append-only variants, direct authored WGSL, imported .riv scripting, real native pixels, and required-WebGPU browser smoke."
+cpp_stimulus = "Historical Editor localization f4bb3025e263ad1a646ef6971358577a0aa6bfa2 retained as provenance; COR-01 source comparison to current d788e8ec6e8b598526607d6a1e8818e8b637b60c proves the governing WebGPU target-0, target-16, whole-module, BindingMap, and one-shared-module members unchanged, with their existing C++ unit fixtures byte-identical."
+source_files = ["src/assets/shader_asset.cpp","src/lua/renderer/lua_gpu.cpp","renderer/include/rive/renderer/ore/ore_context_wgpu.hpp","renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp","renderer/src/ore/ore_binding_map.cpp","tests/unit_tests/runtime/shader_asset_test.cpp","tests/unit_tests/renderer/ore_binding_map_test.cpp","tests/unit_tests/renderer/ore_rstb_entry_container_test.cpp","crates/nuxie-scripting/src/shader_asset.rs","crates/nuxie-render-api/src/lib.rs","crates/nuxie-renderer/src/gpu_canvas.rs","crates/nuxie/tests/imported_gpu_canvas.rs","tools/browser-renderer-smoke/src/lib.rs"]
+source_members = ["ShaderAsset::decode","ShaderAsset::findShader","ContextWGPU::shaderTarget","buildShaderEntries","parseWholeModuleContainer","BindingMap::fromBlob","resolveShaderEntry","decode_shader_asset","decode_whole_module_wgsl","decode_binding_map","resolve_shader_entry","prepare_imported_gpu_canvas","resolve_imported_entry","validate_imported_interface","imported_uniform_requirements","validate_imported_wgpu_limits","make_imported_gpu_canvas_image"]
+lifecycle_phases = ["SignedContent envelope and last-wins RSTB descriptor decode","active WebGPU target selection","target-0 whole-module entry/source preservation","target-16 BindingMap preservation","logical-to-physical entry resolution with declaration-order defaults","authored WGSL parse and validation with retained ModuleInfo","sidecar visibility preflight against actual per-entry usage","one shared ShaderModule creation","physical vertex/fragment entry selection","binding layout and uniform upload","typed draw","retained image composition and browser/native pixel readback"]
+rust_owner = "crates/nuxie-scripting/src/shader_asset.rs owns WebGPU RSTB decode; crates/nuxie-scripting/src/gpu_canvas.rs owns the C++-matching bare/named logical entry selection; nuxie-render-api carries the preserved module, exact selected entry pair, and binding records; crates/nuxie-renderer/src/gpu_canvas.rs owns authored-WGSL/ModuleInfo validation, target-16 usage and visibility preflight, one shared WebGPU module, layout, draw, and retained-image composition."
+displaced_mechanism = "Deleted hard-coded target-1 per-entry GLSL selection, discarded target-16 sidecars, split vertex/fragment source records, Naga GLSL-to-WGSL cross-translation, the wgpu GLSL feature, and its pp-rs/unicode-xid dependency closure."
 dependencies = ["F-ED-00B","F-ED-11"]
-target_tests = ["pending:F-ED-11"]
-required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
-owning_ledger = "pending: F-ED-11 owning-ledger link"
-adaptation_rule = "pending: F-ED-11 rule citation"
-decision_row = "pending: F-ED-11 decision-row disposition"
-touch = []
+target_tests = ["shader_asset::tests::decodes_pinned_cpp_webgpu_whole_module_and_binding_map","shader_asset::tests::selects_webgpu_targets_deterministically_among_retired_variants","shader_asset::tests::validates_only_final_last_wins_descriptors_like_cpp","shader_asset::tests::preserves_arbitrary_logical_and_physical_entry_names_in_declaration_order","shader_asset::tests::accepts_cpp_descriptor_aliases_gaps_and_trailing_bytes","shader_asset::tests::requires_wgsl_source_and_binding_map_targets","shader_asset::tests::malformed_binding_maps_fail_closed","shader_asset::tests::accepts_append_only_binding_map_rows_and_trailing_extension_data","gpu_canvas::tests::shader_entries_use_declaration_order_defaults_and_named_logical_selection","gpu_canvas::tests::binding_map_identity_and_stage_visibility_fail_closed","gpu_canvas::tests::shared_authored_module_drives_both_entries_and_binding_visibility","gpu_canvas::tests::arbitrary_entries_use_declaration_order_defaults_and_exact_pipeline_selection","gpu_canvas::tests::imported_path_has_no_glsl_cross_translation_surface","gpu_canvas::tests::canonical_rstb_wgsl_becomes_a_composited_render_image","imported_shader_and_script_render_real_gpu_pixels","make browser-webgpu-only-check","Editor P14-C01 persisted GPU-canvas matrix"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels","maximum_sdk_bytes"]
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#LOC-009"
+adaptation_rule = "PORTING.md prime directive and RF-31: replace the complete divergent WebGPU shader consumer lifecycle and delete the old cross-translation path in the same batch; preserve C++ descriptor, whole-module, BindingMap, entry, and shared-module semantics."
+decision_row = "C++ passes and Rust substituted a lossy cross-translator for the retained target-0/16 lifecycle: classify structural mistranslation, port the complete C++ WebGPU consumer, and do not add an Editor workaround, alternate shader target, or WebGL2 fallback."
+touch = ["Cargo.lock","crates/nux-capi/src/size_report_roots.rs","crates/nuxie-render-api/src/lib.rs","crates/nuxie-renderer/Cargo.toml","crates/nuxie-renderer/src/gpu_canvas.rs","crates/nuxie-scripting/Cargo.toml","crates/nuxie-scripting/src/shader_asset.rs","crates/nuxie-scripting/src/vm.rs","crates/nuxie-scripting/tests/fixtures/loc009-ubo-triangle.wgsl","crates/nuxie/src/lib.rs","crates/nuxie/tests/imported_gpu_canvas.rs","tools/browser-renderer-smoke/build.rs","tools/browser-renderer-smoke/src/lib.rs","tools/editor-next-runtime-defects/fixtures.toml","docs/editor-next-runtime-defect-atlas.toml","docs/editor-next-runtime-defect-port-map.md","docs/editor-next-runtime-defect-status.md"]
 dont_touch = ["@active-fl-lease"]
 formal_children = []
 candidate_children = ["P14-C01"]
@@ -1130,34 +1130,62 @@ proposal = "148d11f206edc41caad1f48cae0810b268456b2e220ba6253ac6d04ef450b9db"
 runtime_defects = "a610201cc34c95bd5ff0838d95228af3983f38327ebbef87b253c3e49a357b9c"
 parity_ledger = "d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c97"
 [defect.revisions]
-original_localization_rust_sha = { status = "pending", reason = "F-ED-11 must recover the original localization Rust SHA" }
-editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+original_localization_rust_sha = "ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9"
+editor_last_consumed_runtime_sha = "ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9"
+investigation_head_sha = "22e4900243ee92a436afc1609f456525e8312352"
 merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
 consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
 [defect.renderer_provenance]
-status = "pending"
-reason = "F-ED-11 must stamp backend, mode, features, surface, Dawn, and reference executable."
+status = "complete"
+backend = "BrowserWebGpu WebGPU for the required-browser fixture; rust-wgpu over Metal for native retained-image and pixel qualification"
+dawn_revision = "211333b2e3e429c3508f25c81c547f602adf448c"
+mode = "required WebGPU; authored target-0 whole-module WGSL plus target-16 BindingMap; native ClockwiseAtomic and MSAA"
+feature_flags = "WebGPU-only; scripting and imported GPU-canvas enabled; no WebGL2, wgpu GLSL feature, Naga GLSL frontend, or WGSL cross-translation backend"
+surface = "real Chrome canvas/GPU-canvas smoke and Apple M5 Max Metal retained-image/pixel corpus"
+reference_executable = "renderer-replay-ffi-dawn static reference corpus"
+reference_stamp_sha256 = "9077e7a86823453b7820e0bfb0fa13f7235a0d6f5e9df99d74d4353a5f4e05b5"
+command = "cargo test -p nuxie-renderer --lib; cargo test -p nuxie --features scripting --test imported_gpu_canvas; rustup run stable cargo check -p browser-renderer-smoke --target wasm32-unknown-unknown; make browser-webgpu-only-check; make renderer-golden"
+evidence = "Focused last-wins decoder, malformed-sidecar, arbitrary logical/physical entry, declaration-order default, named-entry pixel differential, ModuleInfo usage/visibility, shared-module, converter-deletion, imported-script, real Metal pixel, and wasm32 WebGPU compile gates are green; the required-WebGPU browser matrix and 1,468-row native renderer corpus pass at the exact code checkpoint."
 [defect.executor_verification]
-status = "pending"
-reason = "F-ED-11 executor fixture has not run."
+status = "pass"
+command = "complete closeout battery at 22e4900243ee92a436afc1609f456525e8312352"
+evidence = "414/414 runtime, 144/144 nuxie, 721/721 pinned-C++ probes in the debug probe-armed workspace, ordinary and scripted 317/317 entries plus 647/647 segments with zero divergences, renderer 1468/1468, required-WebGPU real-Chrome, renderer consumer, C API, Apple, frame-loop, B-6, lint, format, and diff gates are green; the release-size SDK closures are 7984504 bytes without scripting and 8885736 bytes with scripting, both below the 9437184-byte ceiling."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "F-ED-11 has no executor-green result to verify."
+reason = "LOC-009 is executor-green and awaits independent orchestrator verification."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:LOC-009"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "Unchanged P14-C01 at runtime ef9 deterministically reaches typed WebGPU, then rejects the compiler-produced RSTB before a device call; the exact one-UBO minimization reproduces target-1 GLSL cross-translation failure with missing layout(binding=X)."
+[[defect.history]]
+state = "qualified"
+actor = "f-ed-executor"
+evidence = "Pinned C++ selects target-0 WGSL and mandatory target-16 BindingMap, parses one whole module, and shares one module across physical entries; Rust selected target 1, dropped sidecars, split stages, and cross-translated GLSL."
+[[defect.history]]
+state = "mapped"
+actor = "f-ed-executor"
+evidence = "Mapped to the file-disjoint scripting decoder, render API carrier, and GPU-canvas renderer consumer; the complete old cross-translation mechanism and dependency closure are deleted without touching the active FL reservation."
+[[defect.history]]
+state = "executor-green"
+actor = "f-ed-executor"
+evidence = "The exact post-review code checkpoint 22e490 preserves C++ last-wins descriptors, arbitrary logical/physical entries, declaration-order defaults, named selection, and target-16 visibility against retained ModuleInfo; the complete workspace, golden, browser, renderer, native API, Apple, structural, and size floors pass."
 [defect.cpp_result]
-status = "pending"
-reason = "Identical persisted records, scripts, WGSL, resources, and time are not normalized."
+status = "pass"
+command = "git -C /Users/levi/dev/oss/rive-runtime diff f4bb3025e263ad1a646ef6971358577a0aa6bfa2..d788e8ec6e8b598526607d6a1e8818e8b637b60c -- src/assets/shader_asset.cpp src/lua/renderer/lua_gpu.cpp renderer/include/rive/renderer/ore/ore_context_wgpu.hpp renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp renderer/src/ore/ore_binding_map.cpp; pinned source and unchanged unit-fixture audit"
+evidence = "At both historical f4bb and current d788, ContextWGPU::shaderTarget selects target 0, buildShaderEntries requires target 16, parseWholeModuleContainer preserves logical/physical entries plus one source, BindingMap::fromBlob preserves its append-only rows, and one ShaderModule is shared across all entries. Changes between pins are a const decode span, unrelated buffer-write arguments, and frame serial state; the three governing C++ unit fixture files are byte-identical."
 [defect.rust_result]
-status = "pending"
-reason = "RuntimeRejected needs a first differing stage, not a label."
+status = "pass"
+command = "cargo test -p nuxie-scripting; cargo test -p nuxie-renderer --lib; cargo test -p nuxie --features scripting --test imported_gpu_canvas; cargo check -p nux-capi --features size-report-roots; rustup run stable cargo check -p browser-renderer-smoke --target wasm32-unknown-unknown"
+evidence = "The exact inner RSTB hash is 546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d; 9 focused decoder rows, 2 focused scripting selection rows, the complete scripting suite, 409 renderer rows, 3 imported scripting rows with real Metal pixels, C API public-root compilation, and wasm32 WebGPU compilation pass. Source ratchets prove the target-1 GLSL translator, wgpu GLSL feature, and pp-rs/unicode-xid closure are absent."
 [defect.editor_result]
-status = "pending"
-reason = "P14-C01 awaits direct record/runtime localization."
+status = "fail"
+command = "GPU_CANVAS_GPU=1 PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor editor-next-cutover.spec.ts gpu-canvas-preview.spec.ts"
+evidence = "At consumed runtime ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9, the unchanged four-test ordinary-route command reports 3 passed and 1 failed in 1.5 minutes, exit 1. Editor producer checkpoint f9d798dd3b1f9b2dfdbeb74dcdf4485aae4519f6 emits exact target-0 WGSL plus target-16 BindingMap and reaches ready WebGPU resources before typed RuntimeRejected. The unchanged P14-C01 rerun awaits the merged runtime consumer repair."
 
 [[defect]]
 id = "LOC-011"
@@ -1673,7 +1701,7 @@ classification = "local-translation-defect"
 ticket = "F-ED-11"
 fixture_id = "fed.loc_019.webgpu_clean_error_scope"
 preliminary_disposition = "Exact BrowserWebGpu binding defect: GPUDevice.popErrorScope resolves a clean scope to JavaScript null, but wasm-bindgen 0.2.126 JsOption semantics let vendored wgpu pass null to Error::from_js and trap."
-reproduction_sha256 = "660e13a094b2b278b347e9ab62f4593c828d76b8d56a0b15a55a37c0ec8df99e"
+reproduction_sha256 = "f4bd1025e8604d860363d7f4d119e9483c378958eae6f94161426ecf7681f4b7"
 rust_stimulus = "Real-Chrome minimal valid 8x8 GpuCanvasRenderPlan through WgpuFactory::new_async and render_gpu_canvas, followed by wgpu's scoped validation-error decode."
 cpp_stimulus = "not-applicable: pinned C++ has no browser WebGPU/wasm-bindgen binding equivalent; the governing external contract is GPUDevice.popErrorScope Promise<GPUError?>."
 source_files = ["vendor/wgpu-30.0.0/src/backend/webgpu.rs","tools/browser-renderer-smoke/src/lib.rs","tools/browser-renderer-smoke/gpu-only.html","tools/browser-renderer-smoke/run-browser.cjs"]

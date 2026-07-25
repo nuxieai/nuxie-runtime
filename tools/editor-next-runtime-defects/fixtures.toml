@@ -143,8 +143,24 @@ driver = "cpp_probe/registry.cpp"
 id = "fed.loc_009.gpu_canvas_records"
 defect_id = "LOC-009"
 kind = "browser-renderer"
-status = "registered"
-driver = "pending:F-ED-11"
+status = "qualified"
+driver = "cargo-test:F-ED-11 exact target-0/16 decode, direct authored-WGSL draw, and imported GPU-canvas pixels"
+stimulus_files = [
+  { root = "rive", path = "src/assets/shader_asset.cpp", sha256 = "fadff3f2fbb73574e47080a032b34f35046890de09d3fd7b38e42a7b27071437" },
+  { root = "rive", path = "src/lua/renderer/lua_gpu.cpp", sha256 = "2b36c01d2fa21f4886cf1063f6ea4a1396eee8fe45c491baf7326778743d035c" },
+  { root = "rive", path = "renderer/include/rive/renderer/ore/ore_context_wgpu.hpp", sha256 = "905e38d3e78df123c33810bb69539e1d0f39edbc173ecd72618b0d8097dc6e1d" },
+  { root = "rive", path = "renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp", sha256 = "68a641f2451da8067e0568f3892d2eebd69052bd3d7d9283aa12f3889527c335" },
+  { root = "rive", path = "renderer/src/ore/ore_binding_map.cpp", sha256 = "1ca7fa820ceab888e763e4860408bbe8046de9fb869b672cc9dc1d79de608d69" },
+  { root = "rive", path = "tests/unit_tests/runtime/shader_asset_test.cpp", sha256 = "9599bc8be79a81ef513153ac0dc1f1d30904c73e34bea08c2c146dc1388a9f7c" },
+  { root = "rive", path = "tests/unit_tests/renderer/ore_binding_map_test.cpp", sha256 = "fe9173805bc58c8ade3ef87602e6c0933a6d90bade7b582b3cc72ddb6457dda6" },
+  { root = "rive", path = "tests/unit_tests/renderer/ore_rstb_entry_container_test.cpp", sha256 = "83804d5a4de64ff33f6422fc8c8c41d52607d712c31b6f8167d95df56ccbdb2e" },
+  { root = "repo", path = "crates/nuxie-scripting/src/shader_asset.rs", sha256 = "003b8e78cbf8a3f7e80ee3045227cb6c3ce85ca82cf999d20096e5052c3e402a" },
+  { root = "repo", path = "crates/nuxie-scripting/tests/fixtures/loc009-ubo-triangle.wgsl", sha256 = "ae1aa970ef1ff3926f18edbba5ae519c62ffb320360ee371553302b16b2bdb8b" },
+  { root = "repo", path = "crates/nuxie-render-api/src/lib.rs", sha256 = "ab62930e5a34c407bfd998c37bf1a6a84e24143ae851c27f0a4ef036b6e128e3" },
+  { root = "repo", path = "crates/nuxie-renderer/src/gpu_canvas.rs", sha256 = "8e16be0217a0a8a7f64300bd782f2b98b419b9f9db379e3f534fe04f78b8d95a" },
+  { root = "repo", path = "crates/nuxie/tests/imported_gpu_canvas.rs", sha256 = "61ef4e50c9d54d81cf2c67bbe28aae4610f99cb810b93580adbeb762551a34e1" },
+  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "0fe8c90faef53cce22ff4503857ebba37203bc44aa0b4951cca99e867acac390" },
+]
 
 [[fixture]]
 id = "fed.loc_011.empty_text_pipeline"
@@ -209,7 +225,7 @@ kind = "browser-renderer"
 status = "implemented"
 driver = "make browser-webgpu-only-check"
 stimulus_files = [
-  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "f8f7589644202b3801e44108897e45bcbc9211892fa8011b66c8cde3a6825297" },
+  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "0fe8c90faef53cce22ff4503857ebba37203bc44aa0b4951cca99e867acac390" },
   { root = "repo", path = "tools/browser-renderer-smoke/gpu-only.html", sha256 = "03c98e7c098f779e35b65d630f77035d0daff45f57daa3501943f082a36e7c9d" },
   { root = "repo", path = "tools/browser-renderer-smoke/run-browser.cjs", sha256 = "60eb1059d55f426b768369849749ca8a27c9850eff87f356bd30555aec1ed7de" },
   { root = "repo", path = "vendor/wgpu-30.0.0/src/backend/webgpu.rs", sha256 = "b248630d054a1948e10413845a4b5913aa70b68d2ac52d4d51323aa3bd55491e" },

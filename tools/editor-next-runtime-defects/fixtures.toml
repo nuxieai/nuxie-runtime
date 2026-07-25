@@ -44,7 +44,23 @@ id = "fed.rt_ed_005.generic_visual_property_bind"
 defect_id = "RT-ED-005"
 kind = "three-layer"
 status = "registered"
-driver = "cpp_probe/registry.cpp"
+driver = "cargo-test:F-ED-03 exact generic property binding"
+stimulus_files = [
+  { root = "rive", path = "include/rive/generated/data_bind/data_bind_base.hpp", sha256 = "b8e07204517b2cd27908f3afff8afc218e50b66cda40b6a6a807b1e9a3428049" },
+  { root = "rive", path = "include/rive/data_bind/data_bind.hpp", sha256 = "c3230767b2293e946f9beec380c3516b8ce5cb7cdf76a39746b1c420baf715f2" },
+  { root = "rive", path = "include/rive/scripted/scripted_data_converter.hpp", sha256 = "6cd69c7c0c48e6089e14f155334d0113ee19e6c52ab9b81e4557a3e19f6eeef8" },
+  { root = "rive", path = "include/rive/data_bind/converters/data_converter_group.hpp", sha256 = "44013eec89001de62a54316e3f5a6dd26735b1796bd9a03ec5bcee3ba50e4d35" },
+  { root = "rive", path = "src/file.cpp", sha256 = "0bf51f08b7a77366a164ecb13de142a890b91fcfd400da379d2e6e36c4bcb47c" },
+  { root = "rive", path = "src/data_bind/data_bind.cpp", sha256 = "5499d70ae8911465c1560f1461ad2cfdf9597b4d40bac1bc0fda8190ca94098e" },
+  { root = "rive", path = "src/data_bind/context/context_value_number.cpp", sha256 = "e8ebd1056ab0a4bde2c527ac3b7d932e3f2c555cd54014c2afe99debdf3d9947" },
+  { root = "rive", path = "src/data_bind/context/context_value_color.cpp", sha256 = "f3320c45ef50ee573d5fdd13c3dfc2bc4471376a49474962283e644554353b5e" },
+  { root = "rive", path = "tests/unit_tests/runtime/data_binding_test.cpp", sha256 = "b370dc111015e8b7ed2bdee102e0b4f15ee792927b93aa45c552e0b3d4014a60" },
+  { root = "repo", path = "crates/nuxie/build.rs", sha256 = "74dd6d592dbd4f26cb9ef3105c7551e40ac928190b8939fa91b7fd316a3b3124" },
+  { root = "repo", path = "crates/nuxie/src/scene.rs", sha256 = "d46ef5c29e8fa2473c1dafa19b8e5376544b837be114758191c806b98ae1b2e1" },
+  { root = "repo", path = "crates/nuxie/tests/scene_authoring.rs", sha256 = "506688d22c1521cbd56975a7efdb7caafd27aa591090b2dfe4b539d61c059dae" },
+  { root = "repo", path = "crates/nuxie/tests/data_converter_authoring.rs", sha256 = "3baf67d902a60ea87b45cd59e184b30e3313e174af5e9efb7f80cee8e0ad23d1" },
+  { root = "repo", path = "docs/f-ed-03-generic-property-binding-spec.md", sha256 = "fde798f3d47efee3d6f1ead9d83eb7a918942c66d687966ddc4056c671ab2b8d" },
+]
 
 [[fixture]]
 id = "fed.rt_ed_006.retracted_symbol_attribution"
@@ -83,7 +99,7 @@ driver = "source-audit+editor-compiler-test:interaction_animation_lowering::test
 stimulus_files = [
   { root = "rive", path = "include/rive/listener_type.hpp", sha256 = "57e7273b348ac16c622d19377442c57379aa974fab866092522ad089f3bdb8c3" },
   { root = "rive", path = "src/listener_group.cpp", sha256 = "7ad6417074fbcda656d09e9885facf8b2d146f9e33217ead475af22bdb71559e" },
-  { root = "repo", path = "crates/nuxie/src/scene.rs", sha256 = "99ca1c39380b831eda18e527b83c8aa665f720961f1f5edae2f1906aba727472" },
+  { root = "repo", path = "crates/nuxie/src/scene.rs", sha256 = "d46ef5c29e8fa2473c1dafa19b8e5376544b837be114758191c806b98ae1b2e1" },
   { root = "repo", path = "crates/nuxie-runtime/src/state_machine.rs", sha256 = "fc1eb4c82bbe3aed79546da376f54ddc366cf4c7d9fa84cd87dfb5b58950b728" },
   { root = "editor", path = "tools/rive-compiler/scene-shared/src/interaction_animation_lowering.rs", sha256 = "aaffae5dec57d0e452e376eb884fbc319db5b47b9334690e327278868539feac" },
 ]

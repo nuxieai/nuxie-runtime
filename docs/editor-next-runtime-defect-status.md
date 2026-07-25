@@ -7,7 +7,7 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: `F-ED-11A` / `LOC-019`;
+- phase: `F-ED-03` publication and independent verification;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - investigation base: `05d45f07d87b33665167de0869b7db7b009bf8fe`;
 - Editor's last consumed runtime:
@@ -27,7 +27,9 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 The active FL executor owns FL-A and the complete reservation recorded in the
 atlas. F-ED may write only its new evidence/checker/fixture paths until that
-lease changes.
+lease changes. The intended published FL-A tip is
+`c4d81801898563c23f1b4f68e0c9ef0df83b1d41`; its uncommitted owner work and
+`LOC-007` remain outside F-ED.
 
 `F-ED-11A` has localized `LOC-019` independently of `LOC-009`. The WebGPU
 device and valid draw succeed; a clean `GPUDevice.popErrorScope()` fulfills
@@ -68,6 +70,12 @@ dependency map is stale and must not be used for qualification. Any later
 artifact change makes the source-root check fail until a newly reviewed Editor
 checkpoint is recorded.
 
+Editor has also locally consumed the WebGPU-only runtime at
+`95027109c89f651835c76646ebf4d8734f032f07`, adapted the two constructor call
+sites, and reported the required-WebGPU route green. That consumption does not
+replace the immutable source checkpoint above until the Editor executor sends
+the next committed and pushed assembly SHA.
+
 ## Executable checks
 
 Run the standalone checker tests:
@@ -100,19 +108,38 @@ C++ parity decision, adding a Rust-only timer would be a new product feature,
 not a port repair; the Editor compiler therefore continues to fail closed for
 the unsupported duration and its fully qualified regression test passes 1/1.
 
+`F-ED-03` / `RT-ED-005` is now classified as an API-surface gap, not a
+low-level runtime defect. Production commit
+`4eec745b704e9920f67098138963dc973e7b2d87` ports the pinned C++ generic
+`DataBind.propertyKey` authoring contract into Scene while leaving the
+FL-owned runtime mechanism unchanged. It adds typed number/color binds,
+stable `LayoutComponentStyle` targets for all four padding keys, exact
+target/property collision identity, converter output validation matching
+C++ `Input`/`None`/`Any` semantics, and encoded `File::import` behavior tests.
+Both independent reviews are clean. The row remains `reported` until the
+merged SHA, orchestrator verification, and unchanged `P09-C01` Editor
+consumption evidence are complete. The executor battery is now green: the
+721-test probe-armed workspace suite, 317/317 ordinary and
+scripted golden entries with 647/647 segments each, 1468/1468 renderer rows,
+CAPI, Apple, frame-loop, B-6, lint/format/diff, WebGPU-only browser, and the
+8.74 MiB maximum SDK floor all passed. Only publication and independent
+consumption/verification remain.
+
 ## Next queue
 
-1. open executor-green `F-ED-11A` as a non-draft one-defect PR, merge it when
-   required CI and review are green, obtain orchestrator verification, and hand
-   the exact SHA to Editor for the unchanged P14-C06 matrix;
+1. merge the executor-green F-ED-03 non-draft PR, obtain independent
+   orchestrator verification, and have Editor consume the exact merge SHA and
+   rerun unchanged `P09-C01`;
 2. qualify `LOC-009` independently from `LOC-019`; `RuntimeRejected` is not a
    diagnosis;
-3. qualify and close `F-ED-03` and `F-ED-04`, then requalify `F-ED-06`,
-   `F-ED-07`, `F-ED-08`, and the remaining `F-ED-11` draw row under the
+3. qualify and close `F-ED-04` against its existing low-level runtime path
+   without touching reserved modules;
+4. requalify `F-ED-06`, `F-ED-07`, `F-ED-08`, and the remaining `F-ED-11`
+   draw row under the
    WebGPU-only support contract—no WebGL2 repair or fallback;
-4. keep `LOC-007` and every other reserved runtime-owner finding with the
+5. keep `LOC-007` and every other reserved runtime-owner finding with the
    active FL executor while file-disjoint evidence/API work proceeds;
-5. burn down the remaining queues in
+6. burn down the remaining queues in
    `docs/editor-next-runtime-defect-goal.md` through Editor consumption and
    the complete 27-child product matrix.
 

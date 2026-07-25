@@ -1,0 +1,1724 @@
+schema = "nuxie.editor-next.runtime-defect-atlas/v1"
+version = 1
+upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+editor_consumed_runtime_ref = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_base_ref = "efb6ad128d6aac7b81ed57d4a8b76eb9259ec833"
+source_snapshot_status = "landed"
+source_snapshot_ref = "8fb90154af8d50847f4efea71ad56a1da6d9e8bf"
+corrections_file = "docs/editor-next-runtime-defect-corrections.toml"
+fixtures_file = "tools/editor-next-runtime-defects/fixtures.toml"
+expected_defects = 25
+expected_formal_children = 8
+expected_candidate_children = 20
+expected_union_children = 27
+expected_overlap_children = ["P09-C01"]
+reserved_ids = ["LOC-010"]
+
+[floors]
+runtime_tests = 414
+nuxie_tests = 140
+cpp_probe_tests = 721
+golden_entries = 317
+golden_segments = 647
+scripted_entries = 317
+scripted_segments = 647
+renderer_pixels = 1468
+maximum_sdk_bytes = 9437184
+
+[lease]
+refreshed = "2026-07-24"
+active_wave = "FL-A"
+branch = "levi/fl-a"
+reserved_files = [
+  "crates/nuxie-graph/src/lib.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+  "crates/nuxie-runtime/src/artboard_data_bind.rs",
+  "crates/nuxie-runtime/src/components.rs",
+  "crates/nuxie-runtime/src/constraints.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+  "crates/nuxie-runtime/src/focus.rs",
+  "crates/nuxie-runtime/src/lib.rs",
+  "crates/nuxie-runtime/src/objects.rs",
+  "crates/nuxie-runtime/src/retained_data_bind.rs",
+  "crates/nuxie-runtime/src/text.rs",
+  "docs/runtime-frame-loop-gaps.toml",
+]
+future_files = [
+  "crates/nuxie-runtime/src/animation.rs",
+  "crates/nuxie-runtime/src/state_machine.rs",
+  "crates/nuxie-runtime/src/state_machine/**",
+]
+shared_ledgers = [
+  "docs/runtime-frame-loop-ownership.toml",
+  "docs/runtime-frame-loop-status.md",
+  "file-correspondence-manifest.toml",
+]
+
+[[artifact]]
+id = "cutover-proposal"
+path = "nuxie-editor-next-cutover-proposal.md"
+sha256 = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+
+[[artifact]]
+id = "runtime-defects"
+path = "nuxie-editor-next-runtime-defects.md"
+sha256 = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+
+[[artifact]]
+id = "parity-ledger"
+path = "nuxie-editor-next-parity-ledger.json"
+sha256 = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+
+[[defect]]
+id = "RT-ED-001"
+title = "Scripted data_viz_demo nested pie-chart text diverges"
+source_class = "transferred-observation"
+state = "closed"
+owner_class = "runtime"
+classification = "stale-oracle"
+ticket = "F-ED-00"
+fixture_id = "fed.rt_ed_001.data_viz_demo"
+preliminary_disposition = "Likely stale after the RB-1 converter-chain repair; rerun at the investigation base."
+reproduction_sha256 = "78428fc00eeedc2edc39fc99ec1a70c12721dbd8e8d43959920f87ce6e840912"
+rust_stimulus = "scripted golden corpus entry data_viz_demo at sample 0.0"
+cpp_stimulus = "pinned scripted C++ golden corpus entry data_viz_demo at sample 0.0"
+source_files = ["src/data_bind/data_bind.cpp","src/data_bind/data_bind_container.cpp"]
+source_members = ["DataBind::update","DataBindContainer::update"]
+lifecycle_phases = ["bind","update","draw-stream"]
+rust_owner = "crates/nuxie-runtime/src/artboard_data_bind.rs retained converter-owned binding queue"
+displaced_mechanism = "The historical outer-occurrence converter filter was deleted by the RB-1 f12B repair."
+dependencies = []
+target_tests = ["scripted-golden:data_viz_demo"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml"
+adaptation_rule = "not-applicable: exact current-pin parity closes the stale observation"
+decision_row = "not-applicable: no divergence is accepted"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = []
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = "a5a606e7e78764e5d5f4e1421c1a5fe61df0ca22"
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pass"
+command = "focused scripted golden compare for RT-ED-001"
+evidence = "Pinned C++ and current Rust are exact; the transferred observation is stale."
+[defect.orchestrator_verification]
+status = "not-applicable"
+reason = "Stale-oracle closure promotes no owning runtime ledger row."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:RT-ED-001"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "focused scripted current-pin differential at a76ab593"
+[[defect.history]]
+state = "stale-oracle"
+actor = "f-ed-executor"
+evidence = "data_viz_demo exact at d788e8ec/current Rust"
+[[defect.history]]
+state = "closed"
+actor = "f-ed-executor"
+evidence = "transferred observation is stale and has no product child"
+[defect.cpp_result]
+status = "pass"
+command = "golden-compare --id data_viz_demo with the pinned scripted C++ runner"
+evidence = "460794-byte C++ stream; focused summary entries=1 exact=1 diverges=0; runner sha256 b20b815c9f3fe30223b0c93ed9b162c0ec1f9031fc0001490d094bb006516a0b"
+[defect.rust_result]
+status = "pass"
+command = "golden-compare --id data_viz_demo with the current scripted Rust runner"
+evidence = "current stream matches pinned C++ within the corpus contract; asset sha256 7e50bfe3a47824908d71c5959f7ab6ccc96f78c0c24cb056ed0f772dc3ddae0c"
+[defect.editor_result]
+status = "not-applicable"
+reason = "Transferred observation has no linked Editor product child."
+
+[[defect]]
+id = "RT-ED-002"
+title = "Scripted db_health_tracker clip geometry diverges"
+source_class = "transferred-observation"
+state = "closed"
+owner_class = "runtime"
+classification = "stale-oracle"
+ticket = "F-ED-00"
+fixture_id = "fed.rt_ed_002.db_health_tracker"
+preliminary_disposition = "Likely stale after the RB-1 converter-chain repair; rerun at the investigation base."
+reproduction_sha256 = "b437ebea103ffeafbd154ef1c6206ea812e276199e04445943804cdd32edb55a"
+rust_stimulus = "scripted golden corpus entry db_health_tracker at sample 0.0"
+cpp_stimulus = "pinned scripted C++ golden corpus entry db_health_tracker at sample 0.0"
+source_files = ["src/data_bind/data_bind.cpp","src/data_bind/data_bind_container.cpp"]
+source_members = ["DataBind::update","DataBindContainer::update"]
+lifecycle_phases = ["bind","update","draw-stream"]
+rust_owner = "crates/nuxie-runtime/src/artboard_data_bind.rs retained converter-owned binding queue"
+displaced_mechanism = "The historical outer-occurrence converter filter was deleted by the RB-1 f12B repair."
+dependencies = []
+target_tests = ["scripted-golden:db_health_tracker"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml"
+adaptation_rule = "not-applicable: exact current-pin parity closes the stale observation"
+decision_row = "not-applicable: no divergence is accepted"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = []
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = "a5a606e7e78764e5d5f4e1421c1a5fe61df0ca22"
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pass"
+command = "focused scripted golden compare for RT-ED-002"
+evidence = "Pinned C++ and current Rust are exact; the transferred observation is stale."
+[defect.orchestrator_verification]
+status = "not-applicable"
+reason = "Stale-oracle closure promotes no owning runtime ledger row."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:RT-ED-002"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "focused scripted current-pin differential at a76ab593"
+[[defect.history]]
+state = "stale-oracle"
+actor = "f-ed-executor"
+evidence = "db_health_tracker exact at d788e8ec/current Rust"
+[[defect.history]]
+state = "closed"
+actor = "f-ed-executor"
+evidence = "transferred observation is stale and has no product child"
+[defect.cpp_result]
+status = "pass"
+command = "golden-compare --id db_health_tracker with the pinned scripted C++ runner"
+evidence = "867469-byte C++ stream; focused summary entries=1 exact=1 diverges=0; runner sha256 b20b815c9f3fe30223b0c93ed9b162c0ec1f9031fc0001490d094bb006516a0b"
+[defect.rust_result]
+status = "pass"
+command = "golden-compare --id db_health_tracker with the current scripted Rust runner"
+evidence = "current stream matches pinned C++ within the corpus contract; asset sha256 bbd78d53e1402e76460314a1eee3d29e153d1907cbb4cc0c8ee31daa1c48b4cf"
+[defect.editor_result]
+status = "not-applicable"
+reason = "Transferred observation has no linked Editor product child."
+
+[[defect]]
+id = "RT-ED-003"
+title = "Browser presentation requires a full CPU RGBA readback"
+source_class = "active-runtime-dependency"
+state = "reported"
+owner_class = "renderer"
+classification = "unqualified"
+ticket = "F-ED-06"
+fixture_id = "fed.rt_ed_003.browser_present_readback"
+preliminary_disposition = "Browser presentation adapter defect outside runtime traversal."
+reproduction_sha256 = "13695005c41c1d398a27f6a15c1f7e9ec5b29ad65196fa60b911d9bbf62b005f"
+rust_stimulus = "pending: F-ED-06 must minimize the direct Rust stimulus for RT-ED-003"
+cpp_stimulus = "pending: F-ED-06 must minimize the pinned-C++ stimulus or prove no equivalent for RT-ED-003"
+source_files = ["pending: F-ED-06 source-file correspondence"]
+source_members = ["pending: F-ED-06 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-06 lifecycle qualification"]
+rust_owner = "pending: F-ED-06 exact Rust owner"
+displaced_mechanism = "pending: F-ED-06 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-06"]
+target_tests = ["pending:F-ED-06"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
+owning_ledger = "pending: F-ED-06 owning-ledger link"
+adaptation_rule = "pending: F-ED-06 rule citation"
+decision_row = "pending: F-ED-06 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = ["P04-C01", "P19-C03"]
+candidate_children = []
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-06 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "pending"
+reason = "F-ED-06 must stamp backend, mode, features, surface, Dawn, and reference executable."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-06 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-06 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:RT-ED-003"
+[defect.cpp_result]
+status = "pending"
+reason = "Presentation/readback equivalence has not been normalized at the pinned reference."
+[defect.rust_result]
+status = "pending"
+reason = "Direct browser presentation fixture has not been rerun at the investigation base."
+[defect.editor_result]
+status = "pending"
+reason = "Linked product fixtures await normalized three-layer evidence."
+
+[[defect]]
+id = "RT-ED-004"
+title = "WebGL2 cannot execute the typed rounded content clip"
+source_class = "active-runtime-dependency"
+state = "reported"
+owner_class = "renderer"
+classification = "unqualified"
+ticket = "F-ED-07"
+fixture_id = "fed.rt_ed_004.webgl2_rounded_clip_402x874_r57"
+preliminary_disposition = "Capability failure; C++ parity versus additive backend feature is still unproved."
+reproduction_sha256 = "95bbbe5576b5741450c21ac010b10c9f4b22aa1c5500141c25e79369ee9305d5"
+rust_stimulus = "pending: F-ED-07 must minimize the direct Rust stimulus for RT-ED-004"
+cpp_stimulus = "pending: F-ED-07 must minimize the pinned-C++ stimulus or prove no equivalent for RT-ED-004"
+source_files = ["pending: F-ED-07 source-file correspondence"]
+source_members = ["pending: F-ED-07 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-07 lifecycle qualification"]
+rust_owner = "pending: F-ED-07 exact Rust owner"
+displaced_mechanism = "pending: F-ED-07 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-07"]
+target_tests = ["pending:F-ED-07"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
+owning_ledger = "pending: F-ED-07 owning-ledger link"
+adaptation_rule = "pending: F-ED-07 rule citation"
+decision_row = "pending: F-ED-07 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = ["P04-C01", "P05-C01", "P10-C01", "P12-C01", "P15-C01"]
+candidate_children = []
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-07 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "pending"
+reason = "F-ED-07 must stamp backend, mode, features, surface, Dawn, and reference executable."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-07 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-07 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:RT-ED-004"
+[defect.cpp_result]
+status = "pending"
+reason = "The exact current-pin typed rounded-clip oracle is the first qualification action."
+[defect.rust_result]
+status = "pending"
+reason = "The exact WebGL2 typed rounded-clip fixture has not been rerun by F-ED."
+[defect.editor_result]
+status = "pending"
+reason = "Linked product children await normalized three-layer evidence."
+
+[[defect]]
+id = "RT-ED-005"
+title = "Typed Scene authoring cannot bind general visual properties"
+source_class = "active-runtime-dependency"
+state = "reported"
+owner_class = "api"
+classification = "unqualified"
+ticket = "F-ED-03"
+fixture_id = "fed.rt_ed_005.generic_visual_property_bind"
+preliminary_disposition = "High-level Scene authoring omission; low-level generic DataBind execution exists."
+reproduction_sha256 = "c00952e16df6b29a33448c0e640de0a261b51bdf40f6d1ef5837d02c514a2e0e"
+rust_stimulus = "pending: F-ED-03 must minimize the direct Rust stimulus for RT-ED-005"
+cpp_stimulus = "pending: F-ED-03 must minimize the pinned-C++ stimulus or prove no equivalent for RT-ED-005"
+source_files = ["pending: F-ED-03 source-file correspondence"]
+source_members = ["pending: F-ED-03 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-03 lifecycle qualification"]
+rust_owner = "pending: F-ED-03 exact Rust owner"
+displaced_mechanism = "pending: F-ED-03 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-03"]
+target_tests = ["cpp_probe/registry.cpp"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-03 owning-ledger link"
+adaptation_rule = "pending: F-ED-03 rule citation"
+decision_row = "pending: F-ED-03 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = ["P09-C01"]
+candidate_children = []
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-03 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-03 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-03 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:RT-ED-005"
+[defect.cpp_result]
+status = "pending"
+reason = "Exact propertyKey record and setter/dirt closure have not been normalized."
+[defect.rust_result]
+status = "pending"
+reason = "Direct low-level execution and missing Scene interface must be recorded separately."
+[defect.editor_result]
+status = "pending"
+reason = "P09-C01 and the focused paywall reproduction are not yet bound to one fixture."
+
+[[defect]]
+id = "RT-ED-006"
+title = "Retracted final-framework symbol attribution"
+source_class = "retracted"
+state = "closed"
+owner_class = "artifact"
+classification = "retracted"
+ticket = "F-ED-00"
+fixture_id = "fed.rt_ed_006.retracted_symbol_attribution"
+preliminary_disposition = "Historical tombstone only."
+reproduction_sha256 = "ba98210446b1adfc262bcd68c5cc272a6139abd4291651cf26e934ab21eba127"
+rust_stimulus = "not-applicable: retracted framework-symbol attribution"
+cpp_stimulus = "not-applicable: retracted framework-symbol attribution"
+source_files = ["not-applicable: historical attribution tombstone"]
+source_members = ["not-applicable: no runtime member was implicated"]
+lifecycle_phases = ["historical-attribution"]
+rust_owner = "not-applicable: retracted observation"
+displaced_mechanism = "not-applicable: no implementation existed"
+dependencies = []
+target_tests = ["evidence-only:runtime-defects"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml"
+adaptation_rule = "not-applicable: retracted observation"
+decision_row = "not-applicable: retracted observation"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = []
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "not-applicable"
+reason = "Historical retraction requires no runtime execution."
+[defect.orchestrator_verification]
+status = "not-applicable"
+reason = "Retraction promotes no owning runtime ledger row."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:RT-ED-006"
+[[defect.history]]
+state = "reproduced"
+actor = "editor-cutover"
+evidence = "historical-symbol-audit"
+[[defect.history]]
+state = "retracted"
+actor = "editor-cutover"
+evidence = "corrected-framework-attribution"
+[[defect.history]]
+state = "closed"
+actor = "f-ed-orchestrator"
+evidence = "retained-tombstone"
+[defect.cpp_result]
+status = "not-applicable"
+reason = "The observation was misattributed and authorizes no runtime oracle."
+[defect.rust_result]
+status = "not-applicable"
+reason = "The observation was misattributed and authorizes no runtime change."
+[defect.editor_result]
+status = "not-applicable"
+reason = "The retracted observation has no product child."
+
+[[defect]]
+id = "RT-ED-007"
+title = "Nested ViewModel number cannot bind transition duration"
+source_class = "active-runtime-dependency"
+state = "reported"
+owner_class = "api"
+classification = "unqualified"
+ticket = "F-ED-04"
+fixture_id = "fed.rt_ed_007.nested_transition_duration"
+preliminary_disposition = "High-level Scene generalization gap; low-level nested resolution exists."
+reproduction_sha256 = "d2bddc7d08da8f34f5b2c960aa1af1b4e7582bd2b184fb6bcd88eb18917dc856"
+rust_stimulus = "pending: F-ED-04 must minimize the direct Rust stimulus for RT-ED-007"
+cpp_stimulus = "pending: F-ED-04 must minimize the pinned-C++ stimulus or prove no equivalent for RT-ED-007"
+source_files = ["pending: F-ED-04 source-file correspondence"]
+source_members = ["pending: F-ED-04 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-04 lifecycle qualification"]
+rust_owner = "pending: F-ED-04 exact Rust owner"
+displaced_mechanism = "pending: F-ED-04 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-04"]
+target_tests = ["cpp_probe/registry.cpp"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-04 owning-ledger link"
+adaptation_rule = "pending: F-ED-04 rule citation"
+decision_row = "pending: F-ED-04 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = ["P19-C09"]
+candidate_children = []
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-04 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-04 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-04 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:RT-ED-007"
+[defect.cpp_result]
+status = "pending"
+reason = "Nested source-path record shape has not been normalized at the current pin."
+[defect.rust_result]
+status = "pending"
+reason = "Existing resolver and missing typed Scene interface need separate evidence."
+[defect.editor_result]
+status = "pending"
+reason = "P19-C09 has not been rerun from the investigation base."
+
+[[defect]]
+id = "LOC-001"
+title = "Extended ViewModel values reset across a preserved-source edit"
+source_class = "candidate"
+state = "reported"
+owner_class = "api"
+classification = "unqualified"
+ticket = "F-ED-01"
+fixture_id = "fed.loc_001.extended_view_model_owner"
+preliminary_disposition = "Structural Scene ownership mistranslation is suspected."
+reproduction_sha256 = "2281423b29ebc3579c00554e4dd1ad2fff0efe1c0f5da25742d296973700e268"
+rust_stimulus = "pending: F-ED-01 must minimize the direct Rust stimulus for LOC-001"
+cpp_stimulus = "pending: F-ED-01 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-001"
+source_files = ["pending: F-ED-01 source-file correspondence"]
+source_members = ["pending: F-ED-01 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-01 lifecycle qualification"]
+rust_owner = "pending: F-ED-01 exact Rust owner"
+displaced_mechanism = "pending: F-ED-01 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-01"]
+target_tests = ["cpp_probe/registry.cpp"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-01 owning-ledger link"
+adaptation_rule = "pending: F-ED-01 rule citation"
+decision_row = "pending: F-ED-01 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P13-C07"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-01 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-01 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-01 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-001"
+[defect.cpp_result]
+status = "pending"
+reason = "One retained C++ ViewModel owner lifecycle has not been probed."
+[defect.rust_result]
+status = "pending"
+reason = "Direct Scene characterization must be rerun at the investigation base."
+[defect.editor_result]
+status = "pending"
+reason = "The linked product reproduction must be rerun after direct qualification."
+
+[[defect]]
+id = "LOC-002"
+title = "Selected-product relation does not re-evaluate after a preserved-source edit"
+source_class = "candidate"
+state = "reported"
+owner_class = "runtime"
+classification = "unqualified"
+ticket = "F-ED-02"
+fixture_id = "fed.loc_002.current_source_relation"
+preliminary_disposition = "Derived-relation rebind gap; may collapse into the stable owner slice."
+reproduction_sha256 = "ba7014eb700b6f97b3f1e05d2ab7062b9e83f64f767566864efa720ecdee4f6b"
+rust_stimulus = "pending: F-ED-02 must minimize the direct Rust stimulus for LOC-002"
+cpp_stimulus = "pending: F-ED-02 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-002"
+source_files = ["pending: F-ED-02 source-file correspondence"]
+source_members = ["pending: F-ED-02 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-02 lifecycle qualification"]
+rust_owner = "pending: F-ED-02 exact Rust owner"
+displaced_mechanism = "pending: F-ED-02 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-02"]
+target_tests = ["cpp_probe/registry.cpp"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-02 owning-ledger link"
+adaptation_rule = "pending: F-ED-02 rule citation"
+decision_row = "pending: F-ED-02 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P04-C11", "P09-C01", "P09-C03", "P09-C06"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-02 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-02 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-02 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-002"
+[defect.cpp_result]
+status = "pending"
+reason = "Immediate current-source evaluation has not been probed at the pin."
+[defect.rust_result]
+status = "pending"
+reason = "Retained and fresh direct relation fixtures need normalized records."
+[defect.editor_result]
+status = "pending"
+reason = "Four affected product children await the direct owner verdict."
+
+[[defect]]
+id = "LOC-003"
+title = "Typed listener surface cannot express long-press duration"
+source_class = "transferred-candidate"
+state = "closed"
+owner_class = "api"
+classification = "additive-product-feature"
+ticket = "F-ED-00"
+fixture_id = "fed.loc_003.long_press_listener"
+preliminary_disposition = "Closed as an unlinked additive product feature: exact C++ parity contains no timed-hold primitive, so no runtime port is authorized."
+reproduction_sha256 = "96d8be0757f53658794310389b0fa4ec0afd3b2676f5a7a849939c8772099e6b"
+rust_stimulus = "typed Scene/compiler 700ms long_press lowering fails closed with animation.interaction.unsupported_long_press_duration"
+cpp_stimulus = "source audit of listener_type.hpp and listener_group.cpp proves no held-duration primitive"
+source_files = ["include/rive/listener_type.hpp","src/listener_group.cpp","crates/nuxie/src/scene.rs","crates/nuxie-runtime/src/state_machine.rs"]
+source_members = ["ListenerType","ListenerGroup::processEvent","ViewModelListenerSpec","RuntimeStateMachineListenerType"]
+lifecycle_phases = ["pointer-down","pointer-up","listener-invocation","compiler-lowering"]
+rust_owner = "API/editor product decision; Rust runtime faithfully mirrors C++ listener types"
+displaced_mechanism = "not-applicable: no duration mechanism exists to displace"
+dependencies = []
+target_tests = ["source-audit+editor-compiler-test:interaction_animation_lowering::tests::projectdo_long_press_fails_closed_with_a_duration_specific_diagnostic"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml"
+adaptation_rule = "not-applicable: an implementation would be additive, not a C++ translation"
+decision_row = "user decision 2026-07-24: preserve exact C++ parity; do not invent a Rust-only long-press runtime primitive"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = []
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pass"
+command = "corrected fully-qualified compiler test plus pinned C++/Rust source audit"
+evidence = "Compiler test 1/1 green; C++ and Rust have no held-duration listener state."
+[defect.orchestrator_verification]
+status = "not-applicable"
+reason = "The user closed an unlinked additive feature; no runtime correspondence row is promoted."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-003"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "pinned C++/Rust listener vocabulary audit plus corrected compiler test 1/1"
+[[defect.history]]
+state = "user-decided"
+actor = "user"
+evidence = "preserve exact C++ parity; do not invent a timed-hold runtime primitive"
+[[defect.history]]
+state = "closed"
+actor = "f-ed-executor"
+evidence = "user decision: preserve exact C++ parity and do not invent a timed-hold runtime primitive"
+[defect.cpp_result]
+status = "not-applicable"
+reason = "Pinned C++ has click/down/up/drag listeners but no long-press or held-duration primitive; synthesizing one would be a new design."
+[defect.rust_result]
+status = "not-applicable"
+reason = "Rust faithfully mirrors the C++ listener vocabulary and stores no press-start duration state."
+[defect.editor_result]
+status = "pass"
+command = "cargo test --manifest-path tools/rive-compiler/Cargo.toml -p nuxie-scene-compiler interaction_animation_lowering::tests::projectdo_long_press_fails_closed_with_a_duration_specific_diagnostic -- --exact"
+evidence = "The corrected fully-qualified compiler regression passes 1/1 and proves unsupported timed long-press lowering fails closed."
+
+[[defect]]
+id = "LOC-004"
+title = "Animation-topology preview replaced excess runtime state"
+source_class = "resolved-editor-owned"
+state = "closed"
+owner_class = "editor"
+classification = "editor-integration-defect"
+ticket = "F-ED-00"
+fixture_id = "fed.loc_004.scoped_animation_remount"
+preliminary_disposition = "Resolved in Editor Next without a runtime change."
+reproduction_sha256 = "c6ff167f6887b48477bd4335bd65bd8149e8447ce52bb981e194469307d0ebd5"
+rust_stimulus = "ProductHost animation-topology edit remounts only the affected source artboard through retained Scene::edit"
+cpp_stimulus = "not-applicable: Editor-only remount integration defect"
+source_files = ["tools/nuxie-editor-next/crates/editor/src/scene_projection/mounted_scene.rs"]
+source_members = ["EditorSession retained Scene edit/remount path"]
+lifecycle_phases = ["edit","scoped-remount","retained-state-reuse"]
+rust_owner = "EditorSession retained Scene occurrence"
+displaced_mechanism = "Whole-Scene replacement on animation-topology edits"
+dependencies = []
+target_tests = ["evidence-only:editor-fix"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "nuxie-editor-next-parity-ledger.json:P13-C09"
+adaptation_rule = "not-applicable: Editor integration fix does not translate a C++ runtime owner"
+decision_row = "not-applicable: no runtime divergence"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = []
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = "e817c55c38ccc2ed643cbd2790e5c38c8f0082b3"
+consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+consumed_superproject_sha = "e817c55c38ccc2ed643cbd2790e5c38c8f0082b3"
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pass"
+command = "focused ProductHost animation-topology retained-Scene tests"
+evidence = "P13-C09 is complete at the pushed Editor checkpoint."
+[defect.orchestrator_verification]
+status = "not-applicable"
+reason = "Editor-owned resolved row promotes no runtime correspondence ledger."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-004"
+[[defect.history]]
+state = "reproduced"
+actor = "editor-cutover"
+evidence = "direct-editor-lifecycle"
+[[defect.history]]
+state = "qualified"
+actor = "editor-cutover"
+evidence = "editor-owner-localization"
+[[defect.history]]
+state = "handoff-ready"
+actor = "editor-cutover"
+evidence = "scoped-remount-repair"
+[[defect.history]]
+state = "editor-consumed"
+actor = "editor-cutover"
+evidence = "P13-C09-complete"
+[[defect.history]]
+state = "closed"
+actor = "f-ed-orchestrator"
+evidence = "source-artifact-resolution"
+[defect.cpp_result]
+status = "not-applicable"
+reason = "The first divergence was Editor Scene replacement, not runtime behavior."
+[defect.rust_result]
+status = "pass"
+command = "source-artifact:LOC-004:retained-scene-characterization"
+evidence = "runtime-defects:LOC-004"
+[defect.editor_result]
+status = "pass"
+command = "source-artifact:LOC-004:product-host-animation-topology"
+evidence = "runtime-defects:LOC-004:P13-C09-complete"
+
+[[defect]]
+id = "LOC-005"
+title = "One durable boolean instance does not reach two retained source instances"
+source_class = "candidate"
+state = "reported"
+owner_class = "api"
+classification = "unqualified"
+ticket = "F-ED-01"
+fixture_id = "fed.loc_005.shared_view_model_owner"
+preliminary_disposition = "Same suspected stable Scene ViewModel owner family as LOC-001."
+reproduction_sha256 = "bf2a9e0cac589e69224fb4bd1e810e05da61573f251b3ab613e4c1c4dac55b5c"
+rust_stimulus = "pending: F-ED-01 must minimize the direct Rust stimulus for LOC-005"
+cpp_stimulus = "pending: F-ED-01 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-005"
+source_files = ["pending: F-ED-01 source-file correspondence"]
+source_members = ["pending: F-ED-01 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-01 lifecycle qualification"]
+rust_owner = "pending: F-ED-01 exact Rust owner"
+displaced_mechanism = "pending: F-ED-01 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-01"]
+target_tests = ["cpp_probe/registry.cpp"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-01 owning-ledger link"
+adaptation_rule = "pending: F-ED-01 rule citation"
+decision_row = "pending: F-ED-01 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P09-C05"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-01 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-01 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-01 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-005"
+[defect.cpp_result]
+status = "pending"
+reason = "One application-owned C++ instance bound to two artboards has not been probed."
+[defect.rust_result]
+status = "pending"
+reason = "Direct Scene and low-level shared-instance cases need one normalized fixture."
+[defect.editor_result]
+status = "pending"
+reason = "P09-C05 awaits the identical direct owner proof."
+
+[[defect]]
+id = "LOC-006"
+title = "Nested conditional child remains in WebGL2 pixels after visibility write"
+source_class = "candidate"
+state = "reported"
+owner_class = "renderer"
+classification = "unqualified"
+ticket = "F-ED-08"
+fixture_id = "fed.loc_006.webgl2_stale_pixels"
+preliminary_disposition = "WebGL2 clip/composite candidate distinct from RT-ED-004."
+reproduction_sha256 = "ba5293f7547814f0db366abf1a34a98b6a59eece17e13cc249874e8996cbe568"
+rust_stimulus = "pending: F-ED-08 must minimize the direct Rust stimulus for LOC-006"
+cpp_stimulus = "pending: F-ED-08 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-006"
+source_files = ["pending: F-ED-08 source-file correspondence"]
+source_members = ["pending: F-ED-08 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-08 lifecycle qualification"]
+rust_owner = "pending: F-ED-08 exact Rust owner"
+displaced_mechanism = "pending: F-ED-08 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-08"]
+target_tests = ["pending:F-ED-08"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
+owning_ledger = "pending: F-ED-08 owning-ledger link"
+adaptation_rule = "pending: F-ED-08 rule citation"
+decision_row = "pending: F-ED-08 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P09-C04"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-08 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "pending"
+reason = "F-ED-08 must stamp backend, mode, features, surface, Dawn, and reference executable."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-08 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-08 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-006"
+[defect.cpp_result]
+status = "pending"
+reason = "Identical draw/hit/pixel fixture has not been run through the pinned reference."
+[defect.rust_result]
+status = "pending"
+reason = "Direct WebGL2 logical membership and pixel stages need normalization."
+[defect.editor_result]
+status = "pending"
+reason = "P09-C04 awaits direct backend localization."
+
+[[defect]]
+id = "LOC-007"
+title = "Retained presentation does not invalidate animated path dimensions"
+source_class = "candidate"
+state = "reported"
+owner_class = "runtime"
+classification = "unqualified"
+ticket = "F-ED-05"
+fixture_id = "fed.loc_007.parametric_path_dirt"
+preliminary_disposition = "High-confidence missing ParametricPath setter dirt callback."
+reproduction_sha256 = "77407599452bf4bcf1b1b13dc47907489d99ab5c7a5638f95cd4eab254659abc"
+rust_stimulus = "pending: F-ED-05 must minimize the direct Rust stimulus for LOC-007"
+cpp_stimulus = "pending: F-ED-05 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-007"
+source_files = ["pending: F-ED-05 source-file correspondence"]
+source_members = ["pending: F-ED-05 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-05 lifecycle qualification"]
+rust_owner = "pending: F-ED-05 exact Rust owner"
+displaced_mechanism = "pending: F-ED-05 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-05"]
+target_tests = ["cpp_probe/registry.cpp"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-05 owning-ledger link"
+adaptation_rule = "pending: F-ED-05 rule citation"
+decision_row = "pending: F-ED-05 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P11-C12"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-05 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-05 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-05 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-007"
+[defect.cpp_result]
+status = "pending"
+reason = "Width/height/origin callback and PathComposer closure have not been probed."
+[defect.rust_result]
+status = "pending"
+reason = "Retained geometry samples must be rerun without a resource-reset compensation."
+[defect.editor_result]
+status = "pending"
+reason = "P11-C12 awaits the direct dirt verdict."
+
+[[defect]]
+id = "LOC-008"
+title = "Editor projection cannot request exact intrinsic text measurement"
+source_class = "candidate"
+state = "reported"
+owner_class = "api"
+classification = "unqualified"
+ticket = "F-ED-09"
+fixture_id = "fed.loc_008.text_measurement_facade"
+preliminary_disposition = "Possible read-only typed facade over existing runtime shaping."
+reproduction_sha256 = "5ca6af05d8ea339c9d2d8d0dc8c37fcc4116c05e544ac720ef564d5c383315e1"
+rust_stimulus = "pending: F-ED-09 must minimize the direct Rust stimulus for LOC-008"
+cpp_stimulus = "pending: F-ED-09 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-008"
+source_files = ["pending: F-ED-09 source-file correspondence"]
+source_members = ["pending: F-ED-09 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-09 lifecycle qualification"]
+rust_owner = "pending: F-ED-09 exact Rust owner"
+displaced_mechanism = "pending: F-ED-09 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-09"]
+target_tests = ["cpp_probe/registry.cpp"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-09 owning-ledger link"
+adaptation_rule = "pending: F-ED-09 rule citation"
+decision_row = "pending: F-ED-09 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P08-C06"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-09 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-09 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-008"
+[defect.cpp_result]
+status = "pending"
+reason = "Exact runtime text measurement ownership has not been mapped."
+[defect.rust_result]
+status = "pending"
+reason = "Existing shaping/measurement path and missing public interface need separate evidence."
+[defect.editor_result]
+status = "pending"
+reason = "P08-C06 shares text symptoms with LOC-011 and awaits stage localization."
+
+[[defect]]
+id = "LOC-009"
+title = "Persisted GPU-canvas scene is rejected by typed WebGPU draw"
+source_class = "candidate"
+state = "reported"
+owner_class = "renderer"
+classification = "unqualified"
+ticket = "F-ED-11"
+fixture_id = "fed.loc_009.gpu_canvas_records"
+preliminary_disposition = "Scripted GPU-canvas execution defect; typed backend selection already succeeds."
+reproduction_sha256 = "43a4bec0b5d6e2cecec82e28666ae6d995dc7b327309fe0bb15a7ab7d1d8b78e"
+rust_stimulus = "pending: F-ED-11 must minimize the direct Rust stimulus for LOC-009"
+cpp_stimulus = "pending: F-ED-11 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-009"
+source_files = ["pending: F-ED-11 source-file correspondence"]
+source_members = ["pending: F-ED-11 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-11 lifecycle qualification"]
+rust_owner = "pending: F-ED-11 exact Rust owner"
+displaced_mechanism = "pending: F-ED-11 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-11"]
+target_tests = ["pending:F-ED-11"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
+owning_ledger = "pending: F-ED-11 owning-ledger link"
+adaptation_rule = "pending: F-ED-11 rule citation"
+decision_row = "pending: F-ED-11 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P14-C01"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-11 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "pending"
+reason = "F-ED-11 must stamp backend, mode, features, surface, Dawn, and reference executable."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-11 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-11 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-009"
+[defect.cpp_result]
+status = "pending"
+reason = "Identical persisted records, scripts, WGSL, resources, and time are not normalized."
+[defect.rust_result]
+status = "pending"
+reason = "RuntimeRejected needs a first differing stage, not a label."
+[defect.editor_result]
+status = "pending"
+reason = "P14-C01 awaits direct record/runtime localization."
+
+[[defect]]
+id = "LOC-011"
+title = "Explicit empty projection text renders an authoring placeholder"
+source_class = "candidate"
+state = "reported"
+owner_class = "runtime"
+classification = "unqualified"
+ticket = "F-ED-09"
+fixture_id = "fed.loc_011.empty_text_pipeline"
+preliminary_disposition = "Product symptom is real; import/bind/shaping/draw owner is unproved."
+reproduction_sha256 = "e70f95fd02649cf22c835cef6ee57f134cfa589fb3dd4bd60a7aaa97ffdb0b53"
+rust_stimulus = "pending: F-ED-09 must minimize the direct Rust stimulus for LOC-011"
+cpp_stimulus = "pending: F-ED-09 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-011"
+source_files = ["pending: F-ED-09 source-file correspondence"]
+source_members = ["pending: F-ED-09 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-09 lifecycle qualification"]
+rust_owner = "pending: F-ED-09 exact Rust owner"
+displaced_mechanism = "pending: F-ED-09 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-09"]
+target_tests = ["cpp_probe/registry.cpp"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-09 owning-ledger link"
+adaptation_rule = "pending: F-ED-09 rule citation"
+decision_row = "pending: F-ED-09 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P08-C06"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-09 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-09 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-011"
+[defect.cpp_result]
+status = "pending"
+reason = "Authored text through shaped runs and pixels has not been compared at the pin."
+[defect.rust_result]
+status = "pending"
+reason = "The first stage that introduces the placeholder is not yet proved."
+[defect.editor_result]
+status = "pending"
+reason = "P08-C06 shares measurement and empty-text candidates."
+
+[[defect]]
+id = "LOC-012"
+title = "One published artifact rasterizes differently across Rust backends"
+source_class = "candidate"
+state = "reported"
+owner_class = "renderer"
+classification = "unqualified"
+ticket = "F-ED-10"
+fixture_id = "fed.loc_012.backend_raster_decomposition"
+preliminary_disposition = "Renderer-backend differential with conflicting pixel counts."
+reproduction_sha256 = "8637e5eb0d472f75c8eb81a4bcb36dd40a44a7ed3ca9546b7eece439587c53e6"
+rust_stimulus = "pending: F-ED-10 must minimize the direct Rust stimulus for LOC-012"
+cpp_stimulus = "pending: F-ED-10 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-012"
+source_files = ["pending: F-ED-10 source-file correspondence"]
+source_members = ["pending: F-ED-10 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-10 lifecycle qualification"]
+rust_owner = "pending: F-ED-10 exact Rust owner"
+displaced_mechanism = "pending: F-ED-10 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-10"]
+target_tests = ["pending:F-ED-10"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
+owning_ledger = "pending: F-ED-10 owning-ledger link"
+adaptation_rule = "pending: F-ED-10 rule citation"
+decision_row = "pending: F-ED-10 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P19-C08"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-10 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "pending"
+reason = "F-ED-10 must stamp backend, mode, features, surface, Dawn, and reference executable."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-10 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-10 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-012"
+[defect.cpp_result]
+status = "pending"
+reason = "Applicable C++ renderer path and exact capture provenance are not normalized."
+[defect.rust_result]
+status = "pending"
+reason = "WebGPU and WebGL2 counts need mode-labeled artifacts."
+[defect.editor_result]
+status = "pending"
+reason = "P19-C08 awaits separation of text and feather effects."
+
+[[defect]]
+id = "LOC-013"
+title = "Authored variable-font weights collapse into one heavy Rust raster"
+source_class = "candidate"
+state = "reported"
+owner_class = "runtime"
+classification = "unqualified"
+ticket = "F-ED-09"
+fixture_id = "fed.loc_013.variable_font_pipeline"
+preliminary_disposition = "Text/font pipeline candidate with conflicting pixel counts."
+reproduction_sha256 = "d67a1e0784b9b69266147c22e5368cbf2e9909319d7d2a0130a6d1e9863f3099"
+rust_stimulus = "pending: F-ED-09 must minimize the direct Rust stimulus for LOC-013"
+cpp_stimulus = "pending: F-ED-09 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-013"
+source_files = ["pending: F-ED-09 source-file correspondence"]
+source_members = ["pending: F-ED-09 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-09 lifecycle qualification"]
+rust_owner = "pending: F-ED-09 exact Rust owner"
+displaced_mechanism = "pending: F-ED-09 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-09"]
+target_tests = ["cpp_probe/registry.cpp"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-09 owning-ledger link"
+adaptation_rule = "pending: F-ED-09 rule citation"
+decision_row = "pending: F-ED-09 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P08-C08"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-09 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-09 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-013"
+[defect.cpp_result]
+status = "pending"
+reason = "Identical font bytes, axes, glyphs, advances, and outlines are not recorded."
+[defect.rust_result]
+status = "pending"
+reason = "First differing font/shaping/raster stage is unproved."
+[defect.editor_result]
+status = "pending"
+reason = "P08-C08 awaits a mode-labeled direct font differential."
+
+[[defect]]
+id = "LOC-014"
+title = "Rust feather raster shifts and strengthens authored box shadows"
+source_class = "candidate"
+state = "reported"
+owner_class = "renderer"
+classification = "unqualified"
+ticket = "F-ED-10"
+fixture_id = "fed.loc_014.feather_owner"
+preliminary_disposition = "High-confidence backend mechanism divergence; symptom attribution remains unproved."
+reproduction_sha256 = "22aff767d33f85d33322abbee14d510b80bf6082ef1dbd60c068f5bf204d24c9"
+rust_stimulus = "pending: F-ED-10 must minimize the direct Rust stimulus for LOC-014"
+cpp_stimulus = "pending: F-ED-10 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-014"
+source_files = ["pending: F-ED-10 source-file correspondence"]
+source_members = ["pending: F-ED-10 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-10 lifecycle qualification"]
+rust_owner = "pending: F-ED-10 exact Rust owner"
+displaced_mechanism = "pending: F-ED-10 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-10"]
+target_tests = ["pending:F-ED-10"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
+owning_ledger = "pending: F-ED-10 owning-ledger link"
+adaptation_rule = "pending: F-ED-10 rule citation"
+decision_row = "pending: F-ED-10 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P08-C09"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-10 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "pending"
+reason = "F-ED-10 must stamp backend, mode, features, surface, Dawn, and reference executable."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-10 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-10 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-014"
+[defect.cpp_result]
+status = "pending"
+reason = "Feather/ShapePaint/LUT ownership has not been compared at the pin."
+[defect.rust_result]
+status = "pending"
+reason = "The local Gaussian image plan needs direct owner/resource evidence."
+[defect.editor_result]
+status = "pending"
+reason = "P08-C09 awaits direct renderer ownership classification."
+
+[[defect]]
+id = "LOC-015"
+title = "Projection corpus becomes terminal on its first iOS Metal draw"
+source_class = "artifact-candidate"
+state = "reported"
+owner_class = "artifact"
+classification = "unqualified"
+ticket = "F-ED-12"
+fixture_id = "fed.loc_015.apple_abi_1_6_draw"
+preliminary_disposition = "ABI 1.5 artifact evidence is stale; requalify with ABI 1.6."
+reproduction_sha256 = "84ac14687a0a3c2400b777576e8cdad61d29ec784ecc238896f0b5c013916ebf"
+rust_stimulus = "pending: F-ED-12 must minimize the direct Rust stimulus for LOC-015"
+cpp_stimulus = "pending: F-ED-12 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-015"
+source_files = ["pending: F-ED-12 source-file correspondence"]
+source_members = ["pending: F-ED-12 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-12 lifecycle qualification"]
+rust_owner = "pending: F-ED-12 exact Rust owner"
+displaced_mechanism = "pending: F-ED-12 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-12"]
+target_tests = ["pending:F-ED-12"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-12 owning-ledger link"
+adaptation_rule = "pending: F-ED-12 rule citation"
+decision_row = "pending: F-ED-12 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P18-C01", "P18-C04", "P18-C05", "P18-C07"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-12 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-12 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-015"
+[defect.cpp_result]
+status = "not-applicable"
+reason = "The row is a published Apple artifact/ABI observation."
+[defect.rust_result]
+status = "pending"
+reason = "Local ABI 1.6 artifact has not been built and qualified by F-ED."
+[defect.editor_result]
+status = "pending"
+reason = "Native product rerun waits for approved publication and SDK consumption."
+
+[[defect]]
+id = "LOC-016"
+title = "Shipped iOS ABI exposes named linear animations only as fallback"
+source_class = "artifact-candidate"
+state = "reported"
+owner_class = "artifact"
+classification = "unqualified"
+ticket = "F-ED-12"
+fixture_id = "fed.loc_016.apple_abi_1_6_animation_selector"
+preliminary_disposition = "Source implementation exists; immutable artifact and SDK are stale."
+reproduction_sha256 = "7ab28da2b22fb9fac48cd866b3f3b4bef7c283bef7a5667b2692c8f7446a75b3"
+rust_stimulus = "pending: F-ED-12 must minimize the direct Rust stimulus for LOC-016"
+cpp_stimulus = "pending: F-ED-12 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-016"
+source_files = ["pending: F-ED-12 source-file correspondence"]
+source_members = ["pending: F-ED-12 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-12 lifecycle qualification"]
+rust_owner = "pending: F-ED-12 exact Rust owner"
+displaced_mechanism = "pending: F-ED-12 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-12"]
+target_tests = ["pending:F-ED-12"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-12 owning-ledger link"
+adaptation_rule = "pending: F-ED-12 rule citation"
+decision_row = "pending: F-ED-12 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P18-C01", "P18-C04"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-12 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-12 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-016"
+[defect.cpp_result]
+status = "not-applicable"
+reason = "The row is an Apple artifact/publication observation."
+[defect.rust_result]
+status = "pending"
+reason = "ABI 1.6 typed animation selection needs local artifact evidence."
+[defect.editor_result]
+status = "pending"
+reason = "SDK consumption waits for the user publication checkpoint."
+
+[[defect]]
+id = "LOC-017"
+title = "Exact native Metal corpus pixels diverge from producer expectations"
+source_class = "artifact-candidate"
+state = "reported"
+owner_class = "artifact"
+classification = "unqualified"
+ticket = "F-ED-12"
+fixture_id = "fed.loc_017.apple_abi_1_6_native_corpus"
+preliminary_disposition = "Old native capture is invalid until ABI 1.6 typed player/time and host composition."
+reproduction_sha256 = "2bee06a8adfb8a7e086d8be2fd3fc2f30f71c30f347abeecfa322a6038ae8486"
+rust_stimulus = "pending: F-ED-12 must minimize the direct Rust stimulus for LOC-017"
+cpp_stimulus = "pending: F-ED-12 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-017"
+source_files = ["pending: F-ED-12 source-file correspondence"]
+source_members = ["pending: F-ED-12 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-12 lifecycle qualification"]
+rust_owner = "pending: F-ED-12 exact Rust owner"
+displaced_mechanism = "pending: F-ED-12 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-12"]
+target_tests = ["pending:F-ED-12"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-12 owning-ledger link"
+adaptation_rule = "pending: F-ED-12 rule citation"
+decision_row = "pending: F-ED-12 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P18-C07"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-12 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-12 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-017"
+[defect.cpp_result]
+status = "not-applicable"
+reason = "The row is a native artifact/host-composition observation."
+[defect.rust_result]
+status = "pending"
+reason = "ABI 1.6 native corpus has not been captured with typed player/time."
+[defect.editor_result]
+status = "pending"
+reason = "Corrected product rerun waits for approved artifact publication."
+
+[[defect]]
+id = "LOC-018"
+title = "Legacy and Rust device/content raster diverges after chrome convergence"
+source_class = "candidate"
+state = "reported"
+owner_class = "editor"
+classification = "unqualified"
+ticket = "F-ED-13"
+fixture_id = "fed.loc_018.record_normalization"
+preliminary_disposition = "Evidence/localization gap; records must be identical before renderer attribution."
+reproduction_sha256 = "c4cc8d29e09836c2ecedec11ddc25c7886f86244c1796c22af661d1c4d3113bf"
+rust_stimulus = "pending: F-ED-13 must minimize the direct Rust stimulus for LOC-018"
+cpp_stimulus = "pending: F-ED-13 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-018"
+source_files = ["pending: F-ED-13 source-file correspondence"]
+source_members = ["pending: F-ED-13 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-13 lifecycle qualification"]
+rust_owner = "pending: F-ED-13 exact Rust owner"
+displaced_mechanism = "pending: F-ED-13 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-13"]
+target_tests = ["pending:F-ED-13"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
+owning_ledger = "pending: F-ED-13 owning-ledger link"
+adaptation_rule = "pending: F-ED-13 rule citation"
+decision_row = "pending: F-ED-13 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P04-C12", "P07-C04"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-13 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "not-applicable"
+reason = "This row does not qualify renderer output."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-13 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-13 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-018"
+[defect.cpp_result]
+status = "pending"
+reason = "Legacy producer records and applicable reference path are not normalized."
+[defect.rust_result]
+status = "pending"
+reason = "Typed records, resource hashes, order, time, surface, and composition need comparison."
+[defect.editor_result]
+status = "pending"
+reason = "The landed checkpoint links P04-C12 and P07-C04 to LOC-018; normalized direct records are still pending."
+
+[[defect]]
+id = "LOC-019"
+title = "Browser WebGPU setup aborts before auto fallback can run"
+source_class = "candidate"
+state = "reported"
+owner_class = "renderer"
+classification = "unqualified"
+ticket = "F-ED-11"
+fixture_id = "fed.loc_019.webgpu_setup_fallback"
+preliminary_disposition = "Browser adapter setup/fallback defect distinct from GPU-canvas execution."
+reproduction_sha256 = "a0cd07f45cbb2691e33b62685d04d5ec13fdd1216eb194f15bc82f65e5d3981f"
+rust_stimulus = "pending: F-ED-11 must minimize the direct Rust stimulus for LOC-019"
+cpp_stimulus = "pending: F-ED-11 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-019"
+source_files = ["pending: F-ED-11 source-file correspondence"]
+source_members = ["pending: F-ED-11 state-bearing member correspondence"]
+lifecycle_phases = ["pending: F-ED-11 lifecycle qualification"]
+rust_owner = "pending: F-ED-11 exact Rust owner"
+displaced_mechanism = "pending: F-ED-11 displaced-mechanism inventory"
+dependencies = ["F-ED-00B","F-ED-11"]
+target_tests = ["pending:F-ED-11"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
+owning_ledger = "pending: F-ED-11 owning-ledger link"
+adaptation_rule = "pending: F-ED-11 rule citation"
+decision_row = "pending: F-ED-11 decision-row disposition"
+touch = []
+dont_touch = ["@active-fl-lease"]
+formal_children = []
+candidate_children = ["P14-C06"]
+disputed_children = []
+[defect.artifact_hashes]
+proposal = "2ff7bf172d5867808078b2ad10d1b0315c502fbb43194395b39c7febb5abb130"
+runtime_defects = "6c99b42c12ea3f698f8da66dcb70cfb9a35c9dc0420a04bd1f45b70520d12055"
+parity_ledger = "da024a3450d99769c0b2ab847ec9259e23feee3a74d438264cb18429b5cb85b4"
+[defect.revisions]
+original_localization_rust_sha = { status = "pending", reason = "F-ED-11 must recover the original localization Rust SHA" }
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
+merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
+consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+[defect.renderer_provenance]
+status = "pending"
+reason = "F-ED-11 must stamp backend, mode, features, surface, Dawn, and reference executable."
+[defect.executor_verification]
+status = "pending"
+reason = "F-ED-11 executor fixture has not run."
+[defect.orchestrator_verification]
+status = "pending"
+reason = "F-ED-11 has no executor-green result to verify."
+[[defect.history]]
+state = "reported"
+actor = "editor-cutover"
+evidence = "runtime-defects:LOC-019"
+[defect.cpp_result]
+status = "not-applicable"
+reason = "Browser WebGPU setup/fallback has no pinned C++ runtime equivalent."
+[defect.rust_result]
+status = "pending"
+reason = "Forced and Auto setup errors/fallback need direct browser evidence."
+[defect.editor_result]
+status = "pending"
+reason = "P14-C06 awaits direct adapter lifecycle localization."

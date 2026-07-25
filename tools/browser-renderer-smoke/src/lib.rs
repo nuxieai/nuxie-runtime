@@ -226,9 +226,10 @@ fn fs_main() -> @location(0) vec4<f32> {
             .await
             .map_err(js_error)?;
         let shader = imported_gpu_canvas_shader(IMPORTED_WGSL);
+        let shader = factory.make_gpu_canvas_shader(&shader).map_err(js_error)?;
         let plan = imported_gpu_canvas_plan(32, 24, [0.0, 0.0, 1.0, 1.0]);
         let image = factory
-            .make_gpu_canvas_image(&shader, &plan)
+            .make_gpu_canvas_image(&shader, &shader, &plan)
             .map_err(js_error)?;
         let mut frame = factory.begin_frame(0xff00_0000).map_err(js_error)?;
         frame.draw_image(
@@ -339,8 +340,11 @@ fn fs_main() -> @location(0) vec4<f32> {
         let mut factory = BrowserFactory::new(canvas, 8, 8).await.map_err(js_error)?;
         let unrelated = factory.begin_frame(0xff12_3456).map_err(js_error)?;
         let invalid_shader = imported_gpu_canvas_shader(INVALID_IMPORTED_WGSL);
+        let invalid_shader = factory
+            .make_gpu_canvas_shader(&invalid_shader)
+            .map_err(js_error)?;
         let plan = imported_gpu_canvas_plan(8, 8, [0.0, 0.0, 0.0, 1.0]);
-        match factory.make_gpu_canvas_image(&invalid_shader, &plan) {
+        match factory.make_gpu_canvas_image(&invalid_shader, &invalid_shader, &plan) {
             Err(error) if error.to_string().contains("vertex inputs") => {}
             Err(error) => {
                 return Err(JsValue::from_str(&format!(
@@ -363,8 +367,11 @@ fn fs_main() -> @location(0) vec4<f32> {
             ));
         }
         let valid_shader = imported_gpu_canvas_shader(IMPORTED_WGSL);
+        let valid_shader = factory
+            .make_gpu_canvas_shader(&valid_shader)
+            .map_err(js_error)?;
         let valid_image = factory
-            .make_gpu_canvas_image(&valid_shader, &plan)
+            .make_gpu_canvas_image(&valid_shader, &valid_shader, &plan)
             .map_err(js_error)?;
         let mut valid_frame = factory.begin_frame(0xff65_4321).map_err(js_error)?;
         valid_frame.draw_image(
@@ -448,7 +455,8 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
                 bytes: vec![0; 16],
             })
             .collect();
-        match factory.make_gpu_canvas_image(&shader, &plan) {
+        let shader = factory.make_gpu_canvas_shader(&shader).map_err(js_error)?;
+        match factory.make_gpu_canvas_image(&shader, &shader, &plan) {
             Err(error) if error.to_string().contains("uniform buffers") => {}
             Err(error) => {
                 return Err(JsValue::from_str(&format!(
@@ -471,8 +479,12 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
             ));
         }
         let valid_plan = imported_gpu_canvas_plan(8, 8, [0.0, 0.0, 0.0, 1.0]);
+        let valid_shader = imported_gpu_canvas_shader(IMPORTED_WGSL);
+        let valid_shader = factory
+            .make_gpu_canvas_shader(&valid_shader)
+            .map_err(js_error)?;
         let valid_image = factory
-            .make_gpu_canvas_image(&imported_gpu_canvas_shader(IMPORTED_WGSL), &valid_plan)
+            .make_gpu_canvas_image(&valid_shader, &valid_shader, &valid_plan)
             .map_err(js_error)?;
         let mut valid_frame = factory.begin_frame(0xff65_4321).map_err(js_error)?;
         valid_frame.draw_image(

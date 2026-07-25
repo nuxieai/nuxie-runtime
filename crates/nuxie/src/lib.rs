@@ -8,7 +8,10 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[cfg(feature = "scripting")]
-use std::{cell::RefCell, collections::VecDeque};
+use std::{
+    cell::RefCell,
+    collections::{BTreeSet, VecDeque},
+};
 
 use anyhow::{Context, Result, bail};
 // The facade always retains ScriptAsset contents because pure-Rust ProjectDO
@@ -51,8 +54,8 @@ pub use nuxie_render_api::{
     GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
     GpuCanvasShaderTextureViewDimension, ImageDecodeError, ImageFilter, ImageSampler, ImageWrap,
     Mat2D, PathVerb, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
-    StrokeJoin, Vec2D,
+    RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
+    Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 #[cfg(all(feature = "renderer", any(target_os = "ios", target_os = "macos")))]
 pub use nuxie_renderer::{
@@ -139,6 +142,7 @@ struct FileScriptAsset {
     ordinal: usize,
     global_id: u32,
     type_name: &'static str,
+    bare_name: String,
     name: String,
     scope: ScopeKey,
     is_module: bool,
@@ -207,6 +211,7 @@ impl FileScriptRuntime {
                     ordinal: entry.ordinal,
                     global_id: entry.asset.id,
                     type_name: entry.asset.type_name,
+                    bare_name: name.to_owned(),
                     name: if folder.is_empty() {
                         name.to_owned()
                     } else {
@@ -301,13 +306,24 @@ impl FileScriptRuntime {
             vm.add_import(import.caller, &import.name, import.target);
         }
         let assets = self.assets.as_ref();
+        let mut registered_shader_aliases = BTreeSet::new();
         for asset in assets
             .iter()
             .filter(|asset| asset.type_name == "ShaderAsset")
         {
-            let payload = required_script_payload(asset, "shader registration")?;
-            vm.register_gpu_canvas_shader_asset(&asset.name, payload)
-                .map_err(|error| asset_phase_error(asset, "shader registration", error))?;
+            let aliases = [&asset.bare_name, &asset.name]
+                .into_iter()
+                .filter(|alias| registered_shader_aliases.insert((*alias).clone()))
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            if aliases.is_empty() {
+                continue;
+            }
+            vm.register_gpu_canvas_shader_asset_aliases(
+                &aliases,
+                asset.payload.as_deref().unwrap_or_default(),
+            )
+            .map_err(|error| asset_phase_error(asset, "shader registration", error))?;
         }
         let mut pending = assets
             .iter()

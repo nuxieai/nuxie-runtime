@@ -47,8 +47,8 @@ use nuxie_image_codec::{
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
     ImageDecodeError, ImageSampler, Mat2D, PathVerb, RawPath, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
-    Renderer, StrokeCap, StrokeJoin, Vec2D,
+    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
+    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 use std::any::Any;
 #[cfg(test)]
@@ -1318,12 +1318,20 @@ impl Factory for WgpuFactory {
         }))
     }
 
-    fn make_gpu_canvas_image(
+    fn make_gpu_canvas_shader(
         &mut self,
         shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.make_imported_gpu_canvas_shader(shader)
+    }
+
+    fn make_gpu_canvas_image(
+        &mut self,
+        vertex_shader: &Arc<dyn RenderGpuCanvasShader>,
+        fragment_shader: &Arc<dyn RenderGpuCanvasShader>,
         plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
-        self.make_imported_gpu_canvas_image(shader, plan)
+        self.make_imported_gpu_canvas_image(vertex_shader, fragment_shader, plan)
     }
 }
 

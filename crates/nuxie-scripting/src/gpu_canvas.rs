@@ -8,20 +8,22 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use luaur_rt::{
-    AnyUserData, Buffer as LuaBuffer, Function, Table, UserData, UserDataFields, UserDataMethods,
-    Value, VmState,
+    AnyUserData, Buffer as LuaBuffer, Function, MultiValue, Table, UserData, UserDataFields,
+    UserDataMethods, Value, VmState,
 };
 use nuxie_render_api::{
     Factory as RenderFactory, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
-    GpuCanvasShaderEntrySelection, GpuCanvasShaderStage, RenderImage,
+    GpuCanvasShaderEntrySelection, GpuCanvasShaderStage, RenderGpuCanvasShader, RenderImage,
 };
 pub use nuxie_render_api::{
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 
-use crate::vm::{Error, Result, ScriptVm};
+use crate::shader_asset::ShaderAsset;
+use crate::vm::{Error, RendererBindings, Result, ScriptVm};
 
 /// Product GPU-canvas resource fences. These are deliberately below WebGPU's
 /// portable minimum limits so malformed authored scripts fail in Rust before
@@ -119,17 +121,30 @@ fn checked_gpu_buffer_write_range(
     Ok((offset, end))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct GpuShader {
     name: String,
     entries: Vec<GpuCanvasShaderEntry>,
+    module: Option<Arc<dyn RenderGpuCanvasShader>>,
+}
+
+impl std::fmt::Debug for GpuShader {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GpuShader")
+            .field("name", &self.name)
+            .field("entries", &self.entries)
+            .field("has_module", &self.module.is_some())
+            .finish()
+    }
 }
 
 impl UserData for GpuShader {}
 
 #[derive(Debug, Clone)]
 struct GpuPipeline {
-    shader_name: String,
+    vertex_shader: GpuShader,
+    fragment_shader: GpuShader,
     vertex_entry: GpuCanvasShaderEntrySelection,
     fragment_entry: GpuCanvasShaderEntrySelection,
     vertex_layouts: Vec<GpuCanvasVertexLayout>,
@@ -160,7 +175,8 @@ impl UserData for GpuBindGroup {}
 
 #[derive(Debug)]
 struct CompletedGpuCanvasPass {
-    shader_name: String,
+    vertex_shader: GpuShader,
+    fragment_shader: GpuShader,
     plan: GpuCanvasDrawPlan,
 }
 
@@ -270,10 +286,106 @@ pub(crate) struct ScriptedImageSampler(pub(crate) nuxie_render_api::ImageSampler
 
 impl UserData for ScriptedImageSampler {}
 
+#[derive(Debug)]
+pub(crate) struct RegisteredGpuCanvasShaderAsset {
+    asset: RegisteredGpuCanvasShaderAssetState,
+    decoded: Option<GpuCanvasShader>,
+}
+
+#[derive(Debug)]
+enum RegisteredGpuCanvasShaderAssetState {
+    Valid(ShaderAsset),
+    Invalid(String),
+}
+
+impl RegisteredGpuCanvasShaderAsset {
+    pub(crate) fn new(name: &str, payload: &[u8]) -> Self {
+        let asset = match ShaderAsset::decode(name, payload) {
+            Ok(asset) => RegisteredGpuCanvasShaderAssetState::Valid(asset),
+            Err(error) => RegisteredGpuCanvasShaderAssetState::Invalid(format!(
+                "ShaderAsset '{name}' neutral decode failed: {error}"
+            )),
+        };
+        Self {
+            asset,
+            decoded: None,
+        }
+    }
+
+    fn resolve(&mut self, name: &str) -> Result<&GpuCanvasShader> {
+        if self.decoded.is_none() {
+            let asset = match &self.asset {
+                RegisteredGpuCanvasShaderAssetState::Valid(asset) => asset,
+                RegisteredGpuCanvasShaderAssetState::Invalid(error) => {
+                    return Err(Error::runtime(error.clone()));
+                }
+            };
+            self.decoded = Some(asset.decode_webgpu(name)?);
+        }
+        self.decoded.as_ref().ok_or_else(|| {
+            Error::runtime(format!(
+                "GPU-canvas shader '{name}' resolved without a decoded shader"
+            ))
+        })
+    }
+}
+
+pub(crate) type ImportedGpuCanvasShaderAssetOwner = Rc<RefCell<RegisteredGpuCanvasShaderAsset>>;
+pub(crate) type ImportedGpuCanvasShaderAssets =
+    Rc<RefCell<BTreeMap<String, ImportedGpuCanvasShaderAssetOwner>>>;
+
 #[derive(Debug, Clone)]
+enum GpuCanvasShaderCatalog {
+    Direct(Rc<BTreeMap<String, Vec<GpuCanvasShaderEntry>>>),
+    Imported(ImportedGpuCanvasShaderAssets),
+}
+
+impl GpuCanvasShaderCatalog {
+    fn shader(
+        &self,
+        name: &str,
+        renderer_bindings: Option<&RendererBindings>,
+    ) -> Option<GpuShader> {
+        match self {
+            Self::Direct(shaders) => {
+                let entries = shaders.get(name)?.clone();
+                if entries.is_empty() {
+                    return None;
+                }
+                Some(GpuShader {
+                    name: name.to_owned(),
+                    entries,
+                    module: None,
+                })
+            }
+            Self::Imported(shaders) => {
+                let owner = Rc::clone(shaders.borrow().get(name)?);
+                let shader = owner.borrow_mut().resolve(name).ok()?.clone();
+                if shader.entries.is_empty() {
+                    return None;
+                }
+                let module = renderer_bindings?
+                    .with_factory(|factory| {
+                        factory
+                            .make_gpu_canvas_shader(&shader)
+                            .map_err(|error| Error::runtime(error.to_string()))
+                    })
+                    .ok()?;
+                Some(GpuShader {
+                    name: name.to_owned(),
+                    entries: shader.entries,
+                    module: Some(module),
+                })
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct GpuCanvasContextBindings {
     canvas: GpuCanvas,
-    shader_entries: Rc<BTreeMap<String, Vec<GpuCanvasShaderEntry>>>,
+    shaders: GpuCanvasShaderCatalog,
+    renderer_bindings: Option<RendererBindings>,
 }
 
 impl GpuCanvasContextBindings {
@@ -281,20 +393,12 @@ impl GpuCanvasContextBindings {
         lua.create_userdata(self.canvas.clone())
     }
 
-    pub(crate) fn shader_userdata(&self, lua: &luaur_rt::Lua, name: String) -> Result<AnyUserData> {
-        let entries = self
-            .shader_entries
-            .get(&name)
-            .ok_or_else(|| Error::runtime(format!("GPU-canvas shader '{name}' is unavailable")))?;
-        if entries.is_empty() {
-            return Err(Error::runtime(format!(
-                "GPU-canvas shader '{name}' is unavailable"
-            )));
-        }
-        lua.create_userdata(GpuShader {
-            name,
-            entries: entries.clone(),
-        })
+    pub(crate) fn shader_userdata(&self, lua: &luaur_rt::Lua, name: String) -> Result<MultiValue> {
+        let Some(shader) = self.shaders.shader(&name, self.renderer_bindings.as_ref()) else {
+            return Ok(MultiValue::new());
+        };
+        lua.create_userdata(shader)
+            .map(|shader| MultiValue::from_vec(vec![Value::UserData(shader)]))
     }
 }
 
@@ -311,28 +415,29 @@ impl UserData for GpuCanvasContextBindings {
 /// share this state, while canonical shader bytes remain VM-owned.
 pub(crate) struct ImportedGpuCanvasInstance {
     state: Rc<RefCell<GpuCanvasState>>,
-    shaders: Rc<RefCell<BTreeMap<String, GpuCanvasShader>>>,
+    renderer_bindings: RendererBindings,
 }
 
 impl ImportedGpuCanvasInstance {
     pub(crate) fn new(
-        shaders: Rc<RefCell<BTreeMap<String, GpuCanvasShader>>>,
+        shaders: ImportedGpuCanvasShaderAssets,
+        renderer_bindings: RendererBindings,
     ) -> (Self, GpuCanvasContextBindings) {
         let state = Rc::new(RefCell::new(GpuCanvasState::default()));
-        let shader_entries = Rc::new(
-            shaders
-                .borrow()
-                .iter()
-                .map(|(name, shader)| (name.clone(), shader.entries.clone()))
-                .collect(),
-        );
         let bindings = GpuCanvasContextBindings {
             canvas: GpuCanvas {
                 state: Rc::clone(&state),
             },
-            shader_entries,
+            shaders: GpuCanvasShaderCatalog::Imported(Rc::clone(&shaders)),
+            renderer_bindings: Some(renderer_bindings.clone()),
         };
-        (Self { state, shaders }, bindings)
+        (
+            Self {
+                state,
+                renderer_bindings,
+            },
+            bindings,
+        )
     }
 
     pub(crate) fn execute_draw_canvas(
@@ -349,22 +454,21 @@ impl ImportedGpuCanvasInstance {
             state.completed = None;
             state.image = None;
         }
-        function.call::<()>((table.clone(),))?;
+        self.renderer_bindings
+            .with_factory_context(factory, || function.call::<()>((table.clone(),)))?;
         let completed =
             self.state.borrow_mut().completed.take().ok_or_else(|| {
                 Error::runtime("gpu-canvas drawCanvas did not finish a render pass")
             })?;
-        let shaders = self.shaders.borrow();
-        let shader = shaders.get(&completed.shader_name).ok_or_else(|| {
-            Error::runtime(format!(
-                "GPU-canvas shader '{}' is unavailable",
-                completed.shader_name
-            ))
+        let vertex_shader = completed.vertex_shader.module.as_ref().ok_or_else(|| {
+            Error::runtime("GPU-canvas vertex shader has no backend module occurrence")
+        })?;
+        let fragment_shader = completed.fragment_shader.module.as_ref().ok_or_else(|| {
+            Error::runtime("GPU-canvas fragment shader has no backend module occurrence")
         })?;
         let image = factory
-            .make_gpu_canvas_image(shader, &completed.plan)
+            .make_gpu_canvas_image(vertex_shader, fragment_shader, &completed.plan)
             .map_err(|error| Error::runtime(format!("GPU-canvas render failed: {error}")))?;
-        drop(shaders);
         self.state.borrow_mut().image = Some(image);
         Ok(())
     }
@@ -610,7 +714,8 @@ impl UserData for GpuRenderPass {
             };
             drop(state);
             this.state.borrow_mut().completed = Some(CompletedGpuCanvasPass {
-                shader_name: pipeline.shader_name.clone(),
+                vertex_shader: pipeline.vertex_shader.clone(),
+                fragment_shader: pipeline.fragment_shader.clone(),
                 plan,
             });
             this.finished = true;
@@ -676,7 +781,7 @@ impl GpuCanvasProgram {
             canvas: GpuCanvas {
                 state: Rc::clone(&state),
             },
-            shader_entries: Rc::new(BTreeMap::from([(
+            shaders: GpuCanvasShaderCatalog::Direct(Rc::new(BTreeMap::from([(
                 "scene".into(),
                 vec![
                     GpuCanvasShaderEntry {
@@ -690,7 +795,8 @@ impl GpuCanvasProgram {
                         physical_entry_point: "fs_main".into(),
                     },
                 ],
-            )])),
+            )]))),
+            renderer_bindings: None,
         };
         let context = vm.lua().create_userdata(bindings)?;
         let chunk = vm
@@ -920,16 +1026,14 @@ fn install_gpu_canvas_globals_with_budget(
             GpuCanvasShaderStage::Vertex,
             "vertex",
         )?;
-        let (fragment, fragment_entry) = decode_pipeline_stage(
-            descriptor.get("fragment")?,
-            GpuCanvasShaderStage::Fragment,
-            "fragment",
-        )?;
-        if vertex.name != fragment.name {
-            return Err(Error::runtime(
-                "GPU pipeline vertex and fragment shaders must share one module",
-            ));
-        }
+        let fragment_value: Value = descriptor.get("fragment")?;
+        let (fragment, fragment_entry) = if matches!(fragment_value, Value::Nil) {
+            let fragment_entry =
+                resolve_shader_entry(&vertex, GpuCanvasShaderStage::Fragment, None, "fragment")?;
+            (vertex.clone(), fragment_entry)
+        } else {
+            decode_pipeline_stage(fragment_value, GpuCanvasShaderStage::Fragment, "fragment")?
+        };
         let targets: Table = descriptor.get("colorTargets")?;
         if targets.raw_len() != 1 {
             return Err(Error::runtime(
@@ -944,7 +1048,8 @@ fn install_gpu_canvas_globals_with_budget(
             ));
         }
         lua.create_userdata(GpuPipeline {
-            shader_name: vertex.name.clone(),
+            vertex_shader: vertex,
+            fragment_shader: fragment,
             vertex_entry,
             fragment_entry,
             vertex_layouts: decode_vertex_layouts(&descriptor)?,
@@ -1186,6 +1291,7 @@ mod tests {
                     physical_entry_point: "physical_fragment_1".into(),
                 },
             ],
+            module: None,
         };
 
         let default = resolve_shader_entry(&shader, GpuCanvasShaderStage::Vertex, None, "vertex")

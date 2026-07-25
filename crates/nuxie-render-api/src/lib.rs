@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub type ColorInt = u32;
@@ -531,6 +532,14 @@ pub trait RenderShader: Any {
     fn as_any(&self) -> &dyn Any;
 }
 
+/// One opaque, lookup-owned authored GPU-canvas shader module.
+///
+/// Each `context:shader` occurrence owns one of these handles. Backends retain
+/// their device/domain identity and physical shader module behind this seam.
+pub trait RenderGpuCanvasShader: Any {
+    fn as_any(&self) -> &dyn Any;
+}
+
 pub trait RenderImage: Any {
     fn as_any(&self) -> &dyn Any;
     fn width(&self) -> u32;
@@ -819,6 +828,15 @@ pub trait Factory {
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint>;
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError>;
 
+    /// Parse, validate, and materialize one fresh authored shader occurrence
+    /// in this factory's backend/device domain.
+    fn make_gpu_canvas_shader(
+        &mut self,
+        _shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        Err(GpuCanvasError::unsupported())
+    }
+
     /// Execute one imported GPU-canvas plan and retain its result as a normal
     /// render image suitable for `Renderer::draw_image`.
     ///
@@ -827,7 +845,8 @@ pub trait Factory {
     /// scripting surface exists.
     fn make_gpu_canvas_image(
         &mut self,
-        _shader: &GpuCanvasShader,
+        _vertex_shader: &Arc<dyn RenderGpuCanvasShader>,
+        _fragment_shader: &Arc<dyn RenderGpuCanvasShader>,
         _plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
         Err(GpuCanvasError::unsupported())

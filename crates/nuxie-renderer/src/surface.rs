@@ -1,6 +1,6 @@
 //! Apple drawable presentation for the retained WebGPU renderer.
 
-use super::present_pipeline::PresentPipeline;
+use super::present_pipeline::{PresentPipeline, PresentTargetAlpha};
 use super::{RenderMode, RendererError, WgpuFactory, WgpuFrame, WgpuFrameMetrics};
 use block2::RcBlock;
 use objc2::rc::Retained;
@@ -150,6 +150,7 @@ impl AppleSurface {
             presenter: PresentPipeline::new(
                 &factory.context.device,
                 wgpu::TextureFormat::Bgra8Unorm,
+                PresentTargetAlpha::Straight,
             ),
             width,
             height,
@@ -714,8 +715,11 @@ mod tests {
                 view_formats: &[],
             });
         let view = target.create_view(&wgpu::TextureViewDescriptor::default());
-        let presenter =
-            PresentPipeline::new(&factory.context.device, wgpu::TextureFormat::Bgra8Unorm);
+        let presenter = PresentPipeline::new(
+            &factory.context.device,
+            wgpu::TextureFormat::Bgra8Unorm,
+            PresentTargetAlpha::Straight,
+        );
 
         factory
             .begin_frame(0xff11_2233)
@@ -758,8 +762,7 @@ mod tests {
         assert_eq!(&mapped[..4], &[0x33, 0x22, 0x11, 0xff]);
     }
 
-    #[test]
-    fn present_pipeline_converts_premultiplied_frames_to_straight_surface_alpha() {
+    fn half_alpha_red_presented_pixel(target_alpha: PresentTargetAlpha) -> [u8; 4] {
         let factory = WgpuFactory::new_with_mode(1, 1, RenderMode::Msaa).unwrap();
         let target = factory
             .context
@@ -779,8 +782,11 @@ mod tests {
                 view_formats: &[],
             });
         let view = target.create_view(&wgpu::TextureViewDescriptor::default());
-        let presenter =
-            PresentPipeline::new(&factory.context.device, wgpu::TextureFormat::Bgra8Unorm);
+        let presenter = PresentPipeline::new(
+            &factory.context.device,
+            wgpu::TextureFormat::Bgra8Unorm,
+            target_alpha,
+        );
 
         factory
             .begin_frame(0x80ff_0000)
@@ -820,6 +826,22 @@ mod tests {
         let slice = readback.slice(..);
         pollster::block_on(super::super::map_buffer(&factory.context, &slice)).unwrap();
         let mapped = slice.get_mapped_range().unwrap();
-        assert_eq!(&mapped[..4], &[0x00, 0x00, 0xff, 0x80]);
+        mapped[..4].try_into().unwrap()
+    }
+
+    #[test]
+    fn present_pipeline_converts_premultiplied_frames_to_straight_surface_alpha() {
+        assert_eq!(
+            half_alpha_red_presented_pixel(PresentTargetAlpha::Straight),
+            [0x00, 0x00, 0xff, 0x80],
+        );
+    }
+
+    #[test]
+    fn present_pipeline_preserves_premultiplied_frames_for_browser_surface_alpha() {
+        assert_eq!(
+            half_alpha_red_presented_pixel(PresentTargetAlpha::Premultiplied),
+            [0x00, 0x00, 0x80, 0x80],
+        );
     }
 }

@@ -23,6 +23,9 @@ that the removed WebGL2 implementation reached C++ renderer parity.
 - Keep active-frame resize protection.
 - Make ordinary `BrowserFrame::present` submit directly to the WebGPU canvas
   surface without GPU-to-CPU readback or Canvas2D presentation.
+- Configure the browser surface for premultiplied alpha and preserve the
+  renderer's premultiplied attachment bytes; Apple drawable presentation keeps
+  its existing straight-alpha conversion.
 - Reserve `BrowserFrame::finish_with_readback` for explicit pixel capture. It
   returns exactly `width * height * 4` RGBA bytes and does not present.
 
@@ -35,7 +38,8 @@ that the removed WebGL2 implementation reached C++ renderer parity.
 - Remove WebGL2-only GPU-canvas translation/rendering code and tests while
   preserving the WebGPU GPU-canvas implementation and its tests.
 - Simplify `tools/browser-renderer-smoke` to exercise WebGPU only, including
-  Core/Compatibility admission, resize, presentation, stream replay,
+  Core/Compatibility admission, presented resize, retry after a one-shot
+  surface-acquisition loss, premultiplied-alpha composition, stream replay,
   GPU-canvas, path clip, and explicit failure when WebGPU is unavailable.
 - Remove stale HTML controls/query parameters for selecting or forcing WebGL2.
 - Update re-exports, documentation, status/defect ledgers, and parity checks so

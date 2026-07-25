@@ -528,11 +528,6 @@ fn read_runtime_color(
 pub struct ArtboardListMapRuleSpec {
     pub view_model: ViewModelId,
     pub artboard: ArtboardId,
-    /// State machines to activate on every item occurrence produced by this rule.
-    ///
-    /// An empty selection preserves Rive's legacy component-list behavior and
-    /// activates the mapped artboard's first state machine when one exists.
-    pub state_machines: Vec<MachineId>,
 }
 
 /// Semantic path to a list beneath an artboard's default view-model context.
@@ -21518,13 +21513,6 @@ fn lower_artboard(
             )
         })?;
         for rule in &spec.map_rules {
-            let rule_local_id = u32::try_from(objects_by_local.len()).map_err(|_| {
-                EditDiagnostic::new(
-                    origins.object(node.id, fallback_operation_index),
-                    vec![EditId::Object(node.id)],
-                    EditReason::CapacityExceeded,
-                )
-            })?;
             let view_model_id = catalogs
                 .view_models
                 .model_indices
@@ -21560,33 +21548,6 @@ fn lower_artboard(
                 ],
             });
             objects_by_local.push(None);
-            let target = catalogs
-                .artboards
-                .get(&rule.artboard)
-                .copied()
-                .ok_or_else(|| {
-                    EditDiagnostic::new(
-                        origins.object(node.id, fallback_operation_index),
-                        vec![EditId::Object(node.id), EditId::Artboard(rule.artboard)],
-                        EditReason::UnknownArtboard,
-                    )
-                })?;
-            for machine_index in resolve_nested_artboard_state_machines(
-                target,
-                &rule.state_machines,
-                node.id,
-                fallback_operation_index,
-                origins,
-            )? {
-                records.push(ExportedRecord {
-                    kind: ExportedObjectKind::NestedStateMachine,
-                    properties: vec![
-                        ExportedProperty::ParentId(rule_local_id),
-                        ExportedProperty::NestedAnimationId(machine_index),
-                    ],
-                });
-                objects_by_local.push(None);
-            }
         }
     }
 
@@ -24021,12 +23982,10 @@ mod tests {
                         ArtboardListMapRuleSpec {
                             view_model: model_a,
                             artboard: item_a,
-                            state_machines: Vec::new(),
                         },
                         ArtboardListMapRuleSpec {
                             view_model: model_b,
                             artboard: item_b,
-                            state_machines: Vec::new(),
                         },
                     ],
                 },
@@ -24116,318 +24075,193 @@ mod tests {
     }
 
     #[test]
-    fn component_list_rule_selected_machine_executes_for_each_exact_imported_occurrence()
+    fn component_list_uses_first_machine_independently_for_each_exact_imported_occurrence()
     -> Result<()> {
-        fn build_and_draw(select_second: bool) -> Result<(Vec<ExportedRecord>, String)> {
-            let mut scene = Scene::new();
-            let ((root, selected_machine), _) = scene
-                .edit(|tx| {
-                    let root = tx.create_artboard(ArtboardSpec {
-                        name: "Root".into(),
-                        width: 100.0,
-                        height: 100.0,
-                    })?;
-                    let item = tx.create_artboard(ArtboardSpec {
-                        name: "Item".into(),
-                        width: 30.0,
-                        height: 30.0,
-                    })?;
-                    let shape = create_colored_rect(
-                        tx,
-                        item,
-                        "Animated item",
-                        0.0,
-                        0.0,
-                        30.0,
-                        30.0,
-                        0xff44_77aa,
-                    )?;
-                    let first_animation = tx.animations().create_linear(
-                        item,
-                        LinearAnimationSpec {
-                            name: "First animation".into(),
-                            fps: 60,
-                            duration: 1,
-                        },
-                    )?;
-                    tx.animations().set_key(
-                        first_animation,
-                        shape,
-                        props::WORLD_OPACITY,
-                        0,
-                        0.2,
-                    )?;
-                    let second_animation = tx.animations().create_linear(
-                        item,
-                        LinearAnimationSpec {
-                            name: "Second animation".into(),
-                            fps: 60,
-                            duration: 1,
-                        },
-                    )?;
-                    tx.animations().set_key(
-                        second_animation,
-                        shape,
-                        props::WORLD_OPACITY,
-                        0,
-                        0.8,
-                    )?;
-                    let mut machines = tx.machines();
-                    let first_machine = machines.create_machine(
-                        item,
-                        MachineSpec {
-                            name: Some("First machine".into()),
-                        },
-                    )?;
-                    let first_layer =
-                        machines.create_layer(first_machine, MachineLayerSpec { name: None })?;
-                    let first_entry = machines.create_entry_state(first_layer)?;
-                    machines.create_any_state(first_layer)?;
-                    machines.create_exit_state(first_layer)?;
-                    let first_state = machines.create_animation_state(
-                        first_layer,
-                        AnimationStateSpec {
-                            animation: first_animation,
-                        },
-                    )?;
-                    machines.create_transition(first_entry, first_state)?;
-                    let second_machine = machines.create_machine(
-                        item,
-                        MachineSpec {
-                            name: Some("Second machine".into()),
-                        },
-                    )?;
-                    machines.create_boolean_input(
-                        second_machine,
-                        BooleanInputSpec {
-                            name: "Focused".into(),
-                            default_value: false,
-                        },
-                    )?;
-                    let second_layer =
-                        machines.create_layer(second_machine, MachineLayerSpec { name: None })?;
-                    let second_entry = machines.create_entry_state(second_layer)?;
-                    machines.create_any_state(second_layer)?;
-                    machines.create_exit_state(second_layer)?;
-                    let second_state = machines.create_animation_state(
-                        second_layer,
-                        AnimationStateSpec {
-                            animation: second_animation,
-                        },
-                    )?;
-                    machines.create_transition(second_entry, second_state)?;
-                    drop(machines);
-
-                    let mut view_models = tx.view_models();
-                    let root_model = view_models.create(ViewModelSpec {
-                        scope: ViewModelScope::Local,
-                        name: "Root model".into(),
-                    })?;
-                    let item_model = view_models.create(ViewModelSpec {
-                        scope: ViewModelScope::Local,
-                        name: "Item model".into(),
-                    })?;
-                    let enabled = view_models.create_boolean(
-                        item_model,
-                        ViewModelBooleanSpec {
-                            name: "enabled".into(),
-                        },
-                    )?;
-                    let items = view_models.create_list(
-                        root_model,
-                        ViewModelListSpec {
-                            name: "items".into(),
-                        },
-                    )?;
-                    let root_defaults = view_models
-                        .create_instance(root_model, ViewModelInstanceSpec { name: None })?;
-                    let item_defaults = view_models
-                        .create_instance(item_model, ViewModelInstanceSpec { name: None })?;
-                    let second_item = view_models
-                        .create_instance(item_model, ViewModelInstanceSpec { name: None })?;
-                    view_models.set_boolean(item_defaults, enabled, true)?;
-                    view_models.set_boolean(second_item, enabled, true)?;
-                    view_models.set_list_items(
-                        root_defaults,
-                        items,
-                        &[item_defaults, second_item],
-                    )?;
-                    view_models.set_artboard_default(root, root_defaults)?;
-                    view_models.set_artboard_default(item, item_defaults)?;
-                    drop(view_models);
-
-                    tx.create_component_list(
-                        root,
-                        ArtboardComponentListSpec {
-                            name: "Items".into(),
-                            x: 0.0,
-                            y: 0.0,
-                            opacity: 1.0,
-                            rotation: 0.0,
-                            scale_x: 1.0,
-                            scale_y: 1.0,
-                            flow: None,
-                            source: ViewModelListSource::direct(items),
-                            map_rules: vec![ArtboardListMapRuleSpec {
-                                view_model: item_model,
-                                artboard: item,
-                                state_machines: select_second
-                                    .then_some(vec![second_machine])
-                                    .unwrap_or_default(),
-                            }],
-                        },
-                    )?;
-                    Ok((root, second_machine))
-                })
-                .map_err(|error| anyhow::anyhow!("{error:?}"))?;
-
-            if select_second {
-                let instance = scene.instantiate(root)?;
-                scene.frame().advance(instance, 0.0, &mut Vec::new());
-                let first = scene
-                    .frame()
-                    .hit_test_paths_with_bounds(instance, crate::Vec2D::new(5.0, 5.0))
-                    .into_iter()
-                    .next()
-                    .context("first repeated occurrence hit")?;
-                let second = scene
-                    .frame()
-                    .hit_test_paths_with_bounds(instance, crate::Vec2D::new(35.0, 5.0))
-                    .into_iter()
-                    .next()
-                    .context("second repeated occurrence hit")?;
-                let first_cursor = scene.machine_boolean_input_at_hit(
-                    instance,
-                    &first,
-                    selected_machine,
-                    "Focused",
+        let mut scene = Scene::new();
+        scene
+            .edit(|tx| {
+                let root = tx.create_artboard(ArtboardSpec {
+                    name: "Root".into(),
+                    width: 100.0,
+                    height: 100.0,
+                })?;
+                let item = tx.create_artboard(ArtboardSpec {
+                    name: "Item".into(),
+                    width: 30.0,
+                    height: 30.0,
+                })?;
+                create_colored_rect(tx, item, "Item", 0.0, 0.0, 30.0, 30.0, 0xff44_77aa)?;
+                let mut machines = tx.machines();
+                let first_machine = machines.create_machine(
+                    item,
+                    MachineSpec {
+                        name: Some("First machine".into()),
+                    },
                 )?;
-                let second_cursor = scene.machine_boolean_input_at_hit(
-                    instance,
-                    &second,
-                    selected_machine,
-                    "Focused",
+                machines.create_boolean_input(
+                    first_machine,
+                    BooleanInputSpec {
+                        name: "Focused".into(),
+                        default_value: false,
+                    },
                 )?;
-                let stale_first_cursor = first_cursor.clone();
-                assert_eq!(
-                    scene
-                        .frame()
-                        .set_occurrence_boolean(first_cursor.clone(), true),
-                    Ok(true)
-                );
-                assert_eq!(
-                    scene
-                        .frame()
-                        .set_occurrence_boolean(second_cursor.clone(), false),
-                    Ok(false),
-                    "the second occurrence must retain its own default"
-                );
-                assert_eq!(
-                    scene.frame().set_occurrence_boolean(first_cursor, true),
-                    Ok(false),
-                    "the first occurrence must retain its independent write"
-                );
-                assert_eq!(
-                    scene.frame().set_occurrence_boolean(second_cursor, true),
-                    Ok(true)
-                );
-
-                // Hot list replacement does not advance the authored Scene
-                // epoch. It can nevertheless reuse mounted index zero for a
-                // different occurrence, so the captured runtime identity must
-                // fence the old cursor from writing that replacement row.
-                {
-                    let live = scene
-                        .instances
-                        .iter_mut()
-                        .flatten()
-                        .find(|candidate| candidate.id == instance)
-                        .context("live component-list instance")?;
-                    let retained = live
-                        .view_model
-                        .as_mut()
-                        .context("retained root ViewModel")?;
-                    let source = retained
-                        .value
-                        .raw()
-                        .list_source_handle_by_property_name_path("items")
-                        .context("root items source")?;
-                    let mut replacement = retained
-                        .value
-                        .handle()
-                        .list_items_by_property_name_path("items")
-                        .context("root items list")?;
-                    replacement.reverse();
-                    let replacement = replacement
-                        .into_iter()
-                        .map(|item| item.borrow().clone())
-                        .collect();
-                    retained
-                        .value
-                        .raw_mut()
-                        .replace_list_items_by_source_handle(&source, replacement)
-                        .context("hot list replacement")?;
-                    live.runtime.bind_view_model(&retained.value);
-                    live.runtime.advance(0.0);
-                }
-                assert_eq!(
-                    scene
-                        .frame()
-                        .set_occurrence_boolean(stale_first_cursor, true),
-                    Err(StaleCursor),
-                    "a replaced row must not inherit a cursor for the old occurrence",
-                );
-                let replacement = scene
-                    .frame()
-                    .hit_test_paths_with_bounds(instance, crate::Vec2D::new(5.0, 5.0))
-                    .into_iter()
-                    .next()
-                    .context("replacement repeated occurrence hit")?;
-                let replacement_cursor = scene.machine_boolean_input_at_hit(
-                    instance,
-                    &replacement,
-                    selected_machine,
-                    "Focused",
+                let first_layer =
+                    machines.create_layer(first_machine, MachineLayerSpec { name: None })?;
+                machines.create_any_state(first_layer)?;
+                machines.create_entry_state(first_layer)?;
+                machines.create_exit_state(first_layer)?;
+                let second_machine = machines.create_machine(
+                    item,
+                    MachineSpec {
+                        name: Some("Second machine".into()),
+                    },
                 )?;
-                assert_eq!(
-                    scene
-                        .frame()
-                        .set_occurrence_boolean(replacement_cursor, false),
-                    Ok(false),
-                    "the stale write must not mutate the replacement occurrence",
-                );
-            }
+                machines.create_boolean_input(
+                    second_machine,
+                    BooleanInputSpec {
+                        name: "Second only".into(),
+                        default_value: false,
+                    },
+                )?;
+                let second_layer =
+                    machines.create_layer(second_machine, MachineLayerSpec { name: None })?;
+                machines.create_any_state(second_layer)?;
+                machines.create_entry_state(second_layer)?;
+                machines.create_exit_state(second_layer)?;
+                drop(machines);
 
-            let exported = scene.export_records();
-            let records = exported.records().to_vec();
-            let bytes = encode_authoring_records(exported.into_authoring_records());
-            let file = Arc::new(File::import(&bytes)?);
-            let root_index = file
-                .artboard_named("Root")
-                .context("exact import retains Root")?
-                .index();
-            let mut runtime = OwnedArtboardInstance::instantiate(file, root_index)?;
-            let root = runtime
-                .instantiate_view_model_instance(0)
-                .context("root default ViewModel")?;
-            assert!(runtime.bind_view_model(&root));
-            runtime.advance(0.0);
-            runtime.advance(0.0);
-            Ok((records, owned_canonical_draw(&mut runtime)?))
-        }
+                let mut view_models = tx.view_models();
+                let root_model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
+                    name: "Root model".into(),
+                })?;
+                let item_model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
+                    name: "Item model".into(),
+                })?;
+                let items = view_models.create_list(
+                    root_model,
+                    ViewModelListSpec {
+                        name: "items".into(),
+                    },
+                )?;
+                let root_defaults = view_models
+                    .create_instance(root_model, ViewModelInstanceSpec { name: None })?;
+                let first_item = view_models
+                    .create_instance(item_model, ViewModelInstanceSpec { name: None })?;
+                let second_item = view_models
+                    .create_instance(item_model, ViewModelInstanceSpec { name: None })?;
+                view_models.set_list_items(root_defaults, items, &[first_item, second_item])?;
+                view_models.set_artboard_default(root, root_defaults)?;
+                view_models.set_artboard_default(item, first_item)?;
+                drop(view_models);
 
-        let (_, legacy_first) = build_and_draw(false)?;
-        let (selected_records, explicit_second) = build_and_draw(true)?;
-        assert_ne!(
-            explicit_second, legacy_first,
-            "an explicit rule selection must override the legacy first machine"
+                tx.create_component_list(
+                    root,
+                    ArtboardComponentListSpec {
+                        name: "Items".into(),
+                        x: 0.0,
+                        y: 0.0,
+                        opacity: 1.0,
+                        rotation: 0.0,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                        flow: None,
+                        source: ViewModelListSource::direct(items),
+                        map_rules: vec![ArtboardListMapRuleSpec {
+                            view_model: item_model,
+                            artboard: item,
+                        }],
+                    },
+                )?;
+                Ok(())
+            })
+            .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+        let exported = scene.export_records();
+        assert!(
+            !exported
+                .records()
+                .iter()
+                .any(|record| record.kind == ExportedObjectKind::NestedStateMachine),
+            "ArtboardListMapRule cannot own NestedStateMachine children",
         );
-        assert!(selected_records.iter().any(|record| {
-            record.kind == ExportedObjectKind::NestedStateMachine
-                && record
-                    .properties
-                    .contains(&ExportedProperty::NestedAnimationId(1))
-        }));
+        let bytes = encode_authoring_records(exported.into_authoring_records());
+        let file = Arc::new(File::import(&bytes)?);
+        let root_index = file
+            .artboard_named("Root")
+            .context("exact import retains Root")?
+            .index();
+        let mut runtime = OwnedArtboardInstance::instantiate(file, root_index)?;
+        let root = runtime
+            .instantiate_view_model_instance(0)
+            .context("root default ViewModel")?;
+        assert!(runtime.bind_view_model(&root));
+        runtime.advance(0.0);
+
+        let occurrence_at = |runtime: &mut OwnedArtboardInstance, x| -> Result<Vec<_>> {
+            let hit = runtime
+                .hit_test_path_segments_with_bounds(crate::Vec2D::new(x, 5.0))
+                .into_iter()
+                .next()
+                .context("repeated occurrence hit")?;
+            Ok(hit
+                .occurrence
+                .into_iter()
+                .map(
+                    |segment| RuntimeArtboardOccurrenceSegment::ComponentListItem {
+                        host_local_id: segment.host_local_id,
+                        item_index: segment.item_index,
+                        occurrence_identity: segment.occurrence_identity,
+                    },
+                )
+                .collect())
+        };
+        let first = occurrence_at(&mut runtime, 5.0)?;
+        let second = occurrence_at(&mut runtime, 35.0)?;
+        let first_input = runtime
+            .raw()
+            .occurrence_state_machine_input(&first, 0, "Focused")
+            .context("C++ first-machine fallback is attached to the first occurrence")?
+            .0;
+        let second_input = runtime
+            .raw()
+            .occurrence_state_machine_input(&second, 0, "Focused")
+            .context("C++ first-machine fallback is attached to the second occurrence")?
+            .0;
+        assert!(
+            runtime
+                .raw()
+                .occurrence_state_machine_input(&first, 1, "Second only")
+                .is_none(),
+            "the second mapped-artboard machine is not selected by the first-machine fallback",
+        );
+        assert_eq!(
+            runtime
+                .raw_mut()
+                .set_occurrence_state_machine_bool(&first, 0, first_input, true),
+            Some(true),
+        );
+        assert_eq!(
+            runtime
+                .raw_mut()
+                .set_occurrence_state_machine_bool(&second, 0, second_input, false),
+            Some(false),
+            "the second occurrence retains its own default",
+        );
+        assert_eq!(
+            runtime
+                .raw_mut()
+                .set_occurrence_state_machine_bool(&first, 0, first_input, true),
+            Some(false),
+            "the first occurrence retains its independent write",
+        );
+        assert_eq!(
+            runtime
+                .raw_mut()
+                .set_occurrence_state_machine_bool(&second, 0, second_input, true),
+            Some(true),
+        );
         Ok(())
     }
 
@@ -26499,7 +26333,6 @@ mod tests {
                     map_rules: vec![ArtboardListMapRuleSpec {
                         view_model: card_model,
                         artboard: card,
-                        state_machines: Vec::new(),
                     }],
                 },
             )?;

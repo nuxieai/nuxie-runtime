@@ -3977,7 +3977,6 @@ fn typed_vertical_component_list_exports_imports_advances_and_draws_two_view_mod
                 map_rules: vec![ArtboardListMapRuleSpec {
                     view_model: item_model,
                     artboard: item_artboard,
-                    state_machines: Vec::new(),
                 }],
             },
         )?;
@@ -4386,7 +4385,6 @@ fn nested_view_model_list_path_imports_advances_and_draws_the_mapped_item() -> R
                 map_rules: vec![ArtboardListMapRuleSpec {
                     view_model: item_model,
                     artboard: item_artboard,
-                    state_machines: Vec::new(),
                 }],
             },
         )?;
@@ -4629,7 +4627,6 @@ fn typed_list_string_equality_mutates_stable_items_rejects_mismatches_and_replay
                 map_rules: vec![ArtboardListMapRuleSpec {
                     view_model: product_model,
                     artboard: item_artboard,
-                    state_machines: Vec::new(),
                 }],
             },
         )?;
@@ -9027,7 +9024,6 @@ fn component_list_hit_paths_preserve_child_front_to_back_order() -> Result<()> {
                 map_rules: vec![ArtboardListMapRuleSpec {
                     view_model: item_model,
                     artboard: item_artboard,
-                    state_machines: Vec::new(),
                 }],
             },
         )?;

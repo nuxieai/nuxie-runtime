@@ -109,21 +109,33 @@ not a port repair; the Editor compiler therefore continues to fail closed for
 the unsupported duration and its fully qualified regression test passes 1/1.
 
 `F-ED-03` / `RT-ED-005` is now classified as an API-surface gap, not a
-low-level runtime defect. Production commit
-`4eec745b704e9920f67098138963dc973e7b2d87` ports the pinned C++ generic
+low-level runtime defect. Production commits
+`4eec745b704e9920f67098138963dc973e7b2d87` and
+`e2d274d8d3b8de3af705d18506a6d48eadebfc0c` port the pinned C++ generic
 `DataBind.propertyKey` authoring contract into Scene while leaving the
-FL-owned runtime mechanism unchanged. It adds typed number/color binds,
-stable `LayoutComponentStyle` targets for all four padding keys, exact
-target/property collision identity, converter output validation matching
-C++ `Input`/`None`/`Any` semantics, and encoded `File::import` behavior tests.
-Both independent reviews are clean. The row remains `reported` until the
-merged SHA, orchestrator verification, and unchanged `P09-C01` Editor
-consumption evidence are complete. The executor battery is now green: the
-721-test probe-armed workspace suite, 317/317 ordinary and
+FL-owned runtime mechanism unchanged. They add typed number/color binds,
+converter-free direction selection, stable `LayoutComponentStyle` targets
+for all four padding keys, exact target/property collision identity,
+converter output validation matching C++ `Input`/`None`/`Any` semantics, and
+encoded `File::import` behavior tests. Independent review found the missing
+converter-free direction surface; the follow-up now proves numeric
+`ToSource`, numeric source-first `TwoWay`, and color source-first `TwoWay`
+through exact re-import and reverse propagation. The row remains `reported`
+until the merged SHA, orchestrator verification, and unchanged `P09-C01`
+Editor consumption evidence are complete. The executor battery is now green:
+the 721-test probe-armed workspace suite, 317/317 ordinary and
 scripted golden entries with 647/647 segments each, 1468/1468 renderer rows,
 CAPI, Apple, frame-loop, B-6, lint/format/diff, WebGPU-only browser, and the
 8.74 MiB maximum SDK floor all passed. Only publication and independent
 consumption/verification remain.
+
+The transferred Editor report cited historical C++ pin
+`f4bb3025e263ad1a646ef6971358577a0aa6bfa2`. It is retained as provenance,
+not silently treated as the current oracle. The relevant source set changed
+before `d788e8ec6e8b598526607d6a1e8818e8b637b60c`: the current pin adds
+generated property notifications, target observation, and explicit
+reconcile-origin handling. `COR-01` therefore requires the F-ED source hashes,
+fixture, executable probe, and behavioral assertions to use `d788e8ec`.
 
 ## Next queue
 

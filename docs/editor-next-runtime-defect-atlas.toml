@@ -360,17 +360,17 @@ owner_class = "api"
 classification = "api-surface-gap"
 ticket = "F-ED-03"
 fixture_id = "fed.rt_ed_005.generic_visual_property_bind"
-preliminary_disposition = "Exact Scene authoring API repair implemented at 4eec745b704e9920f67098138963dc973e7b2d87: generic typed propertyKey binds and stable LayoutComponentStyle targets now reuse the existing faithful runtime DataBind owner."
-reproduction_sha256 = "c59ea489872752f535b7e579418355c1bbac9f373632a744908675d133da295b"
-rust_stimulus = "public Scene authors number/color binds for Rectangle.width, SolidColor.colorValue, converted TwoWay worldOpacity, all four LayoutComponentStyle padding keys, and two component-list occurrence-local widths; records are encoded and reimported through File::import before runtime assertions"
-cpp_stimulus = "pinned data_binding_test.cpp:39-111 plus DataBind propertyKey/target-adjacency/context-value source audit at d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+preliminary_disposition = "Exact Scene authoring API repair implemented at 4eec745b704e9920f67098138963dc973e7b2d87 with the independent-review direction closure at e2d274d8d3b8de3af705d18506a6d48eadebfc0c: generic typed propertyKey binds and stable LayoutComponentStyle targets now reuse the existing faithful runtime DataBind owner."
+reproduction_sha256 = "cc870d4edc91d644d52f93adfc079d40289b27a23b15c3a0fba4d74331284918"
+rust_stimulus = "public Scene authors number/color binds for Rectangle.width, SolidColor.colorValue, converter-free ToSource and source-first TwoWay, converted TwoWay worldOpacity, all four LayoutComponentStyle padding keys, and two component-list occurrence-local widths; records are encoded and reimported through File::import before runtime assertions"
+cpp_stimulus = "historical Editor localization f4bb3025e263ad1a646ef6971358577a0aa6bfa2 retained as provenance; per COR-01, current F-ED oracle is data_binding_test.cpp:39-111 plus DataBind propertyKey/target-adjacency/context-value/reconcile source audit and executable probe at d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 source_files = ["include/rive/generated/data_bind/data_bind_base.hpp","include/rive/data_bind/data_bind.hpp","include/rive/scripted/scripted_data_converter.hpp","include/rive/data_bind/converters/data_converter_group.hpp","src/file.cpp","src/data_bind/data_bind.cpp","src/data_bind/context/context_value_number.cpp","src/data_bind/context/context_value_color.cpp","tests/unit_tests/runtime/data_binding_test.cpp","crates/nuxie/build.rs","crates/nuxie/src/scene.rs","crates/nuxie/tests/scene_authoring.rs","crates/nuxie/tests/data_converter_authoring.rs","docs/f-ed-03-generic-property-binding-spec.md"]
-source_members = ["DataBindBase::propertyKey","DataBind::outputType","DataConverterGroup::outputType","ScriptedDataConverter::outputType","DataBindContextValueNumber::apply","DataBindContextValueColor::apply","SceneTx::component_list_style","ViewModelTx::bind_number","ViewModelTx::bind_color","VmTx::bind_property_value","PropertyBindTarget","PropertyBindSpec","append_property_bind_record"]
+source_members = ["DataBindBase::propertyKey","DataBind::outputType","DataConverterGroup::outputType","ScriptedDataConverter::outputType","DataBindContextValueNumber::apply","DataBindContextValueColor::apply","SceneTx::component_list_style","VmTx::bind_number","VmTx::bind_number_with_direction","VmTx::bind_color","VmTx::bind_color_with_direction","VmTx::bind_property_value","PropertyBindTarget","PropertyBindSpec","append_property_bind_record"]
 lifecycle_phases = ["authoring-validation","target-property collision","record export and exact target adjacency","File::import context construction","initial source-first reconciliation","source-to-target apply","target-to-source reverse apply","occurrence-local ViewModel resolution","clone/rebind","rollback and removal"]
 rust_owner = "crates/nuxie/src/scene.rs Scene authoring facade and record lowering; existing nuxie-runtime DataBind execution remains unchanged under the FL lease"
 displaced_mechanism = "Removed the opacity-only NumberBindSpec/append_number_bind projection and target-only collision identity; compatibility opacity methods now delegate to the generic property bind owner."
 dependencies = ["F-ED-00B","F-ED-03"]
-target_tests = ["scene::tests::generic_property_binds_round_trip_exact_riv_with_converter_direction","scene::tests::layout_padding_and_occurrence_binds_round_trip_exact_riv","generic_number_and_color_binds_export_import_execute_and_collide_by_target_property","component_list_padding_binds_use_the_stable_style_target_and_survive_rollback","component_list_occurrences_execute_one_authored_numeric_bind_in_item_local_contexts","converter_aware_property_binds_reject_known_output_mismatches_atomically"]
+target_tests = ["scene::tests::generic_property_binds_round_trip_exact_riv_with_converter_direction","scene::tests::generic_property_binds_round_trip_exact_riv_without_converter_directions","scene::tests::layout_padding_and_occurrence_binds_round_trip_exact_riv","generic_number_and_color_binds_export_import_execute_and_collide_by_target_property","component_list_padding_binds_use_the_stable_style_target_and_survive_rollback","component_list_occurrences_execute_one_authored_numeric_bind_in_item_local_contexts","converter_aware_property_binds_reject_known_output_mismatches_atomically"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels","maximum_sdk_bytes"]
 owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#RT-ED-005"
 adaptation_rule = "PORTING.md AF-1, AF-2, AF-4, AF-8, and RF-27: preserve C++ target adjacency, typed property identity, stable retained owners, and exact direction/converter semantics"
@@ -387,7 +387,7 @@ parity_ledger = "d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c9
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-investigation_head_sha = "4eec745b704e9920f67098138963dc973e7b2d87"
+investigation_head_sha = "e2d274d8d3b8de3af705d18506a6d48eadebfc0c"
 merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
 consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
@@ -396,8 +396,8 @@ status = "not-applicable"
 reason = "This row does not qualify renderer output."
 [defect.executor_verification]
 status = "pass"
-command = "make cpp-probe; env -u CPP_CONFIG -u RUST_PROFILE make cpp-oracle-workspace-tests; env -u CPP_CONFIG -u RUST_PROFILE make golden-compare; env -u CPP_CONFIG -u RUST_PROFILE make scripted-golden-compare; make capi-smoke; make apple-runtime-check; make runtime-frame-loop-port-check; make b6-audit-check; make lint-gate; cargo fmt --all -- --check; git diff --check; make size-report; make renderer-golden; make browser-webgpu-only-check"
-evidence = "Executor battery passed: all 721 probe-armed workspace tests, 317/317 ordinary golden entries and 647/647 segments, 317/317 scripted entries and 647/647 segments, 1468/1468 renderer rows with zero divergences or gated failures, CAPI/Apple/frame-loop/B-6/lint/format/diff floors, WebGPU-only browser smoke with zero prohibited surfaces, and the 8.74 MiB maximum SDK below the 9 MiB ceiling."
+command = "make cpp-probe; env -u CPP_CONFIG -u RUST_PROFILE make cpp-oracle-workspace-tests; env -u CPP_CONFIG -u RUST_PROFILE make golden-compare; env -u CPP_CONFIG -u RUST_PROFILE make scripted-golden-compare; make capi-smoke; make apple-runtime-check; make runtime-frame-loop-port-check; make b6-audit-check; make lint-gate; cargo fmt --all -- --check; git diff --check; make size-report; make renderer-golden; make browser-webgpu-only-check; post-review: cargo test -p nuxie --lib; cargo test -p nuxie --test scene_authoring; cargo test -p nuxie --test data_converter_authoring; cargo test -p nuxie-runtime --lib; CPP_CONFIG=release make cpp-probe"
+evidence = "The original executor battery passed all 721 probe-armed workspace tests, 317/317 ordinary golden entries and 647/647 segments, 317/317 scripted entries and 647/647 segments, 1468/1468 renderer rows, CAPI/Apple/frame-loop/B-6/lint/format/diff/WebGPU floors, and the 8.74 MiB SDK ceiling. The independent-review closure reran 144/144 nuxie lib, 170/170 Scene authoring, 10/10 converter authoring, 414/414 runtime lib, format/diff/lint, and an executable C++ data_binding_test.riv probe against freshly rebuilt d788e8ec libraries."
 [defect.orchestrator_verification]
 status = "pending"
 reason = "F-ED-03 is executor-green and awaits the orchestrator's independent unchanged-floor verification."
@@ -407,12 +407,12 @@ actor = "editor-cutover"
 evidence = "runtime-defects:RT-ED-005"
 [defect.cpp_result]
 status = "pass"
-command = "pinned-source audit plus tests/unit_tests/runtime/data_binding_test.cpp:39-111 at d788e8ec6e8b598526607d6a1e8818e8b637b60c"
-evidence = "C++ retains target-adjacent propertyKey binds; number and color contexts apply through generic setters; Scripted output is Any; groups skip only Input; clone retargets the retained bind."
+command = "compare f4bb3025e263ad1a646ef6971358577a0aa6bfa2..d788e8ec6e8b598526607d6a1e8818e8b637b60c; pinned-source audit; CPP_CONFIG=release make cpp-probe; rive_cpp_probe --file tests/unit_tests/assets/data_binding_test.riv --property-values"
+evidence = "The historical and current source sets are not byte-identical: d788 adds generated property notifications, target observation, and explicit reconcile-origin handling, so f4bb remains historical provenance and d788 is the COR-01 current oracle. At d788, C++ retains target-adjacent propertyKey binds; number/color contexts apply through generic setters; Scripted output is Any; groups skip only Input; clone retargets the retained bind. The executable probe imported five artboards and emitted 1,656,333 bytes of strict JSON (sha256 78b540d2854520ce1804b9840813d505ab038f499d0469ab267e38c6062db921)."
 [defect.rust_result]
 status = "pass"
 command = "cargo test -p nuxie --lib; cargo test -p nuxie --test scene_authoring; cargo test -p nuxie --test data_converter_authoring; cargo test -p nuxie-runtime --lib"
-evidence = "143/143 nuxie lib, 170/170 Scene authoring, 10/10 converter authoring, and 414/414 runtime lib passed; exact encoded File::import tests cover number, color, converter/direction, four padding keys, and occurrence-local values."
+evidence = "144/144 nuxie lib, 170/170 Scene authoring, 10/10 converter authoring, and 414/414 runtime lib passed; exact encoded File::import tests cover number, color, converter-free ToSource/source-first TwoWay, converted TwoWay, four padding keys, and occurrence-local values."
 [defect.editor_result]
 status = "pending"
 reason = "P09-C01 and the focused paywall reproduction are not yet bound to one fixture."
@@ -691,7 +691,7 @@ classification = "additive-product-feature"
 ticket = "F-ED-00"
 fixture_id = "fed.loc_003.long_press_listener"
 preliminary_disposition = "Closed as an unlinked additive product feature: exact C++ parity contains no timed-hold primitive, so no runtime port is authorized."
-reproduction_sha256 = "aa28e2be4faef3ce1cb68016db37c85c2c048f23f32cb971abcb8c30893685b8"
+reproduction_sha256 = "2790f17e9a04de73ea2fa4a513d696769dbd62d446b6e615d6254e4132cc8210"
 rust_stimulus = "typed Scene/compiler 700ms long_press lowering fails closed with animation.interaction.unsupported_long_press_duration"
 cpp_stimulus = "source audit of listener_type.hpp and listener_group.cpp proves no held-duration primitive"
 source_files = ["include/rive/listener_type.hpp","src/listener_group.cpp","crates/nuxie/src/scene.rs","crates/nuxie-runtime/src/state_machine.rs"]

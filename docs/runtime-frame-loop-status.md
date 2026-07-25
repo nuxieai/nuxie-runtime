@@ -7,8 +7,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 - Phase: FL-A production translation complete in the isolated `levi/fl-a`
   checkout. The six Component member rows are closed locally; the candidate
   publish battery, final independent reviews, candidate commit, and size
-  measurement are green. Rebase onto the final LOC-009/main boundary,
-  post-rebase verification, push, and orchestrator verification remain.
+  measurement are green. Rebase onto the final LOC-009/main boundary is
+  complete; post-rebase retained DataBind target-dirt remediation and
+  verification, push, and orchestrator verification remain.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - File closure: formally 0 / 338 until the file-correspondence manifest's
   52 FL-A rows receive the required orchestrator-verified promotion. Their
@@ -20,8 +21,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 - Current dependency wave: FL-A publish verification. FL-B does not begin
   from this checkout until the FL-A landing and orchestrator promotion are
   accepted.
-- Current FL-A landing: local working tree on `levi/fl-a`, based on
-  `c4d81801`; no publish commit or push has occurred yet.
+- Current FL-A landing: local working tree on `levi/fl-a`, rebased through
+  LOC-009/main `88fdc5a6`; the remediation remains uncommitted and unpushed.
 
 ## FL-0 evidence
 
@@ -369,11 +370,24 @@ FL-A candidate-tree floor before the publish commit:
   callbacks. FL-E must make listener/input/path-effect/DataConverter/draw
   callbacks observe one retained factory; this is runtime callback plumbing,
   not renderer-backend ownership.
+- A post-rebase probe found a separate Scene-authoring boundary outside FL-A:
+  Scene-authored ComponentList padding/gap values omit explicit Yoga units,
+  and mapped plain Artboard items omit the root `LayoutComponentStyle` that
+  pinned C++ requires for hosted Yoga size. Rust currently compensates by
+  interpreting undefined units as lengths and falling back to Artboard
+  dimensions. The exploratory exact-unit/root-style production edits were
+  discarded. This remains a later Scene-authoring/Layout closure; FL-A does
+  not claim or alter it.
+- The FL-A C++ probe no longer reads `Component::m_GraphOrder` from the
+  ordinary import snapshot because that C++ member has no construction
+  default. The scheduled-only runtime-update probe remains the graph-order
+  oracle. Post-rebase verification exposed and removed one stale Rust
+  deserializer requirement for the deleted ordinary-snapshot field.
 
 ## Next
 
-1. Rebase onto the final LOC-009/main boundary, migrate only any newly
-   required facade fixture, and rerun every affected floor.
+1. Complete the post-rebase floor and independent review for the retained
+   DataBind target-dirt correction.
 2. Push `levi/fl-a` with an explicit refspec. The orchestrator independently
    reruns the battery and alone promotes the 52 file-correspondence rows from
    pending-verification.

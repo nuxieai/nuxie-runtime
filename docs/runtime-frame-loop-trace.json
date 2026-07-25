@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "1f0920a131cf73066557dd3335ee3096213d823b7d1b5c433629b6775074ffa0",
+    "cpp_binary_sha256": "eabbc2b562a3ae2fc46a5bf15829f45ed70f60a0408659f145a2c69321f0d29c",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "40b9540fced883e1b51a06b25389153825f9a8e46ff5c1da286caa7cb8da3e25",
-    "rust_coverage_sha256": "a6b13e1c7d45e3117bcf0ffb1ca48b06092e85dd712d8ddfc60ed07fa360599c",
-    "rust_mechanism_coverage_sha256": "3ef88b960f2de377d5b8e75f29d190a880a4ce3e7bb697beeb416ac5b5a881a5",
-    "rust_steady_coverage_sha256": "3c6eaad161555e420dd440cd04c05507c010986b9615e736aeb3f31c327222e2"
+    "rust_binary_sha256": "54238ff54017f8401f041f913caad1787d0445b6feb0c7c9b90a3cda39bd4632",
+    "rust_coverage_sha256": "f25fbd48131d7b04bc2d9db41dcaad0c3e3e4ea0bb1de2d50b052cff38d32823",
+    "rust_mechanism_coverage_sha256": "edeca7b386d137127806ead21a6968340ef3a1e332c479462cbee0d6dee10a2e",
+    "rust_steady_coverage_sha256": "302af6855aff1457341443e2a362cf4d5120aaa2c2af228f751f1a09afe023b4"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -2699,8 +2699,12 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::linear_animation_instance_keep_going"
         },
         {
-          "count": 66,
+          "count": 130,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_changed"
+        },
+        {
+          "count": 64,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_components_dirty"
         },
         {
           "count": 62,
@@ -2761,6 +2765,10 @@
         {
           "count": 81,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::nested_structure_epoch::{closure#0}"
+        },
+        {
+          "count": 64,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::on_component_dirty_handle"
         },
         {
           "count": 5,
@@ -3257,6 +3265,10 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::notify_artboard_data_bind_target_property_changed"
         },
         {
+          "count": 64,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::publish_artboard_data_bind_target_dirty"
+        },
+        {
           "count": 66,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::refresh_retained_owned_view_model_artboard_sources"
         },
@@ -3303,6 +3315,10 @@
         {
           "count": 53,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_nested_artboard_data_binds_from_hosts"
+        },
+        {
+          "count": 64,
+          "name": "<nuxie_runtime::artboard_data_bind::RuntimeArtboardAuthoredDataBindStates as core::ops::deref::Deref>::deref"
         },
         {
           "count": 270,
@@ -3423,7 +3439,7 @@
           "name": "<nuxie_runtime::components::ComponentDirt as core::ops::bit::Not>::not"
         },
         {
-          "count": 9884,
+          "count": 9948,
           "name": "<nuxie_runtime::components::ComponentDirt>::contains"
         },
         {
@@ -3431,8 +3447,12 @@
           "name": "<nuxie_runtime::components::ComponentDirt>::is_empty"
         },
         {
-          "count": 65559,
+          "count": 65687,
           "name": "<nuxie_runtime::components::ComponentHandle>::index"
+        },
+        {
+          "count": 64,
+          "name": "<nuxie_runtime::components::GraphOrder>::index"
         },
         {
           "count": 2,
@@ -5701,7 +5721,7 @@
       ],
       "crates/nuxie-runtime/src/objects.rs": [
         {
-          "count": 64658,
+          "count": 64786,
           "name": "<nuxie_runtime::objects::ComponentAddress>::object"
         },
         {
@@ -5725,7 +5745,7 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::color_property::{closure#0}"
         },
         {
-          "count": 51667,
+          "count": 51731,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component"
         },
         {
@@ -5741,7 +5761,7 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component_local_id"
         },
         {
-          "count": 2841,
+          "count": 2905,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component_mut"
         },
         {
@@ -5777,6 +5797,10 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::fill_rule"
         },
         {
+          "count": 64,
+          "name": "<nuxie_runtime::objects::InstanceObjectArena>::graph_order"
+        },
+        {
           "count": 58049,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::object"
         },
@@ -5793,7 +5817,7 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::replace_solid_color_value"
         },
         {
-          "count": 210,
+          "count": 274,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::root"
         },
         {
@@ -5861,7 +5885,7 @@
           "name": "<nuxie_runtime::objects::InstanceString>::bytes"
         },
         {
-          "count": 64950,
+          "count": 65078,
           "name": "<nuxie_runtime::objects::ObjectHandle>::local_id"
         },
         {
@@ -7142,16 +7166,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 7130,
+    "file_count": 7144,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "607be9f427a897104bfe508d3b1c34118de2132bab8c4e7612fd2ec00d0f545e"
+    "sha256": "12fc891568e154396d59dd7433c517ad32b2aed90e6193d62cc36931707d9b6a"
   },
-  "rust_ref": "c4d81801898563c23f1b4f68e0c9ef0df83b1d41",
+  "rust_ref": "50dd0375b851beaac3a76129fe4ac095c02d3a20",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7130,
+      "file_count": 7144,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "607be9f427a897104bfe508d3b1c34118de2132bab8c4e7612fd2ec00d0f545e"
+      "sha256": "12fc891568e154396d59dd7433c517ad32b2aed90e6193d62cc36931707d9b6a"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -7176,7 +7200,7 @@
     },
     "dynamic_cpp_functions": 461,
     "dynamic_rust_files": 18,
-    "dynamic_rust_functions": 1190,
+    "dynamic_rust_functions": 1196,
     "static_cpp_files": 338
   },
   "steady_allocation_counts": {

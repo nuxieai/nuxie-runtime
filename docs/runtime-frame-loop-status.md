@@ -22,8 +22,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   from this checkout until the FL-A landing and orchestrator promotion are
   accepted.
 - Current FL-A landing: local `levi/fl-a` is rebased through exact
-  LOC-009/main `7f1450dc22ca7370eac9dc9f422351c2dfcc07ee`; final source-bound
-  trace commit `28c2aad5` and all preceding FL-A commits remain unpushed.
+  LOC-009/main `7f1450dc22ca7370eac9dc9f422351c2dfcc07ee`; the complete reviewed
+  candidate runs through evidence commit `e6633d4c` and remains unpushed.
 
 ## FL-0 evidence
 
@@ -438,13 +438,11 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Complete the two independent final reviews and commit this final evidence
-   update.
-2. Reconcile the pre-rebase remote `levi/fl-a` ancestry without rewriting it,
+1. Reconcile the pre-rebase remote `levi/fl-a` ancestry without rewriting it,
    then push with the explicit `HEAD:refs/heads/levi/fl-a` refspec. The
    orchestrator independently
    reruns the battery and alone promotes the 52 file-correspondence rows from
    pending-verification.
-3. After accepted FL-A closure, run the canonical whole-corpus performance
+2. After accepted FL-A closure, run the canonical whole-corpus performance
    checkpoint and proceed to FL-B from the dependency map. Performance remains
    verification evidence, never the source of a work slice.

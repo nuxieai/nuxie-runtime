@@ -174,10 +174,23 @@ jobs:
       - name: Fetch pinned test assets
         run: make fixtures
 
-      - name: Verify browser WebGPU and unsupported-state failure
+      - name: Record WebGPU-only browser support gate
         env:
           BROWSER_RENDERER_BROWSER: chrome
-        run: make browser-renderer-smoke
+        run: |
+          python3 tools/parity-scorecard/parity_scorecard.py record \
+            --gate browser-webgpu-only \
+            --output target/parity-scorecard/evidence/browser-webgpu-only.json \
+            -- make browser-webgpu-only-check
+
+      - name: Upload browser scorecard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-scorecard-evidence-browser-${{ github.run_attempt }}
+          path: target/parity-scorecard/evidence/browser-webgpu-only.json
+          if-no-files-found: warn
+          retention-days: 7
 
   renderer-golden:
     name: Phase R pixel golden
@@ -437,6 +450,7 @@ jobs:
     if: ${{ always() }}
     needs:
       - parity-runtime-evidence
+      - browser-renderer
       - renderer-golden
       - perf-json
     runs-on: ubuntu-latest

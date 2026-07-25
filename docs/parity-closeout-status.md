@@ -1168,7 +1168,8 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
 
 - 2026-07-24 — #HD-3 received its user decision: browser support is WebGPU
   only. The separate approximating WebGL2/FemtoVG renderer, backend-selection
-  API, automatic fallback, and WebGL2 qualification fixtures were deleted.
+  API, and automatic fallback were deleted. The WebGL2 qualification fixtures
+  were retired from live qualification and retained as historical evidence.
   WebGPU Core/Compatibility admission remains internal to the one browser
   backend, and unavailable WebGPU now fails initialization explicitly. This
   is a support-matrix reduction, not evidence that the retired backend matched

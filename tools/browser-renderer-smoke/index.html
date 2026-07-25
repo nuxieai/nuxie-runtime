@@ -24,11 +24,22 @@
       const forceCompatibility = search.has("force-webgpu-compatibility");
       const forceNoSsbo = search.has("force-no-ssbo");
       const forceUnavailable = search.has("force-webgpu-unavailable");
+      const forceNoAdapter = search.has("force-webgpu-no-adapter");
+      const forceDeviceFailure = search.has("force-webgpu-device-failure");
       let compatibilityProbe = null;
 
       try {
         if (forceNoSsbo && !forceCompatibility) {
           throw new Error("force-no-ssbo requires force-webgpu-compatibility");
+        }
+        if (
+            Number(forceCompatibility) +
+            Number(forceUnavailable) +
+            Number(forceNoAdapter) +
+            Number(forceDeviceFailure) >
+          1
+        ) {
+          throw new Error("forced WebGPU admission cases are mutually exclusive");
         }
         await init();
         if (forceUnavailable) {
@@ -50,6 +61,147 @@
           window.__rendererSmoke = { status: "passed", results };
           status.textContent = `passed\n${results.join("\n")}`;
           document.body.dataset.status = "passed";
+        } else if (forceNoAdapter) {
+          const gpu = navigator.gpu;
+          if (!gpu) {
+            throw new Error("forced no-adapter smoke requires navigator.gpu");
+          }
+          const featureLevelsRequested = [];
+          const unavailableGpu = new Proxy(gpu, {
+            get(target, property) {
+              if (property === "requestAdapter") {
+                return async (options = {}) => {
+                  const featureLevel = options.featureLevel ?? "core";
+                  featureLevelsRequested.push(featureLevel);
+                  throw new Error(
+                    `forced ${featureLevel} WebGPU adapter failure`,
+                  );
+                };
+              }
+              const value = Reflect.get(target, property, target);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          });
+          Object.defineProperty(navigator, "gpu", {
+            configurable: true,
+            value: unavailableGpu,
+          });
+          try {
+            await run_backend(document.createElement("canvas"));
+            throw new Error("WebGPU no-adapter browser unexpectedly initialized");
+          } catch (error) {
+            const message = String(error);
+            if (message.includes("unexpectedly initialized")) throw error;
+            for (const expected of [
+              "adapter error",
+              "Core probe failed",
+              "forced core WebGPU adapter failure",
+              "Compatibility probe failed",
+              "forced compatibility WebGPU adapter failure",
+            ]) {
+              if (!message.includes(expected)) {
+                throw new Error(
+                  `WebGPU no-adapter error omitted ${expected}: ${message}`,
+                );
+              }
+            }
+          }
+          if (
+            featureLevelsRequested.length !== 2 ||
+            featureLevelsRequested[0] !== "core" ||
+            featureLevelsRequested[1] !== "compatibility"
+          ) {
+            throw new Error(
+              `WebGPU admission order was ${JSON.stringify(featureLevelsRequested)}; expected Core then Compatibility exactly once`,
+            );
+          }
+          const results = [
+            "webgpu-no-adapter=adapter-error order=core,compatibility",
+          ];
+          window.__rendererSmoke = { status: "passed", results };
+          status.textContent = `passed\n${results.join("\n")}`;
+          document.body.dataset.status = "passed";
+        } else if (forceDeviceFailure) {
+          const gpu = navigator.gpu;
+          if (!gpu) {
+            throw new Error("forced device-failure smoke requires navigator.gpu");
+          }
+          const requestAdapter = gpu.requestAdapter.bind(gpu);
+          const deviceFeatureLevels = [];
+          const failingGpu = new Proxy(gpu, {
+            get(target, property) {
+              if (property === "requestAdapter") {
+                return async (options = {}) => {
+                  const featureLevel = options.featureLevel ?? "core";
+                  const adapter = await requestAdapter(options);
+                  if (!adapter) {
+                    return null;
+                  }
+                  return new Proxy(adapter, {
+                    get(adapterTarget, adapterProperty) {
+                      if (adapterProperty === "requestDevice") {
+                        return async () => {
+                          deviceFeatureLevels.push(featureLevel);
+                          throw new Error(
+                            `forced ${featureLevel} WebGPU device failure`,
+                          );
+                        };
+                      }
+                      const value = Reflect.get(
+                        adapterTarget,
+                        adapterProperty,
+                        adapterTarget,
+                      );
+                      return typeof value === "function"
+                        ? value.bind(adapterTarget)
+                        : value;
+                    },
+                  });
+                };
+              }
+              const value = Reflect.get(target, property, target);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          });
+          Object.defineProperty(navigator, "gpu", {
+            configurable: true,
+            value: failingGpu,
+          });
+          try {
+            await run_backend(document.createElement("canvas"));
+            throw new Error("WebGPU device-failure browser unexpectedly initialized");
+          } catch (error) {
+            const message = String(error);
+            if (message.includes("unexpectedly initialized")) throw error;
+            for (const expected of [
+              "wgpu device error",
+              "Core WebGPU initialization failed",
+              "forced core WebGPU device failure",
+              "Compatibility device failed",
+              "forced compatibility WebGPU device failure",
+            ]) {
+              if (!message.includes(expected)) {
+                throw new Error(
+                  `WebGPU device-failure error omitted ${expected}: ${message}`,
+                );
+              }
+            }
+          }
+          if (
+            deviceFeatureLevels.length !== 2 ||
+            deviceFeatureLevels[0] !== "core" ||
+            deviceFeatureLevels[1] !== "compatibility"
+          ) {
+            throw new Error(
+              `WebGPU device fallback order was ${JSON.stringify(deviceFeatureLevels)}; expected Core then Compatibility`,
+            );
+          }
+          const results = [
+            "webgpu-device-failure=device-error order=core,compatibility",
+          ];
+          window.__rendererSmoke = { status: "passed", results };
+          status.textContent = `passed\n${results.join("\n")}`;
+          document.body.dataset.status = "passed";
         } else {
           if (forceCompatibility) {
             const gpu = navigator.gpu;
@@ -57,7 +209,7 @@
               throw new Error("forced Compatibility smoke requires WebGPU");
             }
             compatibilityProbe = {
-              featureLevelRequested: false,
+              featureLevelsRequested: [],
               advertisedVertexStorageLimit: null,
               requestedVertexStorageLimit: null,
             };
@@ -67,10 +219,11 @@
               get(target, property) {
                 if (property === "requestAdapter") {
                   return async (options = {}) => {
-                    if (options.featureLevel !== "compatibility") {
+                    const featureLevel = options.featureLevel ?? "core";
+                    compatibilityProbe.featureLevelsRequested.push(featureLevel);
+                    if (featureLevel !== "compatibility") {
                       throw new Error("forced Core WebGPU admission failure");
                     }
-                    compatibilityProbe.featureLevelRequested = true;
                     const adapter = await requestAdapter(options);
                     if (!adapter) {
                       return null;
@@ -144,7 +297,9 @@
               ? Math.min(4, compatibilityProbe.advertisedVertexStorageLimit)
               : undefined;
             if (
-              !compatibilityProbe.featureLevelRequested ||
+              compatibilityProbe.featureLevelsRequested.length < 2 ||
+              compatibilityProbe.featureLevelsRequested[0] !== "core" ||
+              compatibilityProbe.featureLevelsRequested[1] !== "compatibility" ||
               compatibilityProbe.requestedVertexStorageLimit !==
                 expectedVertexStorageLimit
             ) {
@@ -154,8 +309,8 @@
             }
             results.push(
               forceNoSsbo
-                ? "compatibility=selected vertex-storage-limit=0 polyfill=rendered"
-                : `compatibility=selected requested-vertex-storage-limit=${compatibilityProbe.requestedVertexStorageLimit} rendered`,
+                ? "compatibility=selected order=core,compatibility vertex-storage-limit=0 polyfill=rendered"
+                : `compatibility=selected order=core,compatibility requested-vertex-storage-limit=${compatibilityProbe.requestedVertexStorageLimit} rendered`,
             );
           } else {
             results.push(await assert_resize(document.createElement("canvas")));

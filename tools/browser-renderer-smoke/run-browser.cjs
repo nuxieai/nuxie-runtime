@@ -42,19 +42,31 @@ const fullCases = [
     path: "?force-webgpu-compatibility=1",
     expected: [
       "backend=webgpu",
-      "compatibility=selected requested-vertex-storage-limit=",
+      "compatibility=selected order=core,compatibility requested-vertex-storage-limit=",
     ],
   },
   {
     path: "?force-webgpu-compatibility=1&force-no-ssbo=1",
     expected: [
       "backend=webgpu",
-      "compatibility=selected vertex-storage-limit=0 polyfill=rendered",
+      "compatibility=selected order=core,compatibility vertex-storage-limit=0 polyfill=rendered",
     ],
   },
   {
     path: "?force-webgpu-unavailable=1",
     expected: ["webgpu-unavailable=adapter-error"],
+  },
+  {
+    path: "?force-webgpu-no-adapter=1",
+    expected: [
+      "webgpu-no-adapter=adapter-error order=core,compatibility",
+    ],
+  },
+  {
+    path: "?force-webgpu-device-failure=1",
+    expected: [
+      "webgpu-device-failure=device-error order=core,compatibility",
+    ],
   },
 ];
 

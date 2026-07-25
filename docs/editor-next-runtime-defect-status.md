@@ -41,14 +41,12 @@ with JavaScript `null`, which wasm-bindgen 0.2.126's undefined-only
 `JsOption::into_option` path sends into vendored wgpu's `Error::from_js`.
 The narrow repair at the existing BrowserWebGpu vendor boundary is red/green
 in real Chrome, and `make browser-webgpu-only-check` is green with a
-deterministic 64-pixel clean-scope row. Full repository floors, a non-draft PR,
-merge, and unchanged Editor P14-C06 consumption remain.
-
-`LOC-002` remains a separate current-pin runtime candidate. P04-C11 now
-reproduces at runtime `95027109`: retained/replayed and fresh edited scenes
-both emit 34 draws, but their semantic hashes are respectively
-`3e16fd81fe5cd4ba` and `726f855d61a0e5ea`. That semantic-only split requires
-the direct identical Rust/C++ owner walk; it is not explained by `LOC-019`.
+deterministic 64-pixel clean-scope row. The complete executor floor is green:
+414 runtime tests, 141 public `nuxie` tests, 721 pinned-C++ probes, ordinary
+and scripted 317/317 entries plus 647/647 segments with zero divergences,
+1,468/1,468 renderer rows, C API and workspace suites, and 8.74 MiB under the
+9 MiB ceiling. A non-draft PR, independent CI, merge, and unchanged Editor
+P14-C06 consumption remain.
 
 ## Editor source snapshot
 
@@ -113,14 +111,12 @@ the unsupported duration and its fully qualified regression test passes 1/1.
    unchanged P14-C06 matrix;
 3. qualify `LOC-009` independently from `LOC-019`; `RuntimeRejected` is not a
    diagnosis;
-4. walk `LOC-002` through one identical retained/fresh Rust and pinned-C++
-   stimulus to the first differing semantic owner;
-5. qualify and close `F-ED-04` and requalify `F-ED-06`, `F-ED-07`,
+4. qualify and close `F-ED-04` and requalify `F-ED-06`, `F-ED-07`,
    `F-ED-08`, and the remaining `F-ED-11` draw row under the WebGPU-only
    support contract—no WebGL2 repair or fallback;
-6. keep `LOC-007` and every other reserved runtime-owner finding with the
+5. keep `LOC-007` and every other reserved runtime-owner finding with the
    active FL executor while file-disjoint evidence/API work proceeds;
-7. burn down the remaining queues in
+6. burn down the remaining queues in
    `docs/editor-next-runtime-defect-goal.md` through Editor consumption and
    the complete 27-child product matrix.
 

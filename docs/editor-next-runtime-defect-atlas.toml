@@ -619,12 +619,12 @@ reason = "The linked product reproduction must be rerun after direct qualificati
 id = "LOC-002"
 title = "Selected-product relation does not re-evaluate after a preserved-source edit"
 source_class = "candidate"
-state = "reproduced"
+state = "reported"
 owner_class = "runtime"
 classification = "unqualified"
 ticket = "F-ED-02"
 fixture_id = "fed.loc_002.current_source_relation"
-preliminary_disposition = "Current-pin Editor reproduction is semantic-only: retained/replayed and fresh edited scenes both emit 34 draws but produce different semantic hashes after the identical selected-product write. Direct Rust/C++ owner localization remains required."
+preliminary_disposition = "Derived-relation rebind gap; may collapse into the stable owner slice."
 reproduction_sha256 = "ba7014eb700b6f97b3f1e05d2ab7062b9e83f64f767566864efa720ecdee4f6b"
 rust_stimulus = "pending: F-ED-02 must minimize the direct Rust stimulus for LOC-002"
 cpp_stimulus = "pending: F-ED-02 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-002"
@@ -650,8 +650,8 @@ runtime_defects = "a610201cc34c95bd5ff0838d95228af3983f38327ebbef87b253c3e49a357
 parity_ledger = "d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c97"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-02 must recover the original localization Rust SHA" }
-editor_last_consumed_runtime_sha = "95027109c89f651835c76646ebf4d8734f032f07"
-investigation_head_sha = "05d45f07d87b33665167de0869b7db7b009bf8fe"
+editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
 merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
 consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
@@ -668,10 +668,6 @@ reason = "F-ED-02 has no executor-green result to verify."
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:LOC-002"
-[[defect.history]]
-state = "reproduced"
-actor = "editor-cutover"
-evidence = "P04-C11 at runtime 95027109: retained/replayed draw_count=34 semantic_hash=3e16fd81fe5cd4ba; fresh edited draw_count=34 semantic_hash=726f855d61a0e5ea"
 [defect.cpp_result]
 status = "pending"
 reason = "Immediate current-source evaluation has not been probed at the pin."
@@ -679,9 +675,8 @@ reason = "Immediate current-source evaluation has not been probed at the pin."
 status = "pending"
 reason = "Retained and fresh direct relation fixtures need normalized records."
 [defect.editor_result]
-status = "fail"
-command = "P04-C11 selected-product structural-remount current-pin rerun"
-evidence = "View-AST 4/4, hover 2/2, and nested occurrence 1/1 pass. The selected-product surface fails after 60.45s with equal draw_count=34 and semantic hashes 3e16fd81fe5cd4ba versus 726f855d61a0e5ea; later scene/hit comparisons do not run."
+status = "pending"
+reason = "Four affected product children await the direct owner verdict."
 
 [[defect]]
 id = "LOC-003"
@@ -1706,12 +1701,20 @@ merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
 consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
 [defect.renderer_provenance]
-status = "pending"
-reason = "Focused real-Chrome WebGPU smoke is green; the full renderer provenance stamp and 1,468-row native pixel referee remain required before executor-green."
+status = "complete"
+backend = "BrowserWebGpu WebGPU for the focused error-scope fixture; rust-wgpu over Metal for the native pixel referee"
+dawn_revision = "211333b2e3e429c3508f25c81c547f602adf448c"
+mode = "required WebGPU; focused 8x8 GPU-canvas draw plus native clockwise-atomic and MSAA corpus"
+feature_flags = "WebGPU-only; no WebGL2 surface; scripted and non-scripted differential floors"
+surface = "real Chrome offscreen 8x8 fixture and Apple M5 Max Metal corpus"
+reference_executable = "renderer-replay-ffi-dawn static reference corpus"
+reference_stamp_sha256 = "9077e7a86823453b7820e0bfb0fa13f7235a0d6f5e9df99d74d4353a5f4e05b5"
+command = "make browser-webgpu-only-check && make renderer-golden"
+evidence = "Focused clean-scope row renders 64 pixels; browser prohibited-surface count is zero; renderer-corpus exact=1468 diverges=0 gated=0 total=1468."
 [defect.executor_verification]
 status = "pass"
-command = "make browser-webgpu-only-check"
-evidence = "Real Chrome passes ordinary and GPU-only smoke. The new row reports gpu-canvas-clean-error-scope=clean rendered-pixels=64; all prior WebGPU rows remain green and prohibited WebGL2 surface count is zero."
+command = "complete closeout battery at c879372ccad6b0203440591486dffc283ef63b1f"
+evidence = "414/414 runtime, 141/141 nuxie, 721/721 C++ probes, ordinary and scripted 317/317 entries plus 647/647 segments with zero divergences, renderer 1468/1468, browser WebGPU-only, C API and workspace green; size 9168392 bytes under 9437184."
 [defect.orchestrator_verification]
 status = "pending"
 reason = "F-ED-11 has no executor-green result to verify."
@@ -1729,7 +1732,7 @@ reason = "Pinned C++ has no browser WebGPU/wasm-bindgen binding equivalent; GPUD
 [defect.rust_result]
 status = "pass"
 command = "make browser-webgpu-only-check"
-evidence = "The pre-repair row traps at vendored wgpu Error::from_js on a clean null result; the repaired row renders 64 red pixels and reports a clean scope while existing device/interface/uniform failure checks remain green."
+evidence = "The pre-repair row traps at vendored wgpu Error::from_js on a clean null result; the repaired row renders 64 red pixels and reports a clean scope while existing device/interface/uniform failure checks remain green. Complete repository floors are green at c879372c."
 [defect.editor_result]
 status = "fail"
 command = "GPU_CANVAS_GPU=1 pnpm --dir apps/nuxie-dashboard exec playwright test --config playwright.gpu-canvas.config.ts"

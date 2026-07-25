@@ -187,8 +187,15 @@ status = "registered"
 driver = "pending:F-ED-13"
 
 [[fixture]]
-id = "fed.loc_019.webgpu_setup_fallback"
+id = "fed.loc_019.webgpu_clean_error_scope"
 defect_id = "LOC-019"
 kind = "browser-renderer"
-status = "registered"
-driver = "pending:F-ED-11"
+status = "implemented"
+driver = "make browser-webgpu-only-check"
+stimulus_files = [
+  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "f8f7589644202b3801e44108897e45bcbc9211892fa8011b66c8cde3a6825297" },
+  { root = "repo", path = "tools/browser-renderer-smoke/gpu-only.html", sha256 = "03c98e7c098f779e35b65d630f77035d0daff45f57daa3501943f082a36e7c9d" },
+  { root = "repo", path = "tools/browser-renderer-smoke/run-browser.cjs", sha256 = "60eb1059d55f426b768369849749ca8a27c9850eff87f356bd30555aec1ed7de" },
+  { root = "repo", path = "vendor/wgpu-30.0.0/src/backend/webgpu.rs", sha256 = "b248630d054a1948e10413845a4b5913aa70b68d2ac52d4d51323aa3bd55491e" },
+  { root = "repo", path = "vendor/wgpu-30.0.0/NUXIE_PATCH.md", sha256 = "e71602da453fc396b6c04975b9d70136348a7bf032f5de2b92e88aef2fb6de44" },
+]

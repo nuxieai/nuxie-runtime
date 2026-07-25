@@ -253,8 +253,12 @@ stale-oracle | retracted → closed
 - A qualified runtime row may carry `TRACKED-GAP`, `DIVERGENT`, or
   `local-translation-defect`.
 - A qualified API row may carry an A-row.
-- A qualified renderer row must cite the renderer provenance record and may carry
-  the same structural classifications only when a C++ correspondence exists.
+- A qualified renderer row must cite the renderer provenance record. Structural
+  renderer/runtime classifications require a C++ correspondence. A
+  `local-translation-defect` may instead cite `AF-10` only when the first
+  divergence is confined to an existing foreign platform binding that pinned
+  C++ cannot execute; the normative platform contract then governs that narrow
+  adapter, not any product or renderer behavior above it.
 - A qualified editor row is transferred to the Editor owner and cannot authorize
   runtime edits.
 - A qualified artifact row names the repository and release prerequisite; it is
@@ -323,7 +327,7 @@ fixture in `F-ED-00`.
 | `LOC-016` | source implementation already present; publication gap | publish ABI 1.6 typed animation selection and integrate it |
 | `LOC-017` | invalid old native capture | rerun ABI 1.6 with typed player/time and production host composition |
 | `LOC-018` | evidence/localization gap | prove normalized record and object-order identity before renderer attribution |
-| `LOC-019` | browser WebGPU setup/fallback defect | preserve the underlying JS error; prove Auto reaches WebGL2 when WebGPU setup fails |
+| `LOC-019` | reproduced BrowserWebGpu nullable-error translation defect | clean `GPUDevice.popErrorScope()` resolves to JavaScript `null`; repair that decode at the existing vendored wgpu boundary and preserve real/rejected errors |
 
 There is no `LOC-010` in the source artifacts. `F-ED-00` records an explicit
 tombstone in a separate `reserved_ids` table so future automation does not
@@ -792,11 +796,17 @@ Qualify both rows independently. `LOC-009` already reaches a selected WebGPU
 backend and typed draw, so its direct C++/Rust record oracle is not blocked by
 `LOC-019`.
 
-For `LOC-019`, preserve the underlying JavaScript setup error and first prove
-the documented Auto/forced-mode contract. If the browser adapter owns fallback
-and typed diagnostics, map its complete adapter/resource lifecycle:
-initialization, requested limits/features, asynchronous failure, fallback,
-resize, device loss, retry policy, and teardown.
+`LOC-019` is no longer an adapter-selection or fallback hypothesis. At runtime
+`95027109`, real Chrome creates the WebGPU device and executes a valid draw.
+The first divergence is the clean error-scope result: WebGPU fulfills
+`GPUDevice.popErrorScope()` with JavaScript `null`, while wasm-bindgen 0.2.126
+uses undefined-only `JsOption` conversion and vendored wgpu passes that null
+to `Error::from_js`. The faithful platform translation is local: recognize
+fulfilled `null` as no error before converting a present `GpuError`, while
+leaving the pre-existing rejected-promise path unchanged and preserving real
+error conversion. This is the `AF-10` foreign-platform-binding case and stays
+at Nuxie's existing vendored BrowserWebGpu compatibility boundary; it does
+not add a dependency fork, downgrade wasm-bindgen, or restore WebGL2 fallback.
 
 For `LOC-009`, feed identical persisted GPU-canvas records, scripts, WGSL,
 resources, and time through C++ and Rust. `RuntimeRejected` alone is not a

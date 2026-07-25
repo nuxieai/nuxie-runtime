@@ -7,11 +7,11 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: `F-ED-00A`;
+- phase: `F-ED-11A` / `LOC-019`;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
-- investigation base: `efb6ad128d6aac7b81ed57d4a8b76eb9259ec833`;
+- investigation base: `05d45f07d87b33665167de0869b7db7b009bf8fe`;
 - Editor's last consumed runtime:
-  `13aedd6d92de0991eed8dc3fda085db2dff18d48`;
+  `95027109c89f651835c76646ebf4d8734f032f07`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
 - closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`,
   and `LOC-004`;
@@ -28,6 +28,23 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 The active FL executor owns FL-A and the complete reservation recorded in the
 atlas. F-ED may write only its new evidence/checker/fixture paths until that
 lease changes.
+
+`F-ED-11A` has localized `LOC-019` independently of `LOC-009`. The WebGPU
+device and valid draw succeed; a clean `GPUDevice.popErrorScope()` fulfills
+with JavaScript `null`, which wasm-bindgen 0.2.126's undefined-only
+`JsOption::into_option` path sends into vendored wgpu's `Error::from_js`.
+The narrow repair at the existing BrowserWebGpu vendor boundary is red/green
+in real Chrome, and `make browser-webgpu-only-check` is green with a
+deterministic 64-pixel clean-scope row plus a concrete validation-error row.
+The complete executor floor is green:
+414 runtime tests, 141 public `nuxie` tests, 721 pinned-C++ probes, ordinary
+and scripted 317/317 entries plus 647/647 segments with zero divergences,
+1,468/1,468 renderer rows, C API and workspace suites, and 8.74 MiB under the
+9 MiB ceiling. The FL executor's current handshake confirms that this vendored
+browser/backend closure is outside the FL-A runtime reservation and that FL
+will consume its merge SHA at the later rebase boundary. A non-draft PR,
+independent CI, merge, orchestrator verification, and unchanged Editor P14-C06
+consumption remain.
 
 ## Editor source snapshot
 
@@ -85,12 +102,13 @@ the unsupported duration and its fully qualified regression test passes 1/1.
 
 ## Next queue
 
-1. have Editor consume merged runtime
-   `95027109c89f651835c76646ebf4d8734f032f07`, adapt the two
-   `BrowserFactory` call sites, and rerun the unchanged WebGPU product gates;
-2. qualify and close `F-ED-03` and `F-ED-04` against their existing
-   low-level runtime paths without touching reserved modules;
-3. requalify `F-ED-06`, `F-ED-07`, `F-ED-08`, and `F-ED-11` under the
+1. open executor-green `F-ED-11A` as a non-draft one-defect PR, merge it when
+   required CI and review are green, obtain orchestrator verification, and hand
+   the exact SHA to Editor for the unchanged P14-C06 matrix;
+2. qualify `LOC-009` independently from `LOC-019`; `RuntimeRejected` is not a
+   diagnosis;
+3. qualify and close `F-ED-03` and `F-ED-04`, then requalify `F-ED-06`,
+   `F-ED-07`, `F-ED-08`, and the remaining `F-ED-11` draw row under the
    WebGPU-only support contract—no WebGL2 repair or fallback;
 4. keep `LOC-007` and every other reserved runtime-owner finding with the
    active FL executor while file-disjoint evidence/API work proceeds;

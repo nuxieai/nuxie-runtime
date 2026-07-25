@@ -7,11 +7,12 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: `F-ED-00A`;
+- phase: `F-ED-03` merge closeout plus file-disjoint `F-ED-11A` /
+  `LOC-019`;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
-- investigation base: `efb6ad128d6aac7b81ed57d4a8b76eb9259ec833`;
+- investigation base: `05d45f07d87b33665167de0869b7db7b009bf8fe`;
 - Editor's last consumed runtime:
-  `13aedd6d92de0991eed8dc3fda085db2dff18d48`;
+  `95027109c89f651835c76646ebf4d8734f032f07`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
 - closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`,
   and `LOC-004`;
@@ -28,6 +29,26 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 The active FL executor owns FL-A and the complete reservation recorded in the
 atlas. F-ED may write only its new evidence/checker/fixture paths until that
 lease changes.
+
+`F-ED-03` is independently reviewable in PR #49 with its complete local floor
+green. Its required CI parity job is blocked by the repository runner lacking
+a matching `llvm-nm`, the same harness defect present on `main`; that harness
+repair remains a separate approval-gated change.
+
+`F-ED-11A` has localized `LOC-019` independently of `LOC-009`. The WebGPU
+device and valid draw succeed; a clean `GPUDevice.popErrorScope()` fulfills
+with JavaScript `null`, which wasm-bindgen 0.2.126's undefined-only
+`JsOption::into_option` path sends into vendored wgpu's `Error::from_js`.
+The narrow repair at the existing BrowserWebGpu vendor boundary is red/green
+in real Chrome, and `make browser-webgpu-only-check` is green with a
+deterministic 64-pixel clean-scope row. Full repository floors, a non-draft PR,
+merge, and unchanged Editor P14-C06 consumption remain.
+
+`LOC-002` remains a separate current-pin runtime candidate. P04-C11 now
+reproduces at runtime `95027109`: retained/replayed and fresh edited scenes
+both emit 34 draws, but their semantic hashes are respectively
+`3e16fd81fe5cd4ba` and `726f855d61a0e5ea`. That semantic-only split requires
+the direct identical Rust/C++ owner walk; it is not explained by `LOC-019`.
 
 ## Editor source snapshot
 
@@ -85,16 +106,21 @@ the unsupported duration and its fully qualified regression test passes 1/1.
 
 ## Next queue
 
-1. have Editor consume merged runtime
-   `95027109c89f651835c76646ebf4d8734f032f07`, adapt the two
-   `BrowserFactory` call sites, and rerun the unchanged WebGPU product gates;
-2. qualify and close `F-ED-03` and `F-ED-04` against their existing
-   low-level runtime paths without touching reserved modules;
-3. requalify `F-ED-06`, `F-ED-07`, `F-ED-08`, and `F-ED-11` under the
-   WebGPU-only support contract—no WebGL2 repair or fallback;
-4. keep `LOC-007` and every other reserved runtime-owner finding with the
+1. clear the separate `llvm-tools` CI harness prerequisite, merge `F-ED-03`,
+   and hand its exact SHA to Editor for P09-C01;
+2. run the complete required floors for `F-ED-11A`, open it as a non-draft
+   one-defect PR, merge it when green, and hand the exact SHA to Editor for the
+   unchanged P14-C06 matrix;
+3. qualify `LOC-009` independently from `LOC-019`; `RuntimeRejected` is not a
+   diagnosis;
+4. walk `LOC-002` through one identical retained/fresh Rust and pinned-C++
+   stimulus to the first differing semantic owner;
+5. qualify and close `F-ED-04` and requalify `F-ED-06`, `F-ED-07`,
+   `F-ED-08`, and the remaining `F-ED-11` draw row under the WebGPU-only
+   support contract—no WebGL2 repair or fallback;
+6. keep `LOC-007` and every other reserved runtime-owner finding with the
    active FL executor while file-disjoint evidence/API work proceeds;
-5. burn down the remaining queues in
+7. burn down the remaining queues in
    `docs/editor-next-runtime-defect-goal.md` through Editor consumption and
    the complete 27-child product matrix.
 

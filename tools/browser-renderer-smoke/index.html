@@ -14,6 +14,7 @@
         assert_direct_gpu_canvas_image,
         assert_explicit_readback,
         assert_imported_gpu_canvas,
+        assert_persistent_surface_acquisition_failure,
         assert_resize,
         assert_surface_acquisition_retry,
         assert_webgpu_gpu_canvas_rejects_invalid_interface,
@@ -145,7 +146,7 @@
         }
       }
 
-      function installOneShotSurfaceAcquisitionLoss() {
+      function installSurfaceAcquisitionLoss(canvas, persistent = false) {
         const prototype = globalThis.GPUCanvasContext?.prototype;
         if (!prototype) {
           throw new Error("browser lacks GPUCanvasContext required by loss proof");
@@ -159,23 +160,42 @@
             "browser lacks callable getCurrentTexture required by loss proof",
           );
         }
-        let calls = 0;
+        const getContext = canvas.getContext;
+        let acquisitions = 0;
+        let surfaces = 0;
+        Object.defineProperty(canvas, "getContext", {
+          configurable: true,
+          value(type, ...args) {
+            if (type === "webgpu") {
+              surfaces += 1;
+            }
+            return getContext.call(this, type, ...args);
+          },
+        });
         Object.defineProperty(prototype, "getCurrentTexture", {
           ...descriptor,
           value(...args) {
-            calls += 1;
-            if (calls === 1) {
-              throw new Error("injected one-shot surface acquisition loss");
+            acquisitions += 1;
+            if (persistent || acquisitions === 1) {
+              throw new Error(
+                persistent
+                  ? "injected persistent surface acquisition loss"
+                  : "injected one-shot surface acquisition loss",
+              );
             }
             return descriptor.value.apply(this, args);
           },
         });
         return {
-          get calls() {
-            return calls;
+          get acquisitions() {
+            return acquisitions;
+          },
+          get surfaces() {
+            return surfaces;
           },
           restore() {
             Object.defineProperty(prototype, "getCurrentTexture", descriptor);
+            delete canvas.getContext;
           },
         };
       }
@@ -518,24 +538,49 @@
             results.push(resizeResult);
 
             const retryCanvas = document.createElement("canvas");
-            const acquisitionLoss = installOneShotSurfaceAcquisitionLoss();
+            const acquisitionLoss =
+              installSurfaceAcquisitionLoss(retryCanvas);
             try {
               const retryResult = await assert_surface_acquisition_retry(
                 retryCanvas,
               );
-              if (acquisitionLoss.calls !== 2) {
+              if (
+                acquisitionLoss.acquisitions !== 2 ||
+                acquisitionLoss.surfaces !== 2
+              ) {
                 throw new Error(
-                  `surface acquisition retry called getCurrentTexture ${acquisitionLoss.calls} times`,
+                  `surface acquisition recovery observed ${acquisitionLoss.acquisitions} acquisitions and ${acquisitionLoss.surfaces} surfaces`,
                 );
               }
-              await assertOpaquePresentationPixels(
-                retryCanvas,
-                [0xab, 0xcd, 0xef, 0xff],
-                "same-factory surface acquisition retry",
-              );
-              results.push(`${retryResult} acquisitions=2`);
+              await assertPremultipliedPresentationPixels(retryCanvas);
+              results.push(`${retryResult} acquisitions=2 surfaces=2`);
             } finally {
               acquisitionLoss.restore();
+            }
+
+            const persistentLossCanvas = document.createElement("canvas");
+            const persistentAcquisitionLoss = installSurfaceAcquisitionLoss(
+              persistentLossCanvas,
+              true,
+            );
+            try {
+              const persistentResult =
+                await assert_persistent_surface_acquisition_failure(
+                  persistentLossCanvas,
+                );
+              if (
+                persistentAcquisitionLoss.acquisitions !== 2 ||
+                persistentAcquisitionLoss.surfaces !== 2
+              ) {
+                throw new Error(
+                  `persistent surface acquisition failure observed ${persistentAcquisitionLoss.acquisitions} acquisitions and ${persistentAcquisitionLoss.surfaces} surfaces`,
+                );
+              }
+              results.push(
+                `${persistentResult} acquisitions=2 surfaces=2`,
+              );
+            } finally {
+              persistentAcquisitionLoss.restore();
             }
             results.push(await assert_direct_gpu_canvas_image(document.createElement("canvas")));
             results.push(await assert_imported_gpu_canvas(document.createElement("canvas")));

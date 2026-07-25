@@ -226,33 +226,35 @@ fn fs_main() -> @location(0) vec4<f32> {
     pub async fn assert_surface_acquisition_retry(
         canvas: HtmlCanvasElement,
     ) -> Result<String, JsValue> {
-        let mut factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
-        let first_error = match factory
-            .begin_frame(0xff12_3456)
-            .map_err(js_error)?
-            .present()
-            .await
-        {
-            Err(error) => error.to_string(),
-            Ok(()) => {
-                return Err(JsValue::from_str(
-                    "injected surface acquisition loss unexpectedly presented the first frame",
-                ));
-            }
-        };
-        if !first_error.contains("browser WebGPU canvas surface was lost") {
-            return Err(JsValue::from_str(&format!(
-                "injected surface acquisition loss returned an unexpected error: {first_error}"
-            )));
-        }
-        factory.resize(4, 3).map_err(js_error)?;
+        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
         factory
-            .begin_frame(0xffab_cdef)
+            .begin_frame(0x80ff_0000)
             .map_err(js_error)?
             .present()
             .await
             .map_err(js_error)?;
-        Ok("surface-acquisition-loss=typed retry=same-factory".into())
+        Ok("surface-acquisition-loss=recreated retry=same-present alpha=premultiplied".into())
+    }
+
+    #[wasm_bindgen]
+    pub async fn assert_persistent_surface_acquisition_failure(
+        canvas: HtmlCanvasElement,
+    ) -> Result<String, JsValue> {
+        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
+        let error = factory
+            .begin_frame(0xff12_3456)
+            .map_err(js_error)?
+            .present()
+            .await
+            .expect_err("persistent surface loss must fail after one recovery attempt")
+            .to_string();
+        let expected = "wgpu device error: browser WebGPU canvas surface remained lost after surface recreation";
+        if error != expected {
+            return Err(JsValue::from_str(&format!(
+                "persistent surface loss returned {error:?}, expected {expected:?}"
+            )));
+        }
+        Ok("surface-acquisition-persistent-loss=typed retry=bounded".into())
     }
 
     #[wasm_bindgen]
@@ -799,8 +801,8 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
 
 #[cfg(target_arch = "wasm32")]
 pub use wasm::{
-    assert_direct_gpu_canvas_image, assert_imported_gpu_canvas, assert_resize,
-    assert_surface_acquisition_retry, assert_webgpu_clean_error_scope,
-    assert_webgpu_gpu_canvas_rejects_invalid_interface, assert_webgpu_uniform_limit_rejection,
-    recording_float_probe, run_backend, run_stream_case,
+    assert_direct_gpu_canvas_image, assert_imported_gpu_canvas,
+    assert_persistent_surface_acquisition_failure, assert_resize, assert_surface_acquisition_retry,
+    assert_webgpu_clean_error_scope, assert_webgpu_gpu_canvas_rejects_invalid_interface,
+    assert_webgpu_uniform_limit_rejection, recording_float_probe, run_backend, run_stream_case,
 };

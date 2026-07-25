@@ -1,3 +1,6 @@
+use super::browser_surface_lifecycle::{
+    acquire_surface_texture, SurfaceAcquisitionFailure, SurfaceRecoveryAction, SurfaceRecoveryError,
+};
 use super::present_pipeline::{PresentPipeline, PresentTargetAlpha};
 use super::{RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame};
 use nuxie_render_api::{
@@ -119,8 +122,7 @@ impl BrowserFactory {
         self.inner.resize(width, height)?;
         self.canvas.set_width(width);
         self.canvas.set_height(height);
-        self.presentation
-            .configure(&self.inner.context.device, width, height);
+        self.presentation.configure(width, height);
         self.width = width;
         self.height = height;
         Ok(())
@@ -354,7 +356,10 @@ impl BrowserFrame {
 }
 
 struct BrowserPresentation {
-    surface: wgpu::Surface<'static>,
+    instance: wgpu::Instance,
+    device: wgpu::Device,
+    canvas: HtmlCanvasElement,
+    surface: RefCell<wgpu::Surface<'static>>,
     configuration: RefCell<wgpu::SurfaceConfiguration>,
     presenter: PresentPipeline,
     queue: wgpu::Queue,
@@ -367,15 +372,9 @@ impl BrowserPresentation {
         width: u32,
         height: u32,
     ) -> Result<Self, RendererError> {
-        let surface = factory
-            .context
-            .instance
-            .create_surface(wgpu::SurfaceTarget::Canvas(canvas))
-            .map_err(|error| {
-                RendererError::Device(format!(
-                    "browser WebGPU canvas surface creation failed: {error}"
-                ))
-            })?;
+        let instance = factory.context.instance.clone();
+        let device = factory.context.device.clone();
+        let surface = create_browser_surface(&instance, canvas.clone(), "creation")?;
         let mut configuration = surface
             .get_default_config(&factory.context.adapter, width, height)
             .ok_or_else(|| {
@@ -384,45 +383,116 @@ impl BrowserPresentation {
                 )
             })?;
         configuration.alpha_mode = wgpu::CompositeAlphaMode::PreMultiplied;
-        surface.configure(&factory.context.device, &configuration);
+        surface.configure(&device, &configuration);
         Ok(Self {
             presenter: PresentPipeline::new(
-                &factory.context.device,
+                &device,
                 configuration.format,
                 PresentTargetAlpha::Premultiplied,
             ),
-            surface,
+            instance,
+            device,
+            canvas,
+            surface: RefCell::new(surface),
             configuration: RefCell::new(configuration),
             queue: factory.context.queue.clone(),
         })
     }
 
-    fn configure(&self, device: &wgpu::Device, width: u32, height: u32) {
+    fn configure(&self, width: u32, height: u32) {
         let mut configuration = self.configuration.borrow_mut();
         configuration.width = width;
         configuration.height = height;
-        self.surface.configure(device, &configuration);
+        self.surface
+            .borrow()
+            .configure(&self.device, &configuration);
     }
 
     fn current_texture(&self) -> Result<wgpu::SurfaceTexture, RendererError> {
-        match self.surface.get_current_texture() {
+        acquire_surface_texture(
+            || self.acquire_current_texture(),
+            |action| match action {
+                SurfaceRecoveryAction::ReconfigureAndRetry => self.reconfigure_surface(),
+                SurfaceRecoveryAction::RecreateAndRetry => self.recreate_surface(),
+            },
+        )
+        .map_err(|error| match error {
+            SurfaceRecoveryError::Acquisition { failure, recovery } => {
+                surface_acquisition_error(failure, recovery)
+            }
+            SurfaceRecoveryError::Recovery(error) => error,
+        })
+    }
+
+    fn acquire_current_texture(&self) -> Result<wgpu::SurfaceTexture, SurfaceAcquisitionFailure> {
+        match self.surface.borrow().get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(texture)
             | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => Ok(texture),
-            wgpu::CurrentSurfaceTexture::Timeout => Err(RendererError::Device(
-                "browser WebGPU canvas surface acquisition timed out".into(),
-            )),
-            wgpu::CurrentSurfaceTexture::Occluded => Err(RendererError::Device(
-                "browser WebGPU canvas surface is occluded".into(),
-            )),
-            wgpu::CurrentSurfaceTexture::Outdated => Err(RendererError::Device(
-                "browser WebGPU canvas surface is outdated".into(),
-            )),
-            wgpu::CurrentSurfaceTexture::Lost => Err(RendererError::Device(
-                "browser WebGPU canvas surface was lost".into(),
-            )),
-            wgpu::CurrentSurfaceTexture::Validation => Err(RendererError::Device(
-                "browser WebGPU canvas surface acquisition failed validation".into(),
-            )),
+            status => Err(surface_failure(status)),
+        }
+    }
+
+    fn reconfigure_surface(&self) -> Result<(), RendererError> {
+        let configuration = self.configuration.borrow();
+        self.surface
+            .borrow()
+            .configure(&self.device, &configuration);
+        Ok(())
+    }
+
+    fn recreate_surface(&self) -> Result<(), RendererError> {
+        let surface = create_browser_surface(&self.instance, self.canvas.clone(), "recreation")?;
+        surface.configure(&self.device, &self.configuration.borrow());
+        *self.surface.borrow_mut() = surface;
+        Ok(())
+    }
+}
+
+fn create_browser_surface(
+    instance: &wgpu::Instance,
+    canvas: HtmlCanvasElement,
+    operation: &'static str,
+) -> Result<wgpu::Surface<'static>, RendererError> {
+    instance
+        .create_surface(wgpu::SurfaceTarget::Canvas(canvas))
+        .map_err(|error| {
+            RendererError::Device(format!(
+                "browser WebGPU canvas surface {operation} failed: {error}"
+            ))
+        })
+}
+
+fn surface_acquisition_error(
+    failure: SurfaceAcquisitionFailure,
+    recovery: Option<SurfaceRecoveryAction>,
+) -> RendererError {
+    let status = match failure {
+        SurfaceAcquisitionFailure::Timeout => "acquisition timed out",
+        SurfaceAcquisitionFailure::Occluded => "is occluded",
+        SurfaceAcquisitionFailure::Outdated => "remained outdated",
+        SurfaceAcquisitionFailure::Lost => "remained lost",
+        SurfaceAcquisitionFailure::Validation => "acquisition failed validation",
+    };
+    let recovery = recovery
+        .map(|recovery| match recovery {
+            SurfaceRecoveryAction::ReconfigureAndRetry => {
+                " after surface reconfiguration".to_owned()
+            }
+            SurfaceRecoveryAction::RecreateAndRetry => " after surface recreation".to_owned(),
+        })
+        .unwrap_or_default();
+    RendererError::Device(format!("browser WebGPU canvas surface {status}{recovery}"))
+}
+
+fn surface_failure(status: wgpu::CurrentSurfaceTexture) -> SurfaceAcquisitionFailure {
+    match status {
+        wgpu::CurrentSurfaceTexture::Timeout => SurfaceAcquisitionFailure::Timeout,
+        wgpu::CurrentSurfaceTexture::Occluded => SurfaceAcquisitionFailure::Occluded,
+        wgpu::CurrentSurfaceTexture::Outdated => SurfaceAcquisitionFailure::Outdated,
+        wgpu::CurrentSurfaceTexture::Lost => SurfaceAcquisitionFailure::Lost,
+        wgpu::CurrentSurfaceTexture::Validation => SurfaceAcquisitionFailure::Validation,
+        wgpu::CurrentSurfaceTexture::Success(_) | wgpu::CurrentSurfaceTexture::Suboptimal(_) => {
+            unreachable!("successful surface acquisition has no failure status")
         }
     }
 }

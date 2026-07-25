@@ -10,6 +10,8 @@ mod atlas_pipeline;
 #[cfg(test)]
 mod atlas_placement_oracle;
 mod atomic_pipeline;
+#[cfg(any(test, target_arch = "wasm32"))]
+mod browser_surface_lifecycle;
 mod clockwise_atomic_pipeline;
 mod composite_pipeline;
 #[cfg(test)]

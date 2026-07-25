@@ -775,7 +775,21 @@ def validate_verification(
         return
     status = str(value.get("status", ""))
     if status == "pending":
-        validate_pending_value(defect_id, field, value, state, errors)
+        pending_allowed_late = (
+            field == "executor_verification"
+            and state in {"qualified", "mapped"}
+        ) or (
+            field == "orchestrator_verification"
+            and state in {"qualified", "mapped", "executor-green"}
+        )
+        validate_pending_value(
+            defect_id,
+            field,
+            value,
+            state,
+            errors,
+            pending_allowed_late=pending_allowed_late,
+        )
     elif status == "pass":
         if not str(value.get("command", "")).strip():
             errors.append(f"{defect_id} {field} pass has no command")

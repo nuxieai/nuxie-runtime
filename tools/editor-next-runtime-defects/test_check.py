@@ -751,6 +751,57 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
             result.stderr,
         )
 
+    def test_verification_can_remain_pending_until_its_state_transition(self) -> None:
+        pending = {"status": "pending", "reason": "Independent run has not completed."}
+
+        errors: list[str] = []
+        CHECKER.validate_verification(
+            "LOC-019",
+            "executor_verification",
+            pending,
+            "mapped",
+            errors,
+        )
+        self.assertEqual(errors, [])
+
+        errors = []
+        CHECKER.validate_verification(
+            "LOC-019",
+            "executor_verification",
+            pending,
+            "executor-green",
+            errors,
+        )
+        self.assertIn(
+            "LOC-019 is executor-green but closure field "
+            "executor_verification is pending",
+            errors,
+        )
+
+        errors = []
+        CHECKER.validate_verification(
+            "LOC-019",
+            "orchestrator_verification",
+            pending,
+            "executor-green",
+            errors,
+        )
+        self.assertEqual(errors, [])
+
+        errors = []
+        CHECKER.validate_verification(
+            "LOC-019",
+            "orchestrator_verification",
+            pending,
+            "orchestrator-verified",
+            errors,
+        )
+        self.assertIn(
+            "LOC-019 is orchestrator-verified but closure field "
+            "orchestrator_verification is pending",
+            errors,
+        )
+
     def test_every_row_must_carry_the_complete_active_lease(self) -> None:
         self.atlas.write_text(
             self.atlas.read_text().replace(

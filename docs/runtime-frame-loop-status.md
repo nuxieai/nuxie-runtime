@@ -4,15 +4,19 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-A source audit/specification in progress. FL-1 rulebook validation,
-  source shaping, and clean-floor verification are complete; no production
-  owner-family translation has started.
+- Phase: FL-A source audit/specification complete. FL-1 rulebook validation,
+  source shaping, and clean-floor verification are complete; the binding
+  52-file/six-member implementation specification is adversarial-review
+  green. No production owner-family translation has started.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - File closure: 0 / 337 in-scope C++ files.
 - Member closure: 41 / 74 owner/member rows (the imported, already-closed
   runtime-drawing ledger); 33 frame-loop rows pending.
 - Open mechanism gaps: 7 / 8.
 - Current dependency wave: FL-A, Component/update ownership.
+- Current FL-A landing: A1 is non-production scaffold only; A1's first
+  production use must land atomically with A2's complete occurrence-graph
+  replacement and legacy-path deletion.
 - Current experimental changes: uncommitted KeyFrame retained-seconds and
   Component-handle candidates remain quarantined. They are not standalone
   slices and must be re-derived in FL-B/FL-A or discarded.
@@ -194,15 +198,80 @@ FL-1 clean committed-tree floor at `bb9ad75d`:
   `47cf0e95bb8c8f9abc04676b3ae802ca3b4aaf401037579194c7bfaf9ca85d51`;
   both below the unchanged 9,437,184-byte budget.
 
+## FL-A source audit and implementation specification
+
+- Binding specification:
+  `docs/runtime-frame-loop-fl-a-spec.md`.
+- Coverage: exactly 52 / 52 `component-update-graph` C++ file rows,
+  partitioned as 11 Component/core, 6 bones, 21 constraints/scrolling, and
+  14 math rows; no missing or duplicate file. All six pending
+  `component.identity`, `component.dirt`, `component.dependents`,
+  `component.update_order`, `component.transforms`, and
+  `component.clone_drop` rows have explicit construct/retain/dirty/update/
+  clone/drop closure contracts.
+- Core finding: committed Rust copies authored local-ID parent/dependent/
+  constraint topology and precomputed order, then centralizes virtual family
+  behavior on Artboard. Pinned C++ owns occurrence-local links, builds them
+  after parenting, sorts that same retained graph, publishes accumulated dirt
+  before concrete callbacks, and traverses retained owner identity.
+- Constraint finding: six arithmetic families are reusable, but all 21 rows
+  remain owner-divergent or missing at the committed floor. FollowPath measure,
+  IK chain, ScrollPhysics, ScrollConstraint child rendezvous, virtualizer,
+  draggable/proxy, and generated setter callbacks must live on concrete
+  occurrences; four Artboard side vectors, per-apply reconstruction, and
+  global type/property redispatch are displaced paths.
+- Bones/math finding: Skin must own one Skinnable link, ordered Tendons, and
+  one retained bone-transform buffer with exact accumulated-dirt callback
+  order. Existing value/path math stays in its accepted modules; the two
+  absent cold utilities are literal small ports, not a new math subsystem.
+- One-owner rule: one `RuntimeObjectOccurrence` owns the sole generated
+  backing fields, embedded Component base, and concrete subclass payload.
+  Typed handles are views of that object, not links between three
+  authoritative stores. Existing renderer resources remain under their
+  already-closed RF ownership adaptations.
+- Hybrid prevention: A1 is private/unreachable scaffold and cannot merge.
+  The first production handle use is atomic with A2, which ports Component
+  ownership, remaps ordinary Component plus already-closed PathComposer/
+  TextVariationHelper nodes into one occurrence schedule, deletes copied
+  relation/schedule reads, and adds negative ratchets in the same landing.
+- Clone/drop is per owner, not a generic remap. ScrollConstraint, Skin,
+  FollowPath, IK, proxies/physics, ArtboardComponentList, ScrollVirtualizer,
+  and Drawable each have copied/default/rebuilt/non-owning/teardown policy.
+- Artboard handoff: FL-A freezes the component construction, dependency sort,
+  dirty/update, advancing/resetting, and frame-interleaving methods from
+  `src/artboard.cpp` as method-level evidence while the whole Artboard file row
+  remains pending for FL-D.
+- Adversarial specification review:
+  - owner/identity/clone/drop: PASS after resolving the forbidden hybrid,
+    single-property-owner ambiguity, generic clone error, Drawable hit/clipping
+    boundary, and Artboard cross-wave handoff;
+  - dirt/order/advance: PASS after correcting TargetedConstraint phase,
+    generated callback/no-op/deserialize semantics, mixed dependency-node
+    schedule replacement, FollowPath update ownership, Scroll child
+    rendezvous, and full advance/reset interleaving;
+  - bones/math ownership: PASS after pinning Skin/Skinnable/Tendon/Weight
+    relations, accumulated Skin callback order, Solo/Layout collapse
+    exceptions, retained constraint/IK targets, and existing math-owner
+    placement;
+  - the final ScrollConstraint computed-property check confirms percent/index
+    drag/physics/intent branches and the intentional no-mutation but repeated
+    notification behavior of velocity/active writes.
+- Structural preflight: `make runtime-frame-loop-port-check` remains green
+  with all 12 controls; open counts remain 337 files, 74 members, and 8 gaps.
+- No production behavior, gate, threshold, renderer boundary, or performance
+  result changed in this audit/specification landing.
+
 ## Next
 
-1. Complete the read-only, member-level comparison of all 52 FL-A C++ source
-   rows and their headers against the committed Rust owners; record the
-   dependency-ordered implementation specification before production edits.
-2. Translate FL-A as one complete Component owner-family wave, covering all
+1. Implement the atomic A1/A2 occurrence-object and Component graph landing
+   from `docs/runtime-frame-loop-fl-a-spec.md`; no production commit may expose
+   both the copied-ID graph and the typed occurrence graph.
+2. Continue A3 through A7 in dependency order, deleting each displaced owner,
+   lookup, reconstruction, or broad callback path in the same landing.
+3. Translate FL-A as one complete Component owner-family wave, covering all
    six pending member rows and closing or rule-backing every mapped file row.
    Delete the copied-id/rediscovery mechanisms displaced by retained
    occurrence-owned links and exact dirt/update ownership in the same landing.
-3. Preserve the complete behavior/pixel/product/size floor during FL-A.
+4. Preserve the complete behavior/pixel/product/size floor during FL-A.
    Performance is measured only after the complete wave, never used as its
    work queue.

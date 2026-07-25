@@ -125,9 +125,17 @@ pub(crate) fn decode_shader_asset(name: &str, payload: &[u8]) -> Result<GpuCanva
     }
 
     let blob_data = cursor.read_bytes(cursor.remaining(), "blob data")?;
+    // `ShaderAsset::decode` first indexes descriptors by target, so a later
+    // duplicate replaces an earlier descriptor before any range is checked.
+    // Validate the final descriptor for every target (including retired
+    // targets) after that coalescing step.
+    let mut final_descriptors = [None; 256];
+    for descriptor in descriptors {
+        final_descriptors[usize::from(descriptor.target)] = Some(descriptor);
+    }
     let mut wgsl = None;
     let mut binding_map = None;
-    for descriptor in descriptors {
+    for descriptor in final_descriptors.into_iter().flatten() {
         let end = descriptor
             .offset
             .checked_add(descriptor.size)
@@ -198,22 +206,6 @@ fn decode_whole_module_wgsl(
     let source = std::str::from_utf8(cursor.read_bytes(source_length, "WGSL source")?)
         .map_err(|_| Error::runtime(format!("ShaderAsset '{name}' WGSL source is not UTF-8")))?
         .to_owned();
-    for (stage, logical) in [
-        (GpuCanvasShaderStage::Vertex, "vs_main"),
-        (GpuCanvasShaderStage::Fragment, "fs_main"),
-    ] {
-        if entries
-            .iter()
-            .filter(|entry| entry.stage == stage && entry.logical_entry_point == logical)
-            .count()
-            != 1
-        {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' must expose exactly one logical WGSL {logical} entry"
-            )));
-        }
-    }
-
     Ok(GpuCanvasShader {
         source,
         entries,
@@ -343,16 +335,23 @@ mod tests {
         bytes.extend_from_slice(value.as_bytes());
     }
 
-    fn loc_009_source_container() -> Vec<u8> {
-        let mut source = vec![2];
-        for (stage, entry) in [(0, "vs_main"), (1, "fs_main")] {
-            source.push(stage);
-            put_string(&mut source, entry);
-            put_string(&mut source, entry);
+    fn source_container(entries: &[(u8, &str, &str)], wgsl: &str) -> Vec<u8> {
+        let mut source = vec![entries.len() as u8];
+        for (stage, logical, physical) in entries {
+            source.push(*stage);
+            put_string(&mut source, logical);
+            put_string(&mut source, physical);
         }
-        put_u32(&mut source, LOC_009_UBO_WGSL.len() as u32);
-        source.extend_from_slice(LOC_009_UBO_WGSL.as_bytes());
+        put_u32(&mut source, wgsl.len() as u32);
+        source.extend_from_slice(wgsl.as_bytes());
         source
+    }
+
+    fn loc_009_source_container() -> Vec<u8> {
+        source_container(
+            &[(0, "vs_main", "vs_main"), (1, "fs_main", "fs_main")],
+            LOC_009_UBO_WGSL,
+        )
     }
 
     fn rstb_payload_with_blob(descriptors: &[(u8, usize, usize)], blob_data: &[u8]) -> Vec<u8> {
@@ -455,6 +454,65 @@ mod tests {
         .expect("the final target-0 descriptor wins exactly as in ShaderAsset::decode");
         assert_eq!(shader.source, LOC_009_UBO_WGSL);
         assert_eq!(shader.bindings.len(), 1);
+    }
+
+    #[test]
+    fn validates_only_final_last_wins_descriptors_like_cpp() {
+        let source = loc_009_source_container();
+        let mut blob_data = source.clone();
+        let binding_map_offset = blob_data.len();
+        blob_data.extend_from_slice(LOC_009_BINDING_MAP);
+        let payload = rstb_payload_with_blob(
+            &[
+                (WGSL_SOURCE_TARGET, u32::MAX as usize, 1),
+                (WGSL_BINDING_MAP_TARGET, u32::MAX as usize, 1),
+                (WGSL_SOURCE_TARGET, 0, source.len()),
+                (
+                    WGSL_BINDING_MAP_TARGET,
+                    binding_map_offset,
+                    LOC_009_BINDING_MAP.len(),
+                ),
+            ],
+            &blob_data,
+        );
+
+        let shader = decode_shader_asset("scene", &payload)
+            .expect("C++ overwrites duplicate targets before validating final ranges");
+        assert_eq!(shader.source, LOC_009_UBO_WGSL);
+        assert_eq!(shader.bindings.len(), 1);
+    }
+
+    #[test]
+    fn preserves_arbitrary_logical_and_physical_entry_names_in_declaration_order() {
+        let source = source_container(
+            &[
+                (0, "alternate_vertex", "vs_main"),
+                (0, "default_vertex", "vs_main"),
+                (1, "alternate_fragment", "fs_main"),
+                (1, "default_fragment", "fs_main"),
+            ],
+            LOC_009_UBO_WGSL,
+        );
+        let payload = rstb_payload(&[
+            (WGSL_SOURCE_TARGET, source),
+            (WGSL_BINDING_MAP_TARGET, LOC_009_BINDING_MAP.to_vec()),
+        ]);
+
+        let shader = decode_shader_asset("scene", &payload)
+            .expect("entry names are records, not a vs_main/fs_main schema");
+        assert_eq!(
+            shader
+                .entries
+                .iter()
+                .map(|entry| entry.logical_entry_point.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "alternate_vertex",
+                "default_vertex",
+                "alternate_fragment",
+                "default_fragment",
+            ],
+        );
     }
 
     #[test]

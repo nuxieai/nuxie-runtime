@@ -635,6 +635,16 @@ impl GpuCanvasShader {
     }
 }
 
+/// The exact logical/physical entry pair selected by one authored pipeline
+/// stage. Bare shader descriptors select the first declaration of that stage;
+/// named descriptors retain both names so the renderer can reject stale or
+/// mismatched records before creating a backend object.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasShaderEntrySelection {
+    pub logical_entry_point: String,
+    pub physical_entry_point: String,
+}
+
 /// One uniform binding produced by an authored GPU-canvas frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuCanvasUniformBuffer {
@@ -668,6 +678,8 @@ pub struct GpuCanvasVertexBuffer {
 /// Backend-neutral result of executing one imported script's `drawCanvas`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GpuCanvasPlan {
+    pub vertex_entry: Option<GpuCanvasShaderEntrySelection>,
+    pub fragment_entry: Option<GpuCanvasShaderEntrySelection>,
     pub width: u32,
     pub height: u32,
     pub clear_color: [f64; 4],

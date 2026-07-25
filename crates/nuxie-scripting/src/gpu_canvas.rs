@@ -13,7 +13,10 @@ use luaur_rt::{
     AnyUserData, Buffer as LuaBuffer, Function, Table, UserData, UserDataFields, UserDataMethods,
     Value, VmState,
 };
-use nuxie_render_api::{Factory as RenderFactory, GpuCanvasPlan, GpuCanvasShader, RenderImage};
+use nuxie_render_api::{
+    Factory as RenderFactory, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
+    GpuCanvasShaderEntrySelection, GpuCanvasShaderStage, RenderImage,
+};
 pub use nuxie_render_api::{
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
@@ -119,6 +122,7 @@ fn checked_gpu_buffer_write_range(
 #[derive(Debug, Clone)]
 struct GpuShader {
     name: String,
+    entries: Vec<GpuCanvasShaderEntry>,
 }
 
 impl UserData for GpuShader {}
@@ -126,6 +130,8 @@ impl UserData for GpuShader {}
 #[derive(Debug, Clone)]
 struct GpuPipeline {
     shader_name: String,
+    vertex_entry: GpuCanvasShaderEntrySelection,
+    fragment_entry: GpuCanvasShaderEntrySelection,
     vertex_layouts: Vec<GpuCanvasVertexLayout>,
 }
 
@@ -267,7 +273,7 @@ impl UserData for ScriptedImageSampler {}
 #[derive(Debug, Clone)]
 pub(crate) struct GpuCanvasContextBindings {
     canvas: GpuCanvas,
-    shader_names: Rc<BTreeSet<String>>,
+    shader_entries: Rc<BTreeMap<String, Vec<GpuCanvasShaderEntry>>>,
 }
 
 impl GpuCanvasContextBindings {
@@ -276,12 +282,19 @@ impl GpuCanvasContextBindings {
     }
 
     pub(crate) fn shader_userdata(&self, lua: &luaur_rt::Lua, name: String) -> Result<AnyUserData> {
-        if !self.shader_names.contains(&name) {
+        let entries = self
+            .shader_entries
+            .get(&name)
+            .ok_or_else(|| Error::runtime(format!("GPU-canvas shader '{name}' is unavailable")))?;
+        if entries.is_empty() {
             return Err(Error::runtime(format!(
                 "GPU-canvas shader '{name}' is unavailable"
             )));
         }
-        lua.create_userdata(GpuShader { name })
+        lua.create_userdata(GpuShader {
+            name,
+            entries: entries.clone(),
+        })
     }
 }
 
@@ -306,12 +319,18 @@ impl ImportedGpuCanvasInstance {
         shaders: Rc<RefCell<BTreeMap<String, GpuCanvasShader>>>,
     ) -> (Self, GpuCanvasContextBindings) {
         let state = Rc::new(RefCell::new(GpuCanvasState::default()));
-        let shader_names = Rc::new(shaders.borrow().keys().cloned().collect());
+        let shader_entries = Rc::new(
+            shaders
+                .borrow()
+                .iter()
+                .map(|(name, shader)| (name.clone(), shader.entries.clone()))
+                .collect(),
+        );
         let bindings = GpuCanvasContextBindings {
             canvas: GpuCanvas {
                 state: Rc::clone(&state),
             },
-            shader_names,
+            shader_entries,
         };
         (Self { state, shaders }, bindings)
     }
@@ -576,6 +595,8 @@ impl UserData for GpuRenderPass {
                 })
                 .collect();
             let plan = GpuCanvasDrawPlan {
+                vertex_entry: Some(pipeline.vertex_entry.clone()),
+                fragment_entry: Some(pipeline.fragment_entry.clone()),
                 width: state.width,
                 height: state.height,
                 clear_color: this.clear_color,
@@ -655,7 +676,21 @@ impl GpuCanvasProgram {
             canvas: GpuCanvas {
                 state: Rc::clone(&state),
             },
-            shader_names: Rc::new(BTreeSet::from(["scene".into()])),
+            shader_entries: Rc::new(BTreeMap::from([(
+                "scene".into(),
+                vec![
+                    GpuCanvasShaderEntry {
+                        stage: GpuCanvasShaderStage::Vertex,
+                        logical_entry_point: "vs_main".into(),
+                        physical_entry_point: "vs_main".into(),
+                    },
+                    GpuCanvasShaderEntry {
+                        stage: GpuCanvasShaderStage::Fragment,
+                        logical_entry_point: "fs_main".into(),
+                        physical_entry_point: "fs_main".into(),
+                    },
+                ],
+            )])),
         };
         let context = vm.lua().create_userdata(bindings)?;
         let chunk = vm
@@ -720,6 +755,76 @@ pub(crate) fn install_gpu_canvas_globals(vm: &ScriptVm) -> Result<()> {
         vm,
         Rc::new(RefCell::new(GpuCanvasResourceBudget::default())),
     )
+}
+
+fn resolve_shader_entry(
+    shader: &GpuShader,
+    stage: GpuCanvasShaderStage,
+    requested_logical: Option<&str>,
+    stage_name: &str,
+) -> Result<GpuCanvasShaderEntrySelection> {
+    let requested_logical = requested_logical.filter(|name| !name.is_empty());
+    let entry = match requested_logical {
+        Some(logical) => shader
+            .entries
+            .iter()
+            .find(|entry| entry.stage == stage && entry.logical_entry_point == logical),
+        None => shader.entries.iter().find(|entry| entry.stage == stage),
+    };
+    let entry = entry.ok_or_else(|| {
+        let available = shader
+            .entries
+            .iter()
+            .filter(|entry| entry.stage == stage)
+            .map(|entry| entry.logical_entry_point.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        match requested_logical {
+            Some(logical) => Error::runtime(format!(
+                "GPUPipeline {stage_name} entry point '{logical}' not found (available: {})",
+                if available.is_empty() {
+                    "<none>"
+                } else {
+                    available.as_str()
+                }
+            )),
+            None => Error::runtime(format!(
+                "GPUPipeline shader has no {stage_name} entry point"
+            )),
+        }
+    })?;
+    Ok(GpuCanvasShaderEntrySelection {
+        logical_entry_point: entry.logical_entry_point.clone(),
+        physical_entry_point: entry.physical_entry_point.clone(),
+    })
+}
+
+fn decode_pipeline_stage(
+    value: Value,
+    stage: GpuCanvasShaderStage,
+    stage_name: &str,
+) -> Result<(GpuShader, GpuCanvasShaderEntrySelection)> {
+    let (shader, requested_logical) = match value {
+        Value::UserData(shader) => (shader.borrow::<GpuShader>()?.clone(), None),
+        Value::Table(descriptor) => {
+            reject_unknown_fields(
+                &descriptor,
+                &["module", "entryPoint"],
+                "GPU pipeline stage descriptor",
+            )?;
+            let module: AnyUserData = descriptor.get("module")?;
+            let shader = module.borrow::<GpuShader>()?.clone();
+            let requested: Option<String> = descriptor.get("entryPoint")?;
+            (shader, requested)
+        }
+        _ => {
+            return Err(Error::runtime(format!(
+                "GPUPipeline {stage_name} must be a Shader or {{ module = Shader, entryPoint = string? }}"
+            )));
+        }
+    };
+    let selection = resolve_shader_entry(&shader, stage, requested_logical.as_deref(), stage_name)?;
+    Ok((shader, selection))
 }
 
 fn install_gpu_canvas_globals_with_budget(
@@ -810,10 +915,16 @@ fn install_gpu_canvas_globals_with_budget(
             &["vertex", "fragment", "vertexLayout", "colorTargets"],
             "GPUPipeline",
         )?;
-        let vertex: AnyUserData = descriptor.get("vertex")?;
-        let fragment: AnyUserData = descriptor.get("fragment")?;
-        let vertex = vertex.borrow::<GpuShader>()?;
-        let fragment = fragment.borrow::<GpuShader>()?;
+        let (vertex, vertex_entry) = decode_pipeline_stage(
+            descriptor.get("vertex")?,
+            GpuCanvasShaderStage::Vertex,
+            "vertex",
+        )?;
+        let (fragment, fragment_entry) = decode_pipeline_stage(
+            descriptor.get("fragment")?,
+            GpuCanvasShaderStage::Fragment,
+            "fragment",
+        )?;
         if vertex.name != fragment.name {
             return Err(Error::runtime(
                 "GPU pipeline vertex and fragment shaders must share one module",
@@ -834,6 +945,8 @@ fn install_gpu_canvas_globals_with_budget(
         }
         lua.create_userdata(GpuPipeline {
             shader_name: vertex.name.clone(),
+            vertex_entry,
+            fragment_entry,
             vertex_layouts: decode_vertex_layouts(&descriptor)?,
         })
     })?;
@@ -1026,7 +1139,10 @@ fn decode_vertex_layouts(descriptor: &Table) -> Result<Vec<GpuCanvasVertexLayout
 
 #[cfg(test)]
 mod tests {
-    use super::checked_gpu_buffer_write_range;
+    use super::{
+        GpuCanvasShaderEntry, GpuCanvasShaderStage, GpuShader, checked_gpu_buffer_write_range,
+        resolve_shader_entry,
+    };
 
     #[test]
     fn gpu_buffer_write_range_is_validated_before_source_copy() {
@@ -1042,5 +1158,68 @@ mod tests {
         let error = checked_gpu_buffer_write_range(1, usize::MAX, usize::MAX)
             .expect_err("range arithmetic must be checked before to_vec");
         assert!(error.to_string().contains("range overflow"), "{error}");
+    }
+
+    #[test]
+    fn shader_entries_use_declaration_order_defaults_and_named_logical_selection() {
+        let shader = GpuShader {
+            name: "scene".into(),
+            entries: vec![
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Vertex,
+                    logical_entry_point: "first_vertex".into(),
+                    physical_entry_point: "physical_vertex_0".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Vertex,
+                    logical_entry_point: "chosen_vertex".into(),
+                    physical_entry_point: "physical_vertex_1".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Fragment,
+                    logical_entry_point: "first_fragment".into(),
+                    physical_entry_point: "physical_fragment_0".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Fragment,
+                    logical_entry_point: "chosen_fragment".into(),
+                    physical_entry_point: "physical_fragment_1".into(),
+                },
+            ],
+        };
+
+        let default = resolve_shader_entry(&shader, GpuCanvasShaderStage::Vertex, None, "vertex")
+            .expect("bare shader selects the first declaration of its stage");
+        assert_eq!(default.logical_entry_point, "first_vertex");
+        assert_eq!(default.physical_entry_point, "physical_vertex_0");
+        assert_eq!(
+            resolve_shader_entry(&shader, GpuCanvasShaderStage::Vertex, Some(""), "vertex",)
+                .expect("an empty entryPoint selects the first declaration like C++"),
+            default,
+        );
+
+        let chosen = resolve_shader_entry(
+            &shader,
+            GpuCanvasShaderStage::Fragment,
+            Some("chosen_fragment"),
+            "fragment",
+        )
+        .expect("named selection resolves logical to physical");
+        assert_eq!(chosen.logical_entry_point, "chosen_fragment");
+        assert_eq!(chosen.physical_entry_point, "physical_fragment_1");
+
+        let error = resolve_shader_entry(
+            &shader,
+            GpuCanvasShaderStage::Fragment,
+            Some("missing"),
+            "fragment",
+        )
+        .expect_err("unknown logical entry fails before renderer allocation");
+        assert!(
+            error
+                .to_string()
+                .contains("available: first_fragment, chosen_fragment"),
+            "{error}",
+        );
     }
 }

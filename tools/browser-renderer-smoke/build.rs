@@ -10,8 +10,8 @@ return function(context)
     local canvas = context:gpuCanvas()
     local shader = context:shader("scene")
     local pipeline = GPUPipeline.new {
-        vertex = shader,
-        fragment = shader,
+        vertex = { module = shader, entryPoint = "chosen_vertex" },
+        fragment = { module = shader, entryPoint = "chosen_fragment" },
         vertexLayout = {},
         colorTargets = { { format = "rgba8unorm" } },
     }
@@ -39,14 +39,26 @@ end
 
 const WGSL: &str = r#"
 @vertex
-fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+fn physical_vertex_0(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let x = f32(i32(index) - 1);
+    let y = f32(i32(index & 1u) * 2 - 1);
+    return vec4<f32>(x, y, 0.0, 1.0);
+}
+
+@vertex
+fn physical_vertex_1(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
     let x = f32(i32(index) - 1);
     let y = f32(i32(index & 1u) * 2 - 1);
     return vec4<f32>(x, y, 0.0, 1.0);
 }
 
 @fragment
-fn fs_main() -> @location(0) vec4<f32> {
+fn physical_fragment_0() -> @location(0) vec4<f32> {
+    return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn physical_fragment_1() -> @location(0) vec4<f32> {
     return vec4<f32>(1.0, 0.0, 0.0, 1.0);
 }
 "#;
@@ -108,11 +120,17 @@ fn imported_file() -> Vec<u8> {
 
 fn shader_payload() -> Vec<u8> {
     const EMPTY_BINDING_MAP: &[u8] = &[2, 1, 14, 0, 0, 0, 0, 0];
-    let mut source = vec![2];
-    for (stage, entry) in [(0, "vs_main"), (1, "fs_main")] {
+    let entries = [
+        (0, "default_vertex", "physical_vertex_0"),
+        (0, "chosen_vertex", "physical_vertex_1"),
+        (1, "default_fragment", "physical_fragment_0"),
+        (1, "chosen_fragment", "physical_fragment_1"),
+    ];
+    let mut source = vec![entries.len() as u8];
+    for (stage, logical, physical) in entries {
         source.push(stage);
-        put_string(&mut source, entry);
-        put_string(&mut source, entry);
+        put_string(&mut source, logical);
+        put_string(&mut source, physical);
     }
     put_u32(&mut source, WGSL.len() as u32);
     source.extend_from_slice(WGSL.as_bytes());

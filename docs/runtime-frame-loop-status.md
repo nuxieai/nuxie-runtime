@@ -255,11 +255,11 @@ FL-A post-rebase floor, refreshed after final independent review:
   `make runtime-frame-loop-port-check`: all 23 checker/capture/summarizer
   controls passed; 338 file rows, 75 member rows, 9 gap rows, and every
   zero-ratchet matched the final rebased source fingerprint.
-- `make size-report` at `28c2aad5`: scripting off 8,017,800 bytes (7.65 MiB),
+- `make size-report` at `f439ef50`: scripting off 8,017,784 bytes (7.65 MiB),
   SHA-256
-  `dc124e53914914b3fe75d7ca85dc4ee6b315d11c6cc6e4ecb9f200209de611ba`;
+  `c7a41481bce8d8fc4d64cf1af626f143b5c8a17b738148d9369ddcd06c9e97ec`;
   scripting on 8,918,904 bytes (8.51 MiB), SHA-256
-  `42ff2fe509b4b8ec7103f60b221943db2876d7638db8da0d1bf57fb9339e2a64`;
+  `ce8e248bffee61589e0c523021b64bf0905edc8828a8a802c8d1daabb153c2b2`;
   both below the unchanged 9,437,184-byte budget.
 
 ## FL-A source audit and implementation specification

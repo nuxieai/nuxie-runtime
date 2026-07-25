@@ -253,8 +253,12 @@ stale-oracle | retracted → closed
 - A qualified runtime row may carry `TRACKED-GAP`, `DIVERGENT`, or
   `local-translation-defect`.
 - A qualified API row may carry an A-row.
-- A qualified renderer row must cite the renderer provenance record and may carry
-  the same structural classifications only when a C++ correspondence exists.
+- A qualified renderer row must cite the renderer provenance record. Structural
+  renderer/runtime classifications require a C++ correspondence. A
+  `local-translation-defect` may instead cite `AF-10` only when the first
+  divergence is confined to an existing foreign platform binding that pinned
+  C++ cannot execute; the normative platform contract then governs that narrow
+  adapter, not any product or renderer behavior above it.
 - A qualified editor row is transferred to the Editor owner and cannot authorize
   runtime edits.
 - A qualified artifact row names the repository and release prerequisite; it is
@@ -799,9 +803,10 @@ The first divergence is the clean error-scope result: WebGPU fulfills
 uses undefined-only `JsOption` conversion and vendored wgpu passes that null
 to `Error::from_js`. The faithful platform translation is local: recognize
 fulfilled `null` as no error before converting a present `GpuError`, while
-preserving rejected promises and real error values. This stays at Nuxie's
-existing vendored BrowserWebGpu compatibility boundary; it does not add a
-dependency fork, downgrade wasm-bindgen, or restore WebGL2 fallback.
+leaving the pre-existing rejected-promise path unchanged and preserving real
+error conversion. This is the `AF-10` foreign-platform-binding case and stays
+at Nuxie's existing vendored BrowserWebGpu compatibility boundary; it does
+not add a dependency fork, downgrade wasm-bindgen, or restore WebGL2 fallback.
 
 For `LOC-009`, feed identical persisted GPU-canvas records, scripts, WGSL,
 resources, and time through C++ and Rust. `RuntimeRejected` alone is not a

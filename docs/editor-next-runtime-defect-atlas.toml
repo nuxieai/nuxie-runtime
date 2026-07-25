@@ -1664,26 +1664,26 @@ reason = "The landed checkpoint links P04-C12 and P07-C04 to LOC-018; normalized
 id = "LOC-019"
 title = "Clean WebGPU error scope is decoded as a present GPU error"
 source_class = "candidate"
-state = "reproduced"
+state = "executor-green"
 owner_class = "renderer"
 classification = "local-translation-defect"
 ticket = "F-ED-11"
 fixture_id = "fed.loc_019.webgpu_clean_error_scope"
 preliminary_disposition = "Exact BrowserWebGpu binding defect: GPUDevice.popErrorScope resolves a clean scope to JavaScript null, but wasm-bindgen 0.2.126 JsOption semantics let vendored wgpu pass null to Error::from_js and trap."
-reproduction_sha256 = "a39e113039801b96696dfa088ac4a91764225cb4bb1d5df47ba170c259a04bf9"
+reproduction_sha256 = "660e13a094b2b278b347e9ab62f4593c828d76b8d56a0b15a55a37c0ec8df99e"
 rust_stimulus = "Real-Chrome minimal valid 8x8 GpuCanvasRenderPlan through WgpuFactory::new_async and render_gpu_canvas, followed by wgpu's scoped validation-error decode."
 cpp_stimulus = "not-applicable: pinned C++ has no browser WebGPU/wasm-bindgen binding equivalent; the governing external contract is GPUDevice.popErrorScope Promise<GPUError?>."
 source_files = ["vendor/wgpu-30.0.0/src/backend/webgpu.rs","tools/browser-renderer-smoke/src/lib.rs","tools/browser-renderer-smoke/gpu-only.html","tools/browser-renderer-smoke/run-browser.cjs"]
-source_members = ["future_pop_error_scope","assert_webgpu_clean_error_scope"]
-lifecycle_phases = ["device error-scope push","valid GPU-canvas draw","popErrorScope promise fulfillment","nullable GPUError decode"]
+source_members = ["future_pop_error_scope","assert_webgpu_clean_error_scope","assert_webgpu_error_scope_preserves_gpu_error"]
+lifecycle_phases = ["device error-scope push","valid and invalid GPU-canvas draws","popErrorScope promise fulfillment","nullable absence decode","concrete GPUError decode"]
 rust_owner = "vendor/wgpu-30.0.0/src/backend/webgpu.rs::future_pop_error_scope at Nuxie's existing BrowserWebGpu compatibility boundary"
 displaced_mechanism = "wasm-bindgen 0.2.126 JsOption::into_option is undefined-only, while the generated WebGPU binding fulfills a clean nullable GPUError with JavaScript null."
 dependencies = []
 target_tests = ["make browser-webgpu-only-check","Editor P14-C06 required-WebGPU matrix"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
 owning_ledger = "docs/editor-next-runtime-defect-atlas.toml:LOC-019"
-adaptation_rule = "WebGPU IDL GPUError? maps JavaScript null to Rust None; preserve rejected promises and concrete GPUError conversion."
-decision_row = "Local translation defect at the already-vendored wgpu BrowserWebGpu boundary; no WebGL2 fallback, wasm-bindgen downgrade, or new dependency fork."
+adaptation_rule = "AF-10: resolve nullable WebIDL absence at the existing foreign binding before converting a present typed value; leave rejected-promise flow unchanged and preserve concrete GPUError conversion."
+decision_row = "AF-10 local platform-binding translation at the already-vendored wgpu BrowserWebGpu boundary; pinned C++ has no browser binding correspondence, and this adds no product behavior, WebGL2 fallback, wasm-bindgen downgrade, or new dependency fork."
 touch = ["vendor/wgpu-30.0.0/src/backend/webgpu.rs","vendor/wgpu-30.0.0/NUXIE_PATCH.md","tools/browser-renderer-smoke/src/lib.rs","tools/browser-renderer-smoke/gpu-only.html","tools/browser-renderer-smoke/run-browser.cjs"]
 dont_touch = ["@active-fl-lease"]
 formal_children = []
@@ -1696,7 +1696,7 @@ parity_ledger = "d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c9
 [defect.revisions]
 original_localization_rust_sha = "95027109c89f651835c76646ebf4d8734f032f07"
 editor_last_consumed_runtime_sha = "95027109c89f651835c76646ebf4d8734f032f07"
-investigation_head_sha = "05d45f07d87b33665167de0869b7db7b009bf8fe"
+investigation_head_sha = "c879372ccad6b0203440591486dffc283ef63b1f"
 merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
 consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
@@ -1710,14 +1710,14 @@ surface = "real Chrome offscreen 8x8 fixture and Apple M5 Max Metal corpus"
 reference_executable = "renderer-replay-ffi-dawn static reference corpus"
 reference_stamp_sha256 = "9077e7a86823453b7820e0bfb0fa13f7235a0d6f5e9df99d74d4353a5f4e05b5"
 command = "make browser-webgpu-only-check && make renderer-golden"
-evidence = "Focused clean-scope row renders 64 pixels; browser prohibited-surface count is zero; renderer-corpus exact=1468 diverges=0 gated=0 total=1468."
+evidence = "Focused clean-scope row returns a 64-pixel buffer with 32 red pixels and the paired invalid-WGSL row returns a concrete validation error; browser prohibited-surface count is zero; renderer-corpus exact=1468 diverges=0 gated=0 total=1468."
 [defect.executor_verification]
 status = "pass"
 command = "complete closeout battery at c879372ccad6b0203440591486dffc283ef63b1f"
 evidence = "414/414 runtime, 141/141 nuxie, 721/721 C++ probes, ordinary and scripted 317/317 entries plus 647/647 segments with zero divergences, renderer 1468/1468, browser WebGPU-only, C API and workspace green; size 9168392 bytes under 9437184."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "F-ED-11 has no executor-green result to verify."
+reason = "F-ED-11 executor-green result awaits independent orchestrator verification."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
@@ -1726,13 +1726,25 @@ evidence = "runtime-defects:LOC-019"
 state = "reproduced"
 actor = "f-ed-executor"
 evidence = "P14-C06 at runtime 950: 1 passed, 16 failed; direct real-Chrome smoke reproduced the same Error::from_js/MakeSendFuture trap and the narrow nullable-error decode repair turned it green."
+[[defect.history]]
+state = "qualified"
+actor = "f-ed-executor"
+evidence = "The first divergence is confined to GPUDevice.popErrorScope nullable WebIDL decoding at the existing BrowserWebGpu binding; AF-10 and the normative Promise<GPUError?> contract authorize the narrow platform translation."
+[[defect.history]]
+state = "mapped"
+actor = "f-ed-executor"
+evidence = "Mapped to vendor/wgpu-30.0.0/src/backend/webgpu.rs::future_pop_error_scope with no active-FL file overlap; the FL executor confirmed this browser/backend lane is outside its reserved runtime ownership."
+[[defect.history]]
+state = "executor-green"
+actor = "f-ed-executor"
+evidence = "Real-Chrome clean-null and concrete-error paths pass; complete runtime, C++ probe, ordinary/scripted golden, renderer pixel, C API, workspace, and size floors pass at the recorded investigation head."
 [defect.cpp_result]
 status = "not-applicable"
 reason = "Pinned C++ has no browser WebGPU/wasm-bindgen binding equivalent; GPUDevice.popErrorScope Promise<GPUError?> is the governing platform contract."
 [defect.rust_result]
 status = "pass"
 command = "make browser-webgpu-only-check"
-evidence = "The pre-repair row traps at vendored wgpu Error::from_js on a clean null result; the repaired row renders 64 red pixels and reports a clean scope while existing device/interface/uniform failure checks remain green. Complete repository floors are green at c879372c."
+evidence = "The pre-repair row traps at vendored wgpu Error::from_js on a clean null result; the repaired row returns a 64-pixel buffer with 32 red pixels and reports a clean scope, while an invalid-WGSL scope returns a concrete validation error and existing device/interface/uniform failure checks remain green. Complete repository floors are green at c879372c."
 [defect.editor_result]
 status = "fail"
 command = "GPU_CANVAS_GPU=1 pnpm --dir apps/nuxie-dashboard exec playwright test --config playwright.gpu-canvas.config.ts"

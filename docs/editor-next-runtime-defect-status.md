@@ -41,12 +41,16 @@ with JavaScript `null`, which wasm-bindgen 0.2.126's undefined-only
 `JsOption::into_option` path sends into vendored wgpu's `Error::from_js`.
 The narrow repair at the existing BrowserWebGpu vendor boundary is red/green
 in real Chrome, and `make browser-webgpu-only-check` is green with a
-deterministic 64-pixel clean-scope row. The complete executor floor is green:
+deterministic 64-pixel clean-scope row plus a concrete validation-error row.
+The complete executor floor is green:
 414 runtime tests, 141 public `nuxie` tests, 721 pinned-C++ probes, ordinary
 and scripted 317/317 entries plus 647/647 segments with zero divergences,
 1,468/1,468 renderer rows, C API and workspace suites, and 8.74 MiB under the
-9 MiB ceiling. A non-draft PR, independent CI, merge, and unchanged Editor
-P14-C06 consumption remain.
+9 MiB ceiling. The FL executor's current handshake confirms that this vendored
+browser/backend closure is outside the FL-A runtime reservation and that FL
+will consume its merge SHA at the later rebase boundary. A non-draft PR,
+independent CI, merge, orchestrator verification, and unchanged Editor P14-C06
+consumption remain.
 
 ## Editor source snapshot
 
@@ -106,9 +110,9 @@ the unsupported duration and its fully qualified regression test passes 1/1.
 
 1. clear the separate `llvm-tools` CI harness prerequisite, merge `F-ED-03`,
    and hand its exact SHA to Editor for P09-C01;
-2. run the complete required floors for `F-ED-11A`, open it as a non-draft
-   one-defect PR, merge it when green, and hand the exact SHA to Editor for the
-   unchanged P14-C06 matrix;
+2. open executor-green `F-ED-11A` as a non-draft one-defect PR, merge it when
+   required CI and review are green, obtain orchestrator verification, and hand
+   the exact SHA to Editor for the unchanged P14-C06 matrix;
 3. qualify `LOC-009` independently from `LOC-019`; `RuntimeRejected` is not a
    diagnosis;
 4. qualify and close `F-ED-04` and requalify `F-ED-06`, `F-ED-07`,

@@ -748,6 +748,18 @@ rules exist so a reviewer can cite the violated rule behind every finding.
   (`crates/nuxie-runtime/src/artboard_data_bind.rs:2561-2572`). Candidate-vector
   precedence, slot-key path rewriting, or stopping at a partial same-model
   match is architecture drift even when a sampled value happens to agree.
+- **AF-10 Foreign platform nullability is resolved at the binding boundary.**
+  When a platform API has no pinned-C++ equivalent, its normative interface
+  contract is the authority only for the narrow foreign binding. Nullable
+  WebIDL results must recognize every absence representation the platform can
+  actually fulfill before converting a present typed value. The translation
+  stays at the existing platform adapter, preserves the surrounding success,
+  concrete-error, and rejected-promise control flow, and must not invent
+  product behavior, a fallback backend, or a second lifecycle. For WebGPU,
+  `GPUDevice.popErrorScope()` returns `Promise<GPUError?>`; therefore a
+  fulfilled JavaScript `null` is `None`, while a non-null `GpuError` continues
+  through the typed error conversion. This is a local platform-binding
+  translation, not evidence of a corresponding C++ renderer mechanism.
 
 ---
 

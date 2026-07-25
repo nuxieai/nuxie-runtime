@@ -281,16 +281,52 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }
             vertex_buffers: Vec::new(),
         };
         let pixels = factory.render_gpu_canvas(&plan).await.map_err(js_error)?;
-        if pixels.len() != 8 * 8 * 4
-            || !pixels
-                .chunks_exact(4)
-                .any(|pixel| pixel[0] > 240 && pixel[1] < 10 && pixel[2] < 10 && pixel[3] > 240)
-        {
-            return Err(JsValue::from_str(
-                "clean WebGPU error scope draw did not return rendered pixels",
-            ));
+        let red = pixels
+            .chunks_exact(4)
+            .filter(|pixel| pixel[0] > 240 && pixel[1] < 10 && pixel[2] < 10 && pixel[3] > 240)
+            .count();
+        if pixels.len() != 8 * 8 * 4 || red != 32 {
+            return Err(JsValue::from_str(&format!(
+                "clean WebGPU error scope draw returned bytes={} red={red}, expected bytes=256 red=32",
+                pixels.len()
+            )));
         }
-        Ok("gpu-canvas-clean-error-scope=clean rendered-pixels=64".into())
+        Ok(format!(
+            "gpu-canvas-clean-error-scope=clean rendered-pixels=64 red-pixels={red}"
+        ))
+    }
+
+    #[wasm_bindgen]
+    pub async fn assert_webgpu_error_scope_preserves_gpu_error() -> Result<String, JsValue> {
+        let factory = WgpuFactory::new_async(8, 8).await.map_err(js_error)?;
+        let invalid_plan = GpuCanvasRenderPlan {
+            shader_wgsl: "this is not valid WGSL".into(),
+            width: 8,
+            height: 8,
+            clear_color: [0.0, 0.0, 0.0, 1.0],
+            vertex_count: 3,
+            instance_count: 1,
+            first_vertex: 0,
+            first_instance: 0,
+            uniform_buffers: Vec::new(),
+            vertex_layouts: Vec::new(),
+            vertex_buffers: Vec::new(),
+        };
+        match factory.render_gpu_canvas(&invalid_plan).await {
+            Err(error)
+                if error
+                    .to_string()
+                    .contains("wgpu rejected the validated plan") =>
+            {
+                Ok("gpu-canvas-error-scope=concrete-error-preserved".into())
+            }
+            Err(error) => Err(JsValue::from_str(&format!(
+                "unexpected WebGPU validation error: {error}"
+            ))),
+            Ok(_) => Err(JsValue::from_str(
+                "invalid WGSL did not produce a concrete WebGPU validation error",
+            )),
+        }
     }
 
     #[wasm_bindgen]

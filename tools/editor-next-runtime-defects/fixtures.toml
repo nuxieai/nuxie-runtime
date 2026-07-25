@@ -193,9 +193,9 @@ kind = "browser-renderer"
 status = "implemented"
 driver = "make browser-webgpu-only-check"
 stimulus_files = [
-  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "87e61fcd483d181cc23203773e9131d84ae5cb69e031cbcfa03cde450901711e" },
-  { root = "repo", path = "tools/browser-renderer-smoke/gpu-only.html", sha256 = "ecc632be01fc3b2f99f78e225d85feb48b30121a5bc7bb3d4f581bb64df66208" },
-  { root = "repo", path = "tools/browser-renderer-smoke/run-browser.cjs", sha256 = "77ca362975b28e8c2c4903d205b46c6d87aed2dde28c8f1835aa86c40363bd9d" },
+  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "f8f7589644202b3801e44108897e45bcbc9211892fa8011b66c8cde3a6825297" },
+  { root = "repo", path = "tools/browser-renderer-smoke/gpu-only.html", sha256 = "03c98e7c098f779e35b65d630f77035d0daff45f57daa3501943f082a36e7c9d" },
+  { root = "repo", path = "tools/browser-renderer-smoke/run-browser.cjs", sha256 = "60eb1059d55f426b768369849749ca8a27c9850eff87f356bd30555aec1ed7de" },
   { root = "repo", path = "vendor/wgpu-30.0.0/src/backend/webgpu.rs", sha256 = "b248630d054a1948e10413845a4b5913aa70b68d2ac52d4d51323aa3bd55491e" },
   { root = "repo", path = "vendor/wgpu-30.0.0/NUXIE_PATCH.md", sha256 = "e71602da453fc396b6c04975b9d70136348a7bf032f5de2b92e88aef2fb6de44" },
 ]

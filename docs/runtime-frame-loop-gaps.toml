@@ -18,25 +18,33 @@ closure = "FL-B either lands the complete C++ KeyFrame owner with retained secon
 
 [[gap]]
 id = "FL-G02"
-status = "open"
-counter = "component_add_dirt"
-mechanism = "Component identity is split across local ids, component vectors, and subsystem sidecars; repeated id-to-owner resolution has not yet been structurally counted against C++ pointers."
+status = "closed"
+mechanism = "Component identity, retained relations, dirt, and dependency order now live on one occurrence-local object arena. Authored, PathComposer, and TextVariationHelper nodes share one typed-handle schedule; Artboard Components dirt is the root Component's sole dirt mask. Construction owner resolution, dependency builds, and dependency sorts match C++ exactly. Remaining component_add_dirt call-count differences are owned by the still-pending FL-C ListenerAlignTarget and FL-E Text-to-layout callback translations, not by the Component lifecycle."
 citations = [
-  "cpp:src/component.cpp:17",
-  "rust:crates/nuxie-runtime/src/components.rs:478",
+  "cpp:src/component.cpp:13-54",
+  "cpp:src/dependency_sorter.cpp:6-48",
+  "rust:crates/nuxie-runtime/src/objects.rs:232-275",
+  "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830",
+  "rust:crates/nuxie-runtime/src/artboard.rs:7651-7815",
 ]
-closure = "FL-A records identity counters and ports the complete retained component/dependent lifecycle."
+closure = "Closed by FL-A: one retained owner graph, one root/component dirt owner, exact dependency construction/sort counts, direct-handle traversal, clone-local relation rebuild, and zero internal owner rediscovery."
 
 [[gap]]
 id = "FL-G03"
 status = "open"
-counter = "state_machine_transition_search"
-mechanism = "State-machine definition and instance collections must be checked for per-frame clone and name/id search work against C++ retained vectors and pointers."
+counters = [
+  "component_add_dirt",
+  "state_machine_transition_search",
+  "component_dirt_consumptions",
+]
+mechanism = "State-machine definition and instance collections must be checked for per-frame clone and name/id search work against C++ retained vectors and pointers. The remaining canonical dirt-consumption delta is isolated to align_target: pinned C++ dispatches ListenerAlignTarget and dirties the retained target Node, while Rust has no corresponding RuntimeScheduledListenerAction variant/import branch."
 citations = [
   "cpp:src/animation/state_machine_instance.cpp:2583",
+  "cpp:src/animation/listener_align_target.cpp:9",
   "rust:crates/nuxie-runtime/src/state_machine/instance.rs:53",
+  "rust:crates/nuxie-runtime/src/state_machine.rs:2036",
 ]
-closure = "FL-C reaches counter parity for collection clones/searches and deletes any displaced lookup path."
+closure = "FL-C ports the complete pinned listener-action owner family, including ListenerAlignTarget's retained target resolution and transform/world-transform dirt writes, reaches parity for component dirt additions, transition searches, and component dirt consumptions, and deletes any displaced lookup path."
 
 [[gap]]
 id = "FL-G04"
@@ -47,7 +55,7 @@ citations = [
   "cpp:src/artboard.cpp:1153",
   "rust:crates/nuxie-runtime/src/artboard_data_bind.rs:1329",
 ]
-closure = "FL-D proves one owner and one consume path for every C++ dirty DataBind batch."
+closure = "FL-D retains one container enrollment per authored DataBind occurrence over the complete dirt mask across clone/collapse; subordinate converter DataBinds execute only through an active outer owner; every compatibility/path source route, including list targets, dirties and enqueues that exact authored occurrence. Prove one insertion-ordered queue entry and one consume path per occurrence. FL-A closes only Component -> collapsable registration/notification and initial synchronization; it does not claim complete DataBind collapse execution parity."
 
 [[gap]]
 id = "FL-G05"
@@ -72,13 +80,24 @@ closure = "The imported runtime-drawing ledger is closed with zero legacy scene-
 [[gap]]
 id = "FL-G07"
 status = "open"
-counter = "per_frame_allocations"
-mechanism = "Per-frame allocation, path/text/bounds/layout rebuild, and unchanged-frame work counts are not yet emitted by both runners."
+counters = [
+  "component_add_dirt",
+  "per_frame_allocations",
+]
+mechanism = "Text/layout owners and per-frame allocation, path/text/bounds/layout rebuild work remain pending. The mechanism trace isolates four missing Rust root-Components publications to pinned Text::buildRenderStyles -> Node::markLayoutNodeDirty -> LayoutComponent::markLayoutNodeDirty -> Artboard::markLayoutDirty; Rust still materializes retained text drawing state without that complete FL-E owner callback chain."
 citations = [
   "cpp:src/artboard.cpp:1652",
+  "cpp:src/artboard.cpp:1314",
+  "cpp:src/layout_component.cpp:1419",
+  "cpp:src/node.cpp:54",
+  "cpp:src/text/text.cpp:1342",
+  "cpp:src/text/text.cpp:826",
+  "rust:crates/nuxie-runtime/src/artboard.rs:7798",
   "rust:crates/nuxie-runtime/src/draw.rs:3816",
+  "rust:crates/nuxie-runtime/src/draw.rs:15779",
+  "rust:crates/nuxie-runtime/src/text.rs:113",
 ]
-closure = "The deterministic structural oracle records equal owner, dirt, rebuild, allocation, event, and clone/remount counts for the canonical corpus."
+closure = "FL-E ports the complete Text/layout dirty callback chain plus Text's retained m_bounds/localBounds owner read (including TransformConstraint targets), and the deterministic structural oracle records equal owner, dirt, rebuild, allocation, event, and clone/remount counts for the canonical corpus."
 
 [[gap]]
 id = "FL-G08"
@@ -97,6 +116,19 @@ citations = [
 ]
 closure = "FL-A/FL-E ports the retained Drawable link and exact DrawOrder/Clipping dirt lifecycle; the three counters match C++ or cite a binding adaptation."
 
+[[gap]]
+id = "FL-G09"
+status = "open"
+mechanism = "Pinned C++ installs one persistent ScriptingContext render context before file import, so context:shader can materialize from listener, input, path-effect, DataConverter, and draw callbacks. Rust currently installs RendererBindings.factory only around generator/init/method-with-factory/draw calls; ordinary callback entry points can therefore observe no factory and return nil."
+citations = [
+  "cpp:src/command_server.cpp:698",
+  "cpp:include/rive/lua/rive_lua_libs.hpp:1530-1543",
+  "rust:crates/nuxie-scripting/src/vm.rs:1693-1729",
+  "rust:crates/nuxie-scripting/src/vm.rs:1821-1870",
+  "rust:crates/nuxie-scripting/src/vm/renderer.rs:29-55",
+]
+closure = "FL-E gives each scripting VM one persistently installed RenderFactory context with C++ lifetime/identity, proves context:shader from every callback family, and deletes callback-scoped factory installation that displaced that owner. LOC-009 remains the renderer/scripting shader-occurrence implementation inside the active-factory boundary."
+
 [[ratchet]]
 id = "legacy_image_layout_scale"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
@@ -114,3 +146,81 @@ id = "nested_render_cache_key"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bRuntimeNestedRenderCacheKey\\b"
 max_occurrences = 22
+
+[[ratchet]]
+id = "component_copied_relation_fields"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\b(?:constraint_locals|dependent_locals|component_by_local|RuntimeUpdateTarget|runtime_update_order)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "artboard_duplicate_component_dirt"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "^\\s*pub\\(crate\\) dirt: ComponentDirt,"
+max_occurrences = 0
+
+[[ratchet]]
+id = "deferred_state_machine_hit_shape_dirt"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bpending_state_machine_hit_shape_dirt\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_definition_raw_pointer"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\b(?:state_machine_definition_ptr|retained_state_machine_ptr)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "runtime_component_parent_local_field"
+globs = ["crates/nuxie-runtime/src/components.rs"]
+pattern = "^\\s*pub(?:\\(crate\\))?\\s+parent_local\\s*:"
+max_occurrences = 0
+
+[[ratchet]]
+id = "runtime_imported_dependency_schedule"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bruntime_dependency_node_order\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "runtime_path_composer_schedule_sidecar"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\b(?:path_composer_order|path_composer_dirt|pending_settlement_component_locals)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "follow_path_graph_composer_rediscovery"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "graph\\.path_composers\\.iter\\(\\)\\.find_map"
+max_occurrences = 0
+
+[[ratchet]]
+id = "follow_path_copied_membership_clone"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "(?:shape_by_path_local:\\s*self\\.shape_by_path_local\\.clone|path_locals:\\s*self\\.path_locals\\.clone)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "follow_path_renderer_sidecar_flags"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\b(?:mark_follow_path_shape|mark_follow_path_path|follow_path_shape_paths)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "drawable_component_index_identity"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\bcomponent_index\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "drawable_authored_id_owner_rediscovery"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\bruntime_drawable_component\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "skinnable_authored_id_owner_rediscovery"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\bruntime_weighted_skinnable_context\\b"
+max_occurrences = 0

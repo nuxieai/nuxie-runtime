@@ -4,22 +4,24 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-A source audit/specification complete. FL-1 rulebook validation,
-  source shaping, and clean-floor verification are complete; the binding
-  52-file/six-member implementation specification is adversarial-review
-  green. No production owner-family translation has started.
+- Phase: FL-A production translation complete in the isolated `levi/fl-a`
+  checkout. The six Component member rows are closed locally; the candidate
+  publish battery and final independent reviews are green. Candidate
+  commit/size measurement, rebase onto the final LOC-009/main boundary,
+  post-rebase verification, push, and orchestrator verification remain.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
-- File closure: 0 / 337 in-scope C++ files.
-- Member closure: 41 / 74 owner/member rows (the imported, already-closed
-  runtime-drawing ledger); 33 frame-loop rows pending.
-- Open mechanism gaps: 7 / 8.
-- Current dependency wave: FL-A, Component/update ownership.
-- Current FL-A landing: A1 is non-production scaffold only; A1's first
-  production use must land atomically with A2's complete occurrence-graph
-  replacement and legacy-path deletion.
-- Current experimental changes: uncommitted KeyFrame retained-seconds and
-  Component-handle candidates remain quarantined. They are not standalone
-  slices and must be re-derived in FL-B/FL-A or discarded.
+- File closure: formally 0 / 338 until the file-correspondence manifest's
+  52 FL-A rows receive the required orchestrator-verified promotion. Their
+  implementation mapping remains `pending-verification`; no row is promoted
+  by this checkout.
+- Member closure: 47 / 75 owner/member rows (41 imported runtime-drawing
+  owners plus all six FL-A Component rows); 28 later-wave rows remain.
+- Open mechanism gaps: 7 / 9. FL-G02 is closed; FL-G06 remained closed.
+- Current dependency wave: FL-A publish verification. FL-B does not begin
+  from this checkout until the FL-A landing and orchestrator promotion are
+  accepted.
+- Current FL-A landing: local working tree on `levi/fl-a`, based on
+  `c4d81801`; no publish commit or push has occurred yet.
 
 ## FL-0 evidence
 
@@ -198,6 +200,33 @@ FL-1 clean committed-tree floor at `bb9ad75d`:
   `47cf0e95bb8c8f9abc04676b3ae802ca3b4aaf401037579194c7bfaf9ca85d51`;
   both below the unchanged 9,437,184-byte budget.
 
+FL-A candidate-tree floor before the publish commit:
+
+- `cargo test -p nuxie-runtime --lib`: 478 / 478 passed.
+- `env -u CPP_CONFIG -u RUST_PROFILE make cpp-oracle-workspace-tests`:
+  the full workspace passed with the probe built and `RIVE_CPP_PROBE`
+  exported; the pinned probe suite ran 726 / 726 with 0 failures.
+- `env -u CPP_CONFIG -u RUST_PROFILE make golden-compare`: 317 / 317
+  entries and 647 / 647 segments exact; 0 divergences or failures.
+- `env -u CPP_CONFIG -u RUST_PROFILE make scripted-golden-compare`: 317 /
+  317 entries and 647 / 647 segments exact; 0 divergences or failures.
+  `data_viz_demo` and `db_health_tracker` both matched.
+- `make renderer-golden`: 1,468 / 1,468 entries accepted, 837 byte-exact,
+  0 divergences, and 0 gated failures on Apple M5 Max.
+- `make capi-smoke`: passed (`draw_paths=2`, `objects=4`).
+- `make apple-runtime-check`: passed, including locked debug and
+  `release-apple` product tests plus the release panic firewall.
+- `make lint-gate`, `cargo fmt --all -- --check`, and `git diff --check`:
+  passed.
+- `make runtime-frame-loop-port-check`: all 23 checker, capture, and
+  summarizer controls passed; 338 file rows, 75 member rows, 9 gap rows, and
+  every zero-ratchet matched.
+- Independent Standards review: PASS with no remaining findings.
+- Independent Spec review: PASS with no remaining findings.
+- `make size-report`: pending the candidate commit because the size harness
+  intentionally refuses a dirty tracked tree; the unchanged budget is
+  9,437,184 bytes.
+
 ## FL-A source audit and implementation specification
 
 - Binding specification:
@@ -261,17 +290,92 @@ FL-1 clean committed-tree floor at `bb9ad75d`:
 - No production behavior, gate, threshold, renderer boundary, or performance
   result changed in this audit/specification landing.
 
+## FL-A production translation evidence
+
+- One occurrence graph: `InstanceObjectArena` now owns authored Components,
+  PathComposer dependency nodes, and TextVariationHelper dependency nodes in
+  one typed-handle address domain and one retained dependency schedule.
+  Parent, child, dependent, constraint, collapsable, layout-ancestor, bone,
+  tendon, advancing, resetting, scrolling, and virtualization relations are
+  occurrence-local links; the copied-id/runtime-order sidecars are ratcheted
+  to zero.
+- One dirt owner: the root Artboard uses its inherited root
+  `RuntimeComponent.dirt`; the duplicate `ArtboardInstance` dirt mask was
+  removed and is guarded by the `artboard_duplicate_component_dirt` zero
+  ratchet. The update loop clears only the root Components bit before walking
+  the retained schedule, matching `Artboard::updateComponents`.
+- Exact lifecycle: accumulated dirt is published before concrete callbacks,
+  Artboard mediation, and dependent recursion. Collapse registration and
+  initial synchronization preserve insertion order. Dependency sorting
+  preserves C++ partial-order publication on cycles. Clone builds a fresh
+  occurrence arena, clears runtime links, reconstructs concrete relations and
+  schedules, and replays authored Solo/Layout collapse in authored order.
+- State-machine hit testing now crosses the same construction boundary as
+  C++: creating an instance mutably mediates through its Artboard, sets
+  `neverDeferUpdate`, and immediately publishes recursive Shape Path dirt.
+  The deferred Rust-only hit-shape queue was deleted and is guarded at zero.
+  State-machine definitions are borrowed from a locally cloned retained
+  `Arc` owner, eliminating the raw-pointer/`unsafe` bridge while preserving
+  the exact authored definition occurrence.
+- Complete FL-A family: Component/container/transform/node/Drawable-facing
+  identity, bones/Skin, all mapped constraint and scrolling families,
+  ParentTraversal, advancing/resetting/virtualizing owners, and the two cold
+  math utilities are translated under the 52-file specification. DrawTarget
+  and DrawRules renderer-order edges are excluded from the Component
+  dependency schedule as in pinned C++.
+- Runtime tests: `cargo test -p nuxie-runtime --lib` is 478 / 478 green after
+  root-dirt unification. The focused one-owner regression clears the root
+  mask, dirties the root source, and proves PATH plus Components publish on
+  that same retained Component.
+- Fresh deterministic trace:
+  - construction owner resolutions 1,565 / 1,565, dependency builds
+    1,455 / 1,455, and dependency sorts 24 / 24;
+  - mechanism construction owner resolutions 239 / 239, dependency builds
+    227 / 227, dependency sorts 8 / 8, and IK chain builds 1 / 1;
+  - advancing/resetting dispatches 348 / 348 and 6 / 6; constraint
+    applications 21 / 21; FollowPath rebuilds 2 / 2; Scroll child,
+    physics, and virtualizer settlements 115 / 115, 6 / 6, and 2 / 2; Skin
+    buffer rebuilds 1 / 1; internal owner rediscovery 0 / 0;
+  - component dirt consumptions are 234 / 234 on the mechanism corpus and
+    714 / 713 on the canonical corpus. The sole canonical delta is the
+    pending FL-C `ListenerAlignTarget` owner.
+  - successful Component dirt publications are 159 / 155 on the mechanism
+    corpus and 4 / 0 on the canonical corpus. C++ breakpoint evidence assigns
+    the mechanism delta to the pending FL-E
+    `Text::buildRenderStyles -> Node -> LayoutComponent -> Artboard`
+    callback chain; the canonical delta is two FL-C align-target writes plus
+    two FL-E root-layout publications. FL-G03 and FL-G07 now own those exact
+    downstream call sites.
+  - unchanged-frame derived-state work is zero on both sides for dirt
+    consumption, constraints, FollowPath, Skin, sorting, clipping, layout,
+    and owner rediscovery. Unchanged-frame allocations remain 0 / 107 and
+    stay open under FL-G07.
+- Structural checker: all 23 unit/negative controls pass; current ledger
+  counts are 338 files pending, 47 / 75 members closed, 9 gaps with 7 open,
+  and all FL-A zero-ratchets hold. File rows intentionally remain
+  pending-verification until the orchestrator's independent battery.
+- Trace evidence is source-bound: capture fingerprints the complete tracked
+  plus intended-untracked candidate (including content, executable mode,
+  symlink target, and deletion state), verifies it did not change during the
+  run, and the checker recomputes it. Trace/status/generated artifacts and the
+  four local-only fixture symlinks are explicitly excluded; stale production
+  or harness source fails closed.
+- LOC-009 follow-up evidence added the FL-E `scripting.render_context` owner
+  and FL-G09: pinned C++ installs one persistent ScriptingContext render
+  factory before import, whereas Rust currently scopes it to selected
+  callbacks. FL-E must make listener/input/path-effect/DataConverter/draw
+  callbacks observe one retained factory; this is runtime callback plumbing,
+  not renderer-backend ownership.
+
 ## Next
 
-1. Implement the atomic A1/A2 occurrence-object and Component graph landing
-   from `docs/runtime-frame-loop-fl-a-spec.md`; no production commit may expose
-   both the copied-ID graph and the typed occurrence graph.
-2. Continue A3 through A7 in dependency order, deleting each displaced owner,
-   lookup, reconstruction, or broad callback path in the same landing.
-3. Translate FL-A as one complete Component owner-family wave, covering all
-   six pending member rows and closing or rule-backing every mapped file row.
-   Delete the copied-id/rediscovery mechanisms displaced by retained
-   occurrence-owned links and exact dirt/update ownership in the same landing.
-4. Preserve the complete behavior/pixel/product/size floor during FL-A.
-   Performance is measured only after the complete wave, never used as its
-   work queue.
+1. Commit the FL-A candidate and run the clean-tree size report under the
+   unchanged 9,437,184-byte budget.
+2. Rebase onto the final LOC-009/main boundary, migrate only any newly
+   required facade fixture, and rerun every affected floor.
+3. Push `levi/fl-a` with an explicit refspec. The orchestrator independently
+   reruns the battery and alone promotes the 52 file-correspondence rows from
+   pending-verification.
+4. After accepted FL-A closure, run the canonical whole-corpus performance
+   checkpoint and proceed to FL-B from the dependency map. Performance remains
+   verification evidence, never the source of a work slice.

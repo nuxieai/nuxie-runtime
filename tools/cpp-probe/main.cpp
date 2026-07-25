@@ -54,9 +54,11 @@ size_t randomProviderTotalCalls();
 #define private public
 #include "rive/artboard_component_list.hpp"
 #undef private
+#define private public
 #define protected public
 #include "rive/artboard.hpp"
 #undef protected
+#undef private
 #include "rive/container_component.hpp"
 #include "rive/animation/blend_animation.hpp"
 #include "rive/animation/blend_state.hpp"
@@ -819,7 +821,6 @@ void write_component_fields(std::ostream& out,
     out << ",\"parentId\":" << component->parentId();
     out << ",\"parentLocal\":";
     write_local_id_or_null(out, localIds, component->parent());
-    out << ",\"graphOrder\":" << component->graphOrder();
     out << ",\"childrenLocal\":[";
     if (component->is<rive::ContainerComponent>())
     {
@@ -896,7 +897,8 @@ void write_component_fields(std::ostream& out,
 
 void write_runtime_update_component(std::ostream& out,
                                     const LocalIds& localIds,
-                                    const rive::Component* component)
+                                    const rive::Component* component,
+                                    bool scheduled)
 {
     auto itr = localIds.find(component);
     if (itr == localIds.end())
@@ -907,7 +909,16 @@ void write_runtime_update_component(std::ostream& out,
 
     out << "{\"localId\":" << itr->second;
     out << ",\"coreType\":" << component->coreType();
-    out << ",\"graphOrder\":" << component->graphOrder();
+    out << ",\"graphOrder\":";
+    if (scheduled)
+    {
+        out << component->graphOrder();
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"scheduled\":" << (scheduled ? "true" : "false");
     out << ",\"dirt\":" << static_cast<unsigned int>(component->m_Dirt);
     out << ",\"collapsed\":"
         << (component->isCollapsed() ? "true" : "false");
@@ -965,8 +976,12 @@ void write_runtime_update(std::ostream& out,
             out << ',';
         }
         first = false;
-        write_runtime_update_component(
-            out, localIds, object->as<rive::Component>());
+        auto* component = object->as<rive::Component>();
+        const bool scheduled =
+            std::find(artboard->m_DependencyOrder.begin(),
+                      artboard->m_DependencyOrder.end(),
+                      component) != artboard->m_DependencyOrder.end();
+        write_runtime_update_component(out, localIds, component, scheduled);
     }
     out << "]}";
 }

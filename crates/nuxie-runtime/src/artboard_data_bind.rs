@@ -1,3 +1,4 @@
+use crate::components::DataBindHandle;
 use crate::data_bind_graph::{
     DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraphConverterBuildCache,
     RuntimeDataBindGraphConverterState, RuntimeDataBindGraphFormulaRandomSource,
@@ -603,6 +604,18 @@ impl RuntimeArtboardAuthoredDataBindStates {
         indices.clear();
         self.recycled_pending_source_dirt_indices = indices;
     }
+
+    fn collapse(&mut self, handle: DataBindHandle, collapsed: bool) -> bool {
+        let data_bind_index = handle.index();
+        let Some(state) = self.states.get_mut(data_bind_index) else {
+            return false;
+        };
+        let effect = state.retained.collapse(collapsed);
+        if effect.requests_dirty_update {
+            self.enqueue_pending_source_dirt(data_bind_index);
+        }
+        effect.changed
+    }
 }
 
 pub(super) fn build_artboard_authored_data_bind_states(
@@ -617,6 +630,21 @@ pub(super) fn build_artboard_authored_data_bind_states(
             .into_iter()
             .map(|data_bind| {
                 let flags = data_bind.object.uint_property("flags").unwrap_or(0);
+                let collapse_eligible = file
+                    .data_bind_collapse_effect_for_object(
+                        data_bind.object,
+                        false,
+                        true,
+                        false,
+                        true,
+                    )
+                    .is_some_and(|effect| effect.changed);
+                let mut retained = RuntimeRetainedDataBind::new(
+                    flags,
+                    file.data_bind_binds_once_for_object(data_bind.object)
+                        .unwrap_or(false),
+                );
+                retained.set_collapse_eligible(collapse_eligible);
                 RuntimeArtboardAuthoredDataBindState {
                     path: shared_data_bind_path(
                         file.data_bind_context_source_path_ids_for_object(data_bind.object)
@@ -625,11 +653,7 @@ pub(super) fn build_artboard_authored_data_bind_states(
                     path_is_name_based: file
                         .data_bind_is_name_based_for_object(data_bind.object)
                         .unwrap_or(false),
-                    retained: RuntimeRetainedDataBind::new(
-                        flags,
-                        file.data_bind_binds_once_for_object(data_bind.object)
-                            .unwrap_or(false),
-                    ),
+                    retained,
                     source: None,
                     shared_converter: None,
                     suppress_target_notifications: false,
@@ -4404,6 +4428,54 @@ fn runtime_created_view_model_value_for_declared_property(
 }
 
 impl ArtboardInstance {
+    /// C++ `DataBind::initialize` / `Component::addCollapsable`.
+    ///
+    /// Authored DataBind order is retained insertion order. Only the first
+    /// occurrence link performs the initial collapse synchronization
+    /// (`data_bind.cpp:608-615`; `component.cpp:108-127`).
+    pub(super) fn initialize_component_data_bind_collapsables(
+        &mut self,
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+    ) {
+        let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+            return;
+        };
+        let links = file
+            .artboard_data_binds(artboard_index)
+            .into_iter()
+            .enumerate()
+            .filter_map(|(data_bind_index, data_bind)| {
+                let target_local_id = data_bind.target_local_id?;
+                let component = self.objects.component_handle(target_local_id)?;
+                Some((component, DataBindHandle::from_index(data_bind_index)))
+            })
+            .collect::<Vec<_>>();
+        for (component, data_bind) in links {
+            if !self.objects.add_collapsable(component, data_bind) {
+                continue;
+            }
+            let collapsed = self
+                .objects
+                .component(component)
+                .is_some_and(|component| component.is_collapsed());
+            self.collapse_artboard_authored_data_bind(data_bind, collapsed);
+        }
+    }
+
+    pub(super) fn collapse_artboard_authored_data_bind(
+        &mut self,
+        data_bind: DataBindHandle,
+        collapsed: bool,
+    ) {
+        if self
+            .artboard_authored_data_bind_states
+            .collapse(data_bind, collapsed)
+        {
+            self.mark_artboard_data_bind_work_dirty();
+        }
+    }
+
     pub fn has_scripted_data_converter_instance_for_global(&self, global_id: u32) -> bool {
         self.scripted_data_converter_instances_by_global
             .contains_key(&global_id)
@@ -4443,6 +4515,34 @@ impl ArtboardInstance {
             self.mark_artboard_data_bind_work_dirty();
         }
         attached
+    }
+
+    pub(super) fn mark_scripted_data_converter_dirty(&mut self, global_id: u32) {
+        // C++ ScriptedDataConverter::advance marks the converter dirty only
+        // when user advance returns true. Converter dependents then enqueue
+        // their exact authored DataBind occurrences before Artboard advances
+        // DataBinds (`scripted_data_converter.cpp:200-211`;
+        // `data_converter.cpp:34-47`).
+        let mut dirtied = false;
+        for data_bind_index in 0..self.artboard_authored_data_bind_states.len() {
+            let contains_global = self.artboard_authored_data_bind_states[data_bind_index]
+                .shared_converter
+                .as_ref()
+                .is_some_and(|shared| {
+                    runtime_data_bind_graph_converter_contains_global_id(
+                        &shared.converter,
+                        global_id,
+                    )
+                });
+            if contains_global {
+                self.artboard_authored_data_bind_states
+                    .mark_source_changed(data_bind_index);
+                dirtied = true;
+            }
+        }
+        if dirtied {
+            self.mark_artboard_data_bind_work_dirty();
+        }
     }
 
     fn enqueue_artboard_data_bind_targets_for_path(&mut self, path: &[u32]) {
@@ -4599,13 +4699,16 @@ impl ArtboardInstance {
         did_enqueue
     }
 
-    pub(crate) fn update_nested_artboard_data_binds_from_hosts(&mut self) -> bool {
+    pub(crate) fn update_nested_artboard_data_binds_from_hosts(
+        &mut self,
+        root_transform: Mat2D,
+    ) -> bool {
         if !self.nested_artboard_tree_has_context_source_bindings() {
             return false;
         }
         let mut changed = false;
         let mut values = std::mem::take(&mut self.artboard_context_source_values_scratch);
-        self.collect_nested_artboard_context_source_values(Mat2D::IDENTITY, &mut values);
+        self.collect_nested_artboard_context_source_values(root_transform, &mut values);
         for source in values.drain(..) {
             changed |= self.set_artboard_data_bind_value_for_path(&source.path, source.value);
         }
@@ -4630,11 +4733,15 @@ impl ArtboardInstance {
                             .child
                             .nested_artboard_tree_has_context_source_bindings()
                 })
-        }) || self.component_list_items.values().flatten().any(|item| {
-            item.child.has_artboard_context_source_bindings()
-                || item
-                    .child
-                    .nested_artboard_tree_has_context_source_bindings()
+        }) || self.component_list_locals().into_iter().any(|local_id| {
+            self.component_list_items(local_id).is_some_and(|items| {
+                items.iter().any(|item| {
+                    item.child.has_artboard_context_source_bindings()
+                        || item
+                            .child
+                            .nested_artboard_tree_has_context_source_bindings()
+                })
+            })
         });
         if let Some(epoch) = structure_epoch {
             self.nested_context_source_tree_cache
@@ -4691,7 +4798,7 @@ impl ArtboardInstance {
         // into the row before its own bindings are polled.
         let row_root_transforms = self.runtime_component_list_child_root_transforms(root_transform);
         for (list_local_id, transforms) in row_root_transforms {
-            let Some(items) = self.component_list_items.get_mut(&list_local_id) else {
+            let Some(items) = self.component_list_items_mut(list_local_id) else {
                 continue;
             };
             for (item, child_root_transform) in items.iter_mut().zip(transforms) {
@@ -4915,12 +5022,7 @@ impl ArtboardInstance {
             let mut list_adapter_changed = false;
             if let Some(update) = list_update {
                 list_adapter_changed = update.binding_changed;
-                if let Some(source) = update.source {
-                    self.component_list_sources
-                        .insert(update.target_local_id, source);
-                } else {
-                    self.component_list_sources.remove(&update.target_local_id);
-                }
+                self.set_component_list_source(update.target_local_id, update.source);
                 if let (Some(file), Some(items)) = (runtime_file.as_deref(), update.items) {
                     list_adapter_changed |=
                         self.sync_component_list_items(file, update.target_local_id, items);
@@ -5307,7 +5409,13 @@ impl ArtboardInstance {
         allow_full_context_bindings: bool,
     ) -> bool {
         let mut changed = false;
-        for items in self.component_list_items.values_mut() {
+        for list_index in 0..self.component_list_count() {
+            let Some(local_id) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            let Some(items) = self.component_list_items_mut(local_id) else {
+                continue;
+            };
             for item in items {
                 // C++ gives each row a child DataContext whose main is the row
                 // instance and whose parent is the complete owning artboard
@@ -5603,12 +5711,7 @@ impl ArtboardInstance {
         }
         for update in component_list_updates {
             changed |= update.binding_changed;
-            if let Some(source) = update.source {
-                self.component_list_sources
-                    .insert(update.target_local_id, source);
-            } else {
-                self.component_list_sources.remove(&update.target_local_id);
-            }
+            self.set_component_list_source(update.target_local_id, update.source);
             if let Some(items) = update.items {
                 changed |= self.sync_component_list_items(file, update.target_local_id, items);
             }
@@ -5823,12 +5926,7 @@ impl ArtboardInstance {
         }
         for update in component_list_updates {
             changed |= update.binding_changed;
-            if let Some(source) = update.source {
-                self.component_list_sources
-                    .insert(update.target_local_id, source);
-            } else {
-                self.component_list_sources.remove(&update.target_local_id);
-            }
+            self.set_component_list_source(update.target_local_id, update.source);
             if let Some(items) = update.items {
                 changed |= self.sync_component_list_items(file, update.target_local_id, items);
             }
@@ -6269,9 +6367,19 @@ impl ArtboardInstance {
                 .child
                 .detach_initial_nested_layout_paint_binding_contexts_recursive(detached_handles);
         }
-        for item in self.component_list_items.values_mut().flatten() {
-            item.child
-                .detach_initial_nested_layout_paint_binding_contexts_recursive(detached_handles);
+        for list_index in 0..self.component_list_count() {
+            let Some(local_id) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            let Some(items) = self.component_list_items_mut(local_id) else {
+                continue;
+            };
+            for item in items {
+                item.child
+                    .detach_initial_nested_layout_paint_binding_contexts_recursive(
+                        detached_handles,
+                    );
+            }
         }
     }
 
@@ -6573,7 +6681,7 @@ impl ArtboardInstance {
         }
         for update in generated_list_updates {
             changed |= update.binding_changed;
-            self.component_list_sources.remove(&update.target_local_id);
+            self.set_component_list_source(update.target_local_id, None);
             if let (Some(file), Some(items)) = (runtime_file.as_deref(), update.items) {
                 changed |= self.sync_component_list_items(file, update.target_local_id, items);
             }
@@ -7792,18 +7900,20 @@ impl ArtboardInstance {
         target_local_id: usize,
         enum_value_names: &[Vec<u8>],
     ) -> Option<RuntimeDataBindGraphValue> {
-        let solo = self
-            .solos
-            .iter()
-            .find(|solo| solo.local_id == target_local_id)?;
+        let solo = self.component_handle(target_local_id)?;
+        let component = self.objects.component(solo)?;
+        let solo_state = component.concrete.solo.as_ref()?;
         let active_component_id = usize::try_from(
-            self.uint_property(target_local_id, solo.active_component_property_key)?,
+            self.uint_property(target_local_id, solo_state.active_component_property_key?)?,
         )
         .ok()?;
-        let active_local_id = solo
-            .runtime_local_by_cpp_local
-            .get(&active_component_id)
-            .copied()?;
+        let active_child_index = solo_state
+            .cpp_local_ids
+            .iter()
+            .position(|cpp_local_id| *cpp_local_id == active_component_id)?;
+        let active_local_id = self
+            .objects
+            .component_local_id(*component.children.get(active_child_index)?)?;
         let active_name = self
             .slot(active_local_id)
             .and_then(|slot| slot.name.as_deref())?
@@ -8610,6 +8720,20 @@ impl ArtboardInstance {
         self.artboard_list_bindings
             .get(index)
             .map(|binding| binding.should_reset_instances)
+    }
+
+    pub(crate) fn artboard_component_list_should_reset_instances(
+        &self,
+        target_local_id: usize,
+    ) -> bool {
+        // `DataBind::init` writes this flag onto the target list. If malformed
+        // input binds the same list more than once, the last authored bind is
+        // the last setter C++ executes (`data_bind.cpp:221-226`).
+        self.artboard_list_bindings
+            .iter()
+            .rev()
+            .find(|binding| binding.target_local_id == target_local_id)
+            .is_some_and(|binding| binding.should_reset_instances)
     }
 }
 
@@ -9848,9 +9972,13 @@ mod tests {
                 ],
             ),
             record(
+                "Shape",
+                vec![property("Shape", "parentId", AuthoringValue::Uint(0))],
+            ),
+            record(
                 "Rectangle",
                 vec![
-                    property("Rectangle", "parentId", AuthoringValue::Uint(0)),
+                    property("Rectangle", "parentId", AuthoringValue::Uint(1)),
                     property("Rectangle", "width", AuthoringValue::Double(10.0)),
                     property("Rectangle", "height", AuthoringValue::Double(10.0)),
                 ],
@@ -9902,7 +10030,7 @@ mod tests {
         let _ = artboard.advance_artboard_data_binds();
         let width_key = property_key_for_name("Rectangle", "width").expect("width key");
         assert_eq!(
-            artboard.double_property(1, width_key),
+            artboard.double_property(2, width_key),
             Some(10.0),
             "C++ compares source path [1, 0] with the occupant's actual viewModelId; slot keys only control placement (data_context.cpp:397-506)"
         );
@@ -10540,7 +10668,10 @@ mod tests {
             .first()
             .expect("fixture has a component list")
             .local_id;
-        let before = artboard.component_list_logical_items[&list_local_id]
+        let before = artboard
+            .component_list_state(list_local_id)
+            .expect("component list state")
+            .logical_items
             .iter()
             .map(|item| item.occurrence_identity)
             .collect::<Vec<_>>();
@@ -10561,7 +10692,10 @@ mod tests {
         );
         assert!(artboard.advance_artboard_data_binds());
 
-        let after = artboard.component_list_logical_items[&list_local_id]
+        let after = artboard
+            .component_list_state(list_local_id)
+            .expect("component list state")
+            .logical_items
             .iter()
             .map(|item| item.occurrence_identity)
             .collect::<Vec<_>>();

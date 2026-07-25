@@ -2,6 +2,10 @@
 // Mirrors /Users/levi/dev/oss/rive-runtime/src/animation/state_machine_instance.cpp.
 use super::*;
 use crate::artboard_data_bind::RuntimeOwnedDataContext;
+use crate::constraints::{
+    RuntimeDraggableProxy, runtime_draggable_proxies, runtime_draggable_proxy_drag,
+    runtime_draggable_proxy_end, runtime_draggable_proxy_hit_test, runtime_draggable_proxy_start,
+};
 use crate::data_bind_graph::data_bind_flags_apply_source_to_target;
 use crate::focus::RuntimeFocusTree;
 use crate::scripting::RuntimeScriptInstanceHandle;
@@ -120,6 +124,9 @@ pub struct StateMachineInstance {
     pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
     pointer_listener_states: Vec<RuntimePointerListenerState>,
     pointer_positions: Vec<RuntimePointerPosition>,
+    /// Fresh component-provided listener/proxy owners constructed for this
+    /// StateMachineInstance (`state_machine_instance.cpp:1969-2013`).
+    draggable_proxies: Vec<RuntimeDraggableProxy>,
     scripted_instances_by_global: BTreeMap<u32, RuntimeScriptInstanceHandle>,
     focus: RuntimeFocusTree,
     scripted_listener_action_definitions: Vec<ScriptListenerActionDefinition>,
@@ -662,6 +669,11 @@ impl Clone for StateMachineInstance {
             pointer_down_listener_hits: self.pointer_down_listener_hits.clone(),
             pointer_listener_states: self.pointer_listener_states.clone(),
             pointer_positions: self.pointer_positions.clone(),
+            draggable_proxies: self
+                .draggable_proxies
+                .iter()
+                .map(RuntimeDraggableProxy::clone_cold)
+                .collect(),
             scripted_instances_by_global: BTreeMap::new(),
             focus: self.focus.clone(),
             scripted_listener_action_definitions: self.scripted_listener_action_definitions.clone(),
@@ -1005,6 +1017,7 @@ impl StateMachineInstance {
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
             pointer_positions: Vec::new(),
+            draggable_proxies: runtime_draggable_proxies(artboard),
             scripted_instances_by_global: BTreeMap::new(),
             focus: RuntimeFocusTree::from_artboard(artboard),
             scripted_listener_action_definitions: state_machine.scripted_listener_actions.clone(),
@@ -1150,11 +1163,13 @@ impl StateMachineInstance {
         self.state_machine_index
     }
 
-    pub(crate) fn retained_state_machine_ptr(&self) -> Option<*const RuntimeStateMachine> {
+    pub(crate) fn retained_state_machine_definitions(
+        &self,
+    ) -> Option<Arc<Vec<RuntimeStateMachine>>> {
         self.state_machine_definitions
             .as_ref()?
-            .get(self.state_machine_index)
-            .map(std::ptr::from_ref)
+            .get(self.state_machine_index)?;
+        self.state_machine_definitions.as_ref().map(Arc::clone)
     }
 
     pub(crate) fn requires_post_update_state_probe(&self) -> bool {
@@ -1327,9 +1342,90 @@ impl StateMachineInstance {
             .retain(|state| state.pointer_id != pointer_id);
     }
 
+    fn draggable_pointer_down(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        position: (f32, f32),
+        pointer_id: i32,
+        timestamp_seconds: f32,
+    ) -> bool {
+        let mut hit = false;
+        let mut hit_opaque = false;
+        for proxy in &mut self.draggable_proxies {
+            if hit_opaque || !runtime_draggable_proxy_hit_test(artboard, proxy, position) {
+                continue;
+            }
+            if !proxy.active_pointers.contains(&pointer_id) {
+                proxy.active_pointers.push(pointer_id);
+            }
+            runtime_draggable_proxy_start(artboard, proxy, position, timestamp_seconds);
+            hit = true;
+            hit_opaque |= proxy.opaque;
+        }
+        hit
+    }
+
+    fn draggable_pointer_move(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        position: (f32, f32),
+        pointer_id: i32,
+        timestamp_seconds: f32,
+    ) -> (bool, bool) {
+        let mut hit = false;
+        let mut started_scroll = false;
+        for proxy in &mut self.draggable_proxies {
+            if !proxy.active_pointers.contains(&pointer_id) {
+                continue;
+            }
+            if runtime_draggable_proxy_drag(artboard, proxy, position, timestamp_seconds) {
+                started_scroll |= !proxy.has_scrolled;
+                proxy.has_scrolled = true;
+                hit = true;
+            }
+        }
+        (hit, started_scroll)
+    }
+
+    fn draggable_pointer_end(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        pointer_id: i32,
+    ) -> (bool, bool) {
+        let mut hit = false;
+        let mut ended_scroll = false;
+        for proxy in &mut self.draggable_proxies {
+            let Some(index) = proxy
+                .active_pointers
+                .iter()
+                .position(|active| *active == pointer_id)
+            else {
+                continue;
+            };
+            proxy.active_pointers.remove(index);
+            runtime_draggable_proxy_end(artboard, proxy);
+            hit = true;
+            ended_scroll |= proxy.has_scrolled;
+            proxy.has_scrolled = false;
+        }
+        (hit, ended_scroll)
+    }
+
+    fn release_draggable_pointer(&mut self, pointer_id: i32) {
+        // `updateListeners(exit)` calls `ListenerGroup::releaseEvent` after
+        // processing. The base phase does not transition through clicked/out
+        // for Exit, so `DraggableConstraintListenerGroup` does not call
+        // `endDrag` (`listener_group.cpp:43-65,115-154`;
+        // `draggable_constraint.cpp:32-85`).
+        for proxy in &mut self.draggable_proxies {
+            proxy.active_pointers.retain(|active| *active != pointer_id);
+            proxy.has_scrolled = false;
+        }
+    }
+
     pub fn pointer_down(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1340,7 +1436,7 @@ impl StateMachineInstance {
 
     pub fn pointer_down_with_event_context(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1361,7 +1457,7 @@ impl StateMachineInstance {
 
     pub fn pointer_down_with_owned_view_model_context(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1380,7 +1476,7 @@ impl StateMachineInstance {
 
     pub fn pointer_down_with_owned_view_model_and_event_context(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1402,7 +1498,7 @@ impl StateMachineInstance {
 
     pub fn try_pointer_down_with_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1413,7 +1509,7 @@ impl StateMachineInstance {
 
     pub fn try_pointer_down_with_timestamp_and_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1435,7 +1531,7 @@ impl StateMachineInstance {
 
     pub fn try_pointer_down_with_owned_view_model_context_and_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1457,7 +1553,7 @@ impl StateMachineInstance {
     #[allow(clippy::too_many_arguments)]
     fn pointer_down_with_context_and_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1474,10 +1570,10 @@ impl StateMachineInstance {
         }
         self.pointer_down_listener_hits
             .retain(|hit| hit.pointer_id != pointer_id);
+        let mut hit = self.draggable_pointer_down(artboard, (x, y), pointer_id, timestamp_seconds);
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
-            return Ok(false);
+            return Ok(hit);
         };
-        let mut hit = false;
         for (listener_index, listener) in state_machine.listeners.iter().enumerate() {
             let listener_hit = listener.hit_test(artboard, x, y);
             let (hover_action, pointer) = self.update_pointer_listener_hover(
@@ -1527,7 +1623,7 @@ impl StateMachineInstance {
 
     pub fn pointer_move(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         seconds: f32,
@@ -1546,7 +1642,7 @@ impl StateMachineInstance {
 
     pub fn pointer_move_with_owned_view_model_context(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         seconds: f32,
@@ -1571,7 +1667,7 @@ impl StateMachineInstance {
 
     pub fn try_pointer_move_with_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1582,7 +1678,7 @@ impl StateMachineInstance {
 
     pub fn try_pointer_move_with_timestamp_and_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1604,7 +1700,7 @@ impl StateMachineInstance {
 
     pub fn try_pointer_move_with_owned_view_model_context_and_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1625,7 +1721,7 @@ impl StateMachineInstance {
 
     pub fn pointer_up(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1636,7 +1732,7 @@ impl StateMachineInstance {
 
     pub fn pointer_up_with_event_context(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1657,7 +1753,7 @@ impl StateMachineInstance {
 
     pub fn pointer_up_with_owned_view_model_context(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1676,7 +1772,7 @@ impl StateMachineInstance {
 
     pub fn pointer_up_with_owned_view_model_and_event_context(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1698,7 +1794,7 @@ impl StateMachineInstance {
 
     pub fn try_pointer_up_with_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1709,7 +1805,7 @@ impl StateMachineInstance {
 
     pub fn try_pointer_up_with_timestamp_and_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1731,7 +1827,7 @@ impl StateMachineInstance {
 
     pub fn try_pointer_up_with_owned_view_model_context_and_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1753,7 +1849,7 @@ impl StateMachineInstance {
     #[allow(clippy::too_many_arguments)]
     fn pointer_up_with_context_and_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1768,12 +1864,42 @@ impl StateMachineInstance {
         if !self.focus.is_inert() {
             self.focus.sync(artboard);
         }
+        let (component_hit, component_ended_drag) =
+            self.draggable_pointer_end(artboard, pointer_id);
+        let mut hit = component_hit;
+        if component_ended_drag {
+            hit |= self.dispatch_direct_pointer_listener_type(
+                artboard,
+                pointer_id,
+                RuntimeListenerType::DragEnd,
+                x,
+                y,
+                timestamp_seconds,
+                owned_context.as_deref_mut(),
+                host,
+            )?;
+            // C++ `StateMachineInstance::dragEnd` immediately follows the
+            // DragEnd listener pass with `pointerMove(position, timeStamp,
+            // pointerId)`. The component-provided group has already left its
+            // down phase, so this tail only needs the ordinary listener pass
+            // (`state_machine_instance.cpp:1585-1607`).
+            hit |= self.update_pointer_listeners_with_script_host_internal(
+                artboard,
+                RuntimeListenerType::Move,
+                x,
+                y,
+                pointer_id,
+                timestamp_seconds,
+                owned_context.as_deref_mut(),
+                host,
+                false,
+            )?;
+        }
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
             self.pointer_down_listener_hits
                 .retain(|hit| hit.pointer_id != pointer_id);
-            return Ok(false);
+            return Ok(hit);
         };
-        let mut hit = false;
         if self.pointer_down_listener_hits.iter().any(|capture| {
             capture.pointer_id == pointer_id
                 && capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
@@ -1844,7 +1970,7 @@ impl StateMachineInstance {
 
     pub fn pointer_exit(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1855,7 +1981,7 @@ impl StateMachineInstance {
 
     pub fn pointer_exit_with_owned_view_model_context(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1874,7 +2000,7 @@ impl StateMachineInstance {
 
     pub fn try_pointer_exit_with_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1885,7 +2011,7 @@ impl StateMachineInstance {
 
     pub fn try_pointer_exit_with_timestamp_and_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -1977,9 +2103,52 @@ impl StateMachineInstance {
         Ok(hit)
     }
 
-    pub fn try_pointer_exit_with_owned_view_model_context_and_script_host(
+    #[allow(clippy::too_many_arguments)]
+    fn dispatch_direct_pointer_listener_type(
         &mut self,
         artboard: &ArtboardInstance,
+        pointer_id: i32,
+        listener_type: RuntimeListenerType,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<bool, ScriptError> {
+        let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
+            return Ok(false);
+        };
+        let mut hit = false;
+        for (listener_index, listener) in state_machine.listeners.iter().enumerate() {
+            if !listener.has_listener(listener_type) || !listener.hit_test(artboard, x, y) {
+                continue;
+            }
+            let (pointer, _) = self.pointer_input_for_listener(
+                listener_index,
+                x,
+                y,
+                pointer_id,
+                timestamp_seconds,
+                true,
+            );
+            if self.perform_listener_actions_with_event_context(
+                &listener.listener_actions,
+                owned_context.as_deref_mut(),
+                &script_pointer_invocation(pointer, listener_type),
+                host,
+                None,
+            )? {
+                self.needs_advance = true;
+            }
+            self.record_pointer_input_for_listener(listener_index, pointer);
+            hit = true;
+        }
+        Ok(hit)
+    }
+
+    pub fn try_pointer_exit_with_owned_view_model_context_and_script_host(
+        &mut self,
+        artboard: &mut ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
@@ -2001,7 +2170,7 @@ impl StateMachineInstance {
     #[allow(clippy::too_many_arguments)]
     fn update_pointer_listeners_with_script_host(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         listener_type: RuntimeListenerType,
         x: f32,
         y: f32,
@@ -2010,11 +2179,83 @@ impl StateMachineInstance {
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
+        self.update_pointer_listeners_with_script_host_internal(
+            artboard,
+            listener_type,
+            x,
+            y,
+            pointer_id,
+            timestamp_seconds,
+            owned_context.as_deref_mut(),
+            host,
+            true,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn update_pointer_listeners_with_script_host_internal(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        listener_type: RuntimeListenerType,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        timestamp_seconds: f32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        host: &mut dyn ScriptHost,
+        process_component_proxies: bool,
+    ) -> Result<bool, ScriptError> {
         if !x.is_finite() || !y.is_finite() {
             return Ok(false);
         }
         if !self.focus.is_inert() {
             self.focus.sync(artboard);
+        }
+        let (component_hit, component_starts_drag, component_ends_drag) =
+            if !process_component_proxies {
+                (false, false, false)
+            } else {
+                match listener_type {
+                    RuntimeListenerType::Move => {
+                        let (hit, starts) = self.draggable_pointer_move(
+                            artboard,
+                            (x, y),
+                            pointer_id,
+                            timestamp_seconds,
+                        );
+                        (hit, starts, false)
+                    }
+                    RuntimeListenerType::Exit => {
+                        self.release_draggable_pointer(pointer_id);
+                        (false, false, false)
+                    }
+                    _ => (false, false, false),
+                }
+            };
+        let mut hit = component_hit;
+        if component_starts_drag {
+            hit |= self.dispatch_direct_pointer_listener_type(
+                artboard,
+                pointer_id,
+                RuntimeListenerType::DragStart,
+                x,
+                y,
+                timestamp_seconds,
+                owned_context.as_deref_mut(),
+                host,
+            )?;
+        }
+        if component_ends_drag {
+            hit |= self.dispatch_direct_pointer_listener_type(
+                artboard,
+                pointer_id,
+                RuntimeListenerType::DragEnd,
+                x,
+                y,
+                timestamp_seconds,
+                owned_context.as_deref_mut(),
+                host,
+            )?;
         }
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
             if listener_type == RuntimeListenerType::Exit {
@@ -2039,7 +2280,6 @@ impl StateMachineInstance {
             }
         }
 
-        let mut hit = false;
         if starts_drag {
             hit |= self.dispatch_captured_pointer_listener_type(
                 artboard,
@@ -5979,7 +6219,7 @@ mod scripted_listener_action_tests {
         let file = read_runtime_file(&std::fs::read(fixture).expect("read listener fixture"))
             .expect("import listener fixture");
         let graph = GraphFile::from_runtime_file(&file).expect("build listener graph");
-        let artboard = ArtboardInstance::from_graph_with_artboards(
+        let mut artboard = ArtboardInstance::from_graph_with_artboards(
             &file,
             graph.artboards.first().expect("fixture artboard"),
             &graph.artboards,
@@ -6105,7 +6345,7 @@ mod scripted_listener_action_tests {
 
     #[test]
     fn successive_pointer_events_preserve_previous_position_and_timestamp() {
-        let (artboard, mut machine) = scripted_listener_artboard_and_machine();
+        let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
         let action = machine
             .scripted_listener_actions()
             .first()
@@ -6121,7 +6361,7 @@ mod scripted_listener_action_tests {
 
         machine
             .try_pointer_down_with_timestamp_and_script_host(
-                &artboard,
+                &mut artboard,
                 200.0,
                 20.0,
                 1,
@@ -6131,7 +6371,7 @@ mod scripted_listener_action_tests {
             .expect("first pointer down");
         machine
             .try_pointer_up_with_timestamp_and_script_host(
-                &artboard,
+                &mut artboard,
                 200.0,
                 20.0,
                 1,
@@ -6141,7 +6381,7 @@ mod scripted_listener_action_tests {
             .expect("first pointer up");
         machine
             .try_pointer_down_with_timestamp_and_script_host(
-                &artboard,
+                &mut artboard,
                 205.0,
                 20.0,
                 1,
@@ -6151,7 +6391,7 @@ mod scripted_listener_action_tests {
             .expect("second pointer down");
         machine
             .try_pointer_up_with_timestamp_and_script_host(
-                &artboard,
+                &mut artboard,
                 210.0,
                 20.0,
                 1,

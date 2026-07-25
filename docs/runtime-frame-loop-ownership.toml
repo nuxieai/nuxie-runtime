@@ -6,22 +6,112 @@ file_correspondence_manifest = "file-correspondence-manifest.toml"
 trace_evidence_file = "docs/runtime-frame-loop-trace.json"
 phase = "atlas-open"
 
+[expected_trace_landmarks]
+frame = [
+  "artboard_draw",
+  "artboard_draw_internal",
+  "artboard_update_components",
+  "artboard_update_pass",
+  "clipping_redundancy_clear",
+  "component_add_dirt",
+  "component_dirt_consumptions",
+  "databind_artboard_batch",
+  "draw_order_sort",
+  "event_apply_batch",
+  "internal_owner_rediscovery",
+  "keyframe_double_apply_steps",
+  "layout_compute",
+  "linear_animation_advance",
+  "per_frame_allocations",
+  "state_machine_advance",
+  "state_machine_layer_advance",
+  "state_machine_transition_search",
+]
+construction = [
+  "artboard_instance",
+  "component_owner_resolutions",
+  "dependency_builds",
+  "dependency_sorts",
+  "linear_animation_instance",
+  "state_machine_instance",
+]
+mechanism_frame = [
+  "advancing_dispatches",
+  "component_add_dirt",
+  "component_dirt_consumptions",
+  "constraint_applications",
+  "follow_path_measure_rebuilds",
+  "internal_owner_rediscovery",
+  "per_frame_allocations",
+  "resetting_dispatches",
+  "scroll_child_applies",
+  "scroll_physics_advances",
+  "scroll_virtualizer_settlements",
+  "skin_buffer_rebuilds",
+]
+mechanism_construction = [
+  "component_owner_resolutions",
+  "dependency_builds",
+  "dependency_sorts",
+  "ik_chain_builds",
+]
+steady = [
+  "clipping_redundancy_clear",
+  "component_dirt_consumptions",
+  "constraint_applications",
+  "draw_order_sort",
+  "follow_path_measure_rebuilds",
+  "internal_owner_rediscovery",
+  "layout_compute",
+  "per_frame_allocations",
+  "skin_buffer_rebuilds",
+]
+
+[[trace_mechanism_fixture]]
+id = "component_list_follow_path"
+path = "tests/unit_tests/assets/component_list_follow_path.riv"
+sha256 = "7738e33c93bf01ff11c2b1063c3e82e17812a7e0ba0b049fa2529516a34c1b0f"
+
+[[trace_mechanism_fixture]]
+id = "complex_ik_dependency"
+path = "tests/unit_tests/assets/complex_ik_dependency.riv"
+sha256 = "5e8609dc09ea7ca64a7ffd8346b875aa53bbcbbe76124d63d22f0eaa5208e74d"
+
+[[trace_mechanism_fixture]]
+id = "component_list_virtualized"
+path = "tests/unit_tests/assets/component_list_virtualized.riv"
+sha256 = "9dac2d1eecbf5642118be39c0eaa98fac096a40a83803ce4cb042017eefb6a78"
+
+[[trace_mechanism_fixture]]
+id = "scroll_test"
+path = "tests/unit_tests/assets/scroll_test.riv"
+sha256 = "6799e3f6619e63f4f5536713439e79b1d10f2b6755914a03dcfae430f1bbd3a8"
+
+[[trace_mechanism_fixture]]
+id = "scroll_intent"
+path = "tests/unit_tests/assets/scroll_intent.riv"
+sha256 = "3d1289a28f6a53e484561ed9b0d4b33775deca57cd71d2019235b1e9043dbfda"
+samples = [0.0, 0.1, 0.116, 0.132, 0.148, 0.164, 0.3]
+input_script = "tools/runtime-frame-loop-port/fixtures/scroll_intent_drag.txt"
+input_sha256 = "9dee53a9222572be311b9da070be207b3c60fcaacda3211c4bc83d3f60d86aa9"
+steady = false
+
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
 faithful = 0
 adapted = 0
 divergent-by-decision = 0
-pending = 337
+pending = 338
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
 # are the state-bearing frame-loop owners still requiring member-level proof.
 [expected_member_status_counts]
-faithful = 5
-adapted = 36
+faithful = 7
+adapted = 40
 divergent-by-decision = 0
-pending = 33
+pending = 28
 compensation = 0
 
 [[wave]]
@@ -87,6 +177,8 @@ rust_modules = [
   "crates/nuxie-runtime/src/constraints.rs",
   "crates/nuxie-runtime/src/artboard.rs",
   "crates/nuxie-runtime/src/draw.rs",
+  "crates/nuxie-runtime/src/parent_traversal.rs",
+  "crates/nuxie-runtime/src/rectangles_to_contour.rs",
 ]
 static_closure = "Component virtual update dispatch, dependency sorting, transforms, bones, and constraints are reachable from Artboard dirt/update traversal."
 
@@ -182,6 +274,17 @@ rust_modules = [
   "crates/nuxie-runtime/src/draw.rs",
 ]
 static_closure = "DataBind, ViewModel, event, nested-artboard, and script-input owners participate in Artboard/StateMachine settlement through retained polymorphic collections."
+
+[[source_set]]
+id = "scripting-render-context"
+wave = "FL-E"
+include = ["src/command_server.cpp"]
+exclude = []
+rust_modules = [
+  "crates/nuxie-scripting/src/vm.rs",
+  "crates/nuxie-scripting/src/vm/renderer.rs",
+]
+static_closure = "The host installs one persistent ScriptingContext render factory before import; listener, input, path-effect, DataConverter, and draw callbacks must all observe that same context through the live RenderFactory boundary (`src/command_server.cpp:698`; `include/rive/lua/rive_lua_libs.hpp:1530-1543`)."
 
 [[source_set]]
 id = "live-draw-boundary"
@@ -1064,6 +1167,17 @@ dynamically_reached = true
 status = "pending"
 
 [[file]]
+upstream = "src/command_server.cpp"
+source_set = "scripting-render-context"
+wave = "FL-E"
+rust_modules = [
+  "crates/nuxie-scripting/src/vm.rs",
+  "crates/nuxie-scripting/src/vm/renderer.rs",
+]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
 upstream = "src/constraints/constrainable_list.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
@@ -1867,7 +1981,7 @@ status = "pending"
 upstream = "src/math/rectangles_to_contour.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+rust_modules = ["crates/nuxie-runtime/src/rectangles_to_contour.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -1923,7 +2037,7 @@ status = "pending"
 upstream = "src/parent_traversal.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/parent_traversal.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -2917,7 +3031,17 @@ wave = "FL-A"
 cpp_files = ["src/component.cpp", "src/artboard.cpp"]
 rust_file = "crates/nuxie-runtime/src/components.rs"
 rust_anchor = "pub struct RuntimeComponent"
-status = "pending"
+status = "adapted"
+rule = "AF-1"
+[member.lifecycle]
+construct = ["cpp:src/component.cpp:13-29", "rust:crates/nuxie-runtime/src/objects.rs:232-251"]
+retain = ["cpp:src/artboard.cpp:264-330", "rust:crates/nuxie-runtime/src/objects.rs:232-275"]
+dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
+update = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7651-7815"]
+advance = ["cpp:src/advancing_component.cpp:17-44", "rust:crates/nuxie-runtime/src/artboard.rs:5615-5665"]
+draw = ["cpp:src/artboard.cpp:1613-1652", "rust:crates/nuxie-runtime/src/draw.rs:4210-4265"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/objects.rs:113-152"]
+drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/artboard.rs:593-631"]
 
 [[member]]
 id = "component.dirt"
@@ -2925,7 +3049,16 @@ wave = "FL-A"
 cpp_files = ["src/component.cpp"]
 rust_file = "crates/nuxie-runtime/src/components.rs"
 rust_anchor = "pub struct ComponentDirt"
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/artboard.cpp:846-855", "rust:crates/nuxie-runtime/src/components.rs:1861-1883"]
+retain = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/components.rs:1831-1857"]
+dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
+update = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7730-7815"]
+advance = ["cpp:src/artboard.cpp:1463-1480", "rust:crates/nuxie-runtime/src/artboard.rs:5615-5665"]
+draw = ["cpp:src/artboard.cpp:1613-1652", "rust:crates/nuxie-runtime/src/draw.rs:4210-4265"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/components.rs:1920-1943"]
+drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/objects.rs:135-153"]
 
 [[member]]
 id = "component.dependents"
@@ -2933,7 +3066,17 @@ wave = "FL-A"
 cpp_files = ["src/component.cpp", "src/dependency_sorter.cpp"]
 rust_file = "crates/nuxie-runtime/src/artboard.rs"
 rust_anchor = "pub fn add_dirt("
-status = "pending"
+status = "adapted"
+rule = "AF-1"
+[member.lifecycle]
+construct = ["cpp:src/component.cpp:13-29", "rust:crates/nuxie-runtime/src/objects.rs:446-461"]
+retain = ["cpp:src/dependency_sorter.cpp:6-48", "rust:crates/nuxie-runtime/src/objects.rs:636-678"]
+dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
+update = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7730-7815"]
+advance = ["cpp:src/advancing_component.cpp:17-44", "rust:crates/nuxie-runtime/src/artboard.rs:5615-5665"]
+draw = ["cpp:src/artboard.cpp:1613-1652", "rust:crates/nuxie-runtime/src/draw.rs:4210-4265"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/artboard.rs:593-625"]
+drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/objects.rs:135-153"]
 
 [[member]]
 id = "component.update_order"
@@ -2941,7 +3084,17 @@ wave = "FL-A"
 cpp_files = ["src/artboard.cpp", "src/dependency_sorter.cpp"]
 rust_file = "crates/nuxie-runtime/src/artboard.rs"
 rust_anchor = "fn update_components_with_hook_recording"
-status = "pending"
+status = "adapted"
+rule = "AF-1"
+[member.lifecycle]
+construct = ["cpp:src/artboard.cpp:846-855", "rust:crates/nuxie-runtime/src/objects.rs:621-650"]
+retain = ["cpp:src/dependency_sorter.cpp:6-48", "rust:crates/nuxie-runtime/src/objects.rs:636-678"]
+dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
+update = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7651-7815"]
+advance = ["cpp:src/artboard.cpp:1463-1505", "rust:crates/nuxie-runtime/src/artboard.rs:5566-5665"]
+draw = ["cpp:src/artboard.cpp:1606-1652", "rust:crates/nuxie-runtime/src/draw.rs:3840-3895"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/artboard.rs:593-625"]
+drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/objects.rs:135-153"]
 
 [[member]]
 id = "component.transforms"
@@ -2949,7 +3102,16 @@ wave = "FL-A"
 cpp_files = ["src/transform_component.cpp", "src/world_transform_component.cpp"]
 rust_file = "crates/nuxie-runtime/src/components.rs"
 rust_anchor = "pub(crate) struct TransformComponents"
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/transform_component.cpp:22-43", "rust:crates/nuxie-runtime/src/components.rs:1808-1827"]
+retain = ["cpp:src/transform_component.cpp:45-51", "rust:crates/nuxie-runtime/src/components.rs:1837-1856"]
+dirty = ["cpp:src/transform_component.cpp:54-61", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
+update = ["cpp:src/transform_component.cpp:63-113", "rust:crates/nuxie-runtime/src/artboard.rs:7890-8025"]
+advance = ["cpp:src/artboard.cpp:1463-1480", "rust:crates/nuxie-runtime/src/artboard.rs:5615-5665"]
+draw = ["cpp:src/artboard.cpp:1613-1652", "rust:crates/nuxie-runtime/src/draw.rs:4210-4265"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/components.rs:1920-1943"]
+drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/objects.rs:135-153"]
 
 [[member]]
 id = "component.clone_drop"
@@ -2957,7 +3119,17 @@ wave = "FL-A"
 cpp_files = ["src/artboard.cpp", "src/component.cpp"]
 rust_file = "crates/nuxie-runtime/src/artboard.rs"
 rust_anchor = "pub struct ArtboardInstance"
-status = "pending"
+status = "adapted"
+rule = "AF-6"
+[member.lifecycle]
+construct = ["cpp:src/artboard.cpp:264-330", "rust:crates/nuxie-runtime/src/artboard.rs:2180-2325"]
+retain = ["cpp:src/component.cpp:13-29", "rust:crates/nuxie-runtime/src/objects.rs:232-275"]
+dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
+update = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7651-7815"]
+advance = ["cpp:src/artboard.cpp:1463-1505", "rust:crates/nuxie-runtime/src/artboard.rs:5566-5665"]
+draw = ["cpp:src/artboard.cpp:1606-1652", "rust:crates/nuxie-runtime/src/draw.rs:3840-3895"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/artboard.rs:494-631"]
+drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/objects.rs:135-153"]
 
 [[member]]
 id = "keyframe.seconds"
@@ -3191,6 +3363,14 @@ wave = "FL-D"
 cpp_files = ["src/event.cpp", "src/animation/state_machine_instance.cpp"]
 rust_file = "crates/nuxie-runtime/src/state_machine.rs"
 rust_anchor = "pub struct StateMachineReportedEvent"
+status = "pending"
+
+[[member]]
+id = "scripting.render_context"
+wave = "FL-E"
+cpp_files = ["src/command_server.cpp"]
+rust_file = "crates/nuxie-scripting/src/vm/renderer.rs"
+rust_anchor = "pub(crate) struct RendererBindings"
 status = "pending"
 
 [[member]]

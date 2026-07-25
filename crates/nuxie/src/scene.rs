@@ -15779,17 +15779,17 @@ impl Frame<'_> {
             .hit_test_path_segments_with_bounds(point)
             .first()
             .map(StateMachineEventContext::from_geometry_hit);
-        let (runtime, machines) = (&live.runtime, &mut live.machines);
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
             let current = match event_context.as_ref() {
                 Some(event_context) => machine.pointer_down_with_event_context(
-                    runtime.raw(),
+                    runtime.raw_mut(),
                     point.x,
                     point.y,
                     pointer_id,
                     event_context,
                 ),
-                None => machine.pointer_down(runtime.raw(), point.x, point.y, pointer_id),
+                None => machine.pointer_down(runtime.raw_mut(), point.x, point.y, pointer_id),
             };
             current | hit
         });
@@ -15817,10 +15817,15 @@ impl Frame<'_> {
         else {
             return false;
         };
-        let (runtime, machines) = (&live.runtime, &mut live.machines);
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current =
-                machine.pointer_move(runtime.raw(), point.x, point.y, elapsed_seconds, pointer_id);
+            let current = machine.pointer_move(
+                runtime.raw_mut(),
+                point.x,
+                point.y,
+                elapsed_seconds,
+                pointer_id,
+            );
             current | hit
         });
         hit
@@ -15846,17 +15851,17 @@ impl Frame<'_> {
             .hit_test_path_segments_with_bounds(point)
             .first()
             .map(StateMachineEventContext::from_geometry_hit);
-        let (runtime, machines) = (&live.runtime, &mut live.machines);
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
             let current = match event_context.as_ref() {
                 Some(event_context) => machine.pointer_up_with_event_context(
-                    runtime.raw(),
+                    runtime.raw_mut(),
                     point.x,
                     point.y,
                     pointer_id,
                     event_context,
                 ),
-                None => machine.pointer_up(runtime.raw(), point.x, point.y, pointer_id),
+                None => machine.pointer_up(runtime.raw_mut(), point.x, point.y, pointer_id),
             };
             current | hit
         });
@@ -15877,9 +15882,9 @@ impl Frame<'_> {
         else {
             return false;
         };
-        let (runtime, machines) = (&live.runtime, &mut live.machines);
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current = machine.pointer_exit(runtime.raw(), point.x, point.y, pointer_id);
+            let current = machine.pointer_exit(runtime.raw_mut(), point.x, point.y, pointer_id);
             current | hit
         });
         hit

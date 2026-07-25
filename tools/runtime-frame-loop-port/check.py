@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import collections
 import fnmatch
+import hashlib
 import json
 import pathlib
 import re
@@ -13,6 +14,17 @@ import subprocess
 import sys
 import tomllib
 from typing import Any, Iterable
+
+
+TOOL_DIR = pathlib.Path(__file__).resolve().parent
+if str(TOOL_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOL_DIR))
+
+from source_fingerprint import (
+    SourceFingerprintError,
+    candidate_source_fingerprint,
+    rust_runner_provenance,
+)
 
 
 STATUSES = {
@@ -421,10 +433,37 @@ def check(
         trace = json.loads(trace_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise CheckFailure(f"cannot read trace evidence {trace_path}: {error}") from error
-    if trace.get("schema") != "nuxie-runtime-frame-loop-trace/v1":
-        errors.append("trace evidence schema is not v1")
+    if trace.get("schema") != "nuxie-runtime-frame-loop-trace/v2":
+        errors.append("trace evidence schema is not v2")
     if trace.get("upstream_ref") != upstream_ref:
         errors.append("trace evidence pins a different upstream ref")
+    recorded_rust_candidate_source = trace.get("rust_candidate_source")
+    if not isinstance(recorded_rust_candidate_source, dict):
+        errors.append("trace evidence has no Rust candidate source fingerprint")
+    else:
+        try:
+            actual_rust_candidate_source = candidate_source_fingerprint(
+                repo_root, evidence_path=trace_path
+            )
+        except SourceFingerprintError as error:
+            errors.append(f"cannot verify Rust candidate source: {error}")
+        else:
+            if recorded_rust_candidate_source != actual_rust_candidate_source:
+                errors.append(
+                    "trace evidence Rust candidate source fingerprint is stale; "
+                    f"recorded={recorded_rust_candidate_source!r}, "
+                    f"actual={actual_rust_candidate_source!r}"
+                )
+            expected_rust_runner_provenance = rust_runner_provenance(
+                actual_rust_candidate_source
+            )
+            if (
+                trace.get("rust_runner_provenance")
+                != expected_rust_runner_provenance
+            ):
+                errors.append(
+                    "trace evidence Rust runner provenance is missing or stale"
+                )
     trace_scope = trace.get("scope", {})
     if trace_scope.get("static_cpp_files") != len(assignments):
         errors.append(
@@ -440,9 +479,135 @@ def check(
     }
     if set(trace.get("corpus", [])) != expected_corpus:
         errors.append("trace evidence does not cover the canonical six-entry corpus")
+    fixture_rows = list(ledger.get("trace_mechanism_fixture", []))
+    expected_mechanism_corpus = {
+        str(row.get("id", "")) for row in fixture_rows
+    }
+    expected_steady_corpus = {
+        str(row.get("id", ""))
+        for row in fixture_rows
+        if row.get("steady", True)
+    }
+    if set(trace.get("mechanism_corpus", [])) != expected_mechanism_corpus:
+        errors.append("trace evidence does not cover the mechanism corpus")
+    if set(trace.get("steady_corpus", [])) != expected_steady_corpus:
+        errors.append("trace evidence does not cover the steady mechanism corpus")
+    trace_fixture_hashes = trace.get("mechanism_fixture_sha256", {})
+    trace_input_hashes = trace.get("mechanism_input_sha256", {})
+    expected_input_ids = {
+        str(row.get("id", ""))
+        for row in fixture_rows
+        if str(row.get("input_script", ""))
+    }
+    if set(trace_input_hashes) != expected_input_ids:
+        errors.append(
+            "trace evidence mechanism input hashes do not match the "
+            "interactive fixture set"
+        )
+    for row in fixture_rows:
+        fixture_id = str(row.get("id", ""))
+        relative_path = str(row.get("path", ""))
+        expected_hash = str(row.get("sha256", ""))
+        fixture_path = rive_runtime_dir / relative_path
+        if not fixture_id or not relative_path or len(expected_hash) != 64:
+            errors.append(f"trace mechanism fixture {fixture_id!r} is incomplete")
+            continue
+        try:
+            actual_hash = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+        except OSError as error:
+            errors.append(
+                f"cannot read trace mechanism fixture {fixture_path}: {error}"
+            )
+            continue
+        if actual_hash != expected_hash:
+            errors.append(
+                f"trace mechanism fixture {fixture_id} hash is {actual_hash}, "
+                f"expected {expected_hash}"
+            )
+        if trace_fixture_hashes.get(fixture_id) != expected_hash:
+            errors.append(
+                f"trace evidence fixture hash for {fixture_id} is stale"
+            )
+        relative_input = str(row.get("input_script", ""))
+        expected_input_hash = str(row.get("input_sha256", ""))
+        if relative_input:
+            input_path = repo_root / relative_input
+            if len(expected_input_hash) != 64:
+                errors.append(
+                    f"trace mechanism input {fixture_id!r} is incomplete"
+                )
+                continue
+            try:
+                actual_input_hash = hashlib.sha256(
+                    input_path.read_bytes()
+                ).hexdigest()
+            except OSError as error:
+                errors.append(
+                    f"cannot read trace mechanism input {input_path}: {error}"
+                )
+                continue
+            if actual_input_hash != expected_input_hash:
+                errors.append(
+                    f"trace mechanism input {fixture_id} hash is "
+                    f"{actual_input_hash}, expected {expected_input_hash}"
+                )
+            if trace_input_hashes.get(fixture_id) != expected_input_hash:
+                errors.append(
+                    f"trace evidence input hash for {fixture_id} is stale"
+                )
+        elif expected_input_hash:
+            errors.append(
+                f"trace mechanism fixture {fixture_id} has an input hash "
+                "without an input script"
+            )
     operations = trace.get("golden_stream_operations", {})
     if operations.get("cpp") != operations.get("rust"):
         errors.append("trace evidence golden-stream work counts differ")
+    mechanism_operations = trace.get("mechanism_golden_stream_operations", {})
+    if mechanism_operations.get("cpp") != mechanism_operations.get("rust"):
+        errors.append("trace evidence mechanism golden-stream work counts differ")
+    expected_landmarks = ledger.get("expected_trace_landmarks", {})
+    trace_sections = {
+        "frame": "landmarks",
+        "construction": "construction_landmarks",
+        "mechanism_frame": "mechanism_landmarks",
+        "mechanism_construction": "mechanism_construction_landmarks",
+        "steady": "steady_landmarks",
+    }
+    for expected_name, trace_name in trace_sections.items():
+        expected_names = expected_landmarks.get(expected_name, [])
+        if not isinstance(expected_names, list):
+            errors.append(f"expected_trace_landmarks.{expected_name} is missing")
+            continue
+        actual_names = set(trace.get(trace_name, {}))
+        if actual_names != set(str(value) for value in expected_names):
+            missing = sorted(set(expected_names) - actual_names)
+            stale = sorted(actual_names - set(expected_names))
+            errors.append(
+                f"trace {trace_name} set differs; missing={missing}, stale={stale}"
+            )
+    steady_landmarks = trace.get("steady_landmarks", {})
+    required_steady_zero = {
+        "component_dirt_consumptions",
+        "constraint_applications",
+        "follow_path_measure_rebuilds",
+        "skin_buffer_rebuilds",
+        "draw_order_sort",
+        "clipping_redundancy_clear",
+        "layout_compute",
+        "internal_owner_rediscovery",
+    }
+    for name in sorted(
+        required_steady_zero
+        & set(expected_landmarks.get("steady", []))
+    ):
+        counts = steady_landmarks.get(name, {})
+        for side in ("cpp", "rust"):
+            if counts.get(side) != 0:
+                errors.append(
+                    f"steady trace {name}.{side} must be zero, "
+                    f"got {counts.get(side)!r}"
+                )
     for side in ("cpp", "rust"):
         if not trace.get("functions", {}).get(side):
             errors.append(f"trace evidence has no reached {side} functions")
@@ -596,7 +761,8 @@ def check(
 
     mismatch_counters = {
         name
-        for name, counts in trace.get("landmarks", {}).items()
+        for trace_name in trace_sections.values()
+        for name, counts in trace.get(trace_name, {}).items()
         if counts.get("cpp") != counts.get("rust")
     }
     gap_counters = {

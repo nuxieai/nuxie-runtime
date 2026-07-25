@@ -100,6 +100,17 @@ fn reset_coverage_profile_for_frame_loop_if_requested() {
     }
 }
 
+fn reset_coverage_profile_for_occurrence_if_requested() {
+    #[cfg(feature = "coverage-trace")]
+    if env::var_os("RIVE_GOLDEN_COVERAGE_OCCURRENCE_ONLY").is_some() {
+        // SAFETY: this feature is only linked with `-Cinstrument-coverage`;
+        // the symbol is supplied by that compiler runtime.
+        unsafe {
+            __llvm_profile_reset_counters();
+        }
+    }
+}
+
 fn reset_frame_loop_allocation_counter_if_requested() {
     #[cfg(feature = "coverage-trace")]
     if env::var_os("RIVE_GOLDEN_ALLOCATION_COUNTER").is_some() {
@@ -121,9 +132,12 @@ fn stop_frame_loop_allocation_counter() -> u64 {
 fn validate_trace_options(options: &Options) -> Result<()> {
     let frame_only = env::var_os("RIVE_GOLDEN_COVERAGE_FRAME_ONLY").is_some();
     let allocations = env::var_os("RIVE_GOLDEN_ALLOCATION_COUNTER").is_some();
+    let steady_only = env::var_os("RIVE_GOLDEN_COVERAGE_STEADY_ONLY").is_some();
+    let occurrence_only = env::var_os("RIVE_GOLDEN_COVERAGE_OCCURRENCE_ONLY").is_some();
+    let mechanism_input = env::var_os("RIVE_GOLDEN_COVERAGE_MECHANISM_INPUT").is_some();
 
     #[cfg(not(feature = "coverage-trace"))]
-    if frame_only || allocations {
+    if frame_only || allocations || occurrence_only || mechanism_input {
         bail!(
             "frame-loop coverage/allocation tracing requires \
              --features coverage-trace and RUSTFLAGS=-Cinstrument-coverage"
@@ -138,6 +152,29 @@ fn validate_trace_options(options: &Options) -> Result<()> {
     }
     if options.layout_bounds && (frame_only || allocations) {
         bail!("frame-loop tracing cannot be combined with --layout-bounds");
+    }
+    if mechanism_input
+        && (!frame_only
+            || occurrence_only
+            || steady_only
+            || options.input_script.is_none()
+            || options.benchmark_repeat != 1)
+    {
+        bail!(
+            "mechanism input coverage requires frame-only coverage, an input \
+             script, --benchmark-repeat 1, and non-occurrence/non-steady mode"
+        );
+    }
+    if steady_only
+        && (!frame_only
+            || options.samples.len() != 1
+            || options.benchmark_repeat != 1
+            || options.input_script.is_some())
+    {
+        bail!(
+            "steady-only coverage requires frame-only coverage, one sample, \
+             --benchmark-repeat 1, and no input script"
+        );
     }
     Ok(())
 }
@@ -270,6 +307,9 @@ fn run() -> Result<String> {
     if !options.layout_bounds {
         ensure_static_draw_supported(&runtime, &graph, artboard, !input_events.is_empty())?;
     }
+    // Construction evidence compares the live occurrence arena, not the
+    // immutable RuntimeFile/GraphFile definition import above.
+    reset_coverage_profile_for_occurrence_if_requested();
     let mut instance =
         ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
             .context("failed to instantiate artboard")?;
@@ -526,6 +566,41 @@ fn run() -> Result<String> {
     factory.source(&options.file.to_string_lossy(), &artboard_name, &scene.name);
     factory.frame_size(frame_dimension(width), frame_dimension(height));
 
+    let mut current_seconds = 0.0;
+    if env::var_os("RIVE_GOLDEN_COVERAGE_STEADY_ONLY").is_some() {
+        advance_scene_to(
+            &mut instance,
+            &runtime,
+            state_machine.as_mut(),
+            owned_view_model_context.as_ref(),
+            #[cfg(feature = "scripting")]
+            script_artboard_render_state
+                .as_ref()
+                .map(|state| state as &dyn RootScriptFrameTail),
+            options.samples[0],
+            &mut current_seconds,
+        )?;
+        instance.synchronize_artboard_renderer(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &external_images,
+            factory.as_factory(),
+            None,
+        )?;
+        instance
+            .draw_artboard(
+                &runtime,
+                artboard,
+                &graph.artboards,
+                factory.as_factory(),
+                &mut *renderer,
+                &external_images,
+                None,
+                true,
+            )
+            .map_err(unsupported_static_text_draw_error)?;
+    }
     reset_coverage_profile_for_frame_loop_if_requested();
     reset_frame_loop_allocation_counter_if_requested();
     let benchmark_start = Instant::now();
@@ -533,7 +608,6 @@ fn run() -> Result<String> {
     let mut input_elapsed = Duration::ZERO;
     let mut prepare_elapsed = Duration::ZERO;
     let mut draw_elapsed = Duration::ZERO;
-    let mut current_seconds = 0.0;
     let mut next_input = 0;
     #[cfg(feature = "scripting")]
     let mut bound_script_artboards = BTreeMap::new();
@@ -572,7 +646,7 @@ fn run() -> Result<String> {
                 timed(options.benchmark, &mut input_elapsed, || {
                     apply_input_event(
                         event,
-                        &instance,
+                        &mut instance,
                         state_machine.as_mut(),
                         owned_view_model_context.as_mut(),
                     );
@@ -1318,7 +1392,7 @@ fn parse_script_float(value: &str, context: &str) -> Result<f32> {
 
 fn apply_input_event(
     event: &InputEvent,
-    instance: &ArtboardInstance,
+    instance: &mut ArtboardInstance,
     state_machine: Option<&mut StateMachineInstance>,
     owned_view_model_context: Option<&mut RuntimeOwnedViewModelContext>,
 ) {
@@ -1637,26 +1711,28 @@ fn advance_scene_to(
     let elapsed_seconds = (target_seconds - *current_seconds).max(0.0);
     if let Some(state_machine) = state_machine.as_deref_mut() {
         instance.advance_state_machine_instance(state_machine, elapsed_seconds);
-        if instance.advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine) {
+        if instance
+            .advance_frame_components_with_state_machine(elapsed_seconds, state_machine)
+            .context("retained frame-component advance failed")?
+        {
             instance.advance_state_machine_instance(state_machine, 0.0);
         }
     } else {
-        instance.advance_nested_artboards(elapsed_seconds);
+        instance
+            .advance_frame_components(elapsed_seconds)
+            .context("retained frame-component advance failed")?;
     }
     let _ = (runtime, owned_view_model_context);
-    instance.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-    instance
-        .advance_script_instances(elapsed_seconds)
-        .context("scripted drawable advance failed")?;
-    instance
-        .update_script_instances()
-        .context("scripted drawable update failed")?;
     if let Some(state_machine) = state_machine.as_deref_mut() {
-        instance.settle_state_machine_update_passes_after_main_advance(std::slice::from_mut(
-            state_machine,
-        ));
+        instance
+            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                std::slice::from_mut(state_machine),
+            )
+            .context("dependency-ordered scripted drawable update failed")?;
     } else {
-        instance.update_pass();
+        instance
+            .update_pass_with_script_errors()
+            .context("dependency-ordered scripted drawable update failed")?;
     }
     #[cfg(feature = "scripting")]
     if let Some(script_frame_tail) = script_frame_tail {
@@ -1955,8 +2031,8 @@ impl RunnerScriptArtboard {
             .and_then(|artboard| artboard.uint_property("defaultStateMachineId"))
             .and_then(|index| usize::try_from(index).ok())
             .filter(|index| graph.state_machines.get(*index).is_some());
-        let state_machine =
-            state_machine_index.and_then(|index| instance.borrow().state_machine_instance(index));
+        let state_machine = state_machine_index
+            .and_then(|index| instance.borrow_mut().state_machine_instance(index));
         let object = runtime.object(graph.global_id as usize);
         render_state
             .borrow_mut()
@@ -2166,7 +2242,13 @@ fn initialize_scripted_drawables_and_realize(
         registered_file,
     )
     .context("failed to initialize scripted drawables")?;
+    // Ordinary scripted Artboards complete their initial Component pass
+    // before their retained backend resources are realized. ScriptInputArtboard
+    // roots deliberately use `initialize_scripted_drawables` directly so
+    // their input-cloned children stay lazy until the scene frame begins
+    // (`scripted_drawable.cpp:346-356`; `scripted_object.cpp:43-61`).
     if let Some(state) = state.as_ref() {
+        instance.update_pass();
         state
             .borrow_mut()
             .realize_pending(runtime, artboards, factory)
@@ -2496,7 +2578,10 @@ fn initialize_scripted_drawables_for_artboard(
     if let Some(model) = bound_context_model {
         bind_script_view_model_artboard_context(instance, runtime, artboard_index, None, &model);
         instance.advance_artboard_data_binds();
-        instance.update_pass();
+        // Hydration dirties ScriptUpdate but C++ does not consume that dirt
+        // while attaching the DataContext. The ordinary Artboard update owns
+        // the first `scriptUpdate()` call (`scripted_object.cpp:43-117,
+        // 399-436`; `scripted_drawable.cpp:346-356`).
     }
 
     render_state
@@ -3293,9 +3378,13 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(scroll_constraint) =
-        unsupported_scroll_constraint_global(runtime, graph, artboard, has_input_events)
-    {
+    let trace_scroll_input = env::var_os("RIVE_GOLDEN_COVERAGE_MECHANISM_INPUT").is_some();
+    if let Some(scroll_constraint) = unsupported_scroll_constraint_global(
+        runtime,
+        graph,
+        artboard,
+        has_input_events && !trace_scroll_input,
+    ) {
         bail!(
             "unsupported: scroll-constraints in Rust golden runner (global {})",
             scroll_constraint

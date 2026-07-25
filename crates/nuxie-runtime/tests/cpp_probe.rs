@@ -15139,7 +15139,7 @@ fn runtime_update_matches_cpp_for_transform_hierarchy() {
                     type_key_for_name(type_name),
                     "slot core type mismatch for local {local_id} in {label}"
                 );
-                assert_eq!(cpp_object.is_component, rust_slot.component_index.is_some());
+                assert_eq!(cpp_object.is_component, rust.component(local_id).is_some());
             }
             (None, None) => {}
             _ => panic!("slot presence mismatch for local {local_id} in {label}"),
@@ -15845,6 +15845,319 @@ fn runtime_drawable_dispatch_stream_exposes_rounded_point_path_payloads_like_cpp
         &cpp_path_commands,
         "Rust rounded point path commands",
     );
+}
+
+#[test]
+fn translation_constraint_bone_virtual_offsets_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_translation_constraint_bone_offset.riv";
+    let bytes = synthetic_runtime_file(8222, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "RootBone", |bytes| {
+            push_uint_property(bytes, "RootBone", "parentId", 0);
+            push_f32_property(bytes, "RootBone", "length", 10.0);
+        });
+        push_object_with_properties(bytes, "Bone", |bytes| {
+            push_uint_property(bytes, "Bone", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 20.0);
+            push_f32_property(bytes, "Node", "y", 7.0);
+        });
+        push_object_with_properties(bytes, "TranslationConstraint", |bytes| {
+            push_uint_property(bytes, "TranslationConstraint", "parentId", 2);
+            push_uint_property(bytes, "TranslationConstraint", "targetId", 3);
+            push_bool_property(bytes, "TranslationConstraint", "offset", true);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    let report = rust.update_components();
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    assert_eq!(cpp_update.did_update, report.did_update);
+    let cpp_bone = cpp_update
+        .components
+        .iter()
+        .find(|component| component.local_id == 2)
+        .expect("C++ constrained Bone");
+    let rust_bone = rust.component(2).expect("Rust constrained Bone");
+    compare_mat2d(
+        cpp_bone.world_transform,
+        Some(rust_bone.transform.world_transform),
+        "world transform",
+        2,
+        label,
+    );
+    assert_eq!(
+        cpp_bone
+            .world_transform
+            .map(|matrix| (matrix[4], matrix[5])),
+        Some((30.0, 7.0))
+    );
+}
+
+#[test]
+fn transform_constraint_reads_retained_layout_target_bounds_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_transform_constraint_layout_target.riv";
+    let bytes = synthetic_runtime_file(8234, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_f32_property(bytes, "LayoutComponent", "width", 200.0);
+            push_f32_property(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object_with_properties(bytes, "LayoutComponent", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "LayoutComponent", "width", 100.0);
+            push_f32_property(bytes, "LayoutComponent", "height", 50.0);
+            push_uint_property(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object_with_properties(bytes, "LayoutComponentStyle", |_| {});
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "TransformConstraint", |bytes| {
+            push_uint_property(bytes, "TransformConstraint", "parentId", 3);
+            push_uint_property(bytes, "TransformConstraint", "targetId", 1);
+            push_f32_property(bytes, "TransformConstraint", "originX", 0.5);
+            push_f32_property(bytes, "TransformConstraint", "originY", 0.5);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    let report = rust.update_components();
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    assert_eq!(cpp_update.did_update, report.did_update);
+    let cpp_node = cpp_update
+        .components
+        .iter()
+        .find(|component| component.local_id == 3)
+        .expect("C++ constrained Node");
+    let rust_node = rust.component(3).expect("Rust constrained Node");
+    compare_mat2d(
+        cpp_node.world_transform,
+        Some(rust_node.transform.world_transform),
+        "layout-target constrained world transform",
+        3,
+        label,
+    );
+    assert_eq!(
+        cpp_node
+            .world_transform
+            .map(|matrix| (matrix[4], matrix[5])),
+        Some((50.0, 25.0))
+    );
+}
+
+#[test]
+fn follow_path_constraint_retains_measure_and_applies_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_follow_path_retained_measure.riv";
+    let bytes = synthetic_runtime_file(8235, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Shape", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "PointsPath", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 2);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 2);
+            push_f32_property(bytes, "StraightVertex", "x", 10.0);
+        });
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "FollowPathConstraint", |bytes| {
+            push_uint_property(bytes, "FollowPathConstraint", "parentId", 5);
+            push_uint_property(bytes, "FollowPathConstraint", "targetId", 1);
+            push_f32_property(bytes, "FollowPathConstraint", "distance", 0.5);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    let report = rust.update_components();
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    assert_eq!(cpp_update.did_update, report.did_update);
+    for local_id in [1, 2, 5, 6] {
+        let cpp_component = cpp_update
+            .components
+            .iter()
+            .find(|component| component.local_id == local_id)
+            .unwrap_or_else(|| panic!("missing C++ component {local_id}"));
+        let rust_component = rust
+            .component(local_id)
+            .unwrap_or_else(|| panic!("missing Rust component {local_id}"));
+        compare_component(cpp_component, rust_component, label);
+    }
+
+    // StraightVertex is not a dependency-graph node in pinned C++; its
+    // graphOrder scalar is therefore indeterminate and is intentionally not
+    // compared. The constrained Node proves FollowPath::update retained and
+    // consumed the path measure (`follow_path_constraint.cpp:119-145`).
+    let cpp_node = cpp_update
+        .components
+        .iter()
+        .find(|component| component.local_id == 5)
+        .expect("C++ constrained Node");
+    let rust_node = rust.component(5).expect("Rust constrained Node");
+    compare_mat2d(
+        cpp_node.world_transform,
+        Some(rust_node.transform.world_transform),
+        "follow-path constrained world transform",
+        5,
+        label,
+    );
+    assert_eq!(
+        cpp_node
+            .world_transform
+            .map(|matrix| (matrix[4], matrix[5])),
+        Some((5.0, 0.0))
+    );
+}
+
+#[test]
+fn list_follow_path_constraint_registers_and_updates_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_list_follow_path_registration.riv";
+    let bytes = synthetic_runtime_file(8236, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "ArtboardComponentList", |bytes| {
+            push_uint_property(bytes, "ArtboardComponentList", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Shape", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "PointsPath", "parentId", 2);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 3);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 3);
+            push_f32_property(bytes, "StraightVertex", "x", 10.0);
+        });
+        push_object_with_properties(bytes, "ListFollowPathConstraint", |bytes| {
+            push_uint_property(bytes, "ListFollowPathConstraint", "parentId", 1);
+            push_uint_property(bytes, "ListFollowPathConstraint", "targetId", 2);
+            push_f32_property(bytes, "ListFollowPathConstraint", "distanceEnd", 1.0);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    let report = rust.update_components();
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    assert_eq!(cpp_update.did_update, report.did_update);
+    for local_id in [1, 2, 3, 6] {
+        let cpp_component = cpp_update
+            .components
+            .iter()
+            .find(|component| component.local_id == local_id)
+            .unwrap_or_else(|| panic!("missing C++ component {local_id}"));
+        let rust_component = rust
+            .component(local_id)
+            .unwrap_or_else(|| panic!("missing Rust component {local_id}"));
+        compare_component(cpp_component, rust_component, label);
+    }
+}
+
+#[test]
+fn ik_constraint_retains_fk_chain_and_solves_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_ik_retained_chain.riv";
+    let bytes = synthetic_runtime_file(8237, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "RootBone", |bytes| {
+            push_uint_property(bytes, "RootBone", "parentId", 0);
+            push_f32_property(bytes, "RootBone", "length", 10.0);
+        });
+        push_object_with_properties(bytes, "Bone", |bytes| {
+            push_uint_property(bytes, "Bone", "parentId", 1);
+            push_f32_property(bytes, "Bone", "length", 10.0);
+        });
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 10.0);
+            push_f32_property(bytes, "Node", "y", 10.0);
+        });
+        push_object_with_properties(bytes, "IKConstraint", |bytes| {
+            push_uint_property(bytes, "IKConstraint", "parentId", 2);
+            push_uint_property(bytes, "IKConstraint", "targetId", 3);
+            push_uint_property(bytes, "IKConstraint", "parentBoneCount", 1);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    let report = rust.update_components();
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    for local_id in [1, 2] {
+        let cpp_bone = cpp_update
+            .components
+            .iter()
+            .find(|component| component.local_id == local_id)
+            .unwrap_or_else(|| panic!("missing C++ bone {local_id}"));
+        let rust_bone = rust
+            .component(local_id)
+            .unwrap_or_else(|| panic!("missing Rust bone {local_id}"));
+        compare_mat2d(
+            cpp_bone.world_transform,
+            Some(rust_bone.transform.world_transform),
+            "IK constrained world transform",
+            local_id,
+            label,
+        );
+    }
 }
 
 #[test]
@@ -20446,7 +20759,7 @@ fn state_machine_name_based_number_bind_source_is_unresolved_like_cpp_probe() {
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -37131,7 +37444,7 @@ fn state_machine_default_viewmodel_list_formula_fallback_to_bindable_list_explic
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -37192,7 +37505,7 @@ fn state_machine_default_viewmodel_list_formula_fallback_to_bindable_list_public
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -37466,7 +37779,7 @@ fn state_machine_default_viewmodel_list_formula_random_fallback_to_bindable_list
         let seeded_random_values = [0.875_f32, 0.625];
         let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
         let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
-        let (_, rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
         let mut state_machine = rust
             .state_machine_instance(0)
             .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -37546,7 +37859,7 @@ fn state_machine_default_viewmodel_list_formula_random_fallback_to_bindable_list
         let seeded_random_values = [0.875_f32, 0.625];
         let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
         let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
-        let (_, rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
         let mut state_machine = rust
             .state_machine_instance(0)
             .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -55550,7 +55863,7 @@ fn bindable_list_main_to_source_target_to_source_matches_cpp_probe() {
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -55609,7 +55922,7 @@ fn bindable_list_public_update_target_to_source_matches_cpp_probe() {
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -55667,7 +55980,7 @@ fn number_to_bindable_list_public_update_target_to_source_matches_cpp_probe() {
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -55726,7 +56039,7 @@ fn number_to_bindable_list_main_to_source_target_to_source_matches_cpp_probe() {
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -70615,7 +70928,7 @@ fn state_machine_imported_viewmodel_viewmodel_source_relink_is_shared_across_sta
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (runtime, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine_a = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
@@ -77038,10 +77351,31 @@ fn compare_cpp_runtime_update(
 }
 
 fn compare_component(cpp: &CppRuntimeComponent, rust: &RuntimeComponent, label: &str) {
-    assert_eq!(
-        cpp.graph_order, rust.graph_order,
-        "graph order mismatch for {label}"
-    );
+    if cpp.scheduled {
+        assert_eq!(
+            cpp.graph_order,
+            rust.graph_order(),
+            "graph order mismatch for scheduled local {} in {label}",
+            cpp.local_id
+        );
+        assert!(
+            cpp.graph_order.is_some(),
+            "scheduled local {} omitted graph order in {label}",
+            cpp.local_id
+        );
+    } else {
+        assert_eq!(
+            None, cpp.graph_order,
+            "unscheduled local {} exposed indeterminate C++ graph order in {label}",
+            cpp.local_id
+        );
+        assert_eq!(
+            None,
+            rust.graph_order(),
+            "unscheduled local {} manufactured graph order in {label}",
+            cpp.local_id
+        );
+    }
     assert_eq!(
         cpp.dirt, rust.dirt.0,
         "dirt mismatch for local {} in {label}",
@@ -77773,7 +78107,8 @@ struct CppRuntimeComponent {
     #[serde(rename = "localId")]
     local_id: usize,
     #[serde(rename = "graphOrder")]
-    graph_order: usize,
+    graph_order: Option<usize>,
+    scheduled: bool,
     dirt: u16,
     collapsed: bool,
     #[serde(rename = "worldTransform")]

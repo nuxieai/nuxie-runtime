@@ -716,7 +716,12 @@ impl ViewModelDataBindingDirection {
         match self {
             Self::ToTarget => 0,
             Self::ToSource => 1 << 0,
-            Self::TwoWay => 1 << 1,
+            // Semantic TwoWay authoring initializes the target from the
+            // source. C++ uses this separate precedence bit when both
+            // directions are dirty during reconcile; see
+            // include/rive/data_bind_flags.hpp:8-23 and
+            // src/data_bind/data_bind.cpp:489-493.
+            Self::TwoWay => (1 << 1) | (1 << 3),
         }
     }
 }
@@ -26671,6 +26676,14 @@ mod tests {
     }
 
     #[test]
+    fn two_way_authoring_emits_source_first_reconcile_flags() {
+        assert_eq!(
+            ViewModelDataBindingDirection::TwoWay.runtime_flags(),
+            (1 << 1) | (1 << 3)
+        );
+    }
+
+    #[test]
     fn project_group_runs_forward_and_reverse_after_exact_import() -> Result<()> {
         let catalog = crate::ProjectDataConverterCatalog::compile([
             crate::ProjectDataConverterDefinition {
@@ -27906,7 +27919,10 @@ mod tests {
                     },
                     AuthoringProperty {
                         key: 587,
-                        value: AuthoringValue::Uint(2),
+                        // TwoWay plus SourceToTargetRunsFirst. C++ consults
+                        // the precedence bit when both reconcile directions
+                        // are dirty (data_bind.cpp:489-493, 518-521).
+                        value: AuthoringValue::Uint(10),
                     },
                     AuthoringProperty {
                         key: 588,

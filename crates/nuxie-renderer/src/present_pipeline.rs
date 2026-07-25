@@ -1,5 +1,13 @@
 //! GPU-only final blit shared by platform presentation adapters.
 
+#[derive(Clone, Copy)]
+pub(crate) enum PresentTargetAlpha {
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    Straight,
+    #[cfg_attr(any(target_os = "ios", target_os = "macos"), allow(dead_code))]
+    Premultiplied,
+}
+
 pub(crate) struct PresentPipeline {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
@@ -7,11 +15,19 @@ pub(crate) struct PresentPipeline {
 }
 
 impl PresentPipeline {
-    pub(crate) fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        target_alpha: PresentTargetAlpha,
+    ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("nuxie-surface-present-shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("surface_present.wgsl").into()),
         });
+        let fragment_entry_point = match target_alpha {
+            PresentTargetAlpha::Straight => "fragment_straight_alpha",
+            PresentTargetAlpha::Premultiplied => "fragment_premultiplied_alpha",
+        };
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nuxie-surface-present-layout"),
             entries: &[
@@ -52,7 +68,7 @@ impl PresentPipeline {
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: Some("fragment_main"),
+                entry_point: Some(fragment_entry_point),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,

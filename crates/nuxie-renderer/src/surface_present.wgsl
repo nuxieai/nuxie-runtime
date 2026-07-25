@@ -21,10 +21,15 @@ fn vertex_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 @group(0) @binding(1) var source_sampler: sampler;
 
 @fragment
-fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
+fn fragment_straight_alpha(input: VertexOutput) -> @location(0) vec4<f32> {
     let premultiplied = textureSample(source_texture, source_sampler, input.uv);
     if premultiplied.a <= 0.0 {
         return vec4<f32>(0.0);
     }
     return vec4<f32>(premultiplied.rgb / premultiplied.a, premultiplied.a);
+}
+
+@fragment
+fn fragment_premultiplied_alpha(input: VertexOutput) -> @location(0) vec4<f32> {
+    return textureSample(source_texture, source_sampler, input.uv);
 }

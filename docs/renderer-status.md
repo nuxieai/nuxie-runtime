@@ -2111,7 +2111,11 @@ widening. Universal byte identity is not part of that stop condition.
   no mapped GPU-to-CPU readback or Canvas2D copy. Explicit pixel capture uses
   `BrowserFrame::finish_with_readback`, which returns the bounded
   `width * height * 4` RGBA result without presenting. The real-browser gate
-  counts both prohibited calls on normal frames and checks exact capture bytes.
+  counts both prohibited calls on normal frames, checks exact capture bytes,
+  proves a 13x9 resize through the canvas surface, and retries a one-shot
+  acquisition loss on the same factory. Browser surfaces are explicitly
+  premultiplied and the compositor oracle blends half-alpha red over blue;
+  Apple retains the existing straight-alpha drawable contract.
 
 - 2026-07-17: At the user's direction, the R4 timing gate no longer requires
   any absolute host-idle percentage. Stable low-idle brackets are admissible;

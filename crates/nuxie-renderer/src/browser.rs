@@ -1,4 +1,4 @@
-use super::present_pipeline::PresentPipeline;
+use super::present_pipeline::{PresentPipeline, PresentTargetAlpha};
 use super::{RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
@@ -376,16 +376,21 @@ impl BrowserPresentation {
                     "browser WebGPU canvas surface creation failed: {error}"
                 ))
             })?;
-        let configuration = surface
+        let mut configuration = surface
             .get_default_config(&factory.context.adapter, width, height)
             .ok_or_else(|| {
                 RendererError::Adapter(
                     "selected WebGPU adapter cannot present to the browser canvas".into(),
                 )
             })?;
+        configuration.alpha_mode = wgpu::CompositeAlphaMode::PreMultiplied;
         surface.configure(&factory.context.device, &configuration);
         Ok(Self {
-            presenter: PresentPipeline::new(&factory.context.device, configuration.format),
+            presenter: PresentPipeline::new(
+                &factory.context.device,
+                configuration.format,
+                PresentTargetAlpha::Premultiplied,
+            ),
             surface,
             configuration: RefCell::new(configuration),
             queue: factory.context.queue.clone(),

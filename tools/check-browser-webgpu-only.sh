@@ -32,6 +32,7 @@ rg -q 'pub async fn present\(self\)' "$browser_source"
 rg -q 'get_current_texture\(\)' "$browser_source"
 rg -q 'queue\.present\(surface_texture\)' "$browser_source"
 rg -q 'pub async fn finish_with_readback\(self\)' "$browser_source"
+rg -q 'configuration\.alpha_mode = wgpu::CompositeAlphaMode::PreMultiplied' "$browser_source"
 
 present_body=$(
   sed -n \
@@ -64,4 +65,4 @@ rg -Fq 'finish_internal(false, false, true, false, Some' <<<"$direct_submit_body
 test ! -e "$repo_dir/crates/nuxie-renderer/src/webgl2.rs"
 test ! -e "$repo_dir/crates/nuxie-renderer/src/webgl2_limits.rs"
 
-echo "browser-webgpu-only summary: browser-smoke=pass gpu-smoke=pass prohibited-surface=0 prohibited-cpu-presentation=0 typed-readback=1"
+echo "browser-webgpu-only summary: browser-smoke=pass gpu-smoke=pass prohibited-surface=0 prohibited-cpu-presentation=0 typed-readback=1 surface-alpha=premultiplied"

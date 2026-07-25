@@ -15,6 +15,7 @@
         assert_explicit_readback,
         assert_imported_gpu_canvas,
         assert_resize,
+        assert_surface_acquisition_retry,
         assert_webgpu_gpu_canvas_rejects_invalid_interface,
         assert_webgpu_uniform_limit_rejection,
         run_backend,
@@ -73,38 +74,110 @@
         };
       }
 
-      async function assertPresentedCanvasPixels(canvas) {
-        const bitmap = await createImageBitmap(canvas);
+      function readBitmapPixels(bitmap, width, height, background = null) {
         const readbackCanvas = document.createElement("canvas");
-        readbackCanvas.width = canvas.width;
-        readbackCanvas.height = canvas.height;
+        readbackCanvas.width = width;
+        readbackCanvas.height = height;
         const context = readbackCanvas.getContext("2d", {
           willReadFrequently: true,
         });
         if (!context) {
           throw new Error("browser lacks Canvas2D for presentation pixel oracle");
         }
+        if (background) {
+          context.fillStyle = background;
+          context.fillRect(0, 0, width, height);
+        }
         context.drawImage(bitmap, 0, 0);
-        bitmap.close();
-        const pixels = context.getImageData(
-          0,
-          0,
-          readbackCanvas.width,
-          readbackCanvas.height,
-        ).data;
+        return context.getImageData(0, 0, width, height).data;
+      }
+
+      function assertExactPixels(pixels, expected, label, tolerance = 0) {
         for (let offset = 0; offset < pixels.length; offset += 4) {
+          const actual = Array.from(pixels.slice(offset, offset + 4));
           if (
-            pixels[offset] !== 0x12 ||
-            pixels[offset + 1] !== 0x34 ||
-            pixels[offset + 2] !== 0x56 ||
-            pixels[offset + 3] !== 0xff
+            actual.some(
+              (channel, index) =>
+                Math.abs(channel - expected[index]) > tolerance,
+            )
           ) {
             throw new Error(
-              `direct WebGPU presentation pixel ${offset / 4} was ` +
-                `[${pixels[offset]},${pixels[offset + 1]},${pixels[offset + 2]},${pixels[offset + 3]}]`,
+              `${label} pixel ${offset / 4} was [${actual.join(",")}]`,
             );
           }
         }
+      }
+
+      async function assertPremultipliedPresentationPixels(canvas) {
+        const bitmap = await createImageBitmap(canvas);
+        try {
+          assertExactPixels(
+            readBitmapPixels(bitmap, canvas.width, canvas.height),
+            [0xff, 0x00, 0x00, 0x80],
+            "transparent direct WebGPU presentation",
+          );
+          assertExactPixels(
+            readBitmapPixels(
+              bitmap,
+              canvas.width,
+              canvas.height,
+              "rgb(0 0 255)",
+            ),
+            [0x80, 0x00, 0x7f, 0xff],
+            "premultiplied WebGPU presentation over blue",
+            1,
+          );
+        } finally {
+          bitmap.close();
+        }
+      }
+
+      async function assertOpaquePresentationPixels(canvas, expected, label) {
+        const bitmap = await createImageBitmap(canvas);
+        try {
+          assertExactPixels(
+            readBitmapPixels(bitmap, canvas.width, canvas.height),
+            expected,
+            label,
+          );
+        } finally {
+          bitmap.close();
+        }
+      }
+
+      function installOneShotSurfaceAcquisitionLoss() {
+        const prototype = globalThis.GPUCanvasContext?.prototype;
+        if (!prototype) {
+          throw new Error("browser lacks GPUCanvasContext required by loss proof");
+        }
+        const descriptor = Object.getOwnPropertyDescriptor(
+          prototype,
+          "getCurrentTexture",
+        );
+        if (!descriptor || typeof descriptor.value !== "function") {
+          throw new Error(
+            "browser lacks callable getCurrentTexture required by loss proof",
+          );
+        }
+        let calls = 0;
+        Object.defineProperty(prototype, "getCurrentTexture", {
+          ...descriptor,
+          value(...args) {
+            calls += 1;
+            if (calls === 1) {
+              throw new Error("injected one-shot surface acquisition loss");
+            }
+            return descriptor.value.apply(this, args);
+          },
+        });
+        return {
+          get calls() {
+            return calls;
+          },
+          restore() {
+            Object.defineProperty(prototype, "getCurrentTexture", descriptor);
+          },
+        };
       }
 
       try {
@@ -375,7 +448,7 @@
             const directPresentation = await assert_direct_presentation(
               directCanvas,
             );
-            await assertPresentedCanvasPixels(directCanvas);
+            await assertPremultipliedPresentationPixels(directCanvas);
             if (
               presentationCalls.counters.getCurrentTexture !== 1 ||
               presentationCalls.counters.mapAsync !== 0 ||
@@ -389,7 +462,7 @@
               );
             }
             results.push(
-              `${directPresentation} exact-rgba=true surface=1 mapAsync=0 putImageData=0`,
+              `${directPresentation} exact-rgba=true composite=over-blue surface=1 mapAsync=0 putImageData=0`,
             );
             const explicitReadback = await assert_explicit_readback(
               document.createElement("canvas"),
@@ -435,7 +508,35 @@
                 : `compatibility=selected order=core,compatibility requested-vertex-storage-limit=${compatibilityProbe.requestedVertexStorageLimit} rendered`,
             );
           } else {
-            results.push(await assert_resize(document.createElement("canvas")));
+            const resizeCanvas = document.createElement("canvas");
+            const resizeResult = await assert_resize(resizeCanvas);
+            await assertOpaquePresentationPixels(
+              resizeCanvas,
+              [0x65, 0x43, 0x21, 0xff],
+              "resized direct WebGPU presentation",
+            );
+            results.push(resizeResult);
+
+            const retryCanvas = document.createElement("canvas");
+            const acquisitionLoss = installOneShotSurfaceAcquisitionLoss();
+            try {
+              const retryResult = await assert_surface_acquisition_retry(
+                retryCanvas,
+              );
+              if (acquisitionLoss.calls !== 2) {
+                throw new Error(
+                  `surface acquisition retry called getCurrentTexture ${acquisitionLoss.calls} times`,
+                );
+              }
+              await assertOpaquePresentationPixels(
+                retryCanvas,
+                [0xab, 0xcd, 0xef, 0xff],
+                "same-factory surface acquisition retry",
+              );
+              results.push(`${retryResult} acquisitions=2`);
+            } finally {
+              acquisitionLoss.restore();
+            }
             results.push(await assert_direct_gpu_canvas_image(document.createElement("canvas")));
             results.push(await assert_imported_gpu_canvas(document.createElement("canvas")));
             results.push(await assert_webgpu_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));

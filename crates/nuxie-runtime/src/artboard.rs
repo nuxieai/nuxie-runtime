@@ -1225,19 +1225,6 @@ impl ArtboardInstance {
                     .component(parent)
                     .map(|component| component.type_name)
                     .unwrap_or("<missing>");
-                if component.type_name == "NestedStateMachine"
-                    && parent_type == "ArtboardListMapRule"
-                {
-                    // Nuxie's public authoring format stores selected list-row
-                    // machine IDs as NestedStateMachine-shaped metadata below
-                    // an ArtboardListMapRule. The graph adapter consumes these
-                    // records into `ComponentListMapRuleNode::state_machine_ids`;
-                    // they are not live Component occurrences and therefore
-                    // must not enter the C++ owner tree. A real
-                    // NestedAnimation still requires NestedArtboard parentage
-                    // (`nested_animation.cpp:8-25`).
-                    continue;
-                }
                 if !objects.is_container_component(parent) {
                     anyhow::bail!(
                         "Component {} local {} parent local {} type {} is not a ContainerComponent",
@@ -18018,6 +18005,28 @@ mod tests {
         let graph = GraphFile::from_runtime_file(&file).expect("synthetic riv should graph");
         let artboard = graph.artboards.first().expect("synthetic riv has artboard");
         ArtboardInstance::from_graph(&file, artboard).expect("instance builds")
+    }
+
+    #[test]
+    fn nested_state_machine_rejects_artboard_list_map_rule_parent() {
+        let bytes = synthetic_riv(9599, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "ArtboardListMapRule", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "NestedStateMachine", &[("parentId", 1)]);
+        });
+        let file = read_runtime_file(&bytes).expect("synthetic riv should import");
+        let graph = GraphFile::from_runtime_file(&file).expect("synthetic riv should graph");
+        let artboard = graph.artboards.first().expect("synthetic riv has artboard");
+
+        let error = match ArtboardInstance::from_graph(&file, artboard) {
+            Ok(_) => panic!("non-container Component parent must be rejected"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.to_string(),
+            "Component NestedStateMachine local 2 parent local 1 type ArtboardListMapRule is not a ContainerComponent"
+        );
     }
 
     fn assert_collapsed(instance: &ArtboardInstance, local_id: usize, collapsed: bool) {

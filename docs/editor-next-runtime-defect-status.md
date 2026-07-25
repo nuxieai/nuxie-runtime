@@ -7,8 +7,7 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: `F-ED-03` merge closeout plus file-disjoint `F-ED-11A` /
-  `LOC-019`;
+- phase: `F-ED-11A` / `LOC-019`;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - investigation base: `05d45f07d87b33665167de0869b7db7b009bf8fe`;
 - Editor's last consumed runtime:
@@ -29,11 +28,6 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 The active FL executor owns FL-A and the complete reservation recorded in the
 atlas. F-ED may write only its new evidence/checker/fixture paths until that
 lease changes.
-
-`F-ED-03` is independently reviewable in PR #49 with its complete local floor
-green. Its required CI parity job is blocked by the repository runner lacking
-a matching `llvm-nm`, the same harness defect present on `main`; that harness
-repair remains a separate approval-gated change.
 
 `F-ED-11A` has localized `LOC-019` independently of `LOC-009`. The WebGPU
 device and valid draw succeed; a clean `GPUDevice.popErrorScope()` fulfills
@@ -108,19 +102,17 @@ the unsupported duration and its fully qualified regression test passes 1/1.
 
 ## Next queue
 
-1. clear the separate `llvm-tools` CI harness prerequisite, merge `F-ED-03`,
-   and hand its exact SHA to Editor for P09-C01;
-2. open executor-green `F-ED-11A` as a non-draft one-defect PR, merge it when
+1. open executor-green `F-ED-11A` as a non-draft one-defect PR, merge it when
    required CI and review are green, obtain orchestrator verification, and hand
    the exact SHA to Editor for the unchanged P14-C06 matrix;
-3. qualify `LOC-009` independently from `LOC-019`; `RuntimeRejected` is not a
+2. qualify `LOC-009` independently from `LOC-019`; `RuntimeRejected` is not a
    diagnosis;
-4. qualify and close `F-ED-04` and requalify `F-ED-06`, `F-ED-07`,
-   `F-ED-08`, and the remaining `F-ED-11` draw row under the WebGPU-only
-   support contract—no WebGL2 repair or fallback;
-5. keep `LOC-007` and every other reserved runtime-owner finding with the
+3. qualify and close `F-ED-03` and `F-ED-04`, then requalify `F-ED-06`,
+   `F-ED-07`, `F-ED-08`, and the remaining `F-ED-11` draw row under the
+   WebGPU-only support contract—no WebGL2 repair or fallback;
+4. keep `LOC-007` and every other reserved runtime-owner finding with the
    active FL executor while file-disjoint evidence/API work proceeds;
-6. burn down the remaining queues in
+5. burn down the remaining queues in
    `docs/editor-next-runtime-defect-goal.md` through Editor consumption and
    the complete 27-child product matrix.
 

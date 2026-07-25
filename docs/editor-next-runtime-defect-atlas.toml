@@ -1696,7 +1696,7 @@ parity_ledger = "d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c9
 [defect.revisions]
 original_localization_rust_sha = "95027109c89f651835c76646ebf4d8734f032f07"
 editor_last_consumed_runtime_sha = "95027109c89f651835c76646ebf4d8734f032f07"
-investigation_head_sha = "c879372ccad6b0203440591486dffc283ef63b1f"
+investigation_head_sha = "df453bb4b771361755ea1166fd2dd7954cee1dc9"
 merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
 consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
@@ -1713,8 +1713,8 @@ command = "make browser-webgpu-only-check && make renderer-golden"
 evidence = "Focused clean-scope row returns a 64-pixel buffer with 32 red pixels and the paired invalid-WGSL row returns a concrete validation error; browser prohibited-surface count is zero; renderer-corpus exact=1468 diverges=0 gated=0 total=1468."
 [defect.executor_verification]
 status = "pass"
-command = "complete closeout battery at c879372ccad6b0203440591486dffc283ef63b1f"
-evidence = "414/414 runtime, 141/141 nuxie, 721/721 C++ probes, ordinary and scripted 317/317 entries plus 647/647 segments with zero divergences, renderer 1468/1468, browser WebGPU-only, C API and workspace green; size 9168392 bytes under 9437184."
+command = "complete closeout battery at b6b5031a0bab850e71b02a375d696c02ce079719; focused real-Chrome and immutable provenance rerun at df453bb4b771361755ea1166fd2dd7954cee1dc9"
+evidence = "414/414 runtime, 141/141 nuxie, 721/721 C++ probes, ordinary and scripted 317/317 entries plus 647/647 segments with zero divergences, renderer 1468/1468, C API and workspace green, and size 9168392 bytes under 9437184 at b6b5031a; exact clean-null, 32-red-pixel, concrete-GPUError, WebGPU-only, and immutable Editor provenance checks pass at df453bb4."
 [defect.orchestrator_verification]
 status = "pending"
 reason = "F-ED-11 executor-green result awaits independent orchestrator verification."
@@ -1737,14 +1737,14 @@ evidence = "Mapped to vendor/wgpu-30.0.0/src/backend/webgpu.rs::future_pop_error
 [[defect.history]]
 state = "executor-green"
 actor = "f-ed-executor"
-evidence = "Real-Chrome clean-null and concrete-error paths pass; complete runtime, C++ probe, ordinary/scripted golden, renderer pixel, C API, workspace, and size floors pass at the recorded investigation head."
+evidence = "Complete runtime, C++ probe, ordinary/scripted golden, renderer pixel, C API, workspace, and size floors pass at b6b5031a; the Real-Chrome clean-null/concrete-error paths and immutable provenance rerun pass at the recorded investigation head df453bb4."
 [defect.cpp_result]
 status = "not-applicable"
 reason = "Pinned C++ has no browser WebGPU/wasm-bindgen binding equivalent; GPUDevice.popErrorScope Promise<GPUError?> is the governing platform contract."
 [defect.rust_result]
 status = "pass"
 command = "make browser-webgpu-only-check"
-evidence = "The pre-repair row traps at vendored wgpu Error::from_js on a clean null result; the repaired row returns a 64-pixel buffer with 32 red pixels and reports a clean scope, while an invalid-WGSL scope returns a concrete validation error and existing device/interface/uniform failure checks remain green. Complete repository floors are green at c879372c."
+evidence = "The pre-repair row traps at vendored wgpu Error::from_js on a clean null result; the repaired row returns a 64-pixel buffer with exactly 32 red pixels and reports a clean scope, while an invalid-WGSL scope returns a concrete validation error and existing device/interface/uniform failure checks remain green. Complete repository floors are green at b6b5031a and focused review corrections are green at df453bb4."
 [defect.editor_result]
 status = "fail"
 command = "GPU_CANVAS_GPU=1 pnpm --dir apps/nuxie-dashboard exec playwright test --config playwright.gpu-canvas.config.ts"

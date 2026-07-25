@@ -2,8 +2,10 @@
 mod wasm {
     use nuxie::{
         BlendMode, BrowserFactory, BrowserResizeError, Factory, File, FillRule, GpuCanvasPlan,
-        GpuCanvasRenderPlan, GpuCanvasShader, GpuCanvasShaderStage, GpuCanvasUniformBuffer,
-        ImageSampler, Mat2D, RecordingFactory, Renderer, WgpuFactory,
+        GpuCanvasRenderPlan, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
+        GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
+        GpuCanvasShaderTextureViewDimension, GpuCanvasUniformBuffer, ImageSampler, Mat2D,
+        RecordingFactory, Renderer, WgpuFactory,
     };
     use nuxie_render_stream::RenderStream;
     use pixel_compare::{RgbaImage, Tolerance, compare};
@@ -13,49 +15,48 @@ mod wasm {
     const IMPORTED_GPU_CANVAS_RIV: &[u8] =
         include_bytes!(concat!(env!("OUT_DIR"), "/imported-gpu-canvas.riv"));
 
-    const IMPORTED_VERTEX_GLSL: &str = r#"#version 300 es
-precision highp float;
-precision highp int;
-void main() {
-    uint index = uint(gl_VertexID);
-    float x = float(int(index) - 1);
-    float y = float(int(index & 1u) * 2 - 1);
-    gl_Position = vec4(x, y, 0.0, 1.0);
-    gl_Position.yz = vec2(-gl_Position.y, gl_Position.z * 2.0 - gl_Position.w);
+    const IMPORTED_WGSL: &str = r#"
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let x = f32(i32(index) - 1);
+    let y = f32(i32(index & 1u) * 2 - 1);
+    return vec4<f32>(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
 }
 "#;
 
-    const IMPORTED_FRAGMENT_GLSL: &str = r#"#version 300 es
-precision highp float;
-layout(location = 0) out vec4 color;
-void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
+    const INVALID_IMPORTED_WGSL: &str = r#"
+@vertex
+fn vs_main(@location(0) position: vec2<f32>) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(position, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
 "#;
 
-    const INVALID_IMPORTED_VERTEX_GLSL: &str = r#"#version 300 es
-precision highp float;
-layout(location = 0) in vec2 position;
-void main() { gl_Position = vec4(position, 0.0, 1.0); }
-"#;
-
-    fn imported_gpu_canvas_shader(vertex_source: &str) -> GpuCanvasShader {
-        imported_gpu_canvas_shader_stages(vertex_source, IMPORTED_FRAGMENT_GLSL)
-    }
-
-    fn imported_gpu_canvas_shader_stages(
-        vertex_source: &str,
-        fragment_source: &str,
-    ) -> GpuCanvasShader {
+    fn imported_gpu_canvas_shader(source: &str) -> GpuCanvasShader {
         GpuCanvasShader {
-            vertex: GpuCanvasShaderStage {
-                source: vertex_source.into(),
-                logical_entry_point: "vs_main".into(),
-                physical_entry_point: "main".into(),
-            },
-            fragment: GpuCanvasShaderStage {
-                source: fragment_source.into(),
-                logical_entry_point: "fs_main".into(),
-                physical_entry_point: "main".into(),
-            },
+            source: source.into(),
+            entries: vec![
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Vertex,
+                    logical_entry_point: "vs_main".into(),
+                    physical_entry_point: "vs_main".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Fragment,
+                    logical_entry_point: "fs_main".into(),
+                    physical_entry_point: "fs_main".into(),
+                },
+            ],
+            bindings: Vec::new(),
         }
     }
 
@@ -222,7 +223,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }
         let mut factory = BrowserFactory::new(canvas, 32, 24)
             .await
             .map_err(js_error)?;
-        let shader = imported_gpu_canvas_shader(IMPORTED_VERTEX_GLSL);
+        let shader = imported_gpu_canvas_shader(IMPORTED_WGSL);
         let plan = imported_gpu_canvas_plan(32, 24, [0.0, 0.0, 1.0, 1.0]);
         let image = factory
             .make_gpu_canvas_image(&shader, &plan)
@@ -335,7 +336,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }
     ) -> Result<String, JsValue> {
         let mut factory = BrowserFactory::new(canvas, 8, 8).await.map_err(js_error)?;
         let unrelated = factory.begin_frame(0xff12_3456).map_err(js_error)?;
-        let invalid_shader = imported_gpu_canvas_shader(INVALID_IMPORTED_VERTEX_GLSL);
+        let invalid_shader = imported_gpu_canvas_shader(INVALID_IMPORTED_WGSL);
         let plan = imported_gpu_canvas_plan(8, 8, [0.0, 0.0, 0.0, 1.0]);
         match factory.make_gpu_canvas_image(&invalid_shader, &plan) {
             Err(error) if error.to_string().contains("vertex inputs") => {}
@@ -359,7 +360,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }
                 "GPU-canvas validation contaminated an unrelated frame",
             ));
         }
-        let valid_shader = imported_gpu_canvas_shader(IMPORTED_VERTEX_GLSL);
+        let valid_shader = imported_gpu_canvas_shader(IMPORTED_WGSL);
         let valid_image = factory
             .make_gpu_canvas_image(&valid_shader, &plan)
             .map_err(js_error)?;
@@ -394,25 +395,49 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }
         const UNIFORM_COUNT: usize = 13;
         let mut factory = BrowserFactory::new(canvas, 8, 8).await.map_err(js_error)?;
         let unrelated = factory.begin_frame(0xff12_3456).map_err(js_error)?;
-        let mut fragment = String::from(
-            "#version 300 es\nprecision highp float;\nlayout(location = 0) out vec4 color;\n",
+        let mut module = String::from(
+            r#"
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let x = f32(i32(index) - 1);
+    let y = f32(i32(index & 1u) * 2 - 1);
+    return vec4<f32>(x, y, 0.0, 1.0);
+}
+"#,
         );
         for index in 0..UNIFORM_COUNT {
             let group = index / 7;
             let binding = index % 7;
-            fragment.push_str(&format!(
-                "layout(std140, set = {group}, binding = {binding}) uniform U{index} {{ vec4 value; }} u{index};\n"
+            module.push_str(&format!(
+                "struct U{index} {{ value: vec4<f32>, }}\n@group({group}) @binding({binding}) var<uniform> u{index}: U{index};\n"
             ));
         }
-        fragment.push_str("void main() { color = ");
+        module.push_str("\n@fragment\nfn fs_main() -> @location(0) vec4<f32> {\n    return ");
         for index in 0..UNIFORM_COUNT {
             if index != 0 {
-                fragment.push_str(" + ");
+                module.push_str(" + ");
             }
-            fragment.push_str(&format!("u{index}.value"));
+            module.push_str(&format!("u{index}.value"));
         }
-        fragment.push_str("; }\n");
-        let shader = imported_gpu_canvas_shader_stages(IMPORTED_VERTEX_GLSL, &fragment);
+        module.push_str(";\n}\n");
+        let mut shader = imported_gpu_canvas_shader(&module);
+        shader.bindings = (0..UNIFORM_COUNT)
+            .map(|index| {
+                let group = (index / 7) as u8;
+                let binding = (index % 7) as u8;
+                GpuCanvasShaderBinding {
+                    group,
+                    binding,
+                    kind: GpuCanvasShaderResourceKind::UniformBuffer,
+                    stage_mask: 1 << GpuCanvasShaderStage::Fragment as u8,
+                    backend_space: group,
+                    backend_slots: [None, Some(u16::from(binding)), None],
+                    texture_view_dimension: GpuCanvasShaderTextureViewDimension::Undefined,
+                    texture_sample_type: GpuCanvasShaderTextureSampleType::Undefined,
+                    texture_multisampled: false,
+                }
+            })
+            .collect();
         let mut plan = imported_gpu_canvas_plan(8, 8, [0.0, 0.0, 0.0, 1.0]);
         plan.uniform_buffers = (0..UNIFORM_COUNT)
             .map(|index| GpuCanvasUniformBuffer {
@@ -445,10 +470,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }
         }
         let valid_plan = imported_gpu_canvas_plan(8, 8, [0.0, 0.0, 0.0, 1.0]);
         let valid_image = factory
-            .make_gpu_canvas_image(
-                &imported_gpu_canvas_shader(IMPORTED_VERTEX_GLSL),
-                &valid_plan,
-            )
+            .make_gpu_canvas_image(&imported_gpu_canvas_shader(IMPORTED_WGSL), &valid_plan)
             .map_err(js_error)?;
         let mut valid_frame = factory.begin_frame(0xff65_4321).map_err(js_error)?;
         valid_frame.draw_image(

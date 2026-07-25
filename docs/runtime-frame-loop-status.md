@@ -6,10 +6,10 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 - Phase: FL-A production translation complete in the isolated `levi/fl-a`
   checkout. The six Component member rows are closed locally; the candidate
-  publish battery, final independent reviews, candidate commit, and size
-  measurement are green. Rebase onto the final LOC-009/main boundary is
-  complete; post-rebase retained DataBind target-dirt remediation and
-  verification, push, and orchestrator verification remain.
+  publish battery and candidate commit are green. Rebase onto the final
+  LOC-009/main boundary is complete, and the post-rebase retained DataBind
+  target-dirt remediation plus every local publish gate are green. Final
+  independent reviews, explicit push, and orchestrator verification remain.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - File closure: formally 0 / 338 until the file-correspondence manifest's
   52 FL-A rows receive the required orchestrator-verified promotion. Their
@@ -21,8 +21,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 - Current dependency wave: FL-A publish verification. FL-B does not begin
   from this checkout until the FL-A landing and orchestrator promotion are
   accepted.
-- Current FL-A landing: local working tree on `levi/fl-a`, rebased through
-  LOC-009/main `88fdc5a6`; the remediation remains uncommitted and unpushed.
+- Current FL-A landing: local `levi/fl-a` is rebased through exact
+  LOC-009/main `7f1450dc22ca7370eac9dc9f422351c2dfcc07ee`; final source-bound
+  trace commit `28c2aad5` and all preceding FL-A commits remain unpushed.
 
 ## FL-0 evidence
 
@@ -231,6 +232,36 @@ FL-A candidate-tree floor before the publish commit:
   `448c54d910b1ab4ec76996323bc1bb1e9abfb2462d291061afa1b22232603665`;
   both below the unchanged 9,437,184-byte budget.
 
+FL-A post-rebase floor, refreshed after final independent review:
+
+- `env -u CPP_CONFIG -u RUST_PROFILE make cpp-oracle-workspace-tests`:
+  the full workspace passed with the probe built and `RIVE_CPP_PROBE`
+  exported; `nuxie-runtime` ran 479 / 479 and the pinned probe suite ran
+  726 / 726 with 0 failures.
+- Ordinary and scripted `make golden-compare` lanes each passed 317 / 317
+  entries and 647 / 647 segments with 0 divergences or failures;
+  `data_viz_demo` and `db_health_tracker` both matched in the scripted lane.
+- `RENDERER_JOBS=4 make renderer-golden`: 1,468 / 1,468 entries accepted,
+  837 byte-exact, 0 divergences, and 0 gated failures on Apple M5 Max. Worker
+  parallelism was the only execution change; manifest, backend, references,
+  tolerances, and timeout were unchanged.
+- `make capi-smoke`: passed (`draw_paths=2`, `objects=4`).
+- `make apple-runtime-check`: passed the generated-header smoke, 66 / 66
+  product tests, 15 / 15 artifact-validator tests, deny clippy, and the
+  `release-apple` panic firewall.
+- `make lint-gate`, `cargo fmt --all -- --check`, and `git diff --check`:
+  passed.
+- Fresh `make runtime-frame-loop-trace` plus
+  `make runtime-frame-loop-port-check`: all 23 checker/capture/summarizer
+  controls passed; 338 file rows, 75 member rows, 9 gap rows, and every
+  zero-ratchet matched the final rebased source fingerprint.
+- `make size-report` at `28c2aad5`: scripting off 8,017,800 bytes (7.65 MiB),
+  SHA-256
+  `dc124e53914914b3fe75d7ca85dc4ee6b315d11c6cc6e4ecb9f200209de611ba`;
+  scripting on 8,918,904 bytes (8.51 MiB), SHA-256
+  `42ff2fe509b4b8ec7103f60b221943db2876d7638db8da0d1bf57fb9339e2a64`;
+  both below the unchanged 9,437,184-byte budget.
+
 ## FL-A source audit and implementation specification
 
 - Binding specification:
@@ -327,10 +358,13 @@ FL-A candidate-tree floor before the publish commit:
   math utilities are translated under the 52-file specification. DrawTarget
   and DrawRules renderer-order edges are excluded from the Component
   dependency schedule as in pinned C++.
-- Runtime tests: `cargo test -p nuxie-runtime --lib` is 478 / 478 green after
-  root-dirt unification. The focused one-owner regression clears the root
-  mask, dirties the root source, and proves PATH plus Components publish on
-  that same retained Component.
+- Runtime tests: `cargo test -p nuxie-runtime --lib` is 479 / 479 green after
+  root-dirt unification and retained DataBind target-dirt remediation. The
+  focused owner regressions clear the root mask, dirty the retained source,
+  and prove PATH/Components publication on the exact retained Component. The
+  custom-source queue regression proves duplicate Bindings dirt does not
+  republish target dirt before the queued occurrence is consumed, matching
+  C++ `DataBind::addDirt`.
 - Fresh deterministic trace:
   - construction owner resolutions 1,565 / 1,565, dependency builds
     1,455 / 1,455, and dependency sorts 24 / 24;
@@ -378,6 +412,24 @@ FL-A candidate-tree floor before the publish commit:
   dimensions. The exploratory exact-unit/root-style production edits were
   discarded. This remains a later Scene-authoring/Layout closure; FL-A does
   not claim or alter it.
+- F-ED-03B's ordinary layout/text-style characterization is absorbed by the
+  existing FL-G07/FL-E owner-family closure, not FL-A. FL-E must replace broad
+  `layout_epoch`/global layout-and-text invalidation for
+  `LayoutComponentStyle` padding keys 512-515 and unit keys 617-620, and
+  `TextStyle`/`TextStylePaint` font-size/line-height keys 274/370, with the pinned owner-local
+  LayoutComponent/Yoga and Text shape-dirt callback chains. Direct and
+  DataBind writes share the same acceptance matrix; the file-disjoint Scene
+  authoring slice waits for that runtime owner landing.
+- Final spec review removed a prematurely included LOC-007 callback slice:
+  ParametricPath, Path, PathComposer, and ShapePaintPath remain one complete
+  FL-E family. Per the FL-A integration boundary in
+  `runtime-frame-loop-fl-a-spec.md`, FL-A does not broaden the preexisting
+  Trim/Dash/Feather allowlist; its schedule adapter routes only that existing
+  classifier through `RuntimeShapeList`'s already-resolved paint-owner mapping
+  so the binding retained-effect floor survives occurrence identity. The full
+  generated callback and Path-to-Shape-to-paint owner family, plus deletion of
+  the allowlist, remain pending in the FL-E `dash.cpp`, `shape_paint.cpp`, and
+  `stroke_effect.cpp` rows.
 - The FL-A C++ probe no longer reads `Component::m_GraphOrder` from the
   ordinary import snapshot because that C++ member has no construction
   default. The scheduled-only runtime-update probe remains the graph-order
@@ -386,9 +438,11 @@ FL-A candidate-tree floor before the publish commit:
 
 ## Next
 
-1. Complete the post-rebase floor and independent review for the retained
-   DataBind target-dirt correction.
-2. Push `levi/fl-a` with an explicit refspec. The orchestrator independently
+1. Complete the two independent final reviews and commit this final evidence
+   update.
+2. Reconcile the pre-rebase remote `levi/fl-a` ancestry without rewriting it,
+   then push with the explicit `HEAD:refs/heads/levi/fl-a` refspec. The
+   orchestrator independently
    reruns the battery and alone promotes the 52 file-correspondence rows from
    pending-verification.
 3. After accepted FL-A closure, run the canonical whole-corpus performance

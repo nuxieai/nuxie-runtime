@@ -6576,11 +6576,13 @@ impl ArtboardInstance {
         if paint_locals.is_empty() {
             self.add_dirt(local_id, ComponentDirt::PATH, false);
         } else {
-            // Direct port of Dash/StrokeEffect/ShapePaint invalidation:
-            // child-property callbacks rewind their EffectPath and add Path
-            // dirt to the owning ShapePaint, which is the dependency node
-            // that recomputes the chain (`dash.cpp:39-48`,
-            // `stroke_effect.cpp:13-25`, `shape_paint.cpp:193-205`).
+            // Preserve the existing RD-1 Trim/Dash/Feather adapter while
+            // FL-A replaces the Component schedule: the sidecar already
+            // resolves each retained ShapePaint owner, and the new schedule
+            // must publish the same PATH dirt on that owner. ParametricPath
+            // and the complete effect owner family remain pending in FL-E
+            // (`dash.cpp:39-48`, `stroke_effect.cpp:13-25`,
+            // `shape_paint.cpp:193-205`).
             for paint_local in paint_locals {
                 self.add_dirt(paint_local, ComponentDirt::PATH, false);
             }
@@ -6665,12 +6667,6 @@ impl ArtboardInstance {
 
     fn property_affects_layout(&self, local_id: usize, property_key: u16) -> bool {
         let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
-        if property_marks_parametric_path_dirty(type_name, property_key) {
-            // ParametricPath::markPathDirty defaults sendToLayout=true and
-            // invalidates the first eligible ancestor LayoutComponent
-            // (`src/shapes/parametric_path.cpp:35-59`).
-            return true;
-        }
         if matches!(
             type_name,
             Some("LayoutComponentStyle" | "NestedArtboardLayout")
@@ -10325,13 +10321,6 @@ fn path_vertex_property_affects_geometry(type_name: Option<&str>, property_key: 
 }
 
 fn property_affects_effect_path_epoch(type_name: Option<&str>, property_key: u16) -> bool {
-    if property_marks_parametric_path_dirty(type_name, property_key)
-        || (type_name.is_some_and(|type_name| {
-            definition_by_name(type_name).is_some_and(|definition| definition.is_a("Path"))
-        }) && property_key_for_name(type_name.unwrap(), "isHole") == Some(property_key))
-    {
-        return true;
-    }
     match type_name {
         Some("TrimPath") => ["start", "end", "offset", "modeValue"]
             .iter()
@@ -10345,41 +10334,6 @@ fn property_affects_effect_path_epoch(type_name: Option<&str>, property_key: u16
         Some("Feather") => ["spaceValue", "strength", "offsetX", "offsetY", "inner"]
             .iter()
             .any(|name| property_key_for_name("Feather", name) == Some(property_key)),
-        _ => false,
-    }
-}
-
-fn property_marks_parametric_path_dirty(type_name: Option<&str>, property_key: u16) -> bool {
-    let Some(type_name) = type_name else {
-        return false;
-    };
-    if !definition_by_name(type_name).is_some_and(|definition| definition.is_a("ParametricPath")) {
-        return false;
-    }
-    if ["width", "height", "originX", "originY"]
-        .into_iter()
-        .any(|name| property_key_for_name(type_name, name) == Some(property_key))
-    {
-        return true;
-    }
-    match type_name {
-        "Rectangle" => [
-            "cornerRadiusTL",
-            "cornerRadiusTR",
-            "cornerRadiusBL",
-            "cornerRadiusBR",
-        ]
-        .into_iter()
-        .any(|name| property_key_for_name(type_name, name) == Some(property_key)),
-        "Polygon" => ["cornerRadius", "points"]
-            .into_iter()
-            .any(|name| property_key_for_name(type_name, name) == Some(property_key)),
-        "Star" => {
-            property_key_for_name(type_name, "innerRadius") == Some(property_key)
-                || ["cornerRadius", "points"]
-                    .into_iter()
-                    .any(|name| property_key_for_name(type_name, name) == Some(property_key))
-        }
         _ => false,
     }
 }
@@ -13590,51 +13544,6 @@ mod tests {
         path_epoch = instance.path_epoch();
         assert!(instance.set_uint_property(0, space_value, 1));
         assert!(instance.path_epoch() > path_epoch);
-    }
-
-    #[test]
-    fn parametric_path_changed_callbacks_dirty_the_path_and_layout_epochs() {
-        let rectangle = synthetic_component_for_type(0, "Rectangle");
-        let mut instance = synthetic_instance(vec![rectangle], vec![0]);
-        let width = property_key_for_name("Rectangle", "width").expect("Rectangle.width");
-        let corner =
-            property_key_for_name("Rectangle", "cornerRadiusTL").expect("Rectangle.cornerRadiusTL");
-
-        let layout_epoch = instance.layout_epoch();
-        assert!(instance.set_keyed_double_property(0, width, 42.0));
-        assert!(
-            instance
-                .component(0)
-                .unwrap()
-                .dirt
-                .contains(ComponentDirt::PATH),
-            "ParametricPath::widthChanged calls markPathDirty (`parametric_path.cpp:35-66`; `path.cpp:327-333`)"
-        );
-        assert!(instance.layout_epoch() > layout_epoch);
-
-        instance.clear_component_dirt(0);
-        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
-        assert!(instance.set_keyed_double_property(0, corner, 3.0));
-        assert!(
-            instance
-                .component(0)
-                .unwrap()
-                .dirt
-                .contains(ComponentDirt::PATH)
-        );
-
-        let polygon = synthetic_component_for_type(0, "Polygon");
-        let mut instance = synthetic_instance(vec![polygon], vec![0]);
-        let points = property_key_for_name("Polygon", "points").expect("Polygon.points");
-        assert!(instance.set_uint_property(0, points, 7));
-        assert!(
-            instance
-                .component(0)
-                .unwrap()
-                .dirt
-                .contains(ComponentDirt::PATH),
-            "Polygon::pointsChanged calls markPathDirty (`polygon.cpp:13-15`)"
-        );
     }
 
     #[test]

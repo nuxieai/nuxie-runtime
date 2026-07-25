@@ -147,7 +147,7 @@ runtime-frame-loop-trace-runners:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/runtime-frame-loop-port/build-trace-runners.sh
 
 runtime-frame-loop-trace: runtime-frame-loop-trace-runners
-	python3 tools/runtime-frame-loop-port/capture_trace.py \
+	PYTHONDONTWRITEBYTECODE=1 python3 tools/runtime-frame-loop-port/capture_trace.py \
 		--repo-root "$(CURDIR)" \
 		--upstream "$(RIVE_RUNTIME_DIR)" \
 		--output-dir "$(RUNTIME_FRAME_LOOP_TRACE_DIR)" \

@@ -84,20 +84,31 @@ counters = [
   "component_add_dirt",
   "per_frame_allocations",
 ]
-mechanism = "Text/layout owners and per-frame allocation, path/text/bounds/layout rebuild work remain pending. The mechanism trace isolates four missing Rust root-Components publications to pinned Text::buildRenderStyles -> Node::markLayoutNodeDirty -> LayoutComponent::markLayoutNodeDirty -> Artboard::markLayoutDirty; Rust still materializes retained text drawing state without that complete FL-E owner callback chain."
+mechanism = "Text/layout owners and per-frame allocation, path/text/bounds/layout rebuild work remain pending. The mechanism trace isolates four missing Rust root-Components publications to pinned Text::buildRenderStyles -> Node::markLayoutNodeDirty -> LayoutComponent::markLayoutNodeDirty -> Artboard::markLayoutDirty; Rust still materializes retained text drawing state without that complete FL-E owner callback chain. Ordinary LayoutComponentStyle padding and TextStyle fontSize/lineHeight writes expose the same missing ownership: Rust broadly bumps layout_epoch/global layout-and-text resources and apply_double_property_changed has no corresponding owner callback, while pinned C++ dirties the retained parent LayoutComponent/Yoga or owning Text."
 citations = [
   "cpp:src/artboard.cpp:1652",
   "cpp:src/artboard.cpp:1314",
+  "cpp:src/layout/layout_component_style.cpp:208",
+  "cpp:src/layout/layout_component_style.cpp:336",
+  "cpp:src/layout/layout_component_style.cpp:417",
+  "cpp:src/layout_component.cpp:1412",
   "cpp:src/layout_component.cpp:1419",
   "cpp:src/node.cpp:54",
+  "cpp:src/text/text_style.cpp:166",
+  "cpp:src/text/text.cpp:951",
   "cpp:src/text/text.cpp:1342",
   "cpp:src/text/text.cpp:826",
+  "rust:crates/nuxie-runtime/src/artboard.rs:4012",
+  "rust:crates/nuxie-runtime/src/artboard.rs:6554",
+  "rust:crates/nuxie-runtime/src/artboard.rs:6660",
+  "rust:crates/nuxie-runtime/src/artboard.rs:8416",
+  "rust:crates/nuxie-runtime/src/artboard.rs:8644",
   "rust:crates/nuxie-runtime/src/artboard.rs:7798",
   "rust:crates/nuxie-runtime/src/draw.rs:3816",
   "rust:crates/nuxie-runtime/src/draw.rs:15779",
   "rust:crates/nuxie-runtime/src/text.rs:113",
 ]
-closure = "FL-E ports the complete Text/layout dirty callback chain plus Text's retained m_bounds/localBounds owner read (including TransformConstraint targets), and the deterministic structural oracle records equal owner, dirt, rebuild, allocation, event, and clone/remount counts for the canonical corpus."
+closure = "FL-E ports the complete Text/layout dirty callback chain plus Text's retained m_bounds/localBounds owner read (including TransformConstraint targets). This includes ordinary LayoutComponentStyle padding writes (type 420, keys 512-515; unit keys 617-620) through the parent LayoutComponent (type 409, styleId 494) to its retained Yoga/artboard owner, and ordinary TextStyle/TextStylePaint fontSize and lineHeight writes (types 573/137, keys 274/370) through the owning Text's path/modifier/world/layout dirt. Direct and DataBindContext (type 447, propertyKey field key 586) writes must share that owner-local path; identical-value writes remain no-ops; unrelated subtrees remain clean; descendant/sibling/bounds/hit/text-reflow results update in the same advance. Rust's broad layout_epoch/global layout-and-text invalidation and missing apply_double_property_changed owner dispatch are displaced under PORTING.md section 2.3 and RF-17. The later Scene authoring slice for these properties waits on this runtime closure. The deterministic structural oracle records equal owner, dirt, rebuild, allocation, event, and clone/remount counts for the canonical corpus."
 
 [[gap]]
 id = "FL-G08"

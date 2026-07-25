@@ -6,8 +6,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 - Phase: FL-A production translation complete in the isolated `levi/fl-a`
   checkout. The six Component member rows are closed locally; the candidate
-  publish battery and final independent reviews are green. Candidate
-  commit/size measurement, rebase onto the final LOC-009/main boundary,
+  publish battery, final independent reviews, candidate commit, and size
+  measurement are green. Rebase onto the final LOC-009/main boundary,
   post-rebase verification, push, and orchestrator verification remain.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - File closure: formally 0 / 338 until the file-correspondence manifest's
@@ -223,9 +223,12 @@ FL-A candidate-tree floor before the publish commit:
   every zero-ratchet matched.
 - Independent Standards review: PASS with no remaining findings.
 - Independent Spec review: PASS with no remaining findings.
-- `make size-report`: pending the candidate commit because the size harness
-  intentionally refuses a dirty tracked tree; the unchanged budget is
-  9,437,184 bytes.
+- `make size-report` at `a71814b3`: scripting off 8,300,616 bytes (7.92 MiB),
+  SHA-256
+  `dd889631e55568ffba8ac3dfb48f5e3ba9fb39fb74108b462818a7937f90c2ba`;
+  scripting on 9,201,592 bytes (8.78 MiB), SHA-256
+  `448c54d910b1ab4ec76996323bc1bb1e9abfb2462d291061afa1b22232603665`;
+  both below the unchanged 9,437,184-byte budget.
 
 ## FL-A source audit and implementation specification
 
@@ -369,13 +372,11 @@ FL-A candidate-tree floor before the publish commit:
 
 ## Next
 
-1. Commit the FL-A candidate and run the clean-tree size report under the
-   unchanged 9,437,184-byte budget.
-2. Rebase onto the final LOC-009/main boundary, migrate only any newly
+1. Rebase onto the final LOC-009/main boundary, migrate only any newly
    required facade fixture, and rerun every affected floor.
-3. Push `levi/fl-a` with an explicit refspec. The orchestrator independently
+2. Push `levi/fl-a` with an explicit refspec. The orchestrator independently
    reruns the battery and alone promotes the 52 file-correspondence rows from
    pending-verification.
-4. After accepted FL-A closure, run the canonical whole-corpus performance
+3. After accepted FL-A closure, run the canonical whole-corpus performance
    checkpoint and proceed to FL-B from the dependency map. Performance remains
    verification evidence, never the source of a work slice.

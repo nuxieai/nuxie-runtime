@@ -1,4 +1,4 @@
-use crate::components::DataBindHandle;
+use crate::components::{ComponentHandle, DataBindHandle};
 use crate::data_bind_graph::{
     DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraphConverterBuildCache,
     RuntimeDataBindGraphConverterState, RuntimeDataBindGraphFormulaRandomSource,
@@ -437,6 +437,10 @@ pub(super) struct RuntimeArtboardPropertyBindingInstance {
 /// `data_bind.cpp:210-240,251-329,483-588`).
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardAuthoredDataBindState {
+    /// Clone-owned equivalent of C++ `DataBind::target()`. Artboard uses this
+    /// retained Component occurrence when the bind enters its dirty list
+    /// (`src/artboard.cpp:1189-1193`).
+    target: Option<ComponentHandle>,
     path: Arc<[u32]>,
     path_is_name_based: bool,
     retained: RuntimeRetainedDataBind,
@@ -621,6 +625,7 @@ impl RuntimeArtboardAuthoredDataBindStates {
 pub(super) fn build_artboard_authored_data_bind_states(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
+    objects: &InstanceObjectArena,
 ) -> RuntimeArtboardAuthoredDataBindStates {
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return RuntimeArtboardAuthoredDataBindStates::default();
@@ -646,6 +651,9 @@ pub(super) fn build_artboard_authored_data_bind_states(
                 );
                 retained.set_collapse_eligible(collapse_eligible);
                 RuntimeArtboardAuthoredDataBindState {
+                    target: data_bind
+                        .target_local_id
+                        .and_then(|local_id| objects.component_handle(local_id)),
                     path: shared_data_bind_path(
                         file.data_bind_context_source_path_ids_for_object(data_bind.object)
                             .unwrap_or_default(),
@@ -1805,15 +1813,16 @@ impl RuntimeArtboardDataBindSourceQueues {
         enqueued_data_binds
     }
 
-    fn enqueue_custom_property(&mut self, index: usize) {
+    fn enqueue_custom_property(&mut self, index: usize) -> bool {
         let Some(flag) = self.dirty_custom_property_flags.get_mut(index) else {
-            return;
+            return false;
         };
         if *flag {
-            return;
+            return false;
         }
         *flag = true;
         self.dirty_custom_properties.push(index);
+        true
     }
 
     fn enqueue_numeric_source(&mut self, index: usize) {
@@ -4600,11 +4609,18 @@ impl ArtboardInstance {
     }
 
     fn enqueue_artboard_property_binding_target(&mut self, index: usize) {
+        let data_bind_index = self
+            .artboard_property_bindings
+            .get(index)
+            .map(|binding| binding.data_bind_index);
         if !self
             .artboard_data_bind_target_queues
             .enqueue_property(index)
         {
             return;
+        }
+        if let Some(data_bind_index) = data_bind_index {
+            self.publish_artboard_data_bind_target_dirty(data_bind_index);
         }
         let value = self
             .artboard_property_bindings
@@ -4653,14 +4669,26 @@ impl ArtboardInstance {
                 .artboard_data_bind_source_queues
                 .custom_property_index_for_data_bind(data_bind_index)
             {
-                self.artboard_data_bind_source_queues
-                    .enqueue_custom_property(index);
+                self.enqueue_artboard_custom_property_binding_source(index);
             }
         } else if let Some(index) = self
             .artboard_data_bind_target_queues
             .property_index_for_data_bind(data_bind_index)
         {
             self.enqueue_artboard_property_binding_target(index);
+        }
+    }
+
+    fn enqueue_artboard_custom_property_binding_source(&mut self, index: usize) {
+        let data_bind_index = self
+            .artboard_custom_property_bindings
+            .get(index)
+            .map(|binding| binding.data_bind_index);
+        let did_enqueue = self
+            .artboard_data_bind_source_queues
+            .enqueue_custom_property(index);
+        if did_enqueue && let Some(data_bind_index) = data_bind_index {
+            self.publish_artboard_data_bind_target_dirty(data_bind_index);
         }
     }
 
@@ -4686,6 +4714,7 @@ impl ArtboardInstance {
             );
         let did_enqueue = !enqueued.is_empty();
         for data_bind_index in enqueued {
+            self.publish_artboard_data_bind_target_dirty(data_bind_index);
             if let Some(state) = self
                 .artboard_authored_data_bind_states
                 .get_mut(data_bind_index)
@@ -4952,6 +4981,7 @@ impl ArtboardInstance {
         let runtime_file = self.runtime_file_arc();
         let mut consumed_source_dirt = false;
         for data_bind_index in dirty_indices.iter().copied() {
+            self.publish_artboard_data_bind_target_dirty(data_bind_index);
             let Some((
                 to_target,
                 path,
@@ -5092,6 +5122,24 @@ impl ArtboardInstance {
         self.artboard_authored_data_bind_states
             .recycle_source_dirt_indices(dirty_indices);
         consumed_source_dirt
+    }
+
+    fn publish_artboard_data_bind_target_dirty(&mut self, data_bind_index: usize) {
+        let target = self
+            .artboard_authored_data_bind_states
+            .get(data_bind_index)
+            .and_then(|state| state.target);
+        if let Some(target) = target {
+            // Literal `Artboard::addDirtyDataBind`: enrolling one retained
+            // DataBind first publishes Components dirt at its target's graph
+            // depth, then inserts the bind in the container queue. Rust cell
+            // notifications already own the sparse occurrence queue, so this
+            // callback runs while consuming that same occurrence and before
+            // `updateComponents` in the current update pass
+            // (`src/artboard.cpp:1189-1201,1417-1425`;
+            // `src/data_bind/data_bind_container.cpp:245-267`).
+            self.on_component_dirty_handle(target);
+        }
     }
 
     fn collect_artboard_formula_token_source_dirt(&mut self) -> bool {
@@ -6587,6 +6635,7 @@ impl ArtboardInstance {
             .artboard_authored_data_bind_states
             .take_pending_source_dirt_indices();
         for data_bind_index in pending_source_dirt_indices.iter().copied() {
+            self.publish_artboard_data_bind_target_dirty(data_bind_index);
             if let Some(state) = self
                 .artboard_authored_data_bind_states
                 .get_mut(data_bind_index)
@@ -6993,8 +7042,7 @@ impl ArtboardInstance {
                 }
             };
             if binding_changed {
-                self.artboard_data_bind_source_queues
-                    .enqueue_custom_property(index);
+                self.enqueue_artboard_custom_property_binding_source(index);
                 changed = true;
             }
         }
@@ -7069,8 +7117,7 @@ impl ArtboardInstance {
                 }
             };
             if binding_changed {
-                self.artboard_data_bind_source_queues
-                    .enqueue_custom_property(index);
+                self.enqueue_artboard_custom_property_binding_source(index);
                 changed = true;
             }
         }
@@ -7738,8 +7785,7 @@ impl ArtboardInstance {
                 if Some(self.artboard_custom_property_bindings[index].data_bind_index)
                     != suppressed_data_bind_index
                 {
-                    self.artboard_data_bind_source_queues
-                        .enqueue_custom_property(index);
+                    self.enqueue_artboard_custom_property_binding_source(index);
                 }
                 changed = true;
             }
@@ -7852,8 +7898,7 @@ impl ArtboardInstance {
                     .advance_converter(binding.converter.as_ref(), elapsed_seconds)
             };
             if advance.changed {
-                self.artboard_data_bind_source_queues
-                    .enqueue_custom_property(index);
+                self.enqueue_artboard_custom_property_binding_source(index);
                 changed = true;
             }
         }
@@ -8740,6 +8785,7 @@ impl ArtboardInstance {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ComponentDirt;
     use crate::data_bind_graph::{
         DATA_BIND_FLAG_DIRECTION_TO_SOURCE, DATA_BIND_FLAG_TWO_WAY,
         RuntimeDataBindGraphFormulaToken,
@@ -8778,6 +8824,7 @@ mod tests {
     fn pending_source_dirt_queue_is_sparse_and_survives_authored_state_clone() {
         let states = (0..4)
             .map(|index| RuntimeArtboardAuthoredDataBindState {
+                target: None,
                 path: Arc::from([index]),
                 path_is_name_based: false,
                 retained: RuntimeRetainedDataBind::new(0, false),
@@ -8835,6 +8882,7 @@ mod tests {
         retained.set_source(primary.clone());
         retained.set_additional_sources(vec![operand.clone()]);
         let state = RuntimeArtboardAuthoredDataBindState {
+            target: None,
             path: Arc::from([1]),
             path_is_name_based: false,
             retained,
@@ -8923,6 +8971,7 @@ mod tests {
         artboard.artboard_authored_data_bind_states =
             RuntimeArtboardAuthoredDataBindStates::new(vec![
                 RuntimeArtboardAuthoredDataBindState {
+                    target: None,
                     path: Arc::from([1]),
                     path_is_name_based: false,
                     retained,
@@ -9333,6 +9382,7 @@ mod tests {
                 let mut retained = RuntimeRetainedDataBind::new(0, false);
                 retained.set_additional_sources(vec![operand]);
                 RuntimeArtboardAuthoredDataBindState {
+                    target: None,
                     path: Arc::from([41]),
                     path_is_name_based: false,
                     retained,
@@ -10546,6 +10596,37 @@ mod tests {
     }
 
     #[test]
+    fn retained_source_enrollment_publishes_cpp_target_component_dirt() {
+        let file = font_binding_fixture();
+        let graphs =
+            nuxie_graph::GraphFile::from_runtime_file(&file).expect("font binding graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut artboard = ArtboardInstance::from_graph(&file, graph).expect("artboard builds");
+        let context = RuntimeOwnedViewModelContext::from_main(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 0, 0)
+                .expect("serialized view model instance builds"),
+        );
+
+        assert!(artboard.bind_owned_view_model_artboard_contexts(&file, &context));
+        while artboard.advance_artboard_data_binds() {}
+        while artboard.update_components().did_update {}
+        assert!(!artboard.has_dirt(ComponentDirt::COMPONENTS));
+
+        let live: Arc<[u8]> = vec![9, 10, 11, 12].into();
+        assert!(
+            context
+                .main_mut()
+                .expect("main view model remains shared")
+                .set_live_font_bytes_by_property_name("font", Some(live))
+        );
+        assert!(artboard.collect_artboard_authored_data_bind_source_dirt());
+        assert!(
+            artboard.has_dirt(ComponentDirt::COMPONENTS),
+            "C++ `Artboard::addDirtyDataBind` publishes the retained bind target through `onComponentDirty` before inserting the occurrence in `DataBindContainer` (`src/artboard.cpp:1189-1201`; `src/data_bind/data_bind_container.cpp:245-267`)"
+        );
+    }
+
+    #[test]
     fn default_context_replaces_the_retained_owned_source() {
         let file = font_binding_fixture();
         let graphs =
@@ -10863,6 +10944,7 @@ mod tests {
         let authored_states = |len: usize| {
             (0..len)
                 .map(|_| RuntimeArtboardAuthoredDataBindState {
+                    target: None,
                     path: Arc::from([]),
                     path_is_name_based: false,
                     retained: RuntimeRetainedDataBind::new(0, false),
@@ -10966,6 +11048,19 @@ mod tests {
             converter_state: RuntimeDataBindGraphConverterState::None,
             default_value: RuntimeDataBindGraphValue::Number(0.0),
         }
+    }
+
+    #[test]
+    fn custom_source_queue_reports_only_the_first_dirty_enrollment() {
+        let bindings = vec![custom_binding(0, 7, 11, None)];
+        let mut queues = RuntimeArtboardDataBindSourceQueues::new(&bindings, &[], &[], &[]);
+        assert!(queues.enqueue_custom_property(0));
+        assert!(
+            !queues.enqueue_custom_property(0),
+            "C++ `DataBind::addDirt` returns before `Artboard::addDirtyDataBind` when Bindings dirt is already pending (`src/data_bind/data_bind.cpp:502-507`)"
+        );
+        assert_eq!(queues.take_custom_property_update_indices(), vec![0]);
+        assert!(queues.enqueue_custom_property(0));
     }
 
     #[test]

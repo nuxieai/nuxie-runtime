@@ -2200,7 +2200,7 @@ impl ArtboardInstance {
             build_state_machines(file, graph, &linear_animations, &mut converter_cache);
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
         let mut artboard_authored_data_bind_states =
-            build_artboard_authored_data_bind_states(file, graph);
+            build_artboard_authored_data_bind_states(file, graph, &objects);
         let mut artboard_property_bindings =
             build_artboard_property_bindings(file, graph, &mut converter_cache);
         let artboard_image_asset_bindings = build_artboard_image_asset_bindings(file, graph);
@@ -7804,7 +7804,7 @@ impl ArtboardInstance {
         self.initialize_runtime_shape_paint_owners(&graphs[graph_index]);
     }
 
-    fn on_component_dirty_handle(&mut self, handle: ComponentHandle) {
+    pub(super) fn on_component_dirty_handle(&mut self, handle: ComponentHandle) {
         self.mark_changed();
         self.mark_components_dirty();
 

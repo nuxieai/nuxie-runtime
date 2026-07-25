@@ -734,8 +734,8 @@ pub trait Factory {
     /// Execute one imported GPU-canvas plan and retain its result as a normal
     /// render image suitable for `Renderer::draw_image`.
     ///
-    /// The default is intentionally fail-closed. Recording, callback, WebGL2,
-    /// and other factories do not silently claim support merely because the
+    /// The default is intentionally fail-closed. Recording, callback, and
+    /// other factories do not silently claim support merely because the
     /// scripting surface exists.
     fn make_gpu_canvas_image(
         &mut self,

@@ -11,7 +11,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 1 Frame parity | PARTIAL | exact-segments 647/647; scripted 647/647; e2e-exact: gate not built | both runtime floors restored green 2026-07-21 (image-policy split); #OR-6 missing |
 | 2 Interaction parity | RED | side-channel: gate not built; fuzz-clean-nights: 0 | #OR-1/2/3/7 |
 | 3 SDK parity | RED | A-rows closed 0/8 | register A-table |
-| 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
+| 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle remains; #HD-3 closed by retiring WebGL2 |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.88 MiB OFF / 8.76 MiB ON vs user-approved 9 MiB budget (both variants green at `5901c1fe`) | #OR-9 |
 
 Regression floor (must stay green): runtime lib 411/411, nuxie lib 167/167,
@@ -983,7 +983,11 @@ upstream-sync-map registry).
 - [ ] #HD-2 renderer oracle hardening (V7; adapter matrix 2/2 complete,
   current-runtime same-runner 1,468/1,468 local, Paravirtual CI rerun and
   clockwise-atomic hypothesis oracle pending)
-- [ ] #HD-3 WebGL2 decision (USER-GATE)
+- [x] #HD-3 WebGL2 decision (USER-GATE) — user chose WebGPU-only browser
+  support on 2026-07-24. The WebGL2/FemtoVG renderer, public selector,
+  automatic fallback, and live qualification surface are removed. Missing or
+  unusable WebGPU is an explicit unsupported browser/device state; this closes
+  V8 by narrowing the product support matrix, not by claiming WebGL2 parity.
 - [ ] #HD-4 TODO(golden) pair
 - [ ] #HD-5 publish the parity claim doc
 - [ ] #LT-* long tail (each opens by USER-GATE)
@@ -1161,6 +1165,14 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   optimization, stop for user decision.
 
 ## Log
+
+- 2026-07-24 — #HD-3 received its user decision: browser support is WebGPU
+  only. The separate approximating WebGL2/FemtoVG renderer, backend-selection
+  API, automatic fallback, and WebGL2 qualification fixtures were deleted.
+  WebGPU Core/Compatibility admission remains internal to the one browser
+  backend, and unavailable WebGPU now fails initialization explicitly. This
+  is a support-matrix reduction, not evidence that the retired backend matched
+  C++; native renderer pixels remain the referee.
 
 - 2026-07-24 — The seventh post-closeout performance burn-down slice ports
   `StateMachineInstance`'s authored state-machine definition owner. C++ stores

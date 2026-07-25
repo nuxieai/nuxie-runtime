@@ -35,9 +35,9 @@ driver = "pending:F-ED-06"
 [[fixture]]
 id = "fed.rt_ed_004.webgl2_rounded_clip_402x874_r57"
 defect_id = "RT-ED-004"
-kind = "browser-renderer"
-status = "registered"
-driver = "pending:F-ED-07"
+kind = "historical"
+status = "historical"
+driver = "evidence-only:webgpu-only-product-decision"
 
 [[fixture]]
 id = "fed.rt_ed_005.generic_visual_property_bind"
@@ -105,9 +105,9 @@ driver = "cpp_probe/registry.cpp"
 [[fixture]]
 id = "fed.loc_006.webgl2_stale_pixels"
 defect_id = "LOC-006"
-kind = "browser-renderer"
-status = "registered"
-driver = "pending:F-ED-08"
+kind = "historical"
+status = "historical"
+driver = "evidence-only:webgpu-only-product-decision"
 
 [[fixture]]
 id = "fed.loc_007.parametric_path_dirt"

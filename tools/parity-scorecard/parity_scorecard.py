@@ -668,9 +668,9 @@ def build_tiers(
                     f"adapters {len(adapters)}/{required_adapters}",
                 ),
                 ratchet(
-                    "webgl2-decision",
-                    "NOT_BUILT",
-                    "WebGL2 decision not built (#HD-3)",
+                    "browser-backend-decision",
+                    "GREEN",
+                    "WebGPU-only browser support; legacy backend retired (#HD-3)",
                 ),
             ],
         ),

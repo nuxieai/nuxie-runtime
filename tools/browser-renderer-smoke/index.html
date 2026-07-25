@@ -4,34 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" href="data:,">
-    <title>Nuxie browser renderer smoke</title>
-    <style>
-      body { font: 14px system-ui, sans-serif; margin: 24px; color: #182027; }
-      main { display: flex; gap: 24px; align-items: flex-start; }
-      canvas { width: 256px; height: 256px; image-rendering: pixelated; border: 1px solid #89939c; }
-      pre { white-space: pre-wrap; }
-    </style>
+    <title>Nuxie WebGPU browser renderer smoke</title>
   </head>
   <body>
-    <h1>Browser renderer smoke</h1>
-    <main>
-      <section id="webgpu-section"><h2>WebGPU</h2><canvas id="webgpu"></canvas></section>
-      <section id="webgl2-section"><h2>WebGL2</h2><canvas id="webgl2"></canvas></section>
-      <section id="fallback-section" hidden><h2>Automatic fallback</h2><canvas id="fallback"></canvas></section>
-      <canvas id="unsupported" hidden></canvas>
-      <canvas id="abandoned" hidden></canvas>
-    </main>
     <pre id="status">running</pre>
     <script type="module">
       import init, {
         assert_direct_gpu_canvas_image,
         assert_imported_gpu_canvas,
-        assert_imported_gpu_canvas_stress,
         assert_resize,
-        assert_webgl2_fail_closed,
-        assert_webgl2_image_mesh,
-        assert_webgl2_gpu_canvas_rejects_invalid_interface,
-        assert_webgl2_imported_gpu_canvas_uniform_animation,
         assert_webgpu_gpu_canvas_rejects_invalid_interface,
         assert_webgpu_uniform_limit_rejection,
         run_backend,
@@ -39,325 +20,187 @@
       } from "./pkg/browser_renderer_smoke.js";
 
       const status = document.querySelector("#status");
-      const withStrictWebgl2ContextReuse = async (callback) => {
-        const originalGetContext = HTMLCanvasElement.prototype.getContext;
-        const attributesByCanvas = new WeakMap();
-        const normalizedAttributes = (attributes) => ({
-          antialias: attributes?.antialias ?? true,
-          stencil: attributes?.stencil ?? false,
-        });
-        HTMLCanvasElement.prototype.getContext = function(type, ...args) {
-          if (type !== "webgl2") {
-            return originalGetContext.call(this, type, ...args);
-          }
-          const requested = normalizedAttributes(args[0]);
-          const existing = attributesByCanvas.get(this);
-          if (existing && (
-            existing.antialias !== requested.antialias
-            || existing.stencil !== requested.stencil
-          )) {
-            return null;
-          }
-          const context = originalGetContext.call(this, type, ...args);
-          if (context && !existing) attributesByCanvas.set(this, requested);
-          return context;
-        };
-        try {
-          return await callback();
-        } finally {
-          HTMLCanvasElement.prototype.getContext = originalGetContext;
-        }
-      };
-      const measureWebgl2ImageUploads = async (callback) => {
-        const originalTexImage2D = WebGL2RenderingContext.prototype.texImage2D;
-        let textureUploads = 0;
-        WebGL2RenderingContext.prototype.texImage2D = function(...args) {
-          if (args.length >= 9 && args[3] === 4 && args[4] === 2) {
-            textureUploads += 1;
-          }
-          return originalTexImage2D.apply(this, args);
-        };
-        try {
-          return { result: await callback(), textureUploads };
-        } finally {
-          WebGL2RenderingContext.prototype.texImage2D = originalTexImage2D;
-        }
-      };
-      const measureImportedWebgl2Allocations = async (callback) => {
-        const originalGetContext = HTMLCanvasElement.prototype.getContext;
-        const originalCreateProgram = WebGL2RenderingContext.prototype.createProgram;
-        const originalCreateVertexArray = WebGL2RenderingContext.prototype.createVertexArray;
-        const originalCreateBuffer = WebGL2RenderingContext.prototype.createBuffer;
-        const webgl2Contexts = new Set();
-        let importedContext;
-        let programs = 0;
-        let vertexArrays = 0;
-        let buffers = 0;
-        HTMLCanvasElement.prototype.getContext = function(type, ...args) {
-          const context = originalGetContext.call(this, type, ...args);
-          if (type === "webgl2" && context && !webgl2Contexts.has(context)) {
-            webgl2Contexts.add(context);
-            if (webgl2Contexts.size === 2) importedContext = context;
-          }
-          return context;
-        };
-        WebGL2RenderingContext.prototype.createProgram = function(...args) {
-          if (this === importedContext) programs += 1;
-          return originalCreateProgram.apply(this, args);
-        };
-        WebGL2RenderingContext.prototype.createVertexArray = function(...args) {
-          if (this === importedContext) vertexArrays += 1;
-          return originalCreateVertexArray.apply(this, args);
-        };
-        WebGL2RenderingContext.prototype.createBuffer = function(...args) {
-          if (this === importedContext) buffers += 1;
-          return originalCreateBuffer.apply(this, args);
-        };
-        try {
-          return {
-            result: await callback(),
-            contexts: webgl2Contexts.size,
-            programs,
-            vertexArrays,
-            buffers,
-          };
-        } finally {
-          HTMLCanvasElement.prototype.getContext = originalGetContext;
-          WebGL2RenderingContext.prototype.createProgram = originalCreateProgram;
-          WebGL2RenderingContext.prototype.createVertexArray = originalCreateVertexArray;
-          WebGL2RenderingContext.prototype.createBuffer = originalCreateBuffer;
-        }
-      };
+      const search = new URLSearchParams(location.search);
+      const forceCompatibility = search.has("force-webgpu-compatibility");
+      const forceNoSsbo = search.has("force-no-ssbo");
+      const forceUnavailable = search.has("force-webgpu-unavailable");
+      let compatibilityProbe = null;
+
       try {
-        const search = new URLSearchParams(location.search);
-        const forceFallback = search.has("force-webgl2-fallback");
-        const forceCompatibility = search.has("force-webgpu-compatibility");
-        const forceNoSsbo = search.has("force-no-ssbo");
-        let compatibilityProbe = null;
-        if (forceFallback && forceCompatibility) {
-          throw new Error("browser smoke fallback modes are mutually exclusive");
-        }
         if (forceNoSsbo && !forceCompatibility) {
           throw new Error("force-no-ssbo requires force-webgpu-compatibility");
         }
-        if (forceFallback) {
+        await init();
+        if (forceUnavailable) {
           Object.defineProperty(navigator, "gpu", {
             configurable: true,
             value: undefined,
           });
-          document.querySelector("#webgpu-section").hidden = true;
-          document.querySelector("#webgl2-section").hidden = true;
-          document.querySelector("#fallback-section").hidden = false;
-        }
-        if (forceCompatibility) {
-          const gpu = navigator.gpu;
-          if (!gpu) {
-            throw new Error("forced Compatibility smoke requires WebGPU");
-          }
-          compatibilityProbe = {
-            featureLevelRequested: false,
-            advertisedVertexStorageLimit: null,
-            requestedVertexStorageLimit: null,
-          };
-          window.__compatibilityProbe = compatibilityProbe;
-          const requestAdapter = gpu.requestAdapter.bind(gpu);
-          const compatibilityGpu = new Proxy(gpu, {
-            get(target, property) {
-              if (property === "requestAdapter") {
-                return async (options = {}) => {
-                  // Force the renderer's first, Core-level admission attempt
-                  // to fail so its production Compatibility retry runs.
-                  if (options.featureLevel !== "compatibility") {
-                    throw new Error("forced Core WebGPU admission failure");
-                  }
-                  compatibilityProbe.featureLevelRequested = true;
-                  const adapter = await requestAdapter(options);
-                  if (!adapter) {
-                    return null;
-                  }
-                  const nativeLimits = Reflect.get(adapter, "limits", adapter);
-                  const nativeVertexStorageLimit = Reflect.get(
-                    nativeLimits,
-                    "maxStorageBuffersInVertexStage",
-                    nativeLimits,
-                  );
-                  const advertisedVertexStorageLimit = forceNoSsbo
-                    ? 0
-                    : nativeVertexStorageLimit;
-                  compatibilityProbe.advertisedVertexStorageLimit =
-                    advertisedVertexStorageLimit;
-                  const compatibilityLimits = new Proxy(nativeLimits, {
-                    get(target, property) {
-                      // Exercise the no-SSBO branch even on a Core-capable CI
-                      // GPU while retaining the browser's real remaining
-                      // Compatibility limits.
-                      if (property === "maxStorageBuffersInVertexStage") {
-                        return advertisedVertexStorageLimit;
-                      }
-                      return Reflect.get(target, property, target);
-                    },
-                  });
-                  return new Proxy(adapter, {
-                    get(target, property) {
-                      if (property === "limits") {
-                        return compatibilityLimits;
-                      }
-                      if (property === "requestDevice") {
-                        return async (descriptor = {}) => {
-                          const requiredLimits = descriptor.requiredLimits ?? {};
-                          const requested = Object.prototype.hasOwnProperty.call(
-                            requiredLimits,
-                            "maxStorageBuffersInVertexStage",
-                          )
-                            ? requiredLimits.maxStorageBuffersInVertexStage
-                            : undefined;
-                          compatibilityProbe.requestedVertexStorageLimit = requested;
-                          const expected = Number.isFinite(advertisedVertexStorageLimit)
-                            ? Math.min(4, advertisedVertexStorageLimit)
-                            : undefined;
-                          if (requested !== expected) {
-                            throw new Error(
-                              `renderer requested Compatibility vertex-storage limit ${requested}; expected ${expected}`,
-                            );
-                          }
-                          return target.requestDevice(descriptor);
-                        };
-                      }
-                      const value = Reflect.get(target, property, target);
-                      return typeof value === "function" ? value.bind(target) : value;
-                    },
-                  });
-                };
-              }
-              const value = Reflect.get(target, property, target);
-              return typeof value === "function" ? value.bind(target) : value;
-            },
-          });
-          Object.defineProperty(navigator, "gpu", {
-            configurable: true,
-            value: compatibilityGpu,
-          });
-          document.querySelector("#webgl2-section").hidden = true;
-        }
-        await init();
-        const streamCases = [
-          { suite: "gm", name: "rect", maxDifferent: 2048, maxOffEdge: 0 },
-          { suite: "gm", name: "rect_grad", maxDifferent: 1536, maxOffEdge: 0 },
-          { suite: "gm", name: "degengrad", maxDifferent: 20000, maxOffEdge: 4096 },
-          { suite: "gm", name: "CubicStroke", maxDifferent: 2560, maxOffEdge: 0 },
-          { suite: "gm", name: "cliprects", maxDifferent: 10240, maxOffEdge: 0 },
-          { suite: "gm", name: "poly_clockwise", maxDifferent: 3584, maxOffEdge: 0 },
-          { suite: "gm", name: "poly_evenOdd", maxDifferent: 5632, maxOffEdge: 0 },
-          { suite: "gm", name: "image", maxDifferent: 2048, maxOffEdge: 512 },
-          { suite: "gm", name: "image_filter_options", maxDifferent: 11264, maxOffEdge: 0 },
-          { suite: "riv", name: "scripted_color", reference: "riv-scripted_color-frame-0", maxDifferent: 4096, maxOffEdge: 0 },
-        ];
-        const results = forceFallback
-          ? [await run_backend(document.querySelector("#fallback"), "auto")]
-          : forceCompatibility
-            ? [await run_backend(document.querySelector("#webgpu"), "webgpu")]
-            : [
-              await run_backend(document.querySelector("#webgpu"), "webgpu"),
-              await run_backend(document.querySelector("#webgl2"), "webgl2"),
-            ];
-        if (forceFallback) {
           try {
-            await run_backend(document.createElement("canvas"), "webgpu");
-            throw new Error("forced WebGPU unexpectedly selected another backend");
+            await run_backend(document.createElement("canvas"));
+            throw new Error("WebGPU-unavailable browser unexpectedly initialized");
           } catch (error) {
-            if (String(error).includes("unexpectedly selected")) {
-              throw error;
+            const message = String(error);
+            if (message.includes("unexpectedly initialized")) throw error;
+            if (!message.includes("WebGPU API is unavailable")) {
+              throw new Error(`WebGPU-unavailable error lacked actionable context: ${message}`);
             }
-            results.push("forced-webgpu=fail-closed");
           }
-        }
-        if (!forceFallback && !forceCompatibility) {
-          results.push(await assert_direct_gpu_canvas_image(document.createElement("canvas"), "webgpu"));
-          results.push(await withStrictWebgl2ContextReuse(
-            () => assert_direct_gpu_canvas_image(document.createElement("canvas"), "webgl2"),
-          ));
-          const imageMesh = await measureWebgl2ImageUploads(
-            () => assert_webgl2_image_mesh(document.createElement("canvas")),
-          );
-          if (imageMesh.textureUploads !== 1) {
-            throw new Error(`WebGL2 reused image allocated ${imageMesh.textureUploads} texture uploads; expected 1`);
+          const results = ["webgpu-unavailable=adapter-error"];
+          window.__rendererSmoke = { status: "passed", results };
+          status.textContent = `passed\n${results.join("\n")}`;
+          document.body.dataset.status = "passed";
+        } else {
+          if (forceCompatibility) {
+            const gpu = navigator.gpu;
+            if (!gpu) {
+              throw new Error("forced Compatibility smoke requires WebGPU");
+            }
+            compatibilityProbe = {
+              featureLevelRequested: false,
+              advertisedVertexStorageLimit: null,
+              requestedVertexStorageLimit: null,
+            };
+            window.__compatibilityProbe = compatibilityProbe;
+            const requestAdapter = gpu.requestAdapter.bind(gpu);
+            const compatibilityGpu = new Proxy(gpu, {
+              get(target, property) {
+                if (property === "requestAdapter") {
+                  return async (options = {}) => {
+                    if (options.featureLevel !== "compatibility") {
+                      throw new Error("forced Core WebGPU admission failure");
+                    }
+                    compatibilityProbe.featureLevelRequested = true;
+                    const adapter = await requestAdapter(options);
+                    if (!adapter) {
+                      return null;
+                    }
+                    const nativeLimits = Reflect.get(adapter, "limits", adapter);
+                    const nativeVertexStorageLimit = Reflect.get(
+                      nativeLimits,
+                      "maxStorageBuffersInVertexStage",
+                      nativeLimits,
+                    );
+                    const advertisedVertexStorageLimit = forceNoSsbo
+                      ? 0
+                      : nativeVertexStorageLimit;
+                    compatibilityProbe.advertisedVertexStorageLimit =
+                      advertisedVertexStorageLimit;
+                    const compatibilityLimits = new Proxy(nativeLimits, {
+                      get(target, property) {
+                        if (property === "maxStorageBuffersInVertexStage") {
+                          return advertisedVertexStorageLimit;
+                        }
+                        return Reflect.get(target, property, target);
+                      },
+                    });
+                    return new Proxy(adapter, {
+                      get(target, property) {
+                        if (property === "limits") {
+                          return compatibilityLimits;
+                        }
+                        if (property === "requestDevice") {
+                          return async (descriptor = {}) => {
+                            const requiredLimits = descriptor.requiredLimits ?? {};
+                            const requested = Object.prototype.hasOwnProperty.call(
+                              requiredLimits,
+                              "maxStorageBuffersInVertexStage",
+                            )
+                              ? requiredLimits.maxStorageBuffersInVertexStage
+                              : undefined;
+                            compatibilityProbe.requestedVertexStorageLimit = requested;
+                            const expected = Number.isFinite(advertisedVertexStorageLimit)
+                              ? Math.min(4, advertisedVertexStorageLimit)
+                              : undefined;
+                            if (requested !== expected) {
+                              throw new Error(
+                                `renderer requested Compatibility vertex-storage limit ${requested}; expected ${expected}`,
+                              );
+                            }
+                            return target.requestDevice(descriptor);
+                          };
+                        }
+                        const value = Reflect.get(target, property, target);
+                        return typeof value === "function" ? value.bind(target) : value;
+                      },
+                    });
+                  };
+                }
+                const value = Reflect.get(target, property, target);
+                return typeof value === "function" ? value.bind(target) : value;
+              },
+            });
+            Object.defineProperty(navigator, "gpu", {
+              configurable: true,
+              value: compatibilityGpu,
+            });
           }
-          results.push(`${imageMesh.result} texture-uploads=${imageMesh.textureUploads}`);
-          results.push(await assert_imported_gpu_canvas(document.createElement("canvas"), "webgpu"));
-          results.push(await assert_imported_gpu_canvas(document.createElement("canvas"), "webgl2"));
-          results.push(await assert_webgpu_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));
-          results.push(await assert_webgl2_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));
-          const uniform = await measureImportedWebgl2Allocations(
-            () => assert_webgl2_imported_gpu_canvas_uniform_animation(document.createElement("canvas")),
-          );
-          if (uniform.contexts !== 2 || uniform.programs !== 1 || uniform.vertexArrays !== 1 || uniform.buffers !== 3) {
-            throw new Error(`WebGL2 uniform animation allocated contexts=${uniform.contexts} programs=${uniform.programs} vaos=${uniform.vertexArrays} buffers=${uniform.buffers}; expected 2/1/1/3`);
-          }
-          results.push(`${uniform.result} programs=${uniform.programs} vaos=${uniform.vertexArrays} buffers=${uniform.buffers} contexts=${uniform.contexts}`);
-          results.push(await assert_webgpu_uniform_limit_rejection(document.createElement("canvas")));
-          const stress = await measureImportedWebgl2Allocations(
-            () => assert_imported_gpu_canvas_stress(document.createElement("canvas")),
-          );
-          if (stress.contexts !== 2 || stress.programs !== 2 || stress.vertexArrays !== 2 || stress.buffers !== 0) {
-            throw new Error(`WebGL2 stress allocated contexts=${stress.contexts} programs=${stress.programs} vaos=${stress.vertexArrays} buffers=${stress.buffers}; expected 2/2/2/0`);
-          }
-          results.push(`${stress.result} programs=${stress.programs} vaos=${stress.vertexArrays} buffers=${stress.buffers} contexts=${stress.contexts}`);
-          results.push(await assert_resize(document.createElement("canvas"), "webgpu"));
-          results.push(await assert_resize(document.createElement("canvas"), "webgl2"));
-          for (const testCase of streamCases) {
-            const { name, suite } = testCase;
-            const label = testCase.reference ?? `${suite}-${name}`;
-            const streamText = await fetch(`/fixtures/renderer/streams/${suite}/${name}.rive-stream`).then((response) => response.text());
-            const streamReference = new Uint8Array(await fetch(`/fixtures/renderer/reference/dawn-webgpu-metal/${suite}/${label}-msaa.png`).then((response) => response.arrayBuffer()));
-            for (const backend of ["webgpu", "webgl2"]) {
-              const canvas = document.createElement("canvas");
-              canvas.hidden = true;
-              document.body.append(canvas);
+
+          const results = [await run_backend(document.createElement("canvas"))];
+          if (forceCompatibility) {
+            const expectedVertexStorageLimit = Number.isFinite(
+              compatibilityProbe.advertisedVertexStorageLimit,
+            )
+              ? Math.min(4, compatibilityProbe.advertisedVertexStorageLimit)
+              : undefined;
+            if (
+              !compatibilityProbe.featureLevelRequested ||
+              compatibilityProbe.requestedVertexStorageLimit !==
+                expectedVertexStorageLimit
+            ) {
+              throw new Error(
+                `Compatibility admission was incomplete: ${JSON.stringify(compatibilityProbe)}`,
+              );
+            }
+            results.push(
+              forceNoSsbo
+                ? "compatibility=selected vertex-storage-limit=0 polyfill=rendered"
+                : `compatibility=selected requested-vertex-storage-limit=${compatibilityProbe.requestedVertexStorageLimit} rendered`,
+            );
+          } else {
+            results.push(await assert_resize(document.createElement("canvas")));
+            results.push(await assert_direct_gpu_canvas_image(document.createElement("canvas")));
+            results.push(await assert_imported_gpu_canvas(document.createElement("canvas")));
+            results.push(await assert_webgpu_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));
+            results.push(await assert_webgpu_uniform_limit_rejection(document.createElement("canvas")));
+
+            const streamCases = [
+              { suite: "gm", name: "rect", maxDifferent: 2048, maxOffEdge: 0 },
+              { suite: "gm", name: "rect_grad", maxDifferent: 1536, maxOffEdge: 0 },
+              { suite: "gm", name: "degengrad", maxDifferent: 20000, maxOffEdge: 4096 },
+              { suite: "gm", name: "CubicStroke", maxDifferent: 2560, maxOffEdge: 0 },
+              { suite: "gm", name: "cliprects", maxDifferent: 10240, maxOffEdge: 0 },
+              { suite: "gm", name: "poly_clockwise", maxDifferent: 3584, maxOffEdge: 0 },
+              { suite: "gm", name: "poly_evenOdd", maxDifferent: 5632, maxOffEdge: 0 },
+              { suite: "gm", name: "image", maxDifferent: 2048, maxOffEdge: 512 },
+              { suite: "gm", name: "image_filter_options", maxDifferent: 11264, maxOffEdge: 0 },
+              { suite: "riv", name: "scripted_color", reference: "riv-scripted_color-frame-0", maxDifferent: 4096, maxOffEdge: 0 },
+            ];
+            for (const testCase of streamCases) {
+              const { name, suite } = testCase;
+              const label = testCase.reference ?? `${suite}-${name}`;
+              const streamText = await fetch(
+                `/fixtures/renderer/streams/${suite}/${name}.rive-stream`,
+              ).then((response) => response.text());
+              const streamReference = new Uint8Array(await fetch(
+                `/fixtures/renderer/reference/dawn-webgpu-metal/${suite}/${label}-msaa.png`,
+              ).then((response) => response.arrayBuffer()));
               results.push(await run_stream_case(
-                canvas,
+                document.createElement("canvas"),
                 label,
-                backend,
                 streamText,
                 streamReference,
-                backend === "webgpu" ? 1 : 2,
-                backend === "webgpu" ? 0 : testCase.maxDifferent,
-                backend === "webgpu" ? 0 : 4,
-                backend === "webgpu" ? 0 : testCase.maxOffEdge,
+                1,
+                0,
+                0,
+                0,
               ));
             }
           }
-          results.push(await assert_webgl2_fail_closed(
-            document.querySelector("#unsupported"),
-            document.querySelector("#abandoned"),
-          ));
+          window.__rendererSmoke = { status: "passed", results };
+          status.textContent = `passed\n${results.join("\n")}`;
+          document.body.dataset.status = "passed";
         }
-        if (forceCompatibility) {
-          const expectedVertexStorageLimit = Number.isFinite(
-            compatibilityProbe.advertisedVertexStorageLimit,
-          )
-            ? Math.min(4, compatibilityProbe.advertisedVertexStorageLimit)
-            : undefined;
-          if (
-            !compatibilityProbe.featureLevelRequested ||
-            compatibilityProbe.requestedVertexStorageLimit !==
-              expectedVertexStorageLimit
-          ) {
-            throw new Error(
-              `Compatibility retry was incomplete: ${JSON.stringify(compatibilityProbe)}`,
-            );
-          }
-          results.push(
-            forceNoSsbo
-              ? "compatibility=selected vertex-storage-limit=0 polyfill=rendered"
-              : `compatibility=selected requested-vertex-storage-limit=${compatibilityProbe.requestedVertexStorageLimit} rendered`,
-          );
-        }
-        if (forceFallback && !results[0].includes("backend=webgl2 fallback=true")) {
-          throw new Error(`automatic fallback selected the wrong backend: ${results[0]}`);
-        }
-        window.__rendererSmoke = { status: "passed", results };
-        status.textContent = `passed\n${results.join("\n")}`;
-        document.body.dataset.status = "passed";
       } catch (error) {
         const message = error?.stack || String(error);
         window.__rendererSmoke = { status: "failed", error: message };

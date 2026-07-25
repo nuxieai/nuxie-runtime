@@ -154,7 +154,7 @@ jobs:
           retention-days: 7
 
   browser-renderer:
-    name: Browser WebGPU and WebGL2
+    name: Browser WebGPU
     runs-on: macos-14
     env:
       RUSTUP_TOOLCHAIN: stable
@@ -174,7 +174,7 @@ jobs:
       - name: Fetch pinned test assets
         run: make fixtures
 
-      - name: Verify browser WebGPU, WebGL2, and fallback
+      - name: Verify browser WebGPU and unsupported-state failure
         env:
           BROWSER_RENDERER_BROWSER: chrome
         run: make browser-renderer-smoke

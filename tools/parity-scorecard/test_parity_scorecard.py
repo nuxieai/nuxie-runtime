@@ -57,7 +57,8 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertRegex(
             makefile,
             re.compile(
-                r"cpp-oracle-workspace-tests: fixtures golden-runner cpp-probe\s+"
+                r"cpp-oracle-workspace-tests:[^\n]*\bfixtures\b"
+                r"[^\n]*\bgolden-runner\b[^\n]*\bcpp-probe\b\s+"
                 r'@test -x "\$\(GOLDEN_RUNNER\)"[\s\S]{0,300}'
                 r'@test -x "\$\(CPP_PROBE\)"[\s\S]{0,300}'
                 r'RIVE_GOLDEN_RUNNER="\$\(GOLDEN_RUNNER\)" '
@@ -471,11 +472,14 @@ class ParityScorecardCliTests(unittest.TestCase):
             "#OR-4",
             "#OR-5",
             "#OR-7",
-            "#HD-3",
             "#OR-9",
             "#B-3",
         ):
             self.assertIn(f"not built ({ticket}", completed.stdout)
+        self.assertIn(
+            "WebGPU-only browser support; legacy backend retired (#HD-3)",
+            completed.stdout,
+        )
         self.assertIn("A-rows closed 0/2 (open: A1,A2)", completed.stdout)
 
         report = json.loads(json_output.read_text())

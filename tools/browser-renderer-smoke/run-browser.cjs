@@ -20,63 +20,52 @@ const fullCases = [
   {
     path: "",
     expected: [
-      "backend=webgpu fallback=false",
-      "backend=webgl2 fallback=false",
-      "direct-gpu-canvas=webgpu",
-      "direct-gpu-canvas=webgl2",
-      "image-mesh=webgl2 indexed=cropped general-triangles=applied transform=applied clip-layer=applied opacity=applied premultiplied-alpha=applied samplers=nearest+bilinear+repeat unsupported=mirror+advanced-blend-fail-closed texture-uploads=1",
-      "imported-gpu-canvas=webgpu selected=webgpu",
-      "imported-gpu-canvas=webgl2 selected=webgl2",
-      "gpu-canvas-interface=sync-rejected unrelated=clean valid=clean",
-      "webgl2-gpu-canvas-interface=attributes+uniforms+interstage-rejected valid=clean",
-      "imported-gpu-canvas-uniform-animation=webgl2 frames=2 first-instance=5 reversed-slots=applied programs=1 vaos=1 buffers=3 contexts=2",
-      "webgpu-uniform-limit=same-call-rejected unrelated=clean valid=clean",
-      "imported-gpu-canvas-stress=webgl2 frames=32 keys=2 programs=2 vaos=2 buffers=0 contexts=2",
+      "backend=webgpu",
       "resize=webgpu in-flight=rejected extent=13x9",
-      "resize=webgl2 in-flight=rejected extent=13x9",
+      "direct-gpu-canvas=webgpu",
+      "imported-gpu-canvas=webgpu",
+      "gpu-canvas-interface=sync-rejected unrelated=clean valid=clean",
+      "webgpu-uniform-limit=same-call-rejected unrelated=clean valid=clean",
       "stream=gm-rect backend=webgpu",
-      "stream=gm-rect backend=webgl2",
+      "stream=gm-rect_grad backend=webgpu",
+      "stream=gm-degengrad backend=webgpu",
+      "stream=gm-CubicStroke backend=webgpu",
+      "stream=gm-cliprects backend=webgpu",
+      "stream=gm-poly_clockwise backend=webgpu",
+      "stream=gm-poly_evenOdd backend=webgpu",
       "stream=gm-image backend=webgpu",
-      "stream=gm-image backend=webgl2",
       "stream=gm-image_filter_options backend=webgpu",
-      "stream=gm-image_filter_options backend=webgl2",
       "stream=riv-scripted_color-frame-0 backend=webgpu",
-      "stream=riv-scripted_color-frame-0 backend=webgl2",
-      "path-clip=exact unsupported=fail-closed recovery=clean abandoned=poisoned",
     ],
-  },
-  {
-    path: "?force-webgl2-fallback=1",
-    expected: ["backend=webgl2 fallback=true", "forced-webgpu=fail-closed"],
   },
   {
     path: "?force-webgpu-compatibility=1",
     expected: [
-      "backend=webgpu fallback=false",
+      "backend=webgpu",
       "compatibility=selected requested-vertex-storage-limit=",
     ],
   },
   {
     path: "?force-webgpu-compatibility=1&force-no-ssbo=1",
     expected: [
-      "backend=webgpu fallback=false",
+      "backend=webgpu",
       "compatibility=selected vertex-storage-limit=0 polyfill=rendered",
     ],
   },
+  {
+    path: "?force-webgpu-unavailable=1",
+    expected: ["webgpu-unavailable=adapter-error"],
+  },
 ];
+
 const cases = process.env.BROWSER_RENDERER_GPU_ONLY === "1"
   ? [{
       path: "gpu-only.html",
       expected: [
         "direct-gpu-canvas=webgpu",
-        "direct-gpu-canvas=webgl2",
-        "imported-gpu-canvas=webgpu selected=webgpu",
-        "imported-gpu-canvas=webgl2 selected=webgl2",
+        "imported-gpu-canvas=webgpu",
         "gpu-canvas-interface=sync-rejected unrelated=clean valid=clean",
-        "webgl2-gpu-canvas-interface=attributes+uniforms+interstage-rejected valid=clean",
-        "imported-gpu-canvas-uniform-animation=webgl2 frames=2 first-instance=5 reversed-slots=applied programs=1 vaos=1 buffers=3 contexts=2",
         "webgpu-uniform-limit=same-call-rejected unrelated=clean valid=clean",
-        "imported-gpu-canvas-stress=webgl2 frames=32 keys=2 programs=2 vaos=2 buffers=0 contexts=2",
       ],
     }]
   : fullCases;

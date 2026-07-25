@@ -125,9 +125,46 @@ fn fs_main() -> @location(0) vec4<f32> {
         frame.restore();
         frame.clip_path(clip.as_ref());
         frame.draw_path(path.as_ref(), paint.as_ref());
-        let pixels = frame.finish().await.map_err(js_error)?;
+        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
         assert_pixels(&pixels)?;
         Ok(format!("backend=webgpu checksum={:016x}", fnv1a64(&pixels)))
+    }
+
+    #[wasm_bindgen]
+    pub async fn assert_direct_presentation(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
+        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
+        factory
+            .begin_frame(0xff12_3456)
+            .map_err(js_error)?
+            .present()
+            .await
+            .map_err(js_error)?;
+        Ok("browser-presentation=direct-webgpu".into())
+    }
+
+    #[wasm_bindgen]
+    pub async fn assert_explicit_readback(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
+        let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
+        let pixels = factory
+            .begin_frame(0xff12_3456)
+            .map_err(js_error)?
+            .finish_with_readback()
+            .await
+            .map_err(js_error)?;
+        let expected = [0x12, 0x34, 0x56, 0xff];
+        if pixels.len() != 4 * 3 * 4
+            || pixels
+                .chunks_exact(4)
+                .any(|pixel| pixel != expected.as_slice())
+        {
+            return Err(JsValue::from_str(
+                "explicit browser readback did not return exact RGBA pixels",
+            ));
+        }
+        Ok(format!(
+            "browser-readback=explicit rgba-bytes={} exact=true",
+            pixels.len()
+        ))
     }
 
     #[wasm_bindgen]
@@ -154,7 +191,7 @@ fn fs_main() -> @location(0) vec4<f32> {
                 "in-flight resize changed readable factory state",
             ));
         }
-        if frame.finish().await.map_err(js_error)?.len() != 8 * 6 * 4 {
+        if frame.finish_with_readback().await.map_err(js_error)?.len() != 8 * 6 * 4 {
             return Err(JsValue::from_str(
                 "in-flight frame changed extent after rejected resize",
             ));
@@ -168,7 +205,7 @@ fn fs_main() -> @location(0) vec4<f32> {
         let pixels = factory
             .begin_frame(0xff65_4321)
             .map_err(js_error)?
-            .finish()
+            .finish_with_readback()
             .await
             .map_err(js_error)?;
         if pixels.len() != 13 * 9 * 4 {
@@ -199,7 +236,7 @@ fn fs_main() -> @location(0) vec4<f32> {
         instance
             .draw(&mut factory, &mut frame)
             .map_err(|error| JsValue::from_str(&format!("{error:#}")))?;
-        let pixels = frame.finish().await.map_err(js_error)?;
+        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
         let red_pixels = pixels
             .chunks_exact(4)
             .filter(|pixel| pixel[0] > 240 && pixel[1] < 10 && pixel[2] < 10 && pixel[3] > 240)
@@ -238,7 +275,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             BlendMode::SrcOver,
             1.0,
         );
-        let pixels = frame.finish().await.map_err(js_error)?;
+        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
         let red = pixels
             .chunks_exact(4)
             .filter(|pixel| *pixel == [255, 0, 0, 255])
@@ -357,7 +394,7 @@ fn fs_main() -> @location(0) vec4<f32> {
                 ));
             }
         }
-        let unrelated_pixels = unrelated.finish().await.map_err(js_error)?;
+        let unrelated_pixels = unrelated.finish_with_readback().await.map_err(js_error)?;
         if !unrelated_pixels
             .chunks_exact(4)
             .all(|pixel| pixel == [0x12, 0x34, 0x56, 0xff])
@@ -380,7 +417,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             BlendMode::SrcOver,
             1.0,
         );
-        let valid_pixels = valid_frame.finish().await.map_err(js_error)?;
+        let valid_pixels = valid_frame.finish_with_readback().await.map_err(js_error)?;
         let red = valid_pixels
             .chunks_exact(4)
             .filter(|pixel| *pixel == [0xff, 0x00, 0x00, 0xff])
@@ -469,7 +506,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
                 ));
             }
         }
-        let unrelated_pixels = unrelated.finish().await.map_err(js_error)?;
+        let unrelated_pixels = unrelated.finish_with_readback().await.map_err(js_error)?;
         if !unrelated_pixels
             .chunks_exact(4)
             .all(|pixel| pixel == [0x12, 0x34, 0x56, 0xff])
@@ -493,7 +530,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
             BlendMode::SrcOver,
             1.0,
         );
-        valid_frame.finish().await.map_err(js_error)?;
+        valid_frame.finish_with_readback().await.map_err(js_error)?;
         Ok("webgpu-uniform-limit=same-call-rejected unrelated=clean valid=clean".into())
     }
 
@@ -520,7 +557,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
         stream
             .replay_frame(0, &mut factory, &mut frame)
             .map_err(js_error)?;
-        let pixels = frame.finish().await.map_err(js_error)?;
+        let pixels = frame.finish_with_readback().await.map_err(js_error)?;
         let actual = RgbaImage::new(width, height, pixels).map_err(js_error)?;
         let expected = RgbaImage::decode_png(&reference_png).map_err(js_error)?;
         let report = compare(

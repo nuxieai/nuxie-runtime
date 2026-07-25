@@ -21,6 +21,8 @@ const fullCases = [
     path: "",
     expected: [
       "backend=webgpu",
+      "browser-presentation=direct-webgpu exact-rgba=true surface=1 mapAsync=0 putImageData=0",
+      "browser-readback=explicit rgba-bytes=48 exact=true surface=0 mapAsync=1 putImageData=0",
       "resize=webgpu in-flight=rejected extent=13x9",
       "direct-gpu-canvas=webgpu",
       "imported-gpu-canvas=webgpu",

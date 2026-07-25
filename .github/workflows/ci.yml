@@ -185,6 +185,11 @@ jobs:
           rustup toolchain install stable --profile minimal --no-self-update
           rustup target add --toolchain stable wasm32-unknown-unknown
 
+      - name: Install pinned ripgrep
+        run: |
+          cargo install ripgrep --version 14.1.1 --locked
+          rg --version
+
       - name: Fetch pinned test assets
         run: make fixtures
 

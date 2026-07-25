@@ -18,7 +18,50 @@ if rg -n -i "$prohibited_pattern" "${prohibited_paths[@]}"; then
   exit 1
 fi
 
+cpu_presentation_pattern='CanvasRenderingContext2d|ImageData|put_image_data|present_pixels'
+if rg -n "$cpu_presentation_pattern" \
+  "$repo_dir/crates/nuxie-renderer/src/browser.rs" \
+  "$repo_dir/crates/nuxie-renderer/Cargo.toml"; then
+  echo "browser-webgpu-only check found a CPU canvas presentation path" >&2
+  exit 1
+fi
+
+browser_source="$repo_dir/crates/nuxie-renderer/src/browser.rs"
+rg -q 'SurfaceTarget::Canvas' "$browser_source"
+rg -q 'pub async fn present\(self\)' "$browser_source"
+rg -q 'get_current_texture\(\)' "$browser_source"
+rg -q 'queue\.present\(surface_texture\)' "$browser_source"
+rg -q 'pub async fn finish_with_readback\(self\)' "$browser_source"
+
+present_body=$(
+  sed -n \
+    '/pub async fn present(self)/,/pub async fn finish_with_readback(self)/p' \
+    "$browser_source"
+)
+if rg -n 'finish_async|map_async|put_image_data' <<<"$present_body"; then
+  echo "browser-webgpu-only check found GPU-to-CPU work in ordinary presentation" >&2
+  exit 1
+fi
+readback_body=$(
+  sed -n \
+    '/pub async fn finish_with_readback(self)/,/struct BrowserPresentation/p' \
+    "$browser_source"
+)
+if rg -n 'current_texture|queue\.present' <<<"$readback_body"; then
+  echo "browser-webgpu-only check found canvas presentation in explicit readback" >&2
+  exit 1
+fi
+rg -q 'let pixels = inner\.finish_async\(\)\.await\?' <<<"$readback_body"
+
+renderer_source="$repo_dir/crates/nuxie-renderer/src/lib.rs"
+direct_submit_body=$(
+  sed -n \
+    '/async fn finish_to_texture_view_async(/,/async fn finish_internal(/p' \
+    "$renderer_source"
+)
+rg -Fq 'finish_internal(false, false, true, false, Some' <<<"$direct_submit_body"
+
 test ! -e "$repo_dir/crates/nuxie-renderer/src/webgl2.rs"
 test ! -e "$repo_dir/crates/nuxie-renderer/src/webgl2_limits.rs"
 
-echo "browser-webgpu-only summary: browser-smoke=pass gpu-smoke=pass prohibited-surface=0"
+echo "browser-webgpu-only summary: browser-smoke=pass gpu-smoke=pass prohibited-surface=0 prohibited-cpu-presentation=0 typed-readback=1"

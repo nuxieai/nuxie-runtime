@@ -2106,6 +2106,13 @@ widening. Universal byte identity is not part of that stop condition.
   not a retroactive parity claim for the retired renderer; the 2026-07-16
   entries below remain historical evidence.
 
+- 2026-07-25: Browser presentation now follows the C++ WebGPU ownership split.
+  `BrowserFrame::present` submits directly to the canvas surface and performs
+  no mapped GPU-to-CPU readback or Canvas2D copy. Explicit pixel capture uses
+  `BrowserFrame::finish_with_readback`, which returns the bounded
+  `width * height * 4` RGBA result without presenting. The real-browser gate
+  counts both prohibited calls on normal frames and checks exact capture bytes.
+
 - 2026-07-17: At the user's direction, the R4 timing gate no longer requires
   any absolute host-idle percentage. Stable low-idle brackets are admissible;
   sampled idle remains recorded and excessive within-bracket spread still

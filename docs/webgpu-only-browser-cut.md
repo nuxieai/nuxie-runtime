@@ -20,7 +20,11 @@ that the removed WebGL2 implementation reached C++ renderer parity.
 - Remove `BrowserBackendPreference`, `BrowserBackend`, `fallback_reason`,
   backend-selection enums, and all public `WebGl2*` exports.
 - Make `webgpu_adapter_info` return `&WgpuAdapterInfo`, not `Option`.
-- Keep active-frame resize protection and browser canvas presentation behavior.
+- Keep active-frame resize protection.
+- Make ordinary `BrowserFrame::present` submit directly to the WebGPU canvas
+  surface without GPU-to-CPU readback or Canvas2D presentation.
+- Reserve `BrowserFrame::finish_with_readback` for explicit pixel capture. It
+  returns exactly `width * height * 4` RGBA bytes and does not present.
 
 ## Removal surface
 
@@ -58,6 +62,9 @@ that the removed WebGL2 implementation reached C++ renderer parity.
 2. `cargo test -p nuxie-renderer`
 3. `cargo test --workspace`
 4. `make browser-renderer-smoke`
+   proves normal presentation calls neither `GPUBuffer.mapAsync` nor
+   `CanvasRenderingContext2D.putImageData`, while explicit readback performs
+   one mapped readback and returns exact RGBA pixels.
 5. `make browser-renderer-gpu-smoke`
 6. `make renderer-golden-same-runner` remains at the unchanged 1,468-row pixel
    floor.

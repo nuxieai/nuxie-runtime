@@ -18,8 +18,8 @@ return function(context)
     local canvas = context:gpuCanvas()
     local shader = context:shader("scene")
     local pipeline = GPUPipeline.new {
-        vertex = shader,
-        fragment = shader,
+        vertex = { module = shader, entryPoint = "chosen_vertex" },
+        fragment = { module = shader, entryPoint = "chosen_fragment" },
         vertexLayout = {},
         colorTargets = { { format = "rgba8unorm" } },
     }
@@ -136,23 +136,41 @@ fn put_string(bytes: &mut Vec<u8>, value: &str) {
 fn shader_payload() -> Vec<u8> {
     const WGSL: &str = r#"
 @vertex
-fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+fn physical_vertex_0(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let x = f32(i32(index) - 1);
+    let y = f32(i32(index & 1u) * 2 - 1);
+    return vec4<f32>(x, y, 0.0, 1.0);
+}
+
+@vertex
+fn physical_vertex_1(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
     let x = f32(i32(index) - 1);
     let y = f32(i32(index & 1u) * 2 - 1);
     return vec4<f32>(x, y, 0.0, 1.0);
 }
 
 @fragment
-fn fs_main() -> @location(0) vec4<f32> {
+fn physical_fragment_0() -> @location(0) vec4<f32> {
+    return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn physical_fragment_1() -> @location(0) vec4<f32> {
     return vec4<f32>(1.0, 0.0, 0.0, 1.0);
 }
 "#;
     const EMPTY_BINDING_MAP: &[u8] = &[2, 1, 14, 0, 0, 0, 0, 0];
-    let mut source = vec![2];
-    for (stage, entry) in [(0, "vs_main"), (1, "fs_main")] {
+    let entries = [
+        (0, "default_vertex", "physical_vertex_0"),
+        (0, "chosen_vertex", "physical_vertex_1"),
+        (1, "default_fragment", "physical_fragment_0"),
+        (1, "chosen_fragment", "physical_fragment_1"),
+    ];
+    let mut source = vec![entries.len() as u8];
+    for (stage, logical, physical) in entries {
         source.push(stage);
-        put_string(&mut source, entry);
-        put_string(&mut source, entry);
+        put_string(&mut source, logical);
+        put_string(&mut source, physical);
     }
     put_u32(&mut source, WGSL.len() as u32);
     source.extend_from_slice(WGSL.as_bytes());
@@ -326,17 +344,31 @@ fn imported_shader_and_script_execute_and_composite_through_one_factory() {
     let (shader, plan) = &calls[0];
     assert_eq!(
         shader
-            .entry(GpuCanvasShaderStage::Vertex, "vs_main")
+            .entry(GpuCanvasShaderStage::Vertex, "chosen_vertex")
             .expect("vertex entry")
             .physical_entry_point,
-        "vs_main",
+        "physical_vertex_1",
     );
     assert_eq!(
         shader
-            .entry(GpuCanvasShaderStage::Fragment, "fs_main")
+            .entry(GpuCanvasShaderStage::Fragment, "chosen_fragment")
             .expect("fragment entry")
             .physical_entry_point,
-        "fs_main",
+        "physical_fragment_1",
+    );
+    assert_eq!(
+        plan.vertex_entry
+            .as_ref()
+            .expect("resolved vertex pipeline entry")
+            .logical_entry_point,
+        "chosen_vertex",
+    );
+    assert_eq!(
+        plan.fragment_entry
+            .as_ref()
+            .expect("resolved fragment pipeline entry")
+            .physical_entry_point,
+        "physical_fragment_1",
     );
     assert_eq!((plan.width, plan.height), (32, 24));
     assert_eq!(plan.vertex_count, 3);

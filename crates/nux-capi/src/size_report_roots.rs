@@ -343,6 +343,8 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
                 bindings: Vec::new(),
             };
             let plan = GpuCanvasPlan {
+                vertex_entry: None,
+                fragment_entry: None,
                 width: args.width,
                 height: args.height,
                 clear_color: [0.0; 4],

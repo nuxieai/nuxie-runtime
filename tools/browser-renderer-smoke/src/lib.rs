@@ -62,6 +62,8 @@ fn fs_main() -> @location(0) vec4<f32> {
 
     fn imported_gpu_canvas_plan(width: u32, height: u32, clear_color: [f64; 4]) -> GpuCanvasPlan {
         GpuCanvasPlan {
+            vertex_entry: None,
+            fragment_entry: None,
             width,
             height,
             clear_color,

@@ -8,8 +8,8 @@ use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};
 
 use nuxie_render_api::{
-    GpuCanvasError, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderResourceKind,
-    GpuCanvasShaderStage, RenderImage,
+    GpuCanvasError, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
+    GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind, GpuCanvasShaderStage, RenderImage,
 };
 pub use nuxie_render_api::{
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
@@ -178,6 +178,8 @@ struct PreparedImportedGpuCanvas {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ImportedGpuCanvasPipelineKey {
     shader: GpuCanvasShader,
+    vertex_entry: Option<GpuCanvasShaderEntrySelection>,
+    fragment_entry: Option<GpuCanvasShaderEntrySelection>,
     uniform_bindings: Vec<(u32, u32, usize)>,
     vertex_layouts: Vec<GpuCanvasVertexLayout>,
     vertex_buffers: Vec<(u32, usize)>,
@@ -192,6 +194,8 @@ impl ImportedGpuCanvasPipelineKey {
             .collect::<Vec<_>>();
         Self {
             shader: shader.clone(),
+            vertex_entry: plan.vertex_entry.clone(),
+            fragment_entry: plan.fragment_entry.clone(),
             uniform_bindings,
             vertex_layouts: plan.vertex_layouts.clone(),
             vertex_buffers: plan
@@ -256,21 +260,28 @@ struct ImportedWgpuGpuCanvasPipeline {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ImportedUniformRequirement {
     required_size: u32,
-    vertex: bool,
-    fragment: bool,
+    stage_mask: u8,
 }
 
 impl ImportedUniformRequirement {
     fn visibility(self) -> wgpu::ShaderStages {
         let mut stages = wgpu::ShaderStages::empty();
-        if self.vertex {
+        if self.stage_mask & (1 << GpuCanvasShaderStage::Vertex as u8) != 0 {
             stages |= wgpu::ShaderStages::VERTEX;
         }
-        if self.fragment {
+        if self.stage_mask & (1 << GpuCanvasShaderStage::Fragment as u8) != 0 {
             stages |= wgpu::ShaderStages::FRAGMENT;
+        }
+        if self.stage_mask & (1 << GpuCanvasShaderStage::Compute as u8) != 0 {
+            stages |= wgpu::ShaderStages::COMPUTE;
         }
         stages
     }
+}
+
+struct ParsedAuthoredWgsl {
+    module: naga::Module,
+    info: naga::valid::ModuleInfo,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -292,22 +303,60 @@ fn prepare_imported_gpu_canvas(
 ) -> Result<PreparedImportedGpuCanvas, GpuCanvasError> {
     validate_imported_gpu_canvas_plan(plan)
         .map_err(|error| GpuCanvasError::new(error.to_string()))?;
-    let module = parse_authored_wgsl(&shader.source)?;
-    let uniform_requirements = validate_imported_interface(shader, plan, &module)?;
-    let vertex_entry_point = shader
-        .entry(GpuCanvasShaderStage::Vertex, "vs_main")
-        .ok_or_else(|| GpuCanvasError::new("authored WGSL has no logical vs_main entry"))?
-        .physical_entry_point
-        .clone();
-    let fragment_entry_point = shader
-        .entry(GpuCanvasShaderStage::Fragment, "fs_main")
-        .ok_or_else(|| GpuCanvasError::new("authored WGSL has no logical fs_main entry"))?
-        .physical_entry_point
-        .clone();
+    let parsed = parse_authored_wgsl(&shader.source)?;
+    let vertex_record = resolve_imported_entry(
+        shader,
+        GpuCanvasShaderStage::Vertex,
+        plan.vertex_entry.as_ref(),
+        "vertex",
+    )?;
+    let fragment_record = resolve_imported_entry(
+        shader,
+        GpuCanvasShaderStage::Fragment,
+        plan.fragment_entry.as_ref(),
+        "fragment",
+    )?;
+    let uniform_requirements = validate_imported_interface(
+        shader,
+        plan,
+        &parsed.module,
+        &parsed.info,
+        vertex_record,
+        fragment_record,
+    )?;
     Ok(PreparedImportedGpuCanvas {
-        vertex_entry_point,
-        fragment_entry_point,
+        vertex_entry_point: vertex_record.physical_entry_point.clone(),
+        fragment_entry_point: fragment_record.physical_entry_point.clone(),
         uniform_requirements,
+    })
+}
+
+fn resolve_imported_entry<'a>(
+    shader: &'a GpuCanvasShader,
+    stage: GpuCanvasShaderStage,
+    selection: Option<&GpuCanvasShaderEntrySelection>,
+    stage_name: &str,
+) -> Result<&'a GpuCanvasShaderEntry, GpuCanvasError> {
+    let entry = match selection {
+        Some(selection) => shader.entries.iter().find(|entry| {
+            entry.stage == stage
+                && entry.logical_entry_point == selection.logical_entry_point
+                && entry.physical_entry_point == selection.physical_entry_point
+        }),
+        None => shader.entries.iter().find(|entry| entry.stage == stage),
+    };
+    entry.ok_or_else(|| {
+        let requested = selection
+            .map(|selection| {
+                format!(
+                    " logical '{}' / physical '{}'",
+                    selection.logical_entry_point, selection.physical_entry_point
+                )
+            })
+            .unwrap_or_default();
+        GpuCanvasError::new(format!(
+            "authored WGSL has no matching {stage_name}{requested} entry"
+        ))
     })
 }
 
@@ -315,16 +364,13 @@ fn validate_imported_interface(
     shader: &GpuCanvasShader,
     plan: &GpuCanvasPlan,
     module: &naga::Module,
+    info: &naga::valid::ModuleInfo,
+    vertex_record: &GpuCanvasShaderEntry,
+    fragment_record: &GpuCanvasShaderEntry,
 ) -> Result<BTreeMap<(u32, u32), ImportedUniformRequirement>, GpuCanvasError> {
     let invalid = |message: String| {
         GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
     };
-    let vertex_record = shader
-        .entry(GpuCanvasShaderStage::Vertex, "vs_main")
-        .ok_or_else(|| invalid("shader has no logical vertex entry 'vs_main'".into()))?;
-    let fragment_record = shader
-        .entry(GpuCanvasShaderStage::Fragment, "fs_main")
-        .ok_or_else(|| invalid("shader has no logical fragment entry 'fs_main'".into()))?;
     let vertex_entry = imported_entry_point(
         module,
         naga::ShaderStage::Vertex,
@@ -434,7 +480,7 @@ fn validate_imported_interface(
         }
     }
 
-    let required_uniforms = imported_uniform_requirements(shader, module)?;
+    let required_uniforms = imported_uniform_requirements(shader, module, info)?;
     let planned_uniforms = plan
         .uniform_buffers
         .iter()
@@ -600,6 +646,7 @@ fn imported_format(value: &str) -> Result<&'static str, GpuCanvasError> {
 fn imported_uniform_requirements(
     shader: &GpuCanvasShader,
     module: &naga::Module,
+    info: &naga::valid::ModuleInfo,
 ) -> Result<BTreeMap<(u32, u32), ImportedUniformRequirement>, GpuCanvasError> {
     let invalid = |message: String| {
         GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
@@ -609,7 +656,8 @@ fn imported_uniform_requirements(
         .update(module.to_ctx())
         .map_err(|error| invalid(format!("uniform layout failed: {error}")))?;
     let mut uniform_sizes = BTreeMap::new();
-    for (_, global) in module.global_variables.iter() {
+    let mut uniform_stage_masks = BTreeMap::new();
+    for (handle, global) in module.global_variables.iter() {
         match global.space {
             naga::AddressSpace::Private => {}
             naga::AddressSpace::Uniform => {
@@ -627,6 +675,24 @@ fn imported_uniform_requirements(
                         key.0, key.1
                     )));
                 }
+                let mut stage_mask = 0;
+                for (index, entry) in module.entry_points.iter().enumerate() {
+                    if info.get_entry_point(index)[handle].is_empty() {
+                        continue;
+                    }
+                    stage_mask |= match entry.stage {
+                        naga::ShaderStage::Vertex => 1 << GpuCanvasShaderStage::Vertex as u8,
+                        naga::ShaderStage::Fragment => 1 << GpuCanvasShaderStage::Fragment as u8,
+                        naga::ShaderStage::Compute => 1 << GpuCanvasShaderStage::Compute as u8,
+                        unsupported => {
+                            return Err(invalid(format!(
+                                "entry point '{}' uses unsupported shader stage {unsupported:?}",
+                                entry.name
+                            )));
+                        }
+                    };
+                }
+                uniform_stage_masks.insert(key, stage_mask);
             }
             ref unsupported => {
                 return Err(invalid(format!(
@@ -648,12 +714,6 @@ fn imported_uniform_requirements(
             return Err(invalid(format!(
                 "binding group {} binding {} has unknown stage mask {:#x}",
                 binding.group, binding.binding, binding.stage_mask
-            )));
-        }
-        if binding.stage_mask & (1 << GpuCanvasShaderStage::Compute as u8) != 0 {
-            return Err(invalid(format!(
-                "binding group {} binding {} is compute-visible in a render pipeline",
-                binding.group, binding.binding
             )));
         }
         let expected_slots = [
@@ -678,10 +738,16 @@ fn imported_uniform_requirements(
                 binding.group, binding.binding
             ))
         })?;
+        let actual_stage_mask = uniform_stage_masks[&key];
+        if actual_stage_mask & !binding.stage_mask != 0 {
+            return Err(invalid(format!(
+                "binding group {} binding {} target-16 visibility {:#x} underdeclares authored WGSL usage {:#x}",
+                binding.group, binding.binding, binding.stage_mask, actual_stage_mask
+            )));
+        }
         let requirement = ImportedUniformRequirement {
             required_size,
-            vertex: binding.stage_mask & (1 << GpuCanvasShaderStage::Vertex as u8) != 0,
-            fragment: binding.stage_mask & (1 << GpuCanvasShaderStage::Fragment as u8) != 0,
+            stage_mask: binding.stage_mask,
         };
         if requirements.insert(key, requirement).is_some() {
             return Err(invalid(format!(
@@ -723,22 +789,16 @@ fn validate_imported_wgpu_limits(
         )));
     }
 
-    for (label, count) in [
-        (
-            "vertex",
-            uniform_requirements
-                .values()
-                .filter(|requirement| requirement.vertex)
-                .count(),
-        ),
-        (
-            "fragment",
-            uniform_requirements
-                .values()
-                .filter(|requirement| requirement.fragment)
-                .count(),
-        ),
+    for (label, stage) in [
+        ("vertex", GpuCanvasShaderStage::Vertex),
+        ("fragment", GpuCanvasShaderStage::Fragment),
+        ("compute", GpuCanvasShaderStage::Compute),
     ] {
+        let stage_bit = 1 << stage as u8;
+        let count = uniform_requirements
+            .values()
+            .filter(|requirement| requirement.stage_mask & stage_bit != 0)
+            .count();
         if count > limits.max_uniform_buffers_per_shader_stage as usize {
             return Err(invalid(format!(
                 "{label} stage requires {count} uniform buffers across bind groups but the device supports {} per stage",
@@ -1277,16 +1337,18 @@ impl WgpuFactory {
 }
 
 /// Parse and validate the exact authored WGSL selected from RSTB target 0.
-fn parse_authored_wgsl(source: &str) -> Result<naga::Module, GpuCanvasError> {
+/// Retain Naga's module analysis so target-16 visibility can be checked before
+/// any WebGPU object or error scope is needed.
+fn parse_authored_wgsl(source: &str) -> Result<ParsedAuthoredWgsl, GpuCanvasError> {
     let module = naga::front::wgsl::parse_str(source)
         .map_err(|error| GpuCanvasError::new(error.emit_to_string(source)))?;
-    naga::valid::Validator::new(
+    let info = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),
     )
     .validate(&module)
     .map_err(|error| GpuCanvasError::new(error.emit_to_string(source)))?;
-    Ok(module)
+    Ok(ParsedAuthoredWgsl { module, info })
 }
 
 /// Shared borrowed view of either public GPU-canvas plan shape.
@@ -1685,6 +1747,8 @@ fn fs_main() -> @location(0) vec4<f32> {
 
     fn imported_plan() -> GpuCanvasPlan {
         GpuCanvasPlan {
+            vertex_entry: None,
+            fragment_entry: None,
             width: 8,
             height: 8,
             clear_color: [0.0, 0.0, 0.0, 1.0],
@@ -1851,6 +1915,19 @@ fn fs_main(@location(0) varying_value: vec3<f32>) -> @location(0) vec4<f32> {
         )
         .expect("canonical target-16 WebGPU identity metadata is valid");
 
+        let vertex_mask = 1 << GpuCanvasShaderStage::Vertex as u8;
+        let error = prepare_imported_gpu_canvas(
+            &imported_uniform_shader(&uniform_wgsl, vertex_mask),
+            &plan,
+        )
+        .err()
+        .expect("target-16 visibility may not omit a stage that actually uses the binding");
+        assert!(error.to_string().contains("underdeclares"), "{error}");
+
+        let broader_mask = fragment_mask | (1 << GpuCanvasShaderStage::Compute as u8);
+        prepare_imported_gpu_canvas(&imported_uniform_shader(&uniform_wgsl, broader_mask), &plan)
+            .expect("C++ and WebGPU allow layout visibility broader than actual use");
+
         let mut unknown_stage = imported_uniform_shader(&uniform_wgsl, fragment_mask);
         unknown_stage.bindings[0].stage_mask |= 0x80;
         let error = prepare_imported_gpu_canvas(&unknown_stage, &plan)
@@ -1921,6 +1998,85 @@ fn fs_main() -> @location(0) vec4<f32> {
     }
 
     #[test]
+    fn arbitrary_entries_use_declaration_order_defaults_and_exact_pipeline_selection() {
+        let source = r#"
+@vertex
+fn physical_vertex_0(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(f32(i32(index) - 1), f32(i32(index & 1u) * 2 - 1), 0.0, 1.0);
+}
+
+@vertex
+fn physical_vertex_1(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(f32(i32(index) - 1), f32(i32(index & 1u) * 2 - 1), 0.0, 1.0);
+}
+
+@fragment
+fn physical_fragment_0() -> @location(0) vec4<f32> {
+    return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn physical_fragment_1() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+"#;
+        let shader = GpuCanvasShader {
+            source: source.into(),
+            entries: vec![
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Vertex,
+                    logical_entry_point: "default_vertex".into(),
+                    physical_entry_point: "physical_vertex_0".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Vertex,
+                    logical_entry_point: "chosen_vertex".into(),
+                    physical_entry_point: "physical_vertex_1".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Fragment,
+                    logical_entry_point: "default_fragment".into(),
+                    physical_entry_point: "physical_fragment_0".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Fragment,
+                    logical_entry_point: "chosen_fragment".into(),
+                    physical_entry_point: "physical_fragment_1".into(),
+                },
+            ],
+            bindings: Vec::new(),
+        };
+        let mut plan = imported_plan();
+
+        let prepared = prepare_imported_gpu_canvas(&shader, &plan)
+            .expect("bare modules select the first declaration of each stage");
+        assert_eq!(prepared.vertex_entry_point, "physical_vertex_0");
+        assert_eq!(prepared.fragment_entry_point, "physical_fragment_0");
+
+        plan.vertex_entry = Some(GpuCanvasShaderEntrySelection {
+            logical_entry_point: "chosen_vertex".into(),
+            physical_entry_point: "physical_vertex_1".into(),
+        });
+        plan.fragment_entry = Some(GpuCanvasShaderEntrySelection {
+            logical_entry_point: "chosen_fragment".into(),
+            physical_entry_point: "physical_fragment_1".into(),
+        });
+        let prepared = prepare_imported_gpu_canvas(&shader, &plan)
+            .expect("the pipeline carries its resolved logical/physical pair");
+        assert_eq!(prepared.vertex_entry_point, "physical_vertex_1");
+        assert_eq!(prepared.fragment_entry_point, "physical_fragment_1");
+
+        plan.fragment_entry.as_mut().unwrap().physical_entry_point = "physical_fragment_0".into();
+        let error = prepare_imported_gpu_canvas(&shader, &plan)
+            .err()
+            .expect("a stale logical/physical pair fails before device allocation");
+        assert!(
+            error.to_string().contains("no matching fragment"),
+            "{error}"
+        );
+    }
+
+    #[test]
     fn imported_path_has_no_glsl_cross_translation_surface() {
         let source = include_str!("gpu_canvas.rs");
         let legacy_helper = ["canonical_glsl", "_es300_to_wgsl"].concat();
@@ -1986,8 +2142,7 @@ fn fs_main() -> @location(0) vec4<f32> {
                     (buffer.group, buffer.binding),
                     ImportedUniformRequirement {
                         required_size: 16,
-                        vertex: false,
-                        fragment: true,
+                        stage_mask: 1 << GpuCanvasShaderStage::Fragment as u8,
                     },
                 )
             })
@@ -2009,8 +2164,11 @@ fn fs_main() -> @location(0) vec4<f32> {
             .into_iter()
             .enumerate()
             .map(|(index, (binding, mut requirement))| {
-                requirement.vertex = index < 7;
-                requirement.fragment = index >= 7;
+                requirement.stage_mask = if index < 7 {
+                    1 << GpuCanvasShaderStage::Vertex as u8
+                } else {
+                    1 << GpuCanvasShaderStage::Fragment as u8
+                };
                 (binding, requirement)
             })
             .collect::<BTreeMap<_, _>>();
@@ -2179,6 +2337,8 @@ fn fs_main() -> @location(0) vec4<f32> {
                 .collect::<Vec<_>>()
         };
         let mut plan = GpuCanvasPlan {
+            vertex_entry: None,
+            fragment_entry: None,
             width: 32,
             height: 24,
             clear_color: [0.0, 0.0, 1.0, 1.0],
@@ -2281,6 +2441,8 @@ fn fs_main() -> @location(0) vec4<f32> {
 
         let shader = imported_shader(IMPORTED_WGSL);
         let plan = GpuCanvasPlan {
+            vertex_entry: None,
+            fragment_entry: None,
             width: 255,
             height: 255,
             clear_color: [0.0, 0.0, 0.0, 1.0],

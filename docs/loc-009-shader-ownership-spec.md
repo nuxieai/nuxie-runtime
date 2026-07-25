@@ -219,5 +219,11 @@ git diff --check
 ```
 
 If full renderer tests require unavailable GPU hardware, run and report focused
-exact internal tests, but they do not replace or waive any required floor. Leave
-the corrected files dirty; do not commit or push.
+exact internal tests, but they do not replace or waive any required floor. The
+accepted correction is merged at
+`7f1450dc22ca7370eac9dc9f422351c2dfcc07ee`. Independent orchestration
+verified that repair, and clean Editor checkpoint
+`d5bbbb31178b8b29c40747fdd21a829348ede624` consumed it through runtime
+`e72323c808b91d706ba3b745396beaca7accd69a`; unchanged `P14-C01` passed 4/4.
+LOC-009 is closed. Any follow-up requires a new reviewed PR and the same
+unweakened floors.

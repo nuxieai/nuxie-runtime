@@ -32,15 +32,15 @@ implementation language in the port map. Update the stale lower-precedence
 file in the same evidence or planning PR.
 
 The immutable Editor source checkpoint is
-`27ef7d471c3034aba4a4b839d2c8150d3bcb40c3` on
+`d5bbbb31178b8b29c40747fdd21a829348ede624` on
 `origin/levi/editor-next-cutover-assembly`:
 
 - proposal SHA-256:
-  `148d11f206edc41caad1f48cae0810b268456b2e220ba6253ac6d04ef450b9db`;
+  `804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24`;
 - runtime-defects SHA-256:
-  `a610201cc34c95bd5ff0838d95228af3983f38327ebbef87b253c3e49a357b9c`;
+  `5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de`;
 - parity-ledger SHA-256:
-  `d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c97`.
+  `68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab`.
 
 The pinned C++ runtime is
 `d788e8ec6e8b598526607d6a1e8818e8b637b60c`. The WebGPU-only runtime
@@ -74,19 +74,20 @@ Every goal turn, without exception:
 
 The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 
-- Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`, `LOC-004`.
+- Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`, `LOC-004`,
+  `LOC-009`.
 - Open formal blockers: `RT-ED-003`, `RT-ED-004`, `RT-ED-005`,
   `RT-ED-007`.
 - Open Scene/API candidates: `LOC-001`, `LOC-005`, `LOC-008`.
 - Open runtime/FL candidates: `LOC-002`, `LOC-007`, `LOC-011`, `LOC-013`.
-- Open browser/renderer candidates: `LOC-006`, `LOC-009`, `LOC-012`,
-  `LOC-014`, `LOC-019`.
+- Open browser/renderer candidates: `LOC-006`, `LOC-012`, `LOC-014`,
+  `LOC-019`.
 - Open artifact/Editor candidates: `LOC-015`, `LOC-016`, `LOC-017`,
   `LOC-018`.
 
 There are eight children with formal runtime dependencies, 20
 candidate-linked children, and 27 unique affected children. The goal burns
-all 20 open rows to a terminal, evidence-backed state and gets the complete
+all 19 open rows to a terminal, evidence-backed state and gets the complete
 27-child product matrix green or explicitly user-excepted.
 
 ## Binding decisions
@@ -163,10 +164,12 @@ contains no stale snapshot, backend, owner, or dependency claim.
 
 ### Q1 — Consume the WebGPU-only runtime and requalify browser blockers
 
-Runtime handoff: `95027109c89f651835c76646ebf4d8734f032f07`.
-Editor removes its two `BrowserBackendPreference::WebGpu` arguments, uses
-`BrowserFactory::new(canvas, width, height)`, rebuilds, and reruns the unchanged
-WebGPU normal/proof/product gates.
+Current investigation base:
+`e72323c808b91d706ba3b745396beaca7accd69a`. Clean Editor checkpoint
+`d5bbbb31178b8b29c40747fdd21a829348ede624` consumes that exact runtime.
+`LOC-009` is independently verified and closed after its unchanged `P14-C01`
+product command passed 4/4; the other browser rows retain their independent
+states and evidence requirements.
 
 Requalify:
 
@@ -176,9 +179,11 @@ Requalify:
   WebGPU, then retire the WebGL2-specific defect or map a surviving WebGPU
   failure;
 - `LOC-006` / `F-ED-08`: same rule for stale conditional pixels;
-- `LOC-019` and `LOC-009` / `F-ED-11`: required-WebGPU setup, unsupported
-  state, GPU-canvas records, resources, and execution are qualified
-  independently.
+- `LOC-019` / `F-ED-11A`: required-WebGPU setup and typed unsupported-state
+  behavior remain independent of shader-record execution;
+- `LOC-009` / `F-ED-11`: the exact target-0/16 and lookup-occurrence repair
+  merged at `7f1450dc`, was consumed through runtime `e72323c8`, and is closed
+  after independent verification and unchanged `P14-C01` 4/4.
 
 Runtime-side WebGPU work must keep `make browser-webgpu-only-check` green and
 must not reintroduce any prohibited WebGL2 surface.

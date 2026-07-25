@@ -28,29 +28,38 @@ This map was prepared from these Editor Next handoff artifacts:
 
 | artifact | SHA-256 |
 |---|---|
-| `nuxie-editor-next-cutover-proposal.md` | `148d11f206edc41caad1f48cae0810b268456b2e220ba6253ac6d04ef450b9db` |
-| `nuxie-editor-next-runtime-defects.md` | `a610201cc34c95bd5ff0838d95228af3983f38327ebbef87b253c3e49a357b9c` |
-| `nuxie-editor-next-parity-ledger.json` | `d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c97` |
+| `nuxie-editor-next-cutover-proposal.md` | `804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24` |
+| `nuxie-editor-next-runtime-defects.md` | `5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de` |
+| `nuxie-editor-next-parity-ledger.json` | `68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab` |
 
 The source copies live under:
 
 `/Users/levi/.codex/worktrees/7189/nuxie-dev/worktrees/editor-next-cutover-assembly/plans/`
 
 The immutable source checkpoint for those hashes is
-`27ef7d471c3034aba4a4b839d2c8150d3bcb40c3`.
+`d5bbbb31178b8b29c40747fdd21a829348ede624`.
 
-The Editor artifacts last consumed runtime commit
-`13aedd6d92de0991eed8dc3fda085db2dff18d48`. That is not the same thing as
-the runtime investigation HEAD or a future merged/consumed repair. Every atlas
-row must retain all of those SHAs separately.
+The Editor artifacts consume runtime commit
+`e72323c808b91d706ba3b745396beaca7accd69a`, which is also the current runtime
+investigation base. LOC-009's distinct corrective merge remains
+`7f1450dc22ca7370eac9dc9f422351c2dfcc07ee`; clean Editor checkpoint
+`d5bbbb31178b8b29c40747fdd21a829348ede624` consumed that repair through
+`e72323c8`. Every atlas row retains localization, investigation, merged, and
+consumed SHAs separately.
+
+Rebasing this evidence onto `e72323c8` also changed the shared browser-smoke
+source bytes through the already-landed RT-ED-003 presentation work. The
+fixture registry and derived `LOC-009`/`LOC-019` reproduction digests are
+mechanically aligned to those exact bytes; this does not promote or otherwise
+change the `LOC-019` row.
 
 There are 25 unique handoff IDs:
 
 - four active `RT-ED-*` product dependencies;
 - two transferred, currently unlinked `RT-ED-*` observations;
-- sixteen unresolved `LOC-*` candidates;
+- fifteen unresolved `LOC-*` candidates;
 - one unlinked `LOC-*` observation;
-- one resolved editor-owned `LOC-*`;
+- two resolved `LOC-*` rows, one editor-owned and one renderer-owned;
 - one retracted `RT-ED-*`.
 
 Eight parity children currently name runtime dependencies. Five of those are
@@ -318,7 +327,7 @@ fixture in `F-ED-00`.
 | `LOC-006` | WebGL2 clip/composite candidate | logical draw/hit state is correct; qualify independently now |
 | `LOC-007` | high-confidence missing C++ dirt callback | ParametricPath width/height/origin setters through Path, Shape, and retained paint-path invalidation |
 | `LOC-008` | candidate public API-surface gap | establish the C++ ownership contract, then expose the exact runtime path only if runtime owns it |
-| `LOC-009` | proven structural WebGPU shader-consumer mistranslation | consume authored target-0 whole-module WGSL and mandatory target-16 `BindingMap` directly, preserving C++ entry selection and shared-module semantics |
+| `LOC-009` | proven structural WebGPU shader-consumer mistranslation | retain one neutral file asset across aliases, then consume target-0 WGSL plus target-16 `BindingMap` in a fresh module per successful lookup occurrence |
 | `LOC-011` | real product symptom, owner unproven | inspect authored text, live VM value, post-bind target, shaped runs, then pixels |
 | `LOC-012` | renderer-backend differential | compare WebGPU, WebGL2, and the applicable C++ reference only after text/feather rows are separated |
 | `LOC-013` | text/font-pipeline candidate, exact stage unproven | same font bytes, axes, glyph IDs, advances, and outlines through C++ and Rust |
@@ -811,9 +820,12 @@ retired WebGL2 variants at the old producer checkpoint; its minimized target-1
 GLSL path then failed in Rust's invented GLSL-to-WGSL translator. Pinned C++
 WebGPU instead selects target 0, requires target 16, parses one authored WGSL
 module with arbitrary logical/physical entry records in declaration order,
-resolves omitted entries to the first stage declaration and named entries
-from logical to physical names, and creates one shared module. The binding-map
-sidecar remains authoritative for backend identity and visibility.
+and resolves omitted entries to the first stage declaration and named entries
+from logical to physical names. One backend-neutral file-owned asset is shared
+by its bare and folder-qualified aliases. Every successful lookup creates a
+fresh ScriptedShader/backend module occurrence; entries within that occurrence
+share it, while a later same-name lookup does not. The binding-map sidecar
+remains authoritative for backend identity and visibility.
 
 The repaired Rust lifecycle now matches that contract end to end:
 
@@ -824,20 +836,35 @@ The repaired Rust lifecycle now matches that contract end to end:
   `{ module = Shader, entryPoint = string? }`, retains the exact selected
   logical/physical pair, and uses declaration order for omitted or empty entry
   names;
-- the renderer parses authored WGSL once, retains Naga `ModuleInfo`, rejects a
-  target-16 visibility mask that underdeclares actual entry-point usage, allows
-  the broader visibility C++/WebGPU permits, creates one shared module, and
-  submits the selected physical vertex and fragment entries directly;
+- the file owner retains neutral decoded target descriptors across aliases,
+  while each successful lookup parses and materializes one fresh authored
+  WGSL occurrence, retains Naga `ModuleInfo`, rejects a target-16 visibility
+  mask that underdeclares actual entry-point usage, allows the broader
+  visibility C++/WebGPU permits, and shares its module only among that
+  occurrence's entries;
 - the target-1 GLSL cross-translator, split-stage representation, discarded
   sidecars, `wgpu` GLSL feature, and `pp-rs`/`unicode-xid` closure are deleted.
 
-The runtime row is executor-green at
-`22e4900243ee92a436afc1609f456525e8312352`. The producer is pinned at Editor
+The corrective runtime investigation head is
+`7d67c1af5e0484447feeb5b3094bcd430aa6db0c`. PR #52 first merged the
+target-0/16 consumer at `88fdc5a6`, but left eager, name-keyed ownership.
+Corrective PR #54 merged the complete lookup lifecycle at
+`7f1450dc22ca7370eac9dc9f422351c2dfcc07ee`, and remote `main` was verified
+equal. Hosted parity, Phase R pixels, and all other non-Apple canonical checks
+passed. The optional 1.0x perf job failed at 1.554x aggregate on its
+independently owned FL signal; LOC-009 changes no frame-loop owner, and no gate
+was loosened. Four hosted Apple jobs were cancelled as runner-queued
+infrastructure, while their
+same-head local Apple, C ABI/header, XCFramework, and release floors passed.
+The producer is pinned at Editor
 checkpoint `f9d798dd3b1f9b2dfdbeb74dcdf4485aae4519f6`, whose exact inner RSTB is
 SHA-256
 `546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d`.
-Independent re-review is clean with no P0/P1/P2 findings. Runtime merge and
-the unchanged Editor `P14-C01` rerun remain before handoff.
+Independent re-review is clean with no P0/P1/P2 findings. Independent
+orchestration accepted the exact repair and source provenance. Clean Editor
+checkpoint `d5bbbb31178b8b29c40747fdd21a829348ede624` consumes runtime
+`e72323c808b91d706ba3b745396beaca7accd69a`, and unchanged `P14-C01` passes
+4/4. LOC-009 is closed; its `P14-C01` mapping remains as product traceability.
 
 The two rows share a real-Chrome smoke harness but not a defect mechanism:
 `LOC-019` owns nullable WebIDL error-scope decoding, while `LOC-009` owns RSTB
@@ -1036,13 +1063,16 @@ An implementer may not use their own measurement to promote a row to closed.
 
 ## Gates
 
-The last accepted clean FL baseline is commit `69e89b3c`: runtime 414/414,
-`nuxie` 140/140, C++ probe 721/721, both command corpora 317/317 entries and
+The current runtime investigation base is
+`e72323c808b91d706ba3b745396beaca7accd69a`. LOC-009's accepted repair-floor
+evidence remains bound to `7f1450dc22ca7370eac9dc9f422351c2dfcc07ee`:
+runtime 414/414,
+`nuxie` 144/144, C++ probe 721/721, both command corpora 317/317 entries and
 647/647 segments with zero failures, renderer 1,468/1,468, and the structural,
 Apple, C API, lint, format, and size gates green. `F-ED-00` must rerun and
 record the exact clean investigation-base commit/counts before production
 work. The atlas checker stores that commit plus exact monotonic minima; prose
-does not permit 414 to become 411 or 140 to become 139.
+does not permit 414 to become 411 or 144 to become 143.
 
 The named battery is:
 

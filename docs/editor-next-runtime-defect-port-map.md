@@ -28,13 +28,16 @@ This map was prepared from these Editor Next handoff artifacts:
 
 | artifact | SHA-256 |
 |---|---|
-| `nuxie-editor-next-cutover-proposal.md` | `10fd9abc06b9b75577207711adf463301c6bd4b6e2468ad106846446f9a1150b` |
-| `nuxie-editor-next-runtime-defects.md` | `3161a240cd940dec88a387a0b0875df2383705bb9d872f6baaff62b967de8dfa` |
-| `nuxie-editor-next-parity-ledger.json` | `f4579d8272bb4f44633afc88f98c0d714f163147ad6ea01765c6ddbcfb8cb180` |
+| `nuxie-editor-next-cutover-proposal.md` | `148d11f206edc41caad1f48cae0810b268456b2e220ba6253ac6d04ef450b9db` |
+| `nuxie-editor-next-runtime-defects.md` | `a610201cc34c95bd5ff0838d95228af3983f38327ebbef87b253c3e49a357b9c` |
+| `nuxie-editor-next-parity-ledger.json` | `d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c97` |
 
 The source copies live under:
 
 `/Users/levi/.codex/worktrees/7189/nuxie-dev/worktrees/editor-next-cutover-assembly/plans/`
+
+The immutable source checkpoint for those hashes is
+`27ef7d471c3034aba4a4b839d2c8150d3bcb40c3`.
 
 The Editor artifacts last consumed runtime commit
 `13aedd6d92de0991eed8dc3fda085db2dff18d48`. That is not the same thing as
@@ -60,6 +63,14 @@ The existing runtime frame-loop port remains separate. It begins at
 `StateMachineInstance::advanceAndApply`, follows runtime ownership and update
 through live Artboard draw, and stops at the existing
 `Renderer` / `RenderFactory` interface.
+
+The supported browser boundary is now WebGPU-only. PR #47 removed WebGL2,
+fallback selection, and the FemtoVG dependency at merged runtime
+`95027109c89f651835c76646ebf4d8734f032f07`. Historical WebGL2 rows remain
+evidence, but no ticket in this map may implement or restore WebGL2. The
+current operating queue and retirement/requalification rules live in
+`docs/editor-next-runtime-defect-goal.md` and supersede historical WebGL2
+implementation language below.
 
 This Editor Next program spans a wider product boundary for **qualification**
 only:

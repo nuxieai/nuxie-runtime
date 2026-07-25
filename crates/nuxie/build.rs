@@ -1055,6 +1055,21 @@ fn render_scene_schema() -> String {
     let mesh_vertex = concrete_definition("MeshVertex");
     let layout_component = concrete_definition("LayoutComponent");
     let layout_component_style = concrete_definition("LayoutComponentStyle");
+    let layout_padding_left =
+        property_by_key_in_hierarchy(layout_component_style.type_key.int, 512)
+            .expect("paddingLeft key")
+            .1;
+    let layout_padding_right =
+        property_by_key_in_hierarchy(layout_component_style.type_key.int, 513)
+            .expect("paddingRight key")
+            .1;
+    let layout_padding_top = property_by_key_in_hierarchy(layout_component_style.type_key.int, 514)
+        .expect("paddingTop key")
+        .1;
+    let layout_padding_bottom =
+        property_by_key_in_hierarchy(layout_component_style.type_key.int, 515)
+            .expect("paddingBottom key")
+            .1;
     let linear_animation = concrete_definition("LinearAnimation");
     let cubic_ease_interpolator = concrete_definition("CubicEaseInterpolator");
     let keyed_object = concrete_definition("KeyedObject");
@@ -3337,6 +3352,9 @@ fn render_scene_schema() -> String {
 
     output.push_str(
         "fn prop_nonvisual_is_available_on(_: NodeKind) -> bool { false }\n\n\
+         fn prop_layout_style_apply(record: &mut RecordSpec, _: f32) -> std::result::Result<(), EditReason> {\n\
+             Err(EditReason::RecordPropertyOwnerMismatch { property: \"LayoutComponentStyle\", actual: record.kind() })\n\
+         }\n\n\
          fn prop_animation_fps_apply(record: &mut RecordSpec, value: u32) -> std::result::Result<(), EditReason> {\n\
              match record {\n\
                  RecordSpec::Animation(AnimationRecordSpec::LinearAnimation(spec)) => { spec.fps = value; Ok(()) },\n\
@@ -3389,6 +3407,50 @@ fn render_scene_schema() -> String {
         .expect("write generated source");
     }
     for (name, ty, key, schema_name, value_kind, declared_owner, apply, setter, reader) in [
+        (
+            "LAYOUT_PADDING_LEFT",
+            "f32",
+            layout_padding_left.key.int,
+            "paddingLeft",
+            "Double",
+            "LayoutComponentStyle",
+            "prop_layout_style_apply",
+            "set_runtime_double",
+            "read_runtime_double",
+        ),
+        (
+            "LAYOUT_PADDING_RIGHT",
+            "f32",
+            layout_padding_right.key.int,
+            "paddingRight",
+            "Double",
+            "LayoutComponentStyle",
+            "prop_layout_style_apply",
+            "set_runtime_double",
+            "read_runtime_double",
+        ),
+        (
+            "LAYOUT_PADDING_TOP",
+            "f32",
+            layout_padding_top.key.int,
+            "paddingTop",
+            "Double",
+            "LayoutComponentStyle",
+            "prop_layout_style_apply",
+            "set_runtime_double",
+            "read_runtime_double",
+        ),
+        (
+            "LAYOUT_PADDING_BOTTOM",
+            "f32",
+            layout_padding_bottom.key.int,
+            "paddingBottom",
+            "Double",
+            "LayoutComponentStyle",
+            "prop_layout_style_apply",
+            "set_runtime_double",
+            "read_runtime_double",
+        ),
         (
             "ANIMATION_FPS",
             "u32",

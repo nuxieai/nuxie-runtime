@@ -19,11 +19,11 @@ use nuxie::{
     SceneTextAlign, SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
     ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
     StructureEpoch, TextSpec, TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D,
-    ViewModelBooleanSpec, ViewModelChildSpec, ViewModelColorSpec, ViewModelEnumSpec, ViewModelId,
-    ViewModelImageSpec, ViewModelInstanceId, ViewModelInstanceSpec, ViewModelListIndexSpec,
-    ViewModelListSource, ViewModelListSpec, ViewModelNumberId, ViewModelNumberSpec, ViewModelScope,
-    ViewModelSpec, ViewModelStringId, ViewModelStringSpec, ViewModelTriggerSpec,
-    VisibilityCondition, props,
+    ViewModelBooleanSpec, ViewModelChildSpec, ViewModelColorSource, ViewModelColorSpec,
+    ViewModelEnumSpec, ViewModelId, ViewModelImageSpec, ViewModelInstanceId, ViewModelInstanceSpec,
+    ViewModelListIndexSpec, ViewModelListSource, ViewModelListSpec, ViewModelNumberId,
+    ViewModelNumberSource, ViewModelNumberSpec, ViewModelScope, ViewModelSpec, ViewModelStringId,
+    ViewModelStringSpec, ViewModelTriggerSpec, VisibilityCondition, props,
 };
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -11172,6 +11172,728 @@ fn generated_authoring_vocabulary_tracks_schema_owners_value_kinds_and_surface_a
         assert_eq!(property.value_kind(), PropValueKind::Double);
         assert_eq!(property.declared_owner(), "TransformComponent");
     }
+
+    for property in [
+        props::LAYOUT_PADDING_LEFT,
+        props::LAYOUT_PADDING_RIGHT,
+        props::LAYOUT_PADDING_TOP,
+        props::LAYOUT_PADDING_BOTTOM,
+    ] {
+        assert_eq!(property.value_kind(), PropValueKind::Double);
+        assert_eq!(property.declared_owner(), "LayoutComponentStyle");
+        assert!(!property.is_available_on(NodeKind::ArtboardComponentList));
+    }
+}
+
+#[test]
+fn generic_number_and_color_binds_export_import_execute_and_collide_by_target_property()
+-> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, rectangle, first_color, second_color, defaults, width, height, tint), _) =
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Bound properties".into(),
+                width: 200.0,
+                height: 120.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Card".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let rectangle = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Rectangle(RectangleSpec::new("Bounds", 10.0, 11.0)),
+            )?;
+            let first_fill = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Fill(FillSpec {
+                    name: "First fill".into(),
+                }),
+            )?;
+            let first_color = tx.create(
+                Parent::Object(first_fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "First color".into(),
+                    color: 0,
+                }),
+            )?;
+            let second_fill = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Fill(FillSpec {
+                    name: "Second fill".into(),
+                }),
+            )?;
+            let second_color = tx.create(
+                Parent::Object(second_fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Second color".into(),
+                    color: 0,
+                }),
+            )?;
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Card values".into(),
+            })?;
+            let width = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "width".into(),
+                },
+            )?;
+            let height = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "height".into(),
+                },
+            )?;
+            let tint = view_models.create_color(
+                model,
+                ViewModelColorSpec {
+                    name: "tint".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                model,
+                ViewModelInstanceSpec {
+                    name: Some("Defaults".into()),
+                },
+            )?;
+            view_models.set_number(defaults, width, 80.0)?;
+            view_models.set_number(defaults, height, 30.0)?;
+            view_models.set_color(defaults, tint, 0xff12_3456)?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            view_models.bind_number(
+                rectangle,
+                props::PATH_WIDTH,
+                ViewModelNumberSource::direct(width),
+            )?;
+            view_models.bind_number(
+                rectangle,
+                props::PATH_HEIGHT,
+                ViewModelNumberSource::direct(height),
+            )?;
+            view_models.bind_color(
+                first_color,
+                props::COLOR_VALUE,
+                ViewModelColorSource::direct(tint),
+            )?;
+            view_models.bind_color(
+                second_color,
+                props::COLOR_VALUE,
+                ViewModelColorSource::direct(tint),
+            )?;
+            Ok((
+                artboard,
+                rectangle,
+                first_color,
+                second_color,
+                defaults,
+                width,
+                height,
+                tint,
+            ))
+        })?;
+
+    let records = scene.export_records().into_records();
+    let rectangle_index = records
+        .iter()
+        .position(|record| {
+            record.kind == ExportedObjectKind::Rectangle
+                && record
+                    .properties
+                    .contains(&ExportedProperty::ComponentName("Bounds".into()))
+        })
+        .expect("bound rectangle");
+    for (offset, key, path) in [(1, 20, vec![0, 0]), (2, 21, vec![0, 1])] {
+        assert_eq!(
+            records[rectangle_index + offset].kind,
+            ExportedObjectKind::DataBindContext
+        );
+        assert!(
+            records[rectangle_index + offset]
+                .properties
+                .contains(&ExportedProperty::DataBindPropertyKey(key))
+        );
+        assert!(
+            records[rectangle_index + offset]
+                .properties
+                .contains(&ExportedProperty::DataBindSourcePath(path))
+        );
+    }
+    let color_bind_count = records
+        .windows(2)
+        .filter(|records| {
+            records[0].kind == ExportedObjectKind::SolidColor
+                && records[1].kind == ExportedObjectKind::DataBindContext
+                && records[1]
+                    .properties
+                    .contains(&ExportedProperty::DataBindPropertyKey(37))
+                && records[1]
+                    .properties
+                    .contains(&ExportedProperty::DataBindSourcePath(vec![0, 2]))
+        })
+        .count();
+    assert_eq!(color_bind_count, 2);
+
+    let cold = scene.instantiate(artboard)?;
+    let width_cursor = scene.cursor(cold, rectangle, props::PATH_WIDTH)?;
+    let height_cursor = scene.cursor(cold, rectangle, props::PATH_HEIGHT)?;
+    let first_color_cursor = scene.cursor(cold, first_color, props::COLOR_VALUE)?;
+    let second_color_cursor = scene.cursor(cold, second_color, props::COLOR_VALUE)?;
+    let mut events = Vec::new();
+    scene.frame().advance(cold, 0.0, &mut events);
+    assert_eq!(scene.frame().get(width_cursor)?, 80.0);
+    assert_eq!(scene.frame().get(height_cursor)?, 30.0);
+    assert_eq!(scene.frame().get(first_color_cursor)?, 0xff12_3456);
+    assert_eq!(scene.frame().get(second_color_cursor)?, 0xff12_3456);
+
+    let live_width = scene.vm_cursor(cold, defaults, width)?;
+    let live_height = scene.vm_cursor(cold, defaults, height)?;
+    assert!(scene.frame().set_vm(live_width, 96.0)?);
+    assert!(scene.frame().set_vm(live_height, 44.0)?);
+    assert!(scene.set_vm_color(cold, defaults, tint, 0xffab_cdef)?);
+    assert!(scene.frame().advance(cold, 0.0, &mut events));
+    assert_eq!(scene.frame().get(width_cursor)?, 96.0);
+    assert_eq!(scene.frame().get(height_cursor)?, 44.0);
+    assert_eq!(scene.frame().get(first_color_cursor)?, 0xffab_cdef);
+    assert_eq!(scene.frame().get(second_color_cursor)?, 0xffab_cdef);
+
+    let before_collision = scene.export_records();
+    let epoch = scene.epoch();
+    let collision = scene.edit(|tx| {
+        let mut view_models = tx.view_models();
+        view_models.bind_number(
+            rectangle,
+            props::RECTANGLE_CORNER_RADIUS_TOP_LEFT,
+            ViewModelNumberSource::direct(height),
+        )?;
+        view_models.bind_number(
+            rectangle,
+            props::PATH_WIDTH,
+            ViewModelNumberSource::direct(width),
+        )?;
+        Ok(())
+    });
+    assert!(collision.is_err());
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), before_collision);
+
+    let wrong_owner = scene.edit(|tx| {
+        tx.view_models().bind_color(
+            rectangle,
+            props::COLOR_VALUE,
+            ViewModelColorSource::direct(tint),
+        )?;
+        Ok(())
+    });
+    assert!(wrong_owner.is_err());
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), before_collision);
+
+    let second_cold = scene.instantiate(artboard)?;
+    let second_width = scene.cursor(second_cold, rectangle, props::PATH_WIDTH)?;
+    let second_color_value = scene.cursor(second_cold, first_color, props::COLOR_VALUE)?;
+    scene.frame().advance(second_cold, 0.0, &mut events);
+    assert_eq!(scene.frame().get(second_width)?, 80.0);
+    assert_eq!(scene.frame().get(second_color_value)?, 0xff12_3456);
+    Ok(())
+}
+
+#[test]
+fn component_list_padding_binds_use_the_stable_style_target_and_survive_rollback() -> Result<()> {
+    let mut scene = Scene::new();
+    let (
+        (
+            root_artboard,
+            item_shape,
+            component_list,
+            style,
+            root_defaults,
+            padding_left,
+            padding_right,
+            padding_top,
+            padding_bottom,
+        ),
+        _,
+    ) = scene.edit(|tx| {
+        let root_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Root".into(),
+            width: 120.0,
+            height: 80.0,
+        })?;
+        let item_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Item".into(),
+            width: 20.0,
+            height: 20.0,
+        })?;
+        let item_shape = tx.create(
+            Parent::Artboard(item_artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Item shape".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(item_shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Item bounds", 20.0, 20.0)),
+        )?;
+        let item_fill = tx.create(
+            Parent::Object(item_shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Bound padding item fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(item_fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Bound padding item color".into(),
+                color: 0xff12_3456,
+            }),
+        )?;
+        let (
+            item_model,
+            item_defaults,
+            root_items,
+            root_defaults,
+            padding_left,
+            padding_right,
+            padding_top,
+            padding_bottom,
+        ) = {
+            let mut view_models = tx.view_models();
+            let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Root model".into(),
+            })?;
+            let item_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Item model".into(),
+            })?;
+            let root_items = view_models.create_list(
+                root_model,
+                ViewModelListSpec {
+                    name: "items".into(),
+                },
+            )?;
+            let padding_left = view_models.create_number(
+                root_model,
+                ViewModelNumberSpec {
+                    name: "paddingLeft".into(),
+                },
+            )?;
+            let padding_right = view_models.create_number(
+                root_model,
+                ViewModelNumberSpec {
+                    name: "paddingRight".into(),
+                },
+            )?;
+            let padding_top = view_models.create_number(
+                root_model,
+                ViewModelNumberSpec {
+                    name: "paddingTop".into(),
+                },
+            )?;
+            let padding_bottom = view_models.create_number(
+                root_model,
+                ViewModelNumberSpec {
+                    name: "paddingBottom".into(),
+                },
+            )?;
+            let root_defaults = view_models.create_instance(
+                root_model,
+                ViewModelInstanceSpec {
+                    name: Some("Root defaults".into()),
+                },
+            )?;
+            let item_defaults = view_models.create_instance(
+                item_model,
+                ViewModelInstanceSpec {
+                    name: Some("Item defaults".into()),
+                },
+            )?;
+            view_models.set_list_items(root_defaults, root_items, &[item_defaults])?;
+            view_models.set_number(root_defaults, padding_left, 4.0)?;
+            view_models.set_number(root_defaults, padding_right, 6.0)?;
+            view_models.set_number(root_defaults, padding_top, 8.0)?;
+            view_models.set_number(root_defaults, padding_bottom, 10.0)?;
+            view_models.set_artboard_default(root_artboard, root_defaults)?;
+            view_models.set_artboard_default(item_artboard, item_defaults)?;
+            (
+                item_model,
+                item_defaults,
+                root_items,
+                root_defaults,
+                padding_left,
+                padding_right,
+                padding_top,
+                padding_bottom,
+            )
+        };
+        let _ = item_defaults;
+        let component_list = tx.create_component_list(
+            root_artboard,
+            ArtboardComponentListSpec {
+                name: "Items".into(),
+                x: 5.0,
+                y: 7.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                flow: Some(ArtboardComponentListFlow {
+                    axis: ArtboardComponentListAxis::Vertical,
+                    reverse: false,
+                    gap: 0.0,
+                }),
+                source: ViewModelListSource::direct(root_items),
+                map_rules: vec![ArtboardListMapRuleSpec {
+                    view_model: item_model,
+                    artboard: item_artboard,
+                }],
+            },
+        )?;
+        let style = tx
+            .component_list_style(component_list)
+            .expect("flowed component lists own a semantic style target");
+        Ok((
+            root_artboard,
+            item_shape,
+            component_list,
+            style,
+            root_defaults,
+            padding_left,
+            padding_right,
+            padding_top,
+            padding_bottom,
+        ))
+    })?;
+
+    scene.edit(|tx| {
+        let mut view_models = tx.view_models();
+        for (property, source) in [
+            (props::LAYOUT_PADDING_LEFT, padding_left),
+            (props::LAYOUT_PADDING_RIGHT, padding_right),
+            (props::LAYOUT_PADDING_TOP, padding_top),
+            (props::LAYOUT_PADDING_BOTTOM, padding_bottom),
+        ] {
+            view_models.bind_number(style, property, ViewModelNumberSource::direct(source))?;
+        }
+        Ok(())
+    })?;
+
+    let records = scene.export_records().into_records();
+    let list_index = records
+        .iter()
+        .position(|record| record.kind == ExportedObjectKind::ArtboardComponentList)
+        .expect("component list target");
+    assert_eq!(
+        records[list_index + 1].kind,
+        ExportedObjectKind::DataBindContext
+    );
+    assert!(
+        !records[list_index + 1].properties.iter().any(|property| {
+            matches!(property, ExportedProperty::DataBindPropertyKey(512..=515))
+        })
+    );
+    let style_index = records
+        .iter()
+        .position(|record| record.kind == ExportedObjectKind::LayoutComponentStyle)
+        .expect("exact layout style target");
+    for (offset, key, source_index) in [(1, 512, 0), (2, 513, 1), (3, 514, 2), (4, 515, 3)] {
+        let bind = &records[style_index + offset];
+        assert_eq!(bind.kind, ExportedObjectKind::DataBindContext);
+        assert!(
+            bind.properties
+                .contains(&ExportedProperty::DataBindPropertyKey(key))
+        );
+        assert!(
+            bind.properties
+                .contains(&ExportedProperty::DataBindSourcePath(
+                    vec![0, source_index,]
+                ))
+        );
+    }
+
+    let before_rejected = scene.export_records();
+    let epoch = scene.epoch();
+    let rejected = scene.edit(|tx| {
+        let mut view_models = tx.view_models();
+        view_models.bind_number(
+            component_list.object_id(),
+            props::LAYOUT_PADDING_LEFT,
+            ViewModelNumberSource::direct(padding_left),
+        )?;
+        Ok(())
+    });
+    assert!(rejected.is_err());
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), before_rejected);
+
+    let wrong_owner = scene.edit(|tx| {
+        tx.view_models().bind_number(
+            style,
+            props::PATH_WIDTH,
+            ViewModelNumberSource::direct(padding_left),
+        )?;
+        Ok(())
+    });
+    assert!(wrong_owner.is_err());
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), before_rejected);
+
+    let collision = scene.edit(|tx| {
+        tx.view_models().bind_number(
+            style,
+            props::LAYOUT_PADDING_LEFT,
+            ViewModelNumberSource::direct(padding_left),
+        )?;
+        Ok(())
+    });
+    assert!(collision.is_err());
+    assert_eq!(scene.export_records(), before_rejected);
+
+    let cold = scene.instantiate(root_artboard)?;
+    let mut events = Vec::new();
+    scene.frame().advance(cold, 0.0, &mut events);
+    let initial_hits = scene
+        .frame()
+        .hit_test_paths_with_bounds(cold, Vec2D::new(10.0, 16.0));
+    assert_eq!(initial_hits.len(), 1);
+    assert_eq!(
+        initial_hits[0].path().objects(),
+        [component_list.object_id(), item_shape]
+    );
+
+    let live_left = scene.vm_cursor(cold, root_defaults, padding_left)?;
+    let live_right = scene.vm_cursor(cold, root_defaults, padding_right)?;
+    let live_top = scene.vm_cursor(cold, root_defaults, padding_top)?;
+    let live_bottom = scene.vm_cursor(cold, root_defaults, padding_bottom)?;
+    assert!(scene.frame().set_vm(live_left, 14.0)?);
+    assert!(scene.frame().set_vm(live_top, 18.0)?);
+    assert!(scene.frame().advance(cold, 0.0, &mut events));
+    assert!(
+        scene
+            .frame()
+            .hit_test_paths_with_bounds(cold, Vec2D::new(10.0, 16.0))
+            .is_empty()
+    );
+    let moved_hits = scene
+        .frame()
+        .hit_test_paths_with_bounds(cold, Vec2D::new(20.0, 26.0));
+    assert_eq!(moved_hits.len(), 1);
+    assert!(scene.frame().set_vm(live_right, 16.0)?);
+    assert!(
+        scene.frame().advance(cold, 0.0, &mut events),
+        "the right-padding bind executes live"
+    );
+    assert!(scene.frame().set_vm(live_bottom, 20.0)?);
+    assert!(
+        scene.frame().advance(cold, 0.0, &mut events),
+        "the bottom-padding bind executes live"
+    );
+
+    let second_cold = scene.instantiate(root_artboard)?;
+    scene.frame().advance(second_cold, 0.0, &mut events);
+    assert_eq!(
+        scene
+            .frame()
+            .hit_test_paths_with_bounds(second_cold, Vec2D::new(10.0, 16.0))
+            .len(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn component_list_occurrences_execute_one_authored_numeric_bind_in_item_local_contexts()
+-> Result<()> {
+    let mut scene = Scene::new();
+    let ((root_artboard, component_list, item_shape), _) = scene.edit(|tx| {
+        let root_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Root".into(),
+            width: 80.0,
+            height: 20.0,
+        })?;
+        let item_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Item".into(),
+            width: 30.0,
+            height: 20.0,
+        })?;
+        let item_shape = tx.create(
+            Parent::Artboard(item_artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Item shape".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let item_bounds = tx.create(
+            Parent::Object(item_shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Item bounds", 1.0, 20.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(item_shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Item fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Item color".into(),
+                color: 0xff12_3456,
+            }),
+        )?;
+
+        let (item_model, items, width) = {
+            let mut view_models = tx.view_models();
+            let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Root model".into(),
+            })?;
+            let item_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Item model".into(),
+            })?;
+            let items = view_models.create_list(
+                root_model,
+                ViewModelListSpec {
+                    name: "items".into(),
+                },
+            )?;
+            let width = view_models.create_number(
+                item_model,
+                ViewModelNumberSpec {
+                    name: "width".into(),
+                },
+            )?;
+            let root_defaults = view_models.create_instance(
+                root_model,
+                ViewModelInstanceSpec {
+                    name: Some("Root defaults".into()),
+                },
+            )?;
+            let narrow = view_models.create_instance(
+                item_model,
+                ViewModelInstanceSpec {
+                    name: Some("Narrow".into()),
+                },
+            )?;
+            let wide = view_models.create_instance(
+                item_model,
+                ViewModelInstanceSpec {
+                    name: Some("Wide".into()),
+                },
+            )?;
+            view_models.set_number(narrow, width, 8.0)?;
+            view_models.set_number(wide, width, 24.0)?;
+            view_models.set_list_items(root_defaults, items, &[narrow, wide])?;
+            view_models.set_artboard_default(root_artboard, root_defaults)?;
+            view_models.set_artboard_default(item_artboard, narrow)?;
+            view_models.bind_number(
+                item_bounds,
+                props::PATH_WIDTH,
+                ViewModelNumberSource::direct(width),
+            )?;
+            (item_model, items, width)
+        };
+        let _ = width;
+        let component_list = tx.create_component_list(
+            root_artboard,
+            ArtboardComponentListSpec {
+                name: "Items".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                flow: Some(ArtboardComponentListFlow {
+                    axis: ArtboardComponentListAxis::Horizontal,
+                    reverse: false,
+                    gap: 0.0,
+                }),
+                source: ViewModelListSource::direct(items),
+                map_rules: vec![ArtboardListMapRuleSpec {
+                    view_model: item_model,
+                    artboard: item_artboard,
+                }],
+            },
+        )?;
+        Ok((root_artboard, component_list, item_shape))
+    })?;
+
+    let records = scene.export_records().into_records();
+    let rectangle = records
+        .iter()
+        .position(|record| {
+            record.kind == ExportedObjectKind::Rectangle
+                && record
+                    .properties
+                    .contains(&ExportedProperty::ComponentName("Item bounds".into()))
+        })
+        .expect("item rectangle");
+    assert_eq!(
+        records[rectangle + 1].kind,
+        ExportedObjectKind::DataBindContext
+    );
+    assert!(
+        records[rectangle + 1]
+            .properties
+            .contains(&ExportedProperty::DataBindPropertyKey(20))
+    );
+    assert!(
+        records[rectangle + 1]
+            .properties
+            .contains(&ExportedProperty::DataBindSourcePath(vec![1, 0]))
+    );
+
+    for _ in 0..2 {
+        let instance = scene.instantiate(root_artboard)?;
+        let mut events = Vec::new();
+        scene.frame().advance(instance, 0.0, &mut events);
+        assert_eq!(
+            scene
+                .frame()
+                .hit_test_paths_with_bounds(instance, Vec2D::new(4.0, 4.0))
+                .len(),
+            1
+        );
+        assert!(
+            scene
+                .frame()
+                .hit_test_paths_with_bounds(instance, Vec2D::new(12.0, 4.0))
+                .is_empty()
+        );
+        let wide = scene
+            .frame()
+            .hit_test_paths_with_bounds(instance, Vec2D::new(42.0, 4.0));
+        assert_eq!(wide.len(), 1);
+        assert_eq!(
+            wide[0].path().objects(),
+            [component_list.object_id(), item_shape]
+        );
+        assert_eq!(wide[0].occurrence()[0].item_index(), 1);
+    }
+    Ok(())
 }
 
 #[test]

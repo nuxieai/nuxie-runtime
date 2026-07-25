@@ -19,12 +19,12 @@ jpeg-decoder = { version = "0.3", default-features = false }
 moxcms = "0.8.1"
 nuxie-image-codec = { path = "../nuxie-image-codec" }
 nuxie-render-api = { path = "../nuxie-render-api" }
-naga = { version = "30.0.0", features = ["glsl-in", "wgsl-in", "wgsl-out"] }
+naga = { version = "30.0.0", features = ["wgsl-in"] }
 png = "0.18"
 smallvec = "1.15.2"
 # Keep the parity-critical core/HAL patches transitive for git and path
 # consumers. The vendored top-level package wires both patched crates by path.
-wgpu = { version = "=30.0.0", path = "../../vendor/wgpu-30.0.0", features = ["glsl"] }
+wgpu = { version = "=30.0.0", path = "../../vendor/wgpu-30.0.0" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = "0.4"

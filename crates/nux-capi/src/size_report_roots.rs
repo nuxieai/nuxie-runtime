@@ -9,9 +9,9 @@
 
 use nuxie::{
     ApplePresentationCompletion, AppleSurface, BlendMode, Factory, FillRule, GpuCanvasPlan,
-    GpuCanvasShader, GpuCanvasShaderStage, ImageFilter, ImageSampler, ImageWrap, Mat2D, RawPath,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderMode, RenderPaint,
-    RenderPath, Renderer, WgpuFactory, WgpuFrame,
+    GpuCanvasShader, ImageFilter, ImageSampler, ImageWrap, Mat2D, RawPath, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderImage, RenderMode, RenderPaint, RenderPath,
+    Renderer, WgpuFactory, WgpuFrame,
 };
 use std::ffi::c_void;
 use std::future::Future;
@@ -337,14 +337,10 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
             let Some(factory) = (unsafe { args.factory.as_mut() }) else {
                 return 0;
             };
-            let stage = GpuCanvasShaderStage {
-                source: String::new(),
-                logical_entry_point: String::new(),
-                physical_entry_point: String::new(),
-            };
             let shader = GpuCanvasShader {
-                vertex: stage.clone(),
-                fragment: stage,
+                source: String::new(),
+                entries: Vec::new(),
+                bindings: Vec::new(),
             };
             let plan = GpuCanvasPlan {
                 width: args.width,

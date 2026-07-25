@@ -2195,39 +2195,44 @@ mod gpu_canvas_tests {
     }
 
     fn shader_payload(fragment_color: &str) -> Vec<u8> {
-        let vertex = "#version 300 es\nvoid main() { gl_Position = vec4(0.0); }";
-        let fragment = format!(
-            "#version 300 es\nout vec4 color;\nvoid main() {{ color = {fragment_color}; }}"
+        const EMPTY_BINDING_MAP: &[u8] = &[2, 1, 14, 0, 0, 0, 0, 0];
+        let module = format!(
+            "@vertex\nfn vs_main() -> @builtin(position) vec4<f32> {{ return vec4<f32>(0.0); }}\n\
+             @fragment\nfn fs_main() -> @location(0) vec4<f32> {{ return {fragment_color}; }}"
         );
-        let mut entries = vec![2];
-        for (stage, logical, source) in [(0, "vs_main", vertex), (1, "fs_main", fragment.as_str())]
-        {
-            entries.push(stage);
-            put_string(&mut entries, logical);
-            put_string(&mut entries, "main");
-            put_u32(&mut entries, source.len() as u32);
-            entries.extend_from_slice(source.as_bytes());
+        let mut source = vec![2];
+        for (stage, entry) in [(0, "vs_main"), (1, "fs_main")] {
+            source.push(stage);
+            put_string(&mut source, entry);
+            put_string(&mut source, entry);
         }
+        put_u32(&mut source, module.len() as u32);
+        source.extend_from_slice(module.as_bytes());
 
         let mut payload = vec![0];
         put_u32(&mut payload, 0x5253_5442);
         put_u16(&mut payload, 4);
-        payload.extend_from_slice(&[1, 0, 1]);
+        payload.extend_from_slice(&[2, 0]);
+        payload.push(0);
         put_u32(&mut payload, 0);
-        put_u32(&mut payload, entries.len() as u32);
-        payload.extend(entries);
+        put_u32(&mut payload, source.len() as u32);
+        payload.push(16);
+        put_u32(&mut payload, source.len() as u32);
+        put_u32(&mut payload, EMPTY_BINDING_MAP.len() as u32);
+        payload.extend(source);
+        payload.extend_from_slice(EMPTY_BINDING_MAP);
         payload
     }
 
     #[test]
     fn duplicate_shader_registration_preserves_the_first_shader() {
         let vm = ScriptVm::new();
-        vm.register_gpu_canvas_shader_asset("scene", &shader_payload("vec4(1.0)"))
+        vm.register_gpu_canvas_shader_asset("scene", &shader_payload("vec4<f32>(1.0)"))
             .expect("first shader registers");
         let first = vm.gpu_canvas_shaders.borrow()["scene"].clone();
 
         let error = vm
-            .register_gpu_canvas_shader_asset("scene", &shader_payload("vec4(0.0)"))
+            .register_gpu_canvas_shader_asset("scene", &shader_payload("vec4<f32>(0.0)"))
             .expect_err("duplicate shader name is rejected");
 
         assert!(error.to_string().contains("duplicated"));

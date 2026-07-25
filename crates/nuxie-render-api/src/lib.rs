@@ -540,23 +540,99 @@ pub trait RenderImage: Any {
     }
 }
 
-/// One canonical GLSL stage decoded from a Rive `ShaderAsset` RSTB v4 blob.
-///
-/// The renderer API deliberately owns this transport type so scripting and
-/// file-runtime code never depend on a concrete GPU backend. Backends may
-/// translate the stage internally (for example, GLSL through Naga to Metal).
+/// One entry-point stage in a Rive whole-module shader source container.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderStage {
+    Vertex = 0,
+    Fragment = 1,
+    Compute = 2,
+}
+
+/// One authored entry record from a Rive whole-module shader source container.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GpuCanvasShaderStage {
-    pub source: String,
+pub struct GpuCanvasShaderEntry {
+    pub stage: GpuCanvasShaderStage,
     pub logical_entry_point: String,
     pub physical_entry_point: String,
 }
 
-/// The vertex and fragment stages selected by `context:shader(name)`.
+/// One resource kind from Rive's frozen `BindingMap` v2 wire schema.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderResourceKind {
+    UniformBuffer = 0,
+    StorageBufferReadOnly = 1,
+    StorageBufferReadWrite = 2,
+    SampledTexture = 3,
+    StorageTexture = 4,
+    Sampler = 5,
+    ComparisonSampler = 6,
+}
+
+/// Texture view dimension reflected into a Rive `BindingMap`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderTextureViewDimension {
+    Undefined = 0,
+    D1 = 1,
+    D2 = 2,
+    D2Array = 3,
+    Cube = 4,
+    CubeArray = 5,
+    D3 = 6,
+}
+
+/// Texture sample type reflected into a Rive `BindingMap`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderTextureSampleType {
+    Undefined = 0,
+    Float = 1,
+    UnfilterableFloat = 2,
+    Depth = 3,
+    Sint = 4,
+    Uint = 5,
+}
+
+/// One decoded row from the mandatory Rive WebGPU `BindingMap` sidecar.
+///
+/// `backend_slots` is ordered vertex, fragment, compute. `None` preserves
+/// Rive's `BindingMap::kAbsent` sentinel without leaking it to callers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasShaderBinding {
+    pub group: u8,
+    pub binding: u8,
+    pub kind: GpuCanvasShaderResourceKind,
+    pub stage_mask: u8,
+    pub backend_space: u8,
+    pub backend_slots: [Option<u16>; 3],
+    pub texture_view_dimension: GpuCanvasShaderTextureViewDimension,
+    pub texture_sample_type: GpuCanvasShaderTextureSampleType,
+    pub texture_multisampled: bool,
+}
+
+/// The authored WGSL module selected by WebGPU from a Rive `ShaderAsset`.
+///
+/// Rive target 0 stores one source module shared by every entry. Target 16
+/// stores the binding metadata that accompanies that exact module.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuCanvasShader {
-    pub vertex: GpuCanvasShaderStage,
-    pub fragment: GpuCanvasShaderStage,
+    pub source: String,
+    pub entries: Vec<GpuCanvasShaderEntry>,
+    pub bindings: Vec<GpuCanvasShaderBinding>,
+}
+
+impl GpuCanvasShader {
+    pub fn entry(
+        &self,
+        stage: GpuCanvasShaderStage,
+        logical_entry_point: &str,
+    ) -> Option<&GpuCanvasShaderEntry> {
+        self.entries
+            .iter()
+            .find(|entry| entry.stage == stage && entry.logical_entry_point == logical_entry_point)
+    }
 }
 
 /// One uniform binding produced by an authored GPU-canvas frame.

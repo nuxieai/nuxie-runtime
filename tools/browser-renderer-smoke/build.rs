@@ -37,22 +37,18 @@ return function(context)
 end
 "#;
 
-const VERTEX_GLSL: &str = r#"#version 300 es
-precision highp float;
-precision highp int;
-void main() {
-    uint index = uint(gl_VertexID);
-    float x = float(int(index) - 1);
-    float y = float(int(index & 1u) * 2 - 1);
-    gl_Position = vec4(x, y, 0.0, 1.0);
-    gl_Position.yz = vec2(-gl_Position.y, gl_Position.z * 2.0 - gl_Position.w);
+const WGSL: &str = r#"
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let x = f32(i32(index) - 1);
+    let y = f32(i32(index & 1u) * 2 - 1);
+    return vec4<f32>(x, y, 0.0, 1.0);
 }
-"#;
 
-const FRAGMENT_GLSL: &str = r#"#version 300 es
-precision highp float;
-layout(location = 0) out vec4 color;
-void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
 "#;
 
 fn main() {
@@ -111,21 +107,28 @@ fn imported_file() -> Vec<u8> {
 }
 
 fn shader_payload() -> Vec<u8> {
-    let mut entries = vec![2];
-    for (stage, logical, source) in [(0, "vs_main", VERTEX_GLSL), (1, "fs_main", FRAGMENT_GLSL)] {
-        entries.push(stage);
-        put_string(&mut entries, logical);
-        put_string(&mut entries, "main");
-        put_u32(&mut entries, source.len() as u32);
-        entries.extend_from_slice(source.as_bytes());
+    const EMPTY_BINDING_MAP: &[u8] = &[2, 1, 14, 0, 0, 0, 0, 0];
+    let mut source = vec![2];
+    for (stage, entry) in [(0, "vs_main"), (1, "fs_main")] {
+        source.push(stage);
+        put_string(&mut source, entry);
+        put_string(&mut source, entry);
     }
+    put_u32(&mut source, WGSL.len() as u32);
+    source.extend_from_slice(WGSL.as_bytes());
+
     let mut payload = vec![0];
     put_u32(&mut payload, 0x5253_5442);
     put_u16(&mut payload, 4);
-    payload.extend_from_slice(&[1, 0, 1]);
+    payload.extend_from_slice(&[2, 0]);
+    payload.push(0);
     put_u32(&mut payload, 0);
-    put_u32(&mut payload, entries.len() as u32);
-    payload.extend(entries);
+    put_u32(&mut payload, source.len() as u32);
+    payload.push(16);
+    put_u32(&mut payload, source.len() as u32);
+    put_u32(&mut payload, EMPTY_BINDING_MAP.len() as u32);
+    payload.extend(source);
+    payload.extend_from_slice(EMPTY_BINDING_MAP);
     payload
 }
 

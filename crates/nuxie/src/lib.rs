@@ -47,10 +47,11 @@ enum ScriptExecutionAuthorization {
 
 pub use nuxie_render_api::{
     Aabb, BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
-    GpuCanvasShaderStage, ImageDecodeError, ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb,
-    RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage,
-    RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
-    Vec2D,
+    GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderResourceKind,
+    GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension,
+    ImageDecodeError, ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb, RawPath,
+    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 #[cfg(all(feature = "renderer", any(target_os = "ios", target_os = "macos")))]
 pub use nuxie_renderer::{

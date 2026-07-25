@@ -20,6 +20,7 @@ GATE_COMMANDS = {
     "renderer-golden": ["make", "renderer-golden"],
     "cargo-test-workspace": ["make", "cpp-oracle-workspace-tests"],
     "capi-smoke": ["make", "capi-smoke"],
+    "browser-webgpu-only": ["make", "browser-webgpu-only-check"],
     "size-report": ["make", "size-report"],
 }
 
@@ -57,7 +58,8 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertRegex(
             makefile,
             re.compile(
-                r"cpp-oracle-workspace-tests: fixtures golden-runner cpp-probe\s+"
+                r"cpp-oracle-workspace-tests:[^\n]*\bfixtures\b"
+                r"[^\n]*\bgolden-runner\b[^\n]*\bcpp-probe\b\s+"
                 r'@test -x "\$\(GOLDEN_RUNNER\)"[\s\S]{0,300}'
                 r'@test -x "\$\(CPP_PROBE\)"[\s\S]{0,300}'
                 r'RIVE_GOLDEN_RUNNER="\$\(GOLDEN_RUNNER\)" '
@@ -89,6 +91,29 @@ class ParityScorecardCliTests(unittest.TestCase):
             "- name: Verify same-runner renderer pixels (non-scorecard)",
             workflow,
         )
+
+    def test_ci_records_webgpu_only_browser_gate_for_the_scorecard(self):
+        workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+        makefile = (REPO_ROOT / "Makefile").read_text()
+        check = (REPO_ROOT / "tools" / "check-browser-webgpu-only.sh").read_text()
+
+        self.assertRegex(
+            workflow,
+            re.compile(
+                r"--gate browser-webgpu-only[\s\\]+"
+                r"--output target/parity-scorecard/evidence/browser-webgpu-only\.json[\s\\]+"
+                r"-- make browser-webgpu-only-check(?:\s|$)"
+            ),
+        )
+        self.assertRegex(
+            makefile,
+            re.compile(
+                r"browser-webgpu-only-check:[^\n]*browser-renderer-smoke"
+                r"[^\n]*browser-renderer-gpu-smoke"
+            ),
+        )
+        self.assertIn("prohibited_pattern=", check)
+        self.assertIn("- browser-renderer", workflow)
 
     def test_same_runner_uses_current_runtime_without_relabeling_historical_oracle(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
@@ -230,6 +255,22 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 1)
         self.assertIn("required renderer-golden evidence is unavailable", completed.stderr)
         self.assertIn("pixel-exact unavailable/red", completed.stdout)
+
+    def test_browser_decision_requires_current_webgpu_only_gate_evidence(self):
+        repo, evidence = self.create_green_repo()
+        (evidence / "browser-webgpu-only.json").unlink()
+
+        completed = self.run_check(repo)
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn(
+            "required browser-webgpu-only evidence is unavailable",
+            completed.stderr,
+        )
+        self.assertIn(
+            "WebGPU-only browser support evidence unavailable/red (#HD-3)",
+            completed.stdout,
+        )
 
     def test_check_rejects_a_failed_workspace_floor_gate(self):
         repo, evidence = self.create_green_repo()
@@ -471,11 +512,14 @@ class ParityScorecardCliTests(unittest.TestCase):
             "#OR-4",
             "#OR-5",
             "#OR-7",
-            "#HD-3",
             "#OR-9",
             "#B-3",
         ):
             self.assertIn(f"not built ({ticket}", completed.stdout)
+        self.assertIn(
+            "WebGPU-only browser support gate green; legacy backend retired (#HD-3)",
+            completed.stdout,
+        )
         self.assertIn("A-rows closed 0/2 (open: A1,A2)", completed.stdout)
 
         report = json.loads(json_output.read_text())
@@ -565,6 +609,11 @@ class ParityScorecardCliTests(unittest.TestCase):
         )
         self.write_evidence(
             evidence / "capi-smoke.json", "capi-smoke", "capi smoke: ok\n"
+        )
+        self.write_evidence(
+            evidence / "browser-webgpu-only.json",
+            "browser-webgpu-only",
+            "browser-webgpu-only summary: browser-smoke=pass gpu-smoke=pass prohibited-surface=0\n",
         )
         return repo, evidence
 

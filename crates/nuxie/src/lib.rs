@@ -58,9 +58,8 @@ pub use nuxie_renderer::{
 };
 #[cfg(all(feature = "renderer", target_arch = "wasm32"))]
 pub use nuxie_renderer::{
-    BrowserBackend, BrowserBackendPreference, BrowserFactory,
-    BrowserFactory as DefaultRendererFactory, BrowserFrame, BrowserFrame as DefaultRendererFrame,
-    BrowserResizeError, WebGl2Factory, WebGl2Frame, WebGl2GpuCanvasRenderer,
+    BrowserFactory, BrowserFactory as DefaultRendererFactory, BrowserFrame,
+    BrowserFrame as DefaultRendererFrame, BrowserResizeError,
 };
 #[cfg(feature = "renderer")]
 pub use nuxie_renderer::{

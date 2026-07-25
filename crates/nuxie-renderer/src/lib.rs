@@ -1,5 +1,4 @@
-//! Pure-Rust WebGPU and WebGL2 renderers behind the `nuxie-render-api` trait
-//! boundary.
+//! Pure-Rust WebGPU renderer behind the `nuxie-render-api` trait boundary.
 
 #[cfg(test)]
 mod atlas_blit_oracle;
@@ -39,10 +38,6 @@ mod surface;
 #[cfg(test)]
 mod tess_span_oracle;
 mod tessellator;
-#[cfg(target_arch = "wasm32")]
-mod webgl2;
-#[cfg(any(target_arch = "wasm32", test))]
-mod webgl2_limits;
 mod work_metrics;
 
 use bytemuck::{Pod, Zeroable};
@@ -81,7 +76,6 @@ pub enum RendererError {
     InvalidGpuCanvas(String),
     Map(String),
     Unsupported(&'static str),
-    WebGl2(String),
 }
 
 impl fmt::Display for RendererError {
@@ -102,17 +96,12 @@ impl fmt::Display for RendererError {
             Self::InvalidGpuCanvas(message) => write!(f, "invalid GPU-canvas plan: {message}"),
             Self::Map(message) => write!(f, "wgpu readback error: {message}"),
             Self::Unsupported(feature) => write!(f, "unsupported renderer feature: {feature}"),
-            Self::WebGl2(message) => write!(f, "WebGL2 renderer error: {message}"),
         }
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-pub use browser::{
-    BrowserBackend, BrowserBackendPreference, BrowserFactory, BrowserFrame, BrowserResizeError,
-};
-#[cfg(target_arch = "wasm32")]
-pub use webgl2::{WebGl2Factory, WebGl2Frame};
+pub use browser::{BrowserFactory, BrowserFrame, BrowserResizeError};
 
 impl Error for RendererError {}
 
@@ -613,8 +602,6 @@ pub struct WgpuFrameMetrics {
     pub backend_work: BackendWorkMetrics,
 }
 
-#[cfg(target_arch = "wasm32")]
-pub use gpu_canvas::WebGl2GpuCanvasRenderer;
 pub use gpu_canvas::{
     GpuCanvasRenderPlan, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer,
     GpuCanvasVertexLayout,

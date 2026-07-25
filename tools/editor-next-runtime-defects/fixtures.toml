@@ -35,9 +35,9 @@ driver = "pending:F-ED-06"
 [[fixture]]
 id = "fed.rt_ed_004.webgl2_rounded_clip_402x874_r57"
 defect_id = "RT-ED-004"
-kind = "browser-renderer"
-status = "registered"
-driver = "pending:F-ED-07"
+kind = "historical"
+status = "historical"
+driver = "evidence-only:webgpu-only-product-decision"
 
 [[fixture]]
 id = "fed.rt_ed_005.generic_visual_property_bind"
@@ -83,7 +83,7 @@ driver = "source-audit+editor-compiler-test:interaction_animation_lowering::test
 stimulus_files = [
   { root = "rive", path = "include/rive/listener_type.hpp", sha256 = "57e7273b348ac16c622d19377442c57379aa974fab866092522ad089f3bdb8c3" },
   { root = "rive", path = "src/listener_group.cpp", sha256 = "7ad6417074fbcda656d09e9885facf8b2d146f9e33217ead475af22bdb71559e" },
-  { root = "repo", path = "crates/nuxie/src/scene.rs", sha256 = "84e98a0a162a8c7592f41a70de01356f711e625d0f8b24fab68a78d747c8198b" },
+  { root = "repo", path = "crates/nuxie/src/scene.rs", sha256 = "99ca1c39380b831eda18e527b83c8aa665f720961f1f5edae2f1906aba727472" },
   { root = "repo", path = "crates/nuxie-runtime/src/state_machine.rs", sha256 = "fc1eb4c82bbe3aed79546da376f54ddc366cf4c7d9fa84cd87dfb5b58950b728" },
   { root = "editor", path = "tools/rive-compiler/scene-shared/src/interaction_animation_lowering.rs", sha256 = "aaffae5dec57d0e452e376eb884fbc319db5b47b9334690e327278868539feac" },
 ]
@@ -105,9 +105,9 @@ driver = "cpp_probe/registry.cpp"
 [[fixture]]
 id = "fed.loc_006.webgl2_stale_pixels"
 defect_id = "LOC-006"
-kind = "browser-renderer"
-status = "registered"
-driver = "pending:F-ED-08"
+kind = "historical"
+status = "historical"
+driver = "evidence-only:webgpu-only-product-decision"
 
 [[fixture]]
 id = "fed.loc_007.parametric_path_dirt"

@@ -371,6 +371,9 @@ browser-renderer-smoke:
 browser-renderer-gpu-smoke:
 	BROWSER_RENDERER_GPU_ONLY=1 tools/browser-renderer-smoke/run.sh
 
+browser-webgpu-only-check: browser-renderer-smoke browser-renderer-gpu-smoke
+	tools/check-browser-webgpu-only.sh
+
 capi-smoke: fixtures
 	cargo build --quiet -p nux-capi
 	mkdir -p target/capi-smoke

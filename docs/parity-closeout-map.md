@@ -30,7 +30,7 @@ D-row.
 | 1 Frame parity | .riv → identical frames, end to end | `make golden-compare` + `scripted-golden-compare` (floor) + `make e2e-golden` (#OR-6) | exact-segments; e2e-exact |
 | 2 Interaction parity | events, hits, inputs, settling identical | side-channel compare (#OR-1/2), script verbs (#OR-3), densified sampling (#OR-4/5), differential fuzz nights (#OR-7) | side-channel-segments; fuzz-clean-nights |
 | 3 SDK parity | embedders can do what rive-cpp embedders can | A-row checklist in the register (#FT tickets) | A-rows closed / total |
-| 4 Platform parity | renderer verified where we ship | pixel ratchet (floor) + adapter matrix (#HD-2) + WebGL2 decision (#HD-3) | pixel-exact entries; adapters ≥ 2 |
+| 4 Platform parity | renderer verified where we ship | pixel ratchet (floor) + adapter matrix (#HD-2) + browser support decision (#HD-3) | pixel-exact entries; adapters ≥ 2 |
 | 5 Performance & size | faster than C++, size within budget | blocking `make perf-hot-loop` ratio ≤ 1.0 (#OR-9) + `r4-timing-gate` + `make size-report` within budget (#B-3) | rust/C++ ratio; MiB |
 
 **Honesty invariants** (inherited): stub-baseline re-verification whenever a
@@ -99,7 +99,8 @@ REPORT: a status-file entry draft (metric delta, files touched, decisions
 **USER-GATE rows** (orchestrator stops and asks; never inferred): Phase S
 approvals (#B-1, per `docs/upstream-sync-map.md`), size budget (#B-3),
 audio engine confirmation (#FT-AUDIO a), command-server decision (#HD-1),
-WebGL2 decision (#HD-3), production-flow corpus access (#FT-PROD), and any
+browser support decision (#HD-3, resolved WebGPU-only 2026-07-24),
+production-flow corpus access (#FT-PROD), and any
 new D-row (deliberate divergence) — declaring accepted non-parity is always
 a user decision.
 
@@ -473,9 +474,12 @@ perf ratio measured and reported to the user.
   adapter/OS in the pixel matrix; purpose-built C++ oracle config for the
   two clockwise-atomic hypotheses, or reclassify them as area-capped
   D-rows (USER-GATE if reclassifying).
-- **#HD-3 WebGL2 decision (V8) — USER-GATE, then M.** Pixel-corpus the
-  femtovg path with its own contracts, or declare it a documented degraded
-  mode (D-row).
+- **#HD-3 Browser support decision (V8) — COMPLETE.** The user selected
+  WebGPU-only browser support on 2026-07-24. Remove the WebGL2/FemtoVG path,
+  selector and automatic fallback; retain strict WebGPU browser gates and make
+  unavailable WebGPU an explicit unsupported state. This closes V8 by
+  removing the unverified product surface, not by classifying it as parity or
+  accepting a renderer divergence.
 - **#HD-4 TODO(golden) pair (H3) — SPINE, S.** `state_machine.rs:797`
   (`addToHitLookup` — likely interacts with OR-2 hit-channel findings) and
   `draw.rs:3555` (layout-bounds path unification).

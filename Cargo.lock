@@ -155,14 +155,12 @@ dependencies = [
 name = "browser-renderer-smoke"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "luaur-common",
  "luaur-compiler",
  "nuxie",
  "nuxie-render-stream",
  "nuxie-schema",
  "pixel-compare",
- "png",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -425,12 +423,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "either"
-version = "1.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
-
-[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -462,25 +454,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "femtovg"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f43d05da42e81724c16d34a150fb7fda53d3f786e5a94673ee526ff8602f0f6a"
-dependencies = [
- "bitflags",
- "bytemuck",
- "fnv",
- "glow",
- "imgref",
- "itertools",
- "log",
- "rgb",
- "slotmap",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
 name = "fiat-crypto"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -501,12 +474,6 @@ dependencies = [
  "crc32fast",
  "miniz_oxide",
 ]
-
-[[package]]
-name = "fnv"
-version = "1.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foldhash"
@@ -709,12 +676,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "imgref"
-version = "1.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89194689a993ab15268672e99e7b0e19da2da3268ac682e8f02d29d4d1434cd7"
-
-[[package]]
 name = "indexmap"
 version = "2.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -729,15 +690,6 @@ name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
-
-[[package]]
-name = "itertools"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
-dependencies = [
- "either",
-]
 
 [[package]]
 name = "itoa"
@@ -1101,10 +1053,8 @@ version = "0.1.0"
 dependencies = [
  "block2",
  "bytemuck",
- "femtovg",
  "futures-channel",
  "image-webp",
- "imgref",
  "jpeg-decoder",
  "js-sys",
  "moxcms",
@@ -1118,7 +1068,6 @@ dependencies = [
  "objc2-quartz-core",
  "png",
  "pollster",
- "rgb",
  "sha2",
  "smallvec",
  "wasm-bindgen",
@@ -1523,15 +1472,6 @@ dependencies = [
  "perf-compare",
  "pixel-compare",
  "serde_json",
-]
-
-[[package]]
-name = "rgb"
-version = "0.8.53"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
-dependencies = [
- "bytemuck",
 ]
 
 [[package]]

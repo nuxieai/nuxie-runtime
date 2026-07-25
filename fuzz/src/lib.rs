@@ -111,7 +111,7 @@ fn drive(data: &[u8], pointer_events: &[PointerEvent]) -> Option<()> {
             for event in pointer_events {
                 apply_pointer_event(
                     event,
-                    &instance,
+                    &mut instance,
                     state_machine.as_mut(),
                     owned_context.as_mut(),
                 );
@@ -161,7 +161,7 @@ fn advance_scene_to(
 
 fn apply_pointer_event(
     event: &PointerEvent,
-    instance: &ArtboardInstance,
+    instance: &mut ArtboardInstance,
     state_machine: Option<&mut StateMachineInstance>,
     owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
 ) {

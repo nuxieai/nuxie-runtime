@@ -39,6 +39,12 @@ pub trait RuntimeDataBindTarget {
     fn read_target(&mut self) -> Option<RuntimeViewModelCellValue>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RuntimeRetainedDataBindCollapse {
+    pub(crate) changed: bool,
+    pub(crate) requests_dirty_update: bool,
+}
+
 /// One retained data bind (C++ `DataBind`).
 pub struct RuntimeRetainedDataBind {
     flags: u64,
@@ -64,6 +70,11 @@ pub struct RuntimeRetainedDataBind {
     target_origin: bool,
     /// C++ `Flag::SuppressDirt`.
     suppress_dirt: bool,
+    /// C++ `DataBind::Flag::Collapsed`. This is occurrence state rebuilt from
+    /// the clone-owned target Component by `DataBind::initialize`.
+    collapsed: bool,
+    /// `DataBind::collapse` exempts displayValue and targets that cannot push.
+    collapse_eligible: bool,
     /// Pending dirt latched from the sink plus reconcile marks
     /// (C++ `m_Dirt`).
     dirt: RuntimeCellDirt,
@@ -75,6 +86,7 @@ impl std::fmt::Debug for RuntimeRetainedDataBind {
             .field("flags", &self.flags)
             .field("binds_once", &self.binds_once)
             .field("target_origin", &self.target_origin)
+            .field("collapsed", &self.collapsed)
             .field("dirt", &self.dirt)
             .finish_non_exhaustive()
     }
@@ -95,6 +107,7 @@ impl Clone for RuntimeRetainedDataBind {
         cloned.set_additional_sources(self.additional_sources.clone());
         cloned.target_origin = self.target_origin;
         cloned.dirt = self.dirt;
+        cloned.collapse_eligible = self.collapse_eligible;
         cloned.sink.add_dirt(primary_dirt);
         cloned.additional_sink.add_dirt(additional_dirt);
         cloned
@@ -112,7 +125,33 @@ impl RuntimeRetainedDataBind {
             additional_sources: Vec::new(),
             target_origin: false,
             suppress_dirt: false,
+            collapsed: false,
+            collapse_eligible: false,
             dirt: RuntimeCellDirt::NONE,
+        }
+    }
+
+    pub(crate) fn set_collapse_eligible(&mut self, collapse_eligible: bool) {
+        self.collapse_eligible = collapse_eligible;
+    }
+
+    pub(crate) fn is_collapsed(&self) -> bool {
+        self.collapsed
+    }
+
+    /// Exact `DataBind::collapse` branch table
+    /// (`src/data_bind/data_bind.cpp:595-607`).
+    pub(crate) fn collapse(&mut self, collapsed: bool) -> RuntimeRetainedDataBindCollapse {
+        if self.collapsed == collapsed || !self.collapse_eligible {
+            return RuntimeRetainedDataBindCollapse {
+                changed: false,
+                requests_dirty_update: false,
+            };
+        }
+        self.collapsed = collapsed;
+        RuntimeRetainedDataBindCollapse {
+            changed: true,
+            requests_dirty_update: !collapsed && !self.dirt.is_empty(),
         }
     }
 

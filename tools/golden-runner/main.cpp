@@ -92,6 +92,16 @@ void resetCoverageProfileForFrameLoopIfRequested()
 #endif
 }
 
+void resetCoverageProfileForOccurrenceIfRequested()
+{
+#if defined(RIVE_GOLDEN_COVERAGE_TRACE)
+    if (std::getenv("RIVE_GOLDEN_COVERAGE_OCCURRENCE_ONLY") != nullptr)
+    {
+        __llvm_profile_reset_counters();
+    }
+#endif
+}
+
 void resetFrameLoopAllocationCounterIfRequested()
 {
 #if defined(RIVE_GOLDEN_COVERAGE_TRACE)
@@ -161,17 +171,31 @@ void validateTraceOptions(const Options& options)
         std::getenv("RIVE_GOLDEN_COVERAGE_FRAME_ONLY") != nullptr;
     const bool allocations =
         std::getenv("RIVE_GOLDEN_ALLOCATION_COUNTER") != nullptr;
-
+    const bool steadyOnly =
+        std::getenv("RIVE_GOLDEN_COVERAGE_STEADY_ONLY") != nullptr;
+    const bool occurrenceOnly =
+        std::getenv("RIVE_GOLDEN_COVERAGE_OCCURRENCE_ONLY") != nullptr;
+    const bool mechanismInput =
+        std::getenv("RIVE_GOLDEN_COVERAGE_MECHANISM_INPUT") != nullptr;
 #if !defined(RIVE_GOLDEN_COVERAGE_TRACE)
     const bool flush =
         std::getenv("RIVE_GOLDEN_COVERAGE_FLUSH") != nullptr;
-    if (frameOnly || flush)
+    if (frameOnly || flush || occurrenceOnly || mechanismInput)
     {
         throw CliError(
             "coverage tracing requires RIVE_GOLDEN_COVERAGE_TRACE and LLVM "
             "coverage instrumentation at build time");
     }
 #endif
+    if (mechanismInput &&
+        (!frameOnly || occurrenceOnly || steadyOnly ||
+         options.inputScript.empty() || options.benchmarkRepeat != 1))
+    {
+        throw CliError(
+            "mechanism input coverage requires frame-only coverage, an "
+            "input script, --benchmark-repeat 1, and "
+            "non-occurrence/non-steady mode");
+    }
 
 #if !defined(RIVE_GOLDEN_COVERAGE_TRACE)
     if (allocations)
@@ -187,6 +211,14 @@ void validateTraceOptions(const Options& options)
         throw CliError(
             "frame-only coverage and allocation tracing require "
             "--benchmark-repeat 1");
+    }
+    if (steadyOnly &&
+        (!frameOnly || options.samples.size() != 1 ||
+         options.benchmarkRepeat != 1 || !options.inputScript.empty()))
+    {
+        throw CliError(
+            "steady-only coverage requires frame-only coverage, one sample, "
+            "--benchmark-repeat 1, and no input script");
     }
 }
 
@@ -725,6 +757,10 @@ public:
                 << static_cast<int>(importResult);
             throw std::runtime_error(out.str());
         }
+        // Construction evidence compares one live Artboard occurrence. The
+        // source Artboard import above is definition construction, not the
+        // instance owner graph measured by FL-A.
+        resetCoverageProfileForOccurrenceIfRequested();
 
         if (!artboardName.empty())
         {
@@ -991,6 +1027,12 @@ int runFile(const Options& options)
                                    frameDimension(scene->height()));
     }
 
+    float currentSeconds = 0.0f;
+    if (std::getenv("RIVE_GOLDEN_COVERAGE_STEADY_ONLY") != nullptr)
+    {
+        advanceTo(scene, options.samples.front(), currentSeconds);
+        scene->draw(renderer.get());
+    }
     resetCoverageProfileForFrameLoopIfRequested();
     resetFrameLoopAllocationCounterIfRequested();
     const auto benchmarkStart = std::chrono::steady_clock::now();
@@ -1007,7 +1049,6 @@ int runFile(const Options& options)
         action();
         elapsed += std::chrono::steady_clock::now() - stageStart;
     };
-    float currentSeconds = 0.0f;
     size_t nextInput = 0;
     for (size_t repeat = 0; repeat < options.benchmarkRepeat; repeat++)
     {

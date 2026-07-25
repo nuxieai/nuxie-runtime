@@ -465,7 +465,7 @@ fn prepared_machine(
     let bytes = scripted_listener_file(protocol_source, action_count);
     let runtime = read_runtime_file_for_facade(&bytes).expect("import scripted listener fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build scripted listener file"));
-    let instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+    let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate scripted listener artboard");
     let machine = instance
         .default_state_machine_instance()

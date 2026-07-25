@@ -23,9 +23,14 @@ The target:
 - builds a separately named `rive_golden_runner_coverage`;
 - builds Rust under `target/frame-loop-coverage` with
   `-Cinstrument-coverage` and the `coverage-trace` feature;
+- stamps that dedicated Rust runner with the complete tracked plus intended-
+  untracked candidate source fingerprint and exact trace build configuration;
 - verifies that the resulting binaries contain their profile/counter symbols.
 
 It never replaces the ordinary debug archive or ordinary golden-runner binary.
+Capture refuses a missing or stale Rust-runner stamp before either runner is
+invoked, and verifies both the candidate source and runner stay unchanged
+through the complete capture.
 
 ## Capture contract
 

@@ -256,7 +256,7 @@ void nux_state_machine_instance_free(struct NuxStateMachineInstance *state_machi
  * Instantiate the state machine at `state_machine_index` on the instance's
  * artboard. Free with `nux_state_machine_instance_free`.
  */
-enum NuxStatus nux_state_machine_instance_new(const struct NuxArtboardInstance *instance,
+enum NuxStatus nux_state_machine_instance_new(struct NuxArtboardInstance *instance,
                                               size_t state_machine_index,
                                               struct NuxStateMachineInstance **out_state_machine);
 
@@ -265,7 +265,7 @@ enum NuxStatus nux_state_machine_instance_new(const struct NuxArtboardInstance *
  * source file when present, otherwise the first state machine. Returns
  * `NUX_STATUS_NOT_FOUND` when the artboard has no state machines.
  */
-enum NuxStatus nux_state_machine_instance_new_default(const struct NuxArtboardInstance *instance,
+enum NuxStatus nux_state_machine_instance_new_default(struct NuxArtboardInstance *instance,
                                                       struct NuxStateMachineInstance **out_state_machine);
 
 /**
@@ -273,7 +273,7 @@ enum NuxStatus nux_state_machine_instance_new_default(const struct NuxArtboardIn
  * which must have been created from `instance`. `out_hit` is optional and
  * reports whether the event landed on a listener.
  */
-enum NuxStatus nux_state_machine_instance_pointer_down(const struct NuxArtboardInstance *instance,
+enum NuxStatus nux_state_machine_instance_pointer_down(struct NuxArtboardInstance *instance,
                                                        struct NuxStateMachineInstance *state_machine,
                                                        float x,
                                                        float y,
@@ -284,7 +284,7 @@ enum NuxStatus nux_state_machine_instance_pointer_down(const struct NuxArtboardI
  * which must have been created from `instance`. `out_hit` is optional and
  * reports whether the event landed on a listener.
  */
-enum NuxStatus nux_state_machine_instance_pointer_move(const struct NuxArtboardInstance *instance,
+enum NuxStatus nux_state_machine_instance_pointer_move(struct NuxArtboardInstance *instance,
                                                        struct NuxStateMachineInstance *state_machine,
                                                        float x,
                                                        float y,
@@ -295,7 +295,7 @@ enum NuxStatus nux_state_machine_instance_pointer_move(const struct NuxArtboardI
  * which must have been created from `instance`. `out_hit` is optional and
  * reports whether the event landed on a listener.
  */
-enum NuxStatus nux_state_machine_instance_pointer_up(const struct NuxArtboardInstance *instance,
+enum NuxStatus nux_state_machine_instance_pointer_up(struct NuxArtboardInstance *instance,
                                                      struct NuxStateMachineInstance *state_machine,
                                                      float x,
                                                      float y,

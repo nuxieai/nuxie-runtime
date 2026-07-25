@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::parent_traversal::{ParentTraversal, ParentTraversalFrame};
 use crate::properties::property_key_for_name;
 use crate::{ArtboardInstance, Mat2D};
 
@@ -1082,7 +1083,7 @@ fn collect_component_focus_descriptors(
             FocusNode::structural_scope(),
             None,
         );
-        if let Some(items) = artboard.component_list_items.get(&local_id) {
+        if let Some(items) = artboard.component_list_items(local_id) {
             let host_transform_local = if crate::constraints::component_list_virtualization(
                 artboard, local_id,
             )
@@ -1095,7 +1096,9 @@ fn collect_component_focus_descriptors(
             let host_world = artboard
                 .component(host_transform_local)
                 .map_or(Mat2D::IDENTITY, |host| host.transform.world_transform);
-            let item_transforms = artboard.component_list_item_transforms.get(&local_id);
+            let item_transforms = artboard
+                .component_list_state(local_id)
+                .map(|list| &list.item_transforms);
             for (item_index, item) in items.iter().enumerate() {
                 let row_key = occurrence_key.child(
                     FOCUS_KEY_LIST_ROW,
@@ -1224,9 +1227,7 @@ fn authored_focus_node(
         && artboard
             .component(focus_local)
             .is_none_or(|focus_data| !focus_data.is_collapsed());
-    let parent_local = artboard
-        .component(focus_local)
-        .and_then(|focus_data| focus_data.parent_local);
+    let parent_local = artboard.component_parent_local(focus_local);
     let eligible = eligible
         && parent_local
             .is_none_or(|parent_local| component_and_ancestors_allow_focus(artboard, parent_local));
@@ -1243,21 +1244,35 @@ fn authored_focus_node(
 
 fn component_and_ancestors_allow_focus(artboard: &ArtboardInstance, start_local: usize) -> bool {
     let drawable_flags_key = property_key_for_name("Drawable", "drawableFlags");
-    let mut current = Some(start_local);
-    while let Some(local_id) = current {
-        let Some(component) = artboard.component(local_id) else {
-            break;
+    let allows_focus = |artboard: &ArtboardInstance,
+                        component: crate::components::ComponentHandle| {
+        let Some(local_id) = artboard.component_local_id(component) else {
+            return true;
         };
+        let component = artboard.component_at(component);
         let is_hidden = drawable_flags_key
             .and_then(|property_key| artboard.objects.uint_property(local_id, property_key))
             .is_some_and(|flags| flags & 1 != 0);
-        if component.is_collapsed()
+        !(component.is_collapsed()
             || is_hidden
-            || (component.capabilities.transform && component.transform.render_opacity <= 0.0)
-        {
+            || (component.capabilities.transform && component.transform.render_opacity <= 0.0))
+    };
+    let Some(start) = artboard.component_handle(start_local) else {
+        return true;
+    };
+    if !allows_focus(artboard, start) {
+        return false;
+    }
+
+    let frames = [ParentTraversalFrame {
+        artboard,
+        host_component_in_parent: None,
+    }];
+    let mut traversal = ParentTraversal::new(&frames, start);
+    while let Some(parent) = traversal.next() {
+        if !allows_focus(parent.artboard, parent.component) {
             return false;
         }
-        current = component.parent_local;
     }
     true
 }

@@ -7,12 +7,16 @@ use std::sync::{
 
 use anyhow::{Context, Result};
 use nuxie_binary::RuntimeFile;
-use nuxie_graph::{ArtboardGraph, DependencyNodeKind};
+use nuxie_graph::{
+    AdvancingComponentKind, ArtboardGraph, DependencyNode, DependencyNodeKind,
+    ResettingComponentKind,
+};
 use nuxie_render_api::Factory as RenderFactory;
+use nuxie_schema::definition_by_name;
 
 use crate::animation::{
-    LinearAnimationInstance, RuntimeJoystick, RuntimeKeyedCallback, RuntimeLinearAnimation,
-    build_linear_animations, build_runtime_joysticks,
+    LinearAnimationInstance, RuntimeInterpolator, RuntimeJoystick, RuntimeKeyedCallback,
+    RuntimeLinearAnimation, build_linear_animations, build_runtime_joysticks,
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardAuthoredDataBindStates, RuntimeArtboardContextSourceValue,
@@ -37,15 +41,14 @@ use crate::artboard_data_bind::{
     reunite_artboard_shared_data_bind_converter_states,
 };
 use crate::components::{
-    AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
-    UpdateComponentsReport, apply_initial_solo_collapses, build_runtime_solos,
-    retain_runtime_component_layout_topology,
+    AuthoredTransform, ComponentDirt, ComponentHandle, Mat2D, RuntimeComponent,
+    RuntimeConstrainableListState, RuntimeIkChainLink, RuntimeSkinnableKind, TransformComponents,
+    TransformProperty, UpdateComponentsReport, retain_runtime_component_layout_topology,
+    retain_runtime_layout_component_styles, retain_runtime_solos,
+    retain_runtime_text_input_scroll_constraints,
 };
 use crate::constraints::{
-    RuntimeFollowPathConstraint, RuntimeIkConstraint, RuntimeListFollowPathConstraint,
-    RuntimeScrollConstraint, build_runtime_follow_path_constraints, build_runtime_ik_constraints,
-    build_runtime_list_follow_path_constraints, build_runtime_scroll_constraints,
-    clear_runtime_scroll_intent_for_direct_offset, component_list_virtual_window,
+    apply_scroll_offset_changed, component_list_virtualization, retain_runtime_scroll_constraints,
     runtime_scroll_double_property, set_runtime_scroll_double_property,
 };
 use crate::data_bind_graph::{
@@ -54,10 +57,11 @@ use crate::data_bind_graph::{
 };
 use crate::draw::{
     RuntimeClippingShapeList, RuntimeDrawableList, RuntimeInitialNestedLayoutPaintFrame,
-    RuntimeLayoutBounds, RuntimeShapeList, runtime_apply_component_list_item_layout_bounds,
+    RuntimeLayoutBounds, RuntimeShapeList, retain_runtime_drawable_component_topology,
+    runtime_apply_component_list_item_layout_bounds, runtime_component_list_item_base_transforms,
     runtime_component_list_item_layout_size,
 };
-use crate::objects::{InstanceObjectArena, InstanceSlot};
+use crate::objects::{ComponentAddress, InstanceObjectArena, InstanceSlot, ObjectHandle};
 use crate::properties::{
     JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
     joystick_flags_property_key, joystick_x_property_key, joystick_y_property_key,
@@ -83,6 +87,55 @@ use crate::{
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance,
 };
+
+fn generated_mat2d(
+    objects: &InstanceObjectArena,
+    local_id: usize,
+    type_name: &'static str,
+) -> Mat2D {
+    let value = |name, default| {
+        property_key_for_name(type_name, name)
+            .and_then(|key| objects.double_property(local_id, key))
+            .unwrap_or(default)
+    };
+    Mat2D([
+        value("xx", 1.0),
+        value("xy", 0.0),
+        value("yx", 0.0),
+        value("yy", 1.0),
+        value("tx", 0.0),
+        value("ty", 0.0),
+    ])
+}
+
+fn deform_point_from_skin(
+    point: (f32, f32),
+    indices: u32,
+    weights: u32,
+    skin_world: Mat2D,
+    bone_transforms: &[Mat2D],
+) -> Option<(f32, f32)> {
+    let mut blended = [0.0; 6];
+    for index in 0..4 {
+        let shift = index * 8;
+        let weight = ((weights >> shift) & 0xff) as u8;
+        if weight == 0 {
+            continue;
+        }
+        let bone_index = ((indices >> shift) & 0xff) as usize;
+        let bone_transform = bone_transforms.get(bone_index)?;
+        let normalized_weight = f32::from(weight) / 255.0;
+        for (target, value) in blended.iter_mut().zip(bone_transform.0) {
+            // Clang contracts each C++ `accumulator += value * weight` in
+            // `Weight::deform`; Rust does not contract implicitly. Preserve
+            // that per-site rounding exactly (`src/bones/weight.cpp:35-48`;
+            // `docs/PORTING.md` §4.2).
+            *target = value.mul_add(normalized_weight, *target);
+        }
+    }
+    let skinned = skin_world.transform_point(point.0, point.1);
+    Some(Mat2D(blended).transform_point(skinned.0, skinned.1))
+}
 
 /// Rejection from attaching host-supplied bytes to one external `FontAsset`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -221,7 +274,91 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RuntimeAdvancingComponent {
+    pub(crate) local_id: usize,
+    pub(crate) object: ObjectHandle,
+    pub(crate) component: Option<ComponentHandle>,
+    pub(crate) kind: AdvancingComponentKind,
+}
+
+enum RuntimeScriptAdvanceMode<'a> {
+    Disabled,
+    HostOnly,
+    Factory(&'a mut dyn RenderFactory),
+}
+
+impl RuntimeScriptAdvanceMode<'_> {
+    fn is_enabled(&self) -> bool {
+        !matches!(self, Self::Disabled)
+    }
+
+    fn call(
+        &mut self,
+        instance: &mut dyn ScriptInstance,
+        args: &[ScriptValue],
+        host: &mut dyn ScriptHost,
+    ) -> Result<ScriptValue, ScriptError> {
+        match self {
+            Self::Disabled => unreachable!("disabled script advance cannot be dispatched"),
+            Self::HostOnly => instance.call_method(ScriptMethod::Advance, args, host),
+            Self::Factory(factory) => {
+                instance.call_method_with_factory(ScriptMethod::Advance, args, host, *factory)
+            }
+        }
+    }
+}
+
+enum RuntimeScriptUpdateMode<'a> {
+    HostOnly,
+    Factory(&'a mut dyn RenderFactory),
+}
+
+impl RuntimeScriptUpdateMode<'_> {
+    fn call(
+        &mut self,
+        instance: &mut dyn ScriptInstance,
+        host: &mut dyn ScriptHost,
+    ) -> Result<ScriptValue, ScriptError> {
+        match self {
+            Self::HostOnly => instance.call_method(ScriptMethod::Update, &[], host),
+            Self::Factory(factory) => {
+                instance.call_method_with_factory(ScriptMethod::Update, &[], host, *factory)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RuntimeResettingComponent {
+    pub(crate) local_id: usize,
+    pub(crate) component: ComponentHandle,
+    pub(crate) kind: ResettingComponentKind,
+}
+
+#[derive(Clone, Copy)]
+pub struct RuntimeComponents<'a> {
+    arena: &'a InstanceObjectArena,
+}
+
+impl<'a> RuntimeComponents<'a> {
+    pub fn len(self) -> usize {
+        self.arena.component_handles().len()
+    }
+
+    pub fn is_empty(self) -> bool {
+        self.arena.component_handles().is_empty()
+    }
+
+    pub fn iter(self) -> impl Iterator<Item = &'a RuntimeComponent> + 'a {
+        self.arena
+            .component_handles()
+            .iter()
+            .filter_map(|handle| self.arena.component(*handle))
+    }
+}
+
+#[derive(Debug)]
 pub struct ArtboardInstance {
     instance_identity: RuntimeArtboardInstanceIdentity,
     pub(crate) width: f32,
@@ -238,26 +375,18 @@ pub struct ArtboardInstance {
     pub(crate) frame_id: Cell<u64>,
     pub(crate) slots: Vec<InstanceSlot>,
     pub(crate) objects: InstanceObjectArena,
-    pub(crate) components: Vec<RuntimeComponent>,
-    pub(crate) component_by_local: BTreeMap<usize, usize>,
-    pub(crate) solos: Vec<RuntimeSolo>,
     pub(crate) joysticks: Vec<RuntimeJoystick>,
-    pub(crate) follow_path_constraints: Vec<RuntimeFollowPathConstraint>,
-    pub(crate) list_follow_path_constraints: Vec<RuntimeListFollowPathConstraint>,
-    pub(crate) scroll_constraints: Vec<RuntimeScrollConstraint>,
-    pub(crate) component_list_item_transforms: BTreeMap<usize, Vec<Mat2D>>,
-    pub(crate) component_list_logical_items: BTreeMap<usize, Vec<RuntimeComponentListLogicalItem>>,
-    pub(crate) component_list_items: BTreeMap<usize, Vec<RuntimeComponentListItemInstance>>,
-    pub(crate) component_list_order_caches:
-        RefCell<BTreeMap<usize, RuntimeComponentListOrderCache>>,
-    pub(crate) component_list_sources: BTreeMap<usize, RuntimeOwnedViewModelListHandle>,
-    pub(crate) ik_constraints: Vec<RuntimeIkConstraint>,
+    /// C++ `Artboard::m_advancingComponents`, retained in authored object
+    /// order and rebuilt against clone-owned occurrences.
+    pub(crate) advancing_components: Vec<RuntimeAdvancingComponent>,
+    /// C++ `Artboard::m_Resettables`, retained in authored object order.
+    pub(crate) resetting_components: Vec<RuntimeResettingComponent>,
+    /// C++ `Artboard::m_ComponentLists`, retained in authored object order.
+    /// Handles address the concrete list occurrences in `objects`; steady
+    /// paths never rescan Components to rediscover this family
+    /// (`src/artboard.cpp:330-395`).
+    component_lists: Vec<ComponentHandle>,
     pub(crate) joysticks_apply_before_update: bool,
-    pub(crate) update_order: Vec<usize>,
-    /// C++ dependency traversal includes embedded runtime-only nodes such as
-    /// `Shape::m_PathComposer`. `update_order` remains the public
-    /// component-only view; this is the actual runtime schedule.
-    runtime_update_order: Vec<RuntimeUpdateTarget>,
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
     pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
     pub(crate) script_instances_by_global:
@@ -266,10 +395,7 @@ pub struct ArtboardInstance {
         RuntimeScriptState<BTreeMap<u32, RuntimeScriptInstanceHandle>>,
     has_scripted_drawables: bool,
     nested_script_owned_contexts: BTreeMap<u32, RuntimeOwnedViewModelInstance>,
-    script_path_effect_globals: RuntimeScriptState<BTreeSet<u32>>,
-    script_advances_active: RuntimeScriptState<BTreeSet<u32>>,
-    script_updates_pending: RuntimeScriptState<BTreeSet<u32>>,
-    script_advance_queue: RuntimeScriptState<Vec<f32>>,
+    script_update_error: Option<ScriptError>,
     pub(crate) nested_artboards: RuntimeNestedArtboards,
     pub(crate) nested_artboard_locals: Vec<usize>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
@@ -330,7 +456,6 @@ pub struct ArtboardInstance {
     /// C++ Shape/PathComposer bounds and hit-test members. Hosts do not own or
     /// synchronize a parallel geometry scene cache.
     pub(crate) geometry_state: RefCell<crate::draw::RuntimeGeometryState>,
-    pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
     pub(crate) cache_epoch: u64,
     pub(crate) prepared_epoch: u64,
@@ -360,11 +485,144 @@ pub struct ArtboardInstance {
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RuntimeUpdateTarget {
-    Component(usize),
-    PathComposer(usize),
-    TextVariationHelper,
+impl Clone for ArtboardInstance {
+    fn clone(&self) -> Self {
+        let mut cloned = Self {
+            instance_identity: self.instance_identity.clone(),
+            width: self.width,
+            height: self.height,
+            origin_x: self.origin_x,
+            origin_y: self.origin_y,
+            clip: self.clip,
+            frame_origin: self.frame_origin.clone(),
+            frame_id: self.frame_id.clone(),
+            slots: self.slots.clone(),
+            objects: self.objects.clone(),
+            joysticks: self.joysticks.clone(),
+            advancing_components: self.advancing_components.clone(),
+            resetting_components: self.resetting_components.clone(),
+            component_lists: self.component_lists.clone(),
+            joysticks_apply_before_update: self.joysticks_apply_before_update,
+            linear_animations: self.linear_animations.clone(),
+            state_machines: self.state_machines.clone(),
+            script_instances_by_global: self.script_instances_by_global.clone(),
+            scripted_data_converter_instances_by_global: self
+                .scripted_data_converter_instances_by_global
+                .clone(),
+            has_scripted_drawables: self.has_scripted_drawables,
+            nested_script_owned_contexts: self.nested_script_owned_contexts.clone(),
+            script_update_error: None,
+            nested_artboards: self.nested_artboards.clone(),
+            nested_artboard_locals: self.nested_artboard_locals.clone(),
+            newly_uncollapsed_nested_artboards: self.newly_uncollapsed_nested_artboards.clone(),
+            graph_global_id: self.graph_global_id,
+            build_context: self.build_context.clone(),
+            nested_context_source_tree_cache: self.nested_context_source_tree_cache.clone(),
+            nested_layout_bounds: self.nested_layout_bounds.clone(),
+            artboard_data_bind_values: self.artboard_data_bind_values.clone(),
+            artboard_formula_random_source: self.artboard_formula_random_source.clone(),
+            artboard_owned_view_model_context: self.artboard_owned_view_model_context.clone(),
+            artboard_owned_data_context: self.artboard_owned_data_context.clone(),
+            artboard_owned_view_model_handle: self.artboard_owned_view_model_handle.clone(),
+            artboard_authored_data_bind_states: self.artboard_authored_data_bind_states.clone(),
+            artboard_owned_view_model_rebind_sink: self
+                .artboard_owned_view_model_rebind_sink
+                .clone(),
+            artboard_property_bindings: self.artboard_property_bindings.clone(),
+            artboard_image_asset_bindings: self.artboard_image_asset_bindings.clone(),
+            artboard_data_bind_target_queues: self.artboard_data_bind_target_queues.clone(),
+            artboard_data_bind_source_queues: self.artboard_data_bind_source_queues.clone(),
+            artboard_retained_subordinate_converter_operands: self
+                .artboard_retained_subordinate_converter_operands
+                .clone(),
+            artboard_custom_property_bindings: self.artboard_custom_property_bindings.clone(),
+            artboard_layout_computed_bindings: self.artboard_layout_computed_bindings.clone(),
+            artboard_numeric_source_bindings: self.artboard_numeric_source_bindings.clone(),
+            artboard_formula_token_bindings: self.artboard_formula_token_bindings.clone(),
+            artboard_converter_property_bindings: self.artboard_converter_property_bindings.clone(),
+            artboard_solo_bindings: self.artboard_solo_bindings.clone(),
+            artboard_solo_source_bindings: self.artboard_solo_source_bindings.clone(),
+            artboard_nested_host_bindings: self.artboard_nested_host_bindings.clone(),
+            artboard_list_bindings: self.artboard_list_bindings.clone(),
+            artboard_text_list_bindings: self.artboard_text_list_bindings.clone(),
+            artboard_context_source_values_scratch: self
+                .artboard_context_source_values_scratch
+                .clone(),
+            artboard_nested_child_context_updates_scratch: self
+                .artboard_nested_child_context_updates_scratch
+                .clone(),
+            stateful_nested_view_model_contexts_dirty: self
+                .stateful_nested_view_model_contexts_dirty,
+            artboard_data_bind_dirty_epoch: self.artboard_data_bind_dirty_epoch,
+            artboard_data_bind_processed_epoch: self.artboard_data_bind_processed_epoch,
+            image_asset_overrides: self.image_asset_overrides.clone(),
+            text_style_font_overrides: self.text_style_font_overrides.clone(),
+            has_legacy_image_layout_scales: self.has_legacy_image_layout_scales.clone(),
+            legacy_image_layout_scales: self.legacy_image_layout_scales.clone(),
+            external_font_assets: self.external_font_assets.clone(),
+            runtime_image_assets: self.runtime_image_assets.clone(),
+            render_resources: self.render_resources.clone(),
+            geometry_state: self.geometry_state.clone(),
+            dirt_depth: 0,
+            cache_epoch: self.cache_epoch,
+            prepared_epoch: self.prepared_epoch,
+            // Core clone starts the new occurrence dirty and rebuilds derived
+            // Path state from clone-owned Components; it does not inherit an
+            // Artboard-side invalidation generation from the source
+            // (`artboard.hpp:548-601`; `artboard.cpp:1038-1057`).
+            path_epoch: 1,
+            layout_epoch: self.layout_epoch,
+            text_affecting_locals: self.text_affecting_locals.clone(),
+            solid_color_paint_revisions: self.solid_color_paint_revisions.clone(),
+            runtime_drawables: self.runtime_drawables.clone(),
+            runtime_shapes: self.runtime_shapes.clone(),
+            runtime_clipping_shapes: self.runtime_clipping_shapes.clone(),
+            runtime_meshes: self.runtime_meshes.clone(),
+            did_change: self.did_change.clone(),
+            layout_constraint_bounds_enabled: self.layout_constraint_bounds_enabled,
+            layout_constraint_bounds: self.layout_constraint_bounds.clone(),
+        };
+
+        // Core clones generated fields into fresh Components, then reruns the
+        // same dirty/clean/dependency phases against clone-owned objects.
+        // Never copy the source occurrence's runtime pointer graph
+        // (`artboard.hpp:548-601`; `artboard.cpp:1038-1057`).
+        if let Some((file, graph)) = cloned.build_context.as_ref().and_then(|context| {
+            let graph_index = context
+                .artboard_index_by_global
+                .get(usize::try_from(cloned.graph_global_id).ok()?)
+                .copied()
+                .flatten()?;
+            Some((
+                Arc::clone(&context.file),
+                context.artboards.get(graph_index)?.clone(),
+            ))
+        }) {
+            Self::build_component_occurrence_relations(&mut cloned.objects, &graph)
+                .expect("a validated source occurrence must rebuild the same dependency graph");
+            retain_runtime_layout_component_styles(&file, &cloned.slots, &mut cloned.objects);
+            retain_runtime_solos(&file, &graph, &mut cloned.objects);
+            retain_runtime_scroll_constraints(&file, &graph, &mut cloned.objects);
+            retain_runtime_text_input_scroll_constraints(&mut cloned.objects);
+            retain_runtime_drawable_component_topology(&graph, &mut cloned.objects);
+            (
+                cloned.advancing_components,
+                cloned.resetting_components,
+                cloned.component_lists,
+            ) = Self::build_component_interface_schedules(&cloned.objects, &graph);
+            cloned
+                .runtime_shapes
+                .rebuild_component_memberships(&cloned.objects);
+            cloned.initialize_path_target_flags(&graph);
+            cloned.initialize_component_data_bind_collapsables(&file, &graph);
+        }
+
+        // Generated C++ clones start with `ComponentDirt::Filthy` and clear
+        // custom DataBind flags. Re-run authored Solo/Layout collapse only
+        // after the clone-owned Component ↔ DataBind links are rebuilt.
+        cloned.rederive_initial_component_collapse();
+        cloned
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -572,7 +830,6 @@ pub(crate) struct RuntimeComponentListItemInstance {
     pub(crate) draw_index_sink: Option<crate::view_model_cell::RuntimeCellDirtSink>,
     pub(crate) occurrence_identity: u64,
     pub(crate) logical_index: usize,
-    pub(crate) virtualized_position: Option<(f32, f32)>,
     /// Last parent-assigned layout size observed while preparing this mounted
     /// occurrence. C++ writes `Artboard::layoutBounds()` back into the full
     /// logical `m_artboardSizes` topology after layout; the next list sync
@@ -580,12 +837,6 @@ pub(crate) struct RuntimeComponentListItemInstance {
     pub(crate) settled_layout_size: Cell<Option<(f32, f32)>>,
     pub(crate) transform: Mat2D,
     pub(crate) render_cache_revision: u64,
-}
-
-#[derive(Debug, Clone, Default)]
-pub(crate) struct RuntimeComponentListOrderCache {
-    pub(crate) indices: Vec<usize>,
-    pub(crate) valid: bool,
 }
 
 impl RuntimeComponentListItemInstance {
@@ -764,9 +1015,67 @@ fn state_machine_requires_outer_update_probe(instance: &StateMachineInstance) ->
 }
 
 impl ArtboardInstance {
+    fn build_component_interface_schedules(
+        objects: &InstanceObjectArena,
+        graph: &ArtboardGraph,
+    ) -> (
+        Vec<RuntimeAdvancingComponent>,
+        Vec<RuntimeResettingComponent>,
+        Vec<ComponentHandle>,
+    ) {
+        // The graph rows are a construction-only projection of the exact
+        // `m_Objects` visitation and C++ family switches. Advancing accepts
+        // Core (not Component), so ScriptedDataConverter deliberately carries
+        // no ComponentHandle (`advancing_component.cpp:17-44`;
+        // `artboard.cpp:330-395`).
+        let advancing = graph
+            .advancing_components
+            .iter()
+            .filter_map(|entry| {
+                Some(RuntimeAdvancingComponent {
+                    local_id: entry.local_id,
+                    object: objects.object_handle(entry.local_id)?,
+                    component: objects.component_handle(entry.local_id),
+                    kind: entry.kind,
+                })
+            })
+            .collect();
+        let resetting = graph
+            .resetting_components
+            .iter()
+            .filter_map(|entry| {
+                Some(RuntimeResettingComponent {
+                    local_id: entry.local_id,
+                    component: objects.component_handle(entry.local_id)?,
+                    kind: entry.kind,
+                })
+            })
+            .collect();
+        let component_lists = objects
+            .component_handles()
+            .iter()
+            .copied()
+            .filter(|handle| {
+                objects
+                    .component(*handle)
+                    .is_some_and(|component| component.concrete.constrainable_list.is_some())
+            })
+            .collect();
+        (advancing, resetting, component_lists)
+    }
+
     fn reset_layout_constraint_bounds_for_new_occurrence(&mut self) {
         self.layout_constraint_bounds_enabled = false;
         self.layout_constraint_bounds = None;
+    }
+
+    fn added_to_host(&self) {
+        if let Some(layout) = self
+            .component(0)
+            .and_then(|component| component.concrete.layout.as_ref())
+        {
+            layout.added_to_host();
+        }
     }
 
     /// Validate bytes against both font backends used by runtime text.
@@ -781,10 +1090,23 @@ impl ArtboardInstance {
     /// queues remain fresh so the transient view cannot advance the scripts.
     pub(crate) fn clone_for_transient_layout(&self) -> Self {
         let mut cloned = self.clone();
+        cloned.restore_transient_component_lists_from(self);
         cloned.restore_transient_occurrence_identities_from(self);
         cloned.restore_transient_script_handles_from(self);
         cloned.restore_transient_layout_transfer_state_from(self);
         cloned
+    }
+
+    fn restore_transient_component_lists_from(&mut self, source: &Self) {
+        let locals = source.component_list_locals();
+        for local_id in locals {
+            let Some(source_state) = source.component_list_state(local_id).cloned() else {
+                continue;
+            };
+            if let Some(cloned_state) = self.component_list_state_mut(local_id) {
+                *cloned_state = source_state;
+            }
+        }
     }
 
     fn restore_transient_layout_transfer_state_from(&mut self, source: &Self) {
@@ -804,8 +1126,11 @@ impl ArtboardInstance {
                     .restore_transient_layout_transfer_state_from(&source_nested.child);
             }
         }
-        for (local_id, source_items) in &source.component_list_items {
-            let Some(cloned_items) = self.component_list_items.get_mut(local_id) else {
+        for local_id in source.component_list_locals() {
+            let Some(source_items) = source.component_list_items(local_id) else {
+                continue;
+            };
+            let Some(cloned_items) = self.component_list_items_mut(local_id) else {
                 continue;
             };
             for (cloned_item, source_item) in cloned_items.iter_mut().zip(source_items) {
@@ -829,8 +1154,11 @@ impl ArtboardInstance {
                     .restore_transient_occurrence_identities_from(&source_nested.child);
             }
         }
-        for (local_id, source_items) in &source.component_list_items {
-            let Some(cloned_items) = self.component_list_items.get_mut(local_id) else {
+        for local_id in source.component_list_locals() {
+            let Some(source_items) = source.component_list_items(local_id) else {
+                continue;
+            };
+            let Some(cloned_items) = self.component_list_items_mut(local_id) else {
                 continue;
             };
             for (cloned_item, source_item) in cloned_items.iter_mut().zip(source_items) {
@@ -845,7 +1173,6 @@ impl ArtboardInstance {
         self.script_instances_by_global.0 = source.script_instances_by_global.0.clone();
         self.scripted_data_converter_instances_by_global.0 =
             source.scripted_data_converter_instances_by_global.0.clone();
-        self.script_path_effect_globals.0 = source.script_path_effect_globals.0.clone();
         for (local_id, source_nested) in source.nested_artboards.iter() {
             if let Some(cloned_nested) = self.nested_artboards.get_mut(local_id) {
                 cloned_nested
@@ -853,8 +1180,11 @@ impl ArtboardInstance {
                     .restore_transient_script_handles_from(&source_nested.child);
             }
         }
-        for (local_id, source_items) in &source.component_list_items {
-            let Some(cloned_items) = self.component_list_items.get_mut(local_id) else {
+        for local_id in source.component_list_locals() {
+            let Some(source_items) = source.component_list_items(local_id) else {
+                continue;
+            };
+            let Some(cloned_items) = self.component_list_items_mut(local_id) else {
                 continue;
             };
             for (cloned_item, source_item) in cloned_items.iter_mut().zip(source_items) {
@@ -863,6 +1193,840 @@ impl ArtboardInstance {
                     .restore_transient_script_handles_from(&source_item.child);
             }
         }
+    }
+
+    fn build_component_occurrence_relations(
+        objects: &mut InstanceObjectArena,
+        graph: &ArtboardGraph,
+    ) -> Result<()> {
+        objects.reset_component_relations();
+        let root = objects
+            .root()
+            .context("artboard occurrence is missing its root Component")?;
+        let parent_key = property_key_for_name("Component", "parentId")
+            .context("Component.parentId is missing from the runtime schema")?;
+
+        // C++ onAddedDirty runs in authored object order. Shape forwards that
+        // phase to its embedded PathComposer immediately after its own base
+        // Component, so parent/child and constraint insertion are observable.
+        for component in &graph.components {
+            let handle = objects
+                .component_handle(component.local_id)
+                .context("authored Component handle is missing")?;
+            if handle != root {
+                let parent_local = objects
+                    .uint_property(component.local_id, parent_key)
+                    .and_then(|parent| usize::try_from(parent).ok())
+                    .context("Component parentId does not resolve to an object slot")?;
+                let parent = objects
+                    .component_handle(parent_local)
+                    .context("Component parentId does not resolve to a Component occurrence")?;
+                let parent_type = objects
+                    .component(parent)
+                    .map(|component| component.type_name)
+                    .unwrap_or("<missing>");
+                if component.type_name == "NestedStateMachine"
+                    && parent_type == "ArtboardListMapRule"
+                {
+                    // Nuxie's public authoring format stores selected list-row
+                    // machine IDs as NestedStateMachine-shaped metadata below
+                    // an ArtboardListMapRule. The graph adapter consumes these
+                    // records into `ComponentListMapRuleNode::state_machine_ids`;
+                    // they are not live Component occurrences and therefore
+                    // must not enter the C++ owner tree. A real
+                    // NestedAnimation still requires NestedArtboard parentage
+                    // (`nested_animation.cpp:8-25`).
+                    continue;
+                }
+                if !objects.is_container_component(parent) {
+                    anyhow::bail!(
+                        "Component {} local {} parent local {} type {} is not a ContainerComponent",
+                        component.type_name,
+                        component.local_id,
+                        parent_local,
+                        parent_type
+                    );
+                }
+                if !objects.link_parent(handle, parent) {
+                    anyhow::bail!("Component parent link could not be retained");
+                }
+                let is_vertex = objects
+                    .component(handle)
+                    .is_some_and(|component| component.concrete.vertex.is_some());
+                if is_vertex
+                    && let Some(skinnable) = objects
+                        .component_mut(parent)
+                        .and_then(|parent| parent.concrete.skinnable.as_mut())
+                {
+                    // Vertex::onAddedDirty registers on Path/Mesh in authored
+                    // object order. Keep that exact owner list for Skin
+                    // deformation; no graph vertex scan is needed at update.
+                    skinnable.vertices.push(handle);
+                }
+            }
+            if let Some(composer) = objects.path_composer_handle(component.local_id) {
+                objects.link_parent(composer, root);
+            }
+            let constraint_state = objects
+                .component(handle)
+                .and_then(|component| component.concrete.constraint);
+            if let Some(constraint_state) = constraint_state {
+                let parent = objects
+                    .component(handle)
+                    .and_then(|component| component.parent)
+                    .context("Constraint is missing its parent Component")?;
+                if !objects
+                    .component(parent)
+                    .is_some_and(|parent| parent.capabilities.transform)
+                {
+                    anyhow::bail!("Constraint parent is not a TransformComponent");
+                }
+                objects.add_constraint(parent, handle);
+
+                // TargetedConstraint::onAddedDirty resolves and validates its
+                // retained target after Constraint has registered on the
+                // constrained parent (`src/constraints/targeted_constraint.cpp:
+                // 23-39`). A missing target is legal only for the three
+                // concrete optional-target families.
+                if constraint_state.targeted {
+                    let target_local = constraint_state
+                        .targeted
+                        .then(crate::constraints::targeted_constraint_target_id_property_key)
+                        .flatten()
+                        .and_then(|key| objects.uint_property(component.local_id, key))
+                        .and_then(|target| usize::try_from(target).ok());
+                    let target = target_local.and_then(|local| objects.component_handle(local));
+                    if target_local.is_some_and(|local| objects.contains_object(local))
+                        && target.is_none_or(|target| {
+                            !objects
+                                .component(target)
+                                .is_some_and(|target| target.capabilities.transform)
+                        })
+                    {
+                        anyhow::bail!(
+                            "TargetedConstraint targetId does not resolve to a TransformComponent"
+                        );
+                    }
+                    if constraint_state.requires_target && target.is_none() {
+                        anyhow::bail!("TargetedConstraint is missing its required target");
+                    }
+                    objects
+                        .component_mut(handle)
+                        .expect("Constraint handle was validated")
+                        .concrete
+                        .constraint
+                        .as_mut()
+                        .expect("Constraint occurrence owns Constraint state")
+                        .target = target;
+                }
+            }
+        }
+
+        // Complete the A3 concrete dirty phase in authored object order.
+        // These are the retained members C++ resolves before any clean or
+        // buildDependencies call; immutable graph rows are not runtime truth.
+        for component in &graph.components {
+            let handle = objects
+                .component_handle(component.local_id)
+                .context("authored Component handle is missing")?;
+            match component.type_name {
+                "Skin" => {
+                    let parent = objects
+                        .component(handle)
+                        .and_then(|component| component.parent)
+                        .context("Skin is missing its parent Component")?;
+                    let parent_is_skinnable = objects
+                        .component(parent)
+                        .and_then(|parent| parent.concrete.skinnable.as_ref())
+                        .is_some();
+                    let world_transform = generated_mat2d(objects, component.local_id, "Skin");
+                    objects
+                        .component_mut(handle)
+                        .expect("Skin handle was validated")
+                        .concrete
+                        .skin
+                        .as_mut()
+                        .expect("Skin occurrence owns Skin state")
+                        .world_transform = world_transform;
+                    if parent_is_skinnable {
+                        objects
+                            .component_mut(handle)
+                            .expect("Skin handle was validated")
+                            .concrete
+                            .skin
+                            .as_mut()
+                            .expect("Skin occurrence owns Skin state")
+                            .skinnable = Some(parent);
+                        objects
+                            .component_mut(parent)
+                            .expect("Skinnable parent handle was validated")
+                            .concrete
+                            .skinnable
+                            .as_mut()
+                            .expect("Skin parent owns Skinnable state")
+                            .skin = Some(handle);
+                    }
+                    // `Skin::onAddedDirty` writes m_WorldTransform before
+                    // checking the parent, then returns MissingObject for a
+                    // non-Skinnable parent. Artboard::canContinue treats that
+                    // status as non-fatal, so malformed legacy files retain a
+                    // null Skinnable rather than failing instantiation
+                    // (`skin.cpp:13-39`; `artboard.cpp:204-245,264-288`).
+                }
+                "Tendon" => {
+                    let bone_id_key = property_key_for_name("Tendon", "boneId")
+                        .context("Tendon.boneId is missing from the runtime schema")?;
+                    let bone_local = objects
+                        .uint_property(component.local_id, bone_id_key)
+                        .and_then(|bone| usize::try_from(bone).ok())
+                        .context("Tendon boneId does not resolve to an object slot")?;
+                    let bone = objects
+                        .component_handle(bone_local)
+                        .context("Tendon boneId does not resolve to a Component occurrence")?;
+                    if objects
+                        .component(bone)
+                        .and_then(|bone| bone.concrete.bone.as_ref())
+                        .is_none()
+                    {
+                        anyhow::bail!("Tendon boneId does not resolve to a Bone");
+                    }
+                    let inverse_bind =
+                        generated_mat2d(objects, component.local_id, "Tendon").invert_or_identity();
+                    let tendon = objects
+                        .component_mut(handle)
+                        .expect("Tendon handle was validated")
+                        .concrete
+                        .tendon
+                        .as_mut()
+                        .expect("Tendon occurrence owns Tendon state");
+                    tendon.inverse_bind = inverse_bind;
+                    tendon.bone = Some(bone);
+                }
+                type_name
+                    if definition_by_name(type_name)
+                        .is_some_and(|definition| definition.is_a("Weight")) =>
+                {
+                    let parent = objects
+                        .component(handle)
+                        .and_then(|component| component.parent)
+                        .context("Weight is missing its parent Component")?;
+                    if objects
+                        .component(parent)
+                        .and_then(|parent| parent.concrete.vertex.as_ref())
+                        .is_none()
+                    {
+                        anyhow::bail!("Weight parent is not a Vertex");
+                    }
+                    objects
+                        .component_mut(parent)
+                        .expect("Vertex parent handle was validated")
+                        .concrete
+                        .vertex
+                        .as_mut()
+                        .expect("Weight parent owns Vertex state")
+                        .weight = Some(handle);
+                }
+                _ => {}
+            }
+        }
+
+        // Complete the A3/A5 clean phase in authored object order. Transform's
+        // parent pointer is a distinct typed relationship, Bone registers
+        // with a Bone parent (RootBone deliberately bypasses that rule),
+        // Tendon registers on its Skin in source order, FollowPath retains its
+        // target path membership, and IK builds its one FK chain.
+        for component in &graph.components {
+            let handle = objects
+                .component_handle(component.local_id)
+                .context("authored Component handle is missing")?;
+            if objects
+                .component(handle)
+                .is_some_and(|component| component.capabilities.transform)
+            {
+                let parent_transform = objects
+                    .component(handle)
+                    .and_then(|component| component.parent)
+                    .filter(|parent| {
+                        objects
+                            .component(*parent)
+                            .is_some_and(|parent| parent.capabilities.world_transform)
+                    });
+                objects
+                    .component_mut(handle)
+                    .expect("Transform handle was validated")
+                    .parent_transform = parent_transform;
+            }
+
+            // `Path::onAddedClean` walks the live parent chain to its Shape,
+            // stores that pointer, and registers itself on the Shape in
+            // authored order. The embedded PathComposer is then reached from
+            // that retained Shape, never rediscovered through immutable graph
+            // rows (`src/shapes/path.cpp:76-96`).
+            if objects
+                .component(handle)
+                .and_then(|component| component.concrete.path.as_ref())
+                .is_some()
+            {
+                let mut ancestor = objects
+                    .component(handle)
+                    .and_then(|component| component.parent);
+                let shape = loop {
+                    let Some(candidate) = ancestor else {
+                        anyhow::bail!("Path is missing its owning Shape");
+                    };
+                    if objects
+                        .component(candidate)
+                        .and_then(|component| component.concrete.shape.as_ref())
+                        .is_some()
+                    {
+                        break candidate;
+                    }
+                    ancestor = objects
+                        .component(candidate)
+                        .and_then(|component| component.parent);
+                };
+                let shape_local = objects
+                    .component_local_id(shape)
+                    .context("Shape handle is missing its object identity")?;
+                objects
+                    .path_composer_handle(shape_local)
+                    .context("Shape is missing its embedded PathComposer")?;
+                objects
+                    .component_mut(handle)
+                    .expect("Path handle was validated")
+                    .concrete
+                    .path
+                    .as_mut()
+                    .expect("Path occurrence owns Path state")
+                    .shape = Some(shape);
+                let paths = &mut objects
+                    .component_mut(shape)
+                    .expect("Shape handle was validated")
+                    .concrete
+                    .shape
+                    .as_mut()
+                    .expect("Shape occurrence owns Shape state")
+                    .paths;
+                assert!(
+                    !paths.contains(&handle),
+                    "C++ Shape::addPath requires unique Path registration"
+                );
+                paths.push(handle);
+            }
+
+            let is_non_root_bone = objects
+                .component(handle)
+                .and_then(|component| component.concrete.bone.as_ref())
+                .is_some_and(|bone| !bone.is_root);
+            if is_non_root_bone {
+                let parent = objects
+                    .component(handle)
+                    .and_then(|component| component.parent)
+                    .context("Bone is missing its parent Component")?;
+                let Some(parent_bone) = objects
+                    .component_mut(parent)
+                    .and_then(|parent| parent.concrete.bone.as_mut())
+                else {
+                    anyhow::bail!("Bone parent is not a Bone");
+                };
+                parent_bone.child_bones.push(handle);
+            } else if component.type_name == "Tendon" {
+                let parent = objects
+                    .component(handle)
+                    .and_then(|component| component.parent)
+                    .context("Tendon is missing its parent Component")?;
+                let Some(skin) = objects
+                    .component_mut(parent)
+                    .and_then(|parent| parent.concrete.skin.as_mut())
+                else {
+                    anyhow::bail!("Tendon parent is not a Skin");
+                };
+                skin.tendons.push(handle);
+            }
+
+            if component.type_name == "IKConstraint" {
+                let tip = objects
+                    .component(handle)
+                    .and_then(|component| component.parent)
+                    .context("IKConstraint is missing its constrained parent")?;
+                if objects
+                    .component(tip)
+                    .and_then(|component| component.concrete.bone.as_ref())
+                    .is_none()
+                {
+                    anyhow::bail!("IKConstraint parent is not a Bone");
+                }
+
+                let mut reverse_chain = vec![tip];
+                let mut bone = tip;
+                let mut remaining = objects
+                    .uint_property(
+                        component.local_id,
+                        crate::constraints::IK_PARENT_BONE_COUNT_PROPERTY_KEY,
+                    )
+                    .unwrap_or(0);
+                while remaining > 0 {
+                    let Some(parent) = objects
+                        .component(bone)
+                        .and_then(|component| component.parent)
+                    else {
+                        break;
+                    };
+                    if objects
+                        .component(parent)
+                        .and_then(|component| component.concrete.bone.as_ref())
+                        .is_none()
+                    {
+                        break;
+                    }
+                    remaining -= 1;
+                    bone = parent;
+                    let peers = &mut objects
+                        .component_mut(bone)
+                        .expect("IK ancestor Bone was validated")
+                        .concrete
+                        .bone
+                        .as_mut()
+                        .expect("IK ancestor owns Bone state")
+                        .peer_constraints;
+                    assert!(
+                        !peers.contains(&handle),
+                        "C++ Bone::addPeerConstraint requires unique IK registration"
+                    );
+                    peers.push(handle);
+                    reverse_chain.push(bone);
+                }
+
+                // C++ stores the FK chain root-to-tip after first collecting
+                // it tip-to-root (`ik_constraint.cpp:25-50`).
+                let chain = reverse_chain
+                    .iter()
+                    .rev()
+                    .copied()
+                    .enumerate()
+                    .map(|(index, bone)| RuntimeIkChainLink {
+                        index,
+                        bone,
+                        angle: 0.0,
+                        transform_components: TransformComponents::default(),
+                        parent_world_inverse: Mat2D::IDENTITY,
+                    })
+                    .collect();
+                let retained = objects
+                    .component_mut(handle)
+                    .expect("IKConstraint handle was validated")
+                    .concrete
+                    .ik
+                    .as_mut()
+                    .expect("IKConstraint owns retained chain state");
+                retained.chain = chain;
+                #[cfg(test)]
+                {
+                    retained.chain_builds += 1;
+                }
+
+                // `IKConstraint::onAddedClean` makes every first-level
+                // off-chain Transform child of each ancestor depend on the
+                // constrained tip (`ik_constraint.cpp:52-72`).
+                for index in 1..reverse_chain.len() {
+                    let ancestor = reverse_chain[index];
+                    let chain_child = reverse_chain[index - 1];
+                    let children = objects
+                        .component(ancestor)
+                        .map(|component| component.children.clone())
+                        .unwrap_or_default();
+                    for child in children {
+                        if child != chain_child
+                            && objects
+                                .component(child)
+                                .is_some_and(|component| component.capabilities.transform)
+                        {
+                            objects.add_dependent(tip, child);
+                        }
+                    }
+                }
+            }
+        }
+
+        // TextStyle creates its optional helper inside that occurrence's
+        // onAddedClean, then immediately runs the helper's dirty/clean phases
+        // (`src/text/text_style.cpp:45-70`). Preserve that object-order
+        // construction point rather than pre-attaching every helper as a
+        // family batch.
+        for component in &graph.components {
+            let Some(helper) = graph
+                .text_variation_helpers
+                .iter()
+                .find(|helper| helper.text_style_local == component.local_id)
+            else {
+                continue;
+            };
+            let handle = if objects
+                .text_variation_helper_handle(helper.text_style_local)
+                .is_some()
+            {
+                objects
+                    .relink_text_variation_helper_owner(helper.text_style_local)
+                    .context("TextVariationHelper cannot retain its rebuilt TextStyle parent")?
+            } else {
+                objects
+                    .attach_text_variation_helper(
+                        helper.text_style_local,
+                        RuntimeComponent::embedded(
+                            helper.text_style_local,
+                            helper.text_style_global,
+                            "TextVariationHelper",
+                        ),
+                    )
+                    .context("TextStyle cannot own its TextVariationHelper")?
+            };
+            if !objects.link_parent(handle, root) {
+                anyhow::bail!("TextVariationHelper parent link could not be retained");
+            }
+        }
+
+        // Consume the construction-only insertion blueprint once. Every edge
+        // lands on the exact authored or embedded Component occurrence.
+        let dependency_handles = graph
+            .dependency_nodes
+            .iter()
+            .map(|node| match node.kind {
+                DependencyNodeKind::Component { local_id, .. } => {
+                    objects.component_handle(local_id)
+                }
+                DependencyNodeKind::PathComposer { shape_local, .. } => {
+                    objects.path_composer_handle(shape_local)
+                }
+                DependencyNodeKind::TextVariationHelper {
+                    text_style_local, ..
+                } => objects.text_variation_helper_handle(text_style_local),
+            })
+            .collect::<Vec<_>>();
+        let mut ordered_edges =
+            Vec::with_capacity(graph.dependency_node_edges_in_insertion_order.len());
+        let mut scheduled_edges = BTreeSet::new();
+        let mut push_edge = |edge_index: usize| {
+            if scheduled_edges.insert(edge_index) {
+                ordered_edges.push(edge_index);
+            }
+        };
+
+        // C++ invokes each concrete buildDependencies in authored object
+        // order. Shape invokes its embedded PathComposer before Super, and
+        // TextStyle invokes its helper before its own parent dependency
+        // (`shape.cpp:262-276`; `text_style.cpp:128-136`). The import graph
+        // stores a family-complete edge set; interleave the already-closed
+        // embedded owners here before consuming the remaining family edges.
+        for component in &graph.components {
+            let handle = objects
+                .component_handle(component.local_id)
+                .context("authored Component handle is missing during dependency construction")?;
+            if let Some(composer_node) = graph.dependency_nodes.iter().position(|node| {
+                matches!(
+                    node.kind,
+                    DependencyNodeKind::PathComposer { shape_local, .. }
+                        if shape_local == component.local_id
+                )
+            }) {
+                for (edge_index, edge) in graph
+                    .dependency_node_edges_in_insertion_order
+                    .iter()
+                    .enumerate()
+                {
+                    if edge.dependent_node == composer_node
+                        && matches!(
+                            edge.kind,
+                            nuxie_graph::DependencyKind::PathComposerShape
+                                | nuxie_graph::DependencyKind::PathComposerPath
+                        )
+                    {
+                        push_edge(edge_index);
+                    }
+                }
+            }
+            if let Some(helper_node) = graph.dependency_nodes.iter().position(|node| {
+                matches!(
+                    node.kind,
+                    DependencyNodeKind::TextVariationHelper {
+                        text_style_local,
+                        ..
+                    } if text_style_local == component.local_id
+                )
+            }) {
+                for (edge_index, edge) in graph
+                    .dependency_node_edges_in_insertion_order
+                    .iter()
+                    .enumerate()
+                {
+                    if (edge.source_node == helper_node || edge.dependent_node == helper_node)
+                        && matches!(
+                            edge.kind,
+                            nuxie_graph::DependencyKind::TextVariationHelperArtboard
+                                | nuxie_graph::DependencyKind::TextVariationHelperText
+                        )
+                    {
+                        push_edge(edge_index);
+                    }
+                }
+            }
+
+            // Skin has no Super::buildDependencies. At the Skin object's
+            // authored build point it walks retained Tendons, adding each
+            // Bone and peer-constraint parent in Tendon order before
+            // allocating its owned transform buffer (`src/bones/skin.cpp:
+            // 53-77`). Derive the edges from those retained owners so clone
+            // construction observes live clone-owned boneId relationships.
+            if component.type_name == "Skin" {
+                let skin = objects
+                    .component_handle(component.local_id)
+                    .context("Skin handle is missing during dependency construction")?;
+                let tendons = objects
+                    .component(skin)
+                    .and_then(|component| component.concrete.skin.as_ref())
+                    .map(|skin| skin.tendons.clone())
+                    .unwrap_or_default();
+                for tendon in tendons {
+                    let Some(bone) = objects
+                        .component(tendon)
+                        .and_then(|component| component.concrete.tendon.as_ref())
+                        .and_then(|tendon| tendon.bone)
+                    else {
+                        continue;
+                    };
+                    objects.add_dependent(bone, skin);
+                    let peer_constraints = objects
+                        .component(bone)
+                        .and_then(|component| component.concrete.bone.as_ref())
+                        .map(|bone| bone.peer_constraints.clone())
+                        .unwrap_or_default();
+                    for constraint in peer_constraints {
+                        if let Some(parent) = objects
+                            .component(constraint)
+                            .and_then(|component| component.parent)
+                        {
+                            objects.add_dependent(parent, skin);
+                        }
+                    }
+                }
+            }
+
+            // Ordinary TargetedConstraint::buildDependencies makes the
+            // constrained parent update after the retained target. IK calls
+            // this base before adding its own target->constraint edge.
+            if let Some(constraint) = objects
+                .component(handle)
+                .and_then(|component| component.concrete.constraint)
+                && constraint.targeted
+                && constraint.kind.uses_targeted_base_dependencies()
+                && let (Some(target), Some(parent)) = (
+                    constraint.target,
+                    objects
+                        .component(handle)
+                        .and_then(|component| component.parent),
+                )
+            {
+                objects.add_dependent(target, parent);
+            }
+
+            if objects
+                .component(handle)
+                .and_then(|component| component.concrete.follow_path.as_ref())
+                .is_some()
+            {
+                let target = objects
+                    .component(handle)
+                    .and_then(|component| component.concrete.constraint)
+                    .and_then(|constraint| constraint.target)
+                    .context("FollowPathConstraint is missing its retained target")?;
+                let source = objects
+                    .component(target)
+                    .and_then(|component| component.concrete.shape.as_ref())
+                    .and_then(|_| {
+                        objects
+                            .component_local_id(target)
+                            .and_then(|local| objects.path_composer_handle(local))
+                    })
+                    .or_else(|| {
+                        objects
+                            .component(target)
+                            .and_then(|component| component.concrete.path.as_ref())
+                            .and_then(|path| path.shape)
+                            .and_then(|shape| objects.component_local_id(shape))
+                            .and_then(|shape_local| objects.path_composer_handle(shape_local))
+                            .or_else(|| {
+                                objects
+                                    .component(target)
+                                    .and_then(|component| component.concrete.path.as_ref())
+                                    .map(|_| target)
+                            })
+                    });
+                if let Some(source) = source {
+                    objects.add_dependent(source, handle);
+                }
+                if let Some(parent) = objects
+                    .component(handle)
+                    .and_then(|component| component.parent)
+                {
+                    objects.add_dependent(handle, parent);
+                }
+
+                // ListFollowPath calls its FollowPath Super first and then
+                // registers itself once on the exact ConstrainableList owner
+                // (`list_follow_path_constraint.cpp:57-66`).
+                if objects
+                    .component(handle)
+                    .and_then(|component| component.concrete.constraint)
+                    .is_some_and(|state| {
+                        state.kind == crate::components::RuntimeConstraintKind::ListFollowPath
+                    })
+                    && let Some(list) = objects
+                        .component(handle)
+                        .and_then(|component| component.parent)
+                    && let Some(constraints) = objects
+                        .component_mut(list)
+                        .and_then(|component| component.concrete.constrainable_list.as_mut())
+                        .map(|list| &mut list.constraints)
+                {
+                    assert!(
+                        !constraints.contains(&handle),
+                        "C++ ConstrainableList requires unique constraint registration"
+                    );
+                    constraints.push(handle);
+                }
+            }
+
+            if component.type_name == "IKConstraint"
+                && let Some(target) = objects
+                    .component(handle)
+                    .and_then(|component| component.concrete.constraint)
+                    .and_then(|constraint| constraint.target)
+            {
+                // `IKConstraint::buildDependencies` runs TargetedConstraint
+                // first (above), then makes the constraint itself depend on
+                // the same target (`ik_constraint.cpp:8-19`).
+                objects.add_dependent(target, handle);
+            }
+
+            // Mesh::buildDependencies adds Skin before its explicit parent
+            // edge (`src/shapes/mesh.cpp:152-160`).
+            if component.type_name == "Mesh" {
+                let mesh = objects
+                    .component_handle(component.local_id)
+                    .context("Mesh handle is missing during dependency construction")?;
+                if let Some(skin) = objects
+                    .component(mesh)
+                    .and_then(|component| component.concrete.skinnable.as_ref())
+                    .and_then(|skinnable| skinnable.skin)
+                {
+                    objects.add_dependent(skin, mesh);
+                }
+            }
+            for (edge_index, edge) in graph
+                .dependency_node_edges_in_insertion_order
+                .iter()
+                .enumerate()
+            {
+                if edge.kind != nuxie_graph::DependencyKind::ParentChild {
+                    continue;
+                }
+                let Some(DependencyNode {
+                    kind: DependencyNodeKind::Component { local_id, .. },
+                    ..
+                }) = graph.dependency_nodes.get(edge.dependent_node)
+                else {
+                    continue;
+                };
+                if *local_id == component.local_id {
+                    push_edge(edge_index);
+                }
+            }
+
+            // PointsPath::buildDependencies calls Super first and then adds
+            // its retained Skin dependency (`src/shapes/points_path.cpp:
+            // 12-19`), the opposite relative position from Mesh.
+            if component.type_name == "PointsPath" {
+                let path = objects
+                    .component_handle(component.local_id)
+                    .context("PointsPath handle is missing during dependency construction")?;
+                if let Some(skin) = objects
+                    .component(path)
+                    .and_then(|component| component.concrete.skinnable.as_ref())
+                    .and_then(|skinnable| skinnable.skin)
+                {
+                    objects.add_dependent(skin, path);
+                }
+            }
+        }
+        for edge_index in 0..graph.dependency_node_edges_in_insertion_order.len() {
+            push_edge(edge_index);
+        }
+
+        for edge_index in ordered_edges {
+            let edge = &graph.dependency_node_edges_in_insertion_order[edge_index];
+            if matches!(
+                edge.kind,
+                nuxie_graph::DependencyKind::TargetedConstraint
+                    | nuxie_graph::DependencyKind::IkConstraintTarget
+                    | nuxie_graph::DependencyKind::IkConstraintTipChild
+                    | nuxie_graph::DependencyKind::DrawTargetDrawable
+                    | nuxie_graph::DependencyKind::DrawRulesTarget
+                    | nuxie_graph::DependencyKind::SkinBone
+                    | nuxie_graph::DependencyKind::SkinBoneConstraintParent
+                    | nuxie_graph::DependencyKind::SkinMesh
+                    | nuxie_graph::DependencyKind::SkinPointsPath
+                    | nuxie_graph::DependencyKind::FollowPathConstraintParent
+                    | nuxie_graph::DependencyKind::FollowPathConstraintTargetPathComposer
+                    | nuxie_graph::DependencyKind::FollowPathConstraintTargetPath
+            ) {
+                continue;
+            }
+            let Some(mut source) = dependency_handles.get(edge.source_node).copied().flatten()
+            else {
+                continue;
+            };
+            let Some(mut dependent) = dependency_handles
+                .get(edge.dependent_node)
+                .copied()
+                .flatten()
+            else {
+                continue;
+            };
+            if edge.kind == nuxie_graph::DependencyKind::ParentChild {
+                let Some(current_parent) = objects
+                    .component(dependent)
+                    .and_then(|component| component.parent)
+                else {
+                    continue;
+                };
+                source = current_parent;
+            } else if edge.kind == nuxie_graph::DependencyKind::TextVariationHelperText {
+                let Some(current_text) = objects.text_variation_helper_text(source) else {
+                    continue;
+                };
+                dependent = current_text;
+            }
+            objects.add_dependent(source, dependent);
+        }
+
+        // Skin allocates exactly one transform slot for identity plus one per
+        // retained Tendon after dependencies are built. Initial FILTHY update
+        // settles the non-identity slots before they are consumed.
+        for component in &graph.components {
+            if component.type_name != "Skin" {
+                continue;
+            }
+            let handle = objects
+                .component_handle(component.local_id)
+                .context("Skin handle is missing")?;
+            let skin = objects
+                .component_mut(handle)
+                .and_then(|component| component.concrete.skin.as_mut())
+                .context("Skin occurrence is missing its concrete state")?;
+            skin.bone_transforms = vec![Mat2D::IDENTITY; skin.tendons.len() + 1];
+        }
+        objects.sort_dependencies_from_root();
+        retain_runtime_component_layout_topology(objects);
+        Ok(())
     }
 
     pub fn from_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Result<Self> {
@@ -981,69 +2145,57 @@ impl ArtboardInstance {
                 source_global_id: local_object.global_id,
                 type_name: local_object.type_name,
                 name: local_object.name.clone(),
-                component_index: None,
             });
         }
         let mut objects = InstanceObjectArena::from_slots(file, &slots);
         apply_artboard_name_based_color_data_bind_defaults(file, graph, &mut objects);
 
-        let mut component_by_local = BTreeMap::new();
-        let mut components = Vec::new();
-
         for component in &graph.components {
             file.object(component.global_id as usize).with_context(|| {
                 format!("component global id {} is missing", component.global_id)
             })?;
-
-            component_by_local.insert(component.local_id, components.len());
-            components.push(RuntimeComponent::from_graph_component(component));
-            let slot = slots
-                .get_mut(component.local_id)
-                .with_context(|| format!("component local id {} is missing", component.local_id))?;
-            slot.component_index = Some(components.len() - 1);
+            objects
+                .attach_component(
+                    component.local_id,
+                    RuntimeComponent::from_graph_component(component),
+                )
+                .with_context(|| {
+                    format!(
+                        "component local id {} is missing or duplicate",
+                        component.local_id
+                    )
+                })?;
+        }
+        for composer in &graph.path_composers {
+            objects
+                .attach_path_composer(
+                    composer.shape_local,
+                    RuntimeComponent::embedded(
+                        composer.shape_local,
+                        composer.shape_global,
+                        "PathComposer",
+                    ),
+                )
+                .with_context(|| {
+                    format!(
+                        "shape local id {} cannot own its PathComposer",
+                        composer.shape_local
+                    )
+                })?;
         }
 
-        let mut update_order = graph
-            .components
-            .iter()
-            .filter_map(|component| {
-                component
-                    .graph_order
-                    .map(|order| (order, component.local_id))
-            })
-            .collect::<Vec<_>>();
-        update_order.sort_by_key(|(order, local_id)| (*order, *local_id));
-        let update_order = update_order
-            .into_iter()
-            .map(|(_, local_id)| local_id)
-            .collect::<Vec<_>>();
-        let runtime_update_order = graph
-            .runtime_dependency_node_order
-            .iter()
-            .filter_map(|node_id| {
-                let node = graph.dependency_nodes.get(*node_id)?;
-                match &node.kind {
-                    DependencyNodeKind::Component { local_id, .. } => {
-                        Some(RuntimeUpdateTarget::Component(*local_id))
-                    }
-                    DependencyNodeKind::PathComposer { shape_local, .. } => {
-                        Some(RuntimeUpdateTarget::PathComposer(*shape_local))
-                    }
-                    DependencyNodeKind::TextVariationHelper { .. } => {
-                        Some(RuntimeUpdateTarget::TextVariationHelper)
-                    }
-                }
-            })
-            .collect::<Vec<_>>();
+        Self::build_component_occurrence_relations(&mut objects, graph)?;
+        retain_runtime_layout_component_styles(file, &slots, &mut objects);
+        retain_runtime_solos(file, graph, &mut objects);
+        retain_runtime_scroll_constraints(file, graph, &mut objects);
+        retain_runtime_text_input_scroll_constraints(&mut objects);
+        retain_runtime_drawable_component_topology(graph, &mut objects);
+        let (advancing_components, resetting_components, component_lists) =
+            Self::build_component_interface_schedules(&objects, graph);
         let mut converter_cache = RuntimeDataBindGraphConverterBuildCache::default();
-        let solos = build_runtime_solos(file, graph);
         let mut linear_animations =
             build_linear_animations(file, graph, &slots, &mut converter_cache);
         let joysticks = build_runtime_joysticks(graph, &linear_animations);
-        let follow_path_constraints = build_runtime_follow_path_constraints(file, graph);
-        let list_follow_path_constraints = build_runtime_list_follow_path_constraints(file, graph);
-        let scroll_constraints = build_runtime_scroll_constraints(file, graph);
-        let ik_constraints = build_runtime_ik_constraints(file, graph);
         let state_machines =
             build_state_machines(file, graph, &linear_animations, &mut converter_cache);
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
@@ -1095,8 +2247,6 @@ impl ArtboardInstance {
                 }
             }
         }
-        apply_initial_solo_collapses(&objects, &solos, &mut components, &component_by_local);
-        retain_runtime_component_layout_topology(&mut components, &component_by_local);
         let nested_artboards = if inserted {
             build_runtime_nested_artboard_instances(
                 file,
@@ -1124,6 +2274,7 @@ impl ArtboardInstance {
                 .max()
                 .map_or(0, |local_id| local_id.saturating_add(1))
         ];
+        let runtime_drawables = RuntimeDrawableList::from_graph(graph, &objects);
         let mut instance = Self {
             instance_identity: RuntimeArtboardInstanceIdentity::next(),
             width: dimensions.width,
@@ -1135,22 +2286,11 @@ impl ArtboardInstance {
             frame_id: Cell::new(0),
             slots,
             objects,
-            components,
-            component_by_local,
-            solos,
             joysticks,
-            follow_path_constraints,
-            list_follow_path_constraints,
-            scroll_constraints,
-            component_list_item_transforms: BTreeMap::new(),
-            component_list_logical_items: BTreeMap::new(),
-            component_list_items: BTreeMap::new(),
-            component_list_order_caches: RefCell::new(BTreeMap::new()),
-            component_list_sources: BTreeMap::new(),
-            ik_constraints,
+            advancing_components,
+            resetting_components,
+            component_lists,
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
-            update_order,
-            runtime_update_order,
             linear_animations,
             state_machines: Arc::new(state_machines),
             script_instances_by_global: RuntimeScriptState::default(),
@@ -1160,10 +2300,7 @@ impl ArtboardInstance {
                 .iter()
                 .any(|component| component.type_name == "ScriptedDrawable"),
             nested_script_owned_contexts: BTreeMap::new(),
-            script_path_effect_globals: RuntimeScriptState::default(),
-            script_advances_active: RuntimeScriptState::default(),
-            script_updates_pending: RuntimeScriptState::default(),
-            script_advance_queue: RuntimeScriptState::default(),
+            script_update_error: None,
             nested_artboards,
             nested_artboard_locals,
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
@@ -1207,7 +2344,6 @@ impl ArtboardInstance {
             runtime_image_assets: RefCell::new(None),
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             geometry_state: RefCell::new(crate::draw::RuntimeGeometryState::default()),
-            dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
             prepared_epoch: 1,
@@ -1215,7 +2351,7 @@ impl ArtboardInstance {
             layout_epoch: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
-            runtime_drawables: RuntimeDrawableList::from_graph(graph),
+            runtime_drawables,
             runtime_shapes: RuntimeShapeList::from_graph(graph),
             runtime_clipping_shapes: RuntimeClippingShapeList::from_graph(graph),
             runtime_meshes: crate::draw::RuntimeMeshList::from_graph(graph),
@@ -1223,7 +2359,16 @@ impl ArtboardInstance {
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
         };
-        instance.apply_initial_layout_component_display_collapses();
+        instance
+            .runtime_shapes
+            .rebuild_component_memberships(&instance.objects);
+        instance.initialize_path_target_flags(graph);
+        // C++ `DataBind::initialize` links every authored bind to its exact
+        // Component target in import order before Solo/Layout can publish
+        // initial collapse transitions (`data_bind.cpp:608-615`;
+        // `component.cpp:108-127`).
+        instance.initialize_component_data_bind_collapsables(file, graph);
+        instance.apply_initial_component_collapse_callbacks_in_authored_order();
         instance.initialize_runtime_shape_paint_owners(graph);
         let nested_host_locals = instance.nested_artboard_locals.clone();
         for host_local_id in nested_host_locals {
@@ -1231,6 +2376,122 @@ impl ArtboardInstance {
         }
 
         Ok(instance)
+    }
+
+    fn initialize_path_target_flags(&mut self, graph: &ArtboardGraph) {
+        let component_handles = self.objects.component_handles().to_vec();
+        for constraint in component_handles {
+            if self
+                .objects
+                .component(constraint)
+                .and_then(|component| component.concrete.follow_path.as_ref())
+                .is_none()
+            {
+                continue;
+            }
+            let Some(target) = self
+                .objects
+                .component(constraint)
+                .and_then(|component| component.concrete.constraint)
+                .and_then(|constraint| constraint.target)
+            else {
+                continue;
+            };
+            if let Some(shape) = self
+                .objects
+                .component_mut(target)
+                .and_then(|component| component.concrete.shape.as_mut())
+            {
+                shape.add_flags(crate::components::RuntimeShapeState::FOLLOW_PATH);
+            } else if let Some(path) = self
+                .objects
+                .component_mut(target)
+                .and_then(|component| component.concrete.path.as_mut())
+            {
+                path.add_flags(crate::components::RuntimePathState::FOLLOW_PATH);
+            }
+        }
+
+        // `ClippingShape::onAddedClean` marks every source-subtree Shape as
+        // clipping before the first dependency update. Those exact Shape
+        // occurrences own the flag; their Paths consult it through `m_Shape`
+        // (`src/shapes/clipping_shape.cpp:91-117`;
+        // `src/shapes/path.cpp:111-125`).
+        for clipping_shape in &graph.clipping_shapes {
+            for &shape_local in &clipping_shape.shape_locals {
+                if let Some(shape) = self
+                    .objects
+                    .component_for_local_mut(shape_local)
+                    .and_then(|component| component.concrete.shape.as_mut())
+                {
+                    shape.add_flags(crate::components::RuntimeShapeState::CLIPPING);
+                }
+            }
+        }
+
+        // TextFollowPathModifier owns the same target flag producer as
+        // FollowPathConstraint. Resolve its authored target once during the
+        // concrete clean phase and mark the exact target occurrence
+        // (`src/text/text_follow_path_modifier.cpp:34-49`).
+        if let Some(target_key) = property_key_for_name("TextFollowPathModifier", "targetId") {
+            for component in &graph.components {
+                if component.type_name != "TextFollowPathModifier" {
+                    continue;
+                }
+                let Some(target) = self
+                    .objects
+                    .uint_property(component.local_id, target_key)
+                    .and_then(|target| usize::try_from(target).ok())
+                    .and_then(|target| self.objects.component_handle(target))
+                else {
+                    continue;
+                };
+                if let Some(shape) = self
+                    .objects
+                    .component(target)
+                    .and_then(|component| component.concrete.shape.as_ref())
+                {
+                    shape.add_flags(crate::components::RuntimeShapeState::FOLLOW_PATH);
+                } else if let Some(path) = self
+                    .objects
+                    .component(target)
+                    .and_then(|component| component.concrete.path.as_ref())
+                {
+                    path.add_flags(crate::components::RuntimePathState::FOLLOW_PATH);
+                }
+            }
+        }
+    }
+
+    fn initialize_state_machine_hit_path_flags(&mut self, state_machine: &RuntimeStateMachine) {
+        let mut hit_shapes = BTreeSet::new();
+        for listener in state_machine.listeners.iter() {
+            if !listener
+                .listener_types
+                .iter()
+                .copied()
+                .any(crate::state_machine::RuntimeListenerType::is_pointer_hit)
+            {
+                continue;
+            }
+            let Some(shape_handle) = self.objects.component_handle(listener.target_local_id) else {
+                continue;
+            };
+            if !hit_shapes.insert(shape_handle) {
+                continue;
+            }
+            if let Some(shape) = self
+                .objects
+                .component(shape_handle)
+                .and_then(|component| component.concrete.shape.as_ref())
+            {
+                // C++ sets neverDeferUpdate and recursively publishes Path
+                // dirt on the Shape at HitExpandable construction
+                // (`state_machine_instance.cpp:1651-1661`).
+                shape.add_flags(crate::components::RuntimeShapeState::NEVER_DEFER_UPDATE);
+                self.add_component_dirt(shape_handle, ComponentDirt::PATH, true);
+            }
+        }
     }
 
     /// Return the external font bytes visible to this concrete runtime tree.
@@ -1260,10 +2521,15 @@ impl ArtboardInstance {
                 .child
                 .apply_external_font_asset_snapshot(Arc::clone(&external_font_assets));
         }
-        for items in self.component_list_items.values_mut() {
-            for item in items {
-                item.child
-                    .apply_external_font_asset_snapshot(Arc::clone(&external_font_assets));
+        for list_index in 0..self.component_list_count() {
+            let Some(local_id) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            if let Some(items) = self.component_list_items_mut(local_id) {
+                for item in items {
+                    item.child
+                        .apply_external_font_asset_snapshot(Arc::clone(&external_font_assets));
+                }
             }
         }
         self.mark_text_changed();
@@ -1272,10 +2538,7 @@ impl ArtboardInstance {
     }
 
     pub fn component(&self, local_id: usize) -> Option<&RuntimeComponent> {
-        self.slots
-            .get(local_id)
-            .and_then(|slot| slot.component_index)
-            .and_then(|index| self.components.get(index))
+        self.objects.component_for_local(local_id)
     }
 
     /// Attach a VM-owned script instance to a scripted object global id.
@@ -1289,15 +2552,21 @@ impl ArtboardInstance {
         instance: Box<dyn ScriptInstance>,
     ) {
         self.has_scripted_drawables = true;
-        self.script_advances_active.remove(&global_id);
         let user_init_pending = instance.user_init_pending().unwrap_or(false);
-        if !user_init_pending && instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
-            self.script_advances_active.insert(global_id);
-        }
+        let advance_active =
+            !user_init_pending && instance.has_method(ScriptMethod::Advance).unwrap_or(false);
         self.script_instances_by_global
             .insert(global_id, RuntimeScriptInstanceHandle::new(instance));
-        if !user_init_pending {
-            self.script_updates_pending.insert(global_id);
+        if self.set_script_owner_lifecycle(global_id, advance_active, !user_init_pending)
+            && !user_init_pending
+            && let Some(component) = self.script_component_handle_for_global(global_id)
+        {
+            // VM attachment completes the concrete ScriptedDrawable owner
+            // after the Artboard's initial FILTHY pass may already have run.
+            // Publish the same ScriptUpdate bit that C++ consumes at this
+            // owner's ordinary dependency slot (`scripted_drawable.cpp:
+            // 347-374`; `component.cpp:222-241`).
+            self.add_component_dirt(component, ComponentDirt::SCRIPT_UPDATE, false);
         }
     }
 
@@ -1321,15 +2590,11 @@ impl ArtboardInstance {
             .has_method(ScriptMethod::Advance)
             .unwrap_or(false)
         {
-            self.script_advances_active.insert(global_id);
+            self.set_script_owner_advance_active(global_id, true);
         }
 
-        if let Some(local_id) = self
-            .components
-            .iter()
-            .find(|component| component.global_id == global_id)
-            .map(|component| component.local_id)
-        {
+        let local_id = self.component_local_for_global(global_id);
+        if let Some(local_id) = local_id {
             self.add_dirt(local_id, ComponentDirt::PAINT, false);
         }
         true
@@ -1344,14 +2609,9 @@ impl ArtboardInstance {
         global_id: u32,
         instance: Box<dyn ScriptInstance>,
     ) {
-        self.script_path_effect_globals.insert(global_id);
         self.set_script_instance_for_global(global_id, instance);
-        if let Some(local_id) = self
-            .components
-            .iter()
-            .find(|component| component.global_id == global_id)
-            .map(|component| component.local_id)
-        {
+        let local_id = self.component_local_for_global(global_id);
+        if let Some(local_id) = local_id {
             // Cold hydration happened before the VM instance could be attached
             // to this ArtboardInstance. Replay the component dirt left by
             // C++ `setNumberInput`/siblings and
@@ -1364,11 +2624,15 @@ impl ArtboardInstance {
     /// Complete C++ `ScriptedPathEffect::didHydrateScriptInputs` after a
     /// bind-time input replay (`scripted_path_effect.cpp:15-19`).
     pub fn did_hydrate_script_inputs_for_global(&mut self, global_id: u32) -> bool {
-        if !self.script_path_effect_globals.contains(&global_id) {
+        if !self
+            .script_component_handle_for_global(global_id)
+            .and_then(|handle| self.objects.component(handle))
+            .is_some_and(|component| component.type_name == "ScriptedPathEffect")
+        {
             return false;
         }
         let Some(local_id) = self
-            .components
+            .components()
             .iter()
             .find(|component| component.global_id == global_id)
             .map(|component| component.local_id)
@@ -1404,22 +2668,43 @@ impl ArtboardInstance {
             &mut dyn ScriptHost,
         ) -> Result<ScriptValue, ScriptError>,
     ) -> Result<bool, ScriptError> {
-        if self.script_updates_pending.is_empty() {
-            return Ok(self.refresh_component_list_items());
-        }
-        let pending = std::mem::take(&mut self.script_updates_pending)
-            .into_iter()
+        // ScriptedDrawable::update is a normal Component update. Preserve the
+        // dependency-sorted owner order rather than draining an Artboard-wide
+        // global-id set (`component.cpp:222-241`;
+        // `scripted_drawable.cpp:347-374`).
+        let pending = self
+            .objects
+            .dependency_order()
+            .iter()
+            .copied()
+            .filter_map(|component| {
+                let owner = self.objects.component(component)?;
+                owner
+                    .concrete
+                    .scripted
+                    .is_some_and(|scripted| scripted.update_pending)
+                    .then_some((component, owner.global_id))
+            })
             .collect::<Vec<_>>();
         let mut did_update = false;
         let mut host = NoopScriptHost;
-        for (index, global_id) in pending.iter().copied().enumerate() {
-            if self.script_path_effect_globals.contains(&global_id) {
+        for (index, (component, global_id)) in pending.iter().copied().enumerate() {
+            if self
+                .objects
+                .component(component)
+                .is_some_and(|component| component.type_name == "ScriptedPathEffect")
+            {
+                self.set_script_owner_update_pending(component, false);
                 continue;
             }
-            if self.script_component_is_collapsed(global_id) {
-                self.script_updates_pending.insert(global_id);
+            if self
+                .objects
+                .component(component)
+                .is_some_and(RuntimeComponent::is_collapsed)
+            {
                 continue;
             }
+            self.set_script_owner_update_pending(component, false);
             let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
                 continue;
             };
@@ -1427,8 +2712,9 @@ impl ArtboardInstance {
             let has_update = match instance.has_method(ScriptMethod::Update) {
                 Ok(has_update) => has_update,
                 Err(error) => {
-                    self.script_updates_pending
-                        .extend(pending[index..].iter().copied());
+                    for (component, _) in &pending[index..] {
+                        self.set_script_owner_update_pending(*component, true);
+                    }
                     return Err(error);
                 }
             };
@@ -1436,13 +2722,13 @@ impl ArtboardInstance {
                 continue;
             }
             if let Err(error) = call_update(instance.as_mut(), &mut host) {
-                self.script_updates_pending
-                    .extend(pending[index..].iter().copied());
+                for (component, _) in &pending[index..] {
+                    self.set_script_owner_update_pending(*component, true);
+                }
                 return Err(error);
             }
             did_update = true;
         }
-        did_update |= self.refresh_component_list_items();
         Ok(did_update)
     }
 
@@ -1474,101 +2760,195 @@ impl ArtboardInstance {
         if seconds == 0.0 {
             return Ok(false);
         }
-        let active = std::mem::take(&mut self.script_advances_active)
-            .into_iter()
-            .collect::<Vec<_>>();
+        // C++ does not drain a file-global script table here. Each
+        // ScriptedDrawable/ScriptedLayout/ScriptedPathEffect occupies its own
+        // slot in Artboard::m_advancingComponents, and that retained
+        // insertion-order list is the dispatch authority
+        // (`advancing_component.cpp:17-44`;
+        // `scripted_drawable.cpp:376-397`;
+        // `scripted_path_effect.cpp:111-130`).
         let mut did_advance = false;
         let mut host = NoopScriptHost;
-        for (index, global_id) in active.iter().copied().enumerate() {
-            if !self.script_path_effect_globals.contains(&global_id)
-                && self.script_component_is_collapsed(global_id)
-            {
-                self.script_advances_active.insert(global_id);
-                continue;
-            }
-            let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
-                continue;
-            };
-            let result = match call_advance(
-                handle.borrow_mut().as_mut(),
-                &[ScriptValue::Number(f64::from(seconds))],
-                &mut host,
+        for index in 0..self.advancing_components.len() {
+            let entry = self.advancing_components[index];
+            if !matches!(
+                entry.kind,
+                AdvancingComponentKind::ScriptedDrawable
+                    | AdvancingComponentKind::ScriptedLayout
+                    | AdvancingComponentKind::ScriptedPathEffect
             ) {
-                Ok(result) => result,
-                Err(error) => {
-                    self.script_advances_active
-                        .extend(active[index..].iter().copied());
-                    return Err(error);
-                }
-            };
-            if result == ScriptValue::Bool(true) {
-                self.script_advances_active.insert(global_id);
-                if !self.script_path_effect_globals.contains(&global_id)
-                    && let Some(local_id) = self
-                        .components
-                        .iter()
-                        .find(|component| component.global_id == global_id)
-                        .map(|component| component.local_id)
-                {
-                    self.add_dirt(local_id, ComponentDirt::PAINT, false);
-                }
-                did_advance = true;
+                continue;
             }
+            did_advance |=
+                self.advance_script_component_with(entry, seconds, &mut host, &mut call_advance)?;
         }
         Ok(did_advance)
     }
 
-    fn script_component_is_collapsed(&self, global_id: u32) -> bool {
-        self.components
+    fn advance_script_component_with(
+        &mut self,
+        entry: RuntimeAdvancingComponent,
+        seconds: f32,
+        host: &mut dyn ScriptHost,
+        call_advance: &mut impl FnMut(
+            &mut dyn ScriptInstance,
+            &[ScriptValue],
+            &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError>,
+    ) -> Result<bool, ScriptError> {
+        if seconds == 0.0 {
+            return Ok(false);
+        }
+        let Some(component) = entry.component else {
+            return Ok(false);
+        };
+        let Some((global_id, active, collapsed)) =
+            self.objects.component(component).and_then(|owner| {
+                Some((
+                    owner.global_id,
+                    owner.concrete.scripted.as_ref()?.advance_active,
+                    owner.is_collapsed(),
+                ))
+            })
+        else {
+            return Ok(false);
+        };
+        if !active || (entry.kind != AdvancingComponentKind::ScriptedPathEffect && collapsed) {
+            return Ok(false);
+        }
+
+        // C++ clears m_isAdvanceActive before entering user code. A true
+        // result rearms the same owner; false parks it until wakeAdvance
+        // (`scripted_drawable.cpp:376-397`;
+        // `scripted_path_effect.cpp:111-130`).
+        self.set_script_owner_advance_active_handle(component, false);
+        let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
+            return Ok(false);
+        };
+        let result = match call_advance(
+            handle.borrow_mut().as_mut(),
+            &[ScriptValue::Number(f64::from(seconds))],
+            host,
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                self.set_script_owner_advance_active_handle(component, true);
+                return Err(error);
+            }
+        };
+        if result != ScriptValue::Bool(true) {
+            return Ok(false);
+        }
+        self.set_script_owner_advance_active_handle(component, true);
+        if entry.kind != AdvancingComponentKind::ScriptedPathEffect {
+            self.add_dirt(entry.local_id, ComponentDirt::PAINT, false);
+        }
+        Ok(true)
+    }
+
+    fn component_local_for_global(&self, global_id: u32) -> Option<usize> {
+        self.components()
             .iter()
             .find(|component| component.global_id == global_id)
-            .is_some_and(RuntimeComponent::is_collapsed)
+            .map(|component| component.local_id)
     }
 
-    /// Queue one exact advance step for replay when a renderer factory is
-    /// available. Steps are intentionally not aggregated.
-    pub fn queue_script_advance(&mut self, seconds: f32) {
-        if self.has_scripted_drawables && seconds != 0.0 {
-            self.script_advance_queue.push(seconds);
-        }
+    fn script_component_handle_for_global(&self, global_id: u32) -> Option<ComponentHandle> {
+        self.objects
+            .component_handles()
+            .iter()
+            .copied()
+            .find(|handle| {
+                self.objects
+                    .component(*handle)
+                    .is_some_and(|component| component.global_id == global_id)
+            })
     }
 
-    /// Replay queued advance steps and then run the pending update phase with
-    /// one renderer factory in scope for every Lua call.
-    pub fn flush_script_lifecycle_with_factory(
+    fn set_script_owner_lifecycle(
         &mut self,
-        factory: &mut dyn RenderFactory,
-    ) -> Result<bool, ScriptError> {
-        let queued = std::mem::take(&mut self.script_advance_queue);
-        let mut changed = false;
-        for (index, seconds) in queued.iter().copied().enumerate() {
-            match self.advance_script_instances_with_factory(seconds, factory) {
-                Ok(advanced) => changed |= advanced,
-                Err(error) => {
-                    self.script_advance_queue
-                        .splice(0..0, queued[index..].iter().copied());
-                    return Err(error);
-                }
-            }
-        }
-        changed |= self.update_script_instances_with_factory(factory)?;
-        Ok(changed)
+        global_id: u32,
+        advance_active: bool,
+        update_pending: bool,
+    ) -> bool {
+        let Some(component) = self.script_component_handle_for_global(global_id) else {
+            return false;
+        };
+        let Some(scripted) = self
+            .objects
+            .component_mut(component)
+            .and_then(|component| component.concrete.scripted.as_mut())
+        else {
+            return false;
+        };
+        scripted.advance_active = advance_active;
+        scripted.update_pending = update_pending;
+        true
+    }
+
+    fn set_script_owner_advance_active(&mut self, global_id: u32, active: bool) -> bool {
+        let Some(component) = self.script_component_handle_for_global(global_id) else {
+            return false;
+        };
+        self.set_script_owner_advance_active_handle(component, active)
+    }
+
+    fn set_script_owner_advance_active_handle(
+        &mut self,
+        component: ComponentHandle,
+        active: bool,
+    ) -> bool {
+        let Some(scripted) = self
+            .objects
+            .component_mut(component)
+            .and_then(|component| component.concrete.scripted.as_mut())
+        else {
+            return false;
+        };
+        scripted.advance_active = active;
+        true
+    }
+
+    fn set_script_owner_update_pending(
+        &mut self,
+        component: ComponentHandle,
+        pending: bool,
+    ) -> bool {
+        let Some(scripted) = self
+            .objects
+            .component_mut(component)
+            .and_then(|component| component.concrete.scripted.as_mut())
+        else {
+            return false;
+        };
+        scripted.update_pending = pending;
+        true
+    }
+
+    fn mark_script_owner_update_pending(&mut self, global_id: u32) -> bool {
+        let Some(component) = self.script_component_handle_for_global(global_id) else {
+            return false;
+        };
+        self.set_script_owner_update_pending(component, true)
     }
 
     /// Re-runs user `init` after C++ clears a scripted object's data context.
     pub fn reinitialize_script_instances(&mut self) -> Result<bool, ScriptError> {
         let mut did_initialize = false;
         let mut host = NoopScriptHost;
-        for (global_id, handle) in &self.script_instances_by_global {
+        let instances = self
+            .script_instances_by_global
+            .iter()
+            .map(|(global_id, handle)| (*global_id, handle.clone()))
+            .collect::<Vec<_>>();
+        for (global_id, handle) in instances {
             let mut instance = handle.borrow_mut();
             if !instance.has_method(ScriptMethod::Init)? {
                 continue;
             }
             instance.call_method(ScriptMethod::Init, &[], &mut host)?;
-            if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
-                self.script_advances_active.insert(*global_id);
-            }
-            self.script_updates_pending.insert(*global_id);
+            let advance_active = instance.has_method(ScriptMethod::Advance).unwrap_or(false);
+            self.set_script_owner_lifecycle(global_id, advance_active, true);
             did_initialize = true;
         }
         Ok(did_initialize)
@@ -1580,16 +2960,19 @@ impl ArtboardInstance {
     ) -> Result<bool, ScriptError> {
         let mut did_initialize = false;
         let mut host = NoopScriptHost;
-        for (global_id, handle) in &self.script_instances_by_global {
+        let instances = self
+            .script_instances_by_global
+            .iter()
+            .map(|(global_id, handle)| (*global_id, handle.clone()))
+            .collect::<Vec<_>>();
+        for (global_id, handle) in instances {
             let mut instance = handle.borrow_mut();
             if !instance.has_method(ScriptMethod::Init)? {
                 continue;
             }
             instance.call_method_with_factory(ScriptMethod::Init, &[], &mut host, factory)?;
-            if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
-                self.script_advances_active.insert(*global_id);
-            }
-            self.script_updates_pending.insert(*global_id);
+            let advance_active = instance.has_method(ScriptMethod::Advance).unwrap_or(false);
+            self.set_script_owner_lifecycle(global_id, advance_active, true);
             did_initialize = true;
         }
         Ok(did_initialize)
@@ -1609,13 +2992,10 @@ impl ArtboardInstance {
         }
         let initialized = instance.call_init_with_factory(&mut NoopScriptHost, factory)?;
         if initialized {
-            if instance.has_method(ScriptMethod::Advance).unwrap_or(false) {
-                self.script_advances_active.insert(global_id);
-            }
-            self.script_updates_pending.insert(global_id);
+            let advance_active = instance.has_method(ScriptMethod::Advance).unwrap_or(false);
+            self.set_script_owner_lifecycle(global_id, advance_active, true);
         } else {
-            self.script_advances_active.remove(&global_id);
-            self.script_updates_pending.remove(&global_id);
+            self.set_script_owner_lifecycle(global_id, false, false);
         }
         Ok(initialized)
     }
@@ -1661,15 +3041,11 @@ impl ArtboardInstance {
             .has_method(ScriptMethod::Advance)
             .unwrap_or(false)
         {
-            self.script_advances_active.insert(global_id);
+            self.set_script_owner_advance_active(global_id, true);
         }
-        self.script_updates_pending.insert(global_id);
-        if let Some(local_id) = self
-            .components
-            .iter()
-            .find(|component| component.global_id == global_id)
-            .map(|component| component.local_id)
-        {
+        self.mark_script_owner_update_pending(global_id);
+        let local_id = self.component_local_for_global(global_id);
+        if let Some(local_id) = local_id {
             // Direct counterpart of `ScriptedObject::setNumberInput` and its
             // sibling setters: every authored input write schedules
             // `ScriptUpdate` on component-backed scripted objects
@@ -1696,9 +3072,9 @@ impl ArtboardInstance {
             .has_method(ScriptMethod::Advance)
             .unwrap_or(false)
         {
-            self.script_advances_active.insert(global_id);
+            self.set_script_owner_advance_active(global_id, true);
         }
-        self.script_updates_pending.insert(global_id);
+        self.mark_script_owner_update_pending(global_id);
         Ok(())
     }
 
@@ -1719,9 +3095,9 @@ impl ArtboardInstance {
             .has_method(ScriptMethod::Advance)
             .unwrap_or(false)
         {
-            self.script_advances_active.insert(global_id);
+            self.set_script_owner_advance_active(global_id, true);
         }
-        self.script_updates_pending.insert(global_id);
+        self.mark_script_owner_update_pending(global_id);
         Ok(())
     }
 
@@ -1741,7 +3117,7 @@ impl ArtboardInstance {
         if !self.script_instances_by_global.contains_key(&global_id) {
             return false;
         }
-        self.script_updates_pending.insert(global_id)
+        self.mark_script_owner_update_pending(global_id)
     }
 
     pub(crate) fn script_instance_for_global(
@@ -1762,9 +3138,12 @@ impl ArtboardInstance {
     /// Snapshot authored custom properties attached to one event, preserving
     /// their component/local order.
     pub fn event_properties(&self, event_local_id: usize) -> Vec<RuntimeEventProperty> {
-        self.components
-            .iter()
-            .filter(|component| component.parent_local == Some(event_local_id))
+        let Some(event) = self.component_handle(event_local_id) else {
+            return Vec::new();
+        };
+        (0..self.component_child_len(event))
+            .filter_map(|index| self.component_child_at(event, index))
+            .filter_map(|handle| self.objects.component(handle))
             .filter_map(|component| {
                 let key = property_key_for_name(component.type_name, "propertyValue")?;
                 let value = match component.type_name {
@@ -1798,13 +3177,242 @@ impl ArtboardInstance {
             .collect()
     }
 
-    pub fn component_mut(&mut self, local_id: usize) -> Option<&mut RuntimeComponent> {
-        let index = self.slots.get(local_id)?.component_index?;
-        Some(&mut self.components[index])
+    pub(crate) fn component_mut(&mut self, local_id: usize) -> Option<&mut RuntimeComponent> {
+        self.objects.component_for_local_mut(local_id)
     }
 
-    pub fn components(&self) -> &[RuntimeComponent] {
-        &self.components
+    pub(crate) fn component_list_state(
+        &self,
+        local_id: usize,
+    ) -> Option<&RuntimeConstrainableListState> {
+        self.component(local_id)?
+            .concrete
+            .constrainable_list
+            .as_ref()
+    }
+
+    pub(crate) fn component_list_state_mut(
+        &mut self,
+        local_id: usize,
+    ) -> Option<&mut RuntimeConstrainableListState> {
+        self.component_mut(local_id)?
+            .concrete
+            .constrainable_list
+            .as_mut()
+    }
+
+    pub(crate) fn component_list_items(
+        &self,
+        local_id: usize,
+    ) -> Option<&[RuntimeComponentListItemInstance]> {
+        Some(&self.component_list_state(local_id)?.items)
+    }
+
+    pub(crate) fn component_list_items_mut(
+        &mut self,
+        local_id: usize,
+    ) -> Option<&mut Vec<RuntimeComponentListItemInstance>> {
+        Some(&mut self.component_list_state_mut(local_id)?.items)
+    }
+
+    pub(crate) fn component_list_locals(&self) -> impl Clone + Iterator<Item = usize> + '_ {
+        self.component_lists
+            .iter()
+            .map(|handle| self.component_at(*handle).local_id)
+    }
+
+    pub(crate) fn component_list_count(&self) -> usize {
+        self.component_lists.len()
+    }
+
+    pub(crate) fn component_list_local_at(&self, index: usize) -> Option<usize> {
+        Some(
+            self.component_at(*self.component_lists.get(index)?)
+                .local_id,
+        )
+    }
+
+    pub(crate) fn set_component_list_source(
+        &mut self,
+        local_id: usize,
+        source: Option<RuntimeOwnedViewModelListHandle>,
+    ) {
+        if let Some(list) = self.component_list_state_mut(local_id) {
+            list.source = source;
+        }
+    }
+
+    pub fn components(&self) -> RuntimeComponents<'_> {
+        RuntimeComponents {
+            arena: &self.objects,
+        }
+    }
+
+    pub(crate) fn component_at(&self, handle: ComponentHandle) -> &RuntimeComponent {
+        self.objects
+            .component(handle)
+            .expect("runtime component handle must address its occurrence")
+    }
+
+    pub(crate) fn component_at_mut(&mut self, handle: ComponentHandle) -> &mut RuntimeComponent {
+        self.objects
+            .component_mut(handle)
+            .expect("runtime component handle must address its occurrence")
+    }
+
+    pub(crate) fn component_handle(&self, local_id: usize) -> Option<ComponentHandle> {
+        self.objects.component_handle(local_id)
+    }
+
+    /// Exact Component/Drawable/LayoutComponent virtual hit-test chain.
+    ///
+    /// The `ComponentHandle` is the occurrence-local counterpart of the C++
+    /// pointer. Callers that start from a `DrawableProxy` pass its retained
+    /// `hittableComponent()` target, preserving both boolean arguments
+    /// (`src/drawable.cpp:62-77`; `src/component.cpp:97-105`;
+    /// `src/layout_component.cpp:49-80`).
+    pub(crate) fn component_hit_test_point(
+        &self,
+        component: ComponentHandle,
+        position: (f32, f32),
+        skip_on_unclipped: bool,
+        is_primary_hit: bool,
+    ) -> bool {
+        let Some(owner) = self.objects.component(component) else {
+            return false;
+        };
+        if owner.concrete.layout.is_some() {
+            return self.layout_component_hit_test_point(
+                component,
+                position,
+                skip_on_unclipped,
+                is_primary_hit,
+            );
+        }
+        if owner.concrete.drawable.is_some() {
+            return self.drawable_component_hit_test_point(
+                component,
+                position,
+                skip_on_unclipped,
+                is_primary_hit,
+            );
+        }
+        self.base_component_hit_test_point(component, position, skip_on_unclipped, is_primary_hit)
+    }
+
+    fn layout_component_hit_test_point(
+        &self,
+        component: ComponentHandle,
+        position: (f32, f32),
+        skip_on_unclipped: bool,
+        is_primary_hit: bool,
+    ) -> bool {
+        let Some(owner) = self.objects.component(component) else {
+            return false;
+        };
+        let Some(layout) = owner.concrete.layout.as_ref() else {
+            return false;
+        };
+        let world = owner.transform.world_transform;
+        if world.determinant() == 0.0 {
+            return false;
+        }
+
+        let clip = layout
+            .clip_property_key
+            .and_then(|key| self.objects.component_bool_property(component, key))
+            .unwrap_or(owner.type_name == "Artboard" && self.clip);
+        if !(skip_on_unclipped && !clip) {
+            let mut local = world
+                .invert_or_identity()
+                .transform_point(position.0, position.1);
+            let (_, _, width, height) = layout.constraint_bounds();
+            if owner.type_name == "Artboard" && (self.origin_x != 0.0 || self.origin_y != 0.0) {
+                local.0 += self.origin_x * width;
+                local.1 += self.origin_y * height;
+            }
+            if local.0 < 0.0 || local.0 > width || local.1 < 0.0 || local.1 > height {
+                return false;
+            }
+        }
+
+        // LayoutComponent explicitly invokes Drawable's implementation after
+        // its local-bounds check, changing only skipOnUnclipped to true.
+        self.drawable_component_hit_test_point(component, position, true, is_primary_hit)
+    }
+
+    fn drawable_component_hit_test_point(
+        &self,
+        component: ComponentHandle,
+        position: (f32, f32),
+        skip_on_unclipped: bool,
+        is_primary_hit: bool,
+    ) -> bool {
+        let Some(owner) = self.objects.component(component) else {
+            return false;
+        };
+        let hidden = owner.is_collapsed()
+            || owner
+                .concrete
+                .drawable
+                .as_ref()
+                .and_then(|drawable| drawable.drawable_flags_property_key)
+                .and_then(|key| self.objects.component_uint_property(component, key))
+                .is_some_and(|flags| flags & 1 != 0);
+        if hidden {
+            return false;
+        }
+
+        // Ordinary Drawable::hittableComponent returns `this`; proxy callers
+        // have already supplied the proxy target at this method's public
+        // boundary.
+        self.base_component_hit_test_point(component, position, skip_on_unclipped, is_primary_hit)
+    }
+
+    fn base_component_hit_test_point(
+        &self,
+        component: ComponentHandle,
+        position: (f32, f32),
+        skip_on_unclipped: bool,
+        _is_primary_hit: bool,
+    ) -> bool {
+        let Some(parent) = self
+            .objects
+            .component(component)
+            .and_then(|component| component.parent)
+        else {
+            return true;
+        };
+        self.component_hit_test_point(parent, position, skip_on_unclipped, false)
+    }
+
+    pub(crate) fn component_parent_handle(
+        &self,
+        handle: ComponentHandle,
+    ) -> Option<ComponentHandle> {
+        self.objects.component(handle)?.parent
+    }
+
+    pub(crate) fn component_local_id(&self, handle: ComponentHandle) -> Option<usize> {
+        self.objects.component_local_id(handle)
+    }
+
+    pub(crate) fn component_parent_local(&self, local_id: usize) -> Option<usize> {
+        let handle = self.component_handle(local_id)?;
+        let parent = self.component_parent_handle(handle)?;
+        self.objects.component_local_id(parent)
+    }
+
+    pub(crate) fn component_child_len(&self, handle: ComponentHandle) -> usize {
+        self.objects.child_len(handle)
+    }
+
+    pub(crate) fn component_child_at(
+        &self,
+        handle: ComponentHandle,
+        index: usize,
+    ) -> Option<ComponentHandle> {
+        self.objects.child_at(handle, index)
     }
 
     pub(crate) fn runtime_file(&self) -> Option<&RuntimeFile> {
@@ -1890,10 +3498,6 @@ impl ArtboardInstance {
         context.artboards.get(index)
     }
 
-    pub fn update_order(&self) -> &[usize] {
-        &self.update_order
-    }
-
     pub fn linear_animation(&self, index: usize) -> Option<&RuntimeLinearAnimation> {
         self.linear_animations.get(index)
     }
@@ -1952,11 +3556,15 @@ impl ArtboardInstance {
         self.nested_artboards
             .values()
             .any(RuntimeNestedArtboardInstance::has_ongoing_work)
-            || self.component_list_items.values().flatten().any(|item| {
-                item.state_machines
-                    .iter()
-                    .any(StateMachineInstance::needs_advance)
-                    || item.child.has_ongoing_nested_work()
+            || self.component_list_locals().into_iter().any(|local_id| {
+                self.component_list_items(local_id).is_some_and(|items| {
+                    items.iter().any(|item| {
+                        item.state_machines
+                            .iter()
+                            .any(StateMachineInstance::needs_advance)
+                            || item.child.has_ongoing_nested_work()
+                    })
+                })
             })
     }
 
@@ -2080,7 +3688,7 @@ impl ArtboardInstance {
             // still needs to observe the nested paint value change.
             self.mark_tree_paint_preparation_changed();
         } else {
-            self.runtime_shapes.mark_property_changed(local_id, false);
+            self.mark_runtime_shape_property_changed(local_id, false);
         }
         self.mark_prepared_changed_for_color_property(local_id, property_key, previous, value);
         self.apply_color_property_changed(local_id, property_key);
@@ -2154,12 +3762,7 @@ impl ArtboardInstance {
             self.slot(local_id).and_then(|slot| slot.type_name),
             property_key,
         );
-        self.runtime_shapes
-            .mark_property_changed(local_id, affects_effect_path);
-        if affects_effect_path {
-            self.mark_path_changed();
-            self.add_dirt(local_id, ComponentDirt::PATH, false);
-        }
+        self.mark_runtime_shape_property_changed(local_id, affects_effect_path);
         self.apply_bool_property_changed(local_id, property_key, value);
         true
     }
@@ -2240,11 +3843,7 @@ impl ArtboardInstance {
             .get()
             .then(|| self.legacy_image_layout_public_scale(local_id, property_key))
             .flatten()
-            .or_else(|| {
-                (!self.scroll_constraints.is_empty())
-                    .then(|| runtime_scroll_double_property(self, local_id, property_key))
-                    .flatten()
-            })
+            .or_else(|| runtime_scroll_double_property(self, local_id, property_key))
             .or_else(|| self.objects.double_property(local_id, property_key))
     }
 
@@ -2347,26 +3946,21 @@ impl ArtboardInstance {
     /// embeddings): returns whether a matching property existed and its
     /// value changed; invalidation is handled internally.
     pub fn set_double_property(&mut self, local_id: usize, property_key: u16, value: f32) -> bool {
-        let cleared_intent = if self.scroll_constraints.is_empty() {
-            false
-        } else {
-            if let Some(changed) =
-                set_runtime_scroll_double_property(self, local_id, property_key, value)
-            {
-                if !changed {
-                    return false;
-                }
-                let _ = self
-                    .objects
-                    .set_generated_double_property(local_id, property_key, value);
-                return self.after_double_property_set(local_id, property_key, value);
+        if let Some(changed) =
+            set_runtime_scroll_double_property(self, local_id, property_key, value)
+        {
+            if !changed {
+                return false;
             }
-            clear_runtime_scroll_intent_for_direct_offset(self, local_id, property_key)
-        };
+            let _ = self
+                .objects
+                .set_generated_double_property(local_id, property_key, value);
+            return self.after_double_property_set(local_id, property_key, value);
+        }
         if self.has_legacy_image_layout_scale(local_id, property_key)
             && self.double_property(local_id, property_key) == Some(value)
         {
-            return cleared_intent;
+            return false;
         }
         let object_changed = self
             .objects
@@ -2374,7 +3968,7 @@ impl ArtboardInstance {
         let legacy_scale_changed =
             self.mark_legacy_image_layout_scale_written(local_id, property_key);
         if !object_changed && !legacy_scale_changed {
-            return cleared_intent;
+            return false;
         }
         self.after_double_property_set(local_id, property_key, value)
     }
@@ -2385,26 +3979,21 @@ impl ArtboardInstance {
         property_key: u16,
         value: f32,
     ) -> bool {
-        let cleared_intent = if self.scroll_constraints.is_empty() {
-            false
-        } else {
-            if let Some(changed) =
-                set_runtime_scroll_double_property(self, local_id, property_key, value)
-            {
-                if !changed {
-                    return false;
-                }
-                let _ = self
-                    .objects
-                    .set_generated_double_property(local_id, property_key, value);
-                return self.after_double_property_set(local_id, property_key, value);
+        if let Some(changed) =
+            set_runtime_scroll_double_property(self, local_id, property_key, value)
+        {
+            if !changed {
+                return false;
             }
-            clear_runtime_scroll_intent_for_direct_offset(self, local_id, property_key)
-        };
+            let _ = self
+                .objects
+                .set_generated_double_property(local_id, property_key, value);
+            return self.after_double_property_set(local_id, property_key, value);
+        }
         if self.has_legacy_image_layout_scale(local_id, property_key)
             && self.double_property(local_id, property_key) == Some(value)
         {
-            return cleared_intent;
+            return false;
         }
         let object_changed =
             self.objects
@@ -2412,7 +4001,7 @@ impl ArtboardInstance {
         let legacy_scale_changed =
             self.mark_legacy_image_layout_scale_written(local_id, property_key);
         if !object_changed && !legacy_scale_changed {
-            return cleared_intent;
+            return false;
         }
         self.after_double_property_set(local_id, property_key, value)
     }
@@ -2423,6 +4012,10 @@ impl ArtboardInstance {
         property_key: u16,
         value: f32,
     ) -> bool {
+        // Generated C++ setters assign backing storage, run the concrete
+        // changed callback, then notify property listeners. Transform dirt
+        // must therefore be visible before a DataBind observes the write.
+        self.apply_double_property_changed(local_id, property_key, value);
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
@@ -2433,13 +4026,7 @@ impl ArtboardInstance {
             self.slot(local_id).and_then(|slot| slot.type_name),
             property_key,
         );
-        self.runtime_shapes
-            .mark_property_changed(local_id, affects_effect_path);
-        if affects_effect_path {
-            self.mark_path_changed();
-            self.add_dirt(local_id, ComponentDirt::PATH, false);
-        }
-        self.apply_double_property_changed(local_id, property_key, value);
+        self.mark_runtime_shape_property_changed(local_id, affects_effect_path);
         true
     }
 
@@ -2454,25 +4041,21 @@ impl ArtboardInstance {
         {
             return false;
         }
+        // Generated uint setters follow the same backing → concrete callback
+        // → notification order as doubles. DistanceConstraint::modeValue is
+        // the A4 positive callback that makes this ordering observable.
+        self.apply_uint_property_changed(local_id, property_key);
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
         self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
-        self.runtime_drawables
-            .mark_uint_property_changed(local_id, property_key, value);
         let affects_effect_path = property_affects_effect_path_epoch(
             self.slot(local_id).and_then(|slot| slot.type_name),
             property_key,
         );
-        self.runtime_shapes
-            .mark_property_changed(local_id, affects_effect_path);
-        if affects_effect_path {
-            self.mark_path_changed();
-            self.add_dirt(local_id, ComponentDirt::PATH, false);
-        }
-        self.apply_uint_property_changed(local_id, property_key);
+        self.mark_runtime_shape_property_changed(local_id, affects_effect_path);
         true
     }
 
@@ -2623,9 +4206,14 @@ impl ArtboardInstance {
         instance.keep_going(animation)
     }
 
-    pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
-        let state_machine = self.state_machine(index)?;
+    pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
+        let definitions = Arc::clone(&self.state_machines);
+        let state_machine = definitions.get(index)?;
         let mut instance = StateMachineInstance::new(index, state_machine, self);
+        // C++ builds inputs, layers, and per-instance data binds before its
+        // listener pass creates HitExpandable owners and publishes Shape Path
+        // dirt (`state_machine_instance.cpp:1707-1831`; helper `:1651-1661`).
+        self.initialize_state_machine_hit_path_flags(state_machine);
         if let Some(context) = self.artboard_owned_view_model_handle.as_ref() {
             instance.bind_owned_view_model_context_handle(context);
         } else if let Some(data_context) = self.artboard_owned_data_context.as_ref() {
@@ -2692,8 +4280,7 @@ impl ArtboardInstance {
                     occurrence_identity,
                 } => {
                     let item = parent
-                        .component_list_items
-                        .get(&host_local_id)?
+                        .component_list_items(host_local_id)?
                         .get(item_index)?;
                     if item.occurrence_identity != occurrence_identity {
                         return None;
@@ -2722,8 +4309,7 @@ impl ArtboardInstance {
                 occurrence_identity,
             } => {
                 let item = parent
-                    .component_list_items
-                    .get(&host_local_id)?
+                    .component_list_items(host_local_id)?
                     .get(item_index)?;
                 if item.occurrence_identity != occurrence_identity {
                     return None;
@@ -2755,8 +4341,7 @@ impl ArtboardInstance {
                     occurrence_identity,
                 } => {
                     let item = parent
-                        .component_list_items
-                        .get_mut(&host_local_id)?
+                        .component_list_items_mut(host_local_id)?
                         .get_mut(item_index)?;
                     if item.occurrence_identity != occurrence_identity {
                         return None;
@@ -2785,8 +4370,7 @@ impl ArtboardInstance {
                 occurrence_identity,
             } => {
                 let item = parent
-                    .component_list_items
-                    .get_mut(&host_local_id)?
+                    .component_list_items_mut(host_local_id)?
                     .get_mut(item_index)?;
                 if item.occurrence_identity != occurrence_identity {
                     return None;
@@ -2825,8 +4409,8 @@ impl ArtboardInstance {
         };
 
         let entries = self
-            .component_list_sources
-            .get(&list_local_id)
+            .component_list_state(list_local_id)
+            .and_then(|list| list.source.as_ref())
             .map(|source| source.item_entries_with_logical_indices(file))
             .unwrap_or_else(|| {
                 contexts
@@ -2867,8 +4451,8 @@ impl ArtboardInstance {
         };
 
         let previous_logical = self
-            .component_list_logical_items
-            .remove(&list_local_id)
+            .component_list_state_mut(list_local_id)
+            .map(|list| std::mem::take(&mut list.logical_items))
             .unwrap_or_default();
         let mut logical_items = Vec::with_capacity(entries.len());
         for entry in entries {
@@ -2879,8 +4463,7 @@ impl ArtboardInstance {
                     && item.mapped_artboard_global == mapped_artboard_global
             });
             let settled_size = self
-                .component_list_items
-                .get(&list_local_id)
+                .component_list_items(list_local_id)
                 .and_then(|items| {
                     items.iter().find(|item| {
                         item.occurrence_identity == entry.occurrence_identity
@@ -2917,54 +4500,48 @@ impl ArtboardInstance {
                         || before.mapped_artboard_global != after.mapped_artboard_global
                         || before.size != after.size
                 });
-        let sizes = logical_items
-            .iter()
-            .map(|item| item.size)
-            .collect::<Vec<_>>();
-        self.component_list_logical_items
-            .insert(list_local_id, logical_items);
-
-        let desired = component_list_virtual_window(self, list_local_id, &sizes)
-            .map(|window| {
-                window
-                    .into_iter()
-                    .map(|item| (item.logical_index, Some((item.position_x, item.position_y))))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_else(|| (0..sizes.len()).map(|index| (index, None)).collect());
-        let logical_items = self
-            .component_list_logical_items
-            .get(&list_local_id)
-            .expect("component-list logical topology was just inserted");
+        let desired = if component_list_virtualization(self, list_local_id).is_some() {
+            // A virtualized list's mounted occurrences are the retained
+            // interface state. ScrollVirtualizer adds/removes them directly;
+            // list synchronization only preserves still-live identities.
+            self.component_list_items(list_local_id)
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|item| item.logical_index)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
+        } else {
+            (0..logical_items.len()).collect()
+        };
         let desired = desired
             .into_iter()
-            .filter(|(index, _)| {
+            .filter(|index| {
                 logical_items
                     .get(*index)
                     .is_some_and(|item| item.mapped_artboard_global.is_some())
             })
             .collect::<Vec<_>>();
-        let existing_matches =
-            self.component_list_items
-                .get(&list_local_id)
-                .is_some_and(|existing| {
-                    existing.len() == desired.len()
-                        && existing
-                            .iter()
-                            .zip(&desired)
-                            .all(|(item, (index, position))| {
-                                let logical = &logical_items[*index];
-                                item.logical_index == *index
-                                    && item.occurrence_identity == logical.occurrence_identity
-                                    && item.virtualized_position == *position
-                                    && item.context_is_current(&logical.context)
-                            })
-                });
+        let existing_matches = self
+            .component_list_items(list_local_id)
+            .is_some_and(|existing| {
+                existing.len() == desired.len()
+                    && existing.iter().zip(&desired).all(|(item, index)| {
+                        let logical = &logical_items[*index];
+                        item.logical_index == *index
+                            && item.occurrence_identity == logical.occurrence_identity
+                            && item.context_is_current(&logical.context)
+                    })
+            });
         if existing_matches {
+            if let Some(list) = self.component_list_state_mut(list_local_id) {
+                list.logical_items = logical_items;
+            }
             if logical_changed {
-                self.component_list_order_caches
-                    .borrow_mut()
-                    .remove(&list_local_id);
+                if let Some(list) = self.component_list_state(list_local_id) {
+                    *list.order_cache.borrow_mut() = Default::default();
+                }
                 self.mark_layout_changed();
                 self.mark_prepared_changed();
             }
@@ -2975,16 +4552,16 @@ impl ArtboardInstance {
         // not by its VMI. Preserve overlapping wrapper occurrences across
         // reorder and virtual-window changes.
         let previous_items = self
-            .component_list_items
-            .remove(&list_local_id)
+            .component_list_state_mut(list_local_id)
+            .map(|list| std::mem::take(&mut list.items))
             .unwrap_or_default();
         let mut reusable_items = previous_items.into_iter().map(Some).collect::<Vec<_>>();
         let parent_data_context = self.artboard_owned_data_context.clone().unwrap_or_default();
         let mut item_context_changed = false;
         let mut items = Vec::with_capacity(desired.len());
-        for (logical_index, virtualized_position) in desired {
-            let logical = self.component_list_logical_items[&list_local_id][logical_index].clone();
-            let context = logical.context;
+        for logical_index in desired {
+            let logical = logical_items[logical_index].clone();
+            let context = logical.context.clone();
             if let Some(existing_index) = reusable_items.iter().position(|candidate| {
                 candidate.as_ref().is_some_and(|item| {
                     item.occurrence_identity == logical.occurrence_identity
@@ -3028,110 +4605,26 @@ impl ArtboardInstance {
                     item_context_changed = true;
                 }
                 item.logical_index = logical_index;
-                item.virtualized_position = virtualized_position;
                 items.push(item);
                 continue;
             }
-
-            let child_graph = logical.mapped_artboard_global.and_then(|global_id| {
-                build_context
-                    .artboards
-                    .iter()
-                    .find(|graph| graph.global_id == global_id)
-            });
-            let Some(child_graph) = child_graph else {
-                continue;
-            };
-            let mut visiting = BTreeSet::from([self.graph_global_id]);
-            let Ok(mut child) = ArtboardInstance::from_graph_inner(
+            if let Some(item) = self.create_component_list_item_instance(
                 file,
-                child_graph,
-                &build_context.artboards,
-                &mut visiting,
-                Some(build_context.clone()),
-                false,
-            ) else {
-                continue;
-            };
-            child.set_frame_origin(false);
-            let child_data_context = RuntimeOwnedDataContext::with_local_handles(
-                [context.clone()],
-                Some(&parent_data_context),
-            );
-            child.bind_owned_view_model_artboard_data_context(
-                file,
-                &child_data_context,
-                true,
-                true,
-            );
-            child.artboard_owned_view_model_context = Some(
-                RuntimeOwnedViewModelContext::from_main_handle(context.clone()),
-            );
-            let selected_machine_indices = {
-                let context = context.borrow();
-                resolve_map_rule(&context)
-                    .filter(|rule| !rule.state_machine_ids.is_empty())
-                    .map(|rule| rule.state_machine_ids.clone())
-            }
-            .unwrap_or_else(|| {
-                let default_state_machine_index = file
-                    .object(child_graph.global_id as usize)
-                    .and_then(|artboard| artboard.uint_property("defaultStateMachineId"));
-                vec![component_list_default_state_machine_index(
-                    default_state_machine_index,
-                    child.state_machines.len(),
-                )]
-            });
-            let mut state_machines = Vec::with_capacity(selected_machine_indices.len());
-            for state_machine_index in selected_machine_indices {
-                let Some(mut state_machine) = child.state_machine_instance(state_machine_index)
-                else {
-                    continue;
-                };
-                state_machine.bind_owned_view_model_data_context(&child_data_context);
-                // C++ `ArtboardComponentList::linkStateMachineToArtboard`
-                // installs the row DataContext and immediately runs
-                // `updateDataBinds(false)` before the first state advance.
-                // `state_machine_instance` retains the context; settle its
-                // bind graph here so row-dependent transitions start from the
-                // same values rather than their authored defaults. The normal
-                // component-list advance owns the first state advance.
-                state_machine.advance_data_context();
-                state_machines.push(state_machine);
-            }
-            child.advance_artboard_data_binds_with_elapsed(0.0);
-            child.update_pass();
-            let context_rebind_sink = crate::view_model_cell::RuntimeCellDirtSink::new();
-            context.add_rebind_dependent(&context_rebind_sink);
-            let draw_index_sink = component_list_draw_index_sink(file, &context);
-            items.push(RuntimeComponentListItemInstance {
-                child: Box::new(child),
-                render_resources: RefCell::new(
-                    crate::draw::RuntimeOccurrenceRenderResources::default(),
-                ),
-                state_machines,
-                context_rebind_sink,
-                draw_index_sink,
-                context,
-                occurrence_identity: logical.occurrence_identity,
+                list_local_id,
                 logical_index,
-                virtualized_position,
-                settled_layout_size: Cell::new(None),
-                transform: Mat2D::IDENTITY,
-                // Render caches outlive list topology changes. Seed each row
-                // with the stable list-item identity so a same-length
-                // replacement cannot reuse the prior occupant's paint cache.
-                render_cache_revision: logical.occurrence_identity,
-            });
+                logical,
+            ) {
+                items.push(item);
+            }
         }
-        self.component_list_item_transforms.insert(
-            list_local_id,
-            items.iter().map(|item| item.transform).collect(),
-        );
-        self.component_list_order_caches
-            .borrow_mut()
-            .remove(&list_local_id);
-        self.component_list_items.insert(list_local_id, items);
+        if let Some(list) = self.component_list_state_mut(list_local_id) {
+            list.item_transforms = items.iter().map(|item| item.transform).collect();
+            list.logical_items = logical_items;
+            list.items = items;
+        }
+        if let Some(list) = self.component_list_state(list_local_id) {
+            *list.order_cache.borrow_mut() = Default::default();
+        }
         let changed = !existing_matches || logical_changed || item_context_changed;
         if changed {
             self.mark_nested_structure_changed();
@@ -3141,104 +4634,441 @@ impl ArtboardInstance {
         changed
     }
 
-    pub(crate) fn refresh_component_list_items(&mut self) -> bool {
-        if self.component_list_sources.is_empty() {
+    /// Mount one retained `VirtualizingComponent` item.
+    ///
+    /// The FL-A adapter deliberately calls this one index at a time, matching
+    /// `ScrollVirtualizer::virtualize` → `VirtualizingComponent::addVirtualizable`
+    /// (`scroll_virtualizer.cpp:244-293`). Artboard/state-machine pooling and
+    /// recorder restoration remain owned by the later
+    /// `src/artboard_component_list.cpp` FL-D row.
+    fn create_component_list_item_instance(
+        &mut self,
+        file: &RuntimeFile,
+        list_local_id: usize,
+        logical_index: usize,
+        logical: RuntimeComponentListLogicalItem,
+    ) -> Option<RuntimeComponentListItemInstance> {
+        let build_context = self.build_context.clone()?;
+        let parent_graph = build_context
+            .artboards
+            .iter()
+            .find(|graph| graph.global_id == self.graph_global_id)?;
+        let component_list = parent_graph
+            .component_lists
+            .iter()
+            .find(|list| list.local_id == list_local_id)?;
+        let child_graph = logical.mapped_artboard_global.and_then(|global_id| {
+            build_context
+                .artboards
+                .iter()
+                .find(|graph| graph.global_id == global_id)
+        })?;
+        let context = logical.context;
+        let mut visiting = BTreeSet::from([self.graph_global_id]);
+        let mut child = ArtboardInstance::from_graph_inner(
+            file,
+            child_graph,
+            &build_context.artboards,
+            &mut visiting,
+            Some(build_context.clone()),
+            false,
+        )
+        .ok()?;
+        child.set_frame_origin(false);
+        let parent_data_context = self.artboard_owned_data_context.clone().unwrap_or_default();
+        let child_data_context = RuntimeOwnedDataContext::with_local_handles(
+            [context.clone()],
+            Some(&parent_data_context),
+        );
+        child.bind_owned_view_model_artboard_data_context(file, &child_data_context, true, true);
+        child.artboard_owned_view_model_context = Some(
+            RuntimeOwnedViewModelContext::from_main_handle(context.clone()),
+        );
+        let selected_machine_indices = component_list
+            .map_rules
+            .iter()
+            .find(|rule| rule.view_model_id == context.borrow().view_model_index() as i64)
+            .filter(|rule| !rule.state_machine_ids.is_empty())
+            .map(|rule| rule.state_machine_ids.clone())
+            .unwrap_or_else(|| {
+                let default_state_machine_index = file
+                    .object(child_graph.global_id as usize)
+                    .and_then(|artboard| artboard.uint_property("defaultStateMachineId"));
+                vec![component_list_default_state_machine_index(
+                    default_state_machine_index,
+                    child.state_machines.len(),
+                )]
+            });
+        let mut state_machines = Vec::with_capacity(selected_machine_indices.len());
+        for state_machine_index in selected_machine_indices {
+            let Some(mut state_machine) = child.state_machine_instance(state_machine_index) else {
+                continue;
+            };
+            state_machine.bind_owned_view_model_data_context(&child_data_context);
+            // C++ `ArtboardComponentList::linkStateMachineToArtboard` installs
+            // the row DataContext and immediately runs `updateDataBinds(false)`
+            // before the first state advance
+            // (`artboard_component_list.cpp:1492-1543`).
+            state_machine.advance_data_context();
+            state_machines.push(state_machine);
+        }
+        child.advance_artboard_data_binds_with_elapsed(0.0);
+        child.update_pass();
+        let context_rebind_sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+        context.add_rebind_dependent(&context_rebind_sink);
+        let draw_index_sink = component_list_draw_index_sink(file, &context);
+        Some(RuntimeComponentListItemInstance {
+            child: Box::new(child),
+            render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
+            state_machines,
+            context_rebind_sink,
+            draw_index_sink,
+            context,
+            occurrence_identity: logical.occurrence_identity,
+            logical_index,
+            settled_layout_size: Cell::new(None),
+            transform: Mat2D::IDENTITY,
+            // Render caches outlive list topology changes. Seed each row with
+            // stable wrapper identity so a same-length replacement cannot
+            // reuse the prior occupant's paint cache.
+            render_cache_revision: logical.occurrence_identity,
+        })
+    }
+
+    /// Literal Rust surface for the pinned `VirtualizingComponent` interface
+    /// (`include/rive/virtualizing_component.hpp:24-39`).
+    pub(crate) fn virtualizing_component_has_item(
+        &self,
+        list_local_id: usize,
+        logical_index: usize,
+    ) -> bool {
+        self.component_list_items(list_local_id)
+            .is_some_and(|items| items.iter().any(|item| item.logical_index == logical_index))
+    }
+
+    pub(crate) fn add_component_list_virtualizable(
+        &mut self,
+        file: &RuntimeFile,
+        list_local_id: usize,
+        logical_index: usize,
+    ) -> bool {
+        if self.virtualizing_component_has_item(list_local_id, logical_index) {
             return false;
         }
-        let Some(file) = self
-            .build_context
-            .as_ref()
-            .map(|context| Arc::clone(&context.file))
+        let Some(logical) = self
+            .component_list_state(list_local_id)
+            .and_then(|list| list.logical_items.get(logical_index))
+            .cloned()
         else {
             return false;
         };
-        let updates = self
-            .component_list_sources
-            .iter()
-            .map(|(&local_id, source)| (local_id, source.items()))
-            .collect::<Vec<_>>();
-        updates
-            .into_iter()
-            .fold(false, |changed, (local_id, items)| {
-                self.sync_component_list_items(&file, local_id, items) || changed
-            })
+        let Some(item) =
+            self.create_component_list_item_instance(file, list_local_id, logical_index, logical)
+        else {
+            return false;
+        };
+        let transform = item.transform;
+        let Some(list) = self.component_list_state_mut(list_local_id) else {
+            return false;
+        };
+        list.items.push(item);
+        list.item_transforms.push(transform);
+        *list.order_cache.borrow_mut() = Default::default();
+        self.mark_nested_structure_changed();
+        self.mark_layout_changed();
+        self.mark_prepared_changed();
+        true
     }
 
-    /// Settle parent-assigned row sizes and immediately rerun the shared scroll
-    /// virtualizer. C++ performs this feedback in
-    /// `ArtboardComponentList::updateLayoutBounds` -> `computeLayoutBounds` ->
-    /// `ScrollConstraint::constrainVirtualized(true)` during the same update
-    /// pass; deferring it until the next draw/advance leaves the old virtual
-    /// window visible for one frame.
-    fn settle_component_list_layout_and_virtualization(&mut self) -> bool {
-        const MAX_LAYOUT_FEEDBACK_PASSES: usize = 8;
-
-        if self.component_list_items.is_empty() {
+    pub(crate) fn remove_component_list_virtualizable(
+        &mut self,
+        list_local_id: usize,
+        logical_index: usize,
+    ) -> bool {
+        let Some(list) = self.component_list_state_mut(list_local_id) else {
             return false;
+        };
+        let Some(index) = list
+            .items
+            .iter()
+            .position(|item| item.logical_index == logical_index)
+        else {
+            return false;
+        };
+        // State machines precede the child Artboard in the item struct, so
+        // dropping the mounted item preserves the C++ teardown order. FL-D
+        // replaces this drop with the C++ resource pools.
+        list.items.remove(index);
+        if index < list.item_transforms.len() {
+            list.item_transforms.remove(index);
         }
+        *list.order_cache.borrow_mut() = Default::default();
+        self.mark_nested_structure_changed();
+        self.mark_layout_changed();
+        self.mark_prepared_changed();
+        true
+    }
 
-        let mut changed = false;
-        for _ in 0..MAX_LAYOUT_FEEDBACK_PASSES {
-            let mut assigned_bounds = self.runtime_component_list_assigned_layout_bounds();
-            // An unhosted ArtboardComponentList has no parent Yoga assignment,
-            // but C++ still writes each mounted artboard's own `layoutBounds`
-            // into the occurrence before drawing it. The former transient
-            // draw clone hid this transfer; keep it on the authoritative child.
-            for (&list_local, items) in &self.component_list_items {
-                assigned_bounds.entry(list_local).or_insert_with(|| {
-                    items
-                        .iter()
-                        .map(|item| {
-                            let (width, height) = runtime_component_list_item_layout_size(item);
-                            RuntimeLayoutBounds {
-                                x: 0.0,
-                                y: 0.0,
-                                width,
-                                height,
-                            }
-                        })
-                        .collect()
-                });
-            }
+    pub(crate) fn set_component_list_visible_indices(
+        &mut self,
+        list_local_id: usize,
+        start: i32,
+        end: i32,
+    ) {
+        let Some(list) = self.component_list_state_mut(list_local_id) else {
+            return;
+        };
+        list.visible_start = start;
+        list.visible_end = end;
+        *list.order_cache.borrow_mut() = Default::default();
+    }
 
-            let mut size_feedback_changed = false;
-            for (list_local, bounds) in assigned_bounds {
-                let Some(items) = self.component_list_items.get_mut(&list_local) else {
-                    continue;
+    pub(crate) fn set_component_list_virtualizable_position(
+        &mut self,
+        list_local_id: usize,
+        logical_index: usize,
+        position: (f32, f32),
+    ) {
+        let uses_layout = self
+            .component(list_local_id)
+            .and_then(|component| component.parent)
+            .and_then(|parent| self.objects.component(parent))
+            .is_some_and(|parent| parent.concrete.layout.is_some());
+        let origin = self
+            .component_list_state(list_local_id)
+            .and_then(|list| {
+                list.items
+                    .iter()
+                    .find(|item| item.logical_index == logical_index)
+            })
+            .map(|item| {
+                let size = crate::draw::runtime_component_list_item_layout_size(item);
+                let origin = if uses_layout {
+                    (size.0 * item.child.origin_x, size.1 * item.child.origin_y)
+                } else {
+                    (0.0, 0.0)
                 };
-                for (item, bounds) in items.iter_mut().zip(bounds) {
-                    let assigned_size = (bounds.width, bounds.height);
-                    if item.settled_layout_size.get() != Some(assigned_size) {
-                        item.settled_layout_size.set(Some(assigned_size));
-                        size_feedback_changed = true;
-                    }
-                    if runtime_apply_component_list_item_layout_bounds(&mut item.child, bounds) {
-                        // Parent constraints can change a row's own layout and
-                        // therefore its intrinsic size. Settle that child before
-                        // measuring the parent again, using the same finite
-                        // update-pass shape as Artboard::updateLayoutBounds.
-                        for _ in 0..MAX_LAYOUT_FEEDBACK_PASSES {
-                            if !item.child.update_pass() {
-                                break;
-                            }
+                origin
+            })
+            .unwrap_or((0.0, 0.0));
+        let Some(list) = self.component_list_state_mut(list_local_id) else {
+            return;
+        };
+        let Some(item_index) = list
+            .items
+            .iter()
+            .position(|item| item.logical_index == logical_index)
+        else {
+            return;
+        };
+        // `Artboard::origin()` is negative when mounted with FrameOrigin off,
+        // so C++ `position - origin` adds the mounted layout origin here.
+        // Retain the final owner transform at the same mutation site
+        // (`artboard_component_list.cpp:1728-1740`;
+        // `artboard.cpp:1729-1734`).
+        let transform = Mat2D([
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+            position.0 + origin.0,
+            position.1 + origin.1,
+        ]);
+        list.items[item_index].transform = transform;
+        if let Some(retained) = list.item_transforms.get_mut(item_index) {
+            *retained = transform;
+        }
+    }
+
+    pub(crate) fn component_list_virtualizable_layout_position(
+        &self,
+        list_local_id: usize,
+        logical_index: usize,
+    ) -> (f32, f32) {
+        self.component_list_state(list_local_id)
+            .and_then(|list| {
+                list.items
+                    .iter()
+                    .find(|item| item.logical_index == logical_index)
+            })
+            .and_then(|item| {
+                item.child
+                    .component(0)
+                    .and_then(|component| component.concrete.layout.as_ref())
+                    .map(|layout| layout.position())
+            })
+            .unwrap_or((0.0, 0.0))
+    }
+
+    pub(crate) fn component_list_virtualizable_changed(&mut self, list_local_id: usize) {
+        if let Some(list) = self.component_list_state(list_local_id) {
+            *list.order_cache.borrow_mut() = Default::default();
+        }
+    }
+
+    /// Literal owner-level `ArtboardComponentList::updateLayoutBounds` tail:
+    /// update mounted row bounds once, write those sizes into the full logical
+    /// vector, compute `m_layoutSize`, then force the retained virtualizer
+    /// (`artboard_component_list.cpp:245-260,1758-1788`).
+    fn update_component_list_layout_bounds(&mut self, root_transform: Mat2D) -> bool {
+        // C++ deliberately reaches `computeLayoutBounds()` even when the
+        // mounted-row loop is empty. That owner tail recomputes the logical
+        // list size and force-settles its ScrollVirtualizer; returning early
+        // would leave an empty-mounted virtualized list one settlement behind
+        // (`artboard_component_list.cpp:245-260,1758-1788`).
+        let mut assigned_bounds = self.runtime_component_list_assigned_layout_bounds();
+        for list_local in self.component_list_locals() {
+            let Some(items) = self.component_list_items(list_local) else {
+                continue;
+            };
+            assigned_bounds.entry(list_local).or_insert_with(|| {
+                items
+                    .iter()
+                    .map(|item| {
+                        let (width, height) = runtime_component_list_item_layout_size(item);
+                        RuntimeLayoutBounds {
+                            x: 0.0,
+                            y: 0.0,
+                            width,
+                            height,
                         }
-                        size_feedback_changed = true;
+                    })
+                    .collect()
+            });
+        }
+        let mut changed = false;
+        for list_index in 0..self.component_list_count() {
+            let Some(list_local) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            let bounds = assigned_bounds.remove(&list_local).unwrap_or_default();
+            let mut measured_sizes = Vec::new();
+            let virtualized =
+                crate::constraints::component_list_virtualization(self, list_local).is_some();
+            if let Some(items) = self.component_list_items_mut(list_local) {
+                for (item, bounds) in items.iter_mut().zip(bounds) {
+                    let previous_size = runtime_component_list_item_layout_size(item);
+                    changed |=
+                        runtime_apply_component_list_item_layout_bounds(&mut item.child, bounds);
+                    if item.settled_layout_size.get().is_none() {
+                        // C++ marks the row as newly hosted before its first
+                        // parent-owned `updateLayoutBounds`; the later
+                        // component traversal performs `updatePass(false)`.
+                        item.child.added_to_host();
                     }
+                    if let Some(layout) = item
+                        .child
+                        .component(0)
+                        .and_then(|component| component.concrete.layout.as_ref())
+                    {
+                        // The mounted root Yoga node remains owned by the
+                        // hosting layout. Retain its parent-local location
+                        // before the later child component traversal, which
+                        // must not solve the occurrence as a standalone root
+                        // (`artboard_component_list.cpp:220-229`;
+                        // `scroll_virtualizer.cpp:269-291`).
+                        layout.retain_bounds(bounds.x, bounds.y, bounds.width, bounds.height);
+                    }
+                    // The transferred root Yoga node is the size owner after
+                    // the parent solve. Do not immediately run a standalone
+                    // child solve and overwrite its parent-local location.
+                    let measured = (bounds.width, bounds.height);
+                    if virtualized && measured != previous_size {
+                        // `setVirtualizablePosition` stores `position -
+                        // artboard->origin()`. A same-frame layout-width
+                        // change therefore moves the retained translation by
+                        // exactly the origin delta before draw
+                        // (`artboard_component_list.cpp:1728-1740`;
+                        // `artboard.cpp:1729-1734`).
+                        item.transform.0[4] += (measured.0 - previous_size.0) * item.child.origin_x;
+                        item.transform.0[5] += (measured.1 - previous_size.1) * item.child.origin_y;
+                    }
+                    item.settled_layout_size.set(Some(measured));
+                    measured_sizes.push((item.logical_index, measured));
                 }
             }
-
-            if !size_feedback_changed {
-                break;
+            let transforms = runtime_component_list_item_base_transforms(self, list_local);
+            if let Some(list) = self.component_list_state_mut(list_local)
+                && list.item_transforms != transforms
+            {
+                list.item_transforms = transforms;
+                changed = true;
             }
-            changed = true;
-            let virtual_window_changed = self.refresh_component_list_items();
-            changed |= virtual_window_changed;
-            // A stable mounted set is not a stable layout. Applying a parent
-            // size can change a hug/intrinsic child, and that new intrinsic
-            // size can alter the next parent assignment and later row
-            // positions without changing any visible indices. Always run the
-            // next bounded measure; only a pass with no size/child feedback is
-            // converged.
+            if let Some(list_component) = self.component_handle(list_local) {
+                // This Rust tail performs the parent-owned Yoga solve after
+                // the dependency walk. Reapply the same list constraints that
+                // C++ runs immediately after
+                // `updateArtboardsWorldTransform`; otherwise the refreshed
+                // hosted-layout bases overwrite FollowPath's retained result
+                // (`artboard_component_list.cpp:1300-1358`).
+                changed |= crate::constraints::apply_list_constraints(self, list_component);
+            }
+
+            let style_local = self.layout_component_style_local(list_local);
+            let is_row = style_local
+                .and_then(|local| {
+                    property_key_for_name("LayoutComponentStyle", "flexDirectionValue")
+                        .and_then(|key| self.uint_property(local, key))
+                })
+                .map(|direction| matches!(direction, 2 | 3))
+                .unwrap_or(true);
+            let gap_property = if is_row {
+                "gapHorizontal"
+            } else {
+                "gapVertical"
+            };
+            let gap = style_local
+                .and_then(|local| {
+                    property_key_for_name("LayoutComponentStyle", gap_property)
+                        .and_then(|key| self.double_property(local, key))
+                })
+                .unwrap_or(0.0);
+            let scroll_constraint = self.component_list_state(list_local).and_then(|list| {
+                list.layout_constraints
+                    .iter()
+                    .copied()
+                    .find(|constraint| self.component_at(*constraint).concrete.scroll.is_some())
+            });
+            if let Some(list) = self.component_list_state_mut(list_local) {
+                for (logical_index, size) in measured_sizes {
+                    if let Some(logical) = list.logical_items.get_mut(logical_index) {
+                        changed |= logical.size != size;
+                        logical.size = size;
+                    }
+                }
+                let mut width: f32 = 0.0;
+                let mut height: f32 = 0.0;
+                let item_count = list.logical_items.len();
+                for (index, item) in list.logical_items.iter().enumerate() {
+                    let real_gap = if index + 1 == item_count { 0.0 } else { gap };
+                    if is_row {
+                        width += item.size.0 + real_gap;
+                        height = height.max(item.size.1);
+                    } else {
+                        width = width.max(item.size.0);
+                        height += item.size.1 + real_gap;
+                    }
+                }
+                changed |= list.layout_size != (width, height);
+                list.layout_size = (width, height);
+            }
+            if let Some(constraint) = scroll_constraint {
+                changed |= crate::constraints::constrain_scroll_virtualizer(self, constraint, true);
+            }
+            let roots = self
+                .runtime_component_list_child_root_transforms(root_transform)
+                .remove(&list_local)
+                .unwrap_or_default();
+            if let Some(items) = self.component_list_items_mut(list_local) {
+                for (item_index, item) in items.iter_mut().enumerate() {
+                    let child_root_transform =
+                        roots.get(item_index).copied().unwrap_or(root_transform);
+                    let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+                    changed |= item
+                        .child
+                        .update_pass_with_script_mode(&mut script_mode, child_root_transform);
+                }
+            }
         }
         changed
     }
@@ -3257,16 +5087,10 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        let Some(state_machine_ptr) = self.state_machine_definition_ptr(instance) else {
+        let definitions = self.state_machine_definition_owner(instance);
+        let Some(state_machine) = definitions.get(instance.state_machine_index()) else {
             return false;
         };
-        // SAFETY: normal instances retain the immutable definition arena that
-        // owns this address. Compatibility instances borrow the same immutable
-        // arena from `self`, which is never replaced during this call. This is
-        // the Rust ownership translation of C++ `StateMachineInstance::
-        // m_machine` (`state_machine_instance.hpp:386`;
-        // `state_machine_instance.cpp:1707-1711`).
-        let state_machine = unsafe { &*state_machine_ptr };
         let mut owned_context = owned_context;
         // C++ `applyEvents()` consumes only reports not delivered to
         // listeners yet, at new-frame start, and loops chained reports before
@@ -3301,11 +5125,10 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        let Some(state_machine_ptr) = self.state_machine_definition_ptr(instance) else {
+        let definitions = self.state_machine_definition_owner(instance);
+        let Some(state_machine) = definitions.get(instance.state_machine_index()) else {
             return false;
         };
-        // SAFETY: see `advance_state_machine_instance_with_context`.
-        let state_machine = unsafe { &*state_machine_ptr };
         // This is C++'s `newFrame=false` follow-up after direct nested-event
         // notification. It advances layers but does not call `applyEvents`;
         // reports created here remain queued for the next ordinary frame
@@ -3323,11 +5146,10 @@ impl ArtboardInstance {
         instance: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
-        let Some(state_machine_ptr) = self.state_machine_definition_ptr(instance) else {
+        let definitions = self.state_machine_definition_owner(instance);
+        let Some(state_machine) = definitions.get(instance.state_machine_index()) else {
             return false;
         };
-        // SAFETY: see `advance_state_machine_instance_with_context`.
-        let state_machine = unsafe { &*state_machine_ptr };
         instance.advance_after_state_probe(self, state_machine, elapsed_seconds)
     }
 
@@ -3338,23 +5160,27 @@ impl ArtboardInstance {
         if !state_machine_requires_outer_update_probe(instance) {
             return false;
         }
-        let Some(state_machine_ptr) = self.state_machine_definition_ptr(instance) else {
+        self.try_change_state_machine_instance_unconditionally(instance)
+    }
+
+    fn try_change_state_machine_instance_unconditionally(
+        &mut self,
+        instance: &mut StateMachineInstance,
+    ) -> bool {
+        let definitions = self.state_machine_definition_owner(instance);
+        let Some(state_machine) = definitions.get(instance.state_machine_index()) else {
             return false;
         };
-        // SAFETY: see `advance_state_machine_instance_with_context`.
-        let state_machine = unsafe { &*state_machine_ptr };
         instance.try_change_state(self, state_machine)
     }
 
-    fn state_machine_definition_ptr(
+    fn state_machine_definition_owner(
         &self,
         instance: &StateMachineInstance,
-    ) -> Option<*const RuntimeStateMachine> {
-        instance.retained_state_machine_ptr().or_else(|| {
-            self.state_machines
-                .get(instance.state_machine_index())
-                .map(std::ptr::from_ref)
-        })
+    ) -> Arc<Vec<RuntimeStateMachine>> {
+        instance
+            .retained_state_machine_definitions()
+            .unwrap_or_else(|| Arc::clone(&self.state_machines))
     }
 
     /// Advance several state-machine instances on this artboard while
@@ -3472,7 +5298,13 @@ impl ArtboardInstance {
                 .child
                 .try_visit_artboard_tree_instances_mut_at_depth(depth.saturating_add(1), visitor)?;
         }
-        for items in self.component_list_items.values_mut() {
+        for list_index in 0..self.component_list_count() {
+            let Some(local_id) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            let Some(items) = self.component_list_items_mut(local_id) else {
+                continue;
+            };
             for item in items {
                 visitor(depth, item.child.graph_global_id, item.child.as_mut())?;
                 item.child.try_visit_artboard_tree_instances_mut_at_depth(
@@ -3547,69 +5379,429 @@ impl ArtboardInstance {
         notified_state_machine
     }
 
+    /// Advances the complete retained `Artboard::m_advancingComponents`
+    /// sequence, including scripted owners in their authored object-order
+    /// slots, and only then advances this artboard's DataBinds.
+    ///
+    /// This is the direct Rust boundary for C++
+    /// `Artboard::advanceInternal` (`src/artboard.cpp:1468-1480`).
+    pub fn advance_frame_components(&mut self, elapsed_seconds: f32) -> Result<bool, ScriptError> {
+        let mut script_mode = RuntimeScriptAdvanceMode::HostOnly;
+        self.advance_frame_components_collect_events_with_mode(
+            elapsed_seconds,
+            &mut script_mode,
+            None,
+        )
+    }
+
+    /// Factory-aware form of [`Self::advance_frame_components`].
+    pub fn advance_frame_components_with_factory(
+        &mut self,
+        elapsed_seconds: f32,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        let mut script_mode = RuntimeScriptAdvanceMode::Factory(factory);
+        self.advance_frame_components_collect_events_with_mode(
+            elapsed_seconds,
+            &mut script_mode,
+            None,
+        )
+    }
+
+    pub fn advance_frame_components_with_state_machine(
+        &mut self,
+        elapsed_seconds: f32,
+        state_machine: &mut StateMachineInstance,
+    ) -> Result<bool, ScriptError> {
+        let mut nested_events = Vec::new();
+        let mut script_mode = RuntimeScriptAdvanceMode::HostOnly;
+        self.advance_frame_components_collect_events_with_mode(
+            elapsed_seconds,
+            &mut script_mode,
+            Some(&mut nested_events),
+        )?;
+        let mut notified_state_machine = false;
+        for (host_local, events) in nested_events {
+            notified_state_machine |= state_machine.notify_events(self, Some(host_local), &events);
+        }
+        Ok(notified_state_machine)
+    }
+
+    /// Complete factory-bearing frame advance for several root state-machine
+    /// occurrences and the one retained mixed-family advancing list.
+    ///
+    /// Root machines advance in caller order; nested Artboards advance once
+    /// from their authored `m_advancingComponents` slot; their reports are
+    /// then delivered to each root in caller order. This is the multi-machine
+    /// form of the pinned `advanceAndApply`/`Artboard::advanceInternal`
+    /// interleave (`state_machine_instance.cpp:2555-2584`;
+    /// `artboard.cpp:1463-1480`).
+    pub fn advance_frame_components_with_state_machines(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+    ) -> Result<bool, ScriptError> {
+        let mut script_mode = RuntimeScriptAdvanceMode::HostOnly;
+        self.advance_frame_components_with_state_machines_and_mode(
+            state_machines,
+            elapsed_seconds,
+            &mut script_mode,
+        )
+    }
+
+    pub fn advance_frame_components_with_state_machines_and_factory(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        let mut script_mode = RuntimeScriptAdvanceMode::Factory(factory);
+        self.advance_frame_components_with_state_machines_and_mode(
+            state_machines,
+            elapsed_seconds,
+            &mut script_mode,
+        )
+    }
+
+    fn advance_frame_components_with_state_machines_and_mode(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        elapsed_seconds: f32,
+        script_mode: &mut RuntimeScriptAdvanceMode<'_>,
+    ) -> Result<bool, ScriptError> {
+        let mut changed = false;
+        for state_machine in state_machines.iter_mut() {
+            changed |= self.advance_state_machine_instance(state_machine, elapsed_seconds);
+        }
+
+        let mut nested_events = Vec::new();
+        changed |= self.advance_frame_components_collect_events_with_mode(
+            elapsed_seconds,
+            script_mode,
+            Some(&mut nested_events),
+        )?;
+        for state_machine in state_machines.iter_mut() {
+            let mut notified = false;
+            for (host_local, events) in &nested_events {
+                notified |= state_machine.notify_events(self, Some(*host_local), events);
+            }
+            if notified {
+                changed |=
+                    self.advance_state_machine_instance_preserving_events(state_machine, 0.0, None);
+            }
+        }
+        Ok(changed)
+    }
+
+    fn advance_frame_components_collect_events_with_mode(
+        &mut self,
+        elapsed_seconds: f32,
+        script_mode: &mut RuntimeScriptAdvanceMode<'_>,
+        nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
+    ) -> Result<bool, ScriptError> {
+        let mut changed = self.advance_retained_components_collect_events_with_scripts(
+            elapsed_seconds,
+            true,
+            script_mode,
+            nested_events,
+        )?;
+        changed |= self.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        Ok(changed)
+    }
+
     fn advance_nested_artboards_collect_events(
         &mut self,
         elapsed_seconds: f32,
-        mut nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
+        nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
     ) -> bool {
-        if self.nested_artboard_locals.is_empty()
-            && self.component_list_items.is_empty()
-            && self.component_list_sources.is_empty()
-        {
+        self.advance_retained_components_collect_events(elapsed_seconds, true, nested_events)
+    }
+
+    fn advance_retained_components_collect_events(
+        &mut self,
+        elapsed_seconds: f32,
+        new_frame: bool,
+        nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
+    ) -> bool {
+        let mut script_mode = RuntimeScriptAdvanceMode::Disabled;
+        self.advance_retained_components_collect_events_with_scripts(
+            elapsed_seconds,
+            new_frame,
+            &mut script_mode,
+            nested_events,
+        )
+        .expect("disabled script dispatch cannot fail")
+    }
+
+    fn advance_retained_components_collect_events_with_scripts(
+        &mut self,
+        elapsed_seconds: f32,
+        new_frame: bool,
+        script_mode: &mut RuntimeScriptAdvanceMode<'_>,
+        mut nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
+    ) -> Result<bool, ScriptError> {
+        if self.advancing_components.is_empty() {
+            return Ok(false);
+        }
+        let has_nested = self
+            .advancing_components
+            .iter()
+            .any(|entry| entry.kind == AdvancingComponentKind::NestedArtboard);
+        let layout_frame =
+            (new_frame && has_nested).then(|| self.runtime_nested_artboard_layout_bounds_frame());
+        let mut initial_layout_paint_evaluations = BTreeMap::new();
+        if let Some(layout_frame) = layout_frame.as_ref() {
+            for entry in &self.advancing_components {
+                if entry.kind != AdvancingComponentKind::NestedArtboard {
+                    continue;
+                }
+                let host_local = entry.local_id;
+                if self
+                    .component(host_local)
+                    .is_some_and(RuntimeComponent::is_collapsed)
+                {
+                    continue;
+                }
+                if self
+                    .component(host_local)
+                    .is_none_or(|component| component.type_name != "NestedArtboardLayout")
+                {
+                    continue;
+                }
+                let Some(nested) = self.nested_artboards.get(&host_local) else {
+                    continue;
+                };
+                if nested.layout_data_transferred
+                    || layout_frame
+                        .bounds
+                        .as_ref()
+                        .as_ref()
+                        .and_then(|bounds| bounds.get(&host_local))
+                        .is_none()
+                {
+                    continue;
+                }
+                if nested.initial_layout_paint_frame.borrow().is_none() {
+                    initial_layout_paint_evaluations
+                        .insert(host_local, nested.child.as_ref().clone());
+                }
+            }
+        }
+        let mut changed = false;
+        let mut script_host = NoopScriptHost;
+        for index in 0..self.advancing_components.len() {
+            let entry = self.advancing_components[index];
+            changed |= match entry.kind {
+                AdvancingComponentKind::NestedArtboard => self.advance_nested_artboard_entry(
+                    entry.local_id,
+                    elapsed_seconds,
+                    new_frame,
+                    script_mode,
+                    layout_frame.as_ref(),
+                    &mut initial_layout_paint_evaluations,
+                    nested_events.as_mut().map(|events| &mut **events),
+                )?,
+                AdvancingComponentKind::ArtboardComponentList => self
+                    .advance_component_list_entry(
+                        entry.local_id,
+                        elapsed_seconds,
+                        new_frame,
+                        script_mode,
+                    )?,
+                AdvancingComponentKind::ScrollConstraint => {
+                    entry.component.is_some_and(|constraint| {
+                        crate::constraints::advance_scroll_constraint(
+                            self,
+                            constraint,
+                            elapsed_seconds,
+                            true,
+                            new_frame,
+                        )
+                    })
+                }
+                AdvancingComponentKind::ScriptedDataConverter => self
+                    .advance_scripted_data_converter_entry(entry.local_id, elapsed_seconds, true),
+                AdvancingComponentKind::LayoutComponent => {
+                    self.advance_layout_component_entry(entry, elapsed_seconds, new_frame)
+                }
+                AdvancingComponentKind::TextInput => {
+                    self.advance_text_input_entry(entry, elapsed_seconds)
+                }
+                AdvancingComponentKind::ScriptedDrawable
+                | AdvancingComponentKind::ScriptedLayout
+                | AdvancingComponentKind::ScriptedPathEffect
+                    if script_mode.is_enabled() =>
+                {
+                    self.advance_script_component_with(
+                        entry,
+                        elapsed_seconds,
+                        &mut script_host,
+                        &mut |instance, args, host| script_mode.call(instance, args, host),
+                    )?
+                }
+                // Root Artboard participates in the C++ advancing interface
+                // only when a concrete root owner adds work; ordinary roots
+                // have no additional advance body.
+                AdvancingComponentKind::Artboard
+                | AdvancingComponentKind::ScriptedDrawable
+                | AdvancingComponentKind::ScriptedLayout
+                | AdvancingComponentKind::ScriptedPathEffect => false,
+            };
+        }
+        Ok(changed)
+    }
+
+    fn advance_layout_component_entry(
+        &mut self,
+        entry: RuntimeAdvancingComponent,
+        elapsed_seconds: f32,
+        new_frame: bool,
+    ) -> bool {
+        if !new_frame {
             return false;
         }
-        let layout_frame = self.runtime_nested_artboard_layout_bounds_frame();
-        let mut changed = self.refresh_component_list_items();
-        let mut initial_layout_paint_evaluations = BTreeMap::new();
-        for index in 0..self.nested_artboard_locals.len() {
-            let host_local = self.nested_artboard_locals[index];
-            if self
-                .component(host_local)
-                .is_some_and(RuntimeComponent::is_collapsed)
-            {
-                continue;
-            }
-            if self
-                .component(host_local)
-                .is_none_or(|component| component.type_name != "NestedArtboardLayout")
-            {
-                continue;
-            }
-            let Some(nested) = self.nested_artboards.get(&host_local) else {
-                continue;
-            };
-            if nested.layout_data_transferred {
-                continue;
-            }
-            if layout_frame
-                .bounds
-                .as_ref()
-                .as_ref()
-                .and_then(|bounds| bounds.get(&host_local))
-                .is_none()
-            {
-                continue;
-            }
-            if nested.initial_layout_paint_frame.borrow().is_none() {
-                // Preserve the queued pre-transfer paint state before the
-                // authoritative mounted child consumes any of it.
-                initial_layout_paint_evaluations.insert(host_local, nested.child.as_ref().clone());
-            }
+        let Some(component) = entry.component else {
+            return false;
+        };
+        let Some(advance) = self.objects.component(component).and_then(|component| {
+            (!component.is_collapsed())
+                .then(|| component.concrete.layout.as_ref())
+                .flatten()
+                .map(|layout| layout.advance_interpolation(elapsed_seconds, true))
+        }) else {
+            return false;
+        };
+        if advance.size_changed {
+            self.add_dirt(entry.local_id, ComponentDirt::PATH, false);
         }
-        for index in 0..self.nested_artboard_locals.len() {
-            let host_local = self.nested_artboard_locals[index];
-            if self
-                .component(host_local)
-                .is_some_and(RuntimeComponent::is_collapsed)
+        if advance.layout_changed {
+            // `LayoutComponent::applyInterpolation` writes `m_layout`, then
+            // propagates size and marks the exact owner world-transform dirty
+            // (`src/layout_component.cpp:1329-1401`).
+            self.add_dirt(entry.local_id, ComponentDirt::WORLD_TRANSFORM, true);
+            self.layout_epoch = self.layout_epoch.wrapping_add(1);
+            self.runtime_drawables.mark_layout_resources_dirty();
+        }
+        advance.keep_going
+    }
+
+    fn advance_text_input_entry(
+        &mut self,
+        entry: RuntimeAdvancingComponent,
+        elapsed_seconds: f32,
+    ) -> bool {
+        let Some(component) = entry.component else {
+            return false;
+        };
+        let Some((is_dragging, scroll_constraint, scroll_x, scroll_y, last_position)) =
+            self.objects.component(component).and_then(|component| {
+                let state = component.concrete.text_input.as_ref()?;
+                Some((
+                    state.is_dragging,
+                    state.scroll_constraint,
+                    state.scroll_x,
+                    state.scroll_y,
+                    state.last_drag_world_position,
+                ))
+            })
+        else {
+            return false;
+        };
+        if !is_dragging {
+            if let Some(state) = self
+                .objects
+                .component_mut(component)
+                .and_then(|component| component.concrete.text_input.as_mut())
             {
-                continue;
+                state.scroll_x = 0.0;
+                state.scroll_y = 0.0;
             }
+            return false;
+        }
+        let Some(scroll_constraint) = scroll_constraint else {
+            return false;
+        };
+        if scroll_x == 0.0 && scroll_y == 0.0 {
+            return false;
+        }
+
+        crate::constraints::advance_text_input_scroll(
+            self,
+            scroll_constraint,
+            scroll_x,
+            scroll_y,
+            elapsed_seconds,
+        );
+        if last_position.0.is_finite() && last_position.1.is_finite() {
+            // RawTextInput selection placement is retained by the text owner;
+            // the Paint dirt is the frame-loop-visible side effect after
+            // `moveCursorTo` (`src/text/text_input.cpp:751-760`).
+            self.add_dirt(entry.local_id, ComponentDirt::PAINT, false);
+        }
+        true
+    }
+
+    fn advance_scripted_data_converter_entry(
+        &mut self,
+        local_id: usize,
+        elapsed_seconds: f32,
+        advance_nested: bool,
+    ) -> bool {
+        // `ScriptedDataConverter::advanceComponent` zeros elapsed time when
+        // AdvanceNested is absent, and `advance` then rejects zero before
+        // calling user code (`scripted_data_converter.cpp:190-211`).
+        let elapsed_seconds = if advance_nested { elapsed_seconds } else { 0.0 };
+        if elapsed_seconds == 0.0 {
+            return false;
+        }
+        let Some(global_id) = self.slots.get(local_id).map(|slot| slot.source_global_id) else {
+            return false;
+        };
+        let Some(handle) = self
+            .scripted_data_converter_instances_by_global
+            .get(&global_id)
+            .cloned()
+        else {
+            return false;
+        };
+        let mut host = NoopScriptHost;
+        let Ok(result) = handle.borrow_mut().call_method(
+            ScriptMethod::Advance,
+            &[ScriptValue::Number(f64::from(elapsed_seconds))],
+            &mut host,
+        ) else {
+            return false;
+        };
+        if result != ScriptValue::Bool(true) {
+            return false;
+        }
+        self.mark_scripted_data_converter_dirty(global_id);
+        true
+    }
+
+    fn advance_nested_artboard_entry(
+        &mut self,
+        host_local: usize,
+        elapsed_seconds: f32,
+        new_frame: bool,
+        script_mode: &mut RuntimeScriptAdvanceMode<'_>,
+        layout_frame: Option<&RuntimeNestedLayoutBoundsFrame>,
+        initial_layout_paint_evaluations: &mut BTreeMap<usize, ArtboardInstance>,
+        nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
+    ) -> Result<bool, ScriptError> {
+        if self
+            .component(host_local)
+            .is_some_and(RuntimeComponent::is_collapsed)
+        {
+            return Ok(false);
+        }
+        if let Some(layout_frame) = layout_frame {
             let layout_data_transferred = self
                 .nested_artboards
                 .get(&host_local)
                 .is_some_and(|nested| nested.layout_data_transferred);
             if layout_data_transferred {
-                changed |= self.apply_nested_artboard_layout_bounds(
+                self.apply_nested_artboard_layout_bounds(
                     host_local,
                     layout_frame.bounds.as_ref().as_ref(),
                     layout_frame.key,
@@ -3623,102 +5815,146 @@ impl ArtboardInstance {
                     paint_evaluation,
                 );
             }
-            let (nested_keep_going, nested_is_dirty) = match nested_events.as_mut() {
-                Some(nested_events) => {
-                    let mut reported_events = Vec::new();
-                    let (nested_keep_going, nested_is_dirty) = self
-                        .nested_artboards
-                        .get_mut(&host_local)
-                        .map(|nested| {
-                            let keep_going =
-                                nested.advance(elapsed_seconds, Some(&mut reported_events));
-                            let is_dirty = nested.child.has_dirt(ComponentDirt::COMPONENTS);
-                            (keep_going, is_dirty)
-                        })
-                        .unwrap_or((false, false));
-                    if !reported_events.is_empty() {
-                        (**nested_events).push((host_local, reported_events));
-                    }
-                    (nested_keep_going, nested_is_dirty)
-                }
-                None => self
-                    .nested_artboards
-                    .get_mut(&host_local)
-                    .map(|nested| {
-                        let keep_going = nested.advance(elapsed_seconds, None);
-                        let is_dirty = nested.child.has_dirt(ComponentDirt::COMPONENTS);
-                        (keep_going, is_dirty)
-                    })
-                    .unwrap_or((false, false)),
-            };
-            changed |= nested_keep_going;
-            if nested_is_dirty {
-                changed = true;
-                self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
-            }
         }
-        let mut component_list_source_changed = false;
+
+        let mut reported_events = Vec::new();
+        let (keep_going, child_dirty) =
+            if let Some(nested) = self.nested_artboards.get_mut(&host_local) {
+                let keep_going = if new_frame {
+                    nested.advance(
+                        elapsed_seconds,
+                        script_mode,
+                        nested_events.as_ref().map(|_| &mut reported_events),
+                    )?
+                } else {
+                    nested.advance_outer_update()
+                };
+                (keep_going, nested.child.has_dirt(ComponentDirt::COMPONENTS))
+            } else {
+                (false, false)
+            };
+        if let Some(nested_events) = nested_events
+            && !reported_events.is_empty()
+        {
+            nested_events.push((host_local, reported_events));
+        }
+        if child_dirty {
+            self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
+        }
+        Ok(keep_going)
+    }
+
+    fn advance_component_list_entry(
+        &mut self,
+        list_local: usize,
+        elapsed_seconds: f32,
+        new_frame: bool,
+        script_mode: &mut RuntimeScriptAdvanceMode<'_>,
+    ) -> Result<bool, ScriptError> {
+        if self
+            .component(list_local)
+            .is_none_or(RuntimeComponent::is_collapsed)
+            || self
+                .component_list_items(list_local)
+                .is_none_or(|items| items.is_empty())
+        {
+            return Ok(false);
+        }
         let parent_data_context = self.artboard_owned_data_context.clone().unwrap_or_default();
-        for items in self.component_list_items.values_mut() {
-            for item in items {
-                let mut row_changed = false;
-                if !item.context_is_current(&item.context)
-                    && let Some(file) = item.child.runtime_file_arc()
-                {
-                    let child_data_context = RuntimeOwnedDataContext::with_local_handles(
-                        [item.context.clone()],
-                        Some(&parent_data_context),
-                    );
-                    row_changed |= item.child.bind_owned_view_model_artboard_data_context(
-                        &file,
-                        &child_data_context,
-                        true,
-                        true,
-                    );
-                    item.child.artboard_owned_view_model_context = Some(
-                        RuntimeOwnedViewModelContext::from_main_handle(item.context.clone()),
-                    );
-                    for state_machine in &mut item.state_machines {
-                        if state_machine.bind_owned_view_model_data_context(&child_data_context) {
-                            row_changed = true;
-                            row_changed |= state_machine.advance_data_context();
-                        }
-                    }
-                    item.consume_context_rebind_dirt();
-                    component_list_source_changed = true;
-                }
-                item.child.queue_script_advance(elapsed_seconds);
+        let mut source_changed = false;
+        let mut child_dirty = false;
+        let mut keep_going = false;
+        let Some(items) = self.component_list_items_mut(list_local) else {
+            return Ok(false);
+        };
+        for item in items {
+            let mut row_changed = false;
+            if !item.context_is_current(&item.context)
+                && let Some(file) = item.child.runtime_file_arc()
+            {
+                let child_data_context = RuntimeOwnedDataContext::with_local_handles(
+                    [item.context.clone()],
+                    Some(&parent_data_context),
+                );
+                row_changed |= item.child.bind_owned_view_model_artboard_data_context(
+                    &file,
+                    &child_data_context,
+                    true,
+                    true,
+                );
+                item.child.artboard_owned_view_model_context = Some(
+                    RuntimeOwnedViewModelContext::from_main_handle(item.context.clone()),
+                );
                 for state_machine in &mut item.state_machines {
+                    if state_machine.bind_owned_view_model_data_context(&child_data_context) {
+                        row_changed = true;
+                        row_changed |= state_machine.advance_data_context();
+                    }
+                }
+                item.consume_context_rebind_dirt();
+                source_changed = true;
+            }
+            for state_machine in &mut item.state_machines {
+                if new_frame {
                     row_changed |= item
                         .child
                         .advance_state_machine_instance(state_machine, elapsed_seconds);
-                }
-                row_changed |= item
+                } else if item
                     .child
-                    .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-                row_changed |= item.child.advance_nested_artboards(elapsed_seconds);
-                row_changed |= item.child.update_pass();
-                if item
-                    .context_rebind_sink
-                    .peek_dirt()
-                    .contains(crate::view_model_cell::RuntimeCellDirt::BINDINGS)
+                    .try_change_state_machine_instance_unconditionally(state_machine)
                 {
-                    component_list_source_changed = true;
+                    // Component-list rows use the literal unguarded
+                    // `tryChangeState()` branch when `NewFrame` is absent.
+                    // A row mounted during the preceding update therefore
+                    // enters its initial state in this same outer pass
+                    // (`artboard_component_list.cpp:827-854`).
+                    row_changed = true;
+                    row_changed |= item.child.advance_state_machine_instance_after_state_probe(
+                        state_machine,
+                        elapsed_seconds,
+                    );
                 }
-                if row_changed {
-                    // The hosting layout must remeasure this row before the
-                    // parent draws; `settle_component_list_layout_and_virtualization`
-                    // consumes the marker in the same outer update pass.
-                    item.settled_layout_size.set(None);
-                }
-                changed |= row_changed;
             }
+            row_changed |= if new_frame {
+                item.child
+                    .advance_retained_components_collect_events_with_scripts(
+                        elapsed_seconds,
+                        true,
+                        script_mode,
+                        None,
+                    )?
+            } else {
+                item.child
+                    .advance_retained_components_collect_events_with_scripts(
+                        elapsed_seconds,
+                        false,
+                        script_mode,
+                        None,
+                    )?
+            };
+            row_changed |= item
+                .child
+                .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+            child_dirty |= item.child.has_dirt(ComponentDirt::COMPONENTS);
+            if item
+                .context_rebind_sink
+                .peek_dirt()
+                .contains(crate::view_model_cell::RuntimeCellDirt::BINDINGS)
+            {
+                source_changed = true;
+            }
+            if row_changed {
+                item.settled_layout_size.set(None);
+            }
+            keep_going |= row_changed;
         }
-        if component_list_source_changed {
+        if source_changed {
             self.mark_component_list_source_changed();
-            changed = true;
         }
-        changed
+        if child_dirty {
+            self.add_dirt(list_local, ComponentDirt::COMPONENTS, false);
+        }
+        Ok(keep_going)
     }
 
     fn runtime_nested_artboard_layout_bounds_frame(&mut self) -> RuntimeNestedLayoutBoundsFrame {
@@ -3908,14 +6144,10 @@ impl ArtboardInstance {
         property: TransformProperty,
         value: f32,
     ) -> bool {
-        let Some(index) = self
-            .slots
-            .get(local_id)
-            .and_then(|slot| slot.component_index)
-        else {
+        let Some(component) = self.component(local_id) else {
             return false;
         };
-        let property_key = self.components[index].transform_property_key(property);
+        let property_key = component.transform_property_key(property);
         let Some(property_key) = property_key else {
             return false;
         };
@@ -3929,14 +6161,10 @@ impl ArtboardInstance {
         property_key: u16,
         value: f32,
     ) -> bool {
-        let Some(index) = self
-            .slots
-            .get(local_id)
-            .and_then(|slot| slot.component_index)
-        else {
+        let Some(component) = self.component(local_id) else {
             return false;
         };
-        if !self.components[index].capabilities.transform {
+        if !component.capabilities.transform {
             return false;
         }
 
@@ -3966,8 +6194,10 @@ impl ArtboardInstance {
             | TransformProperty::Rotation
             | TransformProperty::ScaleX
             | TransformProperty::ScaleY => {
-                self.add_dirt(local_id, ComponentDirt::TRANSFORM, false);
-                self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
+                let handle = self
+                    .component_handle(local_id)
+                    .expect("validated Transform has a Component handle");
+                self.mark_transform_dirty_handle(handle);
             }
         }
         true
@@ -3997,14 +6227,18 @@ impl ArtboardInstance {
 
     pub(crate) fn authored_transform(&self, local_id: usize) -> AuthoredTransform {
         let component = self.component(local_id);
-        let (x, y) = if component.is_some_and(|component| component.type_name == "Bone") {
-            (
-                component
-                    .and_then(|component| component.parent_local)
-                    .and_then(|parent_local| self.bone_length(parent_local))
-                    .unwrap_or(0.0),
-                0.0,
-            )
+        let (x, y) = if component
+            .and_then(|component| component.concrete.bone.as_ref())
+            .is_some_and(|bone| !bone.is_root)
+        {
+            let parent_length = self
+                .component_handle(local_id)
+                .and_then(|handle| self.objects.component(handle))
+                .and_then(|component| component.parent)
+                .and_then(|parent| self.objects.component_local_id(parent))
+                .and_then(|parent_local| self.bone_length(parent_local))
+                .unwrap_or(0.0);
+            (parent_length, 0.0)
         } else {
             (
                 self.transform_property(local_id, TransformProperty::X)
@@ -4033,16 +6267,187 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn bone_length(&self, local_id: usize) -> Option<f32> {
-        self.component(local_id).filter(|component| {
-            component.type_name == "Bone" || component.type_name == "RootBone"
-        })?;
+        self.component(local_id)?.concrete.bone.as_ref()?;
         self.objects
             .double_property_by_name(local_id, "length")
             .or(Some(0.0))
     }
 
+    pub(crate) fn runtime_skinnable_handle_has_skin(&self, handle: ComponentHandle) -> bool {
+        self.objects
+            .component(handle)
+            .and_then(|component| component.concrete.skinnable.as_ref())
+            .is_some_and(|skinnable| skinnable.skin.is_some())
+    }
+
+    pub(crate) fn runtime_node_computed_local_transform(&self, local_id: usize) -> Option<Mat2D> {
+        let handle = self.component_handle(local_id)?;
+        let component = self.objects.component(handle)?;
+        let node = component.concrete.node.as_ref()?;
+        let parent_world = component
+            .parent_transform
+            .and_then(|parent| self.objects.component(parent))
+            .map(|parent| parent.transform.world_transform);
+        Some(node.computed_local_transform(parent_world, component.transform.world_transform))
+    }
+
+    pub(crate) fn runtime_vertex_weight_state(
+        &self,
+        vertex_local: usize,
+    ) -> Option<crate::components::RuntimeWeightState> {
+        let vertex = self.component_handle(vertex_local)?;
+        let weight = self
+            .objects
+            .component(vertex)?
+            .concrete
+            .vertex
+            .as_ref()?
+            .weight?;
+        self.objects.component(weight)?.concrete.weight
+    }
+
+    /// Settle one retained Weight/CubicWeight from the Skin-owned transform
+    /// buffer. The caller supplies live Vertex points; packed indices/values
+    /// are always read from this occurrence's generated storage.
+    pub(crate) fn deform_runtime_vertex_weight(
+        &mut self,
+        vertex_local: usize,
+        point: (f32, f32),
+        cubic_points: Option<((f32, f32), (f32, f32))>,
+    ) -> bool {
+        let Some(vertex) = self.component_handle(vertex_local) else {
+            return false;
+        };
+        let Some(weight) = self
+            .objects
+            .component(vertex)
+            .and_then(|component| component.concrete.vertex.as_ref())
+            .and_then(|vertex| vertex.weight)
+        else {
+            return false;
+        };
+        let Some(skinnable) = self
+            .objects
+            .component(vertex)
+            .and_then(|component| component.parent)
+        else {
+            return false;
+        };
+        let Some(skin) = self
+            .objects
+            .component(skinnable)
+            .and_then(|component| component.concrete.skinnable.as_ref())
+            .and_then(|skinnable| skinnable.skin)
+        else {
+            return false;
+        };
+        let Some(weight_local) = self.objects.component_local_id(weight) else {
+            return false;
+        };
+        let Some(is_cubic_weight) = self
+            .objects
+            .component(weight)
+            .and_then(|component| component.concrete.weight.as_ref())
+            .map(|weight| weight.is_cubic)
+        else {
+            return false;
+        };
+        let values = property_key_for_name("Weight", "values")
+            .and_then(|key| self.uint_property(weight_local, key))
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(255);
+        let indices = property_key_for_name("Weight", "indices")
+            .and_then(|key| self.uint_property(weight_local, key))
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(1);
+
+        let Some(skin_state) = self
+            .objects
+            .component(skin)
+            .and_then(|component| component.concrete.skin.as_ref())
+        else {
+            return false;
+        };
+        let Some(translation) = deform_point_from_skin(
+            point,
+            indices,
+            values,
+            skin_state.world_transform,
+            &skin_state.bone_transforms,
+        ) else {
+            return false;
+        };
+        let cubic_translations = if is_cubic_weight {
+            let (in_point, out_point) = cubic_points.unwrap_or((point, point));
+            let in_values = property_key_for_name("CubicWeight", "inValues")
+                .and_then(|key| self.uint_property(weight_local, key))
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(255);
+            let in_indices = property_key_for_name("CubicWeight", "inIndices")
+                .and_then(|key| self.uint_property(weight_local, key))
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(1);
+            let out_values = property_key_for_name("CubicWeight", "outValues")
+                .and_then(|key| self.uint_property(weight_local, key))
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(255);
+            let out_indices = property_key_for_name("CubicWeight", "outIndices")
+                .and_then(|key| self.uint_property(weight_local, key))
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(1);
+            let Some(in_translation) = deform_point_from_skin(
+                in_point,
+                in_indices,
+                in_values,
+                skin_state.world_transform,
+                &skin_state.bone_transforms,
+            ) else {
+                return false;
+            };
+            let Some(out_translation) = deform_point_from_skin(
+                out_point,
+                out_indices,
+                out_values,
+                skin_state.world_transform,
+                &skin_state.bone_transforms,
+            ) else {
+                return false;
+            };
+            Some((in_translation, out_translation))
+        } else {
+            None
+        };
+
+        let state = self
+            .objects
+            .component_mut(weight)
+            .and_then(|component| component.concrete.weight.as_mut())
+            .expect("validated Weight handle owns Weight state");
+        state.translation = translation;
+        if let Some((in_translation, out_translation)) = cubic_translations {
+            state.in_translation = in_translation;
+            state.out_translation = out_translation;
+        }
+        true
+    }
+
     pub fn has_dirt(&self, dirt: ComponentDirt) -> bool {
-        self.dirt.contains(dirt)
+        self.objects
+            .root()
+            .and_then(|root| self.objects.component(root))
+            .is_some_and(|component| component.dirt.contains(dirt))
+    }
+
+    #[cfg(test)]
+    fn set_artboard_dirt_for_test(&mut self, dirt: ComponentDirt) {
+        let root = self
+            .objects
+            .root()
+            .expect("test Artboard occurrence has a root Component");
+        self.objects
+            .component_mut(root)
+            .expect("test Artboard root Component remains live")
+            .dirt = dirt;
     }
 
     pub fn did_change(&self) -> bool {
@@ -4136,7 +6541,7 @@ impl ArtboardInstance {
         });
         self.enqueue_artboard_parametric_layout_control_sources();
         let layout_locals = self
-            .components
+            .components()
             .iter()
             .filter(|component| component.type_name == "LayoutComponent")
             .map(|component| component.local_id)
@@ -4158,6 +6563,28 @@ impl ArtboardInstance {
         self.runtime_drawables.mark_layout_resources_dirty();
         self.runtime_drawables.mark_text_resources_dirty();
         self.mark_prepared_changed();
+    }
+
+    fn mark_runtime_shape_property_changed(&mut self, local_id: usize, affects_effect_path: bool) {
+        let paint_locals = self
+            .runtime_shapes
+            .mark_property_changed(local_id, affects_effect_path);
+        if !affects_effect_path {
+            return;
+        }
+        self.mark_path_changed();
+        if paint_locals.is_empty() {
+            self.add_dirt(local_id, ComponentDirt::PATH, false);
+        } else {
+            // Direct port of Dash/StrokeEffect/ShapePaint invalidation:
+            // child-property callbacks rewind their EffectPath and add Path
+            // dirt to the owning ShapePaint, which is the dependency node
+            // that recomputes the chain (`dash.cpp:39-48`,
+            // `stroke_effect.cpp:13-25`, `shape_paint.cpp:193-205`).
+            for paint_local in paint_locals {
+                self.add_dirt(paint_local, ComponentDirt::PATH, false);
+            }
+        }
     }
 
     fn mark_text_changed(&mut self) {
@@ -4238,6 +6665,12 @@ impl ArtboardInstance {
 
     fn property_affects_layout(&self, local_id: usize, property_key: u16) -> bool {
         let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        if property_marks_parametric_path_dirty(type_name, property_key) {
+            // ParametricPath::markPathDirty defaults sendToLayout=true and
+            // invalidates the first eligible ancestor LayoutComponent
+            // (`src/shapes/parametric_path.cpp:35-59`).
+            return true;
+        }
         if matches!(
             type_name,
             Some("LayoutComponentStyle" | "NestedArtboardLayout")
@@ -4319,19 +6752,152 @@ impl ArtboardInstance {
     }
 
     pub fn add_dirt(&mut self, local_id: usize, dirt: ComponentDirt, recurse: bool) -> bool {
+        let Some(handle) = self.component_handle(local_id) else {
+            return false;
+        };
+        self.add_component_dirt(handle, dirt, recurse)
+    }
+
+    fn add_component_dirt(
+        &mut self,
+        handle: ComponentHandle,
+        dirt: ComponentDirt,
+        recurse: bool,
+    ) -> bool {
         if dirt.is_empty() {
             return false;
         }
 
-        let Some(index) = self.component_by_local.get(&local_id).copied() else {
+        let Some(component) = self.objects.component(handle) else {
             return false;
         };
-
-        if self.components[index].dirt.contains(dirt) {
+        if component.dirt.contains(dirt) {
             return false;
         }
 
-        if !(dirt
+        // C++ Component::addDirt publishes the accumulated mask before any
+        // concrete callback can re-enter this owner.
+        let accumulated = {
+            let component = self
+                .objects
+                .component_mut(handle)
+                .expect("component handle was resolved above");
+            component.dirt |= dirt;
+            component.dirt
+        };
+        self.dispatch_component_on_dirty(handle, accumulated);
+        self.on_component_dirty_handle(handle);
+
+        if recurse {
+            let dependent_count = self.objects.dependent_len(handle);
+            for index in 0..dependent_count {
+                let Some(dependent) = self.objects.dependent_at(handle, index) else {
+                    continue;
+                };
+                self.add_component_dirt(dependent, dirt, true);
+            }
+        }
+        true
+    }
+
+    /// Literal `TransformComponent::markTransformDirty`: recursive World dirt
+    /// is gated by the transition that newly adds Transform dirt. Repeating a
+    /// transform setter while Transform is already pending must not re-dirty a
+    /// clean dependent subtree (`src/transform_component.cpp:54-61`).
+    fn mark_transform_dirty_handle(&mut self, handle: ComponentHandle) -> bool {
+        if !self.add_component_dirt(handle, ComponentDirt::TRANSFORM, false) {
+            return false;
+        }
+        self.add_component_dirt(handle, ComponentDirt::WORLD_TRANSFORM, true);
+        true
+    }
+
+    fn dispatch_component_on_dirty(&mut self, handle: ComponentHandle, accumulated: ComponentDirt) {
+        let Some(component) = self.objects.component(handle) else {
+            return;
+        };
+        let local_id = component.local_id;
+        let constraint_parent = component
+            .concrete
+            .constraint
+            .as_ref()
+            .and_then(|_| component.parent);
+        let constraint_is_ik = component.concrete.constraint.is_some_and(|constraint| {
+            constraint.kind == crate::components::RuntimeConstraintKind::Ik
+        });
+        let skin_skinnable = component
+            .concrete
+            .skin
+            .as_ref()
+            .and_then(|skin| skin.skinnable);
+        let path_has_deferred_dirt = component
+            .concrete
+            .path
+            .as_ref()
+            .is_some_and(|path| path.deferred_path_dirt.get());
+        let Some(address) = self.objects.address(handle) else {
+            return;
+        };
+        // Neither embedded owner inherits the authored object's concrete
+        // callbacks. PathComposer::onDirty only services deferred path dirt,
+        // which this retained owner never defers; TextVariationHelper has no
+        // onDirty override. In particular, do not run broad Shape/Text/Mesh
+        // invalidation merely because these embedded Components share their
+        // owner's serialized local id.
+        if !matches!(address, ComponentAddress::Authored(_)) {
+            return;
+        }
+
+        // Constraint::onDirty is unconditional: any accumulated dirt on the
+        // concrete Constraint marks its retained constrained parent before
+        // Artboard::onComponentDirty observes the Constraint itself
+        // (`src/constraints/constraint.cpp:35-40`).
+        if constraint_is_ik {
+            self.mark_ik_constraint_dirty(local_id);
+        } else if let Some(parent) = constraint_parent {
+            self.mark_transform_dirty_handle(parent);
+        }
+
+        // Exact `Skin::onDirty`: call only the retained Skinnable, before the
+        // outer Skin reaches Artboard::onComponentDirty. PointsPath and Mesh
+        // intentionally consume different dirt families
+        // (`src/bones/skin.cpp:88-94`,
+        // `src/shapes/points_path.cpp:43-52`,
+        // `src/shapes/mesh.cpp:84-85`).
+        if let Some(skinnable) = skin_skinnable {
+            match self
+                .objects
+                .component(skinnable)
+                .and_then(|component| component.concrete.skinnable.as_ref())
+                .map(|skinnable| skinnable.kind)
+            {
+                Some(RuntimeSkinnableKind::PointsPath) => {
+                    self.add_component_dirt(skinnable, ComponentDirt::PATH, false);
+                }
+                Some(RuntimeSkinnableKind::Mesh) => {
+                    self.add_component_dirt(skinnable, ComponentDirt::VERTICES, false);
+                }
+                _ => {}
+            }
+        }
+
+        // A deferred C++ Path does not keep itself continuously dirty.
+        // Instead, its next ordinary onDirty callback re-adds Path dirt,
+        // guaranteeing one rebuild when the Shape becomes observable again
+        // (`src/shapes/path.cpp:336-347`).
+        if path_has_deferred_dirt {
+            self.add_component_dirt(handle, ComponentDirt::PATH, false);
+        }
+
+        let text_variation_helper = accumulated
+            .contains(ComponentDirt::TEXT_SHAPE)
+            .then(|| self.objects.text_variation_helper_handle(local_id))
+            .flatten();
+        let text_style_parent = text_variation_helper
+            .and_then(|_| self.objects.component(handle))
+            .and_then(|component| component.parent);
+
+        if !(accumulated
             & (ComponentDirt::TEXT_SHAPE
                 | ComponentDirt::WORLD_TRANSFORM
                 | ComponentDirt::RENDER_OPACITY
@@ -4341,69 +6907,110 @@ impl ArtboardInstance {
             self.runtime_drawables
                 .mark_text_resource_dirty_for_local(local_id);
         }
-        if let Some(composer_order) = self.runtime_shapes.mark_component_dirt(local_id, dirt) {
-            self.dirt |= ComponentDirt::COMPONENTS;
-            if composer_order < self.dirt_depth {
-                self.dirt_depth = composer_order;
-            }
-        }
-        self.runtime_meshes.mark_component_dirt(local_id, dirt);
-        self.components[index].dirt |= dirt;
-        if dirt.contains(ComponentDirt::LAYOUT_STYLE) {
+        self.runtime_meshes
+            .mark_component_dirt(local_id, accumulated);
+        if accumulated.contains(ComponentDirt::LAYOUT_STYLE) {
             self.mark_layout_changed();
         }
-        if component_dirt_affects_path_epoch(dirt) {
+        if component_dirt_affects_path_epoch(accumulated) {
             self.mark_path_changed();
-        } else if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
+        } else if accumulated.contains(ComponentDirt::WORLD_TRANSFORM) {
             self.mark_world_transform_changed();
         }
-        if dirt.contains(ComponentDirt::DRAW_ORDER) {
+        if accumulated.contains(ComponentDirt::DRAW_ORDER) {
             self.mark_draw_order_changed();
         }
-        if dirt.contains(ComponentDirt::CLIPPING) {
+        if accumulated.contains(ComponentDirt::CLIPPING) {
             self.mark_clipping_changed();
         }
-        self.on_component_dirty(local_id);
 
-        // Ported from C++ `src/bones/skin.cpp::Skin::onDirty` and
-        // `src/shapes/points_path.cpp::PointsPath::markSkinDirty`.
-        if self.components[index].type_name == "Skin" {
-            if !dirt.contains(ComponentDirt::SKIN) {
-                self.add_dirt(local_id, ComponentDirt::SKIN, false);
-            }
-            let skinnable_count = self.components[index].dependent_locals.len();
-            for dependent_index in 0..skinnable_count {
-                let skinnable_local = self.components[index].dependent_locals[dependent_index];
-                self.add_dirt(skinnable_local, ComponentDirt::PATH, true);
-            }
-        }
-
-        if recurse {
-            // Mirrors C++ DependencyHelper::addDirtToDependents: dependency
-            // edges are stable after import, so cascade without cloning.
-            let dependent_count = self.components[index].dependent_locals.len();
-            for dependent_index in 0..dependent_count {
-                let dependent = self.components[index].dependent_locals[dependent_index];
-                self.add_dirt(dependent, dirt, true);
+        // Concrete Path callbacks own the transition from source dirt to
+        // PathComposer::Path dirt. Keep retained geometry invalidation on the
+        // resource owner, but schedule the embedded Component itself through
+        // the occurrence's one dependency graph (`path.cpp:327-350`,
+        // `shape.cpp:99-108`).
+        for shape_local in self
+            .runtime_shapes
+            .on_component_dirty(local_id, accumulated)
+        {
+            if let Some(composer) = self.objects.path_composer_handle(shape_local) {
+                let composer_dirt = ComponentDirt::PATH | (accumulated & ComponentDirt::N_SLICER);
+                self.add_component_dirt(composer, composer_dirt, true);
             }
         }
 
-        true
+        // Direct port of `TextStyle::onDirty`: shaping dirt first reaches the
+        // owning Text and then the style's embedded TextVariationHelper. The
+        // helper is an independent Component occurrence because its update
+        // must run in dependency order after Artboard and before Text
+        // (`src/text/text_style.cpp:22-34`,
+        // `src/text/text_variation_helper.cpp:7-17`).
+        if let Some(helper) = text_variation_helper {
+            if let Some(text) = text_style_parent {
+                self.add_component_dirt(text, ComponentDirt::TEXT_SHAPE, false);
+            }
+            self.add_component_dirt(helper, ComponentDirt::TEXT_SHAPE, false);
+        }
     }
 
     pub fn collapse_component(&mut self, local_id: usize, collapsed: bool) -> bool {
-        let Some(index) = self.component_by_local.get(&local_id).copied() else {
+        self.collapse_component_tree(local_id, collapsed)
+    }
+
+    fn collapse_component_handle(&mut self, handle: ComponentHandle, collapsed: bool) -> bool {
+        let Some(component) = self.objects.component(handle) else {
             return false;
         };
 
-        if self.components[index].is_collapsed() == collapsed {
+        if component.is_collapsed() == collapsed {
             return false;
         }
 
-        if collapsed {
-            self.components[index].dirt |= ComponentDirt::COLLAPSED;
-        } else {
-            self.components[index].dirt &= !ComponentDirt::COLLAPSED;
+        let accumulated = {
+            let component = self
+                .objects
+                .component_mut(handle)
+                .expect("component handle was resolved above");
+            if collapsed {
+                component.dirt |= ComponentDirt::COLLAPSED;
+            } else {
+                component.dirt &= !ComponentDirt::COLLAPSED;
+            }
+            component.dirt
+        };
+        // Component::collapse publishes its new mask to the concrete virtual
+        // owner before Artboard and collapsable notifications
+        // (`src/component.cpp:76-95`).
+        self.dispatch_component_on_dirty(handle, accumulated);
+        self.on_component_dirty_handle(handle);
+        let collapsable_count = self.objects.collapsable_len(handle);
+        for index in 0..collapsable_count {
+            let Some(data_bind) = self.objects.collapsable_at(handle, index) else {
+                continue;
+            };
+            self.collapse_artboard_authored_data_bind(data_bind, collapsed);
+        }
+
+        // Shape owns an embedded PathComposer and forwards collapse after its
+        // base Component transition (`src/shapes/shape.cpp:64-71`). Giving
+        // the composer its own Collapsed bit ensures Artboard skips it before
+        // clearing pending Path dirt, exactly like the generic C++ traversal.
+        if let Some(composer) = self
+            .objects
+            .component_local_id(handle)
+            .and_then(|local_id| self.objects.path_composer_handle(local_id))
+        {
+            self.collapse_component_handle(composer, collapsed);
+        }
+
+        let Some(ComponentAddress::Authored(_)) = self.objects.address(handle) else {
+            return true;
+        };
+        let local_id = self
+            .objects
+            .component_local_id(handle)
+            .expect("authored component handle has an object");
+        if !collapsed {
             if self.nested_artboards.contains_key(&local_id) {
                 self.newly_uncollapsed_nested_artboards.insert(local_id);
             }
@@ -4415,32 +7022,47 @@ impl ArtboardInstance {
         // explicitly dirties the composer's dependents even when the
         // composer already carries Path dirt, so do not route this through
         // the ordinary duplicate-dirt early return.
-        if let Some((composer_order, dependent_paint_locals)) =
-            self.runtime_shapes.path_collapse_changed(local_id)
+        if let Some(shape_local) = self.runtime_shapes.path_collapse_changed(local_id)
+            && let Some(composer) = self.objects.path_composer_handle(shape_local)
         {
-            self.dirt |= ComponentDirt::COMPONENTS;
-            self.dirt_depth = self.dirt_depth.min(composer_order);
-            for paint_local in dependent_paint_locals {
-                self.add_dirt(paint_local, ComponentDirt::PATH, true);
+            self.add_component_dirt(composer, ComponentDirt::PATH, false);
+            let dependent_count = self.objects.dependent_len(composer);
+            for index in 0..dependent_count {
+                if let Some(dependent) = self.objects.dependent_at(composer, index) {
+                    self.add_component_dirt(dependent, ComponentDirt::PATH, true);
+                }
             }
         }
         self.mark_path_changed();
         self.mark_layout_changed();
-        self.mark_artboard_data_bind_work_dirty();
-        self.on_component_dirty(local_id);
         self.apply_component_collapse_changed(local_id);
         true
     }
 
     pub fn update_components(&mut self) -> UpdateComponentsReport {
-        self.update_components_with_hook(|_, _, _| {})
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        self.update_components_with_hook_recording(
+            true,
+            &mut script_mode,
+            Mat2D::IDENTITY,
+            |_, _, _, _| {},
+        )
     }
 
     pub fn update_pass(&mut self) -> bool {
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        self.update_pass_with_script_mode(&mut script_mode, Mat2D::IDENTITY)
+    }
+
+    fn update_pass_with_script_mode(
+        &mut self,
+        script_mode: &mut RuntimeScriptUpdateMode<'_>,
+        root_transform: Mat2D,
+    ) -> bool {
         // Mirrors C++ src/artboard.cpp Artboard::updatePass: data binds run
         // before components, with artboard-host children publishing first.
-        self.update_nested_artboard_data_binds_from_hosts();
-        self.advance_artboard_data_binds();
+        self.update_nested_artboard_data_binds_from_hosts(root_transform);
+        self.advance_artboard_data_binds_with_root_transform(root_transform, 0.0);
         // C++ transfers a NestedArtboardLayout's Yoga node after the first
         // child-recursive data-bind pass, then reuses that node whenever the
         // parent Yoga graph reports a new layout. The transfer key keeps later
@@ -4458,17 +7080,27 @@ impl ArtboardInstance {
         let mut deferred_nested_opacity_hosts = BTreeSet::new();
         let mut nested_did_update = false;
         if self
-            .update_components_with_hook_recording(false, |instance, local_id, dirt| {
-                nested_did_update |= instance.update_nested_artboard_from_host_dirt(local_id, dirt);
-                if dirt.contains(ComponentDirt::RENDER_OPACITY)
-                    && instance
-                        .nested_artboards
-                        .get(&local_id)
-                        .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS))
-                {
-                    deferred_nested_opacity_hosts.insert(local_id);
-                }
-            })
+            .update_components_with_hook_recording(
+                false,
+                script_mode,
+                root_transform,
+                |instance, local_id, dirt, script_mode| {
+                    nested_did_update |= instance.update_nested_artboard_from_host_dirt(
+                        local_id,
+                        dirt,
+                        script_mode,
+                        root_transform,
+                    );
+                    if dirt.contains(ComponentDirt::RENDER_OPACITY)
+                        && instance
+                            .nested_artboards
+                            .get(&local_id)
+                            .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS))
+                    {
+                        deferred_nested_opacity_hosts.insert(local_id);
+                    }
+                },
+            )
             .did_update
         {
             did_update = true;
@@ -4480,20 +7112,27 @@ impl ArtboardInstance {
                 let mut nested_did_update = false;
                 if !self.joysticks[joystick_index].can_apply_before_update
                     && self
-                        .update_components_with_hook_recording(false, |instance, local_id, dirt| {
-                            nested_did_update |=
-                                instance.update_nested_artboard_from_host_dirt(local_id, dirt);
-                            if dirt.contains(ComponentDirt::RENDER_OPACITY)
-                                && instance
-                                    .nested_artboards
-                                    .get(&local_id)
-                                    .is_some_and(|nested| {
-                                        nested.child.has_dirt(ComponentDirt::COMPONENTS)
-                                    })
-                            {
-                                deferred_nested_opacity_hosts.insert(local_id);
-                            }
-                        })
+                        .update_components_with_hook_recording(
+                            false,
+                            script_mode,
+                            root_transform,
+                            |instance, local_id, dirt, script_mode| {
+                                nested_did_update |= instance
+                                    .update_nested_artboard_from_host_dirt(
+                                        local_id,
+                                        dirt,
+                                        script_mode,
+                                        root_transform,
+                                    );
+                                if dirt.contains(ComponentDirt::RENDER_OPACITY)
+                                    && instance.nested_artboards.get(&local_id).is_some_and(
+                                        |nested| nested.child.has_dirt(ComponentDirt::COMPONENTS),
+                                    )
+                                {
+                                    deferred_nested_opacity_hosts.insert(local_id);
+                                }
+                            },
+                        )
                         .did_update
                 {
                     did_update = true;
@@ -4503,18 +7142,29 @@ impl ArtboardInstance {
             }
             let mut nested_did_update = false;
             if self
-                .update_components_with_hook_recording(false, |instance, local_id, dirt| {
-                    nested_did_update |=
-                        instance.update_nested_artboard_from_host_dirt(local_id, dirt);
-                    if dirt.contains(ComponentDirt::RENDER_OPACITY)
-                        && instance
-                            .nested_artboards
-                            .get(&local_id)
-                            .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS))
-                    {
-                        deferred_nested_opacity_hosts.insert(local_id);
-                    }
-                })
+                .update_components_with_hook_recording(
+                    false,
+                    script_mode,
+                    root_transform,
+                    |instance, local_id, dirt, script_mode| {
+                        nested_did_update |= instance.update_nested_artboard_from_host_dirt(
+                            local_id,
+                            dirt,
+                            script_mode,
+                            root_transform,
+                        );
+                        if dirt.contains(ComponentDirt::RENDER_OPACITY)
+                            && instance
+                                .nested_artboards
+                                .get(&local_id)
+                                .is_some_and(|nested| {
+                                    nested.child.has_dirt(ComponentDirt::COMPONENTS)
+                                })
+                        {
+                            deferred_nested_opacity_hosts.insert(local_id);
+                        }
+                    },
+                )
                 .did_update
             {
                 did_update = true;
@@ -4535,17 +7185,19 @@ impl ArtboardInstance {
             {
                 self.mark_artboard_data_bind_work_dirty();
             }
-            self.update_nested_artboard_data_binds_from_hosts();
-            self.advance_artboard_data_binds();
+            self.update_nested_artboard_data_binds_from_hosts(root_transform);
+            self.advance_artboard_data_binds_with_root_transform(root_transform, 0.0);
         }
         if did_update
-            || self
-                .component_list_items
-                .values()
-                .flatten()
-                .any(|item| item.settled_layout_size.get().is_none())
+            || self.component_list_locals().into_iter().any(|local_id| {
+                self.component_list_items(local_id).is_some_and(|items| {
+                    items
+                        .iter()
+                        .any(|item| item.settled_layout_size.get().is_none())
+                })
+            })
         {
-            did_update |= self.settle_component_list_layout_and_virtualization();
+            did_update |= self.update_component_list_layout_bounds(root_transform);
         }
         for host_local_id in deferred_nested_opacity_hosts {
             if self
@@ -4557,6 +7209,110 @@ impl ArtboardInstance {
             }
         }
         did_update
+    }
+
+    pub fn update_pass_with_script_errors(&mut self) -> Result<bool, ScriptError> {
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        self.update_pass_with_script_mode_and_errors(&mut script_mode)
+    }
+
+    /// Factory-aware `Artboard::updatePass` whose scripted Components execute
+    /// at their retained dependency slots.
+    pub fn update_pass_with_factory(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        let mut script_mode = RuntimeScriptUpdateMode::Factory(factory);
+        self.update_pass_with_script_mode_and_errors(&mut script_mode)
+    }
+
+    fn update_pass_with_script_mode_and_errors(
+        &mut self,
+        script_mode: &mut RuntimeScriptUpdateMode<'_>,
+    ) -> Result<bool, ScriptError> {
+        self.clear_script_update_error_tree();
+        let did_update = self.update_pass_with_script_mode(script_mode, Mat2D::IDENTITY);
+        match self.take_script_update_error_tree() {
+            Some(error) => {
+                self.rearm_pending_script_updates_tree();
+                Err(error)
+            }
+            None => Ok(did_update),
+        }
+    }
+
+    fn clear_script_update_error_tree(&mut self) {
+        self.script_update_error = None;
+        for (_, nested) in &mut self.nested_artboards.entries {
+            nested.child.clear_script_update_error_tree();
+        }
+        for list_index in 0..self.component_list_count() {
+            let Some(list_local) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            let Some(items) = self.component_list_items_mut(list_local) else {
+                continue;
+            };
+            for item in items {
+                item.child.clear_script_update_error_tree();
+            }
+        }
+    }
+
+    fn take_script_update_error_tree(&mut self) -> Option<ScriptError> {
+        if let Some(error) = self.script_update_error.take() {
+            return Some(error);
+        }
+        for (_, nested) in &mut self.nested_artboards.entries {
+            if let Some(error) = nested.child.take_script_update_error_tree() {
+                return Some(error);
+            }
+        }
+        for list_index in 0..self.component_list_count() {
+            let Some(list_local) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            let Some(items) = self.component_list_items_mut(list_local) else {
+                continue;
+            };
+            for item in items {
+                if let Some(error) = item.child.take_script_update_error_tree() {
+                    return Some(error);
+                }
+            }
+        }
+        None
+    }
+
+    fn rearm_pending_script_updates_tree(&mut self) {
+        let schedule_len = self.objects.dependency_order().len();
+        for index in 0..schedule_len {
+            let Some(component) = self.objects.scheduled_at(index) else {
+                continue;
+            };
+            if self
+                .objects
+                .component(component)
+                .and_then(|component| component.concrete.scripted.as_ref())
+                .is_some_and(|scripted| scripted.update_pending)
+            {
+                self.add_component_dirt(component, ComponentDirt::SCRIPT_UPDATE, false);
+            }
+        }
+        for (_, nested) in &mut self.nested_artboards.entries {
+            nested.child.rearm_pending_script_updates_tree();
+        }
+        for list_index in 0..self.component_list_count() {
+            let Some(list_local) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            let Some(items) = self.component_list_items_mut(list_local) else {
+                continue;
+            };
+            for item in items {
+                item.child.rearm_pending_script_updates_tree();
+            }
+        }
     }
 
     /// Settle the bounded component-update tail used by C++
@@ -4596,11 +7352,23 @@ impl ArtboardInstance {
         &mut self,
         state_machines: &mut [StateMachineInstance],
     ) -> bool {
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        self.settle_state_machine_update_passes_after_main_advance_with_mode(
+            state_machines,
+            &mut script_mode,
+        )
+    }
+
+    fn settle_state_machine_update_passes_after_main_advance_with_mode(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        script_mode: &mut RuntimeScriptUpdateMode<'_>,
+    ) -> bool {
         const MAX_OUTER_PASSES: usize = 5;
 
         let mut changed = false;
         for _ in 0..MAX_OUTER_PASSES {
-            changed |= self.update_pass();
+            changed |= self.update_pass_with_script_mode(script_mode, Mat2D::IDENTITY);
             for state_machine in state_machines.iter_mut() {
                 if self.try_change_state_machine_instance(state_machine) {
                     changed = true;
@@ -4612,11 +7380,90 @@ impl ArtboardInstance {
             for state_machine in state_machines.iter_mut() {
                 state_machine.reset_advanced_data_context();
             }
+            self.reset_retained_components();
             if !self.has_dirt(ComponentDirt::COMPONENTS) {
                 break;
             }
         }
         changed
+    }
+
+    pub fn settle_state_machine_update_passes_after_main_advance_with_script_errors(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+    ) -> Result<bool, ScriptError> {
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        self.settle_state_machine_update_passes_after_main_advance_with_mode_and_errors(
+            state_machines,
+            &mut script_mode,
+        )
+    }
+
+    pub fn settle_state_machine_update_passes_after_main_advance_with_factory(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        let mut script_mode = RuntimeScriptUpdateMode::Factory(factory);
+        self.settle_state_machine_update_passes_after_main_advance_with_mode_and_errors(
+            state_machines,
+            &mut script_mode,
+        )
+    }
+
+    fn settle_state_machine_update_passes_after_main_advance_with_mode_and_errors(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        script_mode: &mut RuntimeScriptUpdateMode<'_>,
+    ) -> Result<bool, ScriptError> {
+        self.clear_script_update_error_tree();
+        let changed = self.settle_state_machine_update_passes_after_main_advance_with_mode(
+            state_machines,
+            script_mode,
+        );
+        match self.take_script_update_error_tree() {
+            Some(error) => {
+                self.rearm_pending_script_updates_tree();
+                Err(error)
+            }
+            None => Ok(changed),
+        }
+    }
+
+    fn reset_retained_components(&mut self) {
+        if self.resetting_components.is_empty() {
+            return;
+        }
+        for index in 0..self.resetting_components.len() {
+            let entry = self.resetting_components[index];
+            match entry.kind {
+                ResettingComponentKind::NestedArtboard => {
+                    let Some(nested) = self.nested_artboards.get_mut(&entry.local_id) else {
+                        continue;
+                    };
+                    nested.child.reset_retained_components();
+                    if let Some(context) = nested.stateful_view_model_context.as_mut() {
+                        context.advanced_data_context();
+                    }
+                }
+                ResettingComponentKind::ArtboardComponentList => {
+                    let should_reset_instances =
+                        self.artboard_component_list_should_reset_instances(entry.local_id);
+                    let Some(list) = self.component_list_state_mut(entry.local_id) else {
+                        continue;
+                    };
+                    reset_component_list_instances(list, should_reset_instances);
+                }
+                ResettingComponentKind::CustomPropertyTrigger => {
+                    let Some(property_value_key) =
+                        property_key_for_name("CustomPropertyTrigger", "propertyValue")
+                    else {
+                        continue;
+                    };
+                    let _ = self.set_uint_property(entry.local_id, property_value_key, 0);
+                }
+            }
+        }
     }
 
     fn reset_outer_state_machine_changed_state_counts(
@@ -4629,7 +7476,13 @@ impl ArtboardInstance {
         for nested in self.nested_artboards.values_mut() {
             nested.reset_outer_state_machine_changed_state_counts();
         }
-        for items in self.component_list_items.values_mut() {
+        for list_index in 0..self.component_list_count() {
+            let Some(local_id) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            let Some(items) = self.component_list_items_mut(local_id) else {
+                continue;
+            };
             for item in items {
                 for state_machine in &mut item.state_machines {
                     state_machine.reset_changed_state_count_for_outer_settlement();
@@ -4643,59 +7496,11 @@ impl ArtboardInstance {
     /// Mirrors `Artboard::advanceInternal` for an outer state-machine update
     /// pass, where `AdvanceNested` is set but `NewFrame` is not.
     fn advance_outer_update_components(&mut self) -> bool {
-        let mut dirty_hosts = Vec::new();
-        let mut changed = false;
-        // C++ walks its retained m_advancingComponents in place. Copy one
-        // retained local ID at a time so child advancement does not require a
-        // per-pass clone of the parent traversal topology.
-        for index in 0..self.nested_artboard_locals.len() {
-            let host_local_id = self.nested_artboard_locals[index];
-            if self
-                .component(host_local_id)
-                .is_some_and(RuntimeComponent::is_collapsed)
-            {
-                continue;
-            }
-            let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
-                continue;
-            };
-            changed |= nested.advance_outer_update();
-            if nested.child.has_dirt(ComponentDirt::COMPONENTS) {
-                dirty_hosts.push(host_local_id);
-            }
-        }
-
-        let mut dirty_component_lists = Vec::new();
-        for (list_local_id, items) in &mut self.component_list_items {
-            let mut list_dirty = false;
-            for item in items {
-                let mut item_changed = false;
-                for state_machine in &mut item.state_machines {
-                    if item.child.try_change_state_machine_instance(state_machine) {
-                        item_changed = true;
-                        item_changed |= item
-                            .child
-                            .advance_state_machine_instance_after_state_probe(state_machine, 0.0);
-                    }
-                }
-                item_changed |= item.child.advance_outer_update_components();
-                if item.child.has_dirt(ComponentDirt::COMPONENTS) {
-                    list_dirty = true;
-                }
-                changed |= item_changed;
-            }
-            if list_dirty {
-                dirty_component_lists.push(*list_local_id);
-            }
-        }
-
+        // One insertion-ordered mixed-family walk, exactly like
+        // `Artboard::m_advancingComponents`; NewFrame is deliberately absent
+        // during the outer settlement pass (`artboard.cpp:1463-1480`).
+        let mut changed = self.advance_retained_components_collect_events(0.0, false, None);
         changed |= self.advance_artboard_data_binds_with_elapsed(0.0);
-        for host_local_id in dirty_hosts {
-            changed |= self.add_dirt(host_local_id, ComponentDirt::COMPONENTS, false);
-        }
-        for list_local_id in dirty_component_lists {
-            changed |= self.add_dirt(list_local_id, ComponentDirt::COMPONENTS, false);
-        }
         changed
     }
 
@@ -4703,6 +7508,8 @@ impl ArtboardInstance {
         &mut self,
         host_local_id: usize,
         dirt: ComponentDirt,
+        script_mode: &mut RuntimeScriptUpdateMode<'_>,
+        root_transform: Mat2D,
     ) -> bool {
         if !dirt.contains(ComponentDirt::RENDER_OPACITY)
             && !dirt.contains(ComponentDirt::COMPONENTS)
@@ -4737,8 +7544,15 @@ impl ArtboardInstance {
             {
                 return changed;
             }
+            let child_root_transform = root_transform.multiply(
+                self.component(host_local_id)
+                    .map(|component| component.transform.world_transform)
+                    .unwrap_or(Mat2D::IDENTITY),
+            );
             if let Some(nested) = self.nested_artboards.get_mut(&host_local_id) {
-                changed |= nested.child.update_pass();
+                changed |= nested
+                    .child
+                    .update_pass_with_script_mode(script_mode, child_root_transform);
                 if dirt.contains(ComponentDirt::RENDER_OPACITY) {
                     if let Some(frame) = nested.initial_layout_paint_frame.borrow().as_ref() {
                         // C++ consumes the initial nested-layout shader wave in
@@ -4800,19 +7614,28 @@ impl ArtboardInstance {
     where
         F: FnMut(&mut Self, usize, ComponentDirt),
     {
-        self.update_components_with_hook_recording(true, |instance, local_id, dirt| {
-            hook(instance, local_id, dirt);
-        })
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        self.update_components_with_hook_recording(
+            true,
+            &mut script_mode,
+            Mat2D::IDENTITY,
+            |instance, local_id, dirt, _| {
+                hook(instance, local_id, dirt);
+            },
+        )
     }
 
     fn update_components_with_hook_recording<F>(
         &mut self,
         record_updated_locals: bool,
+        script_mode: &mut RuntimeScriptUpdateMode<'_>,
+        root_transform: Mat2D,
         mut hook: F,
     ) -> UpdateComponentsReport
     where
-        F: FnMut(&mut Self, usize, ComponentDirt),
+        F: FnMut(&mut Self, usize, ComponentDirt, &mut RuntimeScriptUpdateMode<'_>),
     {
+        self.initialize_clone_backend_if_pending();
         let mut report = UpdateComponentsReport::default();
         let graph_owner = self.build_context.as_ref().and_then(|context| {
             let graph_index = context
@@ -4822,29 +7645,12 @@ impl ArtboardInstance {
                 .flatten()?;
             Some((Arc::clone(&context.artboards), graph_index))
         });
-        // A cloned C++ artboard rebuilds clone-owned PathComposer,
-        // ShapePaintPath, EffectPath, and RenderPaint state even when every
-        // copied component property was already clean. RuntimeShapeList marks
-        // that construction settlement explicitly.
-        let component_by_local = &self.component_by_local;
-        let components = &self.components;
-        let pending_shape_components =
-            self.runtime_shapes
-                .pending_settlement_component_locals(|local_id| {
-                    component_by_local
-                        .get(&local_id)
-                        .and_then(|index| components.get(*index))
-                        .is_some_and(RuntimeComponent::is_collapsed)
-                });
-        if !pending_shape_components.is_empty() {
-            for local_id in pending_shape_components {
-                let Some(component_index) = self.component_by_local.get(&local_id).copied() else {
-                    continue;
-                };
-                self.dirt |= ComponentDirt::COMPONENTS;
-                self.components[component_index].dirt |= ComponentDirt::PATH;
-            }
-        }
+        // Core::clone copies generated properties into fresh concrete
+        // Components, then Artboard::initialize runs one FILTHY traversal over
+        // the clone-owned graph. InstanceObjectArena performs that concrete
+        // lifecycle rebuild; consume its one-shot wake here instead of
+        // polling retained renderer sidecars (`artboard.hpp:557-588`,
+        // `artboard.cpp:1214-1248`).
         if !self.has_dirt(ComponentDirt::COMPONENTS) {
             return report;
         }
@@ -4859,32 +7665,56 @@ impl ArtboardInstance {
             self.runtime_taffy_layout_bounds(&graphs[*graph_index], self.runtime_file())
                 .map(Arc::new)
         });
+        if let Some(layout_bounds) = layout_bounds.as_deref() {
+            for (&local_id, &bounds) in layout_bounds {
+                self.retain_runtime_layout_component_bounds(local_id, bounds, Some(layout_bounds));
+            }
+        }
 
         report.did_update = true;
         let max_steps = 100;
-        let update_order_len = self.runtime_update_order.len();
+        let update_order_len = self.objects.dependency_order().len();
 
         while self.has_dirt(ComponentDirt::COMPONENTS) && report.steps < max_steps {
-            self.dirt &= !ComponentDirt::COMPONENTS;
+            if let Some(root) = self.objects.root()
+                && let Some(component) = self.objects.component_mut(root)
+            {
+                component.dirt &= !ComponentDirt::COMPONENTS;
+            }
 
             for order_index in 0..update_order_len {
                 self.dirt_depth = order_index;
-                match self.runtime_update_order[order_index] {
-                    RuntimeUpdateTarget::Component(local_id) => {
-                        let Some(component_index) = self.component_by_local.get(&local_id).copied()
-                        else {
-                            continue;
-                        };
-                        let dirt = self.components[component_index].dirt;
-                        if dirt.is_empty() || dirt.contains(ComponentDirt::COLLAPSED) {
-                            continue;
-                        }
+                let Some(component_handle) = self.objects.scheduled_at(order_index) else {
+                    continue;
+                };
+                let Some(component) = self.objects.component(component_handle) else {
+                    continue;
+                };
+                let local_id = component.local_id;
+                let dirt = component.dirt;
+                if dirt.is_empty() || dirt.contains(ComponentDirt::COLLAPSED) {
+                    continue;
+                }
+                let Some(address) = self.objects.address(component_handle) else {
+                    continue;
+                };
+                let scheduled_component = self
+                    .objects
+                    .component_mut(component_handle)
+                    .expect("scheduled component handle must remain live");
+                scheduled_component.dirt = ComponentDirt::NONE;
 
-                        self.components[component_index].dirt = ComponentDirt::NONE;
-                        self.update_component(component_index, dirt);
+                match address {
+                    ComponentAddress::Authored(_) => {
+                        self.update_component_with_script_mode(
+                            component_handle,
+                            dirt,
+                            script_mode,
+                            root_transform,
+                        );
                         if let Some((graphs, graph_index)) = graph_owner.as_ref() {
                             self.update_runtime_path_owner(
-                                local_id,
+                                component_handle,
                                 dirt,
                                 &graphs[*graph_index],
                                 layout_bounds.as_deref(),
@@ -4903,7 +7733,7 @@ impl ArtboardInstance {
                                 layout_bounds.as_deref(),
                             );
                             self.update_runtime_mesh_owner(
-                                local_id,
+                                component_handle,
                                 dirt,
                                 &graphs[*graph_index],
                                 layout_bounds.as_deref(),
@@ -4912,17 +7742,14 @@ impl ArtboardInstance {
                         if record_updated_locals {
                             report.updated_locals.push(local_id);
                         }
-                        hook(self, local_id, dirt);
+                        hook(self, local_id, dirt, script_mode);
                     }
-                    RuntimeUpdateTarget::PathComposer(shape_local) => {
+                    ComponentAddress::PathComposer(shape) => {
+                        let shape_local = shape.local_id();
                         if self
                             .component(shape_local)
                             .is_some_and(RuntimeComponent::is_collapsed)
                         {
-                            continue;
-                        }
-                        let dirt = self.runtime_shapes.take_path_composer_dirt(shape_local);
-                        if dirt.is_empty() {
                             continue;
                         }
                         if let Some((graphs, graph_index)) = graph_owner.as_ref() {
@@ -4933,29 +7760,10 @@ impl ArtboardInstance {
                                 layout_bounds.as_deref(),
                             );
                         }
-                        // Pinned C++ `PathComposer::buildDependencies` and
-                        // `ClippingShape::buildDependencies`
-                        // (`path_composer.cpp:19-31`,
-                        // `clipping_shape.cpp:140-147`) make the concrete
-                        // PathComposer the source of Path dirt for every
-                        // ClippingShape that retains its world path. The
-                        // composer has just settled, and graph order places
-                        // those dependent components after it in this walk.
-                        let dependent_dirt = dirt & (ComponentDirt::PATH | ComponentDirt::N_SLICER);
-                        if !dependent_dirt.is_empty() {
-                            let dependent_count =
-                                self.runtime_clipping_shapes.dependent_count(shape_local);
-                            for dependent_index in 0..dependent_count {
-                                if let Some(dependent_local) = self
-                                    .runtime_clipping_shapes
-                                    .dependent_local(shape_local, dependent_index)
-                                {
-                                    self.add_dirt(dependent_local, dependent_dirt, true);
-                                }
-                            }
-                        }
                     }
-                    RuntimeUpdateTarget::TextVariationHelper => {}
+                    ComponentAddress::TextVariationHelper { text, .. } => {
+                        self.update_runtime_text_variation_helper(text, dirt);
+                    }
                 }
 
                 if self.dirt_depth < order_index {
@@ -4966,61 +7774,301 @@ impl ArtboardInstance {
             report.steps += 1;
         }
 
-        if let Some((graphs, graph_index)) = graph_owner.as_ref() {
-            // SolidColor mutates its RenderPaint from property/on-added
-            // callbacks and can legitimately be absent from the rooted
-            // Component update graph. Any mutator still dirty after the real
-            // traversal is that callback-owned case, not deferred draw work.
-            self.settle_runtime_shape_paint_callback_mutators(
-                &graphs[*graph_index],
-                layout_bounds.as_deref(),
-            );
-        }
-
         report.max_steps_reached = self.has_dirt(ComponentDirt::COMPONENTS);
         report
     }
 
-    pub(crate) fn on_component_dirty(&mut self, local_id: usize) {
-        self.mark_changed();
-        self.dirt |= ComponentDirt::COMPONENTS;
-
-        let Some(component) = self.component(local_id) else {
+    /// Complete only clone-owned backend initialization before Component
+    /// traversal. Component/DataBind ownership links are rebuilt synchronously
+    /// by the clone itself, matching C++'s observable clone boundary.
+    ///
+    pub(super) fn initialize_clone_backend_if_pending(&mut self) {
+        if !self.objects.take_clone_backend_initialization_pending() {
+            return;
+        }
+        self.mark_components_dirty();
+        let graph_owner = self.build_context.as_ref().and_then(|context| {
+            let graph_index = context
+                .artboard_index_by_global
+                .get(usize::try_from(self.graph_global_id).ok()?)
+                .copied()
+                .flatten()?;
+            Some((Arc::clone(&context.artboards), graph_index))
+        });
+        let Some((graphs, graph_index)) = graph_owner else {
             return;
         };
-        if component.graph_order < self.dirt_depth {
-            self.dirt_depth = component.graph_order;
+        // ShapePaint::onAddedClean creates the clone-owned RenderPaint before
+        // Artboard::initialize walks FILTHY Components
+        // (`shape_paint.cpp:12-57`, `artboard.hpp:557-588`).
+        self.initialize_runtime_shape_paint_owners(&graphs[graph_index]);
+    }
+
+    fn on_component_dirty_handle(&mut self, handle: ComponentHandle) {
+        self.mark_changed();
+        self.mark_components_dirty();
+
+        if let Some(order) = self.objects.graph_order(handle)
+            && order.index() < self.dirt_depth
+        {
+            self.dirt_depth = order.index();
         }
     }
 
-    pub(crate) fn update_component(&mut self, component_index: usize, dirt: ComponentDirt) {
-        let local_id = self.components[component_index].local_id;
+    fn mark_components_dirty(&mut self) -> bool {
+        // Artboard is itself the root Component in pinned C++. Publishing
+        // Components dirt therefore uses the same equality guard as every
+        // other `Component::addDirt` before assigning the retained root mask
+        // (`src/component.cpp:32-45`; `src/artboard.cpp:1205-1241`).
+        let Some(root) = self.objects.root() else {
+            return false;
+        };
+        let Some(component) = self.objects.component_mut(root) else {
+            return false;
+        };
+        if component.dirt.contains(ComponentDirt::COMPONENTS) {
+            return false;
+        }
+        component.dirt |= ComponentDirt::COMPONENTS;
+        true
+    }
+
+    pub(crate) fn update_component(
+        &mut self,
+        component_handle: ComponentHandle,
+        dirt: ComponentDirt,
+    ) {
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        self.update_component_with_script_mode(
+            component_handle,
+            dirt,
+            &mut script_mode,
+            Mat2D::IDENTITY,
+        );
+    }
+
+    fn update_component_with_script_mode(
+        &mut self,
+        component_handle: ComponentHandle,
+        dirt: ComponentDirt,
+        script_mode: &mut RuntimeScriptUpdateMode<'_>,
+        root_transform: Mat2D,
+    ) {
+        let local_id = self
+            .objects
+            .component(component_handle)
+            .expect("component handle must remain live")
+            .local_id;
+        if self
+            .objects
+            .component(component_handle)
+            .and_then(|component| component.concrete.follow_path.as_ref())
+            .is_some()
+        {
+            crate::constraints::update_follow_path_constraint(self, component_handle);
+        }
         if dirt.contains(ComponentDirt::TRANSFORM) {
             let authored = self.authored_transform(local_id);
-            self.components[component_index].update_transform(authored);
+            self.objects
+                .component_mut(component_handle)
+                .expect("component handle must remain live")
+                .update_transform(authored);
         }
         if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
-            let parent_world = self.components[component_index]
-                .parent_local
-                .and_then(|parent_local| self.component(parent_local))
+            if self
+                .objects
+                .component(component_handle)
+                .is_some_and(|component| component.concrete.constrainable_list.is_some())
+            {
+                // C++ `ArtboardComponentList::updateWorldTransform` rebuilds
+                // non-virtual row transforms before calling
+                // `TransformComponent::updateWorldTransform`. Virtualized
+                // transforms remain owned by ScrollVirtualizer; draw only
+                // reads `m_artboardTransforms`
+                // (`artboard_component_list.cpp:1300-1331`).
+                if component_list_virtualization(self, local_id).is_none() {
+                    let transforms = runtime_component_list_item_base_transforms(self, local_id);
+                    if let Some(list) = self.component_list_state_mut(local_id) {
+                        list.item_transforms = transforms;
+                    }
+                }
+            }
+            let parent = self
+                .objects
+                .component(component_handle)
+                .expect("component handle must remain live")
+                .parent;
+            let parent_world = parent
+                .and_then(|parent| self.objects.component(parent))
                 .filter(|parent| parent.capabilities.world_transform)
                 .map(|parent| parent.transform.world_transform);
-            self.components[component_index].update_world_transform(parent_world);
-            crate::constraints::apply_constraints(self, component_index);
-            crate::constraints::apply_list_constraints(self, component_index);
+            let layout_position = self
+                .objects
+                .component(component_handle)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .map(|layout| layout.position());
+            if let (Some(parent), Some((mut x, mut y))) = (parent, layout_position) {
+                // `LayoutComponent::update` first calls Super::update, which
+                // computes the ordinary TransformComponent world and invokes
+                // the virtual LayoutComponent::updateConstraints. It then
+                // replaces that world with the retained Yoga left/top
+                // translation and invokes the same constraints a second
+                // time. The first constrained world is deliberately
+                // overwritten, but its owner-side rendezvous effects
+                // (including ScrollConstraint child counts/virtualization)
+                // remain observable (`transform_component.cpp:73-103`;
+                // `layout_component.cpp:82-121,186-196`).
+                self.objects
+                    .component_mut(component_handle)
+                    .expect("component handle must remain live")
+                    .update_world_transform(parent_world);
+                crate::constraints::apply_parent_layout_constraints(self, component_handle);
+                crate::constraints::apply_list_constraints(self, component_handle);
+                crate::constraints::apply_constraints(self, component_handle);
+
+                // The parent Artboard's normalized origin is removed in the
+                // LayoutComponent-owned replacement world.
+                if self
+                    .objects
+                    .component(parent)
+                    .is_some_and(|parent| parent.type_name == "Artboard")
+                {
+                    x -= self.width * self.origin_x;
+                    y -= self.height * self.origin_y;
+                }
+                let local = Mat2D([1.0, 0.0, 0.0, 1.0, x, y]);
+                self.objects
+                    .component_mut(component_handle)
+                    .expect("component handle must remain live")
+                    .transform
+                    .world_transform = parent_world.unwrap_or(Mat2D::IDENTITY).multiply(local);
+            } else {
+                self.objects
+                    .component_mut(component_handle)
+                    .expect("component handle must remain live")
+                    .update_world_transform(parent_world);
+            }
+            crate::constraints::apply_parent_layout_constraints(self, component_handle);
+            // ArtboardComponentList applies its retained list constraints
+            // before ordinary Transform constraints, and the ordinary pass
+            // skips ListConstraint subtypes
+            // (`artboard_component_list.cpp:1333-1358`).
+            crate::constraints::apply_list_constraints(self, component_handle);
+            crate::constraints::apply_constraints(self, component_handle);
         }
         if dirt.contains(ComponentDirt::RENDER_OPACITY) {
-            let previous_opacity = self.components[component_index].transform.render_opacity;
+            let previous_opacity = self
+                .objects
+                .component(component_handle)
+                .expect("component handle must remain live")
+                .transform
+                .render_opacity;
             let opacity = self.authored_transform(local_id).opacity;
-            let parent_opacity = self.components[component_index]
-                .parent_local
-                .and_then(|parent_local| self.component(parent_local))
-                .filter(|parent| parent.capabilities.world_transform)
-                .map(|parent| parent.transform.render_opacity)
+            let parent_opacity = self
+                .objects
+                .component(component_handle)
+                .expect("component handle must remain live")
+                .parent_transform
+                .and_then(|parent| {
+                    let component = self.objects.component(parent)?;
+                    let key = component.transform_property_key(TransformProperty::Opacity)?;
+                    let authored_opacity = self
+                        .objects
+                        .double_property(component.local_id, key)
+                        .unwrap_or(1.0);
+                    Some(component.child_opacity(authored_opacity))
+                })
                 .unwrap_or(1.0);
-            self.components[component_index].update_render_opacity(opacity, parent_opacity);
-            if self.components[component_index].transform.render_opacity != previous_opacity {
+            self.objects
+                .component_mut(component_handle)
+                .expect("component handle must remain live")
+                .update_render_opacity(opacity, parent_opacity);
+            if self
+                .objects
+                .component(component_handle)
+                .expect("component handle must remain live")
+                .transform
+                .render_opacity
+                != previous_opacity
+            {
                 self.mark_render_opacity_changed();
+            }
+        }
+        if self
+            .objects
+            .component(component_handle)
+            .is_some_and(|component| component.concrete.constrainable_list.is_some())
+        {
+            // The concrete list owner runs these tails after Super::update:
+            // mounted child update under Components dirt and inherited
+            // Artboard opacity under RenderOpacity dirt
+            // (`artboard_component_list.cpp:1254-1297`).
+            if dirt.contains(ComponentDirt::RENDER_OPACITY) {
+                let opacity = self.component_at(component_handle).transform.render_opacity;
+                let opacity_key = property_key_for_name("Artboard", "opacity");
+                if let Some(items) = self.component_list_items_mut(local_id) {
+                    for item in items {
+                        if let Some(key) = opacity_key {
+                            item.child.set_double_property(0, key, opacity);
+                        }
+                    }
+                }
+            }
+            if dirt.contains(ComponentDirt::COMPONENTS) {
+                let roots = self
+                    .runtime_component_list_child_root_transforms(root_transform)
+                    .remove(&local_id)
+                    .unwrap_or_default();
+                if let Some(items) = self.component_list_items_mut(local_id) {
+                    for (item_index, item) in items.iter_mut().enumerate() {
+                        let child_root_transform =
+                            roots.get(item_index).copied().unwrap_or(root_transform);
+                        item.child
+                            .update_pass_with_script_mode(script_mode, child_root_transform);
+                    }
+                }
+            }
+        }
+        self.update_script_component_in_dependency_order(component_handle, dirt, script_mode);
+        if self
+            .objects
+            .component(component_handle)
+            .is_some_and(|component| component.concrete.skin.is_some())
+        {
+            let tendon_count = self
+                .objects
+                .component(component_handle)
+                .and_then(|component| component.concrete.skin.as_ref())
+                .map_or(0, |skin| skin.tendons.len());
+            for index in 0..tendon_count {
+                let transform = self
+                    .objects
+                    .component(component_handle)
+                    .and_then(|component| component.concrete.skin.as_ref())
+                    .and_then(|skin| skin.tendons.get(index))
+                    .and_then(|tendon| self.objects.component(*tendon))
+                    .and_then(|tendon| tendon.concrete.tendon.as_ref())
+                    .and_then(|tendon| {
+                        let bone = self.objects.component(tendon.bone?)?;
+                        Some(bone.transform.world_transform.multiply(tendon.inverse_bind))
+                    });
+                if let Some(transform) = transform
+                    && let Some(slot) = self
+                        .objects
+                        .component_mut(component_handle)
+                        .and_then(|component| component.concrete.skin.as_mut())
+                        .and_then(|skin| skin.bone_transforms.get_mut(index + 1))
+                {
+                    *slot = transform;
+                }
+            }
+            #[cfg(test)]
+            if let Some(skin) = self
+                .objects
+                .component_mut(component_handle)
+                .and_then(|component| component.concrete.skin.as_mut())
+            {
+                skin.buffer_rebuilds += 1;
             }
         }
         if dirt.contains(ComponentDirt::DRAW_ORDER) {
@@ -5028,6 +8076,60 @@ impl ArtboardInstance {
         }
         if dirt.contains(ComponentDirt::CLIPPING) {
             self.refresh_runtime_drawable_save_operations();
+        }
+    }
+
+    fn update_script_component_in_dependency_order(
+        &mut self,
+        component: ComponentHandle,
+        dirt: ComponentDirt,
+        script_mode: &mut RuntimeScriptUpdateMode<'_>,
+    ) {
+        if !dirt.contains(ComponentDirt::SCRIPT_UPDATE) {
+            return;
+        }
+        let Some((global_id, type_name, pending)) =
+            self.objects.component(component).and_then(|owner| {
+                Some((
+                    owner.global_id,
+                    owner.type_name,
+                    owner.concrete.scripted.as_ref()?.update_pending,
+                ))
+            })
+        else {
+            return;
+        };
+        if !pending {
+            return;
+        }
+        self.set_script_owner_update_pending(component, false);
+        if type_name == "ScriptedPathEffect" {
+            // Path effects consume ScriptUpdate by invalidating their local
+            // EffectPath and rearming advance; they do not call a user
+            // `update` method (`src/scripted/scripted_path_effect.cpp:199-207`).
+            self.set_script_owner_advance_active_handle(component, true);
+            return;
+        }
+
+        let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
+            self.set_script_owner_advance_active_handle(component, true);
+            return;
+        };
+        let mut instance = handle.borrow_mut();
+        let result = instance
+            .has_method(ScriptMethod::Update)
+            .and_then(|has_update| {
+                if !has_update {
+                    return Ok(ScriptValue::Nil);
+                }
+                script_mode.call(instance.as_mut(), &mut NoopScriptHost)
+            });
+        self.set_script_owner_advance_active_handle(component, true);
+        if let Err(error) = result {
+            self.set_script_owner_update_pending(component, true);
+            if self.script_update_error.is_none() {
+                self.script_update_error = Some(error);
+            }
         }
     }
 
@@ -5040,6 +8142,21 @@ impl ArtboardInstance {
             }
         }
         changed
+    }
+
+    fn update_runtime_text_variation_helper(&mut self, text: ComponentHandle, dirt: ComponentDirt) {
+        if !dirt.contains(ComponentDirt::TEXT_SHAPE) {
+            return;
+        }
+        if let Some(text_local) = self.component_local_id(text) {
+            // C++ rebuilds the variation-bearing Font on the helper update
+            // (`src/text/text_variation_helper.cpp:14-17`,
+            // `src/text/text_style.cpp:98-124`). Rust's retained text owner
+            // rebuilds lazily from the same live axis values, so invalidate
+            // precisely that Text occurrence here.
+            self.runtime_drawables
+                .mark_text_resource_dirty_for_local(text_local);
+        }
     }
 
     fn apply_joystick_at(&mut self, joystick_index: usize) -> bool {
@@ -5104,7 +8221,15 @@ impl ArtboardInstance {
         local_id: usize,
         property_key: u16,
     ) -> bool {
-        let mut changed = false;
+        let mut changed = self
+            .component(local_id)
+            .and_then(|component| component.concrete.constraint)
+            .is_some_and(|constraint| {
+                crate::constraints::constraint_uint_change_marks_parent_dirty(
+                    constraint.kind,
+                    property_key,
+                ) && self.mark_constraint_parent_transform_dirty(local_id)
+            });
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("NestedArtboard")
             && property_key_for_name("NestedArtboard", "artboardId") == Some(property_key)
             && let Some(value) = self.uint_property(local_id, property_key)
@@ -5126,10 +8251,22 @@ impl ArtboardInstance {
             changed |= self.add_dirt(0, ComponentDirt::DRAW_ORDER, false);
         }
         if solo_active_component_id_property_key() == Some(property_key) {
-            changed |= self.propagate_solo_collapse(local_id);
+            if let Some(solo) = self.component_handle(local_id) {
+                changed |= self.propagate_solo_collapse(solo);
+            }
         }
         if layout_component_style_display_value_property_key() == Some(property_key) {
             changed |= self.propagate_layout_component_display_changed(local_id);
+        }
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("LayoutComponentStyle")
+            && [
+                property_key_for_name("LayoutComponentStyle", "animationStyleType"),
+                property_key_for_name("LayoutComponentStyle", "interpolationType"),
+                property_key_for_name("LayoutComponentStyle", "interpolatorId"),
+            ]
+            .contains(&Some(property_key))
+        {
+            changed |= self.refresh_layout_component_animation_style(local_id);
         }
         changed |= self.apply_nested_trigger_property_changed(local_id, property_key);
         changed
@@ -5166,6 +8303,27 @@ impl ArtboardInstance {
         property_key: u16,
         value: bool,
     ) -> bool {
+        let constraint_kind = self
+            .component_handle(local_id)
+            .and_then(|handle| self.objects.component(handle))
+            .and_then(|component| component.concrete.constraint)
+            .map(|constraint| constraint.kind);
+        if crate::constraints::follow_path_orient_property_key() == property_key
+            && constraint_kind.is_some_and(|kind| {
+                matches!(
+                    kind,
+                    crate::components::RuntimeConstraintKind::FollowPath
+                        | crate::components::RuntimeConstraintKind::ListFollowPath
+                )
+            })
+        {
+            return self.mark_constraint_parent_transform_dirty(local_id);
+        }
+        if crate::constraints::IK_INVERT_DIRECTION_PROPERTY_KEY == property_key
+            && constraint_kind == Some(crate::components::RuntimeConstraintKind::Ik)
+        {
+            return self.mark_ik_constraint_dirty(local_id);
+        }
         match self.slot(local_id).and_then(|slot| slot.type_name) {
             Some("Artboard") if property_key_for_name("Artboard", "clip") == Some(property_key) => {
                 if self.clip == value {
@@ -5200,12 +8358,6 @@ impl ArtboardInstance {
                     == Some(property_key) =>
             {
                 self.set_nested_simple_animation_is_playing(local_id, value)
-            }
-            Some("FollowPathConstraint")
-                if property_key_for_name("FollowPathConstraint", "orient")
-                    == Some(property_key) =>
-            {
-                self.mark_constraint_parent_transform_dirty(local_id)
             }
             _ => false,
         }
@@ -5286,44 +8438,134 @@ impl ArtboardInstance {
     }
 
     fn propagate_layout_component_display_changed(&mut self, style_local_id: usize) -> bool {
-        if self.slot(style_local_id).and_then(|slot| slot.type_name) != Some("LayoutComponentStyle")
-        {
-            return false;
-        }
-        let Some(style_id_key) = property_key_for_name("LayoutComponent", "styleId") else {
+        let Some(style) = self.component_handle(style_local_id) else {
             return false;
         };
-        let layout_locals = self
-            .components
-            .iter()
-            .filter(|component| matches!(component.type_name, "Artboard" | "LayoutComponent"))
-            .filter(|component| {
-                self.uint_property(component.local_id, style_id_key) == Some(style_local_id as u64)
-            })
-            .map(|component| component.local_id)
-            .collect::<Vec<_>>();
+        let Some(layout) = self.objects.component(style).and_then(|component| {
+            (component.type_name == "LayoutComponentStyle")
+                .then_some(component.parent)
+                .flatten()
+        }) else {
+            return false;
+        };
+        let Some(layout_local) = self.component_local_id(layout) else {
+            return false;
+        };
 
+        // LayoutComponentStyle::markLayoutNodeDirty calls its retained
+        // Component parent directly; it never scans the Artboard for matching
+        // styleId values (`layout_component_style.cpp:208-221`).
+        self.propagate_layout_component_display_collapse(layout_local)
+            | self.add_dirt(layout_local, ComponentDirt::LAYOUT_STYLE, false)
+    }
+
+    fn refresh_layout_component_animation_style(&mut self, style_local_id: usize) -> bool {
+        let Some(style) = self.component_handle(style_local_id) else {
+            return false;
+        };
+        let Some(layout) = self
+            .objects
+            .component(style)
+            .and_then(|component| component.parent)
+            .filter(|layout| {
+                self.objects
+                    .component(*layout)
+                    .is_some_and(|component| component.concrete.layout.is_some())
+            })
+        else {
+            return false;
+        };
+        let animation_style = property_key_for_name("LayoutComponentStyle", "animationStyleType")
+            .and_then(|key| self.uint_property(style_local_id, key))
+            .unwrap_or(0) as u8;
+        let interpolation = property_key_for_name("LayoutComponentStyle", "interpolationType")
+            .and_then(|key| self.uint_property(style_local_id, key))
+            .unwrap_or(0) as u8;
+        let interpolation_time = property_key_for_name("LayoutComponentStyle", "interpolationTime")
+            .and_then(|key| self.double_property(style_local_id, key))
+            .unwrap_or(0.0);
+        let interpolator = property_key_for_name("LayoutComponentStyle", "interpolatorId")
+            .and_then(|key| self.uint_property(style_local_id, key))
+            .and_then(|local_id| usize::try_from(local_id).ok())
+            .and_then(|local_id| self.slot(local_id))
+            .and_then(|slot| self.runtime_file()?.object(slot.source_global_id as usize))
+            .and_then(RuntimeInterpolator::from_object);
+        let Some(layout_state) = self
+            .objects
+            .component(layout)
+            .and_then(|component| component.concrete.layout.as_ref())
+        else {
+            return false;
+        };
+        layout_state.set_animation_style(
+            animation_style,
+            interpolation,
+            interpolation_time,
+            interpolator,
+        );
+        self.cascade_layout_component_animation_style(layout);
+        let Some(layout_local) = self.component_local_id(layout) else {
+            return false;
+        };
+        self.add_dirt(layout_local, ComponentDirt::LAYOUT_STYLE, false)
+    }
+
+    fn cascade_layout_component_animation_style(&self, parent: ComponentHandle) {
+        let inherited = self
+            .objects
+            .component(parent)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .map(|layout| {
+                (
+                    layout.effective_interpolation(),
+                    layout.effective_interpolation_time(),
+                    layout.effective_interpolator(),
+                )
+            })
+            .unwrap_or((0, 0.0, None));
+        let child_len = self.component_child_len(parent);
+        for index in 0..child_len {
+            let Some(child) = self.component_child_at(parent, index) else {
+                continue;
+            };
+            let Some(layout) = self
+                .objects
+                .component(child)
+                .and_then(|component| component.concrete.layout.as_ref())
+            else {
+                continue;
+            };
+            layout.set_inherited_animation_style(inherited.0, inherited.1, inherited.2);
+            self.cascade_layout_component_animation_style(child);
+        }
+    }
+
+    fn apply_initial_component_collapse_callbacks_in_authored_order(&mut self) -> bool {
+        // `Artboard::initialize` invokes every object's `onAddedClean` in
+        // authored order. LayoutComponent and Solo both propagate collapse
+        // from that callback, so their relative order is observable: a later
+        // Solo must be allowed to re-collapse its inactive branch after an
+        // earlier ancestor LayoutComponent has propagated its display state
+        // (`src/artboard.cpp:316-374`; `src/layout_component.cpp:303-314`;
+        // `src/solo.cpp:44-52`).
+        let component_handles = self.objects.component_handles().to_vec();
         let mut changed = false;
-        for layout_local in layout_locals {
-            changed |= self.propagate_layout_component_display_collapse(layout_local);
-            changed |= self.add_dirt(layout_local, ComponentDirt::LAYOUT_STYLE, false);
+        for handle in component_handles {
+            let Some(component) = self.objects.component(handle) else {
+                continue;
+            };
+            let local_id = component.local_id;
+            if component.concrete.solo.is_some() {
+                changed |= self.propagate_solo_collapse(handle);
+            } else if matches!(component.type_name, "Artboard" | "LayoutComponent") {
+                changed |= self.propagate_layout_component_display_collapse(local_id);
+            }
         }
         changed
     }
 
-    fn apply_initial_layout_component_display_collapses(&mut self) -> bool {
-        let layout_locals = self
-            .components
-            .iter()
-            .filter(|component| matches!(component.type_name, "Artboard" | "LayoutComponent"))
-            .map(|component| component.local_id)
-            .collect::<Vec<_>>();
-
-        let mut changed = false;
-        for layout_local in layout_locals {
-            changed |= self.propagate_layout_component_display_collapse(layout_local);
-        }
-        changed
+    fn rederive_initial_component_collapse(&mut self) {
+        self.apply_initial_component_collapse_callbacks_in_authored_order();
     }
 
     fn propagate_layout_component_display_collapse(&mut self, layout_local: usize) -> bool {
@@ -5345,8 +8587,11 @@ impl ArtboardInstance {
         // on a valid file every component has one parent, so each local is
         // visited at most once and the guard is a no-op.
         let mut visited = BTreeSet::new();
+        let Some(layout) = self.component_handle(layout_local) else {
+            return false;
+        };
         self.propagate_layout_component_display_collapse_with_ancestor_guarded(
-            layout_local,
+            layout,
             ancestor_changed,
             &mut visited,
         )
@@ -5354,10 +8599,13 @@ impl ArtboardInstance {
 
     fn propagate_layout_component_display_collapse_with_ancestor_guarded(
         &mut self,
-        layout_local: usize,
+        layout: ComponentHandle,
         ancestor_changed: bool,
-        visited: &mut BTreeSet<usize>,
+        visited: &mut BTreeSet<ComponentHandle>,
     ) -> bool {
+        let Some(layout_local) = self.component_local_id(layout) else {
+            return false;
+        };
         let display_hidden =
             self.layout_component_style_local(layout_local)
                 .and_then(|style_local| {
@@ -5369,17 +8617,14 @@ impl ArtboardInstance {
             || self
                 .component(layout_local)
                 .is_some_and(RuntimeComponent::is_collapsed);
-        let children = self
-            .components
-            .iter()
-            .filter(|component| component.parent_local == Some(layout_local))
-            .map(|component| component.local_id)
+        let children = (0..self.component_child_len(layout))
+            .filter_map(|index| self.component_child_at(layout, index))
             .collect::<Vec<_>>();
 
         let mut changed = false;
-        for child_local in children {
+        for child in children {
             changed |= self.collapse_component_tree_with_ancestor_guarded(
-                child_local,
+                child,
                 collapsed,
                 ancestor_changed,
                 visited,
@@ -5389,9 +8634,11 @@ impl ArtboardInstance {
     }
 
     fn layout_component_style_local(&self, layout_local: usize) -> Option<usize> {
-        property_key_for_name("LayoutComponent", "styleId")
-            .and_then(|key| self.uint_property(layout_local, key))
-            .and_then(|style| usize::try_from(style).ok())
+        self.component_handle(layout_local)
+            .and_then(|layout| self.objects.component(layout))
+            .and_then(|component| component.concrete.layout.as_ref())
+            .and_then(|layout| layout.style)
+            .and_then(|style| self.objects.component_local_id(style))
     }
 
     pub(crate) fn apply_double_property_changed(
@@ -5401,6 +8648,63 @@ impl ArtboardInstance {
         value: f32,
     ) -> bool {
         let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        if type_name == Some("LayoutComponentStyle")
+            && property_key_for_name("LayoutComponentStyle", "interpolationTime")
+                == Some(property_key)
+        {
+            return self.refresh_layout_component_animation_style(local_id);
+        }
+        if self
+            .component(local_id)
+            .and_then(|component| component.concrete.constraint)
+            .is_some_and(|constraint| {
+                crate::constraints::constraint_is_ik_strength_property(
+                    constraint.kind,
+                    property_key,
+                )
+            })
+        {
+            return self.mark_ik_constraint_dirty(local_id);
+        }
+        if self
+            .component(local_id)
+            .and_then(|component| component.concrete.constraint)
+            .is_some_and(|constraint| {
+                crate::constraints::constraint_double_change_marks_parent_dirty(
+                    constraint.kind,
+                    property_key,
+                )
+            })
+        {
+            return self.mark_constraint_parent_transform_dirty(local_id);
+        }
+        if self
+            .component(local_id)
+            .and_then(|component| component.concrete.bone.as_ref())
+            .is_some()
+            && property_key_for_name("Bone", "length") == Some(property_key)
+        {
+            let Some(handle) = self.component_handle(local_id) else {
+                return false;
+            };
+            let child_count = self
+                .objects
+                .component(handle)
+                .and_then(|component| component.concrete.bone.as_ref())
+                .map_or(0, |bone| bone.child_bones.len());
+            for index in 0..child_count {
+                let child = self
+                    .objects
+                    .component(handle)
+                    .and_then(|component| component.concrete.bone.as_ref())
+                    .and_then(|bone| bone.child_bones.get(index))
+                    .copied();
+                if let Some(child) = child {
+                    self.mark_transform_dirty_handle(child);
+                }
+            }
+            return true;
+        }
         if path_vertex_property_affects_geometry(type_name, property_key) {
             // Direct port of the concrete Vertex callbacks through
             // PathVertex::markGeometryDirty and Path::markPathDirty. The
@@ -5408,11 +8712,18 @@ impl ArtboardInstance {
             // (`vertex.cpp:14-15`, `straight_vertex.cpp:5`,
             // `cubic_{mirrored,asymmetric,detached}_vertex.cpp`,
             // `path_vertex.cpp:21-30`, `path.cpp:327-334`).
-            if let Some(path_local) = self
-                .component(local_id)
-                .and_then(|component| component.parent_local)
+            if let Some(path_local) = self.component_parent_local(local_id)
+                && let Some(path) = self.component_handle(path_local)
             {
-                self.add_dirt(path_local, ComponentDirt::PATH, false);
+                if let Some(skin) = self
+                    .objects
+                    .component(path)
+                    .and_then(|component| component.concrete.skinnable.as_ref())
+                    .and_then(|skinnable| skinnable.skin)
+                {
+                    self.add_component_dirt(skin, ComponentDirt::SKIN, false);
+                }
+                self.add_component_dirt(path, ComponentDirt::PATH, false);
             }
             return true;
         }
@@ -5427,14 +8738,26 @@ impl ArtboardInstance {
                 | TransformProperty::Rotation
                 | TransformProperty::ScaleX
                 | TransformProperty::ScaleY => {
-                    self.add_dirt(local_id, ComponentDirt::TRANSFORM, false);
-                    self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
+                    let Some(handle) = self.component_handle(local_id) else {
+                        return false;
+                    };
+                    self.mark_transform_dirty_handle(handle);
                 }
             }
             return true;
         }
 
         match self.slot(local_id).and_then(|slot| slot.type_name) {
+            Some("TextStyleAxis")
+                if property_key_for_name("TextStyleAxis", "axisValue") == Some(property_key) =>
+            {
+                // `TextStyleAxis::axisValueChanged` dirties its TextStyle
+                // parent; TextStyle::onDirty then dirties Text and the
+                // embedded variation helper (`text_style_axis.cpp:27-30`,
+                // `text_style.cpp:22-34`).
+                self.component_parent_local(local_id)
+                    .is_some_and(|style| self.add_dirt(style, ComponentDirt::TEXT_SHAPE, false))
+            }
             Some("MeshVertex")
                 if property_key_for_name("Vertex", "x") == Some(property_key)
                     || property_key_for_name("Vertex", "y") == Some(property_key) =>
@@ -5443,19 +8766,28 @@ impl ArtboardInstance {
                 // `markDrawableDirty`, which pushes Vertices dirt
                 // (`src/shapes/mesh_vertex.cpp:5-8`,
                 // `src/shapes/mesh.cpp:14-23`).
-                self.component(local_id)
-                    .and_then(|component| component.parent_local)
-                    .is_some_and(|mesh_local| {
-                        self.add_dirt(mesh_local, ComponentDirt::VERTICES, false)
-                    })
+                let Some(mesh_local) = self.component_parent_local(local_id) else {
+                    return false;
+                };
+                let Some(mesh) = self.component_handle(mesh_local) else {
+                    return false;
+                };
+                if let Some(skin) = self
+                    .objects
+                    .component(mesh)
+                    .and_then(|component| component.concrete.skinnable.as_ref())
+                    .and_then(|skinnable| skinnable.skin)
+                {
+                    self.add_component_dirt(skin, ComponentDirt::SKIN, false);
+                }
+                self.add_component_dirt(mesh, ComponentDirt::VERTICES, false)
             }
             Some("AxisX" | "AxisY")
                 if property_key_for_name("Axis", "offset") == Some(property_key) =>
             {
                 // `Axis::offsetChanged` resolves NSlicerDetails from the
                 // parent and pushes NSlicer dirt (`src/layout/axis.cpp:23-29`).
-                self.component(local_id)
-                    .and_then(|component| component.parent_local)
+                self.component_parent_local(local_id)
                     .is_some_and(|slicer_local| {
                         self.add_dirt(slicer_local, ComponentDirt::N_SLICER, false)
                     })
@@ -5508,10 +8840,7 @@ impl ArtboardInstance {
                     || property_key_for_name("NestedArtboardOrigin", "originY")
                         == Some(property_key) =>
             {
-                let Some(host_local_id) = self
-                    .component(local_id)
-                    .and_then(|component| component.parent_local)
-                else {
+                let Some(host_local_id) = self.component_parent_local(local_id) else {
                     return false;
                 };
                 let Some(origin_x_key) = property_key_for_name("Artboard", "originX") else {
@@ -5611,32 +8940,52 @@ impl ArtboardInstance {
                     property_key_for_name("ScrollConstraint", name) == Some(property_key)
                 }) =>
             {
-                self.mark_constraint_parent_transform_dirty(local_id)
-            }
-            Some("FollowPathConstraint")
-                if property_key_for_name("FollowPathConstraint", "distance")
-                    == Some(property_key)
-                    || property_key_for_name("Constraint", "strength") == Some(property_key) =>
-            {
-                self.mark_constraint_parent_transform_dirty(local_id)
+                apply_scroll_offset_changed(self, local_id, property_key, value)
+                    .unwrap_or_else(|| self.mark_constraint_parent_transform_dirty(local_id))
             }
             _ => false,
         }
     }
 
     fn mark_constraint_parent_transform_dirty(&mut self, constraint_local_id: usize) -> bool {
-        let parent_local = self
-            .component(constraint_local_id)
-            .and_then(|component| component.parent_local)
-            .or_else(|| {
-                let parent_key = property_key_for_name("Component", "parentId")?;
-                usize::try_from(self.uint_property(constraint_local_id, parent_key)?).ok()
-            });
-        let Some(parent_local) = parent_local else {
+        let Some(parent) = self
+            .component_handle(constraint_local_id)
+            .and_then(|constraint| self.objects.component(constraint))
+            .and_then(|constraint| constraint.parent)
+        else {
             return false;
         };
-        let mut changed = self.add_dirt(parent_local, ComponentDirt::TRANSFORM, false);
-        changed |= self.add_dirt(parent_local, ComponentDirt::WORLD_TRANSFORM, true);
+        self.mark_transform_dirty_handle(parent)
+    }
+
+    fn mark_ik_constraint_dirty(&mut self, constraint_local_id: usize) -> bool {
+        let Some(constraint) = self.component_handle(constraint_local_id) else {
+            return false;
+        };
+        let Some(tip) = self
+            .objects
+            .component(constraint)
+            .and_then(|constraint| constraint.parent)
+        else {
+            return false;
+        };
+        let mut changed = self.mark_transform_dirty_handle(tip);
+        let chain_len = self
+            .objects
+            .component(constraint)
+            .and_then(|component| component.concrete.ik.as_ref())
+            .map_or(0, |ik| ik.chain.len());
+        for index in 0..chain_len.saturating_sub(1) {
+            let bone = self
+                .objects
+                .component(constraint)
+                .and_then(|component| component.concrete.ik.as_ref())
+                .and_then(|ik| ik.chain.get(index))
+                .map(|link| link.bone);
+            if let Some(bone) = bone {
+                changed |= self.mark_transform_dirty_handle(bone);
+            }
+        }
         changed
     }
 
@@ -5965,7 +9314,10 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn apply_component_collapse_changed(&mut self, local_id: usize) -> bool {
-        self.propagate_solo_collapse(local_id)
+        let Some(solo) = self.component_handle(local_id) else {
+            return false;
+        };
+        self.propagate_solo_collapse(solo)
     }
 
     pub(crate) fn set_solo_active_child_by_index(
@@ -5977,18 +9329,19 @@ impl ArtboardInstance {
         if rounded < 0.0 || !rounded.is_finite() {
             return false;
         }
-        let Some(solo) = self
-            .solos
-            .iter()
-            .find(|solo| solo.local_id == solo_local_id)
-            .cloned()
-        else {
+        let Some(solo) = self.component_handle(solo_local_id) else {
             return false;
         };
-        let Some(child) = solo.children.get(rounded as usize) else {
+        let child_index = rounded as usize;
+        let is_child = self
+            .objects
+            .component(solo)
+            .and_then(|component| component.concrete.solo.as_ref().map(|_| component))
+            .is_some_and(|component| child_index < component.children.len());
+        if !is_child {
             return false;
-        };
-        self.set_solo_active_child(&solo, child.local_id)
+        }
+        self.set_solo_active_child(solo, child_index)
     }
 
     pub(crate) fn set_solo_active_child_by_name(
@@ -5996,74 +9349,111 @@ impl ArtboardInstance {
         solo_local_id: usize,
         value: &[u8],
     ) -> bool {
-        let Some(solo) = self
-            .solos
-            .iter()
-            .find(|solo| solo.local_id == solo_local_id)
-            .cloned()
-        else {
+        let Some(solo) = self.component_handle(solo_local_id) else {
             return false;
         };
-        let Some(child) = solo.children.iter().find(|child| {
-            self.slot(child.local_id)
+        let child_count = self
+            .objects
+            .component(solo)
+            .and_then(|component| {
+                component
+                    .concrete
+                    .solo
+                    .as_ref()
+                    .map(|_| component.children.len())
+            })
+            .unwrap_or(0);
+        for child_index in 0..child_count {
+            let child_local_id = self
+                .objects
+                .component(solo)
+                .and_then(|component| component.children.get(child_index).copied())
+                .and_then(|child| self.objects.component_local_id(child));
+            if child_local_id
+                .and_then(|local_id| self.slot(local_id))
                 .and_then(|slot| slot.name.as_deref())
                 .is_some_and(|name| name.as_bytes() == value)
-        }) else {
-            return false;
-        };
-        self.set_solo_active_child(&solo, child.local_id)
+            {
+                return self.set_solo_active_child(solo, child_index);
+            }
+        }
+        false
     }
 
     pub(crate) fn set_solo_active_child(
         &mut self,
-        solo: &RuntimeSolo,
-        child_local_id: usize,
+        solo: ComponentHandle,
+        child_index: usize,
     ) -> bool {
-        let Some(cpp_local_id) =
-            solo.runtime_local_by_cpp_local
-                .iter()
-                .find_map(|(cpp_local_id, runtime_local_id)| {
-                    (*runtime_local_id == child_local_id).then_some(*cpp_local_id)
-                })
+        let Some((solo_local_id, active_component_property_key, cpp_local_id)) =
+            self.objects.component(solo).and_then(|component| {
+                let solo = component.concrete.solo.as_ref()?;
+                Some((
+                    component.local_id,
+                    solo.active_component_property_key?,
+                    *solo.cpp_local_ids.get(child_index)?,
+                ))
+            })
         else {
             return false;
         };
         let Ok(cpp_local_id) = u64::try_from(cpp_local_id) else {
             return false;
         };
-        self.set_uint_property(
-            solo.local_id,
-            solo.active_component_property_key,
-            cpp_local_id,
-        )
+        // C++ `Solo::updateByIndex`/`updateByName` writes the generated
+        // Artboard object-table id; `activeComponentIdChanged` then invokes
+        // `propagateCollapse` on this same occurrence (`src/solo.cpp:42-81`).
+        self.set_uint_property(solo_local_id, active_component_property_key, cpp_local_id)
     }
 
-    pub(crate) fn propagate_solo_collapse(&mut self, solo_local_id: usize) -> bool {
-        let Some(solo) = self
-            .solos
-            .iter()
-            .find(|solo| solo.local_id == solo_local_id)
-            .cloned()
+    pub(crate) fn propagate_solo_collapse(&mut self, solo: ComponentHandle) -> bool {
+        let Some((solo_local_id, solo_collapsed, active_component_property_key, child_count)) =
+            self.objects.component(solo).and_then(|component| {
+                let state = component.concrete.solo.as_ref()?;
+                Some((
+                    component.local_id,
+                    component.is_collapsed(),
+                    state.active_component_property_key?,
+                    component.children.len().min(state.cpp_local_ids.len()),
+                ))
+            })
         else {
             return false;
         };
 
-        let solo_collapsed = self
-            .component(solo.local_id)
-            .is_some_and(RuntimeComponent::is_collapsed);
-        let active_local = self
-            .uint_property(solo.local_id, solo.active_component_property_key)
-            .and_then(|id| usize::try_from(id).ok())
-            .and_then(|id| solo.runtime_local_by_cpp_local.get(&id).copied());
+        let active_cpp_local = self
+            .uint_property(solo_local_id, active_component_property_key)
+            .and_then(|id| usize::try_from(id).ok());
 
         let mut changed = false;
-        for child in solo.children {
-            let collapsed = if child.participates {
-                solo_collapsed || Some(child.local_id) != active_local
+        for child_index in 0..child_count {
+            let Some((child, cpp_local_id, participates)) =
+                self.objects.component(solo).and_then(|component| {
+                    let child = *component.children.get(child_index)?;
+                    let cpp_local_id = *component
+                        .concrete
+                        .solo
+                        .as_ref()?
+                        .cpp_local_ids
+                        .get(child_index)?;
+                    let child_type = self.objects.component(child)?.type_name;
+                    let participates = definition_by_name(child_type).is_none_or(|definition| {
+                        !definition.is_a("Constraint") && !definition.is_a("ClippingShape")
+                    });
+                    Some((child, cpp_local_id, participates))
+                })
+            else {
+                continue;
+            };
+            let collapsed = if participates {
+                solo_collapsed || Some(cpp_local_id) != active_cpp_local
             } else {
                 solo_collapsed
             };
-            changed |= self.collapse_component_tree(child.local_id, collapsed);
+            let Some(child_local_id) = self.objects.component_local_id(child) else {
+                continue;
+            };
+            changed |= self.collapse_component_tree(child_local_id, collapsed);
         }
         changed
     }
@@ -6081,8 +9471,11 @@ impl ArtboardInstance {
         // Cycle guard entry point: see
         // propagate_layout_component_display_collapse_with_ancestor.
         let mut visited = BTreeSet::new();
+        let Some(handle) = self.component_handle(local_id) else {
+            return false;
+        };
         self.collapse_component_tree_with_ancestor_guarded(
-            local_id,
+            handle,
             collapsed,
             ancestor_changed,
             &mut visited,
@@ -6091,22 +9484,26 @@ impl ArtboardInstance {
 
     fn collapse_component_tree_with_ancestor_guarded(
         &mut self,
-        local_id: usize,
+        handle: ComponentHandle,
         collapsed: bool,
         ancestor_changed: bool,
-        visited: &mut BTreeSet<usize>,
+        visited: &mut BTreeSet<ComponentHandle>,
     ) -> bool {
         // Cycle guard: see propagate_layout_component_display_collapse_with_
         // ancestor. Skip a local already visited on this propagation walk.
-        if !visited.insert(local_id) {
+        if !visited.insert(handle) {
             return false;
         }
-        let changed_here = self.collapse_component(local_id, collapsed);
+        let changed_here = self.collapse_component_handle(handle, collapsed);
         let mut changed = changed_here;
         if ancestor_changed && !collapsed {
-            changed |= self.add_dirt(local_id, ComponentDirt::FILTHY, false);
+            changed |= self.add_component_dirt(handle, ComponentDirt::FILTHY, false);
         }
-        match self.slot(local_id).and_then(|slot| slot.type_name) {
+        let type_name = self
+            .objects
+            .component(handle)
+            .map(|component| component.type_name);
+        match type_name {
             // C++ Solo::collapse (src/solo.cpp) intentionally skips the blind
             // ContainerComponent child walk: Solo::propagateCollapse (already
             // triggered on change via collapse_component ->
@@ -6119,17 +9516,14 @@ impl ArtboardInstance {
             Some("Artboard" | "LayoutComponent") => {
                 changed
                     | self.propagate_layout_component_display_collapse_with_ancestor_guarded(
-                        local_id,
+                        handle,
                         ancestor_changed || changed_here,
                         visited,
                     )
             }
             _ => {
-                let children = self
-                    .components
-                    .iter()
-                    .filter(|component| component.parent_local == Some(local_id))
-                    .map(|component| component.local_id)
+                let children = (0..self.component_child_len(handle))
+                    .filter_map(|index| self.component_child_at(handle, index))
                     .collect::<Vec<_>>();
                 for child in children {
                     changed |= self.collapse_component_tree_with_ancestor_guarded(
@@ -6139,9 +9533,75 @@ impl ArtboardInstance {
                         visited,
                     );
                 }
+                // TransformComponent's collapse tail runs after
+                // ContainerComponent has propagated to children. Only
+                // dependent TransformComponents that actually own
+                // constraints receive recursive WorldTransform dirt
+                // (`src/transform_component.cpp:18-44`).
+                if self
+                    .objects
+                    .component(handle)
+                    .is_some_and(|component| component.capabilities.transform)
+                {
+                    let dependent_count = self.objects.dependent_len(handle);
+                    for index in 0..dependent_count {
+                        let dependent = self.objects.dependent_at(handle, index);
+                        let constrained_transform = dependent.is_some_and(|dependent| {
+                            self.objects.component(dependent).is_some_and(|component| {
+                                component.capabilities.transform
+                                    && !component.constraints.is_empty()
+                            })
+                        });
+                        if constrained_transform && let Some(dependent) = dependent {
+                            changed |= self.add_component_dirt(
+                                dependent,
+                                ComponentDirt::WORLD_TRANSFORM,
+                                true,
+                            );
+                        }
+                    }
+                }
                 changed
             }
         }
+    }
+}
+
+fn reset_component_list_instances(
+    list: &mut RuntimeConstrainableListState,
+    should_reset_instances: bool,
+) {
+    // C++ walks the complete logical `m_listItems` vector, acknowledges every
+    // VMI, and only then looks up an optionally mounted row in
+    // `m_artboardInstancesMap` (`artboard_component_list.cpp:888-920`).
+    // Virtualization must not suppress reset for unmounted logical rows.
+    let RuntimeConstrainableListState {
+        logical_items,
+        items,
+        ..
+    } = list;
+    for logical in logical_items {
+        if should_reset_instances {
+            logical.context.borrow_mut().advanced_data_context();
+        }
+        let Some(item) = items
+            .iter_mut()
+            .find(|item| item.occurrence_identity == logical.occurrence_identity)
+        else {
+            continue;
+        };
+        if should_reset_instances {
+            if let Some(bound_instance) = item
+                .child
+                .artboard_owned_view_model_context
+                .as_ref()
+                .and_then(RuntimeOwnedViewModelContext::main_handle)
+                && !bound_instance.ptr_eq(&logical.context)
+            {
+                bound_instance.borrow_mut().advanced_data_context();
+            }
+        }
+        item.child.reset_retained_components();
     }
 }
 
@@ -6230,10 +9690,11 @@ impl RuntimeNestedArtboardInstance {
     fn advance(
         &mut self,
         elapsed_seconds: f32,
+        script_mode: &mut RuntimeScriptAdvanceMode<'_>,
         mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
-    ) -> bool {
+    ) -> Result<bool, ScriptError> {
         if self.is_paused {
-            return false;
+            return Ok(false);
         }
 
         let local_elapsed_seconds = self.calculate_local_elapsed_seconds(elapsed_seconds);
@@ -6248,10 +9709,8 @@ impl RuntimeNestedArtboardInstance {
                     state_machine.schedule_post_update_probe();
                 }
             }
-            return true;
+            return Ok(true);
         }
-
-        self.child.queue_script_advance(local_elapsed_seconds);
 
         let mut changed = false;
         for animation in &mut self.animations {
@@ -6272,12 +9731,19 @@ impl RuntimeNestedArtboardInstance {
         // machine observe a reverse write one pass earlier than C++ (the
         // db_health_tracker blend consumed the pulled value on the first
         // frame where C++ still blends the pre-pull value).
-        changed |= self.child.advance_nested_artboards(local_elapsed_seconds);
+        changed |= self
+            .child
+            .advance_retained_components_collect_events_with_scripts(
+                local_elapsed_seconds,
+                true,
+                script_mode,
+                None,
+            )?;
         // Mirrors C++ src/nested_artboard.cpp NestedArtboard::updateDataBinds.
         changed |= self
             .child
             .advance_artboard_data_binds_with_elapsed(local_elapsed_seconds);
-        changed
+        Ok(changed)
     }
 
     fn reset_outer_state_machine_changed_state_counts(&mut self) {
@@ -6620,13 +10086,15 @@ fn build_runtime_nested_artboard_instance(
         build_context,
         false,
     )?);
-    apply_nested_artboard_origin_override(parent_graph, parent_objects, host_local_id, &mut child);
+    apply_nested_artboard_origin_override(parent_objects, host_local_id, &mut child);
     child.set_frame_origin(false);
+    child.added_to_host();
     child.bind_default_view_model_artboard_list_context(file);
     if !child_has_state_machine_data_binds(file, child_graph) {
         child.clear_default_text_property_context();
     }
-    let animations = runtime_nested_animation_instances(file, parent_graph, host_local_id, &child);
+    let animations =
+        runtime_nested_animation_instances(file, parent_graph, host_local_id, &mut child);
     let data_bind_view_model_instance_locals_by_id =
         build_nested_host_view_model_instance_locals(parent_slots, parent_objects, host_local_id);
     let is_stateful = property_key_for_name("NestedArtboard", "isStateful")
@@ -6718,24 +10186,28 @@ fn build_runtime_nested_artboard_instance(
 }
 
 fn apply_nested_artboard_origin_override(
-    parent_graph: &ArtboardGraph,
     parent_objects: &InstanceObjectArena,
     host_local_id: usize,
     child: &mut ArtboardInstance,
 ) -> bool {
-    let Some(origin) = parent_graph.components.iter().find(|component| {
-        component.type_name == "NestedArtboardOrigin"
-            && component.parent_local == Some(host_local_id)
-    }) else {
+    let Some(host) = parent_objects.component_handle(host_local_id) else {
+        return false;
+    };
+    let origin_local = (0..parent_objects.child_len(host))
+        .filter_map(|index| parent_objects.child_at(host, index))
+        .filter_map(|child| parent_objects.component(child))
+        .find(|component| component.type_name == "NestedArtboardOrigin")
+        .map(|component| component.local_id);
+    let Some(origin_local) = origin_local else {
         return false;
     };
     let Some(origin_x) = property_key_for_name("NestedArtboardOrigin", "originX")
-        .and_then(|key| parent_objects.double_property(origin.local_id, key))
+        .and_then(|key| parent_objects.double_property(origin_local, key))
     else {
         return false;
     };
     let Some(origin_y) = property_key_for_name("NestedArtboardOrigin", "originY")
-        .and_then(|key| parent_objects.double_property(origin.local_id, key))
+        .and_then(|key| parent_objects.double_property(origin_local, key))
     else {
         return false;
     };
@@ -6763,7 +10235,7 @@ fn runtime_nested_animation_instances(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
     host_local_id: usize,
-    child: &ArtboardInstance,
+    child: &mut ArtboardInstance,
 ) -> Vec<RuntimeNestedAnimationInstance> {
     let mut animations = Vec::new();
     for local_object in &graph.local_objects {
@@ -6853,6 +10325,13 @@ fn path_vertex_property_affects_geometry(type_name: Option<&str>, property_key: 
 }
 
 fn property_affects_effect_path_epoch(type_name: Option<&str>, property_key: u16) -> bool {
+    if property_marks_parametric_path_dirty(type_name, property_key)
+        || (type_name.is_some_and(|type_name| {
+            definition_by_name(type_name).is_some_and(|definition| definition.is_a("Path"))
+        }) && property_key_for_name(type_name.unwrap(), "isHole") == Some(property_key))
+    {
+        return true;
+    }
     match type_name {
         Some("TrimPath") => ["start", "end", "offset", "modeValue"]
             .iter()
@@ -6866,6 +10345,41 @@ fn property_affects_effect_path_epoch(type_name: Option<&str>, property_key: u16
         Some("Feather") => ["spaceValue", "strength", "offsetX", "offsetY", "inner"]
             .iter()
             .any(|name| property_key_for_name("Feather", name) == Some(property_key)),
+        _ => false,
+    }
+}
+
+fn property_marks_parametric_path_dirty(type_name: Option<&str>, property_key: u16) -> bool {
+    let Some(type_name) = type_name else {
+        return false;
+    };
+    if !definition_by_name(type_name).is_some_and(|definition| definition.is_a("ParametricPath")) {
+        return false;
+    }
+    if ["width", "height", "originX", "originY"]
+        .into_iter()
+        .any(|name| property_key_for_name(type_name, name) == Some(property_key))
+    {
+        return true;
+    }
+    match type_name {
+        "Rectangle" => [
+            "cornerRadiusTL",
+            "cornerRadiusTR",
+            "cornerRadiusBL",
+            "cornerRadiusBR",
+        ]
+        .into_iter()
+        .any(|name| property_key_for_name(type_name, name) == Some(property_key)),
+        "Polygon" => ["cornerRadius", "points"]
+            .into_iter()
+            .any(|name| property_key_for_name(type_name, name) == Some(property_key)),
+        "Star" => {
+            property_key_for_name(type_name, "innerRadius") == Some(property_key)
+                || ["cornerRadius", "points"]
+                    .into_iter()
+                    .any(|name| property_key_for_name(type_name, name) == Some(property_key))
+        }
         _ => false,
     }
 }
@@ -6989,7 +10503,7 @@ fn nested_state_machine_instance(
     graph: &ArtboardGraph,
     local_id: usize,
     object: &nuxie_binary::RuntimeObject,
-    child: &ArtboardInstance,
+    child: &mut ArtboardInstance,
 ) -> Option<RuntimeNestedAnimationInstance> {
     let state_machine_index = usize::try_from(object.uint_property("animationId")?).ok()?;
     let mut state_machine = child.state_machine_instance(state_machine_index)?;
@@ -7058,7 +10572,7 @@ mod tests {
     use crate::Mat2D;
     use crate::animation::{RuntimeKeyFrameCallback, RuntimeKeyedObject, RuntimeKeyedProperty};
     use crate::components::{
-        RuntimeComponentCapabilities, SoloMappingWork, TransformRuntimeState,
+        DataBindHandle, RuntimeComponentCapabilities, SoloMappingWork, TransformRuntimeState,
         reset_solo_mapping_work, solo_mapping_work,
     };
     use crate::data_bind_graph::{
@@ -7066,14 +10580,14 @@ mod tests {
     };
     use crate::properties::property_key_for_name;
     use crate::state_machine::{
-        RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeLayerState,
-        RuntimeStateMachineInput, RuntimeStateMachineLayer,
+        RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeLayerState, RuntimeListenerType,
+        RuntimeStateMachineInput, RuntimeStateMachineLayer, RuntimeStateMachineListener,
     };
     use nuxie_binary::{
         AuthoringProperty, AuthoringRecord, AuthoringValue, BytesValue, FieldValue, RuntimeObject,
         RuntimeProperty, StringValue, read_runtime_file,
     };
-    use nuxie_graph::GraphFile;
+    use nuxie_graph::{DependencyNodeKind, GraphFile};
     use nuxie_render_api::RecordingFactory;
     use nuxie_schema::definition_by_name;
     use std::cell::{Cell, RefCell};
@@ -7090,6 +10604,17 @@ mod tests {
 
     struct RecordingAdvanceScriptInstance {
         seconds: Rc<RefCell<Vec<f32>>>,
+    }
+
+    struct OrderedAdvanceScriptInstance {
+        label: u32,
+        calls: Rc<RefCell<Vec<u32>>>,
+    }
+
+    struct OrderedUpdateScriptInstance {
+        label: u32,
+        calls: Rc<RefCell<Vec<u32>>>,
+        fail_once: Option<Rc<Cell<bool>>>,
     }
 
     struct AdvanceAndUpdateScriptInstance {
@@ -7149,6 +10674,63 @@ mod tests {
                 .expect("advance receives seconds");
             self.seconds.borrow_mut().push(seconds);
             Ok(ScriptValue::Bool(true))
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    impl ScriptInstance for OrderedAdvanceScriptInstance {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::Advance)
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            assert_eq!(method, ScriptMethod::Advance);
+            self.calls.borrow_mut().push(self.label);
+            Ok(ScriptValue::Bool(true))
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    impl ScriptInstance for OrderedUpdateScriptInstance {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::Update)
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            assert_eq!(method, ScriptMethod::Update);
+            self.calls.borrow_mut().push(self.label);
+            if self
+                .fail_once
+                .as_ref()
+                .is_some_and(|fail_once| fail_once.replace(false))
+            {
+                return Err(ScriptError::new("fail once"));
+            }
+            Ok(ScriptValue::Nil)
         }
 
         fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
@@ -7261,21 +10843,13 @@ mod tests {
         components: Vec<RuntimeComponent>,
         update_order: Vec<usize>,
     ) -> ArtboardInstance {
-        let component_by_local = components
-            .iter()
-            .enumerate()
-            .map(|(index, component)| (component.local_id, index))
-            .collect::<BTreeMap<_, _>>();
-
         let slots = components
             .iter()
-            .enumerate()
-            .map(|(index, component)| InstanceSlot {
+            .map(|component| InstanceSlot {
                 local_id: component.local_id,
                 source_global_id: component.global_id,
                 type_name: Some(component.type_name),
                 name: None,
-                component_index: Some(index),
             })
             .collect::<Vec<_>>();
         let mut runtime_objects = vec![None; slots.len()];
@@ -7289,7 +10863,80 @@ mod tests {
                 Vec::new(),
             ));
         }
-        let objects = InstanceObjectArena::from_runtime_objects(runtime_objects);
+        let mut objects = InstanceObjectArena::from_runtime_objects(runtime_objects);
+        for component in components {
+            let local_id = component.local_id;
+            objects
+                .attach_component(local_id, component)
+                .expect("synthetic component occurrence must exist once");
+        }
+        let dependency_handles = update_order
+            .iter()
+            .filter_map(|local_id| objects.component_handle(*local_id))
+            .collect();
+        objects.set_dependency_order(dependency_handles);
+        if let Some(root) = objects.root()
+            && let Some(component) = objects.component_mut(root)
+        {
+            // Synthetic Artboards model the inherited C++ root Component:
+            // Components is loop-control dirt on that same owner, alongside
+            // whatever concrete dirt the test supplied.
+            component.dirt |= ComponentDirt::COMPONENTS;
+        }
+        let advancing_components = slots
+            .iter()
+            .filter_map(|slot| {
+                let kind = match slot.type_name? {
+                    "Artboard" => AdvancingComponentKind::Artboard,
+                    "NestedArtboard" | "NestedArtboardLeaf" | "NestedArtboardLayout" => {
+                        AdvancingComponentKind::NestedArtboard
+                    }
+                    "LayoutComponent" => AdvancingComponentKind::LayoutComponent,
+                    "ArtboardComponentList" => AdvancingComponentKind::ArtboardComponentList,
+                    "ScrollConstraint" => AdvancingComponentKind::ScrollConstraint,
+                    "TextInput" => AdvancingComponentKind::TextInput,
+                    "ScriptedDataConverter" => AdvancingComponentKind::ScriptedDataConverter,
+                    "ScriptedDrawable" => AdvancingComponentKind::ScriptedDrawable,
+                    "ScriptedLayout" => AdvancingComponentKind::ScriptedLayout,
+                    "ScriptedPathEffect" => AdvancingComponentKind::ScriptedPathEffect,
+                    _ => return None,
+                };
+                Some(RuntimeAdvancingComponent {
+                    local_id: slot.local_id,
+                    object: objects.object_handle(slot.local_id)?,
+                    component: objects.component_handle(slot.local_id),
+                    kind,
+                })
+            })
+            .collect();
+        let resetting_components = slots
+            .iter()
+            .filter_map(|slot| {
+                let kind = match slot.type_name? {
+                    "NestedArtboard" | "NestedArtboardLeaf" | "NestedArtboardLayout" => {
+                        ResettingComponentKind::NestedArtboard
+                    }
+                    "ArtboardComponentList" => ResettingComponentKind::ArtboardComponentList,
+                    "CustomPropertyTrigger" => ResettingComponentKind::CustomPropertyTrigger,
+                    _ => return None,
+                };
+                Some(RuntimeResettingComponent {
+                    local_id: slot.local_id,
+                    component: objects.component_handle(slot.local_id)?,
+                    kind,
+                })
+            })
+            .collect();
+        let component_lists = objects
+            .component_handles()
+            .iter()
+            .copied()
+            .filter(|handle| {
+                objects
+                    .component(*handle)
+                    .is_some_and(|component| component.concrete.constrainable_list.is_some())
+            })
+            .collect();
 
         let text_affecting_locals = build_text_affecting_locals(&slots, &objects);
         let solid_color_paint_revisions = vec![
@@ -7311,36 +10958,18 @@ mod tests {
             frame_id: Cell::new(0),
             slots,
             objects,
-            components,
-            component_by_local,
-            solos: Vec::new(),
             joysticks: Vec::new(),
-            follow_path_constraints: Vec::new(),
-            list_follow_path_constraints: Vec::new(),
-            scroll_constraints: Vec::new(),
-            component_list_item_transforms: BTreeMap::new(),
-            component_list_logical_items: BTreeMap::new(),
-            component_list_items: BTreeMap::new(),
-            component_list_order_caches: RefCell::new(BTreeMap::new()),
-            component_list_sources: BTreeMap::new(),
-            ik_constraints: Vec::new(),
+            advancing_components,
+            resetting_components,
+            component_lists,
             joysticks_apply_before_update: true,
-            runtime_update_order: update_order
-                .iter()
-                .copied()
-                .map(RuntimeUpdateTarget::Component)
-                .collect(),
-            update_order,
             linear_animations: Vec::new(),
             state_machines: Arc::new(Vec::new()),
             script_instances_by_global: RuntimeScriptState::default(),
             scripted_data_converter_instances_by_global: RuntimeScriptState::default(),
             has_scripted_drawables: false,
             nested_script_owned_contexts: BTreeMap::new(),
-            script_path_effect_globals: RuntimeScriptState::default(),
-            script_advances_active: RuntimeScriptState::default(),
-            script_updates_pending: RuntimeScriptState::default(),
-            script_advance_queue: RuntimeScriptState::default(),
+            script_update_error: None,
             nested_artboards: RuntimeNestedArtboards::default(),
             nested_artboard_locals: Vec::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
@@ -7384,7 +11013,6 @@ mod tests {
             runtime_image_assets: RefCell::new(None),
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             geometry_state: RefCell::new(crate::draw::RuntimeGeometryState::default()),
-            dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
             prepared_epoch: 1,
@@ -7508,7 +11136,6 @@ mod tests {
             context: retained,
             occurrence_identity: 1,
             logical_index: 0,
-            virtualized_position: None,
             settled_layout_size: Cell::new(None),
             transform: Mat2D::IDENTITY,
             render_cache_revision: 1,
@@ -7555,15 +11182,72 @@ mod tests {
         artboard.state_machines = Arc::new(vec![empty_state_machine(11)]);
 
         let instance = artboard.state_machine_instance(0).expect("state machine");
-        let retained = instance
-            .retained_state_machine_ptr()
+        let retained_owner = instance
+            .retained_state_machine_definitions()
             .expect("artboard-created instances retain the definition");
+        let retained = retained_owner.get(0).expect("retained definition");
         let authored = artboard.state_machine(0).expect("authored definition");
 
         // C++ stores this exact authored `StateMachine*` on the instance
         // (`state_machine_instance.hpp:123,386`;
         // `state_machine_instance.cpp:1707-1711`).
         assert!(std::ptr::eq(retained, authored));
+    }
+
+    #[test]
+    fn each_state_machine_instance_dirties_each_hit_shape_once() {
+        let shape = synthetic_component_for_type(0, "Shape");
+        let mut artboard = synthetic_instance(vec![shape], vec![0]);
+        let listener = RuntimeStateMachineListener {
+            target_local_id: 0,
+            listener_types: vec![RuntimeListenerType::Down],
+            event_local_indices: Vec::new(),
+            view_model_index: None,
+            view_model_property_path: None,
+            hit_paths: Vec::new(),
+            listener_actions: Vec::new(),
+        };
+        let mut definition = empty_state_machine(12);
+        definition.listeners = Arc::new(vec![listener.clone(), listener]);
+        artboard.state_machines = Arc::new(vec![definition]);
+        assert!(artboard.update_components().did_update);
+
+        let first_cache_epoch = artboard.cache_epoch();
+        artboard.state_machine_instance(0).expect("first instance");
+        assert!(
+            artboard
+                .component(0)
+                .expect("shape")
+                .dirt
+                .contains(ComponentDirt::PATH),
+            "HitExpandable construction immediately executes Shape::addDirt(Path,true), while its instance-local hitLookup deduplicates duplicate Shape listeners (`state_machine_instance.cpp:1651-1666`)"
+        );
+        assert!(
+            artboard
+                .component(0)
+                .and_then(|component| component.concrete.shape.as_ref())
+                .expect("shape state")
+                .is_flagged(crate::components::RuntimeShapeState::NEVER_DEFER_UPDATE),
+            "listener initialization sets neverDeferUpdate with the same HitExpandable owner before returning the instance (`state_machine_instance.cpp:1651-1661,1827-1831`)"
+        );
+        assert!(artboard.update_components().did_update);
+        assert!(artboard.cache_epoch() > first_cache_epoch);
+
+        let second_cache_epoch = artboard.cache_epoch();
+        artboard.state_machine_instance(0).expect("second instance");
+        assert!(
+            artboard
+                .component(0)
+                .expect("shape")
+                .dirt
+                .contains(ComponentDirt::PATH),
+            "a fresh C++ StateMachineInstance owns a fresh hitLookup and dirties the already-flagged Shape again"
+        );
+        assert!(artboard.update_components().did_update);
+        assert!(
+            artboard.cache_epoch() > second_cache_epoch,
+            "every StateMachineInstance creation executes Shape::addDirt(Path,true) (`state_machine_instance.cpp:1651-1666,1827-1831`)"
+        );
     }
 
     fn direct_input_blend_state_machine(global_id: u32) -> RuntimeStateMachine {
@@ -7703,7 +11387,8 @@ mod tests {
             cumulated_seconds: 0.0,
         };
 
-        assert!(nested.advance(0.25, None));
+        let mut script_mode = RuntimeScriptAdvanceMode::Disabled;
+        assert!(nested.advance(0.25, &mut script_mode, None).unwrap());
         let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } =
             &nested.animations[0]
         else {
@@ -7802,9 +11487,17 @@ mod tests {
         let bound_rectangle = |width| {
             vec![
                 authoring_record(
+                    "Shape",
+                    vec![authoring_property(
+                        "Shape",
+                        "parentId",
+                        AuthoringValue::Uint(0),
+                    )],
+                ),
+                authoring_record(
                     "Rectangle",
                     vec![
-                        authoring_property("Rectangle", "parentId", AuthoringValue::Uint(0)),
+                        authoring_property("Rectangle", "parentId", AuthoringValue::Uint(1)),
                         authoring_property("Rectangle", "width", AuthoringValue::Double(width)),
                     ],
                 ),
@@ -8206,12 +11899,48 @@ mod tests {
     }
 
     #[test]
+    fn component_list_owner_clones_cold_but_transient_layout_keeps_retained_rows() {
+        let mut original = synthetic_instance(
+            vec![synthetic_component_for_type(0, "ArtboardComponentList")],
+            vec![0],
+        );
+        {
+            let list = original
+                .component_list_state_mut(0)
+                .expect("concrete component-list owner");
+            list.item_transforms = vec![Mat2D([1.0, 0.0, 0.0, 1.0, 4.0, 8.0])];
+            list.order_cache.borrow_mut().indices.push(0);
+            list.order_cache.borrow_mut().valid = true;
+        }
+
+        let cloned = original.clone();
+        let transient = original.clone_for_transient_layout();
+
+        let cloned_list = cloned
+            .component_list_state(0)
+            .expect("clone retains concrete owner type");
+        assert!(cloned_list.item_transforms.is_empty());
+        assert!(cloned_list.order_cache.borrow().indices.is_empty());
+        assert!(!cloned_list.order_cache.borrow().valid);
+
+        let transient_list = transient
+            .component_list_state(0)
+            .expect("transient retains concrete owner type");
+        assert_eq!(transient_list.item_transforms.len(), 1);
+        assert_eq!(transient_list.order_cache.borrow().indices, [0]);
+        assert!(transient_list.order_cache.borrow().valid);
+    }
+
+    #[test]
     fn scripted_updates_run_once_per_attach_or_input_change() {
-        let mut instance = synthetic_instance(Vec::new(), Vec::new());
+        let mut instance = synthetic_instance(
+            vec![synthetic_component_for_type(0, "ScriptedDrawable")],
+            vec![0],
+        );
         let inits = Rc::new(Cell::new(0));
         let updates = Rc::new(Cell::new(0));
         instance.set_script_instance_for_global(
-            7,
+            0,
             Box::new(UpdateScriptInstance {
                 inits: Rc::clone(&inits),
                 updates: Rc::clone(&updates),
@@ -8223,7 +11952,7 @@ mod tests {
         assert!(!instance.update_script_instances().expect("clean update"));
 
         instance
-            .set_script_input_for_global(7, "value", ScriptValue::Number(2.0))
+            .set_script_input_for_global(0, "value", ScriptValue::Number(2.0))
             .expect("input update");
         assert!(instance.update_script_instances().expect("dirty update"));
         assert_eq!(updates.get(), 2);
@@ -8243,16 +11972,65 @@ mod tests {
     }
 
     #[test]
-    fn nested_script_queue_replays_exact_local_speed_adjusted_steps() {
+    fn scripted_updates_run_at_their_dependency_slots_and_retry_from_the_failed_owner() {
+        let mut first = synthetic_component_for_type(0, "ScriptedDrawable");
+        first.global_id = 9;
+        let mut second = synthetic_component_for_type(1, "ScriptedDrawable");
+        second.global_id = 2;
+        let mut instance = synthetic_instance(vec![first, second], vec![1, 0]);
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let fail_once = Rc::new(Cell::new(true));
+        instance.set_script_instance_for_global(
+            9,
+            Box::new(OrderedUpdateScriptInstance {
+                label: 9,
+                calls: Rc::clone(&calls),
+                fail_once: None,
+            }),
+        );
+        instance.set_script_instance_for_global(
+            2,
+            Box::new(OrderedUpdateScriptInstance {
+                label: 2,
+                calls: Rc::clone(&calls),
+                fail_once: Some(Rc::clone(&fail_once)),
+            }),
+        );
+
+        instance
+            .update_pass_with_script_errors()
+            .expect_err("the first dependency owner fails once");
+        assert_eq!(calls.borrow().as_slice(), [2, 9]);
+
+        instance
+            .update_pass_with_script_errors()
+            .expect("the failed owner remains dirtied for an exact retry");
+        assert_eq!(
+            calls.borrow().as_slice(),
+            [2, 9, 2],
+            "ScriptedDrawable::update consumes ScriptUpdate at the concrete Component's retained \
+             dependency slot; a failure rearms that owner without replaying an already-successful \
+             later slot (`component.cpp:222-241`; `scripted_drawable.cpp:347-374`)"
+        );
+    }
+
+    #[test]
+    fn nested_scripts_advance_in_place_with_exact_local_speed_adjusted_steps() {
         let seconds = Rc::new(RefCell::new(Vec::new()));
-        let mut child = synthetic_instance(Vec::new(), Vec::new());
+        let mut child = synthetic_instance(
+            vec![synthetic_component_for_type(0, "ScriptedDrawable")],
+            vec![0],
+        );
         child.set_script_instance_for_global(
-            7,
+            0,
             Box::new(RecordingAdvanceScriptInstance {
                 seconds: Rc::clone(&seconds),
             }),
         );
-        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        let mut parent = synthetic_instance(
+            vec![synthetic_component_for_type(0, "NestedArtboard")],
+            vec![0],
+        );
         parent.nested_artboards.insert(
             0,
             RuntimeNestedArtboardInstance {
@@ -8282,17 +12060,13 @@ mod tests {
         );
         parent.nested_artboard_locals.push(0);
 
-        parent.advance_nested_artboards(0.25);
-        parent.advance_nested_artboards(0.125);
-        let nested = parent
-            .nested_artboards
-            .get_mut(&0)
-            .expect("nested occurrence");
         let mut factory = RecordingFactory::new();
-        nested
-            .child
-            .flush_script_lifecycle_with_factory(&mut factory)
-            .expect("queued lifecycle succeeds");
+        parent
+            .advance_frame_components_with_factory(0.25, &mut factory)
+            .expect("first retained advance succeeds");
+        parent
+            .advance_frame_components_with_factory(0.125, &mut factory)
+            .expect("second retained advance succeeds");
 
         assert_eq!(seconds.borrow().as_slice(), [0.5, 0.25]);
     }
@@ -8300,14 +12074,20 @@ mod tests {
     #[test]
     fn state_machine_batch_advances_nested_scripts_once() {
         let seconds = Rc::new(RefCell::new(Vec::new()));
-        let mut child = synthetic_instance(Vec::new(), Vec::new());
+        let mut child = synthetic_instance(
+            vec![synthetic_component_for_type(0, "ScriptedDrawable")],
+            vec![0],
+        );
         child.set_script_instance_for_global(
-            7,
+            0,
             Box::new(RecordingAdvanceScriptInstance {
                 seconds: Rc::clone(&seconds),
             }),
         );
-        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        let mut parent = synthetic_instance(
+            vec![synthetic_component_for_type(0, "NestedArtboard")],
+            vec![0],
+        );
         parent.nested_artboards.insert(
             0,
             RuntimeNestedArtboardInstance {
@@ -8344,52 +12124,57 @@ mod tests {
             .map(|(index, definition)| StateMachineInstance::new(index, definition, &parent))
             .collect::<Vec<_>>();
 
-        parent.advance_state_machine_instances_with_nested(&mut machines, 0.25);
-        let nested = parent
-            .nested_artboards
-            .get_mut(&0)
-            .expect("nested occurrence");
         let mut factory = RecordingFactory::new();
-        nested
-            .child
-            .flush_script_lifecycle_with_factory(&mut factory)
-            .expect("queued lifecycle succeeds");
+        parent
+            .advance_frame_components_with_state_machines_and_factory(
+                &mut machines,
+                0.25,
+                &mut factory,
+            )
+            .expect("one mixed-family frame succeeds");
 
         assert_eq!(seconds.borrow().as_slice(), [0.5]);
     }
 
     #[test]
-    fn failed_script_advance_preserves_active_state_and_exact_queued_steps() {
+    fn failed_script_advance_preserves_active_state_for_exact_retry() {
         let attempts = Rc::new(RefCell::new(Vec::new()));
         let should_fail = Rc::new(Cell::new(true));
-        let mut instance = synthetic_instance(Vec::new(), Vec::new());
+        let mut instance = synthetic_instance(
+            vec![synthetic_component_for_type(0, "ScriptedDrawable")],
+            vec![0],
+        );
         instance.set_script_instance_for_global(
-            7,
+            0,
             Box::new(FailOnceAdvanceScriptInstance {
                 attempts: Rc::clone(&attempts),
                 should_fail: Rc::clone(&should_fail),
             }),
         );
-        instance.queue_script_advance(0.5);
-        instance.queue_script_advance(0.25);
         let mut factory = RecordingFactory::new();
 
         instance
-            .flush_script_lifecycle_with_factory(&mut factory)
+            .advance_frame_components_with_factory(0.5, &mut factory)
             .expect_err("first advance fails");
         instance
-            .flush_script_lifecycle_with_factory(&mut factory)
-            .expect("the exact queue is retryable");
+            .advance_frame_components_with_factory(0.5, &mut factory)
+            .expect("the exact owner is retryable");
+        instance
+            .advance_frame_components_with_factory(0.25, &mut factory)
+            .expect("the following frame remains independent");
 
         assert_eq!(attempts.borrow().as_slice(), [0.5, 0.5, 0.25]);
     }
 
     #[test]
     fn scripted_advances_stop_on_false_and_reactivate_on_input_change() {
-        let mut instance = synthetic_instance(Vec::new(), Vec::new());
+        let mut instance = synthetic_instance(
+            vec![synthetic_component_for_type(0, "ScriptedDrawable")],
+            vec![0],
+        );
         let advances = Rc::new(Cell::new(0));
         instance.set_script_instance_for_global(
-            7,
+            0,
             Box::new(AdvanceScriptInstance {
                 advances: Rc::clone(&advances),
             }),
@@ -8413,7 +12198,7 @@ mod tests {
         assert_eq!(advances.get(), 2);
 
         instance
-            .set_script_input_for_global(7, "value", ScriptValue::Number(2.0))
+            .set_script_input_for_global(0, "value", ScriptValue::Number(2.0))
             .expect("input update");
         assert!(
             instance
@@ -8424,9 +12209,40 @@ mod tests {
     }
 
     #[test]
+    fn scripted_advances_follow_retained_object_order_not_global_id_order() {
+        let mut first = synthetic_component_for_type(0, "ScriptedDrawable");
+        first.global_id = 9;
+        let mut second = synthetic_component_for_type(1, "ScriptedDrawable");
+        second.global_id = 2;
+        let mut instance = synthetic_instance(vec![first, second], vec![0, 1]);
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        for global_id in [9, 2] {
+            instance.set_script_instance_for_global(
+                global_id,
+                Box::new(OrderedAdvanceScriptInstance {
+                    label: global_id,
+                    calls: Rc::clone(&calls),
+                }),
+            );
+        }
+
+        assert!(instance.advance_frame_components(0.1).unwrap());
+        assert_eq!(
+            calls.borrow().as_slice(),
+            [9, 2],
+            "the complete frame entry point walks Artboard::m_advancingComponents insertion \
+             order, not a late global-id script sweep (`artboard.cpp:1463-1480`; \
+             `advancing_component.cpp:17-44`)"
+        );
+    }
+
+    #[test]
     fn collapsed_scripted_component_defers_update_and_advance_until_visible() {
         let mut instance = synthetic_instance(
-            vec![synthetic_component(0, 0), synthetic_component(1, 1)],
+            vec![
+                synthetic_component_for_type(0, "ScriptedDrawable"),
+                synthetic_component_for_type(1, "ScriptedDrawable"),
+            ],
             vec![0, 1],
         );
         let inits = Rc::new(Cell::new(0));
@@ -8479,7 +12295,10 @@ mod tests {
 
     #[test]
     fn waking_a_parked_script_advance_rearms_it_and_marks_paint_dirty() {
-        let mut instance = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
+        let mut instance = synthetic_instance(
+            vec![synthetic_component_for_type(0, "ScriptedDrawable")],
+            vec![0],
+        );
         let advances = Rc::new(Cell::new(0));
         instance.set_script_instance_for_global(
             0,
@@ -8506,7 +12325,10 @@ mod tests {
 
     #[test]
     fn successful_script_advance_invalidates_paint_without_calling_update() {
-        let mut instance = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
+        let mut instance = synthetic_instance(
+            vec![synthetic_component_for_type(0, "ScriptedDrawable")],
+            vec![0],
+        );
         let advances = Rc::new(Cell::new(0));
         let updates = Rc::new(Cell::new(0));
         instance.set_script_instance_for_global(
@@ -8536,12 +12358,13 @@ mod tests {
     #[test]
     fn render_opacity_update_invalidates_a_prepared_zero_opacity_frame() {
         let mut instance = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
-        assert_eq!(instance.components[0].transform.render_opacity, 0.0);
+        assert_eq!(instance.component(0).unwrap().transform.render_opacity, 0.0);
         let prepared_epoch = instance.prepared_epoch;
 
-        instance.update_component(0, ComponentDirt::RENDER_OPACITY);
+        let component = instance.component_handle(0).unwrap();
+        instance.update_component(component, ComponentDirt::RENDER_OPACITY);
 
-        assert_eq!(instance.components[0].transform.render_opacity, 1.0);
+        assert_eq!(instance.component(0).unwrap().transform.render_opacity, 1.0);
         assert!(instance.prepared_epoch > prepared_epoch);
     }
 
@@ -8572,16 +12395,16 @@ mod tests {
             crate::components::TransformPropertyKeys::for_type(host.type_name);
         let mut simple = synthetic_component(1, 1);
         simple.type_name = "NestedSimpleAnimation";
-        simple.parent_local = Some(0);
         simple.transform_property_keys =
             crate::components::TransformPropertyKeys::for_type(simple.type_name);
         let mut remap = synthetic_component(2, 2);
         remap.type_name = "NestedRemapAnimation";
-        remap.parent_local = Some(0);
         remap.transform_property_keys =
             crate::components::TransformPropertyKeys::for_type(remap.type_name);
 
         let mut instance = synthetic_instance(vec![host, simple, remap], Vec::new());
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 0);
         let mut nested = synthetic_nested_artboard_instance(7);
         nested.animations = vec![
             RuntimeNestedAnimationInstance::Simple {
@@ -8628,7 +12451,7 @@ mod tests {
         }
     }
 
-    fn synthetic_component(local_id: usize, graph_order: usize) -> RuntimeComponent {
+    fn synthetic_component(local_id: usize, _graph_order: usize) -> RuntimeComponent {
         RuntimeComponent {
             local_id,
             global_id: local_id as u32,
@@ -8638,15 +12461,356 @@ mod tests {
                 world_transform: true,
                 transform: true,
             },
-            parent_local: None,
-            constraint_locals: Vec::new(),
-            dependent_locals: Vec::new(),
-            layout_chain_has_layout_component: false,
+            parent: None,
+            parent_transform: None,
+            children: Vec::new(),
+            constraints: Vec::new(),
+            dependents: Vec::new(),
+            collapsables: Vec::new(),
+            layout_ancestors: Vec::new(),
             constrained_layout_ancestor: None,
-            graph_order,
+            graph_order: None,
             dirt: ComponentDirt::NONE,
             transform: TransformRuntimeState::default(),
+            concrete: crate::components::RuntimeConcreteComponentState::for_type("Node"),
         }
+    }
+
+    fn synthetic_component_for_type(local_id: usize, type_name: &'static str) -> RuntimeComponent {
+        let mut component = synthetic_component(local_id, local_id);
+        let definition =
+            nuxie_schema::definition_by_name(type_name).expect("synthetic type exists");
+        component.type_name = type_name;
+        component.transform_property_keys =
+            crate::components::TransformPropertyKeys::for_type(type_name);
+        component.capabilities = RuntimeComponentCapabilities {
+            world_transform: definition.is_a("WorldTransformComponent"),
+            transform: definition.is_a("TransformComponent"),
+        };
+        component.concrete = crate::components::RuntimeConcreteComponentState::for_type(type_name);
+        component
+    }
+
+    fn synthetic_typed_component(local_id: usize, type_name: &'static str) -> RuntimeComponent {
+        let definition = definition_by_name(type_name).expect("synthetic Component type");
+        let mut component = synthetic_component(local_id, local_id);
+        component.type_name = type_name;
+        component.transform_property_keys =
+            crate::components::TransformPropertyKeys::for_type(type_name);
+        component.capabilities = RuntimeComponentCapabilities {
+            world_transform: definition.is_a("WorldTransformComponent"),
+            transform: definition.is_a("TransformComponent"),
+        };
+        component.concrete = crate::components::RuntimeConcreteComponentState::for_type(type_name);
+        component
+    }
+
+    fn synthetic_link_parent(instance: &mut ArtboardInstance, child: usize, parent: usize) {
+        let child = instance.component_handle(child).expect("synthetic child");
+        let parent = instance.component_handle(parent).expect("synthetic parent");
+        assert!(instance.objects.link_parent(child, parent));
+        if instance
+            .objects
+            .component(child)
+            .is_some_and(|component| component.capabilities.transform)
+            && instance
+                .objects
+                .component(parent)
+                .is_some_and(|component| component.capabilities.world_transform)
+        {
+            instance
+                .objects
+                .component_mut(child)
+                .expect("synthetic child remains live")
+                .parent_transform = Some(parent);
+        }
+    }
+
+    fn synthetic_add_dependent(instance: &mut ArtboardInstance, source: usize, dependent: usize) {
+        let source = instance.component_handle(source).expect("synthetic source");
+        let dependent = instance
+            .component_handle(dependent)
+            .expect("synthetic dependent");
+        assert!(instance.objects.add_dependent(source, dependent));
+    }
+
+    #[test]
+    fn layout_drawable_hit_test_preserves_skip_hidden_and_parent_fallback() {
+        let mut instance = synthetic_instance(
+            vec![synthetic_component_for_type(0, "LayoutComponent")],
+            vec![0],
+        );
+        let layout = instance.component_handle(0).expect("layout handle");
+        instance
+            .component(0)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("layout owner")
+            .retain_bounds(0.0, 0.0, 100.0, 50.0);
+
+        assert!(instance.component_hit_test_point(layout, (25.0, 25.0), false, true));
+        assert!(!instance.component_hit_test_point(layout, (125.0, 25.0), false, true));
+        assert!(
+            instance.component_hit_test_point(layout, (125.0, 25.0), true, true),
+            "skipOnUnclipped bypasses only an unclipped Layout's local bounds"
+        );
+
+        let drawable_flags =
+            property_key_for_name("LayoutComponent", "drawableFlags").expect("Drawable flags");
+        assert!(instance.set_uint_property(0, drawable_flags, 1));
+        assert!(
+            !instance.component_hit_test_point(layout, (25.0, 25.0), false, true),
+            "Drawable::hitTestPoint rejects its sole generated Hidden flag"
+        );
+    }
+
+    #[test]
+    fn node_computed_local_uses_settled_world_and_retained_parent_transform() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_typed_component(0, "Node"),
+                synthetic_typed_component(1, "Node"),
+            ],
+            vec![0, 1],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        let parent_world = Mat2D([2.0, 0.0, 0.0, 3.0, 10.0, 20.0]);
+        let expected_local = Mat2D([1.0, 0.0, 0.0, 1.0, 4.0, 5.0]);
+        instance.component_mut(0).unwrap().transform.world_transform = parent_world;
+        instance.component_mut(1).unwrap().transform.world_transform =
+            parent_world.multiply(expected_local);
+        instance
+            .component(1)
+            .unwrap()
+            .concrete
+            .node
+            .as_ref()
+            .unwrap()
+            .mark_computed_local_dirty();
+
+        assert_eq!(
+            instance.runtime_node_computed_local_transform(1),
+            Some(expected_local)
+        );
+
+        instance.component_mut(0).unwrap().transform.world_transform =
+            Mat2D([0.0, 0.0, 0.0, 0.0, 7.0, 9.0]);
+        instance
+            .component(1)
+            .unwrap()
+            .concrete
+            .node
+            .as_ref()
+            .unwrap()
+            .mark_computed_local_dirty();
+        assert_eq!(
+            instance.runtime_node_computed_local_transform(1),
+            Some(Mat2D::IDENTITY)
+        );
+
+        instance.component_mut(1).unwrap().parent_transform = None;
+        instance
+            .component(1)
+            .unwrap()
+            .concrete
+            .node
+            .as_ref()
+            .unwrap()
+            .mark_computed_local_dirty();
+        assert_eq!(
+            instance.runtime_node_computed_local_transform(1),
+            Some(Mat2D::IDENTITY)
+        );
+    }
+
+    #[test]
+    fn transform_render_opacity_uses_cpp_child_opacity_dispatch() {
+        let mut world_parent = synthetic_instance(
+            vec![
+                synthetic_typed_component(0, "Artboard"),
+                synthetic_typed_component(1, "Node"),
+            ],
+            vec![0, 1],
+        );
+        synthetic_link_parent(&mut world_parent, 1, 0);
+        assert!(
+            world_parent
+                .objects
+                .set_double_property_by_name(0, "opacity", 0.5)
+        );
+        assert!(
+            world_parent
+                .objects
+                .set_double_property_by_name(1, "opacity", 0.8)
+        );
+        let root = world_parent.component_handle(0).unwrap();
+        world_parent.update_component(root, ComponentDirt::RENDER_OPACITY);
+        let child = world_parent.component_handle(1).unwrap();
+        world_parent.update_component(child, ComponentDirt::RENDER_OPACITY);
+        assert_eq!(
+            world_parent.component(1).unwrap().transform.render_opacity,
+            0.4
+        );
+
+        let mut transform_parent = synthetic_instance(
+            vec![
+                synthetic_typed_component(0, "Node"),
+                synthetic_typed_component(1, "Node"),
+            ],
+            vec![0, 1],
+        );
+        synthetic_link_parent(&mut transform_parent, 1, 0);
+        assert!(
+            transform_parent
+                .objects
+                .set_double_property_by_name(0, "opacity", 0.5)
+        );
+        assert!(
+            transform_parent
+                .objects
+                .set_double_property_by_name(1, "opacity", 0.8)
+        );
+        transform_parent
+            .component_mut(0)
+            .unwrap()
+            .transform
+            .render_opacity = 0.25;
+        let child = transform_parent.component_handle(1).unwrap();
+        transform_parent.update_component(child, ComponentDirt::RENDER_OPACITY);
+        assert_eq!(
+            transform_parent
+                .component(1)
+                .unwrap()
+                .transform
+                .render_opacity,
+            0.2
+        );
+    }
+
+    #[test]
+    fn skin_on_dirty_targets_only_the_retained_skinnable_dirt_family() {
+        for (type_name, expected) in [
+            ("PointsPath", ComponentDirt::PATH),
+            ("Mesh", ComponentDirt::VERTICES),
+        ] {
+            let mut instance = synthetic_instance(
+                vec![
+                    synthetic_typed_component(0, type_name),
+                    synthetic_typed_component(1, "Skin"),
+                ],
+                vec![0, 1],
+            );
+            synthetic_link_parent(&mut instance, 1, 0);
+            let skinnable = instance.component_handle(0).unwrap();
+            let skin = instance.component_handle(1).unwrap();
+            instance
+                .component_mut(0)
+                .unwrap()
+                .concrete
+                .skinnable
+                .as_mut()
+                .unwrap()
+                .skin = Some(skin);
+            instance
+                .component_mut(1)
+                .unwrap()
+                .concrete
+                .skin
+                .as_mut()
+                .unwrap()
+                .skinnable = Some(skinnable);
+            instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
+            instance.component_mut(1).unwrap().dirt = ComponentDirt::NONE;
+            instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
+
+            assert!(instance.add_component_dirt(skin, ComponentDirt::SKIN, false));
+            assert_eq!(instance.component(1).unwrap().dirt, ComponentDirt::SKIN);
+            assert!(instance.component(0).unwrap().dirt.contains(expected));
+            let other = if expected == ComponentDirt::PATH {
+                ComponentDirt::VERTICES
+            } else {
+                ComponentDirt::PATH
+            };
+            assert!(!instance.component(0).unwrap().dirt.contains(other));
+        }
+    }
+
+    #[test]
+    fn skin_update_rebuilds_only_its_retained_tendon_buffer() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_typed_component(0, "RootBone"),
+                synthetic_typed_component(1, "Tendon"),
+                synthetic_typed_component(2, "Skin"),
+                synthetic_typed_component(3, "Mesh"),
+            ],
+            vec![0, 1, 2, 3],
+        );
+        let bone = instance.component_handle(0).unwrap();
+        let tendon = instance.component_handle(1).unwrap();
+        let skin = instance.component_handle(2).unwrap();
+        let bone_world = Mat2D([2.0, 0.0, 0.0, 3.0, 4.0, 5.0]);
+        let inverse_bind = Mat2D([1.0, 0.0, 0.0, 1.0, -1.0, -2.0]);
+        instance.component_mut(0).unwrap().transform.world_transform = bone_world;
+        {
+            let tendon_state = instance
+                .component_mut(1)
+                .unwrap()
+                .concrete
+                .tendon
+                .as_mut()
+                .unwrap();
+            tendon_state.bone = Some(bone);
+            tendon_state.inverse_bind = inverse_bind;
+        }
+        {
+            let skin_state = instance
+                .component_mut(2)
+                .unwrap()
+                .concrete
+                .skin
+                .as_mut()
+                .unwrap();
+            skin_state.tendons.push(tendon);
+            skin_state.bone_transforms = vec![Mat2D::IDENTITY; 2];
+        }
+
+        instance.update_component(skin, ComponentDirt::FILTHY);
+        let expected = bone_world.multiply(inverse_bind);
+        let state = instance
+            .component(2)
+            .unwrap()
+            .concrete
+            .skin
+            .as_ref()
+            .unwrap();
+        assert_eq!(state.bone_transforms, vec![Mat2D::IDENTITY, expected]);
+        assert_eq!(state.buffer_rebuilds, 1);
+
+        instance.component_mut(0).unwrap().transform.world_transform =
+            Mat2D([1.0, 0.0, 0.0, 1.0, 9.0, 11.0]);
+        let state = instance
+            .component(2)
+            .unwrap()
+            .concrete
+            .skin
+            .as_ref()
+            .unwrap();
+        assert_eq!(state.bone_transforms[1], expected);
+        assert_eq!(state.buffer_rebuilds, 1);
+
+        instance.update_component(skin, ComponentDirt::SKIN);
+        let state = instance
+            .component(2)
+            .unwrap()
+            .concrete
+            .skin
+            .as_ref()
+            .unwrap();
+        assert_eq!(
+            state.bone_transforms[1],
+            Mat2D([1.0, 0.0, 0.0, 1.0, 9.0, 11.0]).multiply(inverse_bind)
+        );
+        assert_eq!(state.buffer_rebuilds, 2);
     }
 
     fn callback_route_animation(has_keyed_callbacks: bool) -> RuntimeLinearAnimation {
@@ -8746,27 +12910,27 @@ mod tests {
         let opacity_key = property_key_for_name("Artboard", "opacity").expect("opacity key");
         assert!(leaf.set_double_property(0, opacity_key, 0.0));
         leaf.clear_component_dirt(0);
-        leaf.dirt = ComponentDirt::NONE;
+        leaf.set_artboard_dirt_for_test(ComponentDirt::NONE);
 
         let mut middle_root = typed_component(0, 0, "Artboard");
         middle_root.transform.render_opacity = 1.0;
         let mut middle_host = typed_component(1, 1, "NestedArtboard");
-        middle_host.parent_local = Some(0);
         middle_host.dirt = ComponentDirt::RENDER_OPACITY;
         let mut middle = synthetic_instance(vec![middle_root, middle_host], vec![1]);
+        synthetic_link_parent(&mut middle, 1, 0);
         let mut leaf_mount = synthetic_nested_artboard_instance(2);
         leaf_mount.child = Box::new(leaf);
         middle.nested_artboards.insert(1, leaf_mount);
         middle.nested_artboard_locals.push(1);
-        middle.dirt = ComponentDirt::COMPONENTS;
+        middle.set_artboard_dirt_for_test(ComponentDirt::COMPONENTS);
 
         let mut root_component = typed_component(0, 0, "Artboard");
         root_component.transform.render_opacity = 1.0;
         let mut root_host = typed_component(1, 1, "NestedArtboard");
-        root_host.parent_local = Some(0);
         root_host.transform.render_opacity = 1.0;
         root_host.dirt = ComponentDirt::COMPONENTS;
         let mut root = synthetic_instance(vec![root_component, root_host], vec![1]);
+        synthetic_link_parent(&mut root, 1, 0);
         let mut middle_mount = synthetic_nested_artboard_instance(1);
         middle_mount.child = Box::new(middle);
         root.nested_artboards.insert(1, middle_mount);
@@ -8833,6 +12997,67 @@ mod tests {
     }
 
     #[test]
+    fn retained_reset_schedule_recurses_into_nested_artboards() {
+        let property_value_key = property_key_for_name("CustomPropertyTrigger", "propertyValue")
+            .expect("trigger property value");
+        let mut child = synthetic_instance(
+            vec![synthetic_component_for_type(0, "CustomPropertyTrigger")],
+            vec![0],
+        );
+        assert!(child.set_uint_property(0, property_value_key, 3));
+
+        let mut parent = synthetic_instance(
+            vec![synthetic_component_for_type(0, "NestedArtboard")],
+            vec![0],
+        );
+        let mut nested = synthetic_nested_artboard_instance(1);
+        nested.child = Box::new(child);
+        parent.nested_artboards.insert(0, nested);
+
+        parent.reset_retained_components();
+
+        assert_eq!(
+            parent
+                .nested_artboards
+                .get(&0)
+                .and_then(|nested| { nested.child.uint_property(0, property_value_key) }),
+            Some(0),
+            "Artboard::reset walks the authored reset schedule recursively \
+             (`artboard.cpp:1483-1493`; `nested_artboard.cpp:1035-1043`)"
+        );
+    }
+
+    #[test]
+    fn component_list_reset_visits_unmounted_logical_rows() {
+        let (file, _, _) = owned_view_model_action_fixture(9_706, false);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1).expect("row context"),
+        );
+        assert!(context.borrow_mut().set_trigger_by_property_index(2, 1));
+        let mut list = RuntimeConstrainableListState::default();
+        list.logical_items.push(RuntimeComponentListLogicalItem {
+            occurrence_identity: 41,
+            context: context.clone(),
+            size: (100.0, 20.0),
+            mapped_artboard_global: None,
+        });
+        assert!(
+            list.items.is_empty(),
+            "logical row is deliberately unmounted"
+        );
+
+        reset_component_list_instances(&mut list, true);
+
+        assert_eq!(
+            context.borrow().trigger_value_by_property_path(&[2]),
+            Some(0),
+            "C++ acknowledges every logical m_listItems VMI before the \
+             optional m_artboardInstancesMap lookup \
+             (`artboard_component_list.cpp:888-920`)"
+        );
+    }
+
+    #[test]
     fn range_mapper_reverse_conversion_swaps_input_and_output_ranges() {
         let converter = RuntimeDataBindGraphConverter::RangeMapper {
             global_id: 0,
@@ -8890,18 +13115,40 @@ mod tests {
 
     #[test]
     fn add_dirt_recurses_to_graph_dependents() {
-        let mut source = synthetic_component(0, 0);
-        source.dependent_locals.push(1);
-        let dependent = synthetic_component(1, 1);
-        let mut instance = synthetic_instance(vec![source, dependent], vec![0, 1]);
+        let source = synthetic_component(0, 0);
+        let first_dependent = synthetic_component(1, 1);
+        let second_dependent = synthetic_component(2, 2);
+        let mut instance = synthetic_instance(
+            vec![source, first_dependent, second_dependent],
+            vec![0, 1, 2],
+        );
+        synthetic_add_dependent(&mut instance, 0, 2);
+        synthetic_add_dependent(&mut instance, 0, 1);
+        let source_handle = instance.component_handle(0).expect("source handle");
+        let second_handle = instance
+            .component_handle(2)
+            .expect("second dependent handle");
+        assert!(!instance.objects.add_dependent(source_handle, second_handle));
+        assert_eq!(
+            instance.objects.dependent_at(source_handle, 0),
+            instance.component_handle(2)
+        );
+        assert_eq!(
+            instance.objects.dependent_at(source_handle, 1),
+            instance.component_handle(1)
+        );
+        assert_eq!(instance.objects.dependent_len(source_handle), 2);
 
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
+        assert!(!instance.has_dirt(ComponentDirt::COMPONENTS));
         assert!(instance.add_dirt(0, ComponentDirt::PATH, true));
         assert!(
             instance
                 .component(0)
                 .unwrap()
                 .dirt
-                .contains(ComponentDirt::PATH)
+                .contains(ComponentDirt::PATH | ComponentDirt::COMPONENTS),
+            "The root Artboard is the same retained Component dirt owner that publishes Components loop-control dirt (`src/component.cpp:32-45`; `src/artboard.cpp:1205-1241`)"
         );
         assert!(
             instance
@@ -8910,19 +13157,108 @@ mod tests {
                 .dirt
                 .contains(ComponentDirt::PATH)
         );
+        assert!(
+            instance
+                .component(2)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::PATH)
+        );
         assert!(instance.has_dirt(ComponentDirt::COMPONENTS));
 
         assert!(!instance.add_dirt(0, ComponentDirt::PATH, true));
+        assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::PATH | ComponentDirt::PAINT)
+        );
+    }
+
+    #[test]
+    fn occurrence_dependency_sort_matches_cpp_diamond_visitation_order() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component(0, 0),
+                synthetic_component(1, 1),
+                synthetic_component(2, 2),
+                synthetic_component(3, 3),
+            ],
+            Vec::new(),
+        );
+        synthetic_add_dependent(&mut instance, 0, 1);
+        synthetic_add_dependent(&mut instance, 0, 2);
+        synthetic_add_dependent(&mut instance, 1, 3);
+        synthetic_add_dependent(&mut instance, 2, 3);
+
+        assert!(instance.objects.sort_dependencies_from_root());
+        assert_eq!(
+            instance
+                .objects
+                .dependency_order()
+                .iter()
+                .filter_map(|handle| instance.objects.component_local_id(*handle))
+                .collect::<Vec<_>>(),
+            vec![0, 2, 1, 3],
+            "DependencySorter visits retained dependents in insertion order and front-inserts each completed owner (`src/dependency_sorter.cpp:6-48`)"
+        );
+    }
+
+    #[test]
+    fn occurrence_dependency_sort_publishes_cpp_partial_order_on_cycle() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component(0, 0),
+                synthetic_component(1, 1),
+                synthetic_component(2, 2),
+            ],
+            Vec::new(),
+        );
+        synthetic_add_dependent(&mut instance, 0, 2);
+        synthetic_add_dependent(&mut instance, 0, 1);
+        synthetic_add_dependent(&mut instance, 1, 0);
+
+        assert!(!instance.objects.sort_dependencies_from_root());
+        assert_eq!(
+            instance
+                .objects
+                .dependency_order()
+                .iter()
+                .filter_map(|handle| instance.objects.component_local_id(*handle))
+                .collect::<Vec<_>>(),
+            vec![2],
+            "DependencySorter::sort ignores visit's cycle result and publishes owners completed before the cyclic branch (`src/dependency_sorter.cpp:6-10`)"
+        );
+        assert_eq!(
+            instance
+                .component(2)
+                .and_then(|component| component.graph_order),
+            Some(crate::components::GraphOrder::new(0))
+        );
+        assert_eq!(
+            instance
+                .component(0)
+                .and_then(|component| component.graph_order),
+            None
+        );
+        assert_eq!(
+            instance
+                .component(1)
+                .and_then(|component| component.graph_order),
+            None
+        );
     }
 
     #[test]
     fn enabling_layout_constraint_bounds_dirties_layout_dependents() {
         let mut layout = synthetic_component(0, 0);
         layout.type_name = "LayoutComponent";
-        layout.dependent_locals.push(1);
         let dependent = synthetic_component(1, 1);
         let mut instance = synthetic_instance(vec![layout, dependent], vec![0, 1]);
-        instance.dirt = ComponentDirt::NONE;
+        synthetic_add_dependent(&mut instance, 0, 1);
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
         let prepared_epoch = instance.prepared_epoch();
 
         instance.enable_layout_constraint_bounds();
@@ -8950,6 +13286,120 @@ mod tests {
     }
 
     #[test]
+    fn retained_layout_owner_keeps_parent_local_coordinates_for_constraint_offsets() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let parent = synthetic_component_for_type(1, "LayoutComponent");
+        let child = synthetic_component_for_type(2, "LayoutComponent");
+        let mut instance = synthetic_instance(vec![root, parent, child], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        let accumulated = BTreeMap::from([
+            (
+                0,
+                RuntimeLayoutBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 300.0,
+                    height: 200.0,
+                },
+            ),
+            (
+                1,
+                RuntimeLayoutBounds {
+                    x: 11.0,
+                    y: 19.0,
+                    width: 100.0,
+                    height: 80.0,
+                },
+            ),
+            (
+                2,
+                RuntimeLayoutBounds {
+                    x: 28.0,
+                    y: 42.0,
+                    width: 40.0,
+                    height: 30.0,
+                },
+            ),
+        ]);
+
+        instance.retain_runtime_layout_component_bounds(2, accumulated[&2], Some(&accumulated));
+        let layout = instance
+            .component(2)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("retained LayoutComponent state");
+        assert_eq!(layout.transform_property(TransformProperty::X), Some(17.0));
+        assert_eq!(layout.transform_property(TransformProperty::Y), Some(23.0));
+    }
+
+    #[test]
+    fn layout_world_update_uses_retained_position_and_root_origin() {
+        // LayoutComponent::update replaces TransformComponent's authored
+        // local matrix with retained Yoga left/top and subtracts the root
+        // Artboard normalized origin before multiplying by its parent
+        // (`src/layout/layout_component.cpp:82-121`).
+        let root = synthetic_component_for_type(0, "Artboard");
+        let layout = synthetic_component_for_type(1, "LayoutComponent");
+        let mut instance = synthetic_instance(vec![root, layout], vec![0, 1]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        instance.width = 100.0;
+        instance.height = 80.0;
+        instance.origin_x = 0.5;
+        instance.origin_y = 0.25;
+        instance.component_mut(0).unwrap().transform.world_transform =
+            Mat2D([2.0, 0.0, 0.0, 3.0, 10.0, 20.0]);
+        instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("retained LayoutComponent state")
+            .retain_bounds(60.0, 70.0, 40.0, 30.0);
+
+        let layout = instance.component_handle(1).unwrap();
+        instance.update_component(layout, ComponentDirt::WORLD_TRANSFORM);
+
+        assert_eq!(
+            instance.component(1).unwrap().transform.world_transform,
+            Mat2D([2.0, 0.0, 0.0, 3.0, 30.0, 170.0])
+        );
+    }
+
+    #[test]
+    fn layout_ancestry_retains_exact_nearest_first_owner_identity() {
+        // C++ `Drawable::isChildOfLayout` walks from the queried Component
+        // through concrete parent pointers and compares LayoutComponent
+        // identity (`src/drawable.cpp:45-59`). The Rust occurrence retains the
+        // same identities instead of the displaced boolean-only mirror.
+        let root = synthetic_component_for_type(0, "Artboard");
+        let outer = synthetic_component_for_type(1, "LayoutComponent");
+        let inner = synthetic_component_for_type(2, "LayoutComponent");
+        let shape = synthetic_component_for_type(3, "Shape");
+        let mut instance = synthetic_instance(vec![root, outer, inner, shape], vec![0, 1, 2, 3]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 2);
+        crate::components::retain_runtime_component_layout_topology(&mut instance.objects);
+
+        let outer = instance.component_handle(1).expect("outer layout");
+        let inner = instance.component_handle(2).expect("inner layout");
+        assert_eq!(
+            instance.component(3).expect("shape").layout_ancestors,
+            vec![inner, outer]
+        );
+        assert_eq!(
+            instance.component(2).expect("inner").layout_ancestors,
+            vec![inner, outer],
+            "C++ begins the identity walk at `this`"
+        );
+        assert!(
+            instance
+                .component(0)
+                .expect("root")
+                .layout_ancestors
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn nested_layout_constraint_space_refreshes_for_parent_or_child_layout_generation() {
         let mut host = synthetic_component(0, 0);
         host.type_name = "NestedArtboardLayout";
@@ -8957,8 +13407,9 @@ mod tests {
 
         let mut child_layout = synthetic_component(0, 0);
         child_layout.type_name = "LayoutComponent";
-        child_layout.dependent_locals.push(1);
-        let child = synthetic_instance(vec![child_layout, synthetic_component(1, 1)], vec![0, 1]);
+        let mut child =
+            synthetic_instance(vec![child_layout, synthetic_component(1, 1)], vec![0, 1]);
+        synthetic_add_dependent(&mut child, 0, 1);
         let mut nested = synthetic_nested_artboard_instance(7);
         nested.child = Box::new(child);
         parent.nested_artboards.insert(0, nested);
@@ -9041,7 +13492,7 @@ mod tests {
     }
 
     #[test]
-    fn path_epoch_tracks_path_dirt_separately_from_draw_cache_epoch() {
+    fn path_dirt_tracks_geometry_revision_separately_from_draw_cache_epoch() {
         let component = synthetic_component(0, 0);
         let mut instance = synthetic_instance(vec![component], vec![0]);
 
@@ -9139,6 +13590,51 @@ mod tests {
         path_epoch = instance.path_epoch();
         assert!(instance.set_uint_property(0, space_value, 1));
         assert!(instance.path_epoch() > path_epoch);
+    }
+
+    #[test]
+    fn parametric_path_changed_callbacks_dirty_the_path_and_layout_epochs() {
+        let rectangle = synthetic_component_for_type(0, "Rectangle");
+        let mut instance = synthetic_instance(vec![rectangle], vec![0]);
+        let width = property_key_for_name("Rectangle", "width").expect("Rectangle.width");
+        let corner =
+            property_key_for_name("Rectangle", "cornerRadiusTL").expect("Rectangle.cornerRadiusTL");
+
+        let layout_epoch = instance.layout_epoch();
+        assert!(instance.set_keyed_double_property(0, width, 42.0));
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::PATH),
+            "ParametricPath::widthChanged calls markPathDirty (`parametric_path.cpp:35-66`; `path.cpp:327-333`)"
+        );
+        assert!(instance.layout_epoch() > layout_epoch);
+
+        instance.clear_component_dirt(0);
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
+        assert!(instance.set_keyed_double_property(0, corner, 3.0));
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::PATH)
+        );
+
+        let polygon = synthetic_component_for_type(0, "Polygon");
+        let mut instance = synthetic_instance(vec![polygon], vec![0]);
+        let points = property_key_for_name("Polygon", "points").expect("Polygon.points");
+        assert!(instance.set_uint_property(0, points, 7));
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::PATH),
+            "Polygon::pointsChanged calls markPathDirty (`polygon.cpp:13-15`)"
+        );
     }
 
     #[test]
@@ -9473,21 +13969,9 @@ mod tests {
             property_key_for_name("GradientStop", "colorValue").expect("stop color key");
         let stop_position_key =
             property_key_for_name("GradientStop", "position").expect("stop position key");
-        instance.objects = InstanceObjectArena::from_runtime_objects(vec![
-            Some(synthetic_runtime_object(0, "LinearGradient", Vec::new())),
-            Some(synthetic_runtime_object(
-                1,
-                "GradientStop",
-                vec![RuntimeProperty {
-                    key: parent_key,
-                    name: "parentId",
-                    owner: "Component",
-                    value: FieldValue::Uint(0),
-                }],
-            )),
-        ]);
+        let _ = instance.objects.set_uint_property(1, parent_key, 0);
 
-        instance.dirt = ComponentDirt::NONE;
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
         instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
         assert!(instance.set_double_property(0, start_x_key, 10.0));
         assert!(
@@ -9498,7 +13982,7 @@ mod tests {
                 .contains(ComponentDirt::TRANSFORM)
         );
 
-        instance.dirt = ComponentDirt::NONE;
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
         instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
         assert!(instance.set_double_property(0, opacity_key, 0.5));
         assert!(
@@ -9509,7 +13993,7 @@ mod tests {
                 .contains(ComponentDirt::PAINT)
         );
 
-        instance.dirt = ComponentDirt::NONE;
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
         instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
         assert!(instance.set_color_property(1, stop_color_key, 0xff00_ff00));
         assert!(
@@ -9520,7 +14004,7 @@ mod tests {
                 .contains(ComponentDirt::PAINT | ComponentDirt::STOPS)
         );
 
-        instance.dirt = ComponentDirt::NONE;
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
         instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
         assert!(instance.set_double_property(1, stop_position_key, 0.25));
         assert!(
@@ -9534,12 +14018,10 @@ mod tests {
 
     #[test]
     fn follow_path_property_changes_dirty_the_constrained_parent_transform() {
-        let mut parent = synthetic_component(0, 0);
-        parent.type_name = "Node";
-        let mut constraint = synthetic_component(1, 1);
-        constraint.type_name = "FollowPathConstraint";
-        constraint.parent_local = Some(0);
+        let parent = synthetic_component_for_type(0, "Node");
+        let constraint = synthetic_component_for_type(1, "FollowPathConstraint");
         let mut instance = synthetic_instance(vec![parent, constraint], vec![0, 1]);
+        synthetic_link_parent(&mut instance, 1, 0);
         let distance_key = property_key_for_name("FollowPathConstraint", "distance")
             .expect("FollowPathConstraint.distance key");
         let orient_key = property_key_for_name("FollowPathConstraint", "orient")
@@ -9556,7 +14038,7 @@ mod tests {
                     .dirt
                     .contains(ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM)
             );
-            instance.dirt = ComponentDirt::NONE;
+            instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
             instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
         }
 
@@ -9566,6 +14048,473 @@ mod tests {
         assert_parent_transform_dirty(&mut instance, changed);
         let changed = instance.set_double_property(1, strength_key, 0.5);
         assert_parent_transform_dirty(&mut instance, changed);
+    }
+
+    #[test]
+    fn list_follow_path_inherited_and_leaf_callbacks_dirty_the_constrained_list() {
+        let list = synthetic_component_for_type(0, "ArtboardComponentList");
+        let constraint = synthetic_component_for_type(1, "ListFollowPathConstraint");
+        let mut instance = synthetic_instance(vec![list, constraint], vec![0, 1]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        let distance_key = property_key_for_name("FollowPathConstraint", "distance").unwrap();
+        let orient_key = property_key_for_name("FollowPathConstraint", "orient").unwrap();
+        let distance_end_key =
+            property_key_for_name("ListFollowPathConstraint", "distanceEnd").unwrap();
+        let distance_offset_key =
+            property_key_for_name("ListFollowPathConstraint", "distanceOffset").unwrap();
+        let offset_key = property_key_for_name("FollowPathConstraint", "offset").unwrap();
+
+        for change in [
+            (distance_key, 0.25),
+            (distance_end_key, 0.75),
+            (distance_offset_key, 0.1),
+        ] {
+            instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
+            assert!(instance.set_double_property(1, change.0, change.1));
+            assert!(
+                instance
+                    .component(0)
+                    .unwrap()
+                    .dirt
+                    .contains(ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM)
+            );
+        }
+
+        instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
+        assert!(instance.set_bool_property(1, orient_key, false));
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM)
+        );
+
+        // Generated FollowPath.offset has an intentional no-op changed
+        // callback (`follow_path_constraint_base.hpp:107-110`).
+        instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
+        assert!(instance.set_bool_property(1, offset_key, true));
+        assert!(instance.component(0).unwrap().dirt.is_empty());
+    }
+
+    #[test]
+    fn ik_strength_and_invert_dirty_the_retained_chain_but_parent_count_is_noop() {
+        let root = synthetic_component_for_type(0, "RootBone");
+        let middle = synthetic_component_for_type(1, "Bone");
+        let tip = synthetic_component_for_type(2, "Bone");
+        let constraint = synthetic_component_for_type(3, "IKConstraint");
+        let mut instance =
+            synthetic_instance(vec![root, middle, tip, constraint], vec![0, 1, 2, 3]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 2);
+        let links = [0usize, 1, 2]
+            .into_iter()
+            .enumerate()
+            .map(|(index, local)| RuntimeIkChainLink {
+                index,
+                bone: instance.component_handle(local).unwrap(),
+                angle: 0.0,
+                transform_components: TransformComponents::default(),
+                parent_world_inverse: Mat2D::IDENTITY,
+            })
+            .collect();
+        instance
+            .component_mut(3)
+            .unwrap()
+            .concrete
+            .ik
+            .as_mut()
+            .unwrap()
+            .chain = links;
+
+        let clear_chain = |instance: &mut ArtboardInstance| {
+            for local in 0..3 {
+                instance.component_mut(local).unwrap().dirt = ComponentDirt::NONE;
+            }
+        };
+        let assert_chain_dirty = |instance: &ArtboardInstance| {
+            for local in 0..3 {
+                assert!(
+                    instance
+                        .component(local)
+                        .unwrap()
+                        .dirt
+                        .contains(ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM)
+                );
+            }
+        };
+
+        let strength_key = property_key_for_name("Constraint", "strength").unwrap();
+        clear_chain(&mut instance);
+        assert!(instance.set_double_property(3, strength_key, 0.5));
+        assert_chain_dirty(&instance);
+
+        clear_chain(&mut instance);
+        assert!(instance.set_bool_property(
+            3,
+            crate::constraints::IK_INVERT_DIRECTION_PROPERTY_KEY,
+            true,
+        ));
+        assert_chain_dirty(&instance);
+
+        clear_chain(&mut instance);
+        assert!(instance.set_uint_property(
+            3,
+            crate::constraints::IK_PARENT_BONE_COUNT_PROPERTY_KEY,
+            2,
+        ));
+        for local in 0..3 {
+            assert!(instance.component(local).unwrap().dirt.is_empty());
+        }
+        assert_eq!(
+            instance
+                .component(3)
+                .unwrap()
+                .concrete
+                .ik
+                .as_ref()
+                .unwrap()
+                .chain
+                .len(),
+            3,
+            "parentBoneCountChanged is a no-op; lifecycle owns chain rebuild"
+        );
+    }
+
+    #[test]
+    fn a5_owned_state_resets_on_occurrence_clone() {
+        let follow = synthetic_component_for_type(0, "FollowPathConstraint");
+        let list = synthetic_component_for_type(1, "ArtboardComponentList");
+        let ik = synthetic_component_for_type(2, "IKConstraint");
+        let mut instance = synthetic_instance(vec![follow, list, ik], vec![0, 1, 2]);
+        let follow_handle = instance.component_handle(0).unwrap();
+        let ik_handle = instance.component_handle(2).unwrap();
+        {
+            let follow = instance
+                .component_mut(0)
+                .unwrap()
+                .concrete
+                .follow_path
+                .as_mut()
+                .unwrap();
+            follow.raw_path.move_to(1.0, 2.0);
+            follow.path_measure = crate::draw::RuntimePathMeasure::from_raw_path(&follow.raw_path);
+        }
+        instance
+            .component_mut(1)
+            .unwrap()
+            .concrete
+            .constrainable_list
+            .as_mut()
+            .unwrap()
+            .constraints
+            .push(follow_handle);
+        instance
+            .component_mut(2)
+            .unwrap()
+            .concrete
+            .ik
+            .as_mut()
+            .unwrap()
+            .chain
+            .push(RuntimeIkChainLink {
+                index: 0,
+                bone: ik_handle,
+                angle: 1.0,
+                transform_components: TransformComponents::default(),
+                parent_world_inverse: Mat2D::IDENTITY,
+            });
+
+        let cloned = instance.clone();
+        assert!(
+            cloned
+                .component(0)
+                .unwrap()
+                .concrete
+                .follow_path
+                .as_ref()
+                .unwrap()
+                .raw_path
+                .verbs()
+                .is_empty()
+        );
+        assert!(
+            cloned
+                .component(1)
+                .unwrap()
+                .concrete
+                .constrainable_list
+                .as_ref()
+                .unwrap()
+                .constraints
+                .is_empty()
+        );
+        assert!(
+            cloned
+                .component(2)
+                .unwrap()
+                .concrete
+                .ik
+                .as_ref()
+                .unwrap()
+                .chain
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn follow_path_measure_rebuilds_on_owner_update_and_preserves_when_shape_is_empty() {
+        let root = synthetic_component_for_type(0, "Node");
+        let shape = synthetic_component_for_type(1, "Shape");
+        let path = synthetic_component_for_type(2, "PointsPath");
+        let constraint = synthetic_component_for_type(3, "FollowPathConstraint");
+        let empty_shape = synthetic_component_for_type(4, "Shape");
+        let mut instance = synthetic_instance(
+            vec![root, shape, path, constraint, empty_shape],
+            vec![2, 3, 0],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 0);
+        synthetic_link_parent(&mut instance, 4, 0);
+        let constraint_handle = instance.component_handle(3).unwrap();
+        let shape_handle = instance.component_handle(1).unwrap();
+        let path_handle = instance.component_handle(2).unwrap();
+        instance
+            .component_mut(1)
+            .unwrap()
+            .concrete
+            .shape
+            .as_mut()
+            .unwrap()
+            .paths
+            .push(path_handle);
+        {
+            let path = instance
+                .component_mut(2)
+                .unwrap()
+                .concrete
+                .path
+                .as_mut()
+                .unwrap();
+            path.shape = Some(shape_handle);
+        }
+        instance
+            .component_mut(3)
+            .unwrap()
+            .concrete
+            .constraint
+            .as_mut()
+            .unwrap()
+            .target = Some(shape_handle);
+        instance.runtime_shapes.seed_follow_path_source_for_test(
+            1,
+            2,
+            &[
+                crate::draw::RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+                crate::draw::RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+            ],
+            false,
+        );
+
+        assert!(crate::constraints::update_follow_path_constraint(
+            &mut instance,
+            constraint_handle
+        ));
+        let follow = instance
+            .component(3)
+            .unwrap()
+            .concrete
+            .follow_path
+            .as_ref()
+            .unwrap();
+        assert_eq!(follow.measure_rebuilds, 1);
+        assert_eq!(follow.path_measure.length(), 10.0);
+        let retained_verb_storage = follow.raw_path.verbs().as_ptr();
+        let retained_point_storage = follow.raw_path.points().as_ptr();
+
+        instance.runtime_shapes.seed_follow_path_source_for_test(
+            1,
+            2,
+            &[
+                crate::draw::RuntimePathCommand::Move { x: 2.0, y: 0.0 },
+                crate::draw::RuntimePathCommand::Line { x: 14.0, y: 0.0 },
+            ],
+            false,
+        );
+        assert!(crate::constraints::update_follow_path_constraint(
+            &mut instance,
+            constraint_handle
+        ));
+        let follow = instance
+            .component(3)
+            .unwrap()
+            .concrete
+            .follow_path
+            .as_ref()
+            .unwrap();
+        assert_eq!(follow.measure_rebuilds, 2);
+        assert_eq!(follow.path_measure.length(), 12.0);
+        assert_eq!(
+            follow.raw_path.verbs().as_ptr(),
+            retained_verb_storage,
+            "FollowPath reuses m_rawPath verb storage across equal-size rewinds (`follow_path_constraint.cpp:137-145`)"
+        );
+        assert_eq!(
+            follow.raw_path.points().as_ptr(),
+            retained_point_storage,
+            "FollowPath reuses m_rawPath point storage across equal-size rewinds (`follow_path_constraint.cpp:137-145`)"
+        );
+
+        instance
+            .component_mut(3)
+            .unwrap()
+            .concrete
+            .constraint
+            .as_mut()
+            .unwrap()
+            .target = Some(instance.component_handle(4).unwrap());
+        assert!(!crate::constraints::update_follow_path_constraint(
+            &mut instance,
+            constraint_handle
+        ));
+        let follow = instance
+            .component(3)
+            .unwrap()
+            .concrete
+            .follow_path
+            .as_ref()
+            .unwrap();
+        assert_eq!(follow.measure_rebuilds, 2);
+        assert_eq!(follow.path_measure.length(), 12.0);
+
+        // A clean Artboard pass never reaches the FollowPath update site.
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
+        for local in 0..5 {
+            instance.component_mut(local).unwrap().dirt = ComponentDirt::NONE;
+        }
+        assert!(!instance.update_components().did_update);
+        assert_eq!(
+            instance
+                .component(3)
+                .unwrap()
+                .concrete
+                .follow_path
+                .as_ref()
+                .unwrap()
+                .measure_rebuilds,
+            2
+        );
+    }
+
+    #[test]
+    fn path_deferral_consumes_occurrence_owned_follow_flags_and_rearms_on_dirty() {
+        let bytes = synthetic_riv(11_905, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Shape", &[("parentId", 0)]);
+            push_synthetic_object_with_properties(bytes, "Rectangle", |bytes| {
+                push_synthetic_uint_property(bytes, "Rectangle", "parentId", 1);
+                push_synthetic_f32_property(bytes, "Rectangle", "width", 20.0);
+                push_synthetic_f32_property(bytes, "Rectangle", "height", 10.0);
+            });
+        });
+        let mut instance = instance_from_riv(&bytes);
+        assert!(instance.update_components().did_update);
+        let path = instance.component_handle(2).expect("Rectangle Path handle");
+        let shape = instance.component_handle(1).expect("Shape handle");
+        let initial_mutation = instance
+            .runtime_shapes
+            .retained_path_mutation_id_for_test(2)
+            .expect("visible first update builds the Path");
+
+        instance.component_at_mut(shape).transform.render_opacity = 0.0;
+        assert!(instance.add_component_dirt(path, ComponentDirt::PATH, false));
+        assert!(instance.update_components().did_update);
+        assert_eq!(
+            instance
+                .runtime_shapes
+                .retained_path_mutation_id_for_test(2),
+            Some(initial_mutation),
+            "an invisible ordinary Path retains its prior RawPath while deferred (`path.cpp:111-125,350-372`)"
+        );
+        assert!(
+            instance
+                .component_at(path)
+                .concrete
+                .path
+                .as_ref()
+                .unwrap()
+                .deferred_path_dirt
+                .get()
+        );
+
+        instance.component_at_mut(shape).transform.render_opacity = 1.0;
+        assert!(instance.add_component_dirt(path, ComponentDirt::WORLD_TRANSFORM, false));
+        assert!(
+            instance
+                .component_at(path)
+                .dirt
+                .contains(ComponentDirt::PATH),
+            "the next Path::onDirty re-adds deferred Path dirt (`path.cpp:336-347`)"
+        );
+        assert!(instance.update_components().did_update);
+        let restored_mutation = instance
+            .runtime_shapes
+            .retained_path_mutation_id_for_test(2)
+            .expect("restored visible Path rebuilds");
+        assert_ne!(restored_mutation, initial_mutation);
+        assert!(
+            !instance
+                .component_at(path)
+                .concrete
+                .path
+                .as_ref()
+                .unwrap()
+                .deferred_path_dirt
+                .get()
+        );
+
+        instance.component_at_mut(shape).transform.render_opacity = 0.0;
+        instance
+            .component_at(shape)
+            .concrete
+            .shape
+            .as_ref()
+            .unwrap()
+            .add_flags(crate::components::RuntimeShapeState::FOLLOW_PATH);
+        assert!(instance.add_component_dirt(path, ComponentDirt::PATH, false));
+        assert!(instance.update_components().did_update);
+        assert_ne!(
+            instance
+                .runtime_shapes
+                .retained_path_mutation_id_for_test(2),
+            Some(restored_mutation),
+            "Shape followPath forbids deferral even at zero opacity (`follow_path_constraint.cpp:149-165`; `path.cpp:111-125`)"
+        );
+
+        let cloned = instance.clone();
+        assert!(
+            !cloned
+                .component_at(shape)
+                .concrete
+                .shape
+                .as_ref()
+                .unwrap()
+                .is_flagged(crate::components::RuntimeShapeState::FOLLOW_PATH),
+            "generated clone resets runtime flags before clean-phase producers rebuild them"
+        );
+        assert!(
+            !cloned
+                .component_at(path)
+                .concrete
+                .path
+                .as_ref()
+                .unwrap()
+                .deferred_path_dirt
+                .get()
+        );
     }
 
     #[test]
@@ -9773,11 +14722,11 @@ mod tests {
         root.type_name = "Artboard";
         root.transform.render_opacity = 0.5;
         let mut child = synthetic_component(1, 1);
-        child.parent_local = Some(0);
         child.dirt = ComponentDirt::TRANSFORM
             | ComponentDirt::WORLD_TRANSFORM
             | ComponentDirt::RENDER_OPACITY;
         let mut instance = synthetic_instance(vec![root, child], vec![0, 1]);
+        synthetic_link_parent(&mut instance, 1, 0);
         assert!(instance.objects.set_double_property_by_name(1, "x", 2.0));
         assert!(instance.objects.set_double_property_by_name(1, "y", 3.0));
         assert!(
@@ -9812,12 +14761,600 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_transform_dirt_does_not_redirty_world_dependents() {
+        // `TransformComponent::markTransformDirty` returns immediately when
+        // Transform is already present; recursive WorldTransform dirt is
+        // gated by that first addition (`src/transform_component.cpp:54-61`).
+        let mut source = synthetic_component(0, 0);
+        source.dirt = ComponentDirt::TRANSFORM;
+        let dependent = synthetic_component(1, 1);
+        let mut instance = synthetic_instance(vec![source, dependent], vec![0, 1]);
+        synthetic_add_dependent(&mut instance, 0, 1);
+        instance.clear_component_dirt(1);
+
+        let source = instance.component_handle(0).expect("source");
+        assert!(!instance.mark_transform_dirty_handle(source));
+        assert!(
+            !instance
+                .component(1)
+                .expect("dependent")
+                .dirt
+                .contains(ComponentDirt::WORLD_TRANSFORM)
+        );
+    }
+
+    #[test]
+    fn collapse_dirties_constrained_dependents_only_for_transform_owners() {
+        // Only TransformComponent::collapse has the constrained-dependent
+        // tail, after ContainerComponent child propagation
+        // (`src/transform_component.cpp:18-44`). Component/Skin collapse must
+        // not acquire that virtual override accidentally.
+        for (source_type, should_dirty) in [("Node", true), ("Skin", false)] {
+            let source = synthetic_component_for_type(0, source_type);
+            let dependent = synthetic_component_for_type(1, "Node");
+            let constraint = synthetic_component_for_type(2, "RotationConstraint");
+            let mut instance =
+                synthetic_instance(vec![source, dependent, constraint], vec![0, 1, 2]);
+            let source = instance.component_handle(0).unwrap();
+            let dependent = instance.component_handle(1).unwrap();
+            let constraint = instance.component_handle(2).unwrap();
+            synthetic_add_dependent(&mut instance, 0, 1);
+            assert!(instance.objects.add_constraint(dependent, constraint));
+            instance.clear_component_dirt(0);
+            instance.clear_component_dirt(1);
+            instance.clear_component_dirt(2);
+
+            assert!(instance.collapse_component_tree(0, true));
+            assert_eq!(
+                instance
+                    .component_at(dependent)
+                    .dirt
+                    .contains(ComponentDirt::WORLD_TRANSFORM),
+                should_dirty,
+                "{source_type} collapse dispatch"
+            );
+            assert!(instance.component_at(source).is_collapsed());
+        }
+    }
+
+    #[test]
+    fn bone_length_changed_dirties_only_retained_child_bones() {
+        // Bone::lengthChanged walks m_ChildBones and calls
+        // markTransformDirty on each (`src/bones/bone.cpp:20-26`).
+        let parent = synthetic_component_for_type(0, "RootBone");
+        let child = synthetic_component_for_type(1, "Bone");
+        let unrelated = synthetic_component_for_type(2, "Bone");
+        let mut instance = synthetic_instance(vec![parent, child, unrelated], vec![0, 1, 2]);
+        let parent = instance.component_handle(0).unwrap();
+        let child = instance.component_handle(1).unwrap();
+        instance
+            .component_at_mut(parent)
+            .concrete
+            .bone
+            .as_mut()
+            .unwrap()
+            .child_bones
+            .push(child);
+        instance.clear_component_dirt(0);
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(2);
+        let length = property_key_for_name("Bone", "length").expect("Bone.length");
+
+        assert!(instance.set_double_property(0, length, 42.0));
+        assert!(
+            instance
+                .component(1)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM)
+        );
+        assert_eq!(instance.component(2).unwrap().dirt, ComponentDirt::NONE);
+    }
+
+    #[test]
+    fn world_transform_parent_uses_base_child_opacity() {
+        // WorldTransformComponent::childOpacity returns authored opacity,
+        // while TransformComponent overrides it with settled render opacity
+        // (`src/world_transform_component.cpp:8`;
+        // `include/rive/transform_component.hpp:40-43`).
+        // The pinned schema has no concrete WorldTransformComponent-only
+        // subtype, so exercise the abstract base dispatch directly.
+        let mut parent = synthetic_component(0, 0);
+        parent.type_name = "WorldTransformComponent";
+        parent.capabilities = RuntimeComponentCapabilities {
+            world_transform: true,
+            transform: false,
+        };
+        parent.transform.render_opacity = 0.125;
+        assert_eq!(parent.child_opacity(0.5), 0.5);
+    }
+
+    #[test]
+    fn node_computed_local_is_lazy_and_singular_parent_falls_back_to_identity() {
+        // Node invalidates its distinct computed-local cache before the base
+        // world update. Query derives inverse(parent world) * settled world;
+        // missing/singular parents yield identity (`src/node.cpp:26-45`).
+        let parent = synthetic_component(0, 0);
+        let child = synthetic_component(1, 1);
+        let mut instance = synthetic_instance(vec![parent, child], vec![0, 1]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        instance.component_mut(0).unwrap().transform.world_transform =
+            Mat2D([1.0, 0.0, 0.0, 1.0, 10.0, 3.0]);
+        {
+            let child = instance.component_mut(1).unwrap();
+            child.transform.world_transform = Mat2D([1.0, 0.0, 0.0, 1.0, 25.0, 8.0]);
+            child
+                .concrete
+                .node
+                .as_ref()
+                .expect("Node state")
+                .mark_computed_local_dirty();
+        }
+        assert_eq!(
+            instance.runtime_node_computed_local_transform(1),
+            Some(Mat2D([1.0, 0.0, 0.0, 1.0, 15.0, 5.0]))
+        );
+
+        instance.component_mut(0).unwrap().transform.world_transform =
+            Mat2D([0.0, 0.0, 0.0, 0.0, 10.0, 3.0]);
+        instance
+            .component_mut(1)
+            .unwrap()
+            .concrete
+            .node
+            .as_ref()
+            .expect("Node state")
+            .mark_computed_local_dirty();
+        assert_eq!(
+            instance.runtime_node_computed_local_transform(1),
+            Some(Mat2D::IDENTITY)
+        );
+    }
+
+    #[test]
+    fn skin_on_dirty_targets_exact_skinnable_dirt_family() {
+        // Skin::onDirty calls one retained Skinnable. PointsPath translates
+        // that to Path; Mesh translates it to Vertices
+        // (`src/bones/skin.cpp:88-94`,
+        // `src/shapes/points_path.cpp:43-52`,
+        // `src/shapes/mesh.cpp:84-85`).
+        for (type_name, expected, rejected) in [
+            ("PointsPath", ComponentDirt::PATH, ComponentDirt::VERTICES),
+            ("Mesh", ComponentDirt::VERTICES, ComponentDirt::PATH),
+        ] {
+            let skinnable = synthetic_component_for_type(0, type_name);
+            let skin = synthetic_component_for_type(1, "Skin");
+            let mut instance = synthetic_instance(vec![skinnable, skin], vec![1, 0]);
+            synthetic_link_parent(&mut instance, 1, 0);
+            let skinnable = instance.component_handle(0).unwrap();
+            let skin = instance.component_handle(1).unwrap();
+            instance
+                .component_at_mut(skinnable)
+                .concrete
+                .skinnable
+                .as_mut()
+                .unwrap()
+                .skin = Some(skin);
+            {
+                let state = instance
+                    .component_at_mut(skin)
+                    .concrete
+                    .skin
+                    .as_mut()
+                    .unwrap();
+                state.skinnable = Some(skinnable);
+            }
+            instance.clear_component_dirt(0);
+            instance.clear_component_dirt(1);
+
+            assert!(instance.add_component_dirt(skin, ComponentDirt::PAINT, false));
+            let dirt = instance.component_at(skinnable).dirt;
+            assert!(dirt.contains(expected));
+            assert!(!dirt.contains(rejected));
+        }
+    }
+
+    #[test]
+    fn skin_buffer_rebuilds_only_when_skin_owner_updates() {
+        // Skin owns `(tendons + 1)` matrices and rebuilds them from the
+        // retained Tendon/Bone links in update, not during draw
+        // (`src/bones/skin.cpp:38-77`).
+        let mut bone = synthetic_component_for_type(0, "RootBone");
+        bone.transform.world_transform = Mat2D([1.0, 0.0, 0.0, 1.0, 7.0, 9.0]);
+        let tendon = synthetic_component_for_type(1, "Tendon");
+        let mut skin = synthetic_component_for_type(2, "Skin");
+        skin.dirt = ComponentDirt::SKIN;
+        let mut instance = synthetic_instance(vec![bone, tendon, skin], vec![0, 1, 2]);
+        let bone = instance.component_handle(0).unwrap();
+        let tendon = instance.component_handle(1).unwrap();
+        let skin = instance.component_handle(2).unwrap();
+        {
+            let state = instance
+                .component_at_mut(tendon)
+                .concrete
+                .tendon
+                .as_mut()
+                .unwrap();
+            state.bone = Some(bone);
+            state.inverse_bind = Mat2D([1.0, 0.0, 0.0, 1.0, 2.0, 3.0]);
+        }
+        {
+            let state = instance
+                .component_at_mut(skin)
+                .concrete
+                .skin
+                .as_mut()
+                .unwrap();
+            state.tendons.push(tendon);
+            state.bone_transforms = vec![Mat2D::IDENTITY; 2];
+        }
+
+        instance.update_components();
+        let state = instance.component_at(skin).concrete.skin.as_ref().unwrap();
+        assert_eq!(
+            state.bone_transforms,
+            vec![Mat2D::IDENTITY, Mat2D([1.0, 0.0, 0.0, 1.0, 9.0, 12.0])]
+        );
+        assert_eq!(state.buffer_rebuilds, 1);
+
+        instance.update_components();
+        assert_eq!(
+            instance
+                .component_at(skin)
+                .concrete
+                .skin
+                .as_ref()
+                .unwrap()
+                .buffer_rebuilds,
+            1
+        );
+    }
+
+    #[test]
+    fn weight_deformation_reads_live_packed_occurrence_fields() {
+        // Weight decodes four packed bytes from the live generated fields and
+        // writes its retained translation without normalization beyond
+        // weight/255 (`src/bones/weight.cpp:24-56`;
+        // `src/shapes/vertex.cpp:17-23`).
+        let path = synthetic_component_for_type(0, "PointsPath");
+        let skin = synthetic_component_for_type(1, "Skin");
+        let vertex = synthetic_component_for_type(2, "StraightVertex");
+        let weight = synthetic_component_for_type(3, "Weight");
+        let mut instance = synthetic_instance(vec![path, skin, vertex, weight], vec![1, 0, 2, 3]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 0);
+        synthetic_link_parent(&mut instance, 3, 2);
+        let path = instance.component_handle(0).unwrap();
+        let skin = instance.component_handle(1).unwrap();
+        let vertex = instance.component_handle(2).unwrap();
+        let weight = instance.component_handle(3).unwrap();
+        instance
+            .component_at_mut(path)
+            .concrete
+            .skinnable
+            .as_mut()
+            .unwrap()
+            .skin = Some(skin);
+        instance
+            .component_at_mut(skin)
+            .concrete
+            .skin
+            .as_mut()
+            .unwrap()
+            .bone_transforms = vec![Mat2D::IDENTITY, Mat2D([1.0, 0.0, 0.0, 1.0, 10.0, 20.0])];
+        instance
+            .component_at_mut(vertex)
+            .concrete
+            .vertex
+            .as_mut()
+            .unwrap()
+            .weight = Some(weight);
+        let indices = property_key_for_name("Weight", "indices").unwrap();
+        let values = property_key_for_name("Weight", "values").unwrap();
+        assert_eq!(instance.objects.uint_property(3, indices), Some(1));
+        assert!(instance.objects.set_uint_property(3, values, 0));
+        assert!(instance.deform_runtime_vertex_weight(2, (2.0, 3.0), None));
+        assert_eq!(
+            instance.runtime_vertex_weight_state(2).unwrap().translation,
+            (0.0, 0.0)
+        );
+
+        assert!(instance.objects.set_uint_property(3, values, 255));
+        assert!(instance.deform_runtime_vertex_weight(2, (2.0, 3.0), None));
+        assert_eq!(
+            instance.runtime_vertex_weight_state(2).unwrap().translation,
+            (12.0, 23.0)
+        );
+    }
+
+    #[test]
+    fn weight_deformation_matches_clang_contracted_accumulation() {
+        // The two active packed influences are the minimal tape.riv
+        // counterexample for the one-ulp difference between separate
+        // multiply/add and the C++ geometry pipeline's default contraction.
+        // Preserve Weight::deform's source loop and clang rounding exactly
+        // (`src/bones/weight.cpp:24-55`; `docs/PORTING.md` §4.2).
+        let f = f32::from_bits;
+        let bones = [
+            Mat2D::IDENTITY,
+            Mat2D([
+                f(1_057_841_340),
+                f(3_194_226_667),
+                f(1_049_771_165),
+                f(1_057_885_778),
+                f(1_107_583_000),
+                f(1_124_670_380),
+            ]),
+            Mat2D([
+                f(1_057_841_342),
+                f(3_194_226_637),
+                f(1_049_771_148),
+                f(1_057_885_779),
+                f(1_106_043_744),
+                f(1_125_092_309),
+            ]),
+        ];
+        let point = (f(3_265_177_136), f(1_091_681_984));
+        let world = Mat2D([1.0, 0.0, 0.0, 1.0, f(1_135_168_757), f(1_135_822_912)]);
+
+        let deformed =
+            deform_point_from_skin(point, 258, 32_385, world, &bones).expect("valid bone indices");
+        assert_eq!(
+            (deformed.0.to_bits(), deformed.1.to_bits()),
+            (1_133_233_234, 1_133_466_484)
+        );
+    }
+
+    #[test]
+    fn cubic_weight_retains_independent_live_in_and_out_translations() {
+        // CubicWeight owns independent in/out translations and decodes each
+        // packed generated field through Weight::deform
+        // (`include/rive/bones/cubic_weight.hpp:9-15`;
+        // `src/shapes/cubic_vertex.cpp:16-24`).
+        let path = synthetic_component_for_type(0, "PointsPath");
+        let skin = synthetic_component_for_type(1, "Skin");
+        let vertex = synthetic_component_for_type(2, "CubicDetachedVertex");
+        let weight = synthetic_component_for_type(3, "CubicWeight");
+        let mut instance = synthetic_instance(vec![path, skin, vertex, weight], vec![1, 0, 2, 3]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 0);
+        synthetic_link_parent(&mut instance, 3, 2);
+        let path = instance.component_handle(0).unwrap();
+        let skin = instance.component_handle(1).unwrap();
+        let vertex = instance.component_handle(2).unwrap();
+        let weight = instance.component_handle(3).unwrap();
+        instance
+            .component_at_mut(path)
+            .concrete
+            .skinnable
+            .as_mut()
+            .unwrap()
+            .skin = Some(skin);
+        instance
+            .component_at_mut(skin)
+            .concrete
+            .skin
+            .as_mut()
+            .unwrap()
+            .bone_transforms = vec![Mat2D::IDENTITY, Mat2D([1.0, 0.0, 0.0, 1.0, 10.0, 20.0])];
+        instance
+            .component_at_mut(vertex)
+            .concrete
+            .vertex
+            .as_mut()
+            .unwrap()
+            .weight = Some(weight);
+        for (owner, field) in [
+            ("Weight", "values"),
+            ("CubicWeight", "inValues"),
+            ("CubicWeight", "outValues"),
+        ] {
+            let key = property_key_for_name(owner, field).unwrap();
+            if instance.objects.uint_property(3, key) != Some(255) {
+                assert!(instance.objects.set_uint_property(3, key, 255));
+            }
+        }
+        for (owner, field) in [
+            ("Weight", "indices"),
+            ("CubicWeight", "inIndices"),
+            ("CubicWeight", "outIndices"),
+        ] {
+            let key = property_key_for_name(owner, field).unwrap();
+            if instance.objects.uint_property(3, key) != Some(1) {
+                assert!(instance.objects.set_uint_property(3, key, 1));
+            }
+        }
+
+        assert!(instance.deform_runtime_vertex_weight(
+            2,
+            (2.0, 3.0),
+            Some(((0.0, 1.0), (4.0, 5.0))),
+        ));
+        let state = instance.runtime_vertex_weight_state(2).unwrap();
+        assert_eq!(state.translation, (12.0, 23.0));
+        assert_eq!(state.in_translation, (10.0, 21.0));
+        assert_eq!(state.out_translation, (14.0, 25.0));
+    }
+
+    #[test]
+    fn clone_resets_every_bone_runtime_relation_and_buffer() {
+        // Generated fields clone, but Bone/Skin/Tendon/Skinnable/Weight
+        // runtime pointers, buffers, and lazy outputs are defaulted and later
+        // rebuilt against clone-owned objects (`artboard.hpp:548-601`;
+        // `src/bones/{bone,skin,tendon,weight}.cpp`).
+        let bone = synthetic_component_for_type(0, "RootBone");
+        let tendon = synthetic_component_for_type(1, "Tendon");
+        let skin = synthetic_component_for_type(2, "Skin");
+        let vertex = synthetic_component_for_type(3, "CubicDetachedVertex");
+        let weight = synthetic_component_for_type(4, "CubicWeight");
+        let mut instance = synthetic_instance(
+            vec![bone, tendon, skin, vertex, weight],
+            vec![0, 1, 2, 3, 4],
+        );
+        let bone = instance.component_handle(0).unwrap();
+        let tendon = instance.component_handle(1).unwrap();
+        let skin = instance.component_handle(2).unwrap();
+        let vertex = instance.component_handle(3).unwrap();
+        let weight = instance.component_handle(4).unwrap();
+        instance
+            .component_at_mut(bone)
+            .concrete
+            .bone
+            .as_mut()
+            .unwrap()
+            .child_bones
+            .push(bone);
+        instance
+            .component_at_mut(tendon)
+            .concrete
+            .tendon
+            .as_mut()
+            .unwrap()
+            .bone = Some(bone);
+        {
+            let state = instance
+                .component_at_mut(skin)
+                .concrete
+                .skin
+                .as_mut()
+                .unwrap();
+            state.tendons.push(tendon);
+            state.skinnable = Some(vertex);
+            state.bone_transforms = vec![Mat2D::IDENTITY; 2];
+        }
+        instance
+            .component_at_mut(vertex)
+            .concrete
+            .vertex
+            .as_mut()
+            .unwrap()
+            .weight = Some(weight);
+        instance
+            .component_at_mut(weight)
+            .concrete
+            .weight
+            .as_mut()
+            .unwrap()
+            .translation = (7.0, 9.0);
+
+        let cloned = instance.clone();
+        assert!(
+            cloned
+                .component(0)
+                .unwrap()
+                .concrete
+                .bone
+                .as_ref()
+                .unwrap()
+                .child_bones
+                .is_empty()
+        );
+        assert!(
+            cloned
+                .component(1)
+                .unwrap()
+                .concrete
+                .tendon
+                .as_ref()
+                .unwrap()
+                .bone
+                .is_none()
+        );
+        let cloned_skin = cloned.component(2).unwrap().concrete.skin.as_ref().unwrap();
+        assert!(cloned_skin.tendons.is_empty());
+        assert!(cloned_skin.skinnable.is_none());
+        assert!(cloned_skin.bone_transforms.is_empty());
+        assert!(
+            cloned
+                .component(3)
+                .unwrap()
+                .concrete
+                .vertex
+                .as_ref()
+                .unwrap()
+                .weight
+                .is_none()
+        );
+        assert_eq!(
+            cloned
+                .component(4)
+                .unwrap()
+                .concrete
+                .weight
+                .as_ref()
+                .unwrap()
+                .translation,
+            (0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn parent_traversal_crosses_mount_once_and_resets_metadata() {
+        // ParentTraversal returns current, then advances; the source Artboard
+        // root is the call that records a host crossing
+        // (`src/parent_traversal.cpp:14-60`).
+        use crate::parent_traversal::{ParentTraversal, ParentTraversalFrame};
+
+        let parent_root = synthetic_component(0, 0);
+        let parent_ancestor = synthetic_component(1, 1);
+        let parent_host = synthetic_component(2, 2);
+        let mut parent = synthetic_instance(
+            vec![parent_root, parent_ancestor, parent_host],
+            vec![0, 1, 2],
+        );
+        synthetic_link_parent(&mut parent, 1, 0);
+        synthetic_link_parent(&mut parent, 2, 1);
+
+        let child_root = synthetic_component(0, 0);
+        let child_parent = synthetic_component(1, 1);
+        let child_start = synthetic_component(2, 2);
+        let mut child =
+            synthetic_instance(vec![child_root, child_parent, child_start], vec![0, 1, 2]);
+        synthetic_link_parent(&mut child, 1, 0);
+        synthetic_link_parent(&mut child, 2, 1);
+
+        let host = parent.component_handle(2).unwrap();
+        let start = child.component_handle(2).unwrap();
+        let frames = [
+            ParentTraversalFrame {
+                artboard: &parent,
+                host_component_in_parent: None,
+            },
+            ParentTraversalFrame {
+                artboard: &child,
+                host_component_in_parent: Some(host),
+            },
+        ];
+        let mut traversal = ParentTraversal::new(&frames, start);
+        assert_eq!(
+            child.component_local_id(traversal.next().unwrap().component),
+            Some(1)
+        );
+        assert!(!traversal.did_cross_boundary());
+        assert_eq!(
+            child.component_local_id(traversal.next().unwrap().component),
+            Some(0)
+        );
+        assert!(traversal.did_cross_boundary());
+        assert_eq!(traversal.crossing_host(), Some(host));
+        assert!(std::ptr::eq(traversal.source_artboard().unwrap(), &child));
+        assert!(std::ptr::eq(traversal.current_artboard().unwrap(), &parent));
+        assert_eq!(
+            parent.component_local_id(traversal.next().unwrap().component),
+            Some(1)
+        );
+        assert!(!traversal.did_cross_boundary());
+        assert_eq!(traversal.crossing_host(), None);
+        assert!(traversal.source_artboard().is_none());
+    }
+
+    #[test]
     fn transform_property_mutation_marks_instance_dirty() {
         let node_x_key = property_key_for_name("Node", "x").expect("Node.x key");
         let mut component = synthetic_component(0, 0);
         component.dirt = ComponentDirt::NONE;
         let mut instance = synthetic_instance(vec![component], vec![0]);
-        instance.dirt = ComponentDirt::NONE;
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
         instance.did_change.set(false);
 
         assert!(instance.set_transform_property(0, TransformProperty::X, 12.0));
@@ -9886,12 +15423,12 @@ mod tests {
         path.capabilities = RuntimeComponentCapabilities::default();
         let mut vertex = synthetic_component(1, 1);
         vertex.type_name = "StraightVertex";
-        vertex.parent_local = Some(0);
         vertex.capabilities = RuntimeComponentCapabilities::default();
         let mut instance = synthetic_instance(vec![path, vertex], vec![0, 1]);
+        synthetic_link_parent(&mut instance, 1, 0);
         instance.clear_component_dirt(0);
         instance.clear_component_dirt(1);
-        instance.dirt = ComponentDirt::NONE;
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
 
         assert!(instance.set_keyed_double_property(1, vertex_x_key, 14.0));
         assert!(
@@ -9912,13 +15449,13 @@ mod tests {
 
     #[test]
     fn transform_property_mutation_only_recurses_world_transform_to_dependents() {
-        let mut source = synthetic_component(0, 0);
-        source.dependent_locals.push(1);
+        let source = synthetic_component(0, 0);
         let dependent = synthetic_component(1, 1);
         let mut instance = synthetic_instance(vec![source, dependent], vec![0, 1]);
+        synthetic_add_dependent(&mut instance, 0, 1);
         instance.clear_component_dirt(0);
         instance.clear_component_dirt(1);
-        instance.dirt = ComponentDirt::NONE;
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
 
         assert!(instance.set_transform_property(0, TransformProperty::X, 12.0));
 
@@ -9935,7 +15472,7 @@ mod tests {
         let mut component = synthetic_component(0, 0);
         component.dirt = ComponentDirt::NONE;
         let mut instance = synthetic_instance(vec![component], vec![0]);
-        instance.dirt = ComponentDirt::NONE;
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
 
         assert!(instance.set_transform_property(0, TransformProperty::Opacity, 0.35));
         let component = instance.component(0).unwrap();
@@ -9955,7 +15492,7 @@ mod tests {
         root.type_name = "Artboard";
         root.dirt = ComponentDirt::NONE;
         let mut instance = synthetic_instance(vec![root], vec![0]);
-        instance.dirt = ComponentDirt::NONE;
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
 
         assert!(instance.set_double_property(0, artboard_opacity_key, 0.25));
 
@@ -9973,7 +15510,7 @@ mod tests {
         let mut component = synthetic_component(0, 0);
         component.dirt = ComponentDirt::NONE;
         let mut instance = synthetic_instance(vec![component], vec![0]);
-        instance.dirt = ComponentDirt::NONE;
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
 
         assert!(instance.set_transform_property(0, TransformProperty::X, 9.0));
         assert!(instance.set_transform_property(0, TransformProperty::Y, 4.0));
@@ -10014,7 +15551,20 @@ mod tests {
             .iter()
             .filter(|component| component.graph_order.is_some())
             .count();
-        assert_eq!(instance.update_order().len(), graph_ordered_components);
+        assert_eq!(
+            instance
+                .objects
+                .dependency_order()
+                .iter()
+                .filter(|handle| {
+                    matches!(
+                        instance.objects.address(**handle),
+                        Some(ComponentAddress::Authored(_))
+                    )
+                })
+                .count(),
+            graph_ordered_components
+        );
         assert!(instance.has_dirt(ComponentDirt::COMPONENTS));
         assert!(
             instance
@@ -10022,6 +15572,602 @@ mod tests {
                 .iter()
                 .all(|component| component.dirt == ComponentDirt::FILTHY)
         );
+    }
+
+    #[test]
+    fn occurrence_schedule_keeps_embedded_path_composer_identity_exact() {
+        let bytes = include_bytes!("../../../fixtures/graph/clipping_and_draw_order.riv");
+        let file = read_runtime_file(bytes).expect("fixture should import");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture should graph");
+        let artboard = graph.artboards.first().expect("fixture has artboard");
+        let instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
+
+        let (source_local, shape_local, dependent_local) = artboard
+            .dependency_nodes
+            .iter()
+            .enumerate()
+            .find_map(|(composer_node, node)| {
+                let DependencyNodeKind::PathComposer { shape_local, .. } = node.kind else {
+                    return None;
+                };
+                let source_local = artboard
+                    .dependency_node_edges_in_insertion_order
+                    .iter()
+                    .find(|edge| edge.dependent_node == composer_node)
+                    .and_then(|edge| artboard.dependency_nodes.get(edge.source_node))
+                    .and_then(|node| match node.kind {
+                        DependencyNodeKind::Component { local_id, .. } => Some(local_id),
+                        _ => None,
+                    })?;
+                let dependent_local = artboard
+                    .dependency_node_edges_in_insertion_order
+                    .iter()
+                    .find(|edge| edge.source_node == composer_node)
+                    .and_then(|edge| artboard.dependency_nodes.get(edge.dependent_node))
+                    .and_then(|node| match node.kind {
+                        DependencyNodeKind::Component { local_id, .. } => Some(local_id),
+                        _ => None,
+                    })?;
+                Some((source_local, shape_local, dependent_local))
+            })
+            .expect("fixture has Component -> PathComposer -> Component dependency chain");
+
+        let source = instance
+            .component_handle(source_local)
+            .expect("source handle");
+        let shape = instance
+            .component_handle(shape_local)
+            .expect("shape handle");
+        let composer = instance
+            .objects
+            .path_composer_handle(shape_local)
+            .expect("embedded PathComposer handle");
+        let dependent = instance
+            .component_handle(dependent_local)
+            .expect("dependent handle");
+
+        assert_ne!(shape, composer);
+        assert_eq!(
+            instance.objects.component_local_id(shape),
+            instance.objects.component_local_id(composer)
+        );
+        assert!(matches!(
+            instance.objects.address(composer),
+            Some(ComponentAddress::PathComposer(_))
+        ));
+        assert!(
+            instance.objects.graph_order(source).unwrap().index()
+                < instance.objects.graph_order(composer).unwrap().index()
+        );
+        assert!(
+            instance.objects.graph_order(composer).unwrap().index()
+                < instance.objects.graph_order(dependent).unwrap().index()
+        );
+    }
+
+    #[test]
+    fn occurrence_schedule_excludes_draw_order_only_components() {
+        let bytes = synthetic_riv(13_103, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Shape", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "DrawTarget", &[("parentId", 0), ("drawableId", 1)]);
+            push_synthetic_object(bytes, "DrawRules", &[("parentId", 0), ("drawTargetId", 2)]);
+        });
+        let instance = instance_from_riv(&bytes);
+        let draw_target = instance
+            .component_handle(2)
+            .expect("DrawTarget remains a live Component occurrence");
+        let draw_rules = instance
+            .component_handle(3)
+            .expect("DrawRules remains a live Component occurrence");
+
+        assert!(
+            !instance.objects.dependency_order().contains(&draw_target),
+            "DrawTarget inherits empty Component::buildDependencies; its drawable edge belongs only to Artboard draw-order sorting (`src/draw_target.cpp`; `include/rive/component.hpp:50`; `src/artboard.cpp:409-435`)"
+        );
+        assert!(
+            !instance.objects.dependency_order().contains(&draw_rules),
+            "DrawRules inherits empty Component::buildDependencies; its target edge belongs only to Artboard draw-order sorting (`src/draw_rules.cpp`; `include/rive/component.hpp:50`; `src/artboard.cpp:409-435`)"
+        );
+    }
+
+    #[test]
+    fn follow_path_node_target_adds_no_path_source_dependency() {
+        let bytes = synthetic_riv(13_102, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(
+                bytes,
+                "FollowPathConstraint",
+                &[("parentId", 1), ("targetId", 2)],
+            );
+        });
+        let instance = instance_from_riv(&bytes);
+        let target = instance.component_handle(2).expect("ordinary Node target");
+        let constraint = instance
+            .component_handle(3)
+            .expect("FollowPathConstraint handle");
+        let constrained_parent = instance
+            .component_handle(1)
+            .expect("constrained parent handle");
+
+        assert!(
+            !(0..instance.objects.dependent_len(target))
+                .filter_map(|index| instance.objects.dependent_at(target, index))
+                .any(|dependent| dependent == constraint),
+            "FollowPath adds a source edge only for Shape/Path targets (`follow_path_constraint.cpp:167-186`)"
+        );
+        assert!(
+            (0..instance.objects.dependent_len(constraint))
+                .filter_map(|index| instance.objects.dependent_at(constraint, index))
+                .any(|dependent| dependent == constrained_parent)
+        );
+    }
+
+    #[test]
+    fn occurrence_schedule_interleaves_text_helper_before_later_root_child() {
+        let bytes = synthetic_riv(9589, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Text", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "TextStyle", &[("parentId", 1)]);
+            push_synthetic_object(bytes, "TextStyleAxis", &[("parentId", 2)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+        });
+        let instance = instance_from_riv(&bytes);
+        let root = instance.component_handle(0).expect("root handle");
+        let text = instance.component_handle(1).expect("Text handle");
+        let style = instance.component_handle(2).expect("TextStyle handle");
+        let helper = instance
+            .objects
+            .text_variation_helper_handle(2)
+            .expect("TextStyle owns a variation helper");
+        let later_child = instance.component_handle(4).expect("later Node handle");
+
+        assert_eq!(
+            (0..instance.objects.dependent_len(root))
+                .filter_map(|index| instance.objects.dependent_at(root, index))
+                .collect::<Vec<_>>(),
+            vec![text, helper, later_child],
+            "TextStyle invokes helper buildDependencies before its own parent edge, and the later Node runs afterward in object order (`text_style.cpp:128-136`; `text_variation_helper.cpp:7-12`; `artboard.cpp:417-428`)"
+        );
+        assert_eq!(
+            instance.objects.dependency_order(),
+            &[root, later_child, helper, text, style],
+            "DependencySorter front-inserts completed siblings after visiting retained insertion order (`dependency_sorter.cpp:6-48`)"
+        );
+    }
+
+    #[test]
+    fn clone_rebuilds_component_relations_in_clone_owned_storage() {
+        let bytes = include_bytes!("../../../fixtures/graph/clipping_and_draw_order.riv");
+        let file = read_runtime_file(bytes).expect("fixture should import");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture should graph");
+        let artboard = graph.artboards.first().expect("fixture has artboard");
+        let instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
+        let source = instance
+            .objects
+            .dependency_order()
+            .iter()
+            .copied()
+            .find(|handle| instance.objects.dependent_len(*handle) > 0)
+            .expect("fixture has a dependency source");
+        let source_dependent = instance
+            .objects
+            .dependent_at(source, 0)
+            .expect("source has a dependent");
+        let mut instance = instance;
+        let fabricated_bind = DataBindHandle::from_index(usize::MAX);
+        assert!(instance.objects.add_collapsable(source, fabricated_bind));
+        let source_path = instance
+            .objects
+            .component_handles()
+            .iter()
+            .copied()
+            .find(|handle| {
+                instance
+                    .objects
+                    .component(*handle)
+                    .and_then(|component| component.concrete.path.as_ref())
+                    .and_then(|path| path.shape)
+                    .is_some()
+            })
+            .expect("fixture has a Path with a retained Shape owner");
+        let source_shape = instance
+            .objects
+            .component(source_path)
+            .and_then(|component| component.concrete.path.as_ref())
+            .and_then(|path| path.shape)
+            .expect("source Path retained its Shape");
+        let source_composer = instance
+            .objects
+            .component_local_id(source_shape)
+            .and_then(|local| instance.objects.path_composer_handle(local))
+            .expect("source Shape owns its embedded PathComposer");
+
+        let mut cloned = instance.clone();
+
+        assert!(!std::ptr::eq(
+            instance.objects.component(source).unwrap(),
+            cloned.objects.component(source).unwrap()
+        ));
+        assert_eq!(
+            cloned.objects.dependent_at(source, 0),
+            Some(source_dependent)
+        );
+        assert_eq!(
+            cloned.objects.graph_order(source),
+            instance.objects.graph_order(source)
+        );
+        assert_eq!(
+            cloned.objects.collapsable_len(source),
+            0,
+            "cloneObjectDataBinds rebuilds m_collapsables from cloned authored DataBinds instead of copying the source pointer list (`artboard.cpp:1038-1057`)"
+        );
+        assert_eq!(
+            instance.objects.collapsable_at(source, 0),
+            Some(fabricated_bind)
+        );
+        assert_eq!(
+            cloned.objects.dependency_order(),
+            instance.objects.dependency_order(),
+            "clone rebuild must reproduce the authored occurrence schedule"
+        );
+        let cloned_shape = cloned
+            .objects
+            .component(source_path)
+            .and_then(|component| component.concrete.path.as_ref())
+            .and_then(|path| path.shape)
+            .expect("clone Path rebuilt its clone-owned Shape pointer");
+        assert_eq!(cloned_shape, source_shape);
+        assert!(
+            cloned
+                .objects
+                .component(cloned_shape)
+                .and_then(|component| component.concrete.shape.as_ref())
+                .is_some_and(|shape| shape.paths.contains(&source_path))
+        );
+        assert_eq!(
+            cloned
+                .objects
+                .component_local_id(cloned_shape)
+                .and_then(|local| cloned.objects.path_composer_handle(local)),
+            Some(source_composer),
+            "Path reaches the clone-owned embedded composer only through its retained Shape (`path.cpp:76-96`; `follow_path_constraint.cpp:175-186`)"
+        );
+        assert!(!std::ptr::eq(
+            instance.objects.component(source_shape).unwrap(),
+            cloned.objects.component(cloned_shape).unwrap()
+        ));
+
+        cloned
+            .objects
+            .component_mut(source)
+            .unwrap()
+            .dependents
+            .clear();
+        cloned.objects.component_mut(source).unwrap().dirt = ComponentDirt::NONE;
+
+        assert_eq!(cloned.objects.dependent_len(source), 0);
+        assert!(instance.objects.dependent_len(source) > 0);
+        assert_ne!(
+            cloned.objects.component(source).unwrap().dirt,
+            instance.objects.component(source).unwrap().dirt
+        );
+    }
+
+    #[test]
+    fn clone_rebuilds_parent_links_from_clone_owned_generated_parent_id() {
+        let bytes = synthetic_riv(9590, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+        });
+        let mut instance = instance_from_riv(&bytes);
+        let parent_key = property_key_for_name("Component", "parentId").expect("parentId key");
+
+        assert_eq!(instance.component_parent_local(3), Some(1));
+        assert!(instance.set_uint_property(3, parent_key, 2));
+        assert_eq!(
+            instance.component_parent_local(3),
+            Some(1),
+            "Component.parentIdChanged is intentionally a no-op on the live occurrence"
+        );
+
+        let cloned = instance.clone();
+        assert_eq!(
+            cloned.component_parent_local(3),
+            Some(2),
+            "fresh clone onAddedDirty resolves the copied generated parentId (`src/component.cpp:19-29`)"
+        );
+        assert_eq!(instance.component_parent_local(3), Some(1));
+    }
+
+    #[test]
+    fn targeted_constraint_retains_live_target_and_clone_reresolves_generated_target_id() {
+        let bytes = synthetic_riv(9_594, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(
+                bytes,
+                "RotationConstraint",
+                &[("parentId", 1), ("targetId", 2)],
+            );
+        });
+        let mut instance = instance_from_riv(&bytes);
+        let owner = instance.component_handle(1).expect("constraint owner");
+        let first_target = instance.component_handle(2).expect("first target");
+        let second_target = instance.component_handle(3).expect("second target");
+        let constraint = instance.component_handle(4).expect("constraint");
+
+        assert_eq!(instance.objects.constraint_len(owner), 1);
+        assert_eq!(instance.objects.constraint_at(owner, 0), Some(constraint));
+        assert_eq!(
+            instance
+                .component_at(constraint)
+                .concrete
+                .constraint
+                .expect("retained constraint state")
+                .target,
+            Some(first_target)
+        );
+        assert_eq!(
+            instance.objects.dependent_at(first_target, 0),
+            Some(owner),
+            "TargetedConstraint::buildDependencies adds target -> constrained parent (`src/constraints/targeted_constraint.cpp:42-49`)"
+        );
+
+        let target_key =
+            property_key_for_name("TargetedConstraint", "targetId").expect("targetId key");
+        instance.clear_component_dirt(1);
+        assert!(instance.set_uint_property(4, target_key, 3));
+        assert_eq!(
+            instance
+                .component_at(constraint)
+                .concrete
+                .constraint
+                .expect("retained constraint state")
+                .target,
+            Some(first_target),
+            "TargetedConstraintBase::targetIdChanged is intentionally empty; a live occurrence does not retarget (`generated/constraints/targeted_constraint_base.hpp`)"
+        );
+        assert!(
+            !instance
+                .component_at(owner)
+                .dirt
+                .contains(ComponentDirt::TRANSFORM),
+            "targetIdChanged must not dirty the constrained parent"
+        );
+
+        let cloned = instance.clone();
+        assert_eq!(
+            cloned
+                .component_at(constraint)
+                .concrete
+                .constraint
+                .expect("clone retained constraint state")
+                .target,
+            Some(second_target),
+            "fresh clone onAddedDirty resolves the copied generated targetId (`src/constraints/targeted_constraint.cpp:23-39`)"
+        );
+        assert_eq!(cloned.objects.constraint_at(owner, 0), Some(constraint));
+        assert_eq!(cloned.objects.dependent_at(second_target, 0), Some(owner));
+        assert_eq!(instance.objects.dependent_at(first_target, 0), Some(owner));
+
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(4);
+        assert!(instance.add_dirt(4, ComponentDirt::PATH, false));
+        assert!(
+            instance
+                .component_at(owner)
+                .dirt
+                .contains(ComponentDirt::TRANSFORM),
+            "Constraint::onDirty marks its retained parent for every non-empty accumulated dirt (`src/constraints/constraint.cpp:23-29`)"
+        );
+
+        instance.clear_component_dirt(1);
+        let strength_key = property_key_for_name("Constraint", "strength").expect("strength key");
+        assert!(instance.set_double_property(4, strength_key, 0.5));
+        assert!(
+            instance
+                .component_at(owner)
+                .dirt
+                .contains(ComponentDirt::TRANSFORM),
+            "ConstraintBase::strengthChanged dirties the retained constrained parent"
+        );
+    }
+
+    #[test]
+    fn targeted_constraint_target_validation_preserves_optional_and_required_contracts() {
+        let optional = synthetic_riv(9_595, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "RotationConstraint", &[("parentId", 1)]);
+        });
+        let optional = instance_from_riv(&optional);
+        let optional_constraint = optional.component_handle(2).expect("optional constraint");
+        assert_eq!(
+            optional
+                .component_at(optional_constraint)
+                .concrete
+                .constraint
+                .expect("constraint state")
+                .target,
+            None
+        );
+
+        let required = synthetic_riv(9_596, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "DistanceConstraint", &[("parentId", 1)]);
+        });
+        let file = read_runtime_file(&required).expect("required fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("required fixture graphs");
+        let required = ArtboardInstance::from_graph(&file, &graphs.artboards[0])
+            .expect("invalid required-target constraint is filtered before initialize");
+        assert!(
+            required
+                .components()
+                .iter()
+                .all(|component| component.type_name != "DistanceConstraint"),
+            "Artboard::validateObjects removes invalid Components from m_Objects before \
+             initialize; MissingObject from onAddedDirty is non-fatal (`artboard.cpp:204-245, \
+             264-288`; `targeted_constraint.cpp:7-38`)"
+        );
+
+        let wrong_type = synthetic_riv(9_597, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "Skin", &[("parentId", 0)]);
+            push_synthetic_object(
+                bytes,
+                "DistanceConstraint",
+                &[("parentId", 1), ("targetId", 2)],
+            );
+        });
+        let file = read_runtime_file(&wrong_type).expect("wrong-type fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("wrong-type fixture graphs");
+        let wrong_type = ArtboardInstance::from_graph(&file, &graphs.artboards[0])
+            .expect("wrong-type target constraint is filtered before initialize");
+        assert!(
+            wrong_type
+                .components()
+                .iter()
+                .all(|component| component.type_name != "DistanceConstraint"),
+            "TargetedConstraint::validate rejects a non-Transform target and the Artboard removes \
+             that invalid object before lifecycle dispatch"
+        );
+    }
+
+    #[test]
+    fn transform_constraint_registration_is_an_unconditional_ordered_push() {
+        let owner = synthetic_component_for_type(0, "Node");
+        let first = synthetic_component_for_type(1, "RotationConstraint");
+        let second = synthetic_component_for_type(2, "ScaleConstraint");
+        let mut instance = synthetic_instance(vec![owner, first, second], vec![0, 1, 2]);
+        let owner = instance.component_handle(0).unwrap();
+        let first = instance.component_handle(1).unwrap();
+        let second = instance.component_handle(2).unwrap();
+
+        assert!(instance.objects.add_constraint(owner, first));
+        assert!(instance.objects.add_constraint(owner, second));
+        assert!(instance.objects.add_constraint(owner, first));
+        assert_eq!(
+            (0..instance.objects.constraint_len(owner))
+                .map(|index| instance.objects.constraint_at(owner, index).unwrap())
+                .collect::<Vec<_>>(),
+            vec![first, second, first],
+            "TransformComponent::addConstraint unconditionally push_backs in call order (`src/transform_component.cpp:123-126`)"
+        );
+    }
+
+    #[test]
+    fn clone_relinks_text_variation_helper_to_clone_owned_text_parent() {
+        let bytes = synthetic_riv(9591, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            push_synthetic_object(bytes, "Text", &[("parentId", 0)]);
+            push_synthetic_object(bytes, "TextStyle", &[("parentId", 1)]);
+            push_synthetic_object(bytes, "TextStyleAxis", &[("parentId", 2)]);
+            push_synthetic_object(bytes, "Text", &[("parentId", 0)]);
+        });
+        let mut instance = instance_from_riv(&bytes);
+        let parent_key = property_key_for_name("Component", "parentId").expect("parentId key");
+        let first_text = instance.component_handle(1).expect("first Text handle");
+        let second_text = instance.component_handle(4).expect("second Text handle");
+
+        assert_eq!(
+            instance.objects.text_variation_helper_text_handle(2),
+            Some(first_text)
+        );
+        assert!(instance.set_uint_property(2, parent_key, 4));
+
+        let cloned = instance.clone();
+        assert_eq!(cloned.component_parent_local(2), Some(4));
+        assert_eq!(
+            cloned.objects.text_variation_helper_text_handle(2),
+            Some(second_text),
+            "TextStyle::onAddedClean refreshes m_text before creating the clone-owned helper (`src/text/text_style.cpp:45-70`)"
+        );
+        let helper = cloned
+            .objects
+            .text_variation_helper_handle(2)
+            .expect("helper handle");
+        assert_eq!(
+            cloned.objects.dependent_at(helper, 0),
+            Some(second_text),
+            "TextVariationHelper::buildDependencies reads the rebuilt TextStyle parent (`src/text/text_variation_helper.cpp:7-12`)"
+        );
+        assert_eq!(
+            instance.objects.text_variation_helper_text_handle(2),
+            Some(first_text)
+        );
+    }
+
+    #[test]
+    fn data_bind_collapsables_link_in_import_order_and_rebuild_on_clone_initialize() {
+        let bytes = include_bytes!("../../../fixtures/flow/data_binding_test.riv");
+        let file = read_runtime_file(bytes).expect("fixture should import");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture should graph");
+        let artboard = graph.artboards.first().expect("fixture has artboard");
+        let instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
+        let artboard_index = file
+            .artboards()
+            .iter()
+            .position(|candidate| candidate.id == artboard.global_id)
+            .expect("graph artboard maps to runtime file");
+
+        let mut expected = BTreeMap::<ComponentHandle, Vec<DataBindHandle>>::new();
+        for (data_bind_index, data_bind) in file
+            .artboard_data_binds(artboard_index)
+            .into_iter()
+            .enumerate()
+        {
+            let Some(target_local_id) = data_bind.target_local_id else {
+                continue;
+            };
+            let Some(component) = instance.objects.component_handle(target_local_id) else {
+                continue;
+            };
+            expected
+                .entry(component)
+                .or_default()
+                .push(DataBindHandle::from_index(data_bind_index));
+        }
+        assert!(
+            !expected.is_empty(),
+            "fixture must exercise Component targets"
+        );
+        for (component, data_binds) in &expected {
+            assert_eq!(
+                (0..instance.objects.collapsable_len(*component))
+                    .filter_map(|index| instance.objects.collapsable_at(*component, index))
+                    .collect::<Vec<_>>(),
+                *data_binds
+            );
+        }
+
+        let mut cloned = instance.clone();
+        for (component, data_binds) in expected {
+            assert_eq!(
+                (0..cloned.objects.collapsable_len(component))
+                    .filter_map(|index| cloned.objects.collapsable_at(component, index))
+                    .collect::<Vec<_>>(),
+                data_binds
+            );
+        }
+        let _ = cloned.advance_artboard_data_binds();
     }
 
     #[test]
@@ -10693,7 +16839,7 @@ mod tests {
         let file = read_runtime_file(&bytes).expect("owned ViewModel action fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
         let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
-        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+        let mut artboard = ArtboardInstance::from_graph(&file, artboard_graph)
             .expect("fixture artboard instantiates");
         let runtime_state_machine = artboard.state_machine(0).expect("fixture machine graph");
         assert_eq!(runtime_state_machine.bindable_numbers.len(), 1);
@@ -10726,7 +16872,7 @@ mod tests {
         let file = read_runtime_file(&bytes).expect("two-way listener fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
         let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
-        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+        let mut artboard = ArtboardInstance::from_graph(&file, artboard_graph)
             .expect("fixture artboard instantiates");
         let state_machine = artboard
             .state_machine_instance(0)
@@ -10753,7 +16899,6 @@ mod tests {
             context: context.clone(),
             occurrence_identity: 1,
             logical_index: 0,
-            virtualized_position: None,
             settled_layout_size: Cell::new(None),
             transform: Mat2D::IDENTITY,
             render_cache_revision: 1,
@@ -10778,7 +16923,7 @@ mod tests {
         let file = read_runtime_file(&bytes).expect("owned ViewModel action fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
         let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
-        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+        let mut artboard = ArtboardInstance::from_graph(&file, artboard_graph)
             .expect("fixture artboard instantiates");
         let runtime_state_machine = artboard.state_machine(0).expect("fixture machine graph");
         assert_eq!(runtime_state_machine.listeners.len(), 1);
@@ -10797,7 +16942,7 @@ mod tests {
         let file = read_runtime_file(&bytes).expect("listener cascade fixture imports");
         let graph = GraphFile::from_runtime_file(&file).expect("fixture builds a graph");
         let artboard_graph = graph.artboards.first().expect("fixture has an artboard");
-        let artboard = ArtboardInstance::from_graph(&file, artboard_graph)
+        let mut artboard = ArtboardInstance::from_graph(&file, artboard_graph)
             .expect("fixture artboard instantiates");
         let state_machine = artboard
             .state_machine_instance(0)
@@ -11720,7 +17865,8 @@ mod tests {
 
     #[test]
     fn component_list_advance_writes_state_actions_to_the_item_context() {
-        let (file, child, mut state_machine) = owned_view_model_action_fixture(9681, false);
+        let (file, mut child, mut state_machine) = owned_view_model_action_fixture(9681, false);
+        child.update_pass();
         let context = RuntimeOwnedViewModelInstance::new(&file, 1)
             .expect("fixture has an owned ViewModel context");
 
@@ -11743,10 +17889,12 @@ mod tests {
             .expect("fixture list has one retained row");
         state_machine.bind_owned_view_model_handle(&row.instance);
 
-        let mut parent = synthetic_instance(Vec::new(), Vec::new());
-        parent.component_list_sources.insert(1, list.clone());
-        parent.component_list_items.insert(
-            1,
+        let mut parent = synthetic_instance(
+            vec![synthetic_component_for_type(1, "ArtboardComponentList")],
+            vec![1],
+        );
+        parent.set_component_list_source(1, Some(list.clone()));
+        parent.component_list_state_mut(1).unwrap().items =
             vec![RuntimeComponentListItemInstance {
                 child: Box::new(child),
                 render_resources: RefCell::new(
@@ -11762,19 +17910,17 @@ mod tests {
                 context: row.instance,
                 occurrence_identity: row.occurrence_identity,
                 logical_index: 0,
-                virtualized_position: None,
                 settled_layout_size: Cell::new(None),
                 transform: Mat2D::IDENTITY,
                 render_cache_revision: row.occurrence_identity,
-            }],
-        );
+            }];
 
         let cache_epoch = parent.cache_epoch();
         let prepared_epoch = parent.prepared_epoch();
-        let path_epoch = parent.path_epoch();
+        let retained_path_generation = parent.path_epoch();
         let layout_epoch = parent.layout_epoch();
         assert!(parent.advance_nested_artboards(0.0));
-        let context = &parent.component_list_items[&1][0].context;
+        let context = &parent.component_list_items(1).unwrap()[0].context;
         assert_eq!(
             context.borrow().number_value_by_property_path(&[1]),
             Some(42.0)
@@ -11790,7 +17936,7 @@ mod tests {
         // (`artboard_component_list.cpp:827-885`, especially 870-881).
         assert_eq!(parent.cache_epoch(), cache_epoch);
         assert_eq!(parent.prepared_epoch(), prepared_epoch);
-        assert_eq!(parent.path_epoch(), path_epoch);
+        assert_eq!(parent.path_epoch(), retained_path_generation);
         assert_eq!(parent.layout_epoch(), layout_epoch);
     }
 
@@ -11812,9 +17958,11 @@ mod tests {
         let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(main);
         assert!(contexts.set_global_slot_handle(&file, 1, global_override.clone()));
 
-        let mut parent = synthetic_instance(Vec::new(), Vec::new());
-        parent.component_list_items.insert(
-            1,
+        let mut parent = synthetic_instance(
+            vec![synthetic_component_for_type(1, "ArtboardComponentList")],
+            vec![1],
+        );
+        parent.component_list_state_mut(1).unwrap().items =
             vec![RuntimeComponentListItemInstance {
                 child: Box::new(child),
                 render_resources: RefCell::new(
@@ -11830,12 +17978,10 @@ mod tests {
                 context: row.clone(),
                 occurrence_identity: 1,
                 logical_index: 0,
-                virtualized_position: None,
                 settled_layout_size: Cell::new(None),
                 transform: Mat2D::IDENTITY,
                 render_cache_revision: 1,
-            }],
-        );
+            }];
         let _ = parent.bind_owned_view_model_artboard_contexts(&file, &contexts);
 
         assert!(parent.advance_nested_artboards(0.0));
@@ -11889,53 +18035,51 @@ mod tests {
         let second = rows[1].clone();
         state_machine.bind_owned_view_model_handle(&second.instance);
 
-        let mut parent = synthetic_instance(Vec::new(), Vec::new());
-        parent.component_list_sources.insert(1, list.clone());
-        parent.component_list_items.insert(
-            1,
-            vec![
-                RuntimeComponentListItemInstance {
-                    child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
-                    render_resources: RefCell::new(
-                        crate::draw::RuntimeOccurrenceRenderResources::default(),
-                    ),
-                    state_machines: Vec::new(),
-                    context_rebind_sink: {
-                        let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
-                        first.instance.add_rebind_dependent(&sink);
-                        sink
-                    },
-                    draw_index_sink: None,
-                    context: first.instance,
-                    occurrence_identity: first.occurrence_identity,
-                    logical_index: 0,
-                    virtualized_position: None,
-                    settled_layout_size: Cell::new(None),
-                    transform: Mat2D::IDENTITY,
-                    render_cache_revision: first.occurrence_identity,
-                },
-                RuntimeComponentListItemInstance {
-                    child: Box::new(child),
-                    render_resources: RefCell::new(
-                        crate::draw::RuntimeOccurrenceRenderResources::default(),
-                    ),
-                    state_machines: vec![state_machine],
-                    context_rebind_sink: {
-                        let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
-                        second.instance.add_rebind_dependent(&sink);
-                        sink
-                    },
-                    draw_index_sink: None,
-                    context: second.instance,
-                    occurrence_identity: second.occurrence_identity,
-                    logical_index: 1,
-                    virtualized_position: None,
-                    settled_layout_size: Cell::new(None),
-                    transform: Mat2D::IDENTITY,
-                    render_cache_revision: second.occurrence_identity,
-                },
-            ],
+        let mut parent = synthetic_instance(
+            vec![synthetic_component_for_type(1, "ArtboardComponentList")],
+            vec![1],
         );
+        parent.set_component_list_source(1, Some(list.clone()));
+        parent.component_list_state_mut(1).unwrap().items = vec![
+            RuntimeComponentListItemInstance {
+                child: Box::new(synthetic_instance(Vec::new(), Vec::new())),
+                render_resources: RefCell::new(
+                    crate::draw::RuntimeOccurrenceRenderResources::default(),
+                ),
+                state_machines: Vec::new(),
+                context_rebind_sink: {
+                    let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+                    first.instance.add_rebind_dependent(&sink);
+                    sink
+                },
+                draw_index_sink: None,
+                context: first.instance,
+                occurrence_identity: first.occurrence_identity,
+                logical_index: 0,
+                settled_layout_size: Cell::new(None),
+                transform: Mat2D::IDENTITY,
+                render_cache_revision: first.occurrence_identity,
+            },
+            RuntimeComponentListItemInstance {
+                child: Box::new(child),
+                render_resources: RefCell::new(
+                    crate::draw::RuntimeOccurrenceRenderResources::default(),
+                ),
+                state_machines: vec![state_machine],
+                context_rebind_sink: {
+                    let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
+                    second.instance.add_rebind_dependent(&sink);
+                    sink
+                },
+                draw_index_sink: None,
+                context: second.instance,
+                occurrence_identity: second.occurrence_identity,
+                logical_index: 1,
+                settled_layout_size: Cell::new(None),
+                transform: Mat2D::IDENTITY,
+                render_cache_revision: second.occurrence_identity,
+            },
+        ];
 
         assert!(parent.advance_nested_artboards(0.0));
         let source_items = list.items();
@@ -12014,13 +18158,11 @@ mod tests {
 
         assert_collapsed(&instance, 3, true);
         assert_collapsed(&instance, 4, false);
-        let mapping = &instance.solos[0].runtime_local_by_cpp_local;
-        assert_eq!(mapping.len(), 4);
-        assert_eq!(mapping.get(&0), Some(&0));
-        assert!(!mapping.contains_key(&1));
-        assert_eq!(mapping.get(&2), Some(&2));
-        assert_eq!(mapping.get(&3), Some(&3));
-        assert_eq!(mapping.get(&4), Some(&4));
+        let solo = instance
+            .component(2)
+            .and_then(|component| component.concrete.solo.as_ref())
+            .expect("Solo occurrence owns its retained state");
+        assert_eq!(solo.cpp_local_ids, [3, 4]);
         assert_eq!(
             solo_mapping_work(),
             SoloMappingWork {
@@ -12043,7 +18185,14 @@ mod tests {
 
         reset_solo_mapping_work();
         let instance = instance_from_riv(&bytes);
-        assert_eq!(instance.solos.len(), 1);
+        assert_eq!(
+            instance
+                .components()
+                .iter()
+                .filter(|component| component.concrete.solo.is_some())
+                .count(),
+            1
+        );
         solo_mapping_work()
     }
 
@@ -12064,7 +18213,7 @@ mod tests {
     }
 
     #[test]
-    fn imported_solos_share_one_mapping_without_behavior_drift() {
+    fn imported_solos_retain_children_on_each_occurrence_without_behavior_drift() {
         let bytes = synthetic_riv(9670, |bytes| {
             push_synthetic_object(bytes, "Backboard", &[]);
             push_synthetic_object(bytes, "Artboard", &[]);
@@ -12081,11 +18230,16 @@ mod tests {
         reset_solo_mapping_work();
         let mut instance = instance_from_riv(&bytes);
 
-        assert_eq!(instance.solos.len(), 2);
-        assert!(std::sync::Arc::ptr_eq(
-            &instance.solos[0].runtime_local_by_cpp_local,
-            &instance.solos[1].runtime_local_by_cpp_local,
-        ));
+        let first = instance
+            .component(1)
+            .and_then(|component| component.concrete.solo.as_ref())
+            .expect("first Solo occurrence");
+        let second = instance
+            .component(4)
+            .and_then(|component| component.concrete.solo.as_ref())
+            .expect("second Solo occurrence");
+        assert_eq!(first.cpp_local_ids, [2, 3]);
+        assert_eq!(second.cpp_local_ids, [5, 6]);
         assert_eq!(
             solo_mapping_work(),
             SoloMappingWork {
@@ -12132,12 +18286,23 @@ mod tests {
             push_synthetic_object(bytes, "Shape", &[("parentId", 4)]);
         });
         let instance = instance_from_riv(&bytes);
-
         assert_collapsed(&instance, 2, false);
         assert_collapsed(&instance, 3, false);
         assert_collapsed(&instance, 4, true);
         // The deep descendant was left un-collapsed before the fix.
         assert_collapsed(&instance, 5, true);
+        let inactive_composer = instance
+            .objects
+            .path_composer_handle(5)
+            .expect("inactive Shape owns its PathComposer");
+        assert!(
+            instance
+                .objects
+                .component(inactive_composer)
+                .expect("inactive PathComposer remains live")
+                .is_collapsed(),
+            "Shape::collapse must keep its embedded PathComposer collapsed"
+        );
     }
 
     // Regression for the M8 audit finding: collapse propagation from a
@@ -12234,27 +18399,27 @@ mod tests {
         let opacity_key = property_key_for_name("Artboard", "opacity").expect("opacity key");
         assert!(leaf.set_double_property(0, opacity_key, 0.0));
         leaf.clear_component_dirt(0);
-        leaf.dirt = ComponentDirt::NONE;
+        leaf.set_artboard_dirt_for_test(ComponentDirt::NONE);
 
         let mut middle_root = typed_component(0, 0, "Artboard");
         middle_root.transform.render_opacity = 1.0;
         let mut middle_host = typed_component(1, 1, "NestedArtboard");
-        middle_host.parent_local = Some(0);
         middle_host.dirt = ComponentDirt::RENDER_OPACITY;
         let mut middle = synthetic_instance(vec![middle_root, middle_host], vec![1]);
+        synthetic_link_parent(&mut middle, 1, 0);
         let mut leaf_mount = synthetic_nested_artboard_instance(2);
         leaf_mount.child = Box::new(leaf);
         middle.nested_artboards.insert(1, leaf_mount);
         middle.nested_artboard_locals.push(1);
-        middle.dirt = ComponentDirt::COMPONENTS;
+        middle.set_artboard_dirt_for_test(ComponentDirt::COMPONENTS);
 
         let mut root_component = typed_component(0, 0, "Artboard");
         root_component.transform.render_opacity = 1.0;
         let mut root_host = typed_component(1, 1, "NestedArtboard");
-        root_host.parent_local = Some(0);
         root_host.transform.render_opacity = 1.0;
         root_host.dirt = ComponentDirt::COMPONENTS;
         let mut root = synthetic_instance(vec![root_component, root_host], vec![1]);
+        synthetic_link_parent(&mut root, 1, 0);
         let mut middle_mount = synthetic_nested_artboard_instance(1);
         middle_mount.child = Box::new(middle);
         root.nested_artboards.insert(1, middle_mount);
@@ -12340,8 +18505,7 @@ mod tests {
         );
         assert!(parent.sync_component_list_items(&file, list_local_id, vec![row_context.clone()],));
         let mounted = parent
-            .component_list_items
-            .get(&list_local_id)
+            .component_list_items(list_local_id)
             .and_then(|items| items.first())
             .expect("mounted component-list row");
         assert!(mounted.context.ptr_eq(&row_context));
@@ -12364,7 +18528,7 @@ mod tests {
         );
 
         parent.advance_nested_artboards(0.0);
-        let advanced = parent.component_list_items[&list_local_id][0]
+        let advanced = parent.component_list_items(list_local_id).unwrap()[0]
             .state_machines
             .first()
             .expect("row default state machine");

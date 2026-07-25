@@ -961,7 +961,7 @@ impl FileScriptArtboard {
             ))
         })?;
         let external_font_assets = file.external_font_assets.snapshot();
-        let instance = RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_view_model_instances(
+        let mut instance = RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_view_model_instances(
             &file.runtime,
             graph,
             &file.graph.artboards,
@@ -1072,17 +1072,22 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
 
     fn advance(&mut self, seconds: f32) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
         self.bind_view_model();
-        let mut changed = if let Some(state_machine) = self.state_machine.as_mut() {
-            self.instance
-                .advance_state_machine_instance(state_machine, seconds)
+        if let Some(state_machine) = self.state_machine.as_mut() {
+            let state_machines = std::slice::from_mut(state_machine);
+            let mut changed = self
+                .instance
+                .advance_frame_components_with_state_machines(state_machines, seconds)?;
+            changed |= self
+                .instance
+                .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                    state_machines,
+                )?;
+            Ok(changed)
         } else {
-            self.instance.advance_nested_artboards(seconds)
-        };
-        changed |= self
-            .instance
-            .advance_artboard_data_binds_with_elapsed(seconds);
-        changed |= self.instance.update_pass();
-        Ok(changed)
+            let mut changed = self.instance.advance_frame_components(seconds)?;
+            changed |= self.instance.update_pass_with_script_errors()?;
+            Ok(changed)
+        }
     }
 
     fn animation(
@@ -1416,57 +1421,19 @@ fn flush_scripted_artboard_tree(
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
-    // Converter tables are attached after the caller's ordinary data-bind
-    // pass. Re-run the zero-time bind phase so the first factory-bearing
-    // frame observes scripted conversion instead of the inert pass-through
-    // placeholder used during instance construction.
-    let mut changed = instance.advance_artboard_data_binds();
-    let mut visitor = |_: usize, _: u32, nested: &mut RuntimeArtboardInstance| {
-        changed |= nested.advance_artboard_data_binds();
-        Ok::<(), std::convert::Infallible>(())
-    };
-    let result = instance.try_visit_artboard_tree_instances_mut(&mut visitor);
-    match result {
-        Ok(()) => {}
-        Err(error) => match error {},
-    }
-
-    changed |= instance
-        .flush_script_lifecycle_with_factory(factory)
-        .map_err(|error| {
-            error.with_context(format!(
-                "root graph {} script lifecycle failed",
-                instance.graph_global_id()
-            ))
-        })?;
-    let mut visitor = |depth: usize, graph_global_id: u32, nested: &mut RuntimeArtboardInstance| {
-        changed |= nested
-            .flush_script_lifecycle_with_factory(factory)
-            .map_err(|error| {
-                error.with_context(format!(
-                    "nested depth {depth} graph {graph_global_id} script lifecycle failed"
-                ))
-            })?;
-        Ok::<(), nuxie_runtime::ScriptError>(())
-    };
-    instance.try_visit_artboard_tree_instances_mut(&mut visitor)?;
-    // Each concrete child receives a regular component update after its
-    // script update. The facade caller performs the root update immediately
-    // after this helper returns.
-    let mut visitor = |_: usize, _: u32, nested: &mut RuntimeArtboardInstance| {
-        changed |= nested.update_pass();
-        Ok::<(), std::convert::Infallible>(())
-    };
-    let result = instance.try_visit_artboard_tree_instances_mut(&mut visitor);
-    match result {
-        Ok(()) => {}
-        Err(error) => match error {},
-    }
+    // A draw-only bootstrap has no elapsed frame to replay. Walk the same
+    // retained advancing list at zero seconds so nested child dirt bubbles to
+    // its host, then consume ScriptUpdate at each concrete dependency slot.
+    // This replaces the old Artboard-wide script-table sweep with the pinned
+    // Component lifecycle (`artboard.cpp:1463-1480`;
+    // `scripted_drawable.cpp:347-397`).
+    let mut changed = instance.advance_frame_components_with_factory(0.0, factory)?;
+    changed |= instance.update_pass_with_factory(factory)?;
     Ok(changed)
 }
 
 #[cfg(feature = "scripting")]
-fn prepare_scripted_artboard_tree(
+fn mount_scripted_artboard_tree(
     file: &File,
     root_graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
@@ -1507,15 +1474,15 @@ fn prepare_scripted_artboard_tree(
             group.path
         )));
     }
-    let changed = if has_script_target {
-        flush_scripted_artboard_tree(instance, factory)?
-    } else {
-        false
-    };
+    Ok(has_script_target)
+}
 
-    // Script update refreshes component-list occurrences. A newly materialized
-    // child is mounted on the next preparation call, but must not slip through
-    // this draw without a table in the meantime.
+#[cfg(feature = "scripting")]
+fn verify_scripted_artboard_tree_attached(
+    file: &File,
+    root_graph: &ArtboardGraph,
+    instance: &mut RuntimeArtboardInstance,
+) -> std::result::Result<(), nuxie_runtime::ScriptError> {
     let (_, after_lifecycle) = collect_script_mount_groups(file, root_graph, instance)?;
     if let Some(group) = after_lifecycle
         .iter()
@@ -1526,46 +1493,59 @@ fn prepare_scripted_artboard_tree(
             group.path
         )));
     }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn prepare_scripted_artboard_tree(
+    file: &File,
+    root_graph: &ArtboardGraph,
+    instance: &mut RuntimeArtboardInstance,
+    factory: &mut dyn Factory,
+) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+    let has_script_target = mount_scripted_artboard_tree(file, root_graph, instance, factory)?;
+    let changed = if has_script_target {
+        flush_scripted_artboard_tree(instance, factory)?
+    } else {
+        false
+    };
+
+    // Script update refreshes component-list occurrences. A newly materialized
+    // child is mounted on the next preparation call, but must not slip through
+    // this draw without a table in the meantime.
+    verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
     Ok(changed)
 }
 
 #[cfg(feature = "scripting")]
-fn queue_root_script_advance(
+fn advance_scripted_artboard_frame_with_factory(
     file: &File,
     root_graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
+    state_machines: &mut [StateMachineInstance],
     elapsed_seconds: f32,
-) -> bool {
-    if !file.scripts.borrow().scripts_are_authenticated() {
-        return false;
-    }
-    let mut has_scripted_drawable = root_graph
-        .components
-        .iter()
-        .any(|component| component.type_name == "ScriptedDrawable");
-    let mut visitor = |_: usize, graph_global_id: u32, _: &mut RuntimeArtboardInstance| {
-        has_scripted_drawable |= file
-            .graph
-            .artboards
-            .iter()
-            .find(|candidate| candidate.global_id == graph_global_id)
-            .is_some_and(|graph| {
-                graph
-                    .components
-                    .iter()
-                    .any(|component| component.type_name == "ScriptedDrawable")
-            });
-        Ok::<(), std::convert::Infallible>(())
+    factory: &mut dyn Factory,
+) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+    let _ = mount_scripted_artboard_tree(file, root_graph, instance, factory)?;
+    let mut changed = if state_machines.is_empty() {
+        instance.advance_frame_components_with_factory(elapsed_seconds, factory)?
+    } else {
+        instance.advance_frame_components_with_state_machines_and_factory(
+            state_machines,
+            elapsed_seconds,
+            factory,
+        )?
     };
-    let result = instance.try_visit_artboard_tree_instances_mut(&mut visitor);
-    match result {
-        Ok(()) => {}
-        Err(error) => match error {},
-    }
-    if has_scripted_drawable {
-        instance.queue_script_advance(elapsed_seconds);
-    }
-    has_scripted_drawable && elapsed_seconds != 0.0
+    changed |= if state_machines.is_empty() {
+        instance.update_pass_with_factory(factory)?
+    } else {
+        instance.settle_state_machine_update_passes_after_main_advance_with_factory(
+            state_machines,
+            factory,
+        )?
+    };
+    verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
+    Ok(changed)
 }
 
 /// Imported Rive file plus its runtime graph projection.
@@ -2405,21 +2385,11 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     pub fn advance(&mut self, elapsed_seconds: f32) -> bool {
-        let mut changed = false;
-        #[cfg(feature = "scripting")]
-        {
-            changed |= queue_root_script_advance(
-                self.file,
-                self.artboard().graph(),
-                &mut self.raw,
-                elapsed_seconds,
-            );
-        }
-        changed |= self.raw.advance_nested_artboards(elapsed_seconds);
-        changed |= self
+        let mut changed = self
             .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        changed |= self.raw.update_pass();
+            .advance_frame_components(elapsed_seconds)
+            .unwrap_or(false);
+        changed |= self.raw.update_pass_with_script_errors().unwrap_or(false);
         #[cfg(feature = "scripting")]
         {
             changed |= self.file.advance_detached_view_models();
@@ -2428,45 +2398,41 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     /// Advance with a renderer factory available to every script lifecycle
-    /// phase. Legacy [`Self::advance`] queues exact script steps for the next
-    /// draw; this method executes them before the regular update pass and
-    /// surfaces script errors immediately. Once this File's scripts bootstrap,
-    /// every factory-bearing advance and draw must use that same live Factory
-    /// object; a different object is rejected before script execution.
+    /// phase. [`Self::advance`] advances only lifecycle work that does not
+    /// require a renderer factory; this method also advances retained scripted
+    /// drawables before the regular update pass and surfaces script errors
+    /// immediately. Once this File's scripts bootstrap, every factory-bearing
+    /// advance and draw must use that same live Factory object; a different
+    /// object is rejected before script execution.
     pub fn try_advance_with_factory(
         &mut self,
         factory: &mut dyn Factory,
         elapsed_seconds: f32,
     ) -> Result<bool> {
         #[cfg(feature = "scripting")]
-        let _ = queue_root_script_advance(
-            self.file,
-            self.artboard().graph(),
-            &mut self.raw,
-            elapsed_seconds,
-        );
-        let mut changed = self.raw.advance_nested_artboards(elapsed_seconds);
-        changed |= self
-            .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        #[cfg(feature = "scripting")]
         {
-            changed |= prepare_scripted_artboard_tree(
+            let mut changed = advance_scripted_artboard_frame_with_factory(
                 self.file,
                 self.artboard().graph(),
                 &mut self.raw,
+                &mut [],
+                elapsed_seconds,
                 factory,
             )
             .context("failed to advance scripted drawables")?;
+            changed |= self.file.advance_detached_view_models();
+            return Ok(changed);
         }
         #[cfg(not(feature = "scripting"))]
-        let _ = factory;
-        changed |= self.raw.update_pass();
-        #[cfg(feature = "scripting")]
         {
-            changed |= self.file.advance_detached_view_models();
+            let _ = factory;
+            let mut changed = self
+                .raw
+                .advance_frame_components(elapsed_seconds)
+                .context("failed to advance retained artboard components")?;
+            changed |= self.raw.update_pass();
+            Ok(changed)
         }
-        Ok(changed)
     }
 
     /// Return visible Shape and Text locals under `point`, front to back,
@@ -2554,20 +2520,20 @@ impl<'a> ArtboardInstance<'a> {
         self.linear_animation_instance(index)
     }
 
-    pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
+    pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
         self.raw.state_machine_instance(index)
     }
 
     /// Instantiate the first exact-name state machine, mirroring C++
     /// `ArtboardInstance::stateMachineNamed` without cross-kind fallback.
-    pub fn state_machine_instance_named(&self, name: &str) -> Option<StateMachineInstance> {
+    pub fn state_machine_instance_named(&mut self, name: &str) -> Option<StateMachineInstance> {
         let index = self.artboard().state_machine_index_named(name)?;
         self.state_machine_instance(index)
     }
 
     /// Instantiate the artboard's default state machine: the one flagged in
     /// the source file when present, otherwise the first state machine.
-    pub fn default_state_machine_instance(&self) -> Option<StateMachineInstance> {
+    pub fn default_state_machine_instance(&mut self) -> Option<StateMachineInstance> {
         let index = self.artboard().default_state_machine_index().unwrap_or(0);
         self.state_machine_instance(index)
     }
@@ -2667,25 +2633,16 @@ impl<'a> ArtboardInstance<'a> {
         if state_machines.is_empty() {
             return self.advance(elapsed_seconds);
         }
-        let mut changed = false;
-        #[cfg(feature = "scripting")]
-        {
-            changed |= queue_root_script_advance(
-                self.file,
-                self.artboard().graph(),
-                &mut self.raw,
-                elapsed_seconds,
-            );
-        }
+        let mut changed = self
+            .raw
+            .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+            .unwrap_or(false);
         changed |= self
             .raw
-            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
-        changed |= self
-            .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        changed |= self
-            .raw
-            .settle_state_machine_update_passes_after_main_advance(state_machines);
+            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                state_machines,
+            )
+            .unwrap_or(false);
         #[cfg(feature = "scripting")]
         {
             changed |= self.file.advance_detached_view_models();
@@ -2705,15 +2662,6 @@ impl<'a> ArtboardInstance<'a> {
             return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
         }
         let mut changed = false;
-        #[cfg(feature = "scripting")]
-        {
-            changed |= queue_root_script_advance(
-                self.file,
-                self.artboard().graph(),
-                &mut self.raw,
-                elapsed_seconds,
-            );
-        }
         for state_machine in state_machines.iter_mut() {
             changed |= state_machine.bind_owned_view_model_handle(view_model.handle());
         }
@@ -2722,11 +2670,14 @@ impl<'a> ArtboardInstance<'a> {
             .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
         changed |= self
             .raw
-            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
+            .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+            .unwrap_or(false);
         changed |= self
             .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        changed |= self.raw.update_pass();
+            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                state_machines,
+            )
+            .unwrap_or(false);
         advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
     }
 
@@ -2757,37 +2708,27 @@ impl<'a> ArtboardInstance<'a> {
         let mut changed = false;
         #[cfg(feature = "scripting")]
         {
-            changed |= queue_root_script_advance(
+            changed |= advance_scripted_artboard_frame_with_factory(
                 self.file,
                 self.artboard().graph(),
                 &mut self.raw,
+                state_machines,
                 elapsed_seconds,
-            );
-        }
-        changed |= self
-            .raw
-            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
-        changed |= self
-            .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        #[cfg(feature = "scripting")]
-        {
-            changed |= prepare_scripted_artboard_tree(
-                self.file,
-                self.artboard().graph(),
-                &mut self.raw,
                 factory,
             )
             .context("failed to advance scripted drawables")?;
+            changed |= self.file.advance_detached_view_models();
         }
         #[cfg(not(feature = "scripting"))]
-        let _ = factory;
-        changed |= self
-            .raw
-            .settle_state_machine_update_passes_after_main_advance(state_machines);
-        #[cfg(feature = "scripting")]
         {
-            changed |= self.file.advance_detached_view_models();
+            let _ = factory;
+            changed |= self
+                .raw
+                .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+                .context("failed to advance retained artboard components")?;
+            changed |= self
+                .raw
+                .settle_state_machine_update_passes_after_main_advance(state_machines);
         }
         Ok(advance_and_apply_keep_going(
             changed,
@@ -2812,40 +2753,35 @@ impl<'a> ArtboardInstance<'a> {
                 .map(|advanced| changed | advanced);
         }
         let mut changed = false;
-        #[cfg(feature = "scripting")]
-        {
-            changed |= queue_root_script_advance(
-                self.file,
-                self.artboard().graph(),
-                &mut self.raw,
-                elapsed_seconds,
-            );
-        }
         for state_machine in state_machines.iter_mut() {
             changed |= state_machine.bind_owned_view_model_handle(view_model.handle());
         }
         changed |= self
             .raw
             .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
-        changed |= self
-            .raw
-            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
-        changed |= self
-            .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         #[cfg(feature = "scripting")]
         {
-            changed |= prepare_scripted_artboard_tree(
+            changed |= advance_scripted_artboard_frame_with_factory(
                 self.file,
                 self.artboard().graph(),
                 &mut self.raw,
+                state_machines,
+                elapsed_seconds,
                 factory,
             )
             .context("failed to advance scripted drawables")?;
         }
         #[cfg(not(feature = "scripting"))]
-        let _ = factory;
-        changed |= self.raw.update_pass();
+        {
+            let _ = factory;
+            changed |= self
+                .raw
+                .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+                .context("failed to advance retained artboard components")?;
+            changed |= self
+                .raw
+                .settle_state_machine_update_passes_after_main_advance(state_machines);
+        }
         Ok(advance_and_apply_keep_going(
             changed,
             elapsed_seconds,
@@ -3000,17 +2936,11 @@ impl OwnedArtboardInstance {
     }
 
     pub fn advance(&mut self, elapsed_seconds: f32) -> bool {
-        let mut changed = false;
-        #[cfg(feature = "scripting")]
-        if let Some(artboard) = self.file.graph.artboards.get(self.artboard_index) {
-            changed |=
-                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
-        }
-        changed |= self.raw.advance_nested_artboards(elapsed_seconds);
-        changed |= self
+        let mut changed = self
             .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        changed |= self.raw.update_pass();
+            .advance_frame_components(elapsed_seconds)
+            .unwrap_or(false);
+        changed |= self.raw.update_pass_with_script_errors().unwrap_or(false);
         #[cfg(feature = "scripting")]
         {
             changed |= self.file.advance_detached_view_models();
@@ -3033,24 +2963,29 @@ impl OwnedArtboardInstance {
             .get(self.artboard_index)
             .context("owned artboard instance graph is unavailable")?;
         #[cfg(feature = "scripting")]
-        let _ = queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
-        let mut changed = self.raw.advance_nested_artboards(elapsed_seconds);
-        changed |= self
-            .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        #[cfg(feature = "scripting")]
         {
-            changed |= prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)
-                .context("failed to advance scripted drawables")?;
+            let mut changed = advance_scripted_artboard_frame_with_factory(
+                &self.file,
+                artboard,
+                &mut self.raw,
+                &mut [],
+                elapsed_seconds,
+                factory,
+            )
+            .context("failed to advance scripted drawables")?;
+            changed |= self.file.advance_detached_view_models();
+            return Ok(changed);
         }
         #[cfg(not(feature = "scripting"))]
-        let _ = factory;
-        changed |= self.raw.update_pass();
-        #[cfg(feature = "scripting")]
         {
-            changed |= self.file.advance_detached_view_models();
+            let _ = factory;
+            let mut changed = self
+                .raw
+                .advance_frame_components(elapsed_seconds)
+                .context("failed to advance retained artboard components")?;
+            changed |= self.raw.update_pass();
+            Ok(changed)
         }
-        Ok(changed)
     }
 
     #[cfg(feature = "scripting")]
@@ -3225,18 +3160,18 @@ impl OwnedArtboardInstance {
         self.linear_animation_instance(index)
     }
 
-    pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
+    pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
         self.raw.state_machine_instance(index)
     }
 
     /// Owning mirror of [`ArtboardInstance::state_machine_instance_named`].
-    pub fn state_machine_instance_named(&self, name: &str) -> Option<StateMachineInstance> {
+    pub fn state_machine_instance_named(&mut self, name: &str) -> Option<StateMachineInstance> {
         let index = self.artboard().state_machine_index_named(name)?;
         self.state_machine_instance(index)
     }
 
     /// See [`ArtboardInstance::default_state_machine_instance`].
-    pub fn default_state_machine_instance(&self) -> Option<StateMachineInstance> {
+    pub fn default_state_machine_instance(&mut self) -> Option<StateMachineInstance> {
         let index = self.artboard().default_state_machine_index().unwrap_or(0);
         self.state_machine_instance(index)
     }
@@ -3310,21 +3245,16 @@ impl OwnedArtboardInstance {
         if state_machines.is_empty() {
             return self.advance(elapsed_seconds);
         }
-        let mut changed = false;
-        #[cfg(feature = "scripting")]
-        if let Some(artboard) = self.file.graph.artboards.get(self.artboard_index) {
-            changed |=
-                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
-        }
+        let mut changed = self
+            .raw
+            .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+            .unwrap_or(false);
         changed |= self
             .raw
-            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
-        changed |= self
-            .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        changed |= self
-            .raw
-            .settle_state_machine_update_passes_after_main_advance(state_machines);
+            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                state_machines,
+            )
+            .unwrap_or(false);
         #[cfg(feature = "scripting")]
         {
             changed |= self.file.advance_detached_view_models();
@@ -3344,11 +3274,6 @@ impl OwnedArtboardInstance {
             return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
         }
         let mut changed = false;
-        #[cfg(feature = "scripting")]
-        if let Some(artboard) = self.file.graph.artboards.get(self.artboard_index) {
-            changed |=
-                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
-        }
         for state_machine in state_machines.iter_mut() {
             changed |= state_machine.bind_owned_view_model_handle(view_model.handle());
         }
@@ -3357,11 +3282,14 @@ impl OwnedArtboardInstance {
             .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
         changed |= self
             .raw
-            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
+            .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+            .unwrap_or(false);
         changed |= self
             .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        changed |= self.raw.update_pass();
+            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                state_machines,
+            )
+            .unwrap_or(false);
         advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
     }
 
@@ -3401,28 +3329,27 @@ impl OwnedArtboardInstance {
             .context("owned artboard instance graph is unavailable")?;
         #[cfg(feature = "scripting")]
         {
-            changed |=
-                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
-        }
-        changed |= self
-            .raw
-            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
-        changed |= self
-            .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-        #[cfg(feature = "scripting")]
-        {
-            changed |= prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)
-                .context("failed to advance scripted drawables")?;
+            changed |= advance_scripted_artboard_frame_with_factory(
+                &self.file,
+                artboard,
+                &mut self.raw,
+                state_machines,
+                elapsed_seconds,
+                factory,
+            )
+            .context("failed to advance scripted drawables")?;
+            changed |= self.file.advance_detached_view_models();
         }
         #[cfg(not(feature = "scripting"))]
-        let _ = factory;
-        changed |= self
-            .raw
-            .settle_state_machine_update_passes_after_main_advance(state_machines);
-        #[cfg(feature = "scripting")]
         {
-            changed |= self.file.advance_detached_view_models();
+            let _ = factory;
+            changed |= self
+                .raw
+                .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+                .context("failed to advance retained artboard components")?;
+            changed |= self
+                .raw
+                .settle_state_machine_update_passes_after_main_advance(state_machines);
         }
         Ok(advance_and_apply_keep_going(
             changed,
@@ -3454,31 +3381,35 @@ impl OwnedArtboardInstance {
             .artboards
             .get(self.artboard_index)
             .context("owned artboard instance graph is unavailable")?;
-        #[cfg(feature = "scripting")]
-        {
-            changed |=
-                queue_root_script_advance(&self.file, artboard, &mut self.raw, elapsed_seconds);
-        }
         for state_machine in state_machines.iter_mut() {
             changed |= state_machine.bind_owned_view_model_handle(view_model.handle());
         }
         changed |= self
             .raw
             .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
-        changed |= self
-            .raw
-            .advance_state_machine_instances_with_nested(state_machines, elapsed_seconds);
-        changed |= self
-            .raw
-            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         #[cfg(feature = "scripting")]
         {
-            changed |= prepare_scripted_artboard_tree(&self.file, artboard, &mut self.raw, factory)
-                .context("failed to advance scripted drawables")?;
+            changed |= advance_scripted_artboard_frame_with_factory(
+                &self.file,
+                artboard,
+                &mut self.raw,
+                state_machines,
+                elapsed_seconds,
+                factory,
+            )
+            .context("failed to advance scripted drawables")?;
         }
         #[cfg(not(feature = "scripting"))]
-        let _ = factory;
-        changed |= self.raw.update_pass();
+        {
+            let _ = factory;
+            changed |= self
+                .raw
+                .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+                .context("failed to advance retained artboard components")?;
+            changed |= self
+                .raw
+                .settle_state_machine_update_passes_after_main_advance(state_machines);
+        }
         Ok(advance_and_apply_keep_going(
             changed,
             elapsed_seconds,
@@ -3956,6 +3887,8 @@ mod owned_instance_tests {
     #[cfg(feature = "scripting")]
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
     use nuxie_render_api::RecordingFactory;
+    #[cfg(not(feature = "scripting"))]
+    use nuxie_schema::definition_by_name;
 
     const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
 
@@ -3984,6 +3917,210 @@ mod owned_instance_tests {
         let mut factory = RecordingFactory::new();
         draw(&mut factory).expect("draw succeeds");
         factory.stream()
+    }
+
+    #[cfg(not(feature = "scripting"))]
+    fn schema_property_key(type_name: &str, property_name: &str) -> u16 {
+        definition_by_name(type_name)
+            .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+            .properties
+            .iter()
+            .find(|property| property.name == property_name)
+            .unwrap_or_else(|| panic!("missing schema property {type_name}.{property_name}"))
+            .key
+            .int
+    }
+
+    #[cfg(not(feature = "scripting"))]
+    fn start_clamped_scroll_physics(
+        instance: &mut RuntimeArtboardInstance,
+        state_machine: &mut StateMachineInstance,
+    ) {
+        instance
+            .advance_frame_components(0.0)
+            .expect("scroll fixture initializes its retained advancing owners");
+        instance.update_pass();
+        let mut host = NoopScriptHost;
+        assert!(
+            state_machine
+                .try_pointer_down_with_timestamp_and_script_host(
+                    instance, 40.0, 500.0, 0, 1.2, &mut host,
+                )
+                .expect("pointer down succeeds")
+        );
+        assert!(
+            state_machine
+                .try_pointer_move_with_timestamp_and_script_host(
+                    instance, 30.0, 440.0, 0, 1.232, &mut host,
+                )
+                .expect("pointer move succeeds")
+        );
+        assert!(
+            state_machine
+                .try_pointer_up_with_timestamp_and_script_host(
+                    instance, 30.0, 440.0, 0, 1.248, &mut host,
+                )
+                .expect("pointer up succeeds")
+        );
+    }
+
+    #[cfg(not(feature = "scripting"))]
+    fn detached_test_view_model() -> (File, ViewModelInstance) {
+        let file = File::import(&external_fixture("custom_property_trigger.riv"))
+            .expect("custom-property fixture imports");
+        let instance = file
+            .artboard_named("Main")
+            .expect("custom-property fixture has Main")
+            .instantiate()
+            .expect("custom-property fixture instantiates");
+        let view_model = instance
+            .instantiate_view_model()
+            .expect("custom-property fixture has a view model");
+        drop(instance);
+        (file, view_model)
+    }
+
+    #[cfg(not(feature = "scripting"))]
+    #[test]
+    fn borrowed_factory_view_model_advance_uses_mixed_schedule_and_bounded_settlement() {
+        let scroll_file =
+            File::import(&external_fixture("scroll_test.riv")).expect("scroll fixture imports");
+        let mut scroll = scroll_file
+            .artboard_named("Artboard 2")
+            .expect("scroll fixture has Artboard 2")
+            .instantiate()
+            .expect("scroll artboard instantiates");
+        let mut scroll_machine = scroll
+            .state_machine_instance(0)
+            .expect("scroll artboard has a state machine");
+        start_clamped_scroll_physics(scroll.raw_mut(), &mut scroll_machine);
+        let (_view_model_file, mut view_model) = detached_test_view_model();
+        let mut factory = RecordingFactory::new();
+
+        assert!(
+            scroll
+                .try_advance_with_state_machines_and_view_model_and_factory(
+                    std::slice::from_mut(&mut scroll_machine),
+                    0.1,
+                    &mut view_model,
+                    &mut factory,
+                )
+                .expect("borrowed facade advance succeeds")
+        );
+        assert!(
+            !scroll
+                .raw_mut()
+                .advance_frame_components(0.1)
+                .expect("mixed-family follow-up succeeds"),
+            "the facade consumes the one-frame clamped ScrollPhysics run from \
+             C++ m_advancingComponents; a direct follow-up is idle \
+             (`artboard.cpp:1463-1480`; `scroll_constraint.cpp:299-336`; \
+             `clamped_scroll_physics.cpp:6-9`)"
+        );
+
+        let trigger_file = File::import(&external_fixture("custom_property_trigger.riv"))
+            .expect("custom-property fixture imports");
+        let mut trigger = trigger_file
+            .artboard_named("Main")
+            .expect("custom-property fixture has Main")
+            .instantiate()
+            .expect("custom-property artboard instantiates");
+        let mut trigger_machine = trigger
+            .state_machine_instance(0)
+            .expect("custom-property artboard has a state machine");
+        let mut trigger_view_model = trigger
+            .instantiate_view_model()
+            .expect("custom-property artboard has a view model");
+        let trigger_value = schema_property_key("CustomPropertyTrigger", "propertyValue");
+        assert!(trigger.raw_mut().set_uint_property(7, trigger_value, 1));
+
+        trigger
+            .try_advance_with_state_machines_and_view_model_and_factory(
+                std::slice::from_mut(&mut trigger_machine),
+                0.1,
+                &mut trigger_view_model,
+                &mut factory,
+            )
+            .expect("borrowed trigger settlement succeeds");
+        assert!(
+            trigger.raw_mut().set_uint_property(7, trigger_value, 1),
+            "advanceAndApply runs the bounded update/reset loop, so \
+             Artboard::reset consumes CustomPropertyTrigger after the pass \
+             (`state_machine_instance.cpp:2622-2654`; `artboard.cpp:1483-1493`)"
+        );
+    }
+
+    #[cfg(not(feature = "scripting"))]
+    #[test]
+    fn owned_factory_view_model_advance_uses_mixed_schedule_and_bounded_settlement() {
+        let scroll_file =
+            Arc::new(File::import(&external_fixture("scroll_test.riv")).expect("scroll fixture"));
+        let scroll_index = scroll_file
+            .artboard_named("Artboard 2")
+            .expect("scroll fixture has Artboard 2")
+            .index();
+        let mut scroll = OwnedArtboardInstance::instantiate(scroll_file, scroll_index)
+            .expect("owned scroll artboard instantiates");
+        let mut scroll_machine = scroll
+            .state_machine_instance(0)
+            .expect("scroll artboard has a state machine");
+        start_clamped_scroll_physics(scroll.raw_mut(), &mut scroll_machine);
+        let (_view_model_file, mut view_model) = detached_test_view_model();
+        let mut factory = RecordingFactory::new();
+
+        assert!(
+            scroll
+                .try_advance_with_state_machines_and_view_model_and_factory(
+                    std::slice::from_mut(&mut scroll_machine),
+                    0.1,
+                    &mut view_model,
+                    &mut factory,
+                )
+                .expect("owned facade advance succeeds")
+        );
+        assert!(
+            !scroll
+                .raw_mut()
+                .advance_frame_components(0.1)
+                .expect("mixed-family follow-up succeeds"),
+            "the owning facade consumes the one-frame clamped ScrollPhysics \
+             run in the C++ advancing-component slot \
+             (`artboard.cpp:1463-1480`; `scroll_constraint.cpp:299-336`; \
+             `clamped_scroll_physics.cpp:6-9`)"
+        );
+
+        let trigger_file = Arc::new(
+            File::import(&external_fixture("custom_property_trigger.riv"))
+                .expect("custom-property fixture imports"),
+        );
+        let trigger_index = trigger_file
+            .artboard_named("Main")
+            .expect("custom-property fixture has Main")
+            .index();
+        let mut trigger = OwnedArtboardInstance::instantiate(trigger_file, trigger_index)
+            .expect("owned custom-property artboard instantiates");
+        let mut trigger_machine = trigger
+            .state_machine_instance(0)
+            .expect("custom-property artboard has a state machine");
+        let mut trigger_view_model = trigger
+            .instantiate_view_model()
+            .expect("custom-property artboard has a view model");
+        let trigger_value = schema_property_key("CustomPropertyTrigger", "propertyValue");
+        assert!(trigger.raw_mut().set_uint_property(7, trigger_value, 1));
+
+        trigger
+            .try_advance_with_state_machines_and_view_model_and_factory(
+                std::slice::from_mut(&mut trigger_machine),
+                0.1,
+                &mut trigger_view_model,
+                &mut factory,
+            )
+            .expect("owned trigger settlement succeeds");
+        assert!(
+            trigger.raw_mut().set_uint_property(7, trigger_value, 1),
+            "the owning facade must run advanceAndApply's bounded update/reset loop \
+             (`state_machine_instance.cpp:2622-2654`; `artboard.cpp:1483-1493`)"
+        );
     }
 
     #[test]

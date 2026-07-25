@@ -693,7 +693,8 @@ impl FlowSession {
         if let Some(view_model) = root_view_model.as_ref() {
             let _ = instance.bind_view_model(view_model);
         }
-        let (player_metadata, player) = select_player(artboard, &instance, config.player.as_ref())?;
+        let (player_metadata, player) =
+            select_player(artboard, &mut instance, config.player.as_ref())?;
 
         let (x, y, width, height) = instance.artboard_bounds();
         if !x.is_finite()
@@ -1511,7 +1512,7 @@ impl FlowSession {
         let changed = match event.kind {
             FlowPointerKind::Down => machine
                 .try_pointer_down_with_timestamp_and_script_host(
-                    self.artboard.raw(),
+                    self.artboard.raw_mut(),
                     event.x,
                     event.y,
                     event.pointer_id,
@@ -1521,7 +1522,7 @@ impl FlowSession {
                 .map_err(flow_script_error)?,
             FlowPointerKind::Move => machine
                 .try_pointer_move_with_timestamp_and_script_host(
-                    self.artboard.raw(),
+                    self.artboard.raw_mut(),
                     event.x,
                     event.y,
                     event.pointer_id,
@@ -1532,7 +1533,7 @@ impl FlowSession {
             FlowPointerKind::Up | FlowPointerKind::Cancel => {
                 let mut changed = machine
                     .try_pointer_up_with_timestamp_and_script_host(
-                        self.artboard.raw(),
+                        self.artboard.raw_mut(),
                         event.x,
                         event.y,
                         event.pointer_id,
@@ -1542,7 +1543,7 @@ impl FlowSession {
                     .map_err(flow_script_error)?;
                 changed |= machine
                     .try_pointer_exit_with_timestamp_and_script_host(
-                        self.artboard.raw(),
+                        self.artboard.raw_mut(),
                         event.x,
                         event.y,
                         event.pointer_id,
@@ -1554,7 +1555,7 @@ impl FlowSession {
             }
             FlowPointerKind::Exit => machine
                 .try_pointer_exit_with_timestamp_and_script_host(
-                    self.artboard.raw(),
+                    self.artboard.raw_mut(),
                     event.x,
                     event.y,
                     event.pointer_id,
@@ -4320,7 +4321,7 @@ fn validate_optional_selector(value: Option<&str>, label: &str) -> Result<(), Fl
 
 fn select_player(
     artboard: crate::Artboard<'_>,
-    instance: &OwnedArtboardInstance,
+    instance: &mut OwnedArtboardInstance,
     explicit: Option<&FlowPlayerSelector>,
 ) -> Result<(FlowPlayerMetadata, FlowPlayer), FlowSessionError> {
     match explicit {

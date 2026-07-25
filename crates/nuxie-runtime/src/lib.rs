@@ -7,8 +7,10 @@ mod data_bind_graph;
 mod draw;
 mod focus;
 mod objects;
+mod parent_traversal;
 mod project_data_converter;
 mod properties;
+mod rectangles_to_contour;
 mod scripting;
 mod state_machine;
 mod text;
@@ -24,7 +26,7 @@ pub use animation::{
     RuntimeKeyedProperty, RuntimeLinearAnimation,
 };
 pub use artboard::{
-    ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment,
+    ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,
     RuntimeEventProperty, RuntimeEventPropertyValue,
 };
 pub use components::{

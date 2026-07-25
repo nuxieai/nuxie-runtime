@@ -2,12 +2,14 @@ use super::{RendererError, WgpuAdapterInfo, WgpuFactory, WgpuFrame};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
     ImageDecodeError, ImageSampler, Mat2D, RawPath, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, Renderer,
+    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath, RenderShader,
+    Renderer,
 };
 use std::cell::Cell;
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
+use std::sync::Arc;
 use wasm_bindgen::{Clamped, JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
@@ -267,12 +269,21 @@ impl Factory for BrowserFactory {
         self.inner.decode_image(data)
     }
 
-    fn make_gpu_canvas_image(
+    fn make_gpu_canvas_shader(
         &mut self,
         shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.inner.make_gpu_canvas_shader(shader)
+    }
+
+    fn make_gpu_canvas_image(
+        &mut self,
+        vertex_shader: &Arc<dyn RenderGpuCanvasShader>,
+        fragment_shader: &Arc<dyn RenderGpuCanvasShader>,
         plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
-        self.inner.make_gpu_canvas_image(shader, plan)
+        self.inner
+            .make_gpu_canvas_image(vertex_shader, fragment_shader, plan)
     }
 }
 

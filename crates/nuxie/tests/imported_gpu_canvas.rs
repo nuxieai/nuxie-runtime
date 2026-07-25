@@ -3,13 +3,14 @@
 use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
     ColorInt, Factory, File, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
     GpuCanvasShaderStage, ImageDecodeError, RawPath, RecordingFactory, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader,
-    WgpuFactory,
+    RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
+    RenderPath, RenderShader, WgpuFactory,
 };
 use nuxie_schema::definition_by_name;
 
@@ -36,6 +37,55 @@ return function(context)
         end,
         draw = function(self, renderer)
             renderer:drawImage(canvas.image, sampler, "srcOver", 1.0)
+        end,
+    }
+end
+"#;
+
+const FOLDERED_SHADER_ALIAS_SCRIPT: &[u8] = br#"
+return function(context)
+    local bare = context:shader("scene")
+    local qualified = context:shader("effects/scene")
+    return {
+        draw = function(self, renderer)
+        end,
+    }
+end
+"#;
+
+const UNUSED_CONTENTLESS_SHADER_SCRIPT: &[u8] = br#"
+return function(_context)
+    return {
+        draw = function(self, renderer)
+        end,
+    }
+end
+"#;
+
+const REQUESTED_CONTENTLESS_SHADER_SCRIPT: &[u8] = br##"
+return function(context)
+    local shader = context:shader("scene")
+    local returnCount = select("#", context:shader("scene"))
+    if shader ~= nil or returnCount ~= 0 then
+        error("contentless shader lookup must return zero values")
+    end
+    return {
+        draw = function(self, renderer)
+        end,
+    }
+end
+"##;
+
+const COLLIDING_SHADER_ALIAS_SCRIPT: &[u8] = br#"
+return function(context)
+    local bare = context:shader("scene")
+    local first = context:shader("first/scene")
+    local second = context:shader("second/scene")
+    if bare == nil or first == nil or second == nil then
+        error("every first-wins alias must remain reachable")
+    end
+    return {
+        draw = function(self, renderer)
         end,
     }
 end
@@ -134,6 +184,10 @@ fn put_string(bytes: &mut Vec<u8>, value: &str) {
 }
 
 fn shader_payload() -> Vec<u8> {
+    shader_payload_with_marker("default")
+}
+
+fn shader_payload_with_marker(marker: &str) -> Vec<u8> {
     const WGSL: &str = r#"
 @vertex
 fn physical_vertex_0(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
@@ -159,6 +213,7 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
     return vec4<f32>(1.0, 0.0, 0.0, 1.0);
 }
 "#;
+    let wgsl = format!("// {marker}\n{WGSL}");
     const EMPTY_BINDING_MAP: &[u8] = &[2, 1, 14, 0, 0, 0, 0, 0];
     let entries = [
         (0, "default_vertex", "physical_vertex_0"),
@@ -172,8 +227,8 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
         put_string(&mut source, logical);
         put_string(&mut source, physical);
     }
-    put_u32(&mut source, WGSL.len() as u32);
-    source.extend_from_slice(WGSL.as_bytes());
+    put_u32(&mut source, wgsl.len() as u32);
+    source.extend_from_slice(wgsl.as_bytes());
 
     let mut payload = vec![0];
     put_u32(&mut payload, 0x5253_5442);
@@ -224,6 +279,114 @@ fn imported_file() -> Vec<u8> {
     bytes
 }
 
+fn foldered_shader_alias_file() -> Vec<u8> {
+    let mut script_payload = vec![0];
+    script_payload.extend(compile_luau(FOLDERED_SHADER_ALIAS_SCRIPT));
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 991);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ShaderAsset", |bytes| {
+        push_uint(bytes, "ShaderAsset", "assetId", 0);
+        push_string(bytes, "ShaderAsset", "name", "scene");
+        push_string(bytes, "ShaderAsset", "folderPath", "effects");
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_blob(bytes, "FileAssetContents", "bytes", &shader_payload());
+    });
+    push_object(&mut bytes, "ScriptAsset", |bytes| {
+        push_uint(bytes, "ScriptAsset", "assetId", 1);
+        push_string(bytes, "ScriptAsset", "name", "AliasLookup");
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_blob(bytes, "FileAssetContents", "bytes", &script_payload);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 32.0);
+        push_f32(bytes, "Artboard", "height", 24.0);
+    });
+    push_object(&mut bytes, "ScriptedDrawable", |bytes| {
+        push_uint(bytes, "ScriptedDrawable", "parentId", 0);
+        push_uint(bytes, "ScriptedDrawable", "scriptAssetId", 1);
+    });
+    bytes
+}
+
+fn contentless_shader_file(script: &[u8]) -> Vec<u8> {
+    let mut script_payload = vec![0];
+    script_payload.extend(compile_luau(script));
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 991);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ShaderAsset", |bytes| {
+        push_uint(bytes, "ShaderAsset", "assetId", 0);
+        push_string(bytes, "ShaderAsset", "name", "scene");
+    });
+    push_object(&mut bytes, "ScriptAsset", |bytes| {
+        push_uint(bytes, "ScriptAsset", "assetId", 1);
+        push_string(bytes, "ScriptAsset", "name", "ContentlessShader");
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_blob(bytes, "FileAssetContents", "bytes", &script_payload);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 32.0);
+        push_f32(bytes, "Artboard", "height", 24.0);
+    });
+    push_object(&mut bytes, "ScriptedDrawable", |bytes| {
+        push_uint(bytes, "ScriptedDrawable", "parentId", 0);
+        push_uint(bytes, "ScriptedDrawable", "scriptAssetId", 1);
+    });
+    bytes
+}
+
+fn colliding_shader_alias_file() -> Vec<u8> {
+    let mut script_payload = vec![0];
+    script_payload.extend(compile_luau(COLLIDING_SHADER_ALIAS_SCRIPT));
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 991);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    for (asset_id, folder, marker) in [(0, "first", "first-owner"), (1, "second", "second-owner")] {
+        push_object(&mut bytes, "ShaderAsset", |bytes| {
+            push_uint(bytes, "ShaderAsset", "assetId", asset_id);
+            push_string(bytes, "ShaderAsset", "name", "scene");
+            push_string(bytes, "ShaderAsset", "folderPath", folder);
+        });
+        push_object(&mut bytes, "FileAssetContents", |bytes| {
+            push_blob(
+                bytes,
+                "FileAssetContents",
+                "bytes",
+                &shader_payload_with_marker(marker),
+            );
+        });
+    }
+    push_object(&mut bytes, "ScriptAsset", |bytes| {
+        push_uint(bytes, "ScriptAsset", "assetId", 2);
+        push_string(bytes, "ScriptAsset", "name", "AliasCollisions");
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_blob(bytes, "FileAssetContents", "bytes", &script_payload);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 32.0);
+        push_f32(bytes, "Artboard", "height", 24.0);
+    });
+    push_object(&mut bytes, "ScriptedDrawable", |bytes| {
+        push_uint(bytes, "ScriptedDrawable", "parentId", 0);
+        push_uint(bytes, "ScriptedDrawable", "scriptAssetId", 2);
+    });
+    bytes
+}
+
 struct TestImage {
     width: u32,
     height: u32,
@@ -243,8 +406,17 @@ impl RenderImage for TestImage {
     }
 }
 
+struct TestGpuCanvasShader(GpuCanvasShader);
+
+impl RenderGpuCanvasShader for TestGpuCanvasShader {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 struct GpuRecordingFactory {
     inner: RecordingFactory,
+    shader_occurrences: Rc<RefCell<Vec<Arc<dyn RenderGpuCanvasShader>>>>,
     calls: Rc<RefCell<Vec<(GpuCanvasShader, GpuCanvasPlan)>>>,
 }
 
@@ -252,6 +424,7 @@ impl GpuRecordingFactory {
     fn new() -> Self {
         Self {
             inner: RecordingFactory::new(),
+            shader_occurrences: Rc::new(RefCell::new(Vec::new())),
             calls: Rc::new(RefCell::new(Vec::new())),
         }
     }
@@ -309,17 +482,139 @@ impl Factory for GpuRecordingFactory {
         self.inner.decode_image(data)
     }
 
-    fn make_gpu_canvas_image(
+    fn make_gpu_canvas_shader(
         &mut self,
         shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        let occurrence: Arc<dyn RenderGpuCanvasShader> =
+            Arc::new(TestGpuCanvasShader(shader.clone()));
+        self.shader_occurrences
+            .borrow_mut()
+            .push(Arc::clone(&occurrence));
+        Ok(occurrence)
+    }
+
+    fn make_gpu_canvas_image(
+        &mut self,
+        vertex_shader: &Arc<dyn RenderGpuCanvasShader>,
+        fragment_shader: &Arc<dyn RenderGpuCanvasShader>,
         plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
-        self.calls.borrow_mut().push((shader.clone(), plan.clone()));
+        assert!(
+            Arc::ptr_eq(vertex_shader, fragment_shader),
+            "combined shader fixture must use the same handle for both stages"
+        );
+        let vertex_shader = vertex_shader
+            .as_any()
+            .downcast_ref::<TestGpuCanvasShader>()
+            .expect("test vertex shader handle");
+        fragment_shader
+            .as_any()
+            .downcast_ref::<TestGpuCanvasShader>()
+            .expect("test fragment shader handle");
+        self.calls
+            .borrow_mut()
+            .push((vertex_shader.0.clone(), plan.clone()));
         Ok(Box::new(TestImage {
             width: plan.width,
             height: plan.height,
         }))
     }
+}
+
+#[test]
+fn foldered_shader_resolves_through_bare_and_qualified_aliases_as_distinct_occurrences() {
+    let file = File::import_with_unsigned_scripts(&foldered_shader_alias_file()).unwrap();
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()
+        .unwrap();
+    let mut factory = GpuRecordingFactory::new();
+    let mut renderer = factory.inner.make_renderer();
+
+    instance.draw(&mut factory, &mut renderer).unwrap();
+
+    let occurrences = factory.shader_occurrences.borrow();
+    assert_eq!(
+        occurrences.len(),
+        2,
+        "each successful alias lookup must create one shader occurrence"
+    );
+    assert!(
+        !Arc::ptr_eq(&occurrences[0], &occurrences[1]),
+        "bare and qualified lookups must create distinct shader occurrences"
+    );
+}
+
+#[test]
+fn unused_contentless_shader_asset_does_not_prevent_script_boot() {
+    let file = File::import_with_unsigned_scripts(&contentless_shader_file(
+        UNUSED_CONTENTLESS_SHADER_SCRIPT,
+    ))
+    .unwrap();
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()
+        .unwrap();
+    let mut factory = GpuRecordingFactory::new();
+    let mut renderer = factory.inner.make_renderer();
+
+    instance.draw(&mut factory, &mut renderer).unwrap();
+
+    assert!(factory.shader_occurrences.borrow().is_empty());
+}
+
+#[test]
+fn requested_contentless_shader_asset_returns_nil_and_script_continues() {
+    let file = File::import_with_unsigned_scripts(&contentless_shader_file(
+        REQUESTED_CONTENTLESS_SHADER_SCRIPT,
+    ))
+    .unwrap();
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()
+        .unwrap();
+    let mut factory = GpuRecordingFactory::new();
+    let mut renderer = factory.inner.make_renderer();
+
+    instance.draw(&mut factory, &mut renderer).unwrap();
+
+    assert!(factory.shader_occurrences.borrow().is_empty());
+}
+
+#[test]
+fn shader_alias_collisions_preserve_the_first_owner_per_alias() {
+    let file = File::import_with_unsigned_scripts(&colliding_shader_alias_file()).unwrap();
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()
+        .unwrap();
+    let mut factory = GpuRecordingFactory::new();
+    let mut renderer = factory.inner.make_renderer();
+
+    instance.draw(&mut factory, &mut renderer).unwrap();
+
+    let occurrences = factory.shader_occurrences.borrow();
+    let sources = occurrences
+        .iter()
+        .map(|shader| {
+            shader
+                .as_any()
+                .downcast_ref::<TestGpuCanvasShader>()
+                .expect("test shader occurrence")
+                .0
+                .source
+                .as_str()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(sources.len(), 3);
+    assert!(sources[0].contains("first-owner"));
+    assert!(sources[1].contains("first-owner"));
+    assert!(sources[2].contains("second-owner"));
 }
 
 #[test]
@@ -417,8 +712,10 @@ fn default_factory_rejects_imported_gpu_canvas_instead_of_silently_drawing() {
     let mut renderer = factory.make_renderer();
 
     let error = instance.draw(&mut factory, &mut renderer).unwrap_err();
+    // Pinned lua_scripted_context.cpp:547-556 returns zero values when backend
+    // shader creation fails, so the downstream pipeline sees nil.
     assert!(
-        format!("{error:#}").contains("does not support imported GPU-canvas images"),
+        format!("{error:#}").contains("error converting Lua nil to AnyUserData"),
         "{error:#}"
     );
 }

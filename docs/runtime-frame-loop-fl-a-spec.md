@@ -1,7 +1,7 @@
 # FL-A Component / Update Owner-Family Specification
 
-Status: binding implementation specification; production translation has not
-started.
+Status: frozen pre-translation implementation mini-map, retained as the binding
+design record for the completed FL-A production translation.
 
 Pinned authority:
 `/Users/levi/dev/oss/rive-runtime` at

@@ -200,8 +200,8 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   renderer symptom was caused by the later hover/clear gesture.
 - Open browser/renderer qualification candidate: `LOC-012`.
 - Open artifact/Editor candidates: `LOC-015`, `LOC-016`, and `LOC-017`.
-- Changed intake needs evidence while an already-authorized additive Scene
-  candidate remains under review: `LOC-018`.
+- Changed intake needs evidence after its additive Scene repair landed:
+  `LOC-018`.
 
 There are ten unique children with eleven structured runtime links, 13
 candidate-linked children, and 23 unique affected children. The goal burns
@@ -377,20 +377,19 @@ Ordinary layout padding and TextStyle font-size/line-height remain under
 `P08-C01` / `LOC-018`; their runtime dirt/reflow acceptance is deferred until
 the relevant layout/text port wave lands.
 
-The separate `LOC-018` additive Scene-authoring gap is active in PR #66 from
-exact main `85e69a8215ef7caaef2c91437b0f435a5b830a56`. It may add the complete
-typed public `LayoutComponent` 409 / `LayoutComponentStyle` 420 hierarchy,
-property domain, owner IDs, record order, and encode/import/export fixpoint in
-`crates/nuxie/build.rs`, `crates/nuxie/src/scene.rs`, and focused
-`crates/nuxie` tests only. It must cover every concrete pinned-C++
-`KeyFrameInterpolator` descendant accepted by `interpolatorId`, including
-semantic ScriptAsset ordinal mapping. Its honest current-product claim is
-only +60 type-409 plus +60 type-420 records (410 -> 530). The remaining ten
-records and product traversal/order are Editor-owned; runtime layout/dirt/text
-execution and pixels remain post-port verification. Its changed committed
-inbox record is `intake-needs-evidence` because it does not separately label
-one full Editor SHA and one full Runtime SHA. The already-authorized PR may
-finish as a reviewed additive candidate, but the row cannot promote until the
+The separate `LOC-018` additive Scene-authoring repair is merged: PR #66 exact
+head `2707280cb3507f8d5c2f48cfe58f1cf0990e9ed0` rebase-merged at
+`d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3`. It adds the complete typed public
+`LayoutComponent` 409 / `LayoutComponentStyle` 420 hierarchy, property domain,
+owner IDs, record order, encode/import/export fixpoint, and every concrete
+pinned-C++ `KeyFrameInterpolator` descendant accepted by `interpolatorId`,
+including semantic ScriptAsset ordinal mapping. Its honest current-product
+claim remains only +60 type-409 plus +60 type-420 records (410 -> 530). The
+remaining ten records and product traversal/order are Editor-owned; runtime
+layout/dirt/text execution and pixels remain post-port verification. Its
+changed committed inbox record stays `intake-needs-evidence` because it does
+not separately label one full Editor SHA and one full Runtime SHA. The
+implementation is landed, but the row cannot promote until that
 committed-evidence gap is resolved.
 
 `F-ED-04` (`RT-ED-007`) is a confirmed runtime defect retained as deferred

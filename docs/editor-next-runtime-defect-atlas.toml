@@ -2,7 +2,7 @@ schema = "nuxie.editor-next.runtime-defect-atlas/v2"
 version = 2
 upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 editor_consumed_runtime_ref = "e72323c808b91d706ba3b745396beaca7accd69a"
-investigation_base_ref = "e72323c808b91d706ba3b745396beaca7accd69a"
+investigation_base_ref = "d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3"
 source_snapshot_status = "landed"
 source_snapshot_ref = "c7e4f313e8cd9237186e83546566537a341e3cfa"
 corrections_file = "docs/editor-next-runtime-defect-corrections.toml"
@@ -435,7 +435,7 @@ classification = "api-surface-gap"
 ticket = "F-ED-03"
 fixture_id = "fed.rt_ed_005.generic_visual_property_bind"
 preliminary_disposition = "Exact Scene authoring API repair implemented at 4eec745b704e9920f67098138963dc973e7b2d87 with the independent-review direction closure at e2d274d8d3b8de3af705d18506a6d48eadebfc0c; PR #49 final head f0bd914fbac1fd4cf82814216f2ddc88c3e32083 rebase-merged as the same tree at 08286481b4e7420768f625f901a944f313b84903. Generic typed propertyKey binds and stable LayoutComponentStyle targets reuse the existing faithful runtime DataBind owner."
-reproduction_sha256 = "cc870d4edc91d644d52f93adfc079d40289b27a23b15c3a0fba4d74331284918"
+reproduction_sha256 = "74a6968477b9ab00df7b94030258536a1c09ae2946818c0c2aacdf6f34c36567"
 rust_stimulus = "public Scene authors number/color binds for Rectangle.width, SolidColor.colorValue, converter-free ToSource and source-first TwoWay, converted TwoWay worldOpacity, all four LayoutComponentStyle padding keys, and two component-list occurrence-local widths; records are encoded and reimported through File::import before runtime assertions"
 cpp_stimulus = "historical Editor localization f4bb3025e263ad1a646ef6971358577a0aa6bfa2 retained as provenance; per COR-01, current F-ED oracle is data_binding_test.cpp:39-111 plus DataBind propertyKey/target-adjacency/context-value/reconcile source audit and executable probe at d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 source_files = ["include/rive/generated/data_bind/data_bind_base.hpp","include/rive/data_bind/data_bind.hpp","include/rive/scripted/scripted_data_converter.hpp","include/rive/data_bind/converters/data_converter_group.hpp","src/file.cpp","src/data_bind/data_bind.cpp","src/data_bind/context/context_value_number.cpp","src/data_bind/context/context_value_color.cpp","tests/unit_tests/runtime/data_binding_test.cpp","crates/nuxie/build.rs","crates/nuxie/src/scene.rs","crates/nuxie/tests/scene_authoring.rs","crates/nuxie/tests/data_converter_authoring.rs","docs/f-ed-03-generic-property-binding-spec.md"]
@@ -803,7 +803,7 @@ classification = "additive-product-feature"
 ticket = "F-ED-00"
 fixture_id = "fed.loc_003.long_press_listener"
 preliminary_disposition = "Closed as an unlinked additive product feature: exact C++ parity contains no timed-hold primitive, so no runtime port is authorized."
-reproduction_sha256 = "2790f17e9a04de73ea2fa4a513d696769dbd62d446b6e615d6254e4132cc8210"
+reproduction_sha256 = "a14540423548ea5a02ed66e4410a38108fe952f27ca3f1d3a39e297f4876d4e6"
 rust_stimulus = "typed Scene/compiler 700ms long_press lowering fails closed with animation.interaction.unsupported_long_press_duration"
 cpp_stimulus = "source audit of listener_type.hpp and listener_group.cpp proves no held-duration primitive"
 source_files = ["include/rive/listener_type.hpp","src/listener_group.cpp","crates/nuxie/src/scene.rs","crates/nuxie-runtime/src/state_machine.rs"]
@@ -1842,7 +1842,7 @@ owner_class = "api"
 classification = "api-surface-gap"
 ticket = "F-ED-13"
 fixture_id = "fed.loc_018.record_normalization"
-preliminary_disposition = "Qualified split boundary: Nuxie's public Scene facade cannot author the complete typed LayoutComponent 409 / LayoutComponentStyle 420 hierarchy. The additive repair owns stable hierarchy, owner IDs, all 75 style properties, concrete interpolator records, and encode/import/export fixpoint only. Product-only records/traversal remain Editor-owned, while runtime execution/dirt/pixels remain deferred post-port verification."
+preliminary_disposition = "The additive public Scene-authoring repair landed at d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3. It owns stable LayoutComponent 409 / LayoutComponentStyle 420 hierarchy, owner IDs, all 75 style properties, every concrete interpolator record, and encode/import/export fixpoint only. Product-only records/traversal remain Editor-owned, while runtime execution/dirt/pixels remain deferred post-port verification. The changed inbox record still needs separately labeled full Editor and Runtime SHAs before promotion."
 reproduction_sha256 = "c4cc8d29e09836c2ecedec11ddc25c7886f86244c1796c22af661d1c4d3113bf"
 rust_stimulus = "cargo test -p nuxie --test scene_authoring layout_style_ -- --nocapture plus Scene encode/import/export fixpoint tests"
 cpp_stimulus = "pinned d788 type/property/source audit of LayoutComponent 409, LayoutComponentStyle 420, and every concrete KeyFrameInterpolator accepted by LayoutComponentStyle::interpolatorId"
@@ -1856,7 +1856,7 @@ target_tests = ["ordinary_layout_export_is_deterministic_and_reimports_with_exac
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
 owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#LOC-018"
 adaptation_rule = "PORTING.md prime directive: preserve the complete typed C++ record family, owner hierarchy, explicit-property presence, and semantic ID translation; no raw-record shadow or flattened-unit approximation"
-decision_row = "PR #66 is an additive Scene-authoring candidate based on exact main 85e69a8215ef7caaef2c91437b0f435a5b830a56. It is merge-blocked until all four concrete interpolator variants are exact. Its product-stream claim is limited to +60 type409 and +60 type420 records (410 -> 530)."
+decision_row = "PR #66 exact reviewed head 2707280cb3507f8d5c2f48cfe58f1cf0990e9ed0 rebase-merged as d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3. Its product-stream claim is limited to +60 type409 and +60 type420 records (410 -> 530); the remaining ten records and product traversal/order stay Editor-owned, and runtime layout/dirt/text execution remains post-port verification."
 touch = ["crates/nuxie/build.rs","crates/nuxie/src/scene.rs","crates/nuxie/tests/scene_authoring.rs"]
 dont_touch = ["@active-fl-lease"]
 formal_children = []
@@ -1869,8 +1869,8 @@ parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a
 [defect.revisions]
 original_localization_rust_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
-investigation_head_sha = "213e3985221f097a1f9819683a4e465c24835a9f"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+investigation_head_sha = "2707280cb3507f8d5c2f48cfe58f1cf0990e9ed0"
+merged_repair_sha = "d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3"
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
 consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
 [defect.renderer_provenance]
@@ -1878,10 +1878,10 @@ status = "not-applicable"
 reason = "This row does not qualify renderer output."
 [defect.executor_verification]
 status = "pending"
-reason = "PR #66 remains an open candidate. The complete four-interpolator authoring seam is implemented locally, but final full-floor evidence and an immutable corrected head are still pending."
+reason = "PR #66 exact head 2707280c and merge d7cef0a8 have complete local executor evidence: runtime 414, nuxie 145, Scene authoring 178, C++ probes 721, probe-armed workspace, ordinary/scripted 317/317 entries and 647/647 segments, C API, lint/format/diff, size below 9 MiB, and clean Standards/Spec reviews. The verification table remains pending only because the changed committed inbox record is intake-needs-evidence and cannot legally enter executor-green."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "Independent verification waits for the final PR #66 head and is limited to the additive authoring/fixpoint claim."
+reason = "Independent frozen-head Standards and Spec reviews are clean for the additive authoring/fixpoint claim. Formal orchestrator promotion waits for the changed committed inbox record to supply separately labeled full Editor and Runtime SHAs."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
@@ -1895,13 +1895,13 @@ status = "pass"
 command = "pinned d788 type/property/source audit for LayoutComponent 409, LayoutComponentStyle 420, and LayoutComponentStyle::interpolatorId"
 evidence = "Pinned C++ accepts the full typed 409/420 owner hierarchy and every concrete KeyFrameInterpolator descendant: CubicEase type28, CubicValue type138, Elastic type174, and Scripted type972, with exact inherited/default properties and FileAsset ordinal resolution."
 [defect.rust_result]
-status = "fail"
+status = "pass"
 command = "cargo test -p nuxie --test scene_authoring layout_style_ -- --nocapture plus Scene encode/import/export fixpoint tests"
-evidence = "Runtime main 85e69a82 lacks the complete public typed 409/420 mount surface. Open PR #66 is the Scene-only repair candidate; it must remain limited to exact authoring hierarchy, domain, ordering, interpolators, and binary fixpoint."
+evidence = "Runtime main d7cef0a8 contains the complete public typed 409/420 authoring surface. Exact head 2707280c proves all 75 properties, stable hierarchy/order, CubicEase type28, CubicValue type138, Elastic type174, Scripted type972, semantic FileAsset ordinals, explicit defaults/presence, unrestricted finite cubic controls, and binary encode/import/export fixpoint. Full local floors and both independent reviews are green."
 [defect.editor_result]
 status = "fail"
 command = "Editor LOC-018 normalized-record differential and authored-layout producer suites recorded at checkpoint c7e4f313e8cd9237186e83546566537a341e3cfa"
-evidence = "The Editor producer commit 38f5170f113805b6bc3dcde1c8da5e761a29aa41 is independently reviewed and green: 277 shared-lowering tests, 46 scene-compiler tests, and the focused adapter preserve ten artboards with 60 component/60 style plans. Current retained/cold streams remain red because the runtime Scene authoring seam is absent; no raw records, postprocessor, remount shadow, or pixel-oracle change ships."
+evidence = "The Editor producer commit 38f5170f113805b6bc3dcde1c8da5e761a29aa41 is independently reviewed and green: 277 shared-lowering tests, 46 scene-compiler tests, and the focused adapter preserve ten artboards with 60 component/60 style plans. Checkpoint c7 predates runtime landing d7cef0a8, so retained/cold product streams have not consumed or rerun the new typed Scene seam; no raw records, postprocessor, remount shadow, or pixel-oracle change ships."
 
 [[defect]]
 id = "LOC-019"

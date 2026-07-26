@@ -50,6 +50,13 @@ const TEXT_TRIM_BOTTOM_ALPHABETIC: u64 = 1;
 const TEXT_TRIM_BOTTOM_TEXT: u64 = 2;
 const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
 
+fn font_parser_panic_boundary<F>(parse: F) -> bool
+where
+    F: FnOnce() -> bool + std::panic::UnwindSafe,
+{
+    std::panic::catch_unwind(parse).unwrap_or(false)
+}
+
 /// Whether embedded font bytes can be parsed by both runtime text backends.
 ///
 /// Dynamic authoring calls this before publishing a structural edit so a
@@ -60,7 +67,7 @@ pub fn embedded_font_is_parseable(font_bytes: &[u8]) -> bool {
         return false;
     }
 
-    std::panic::catch_unwind(|| {
+    font_parser_panic_boundary(|| {
         let Ok(font) = SkrifaFontRef::new(font_bytes) else {
             return false;
         };
@@ -84,7 +91,6 @@ pub fn embedded_font_is_parseable(font_bytes: &[u8]) -> bool {
         }
         true
     })
-    .unwrap_or(false)
 }
 
 /// Whether every in-band `FontAsset` can be safely consumed by the text
@@ -6076,29 +6082,54 @@ mod tests {
         decoded
     }
 
-    fn malformed_outline_font_bytes() -> Vec<u8> {
-        let mut bytes = fixture_font_bytes();
+    fn font_table_range(bytes: &[u8], tag: &[u8; 4]) -> std::ops::Range<usize> {
         let table_count = usize::from(u16::from_be_bytes([bytes[4], bytes[5]]));
-        let glyf_offset = (0..table_count)
+        (0..table_count)
             .map(|index| 12 + index * 16)
             .find_map(|record| {
-                (bytes.get(record..record + 4) == Some(b"glyf")).then(|| {
-                    u32::from_be_bytes([
+                (bytes.get(record..record + 4) == Some(tag)).then(|| {
+                    let offset = u32::from_be_bytes([
                         bytes[record + 8],
                         bytes[record + 9],
                         bytes[record + 10],
                         bytes[record + 11],
-                    ]) as usize
+                    ]) as usize;
+                    let length = u32::from_be_bytes([
+                        bytes[record + 12],
+                        bytes[record + 13],
+                        bytes[record + 14],
+                        bytes[record + 15],
+                    ]) as usize;
+                    offset..offset + length
                 })
             })
-            .expect("fixture has a glyf table");
-        assert_ne!(
-            i16::from_be_bytes([bytes[glyf_offset], bytes[glyf_offset + 1]]),
-            0,
-            "fixture glyph zero must have contours before corruption"
+            .unwrap_or_else(|| panic!("fixture has a {} table", String::from_utf8_lossy(tag)))
+    }
+
+    fn empty_glyph_with_padding_font_bytes() -> Vec<u8> {
+        let mut bytes = fixture_font_bytes();
+        let glyf = font_table_range(&bytes, b"glyf");
+        assert_eq!(glyf.len(), 244, "fixture has one 244-byte glyph body");
+        assert_eq!(
+            i16::from_be_bytes([bytes[glyf.start], bytes[glyf.start + 1]]),
+            2,
+            "fixture glyph body starts as a two-contour simple glyph"
         );
-        bytes[glyf_offset..glyf_offset + 2].copy_from_slice(&0i16.to_be_bytes());
-        bytes[glyf_offset + 10..glyf_offset + 12].copy_from_slice(&0u16.to_be_bytes());
+        bytes[glyf.start..glyf.start + 2].copy_from_slice(&0i16.to_be_bytes());
+        bytes[glyf.start + 10..glyf.start + 12].copy_from_slice(&0u16.to_be_bytes());
+        bytes[glyf.start + 12..glyf.end].fill(0);
+        bytes
+    }
+
+    fn malformed_outline_font_bytes() -> Vec<u8> {
+        let mut bytes = fixture_font_bytes();
+        let glyf = font_table_range(&bytes, b"glyf");
+        assert_eq!(
+            i16::from_be_bytes([bytes[glyf.start], bytes[glyf.start + 1]]),
+            2,
+            "fixture glyph body starts as a two-contour simple glyph"
+        );
+        bytes[glyf.start + 14..glyf.start + 16].copy_from_slice(&u16::MAX.to_be_bytes());
         bytes
     }
 
@@ -6205,7 +6236,29 @@ mod tests {
     }
 
     #[test]
-    fn embedded_font_validation_rejects_outline_reader_panics() {
+    fn embedded_font_validation_accepts_empty_glyph_with_padding() {
+        // Regression for googlefonts/fontations#1962: a zero-contour simple
+        // glyph may carry trailing padding, and outline traversal must treat
+        // it as an empty glyph rather than indexing an empty point buffer.
+        let font = empty_glyph_with_padding_font_bytes();
+        assert!(
+            HarfFontRef::new(&font).is_ok() && SkrifaFontRef::new(&font).is_ok(),
+            "the shallow parsers must accept the regression font"
+        );
+        assert!(embedded_font_is_parseable(&font));
+    }
+
+    #[test]
+    fn embedded_font_catalog_accepts_empty_glyph_with_padding() {
+        let (runtime, _) = baseline_origin_text_runtime_with_sizing_and_font(
+            TEXT_SIZING_FIXED,
+            empty_glyph_with_padding_font_bytes(),
+        );
+        assert!(embedded_fonts_are_parseable(&runtime));
+    }
+
+    #[test]
+    fn embedded_font_validation_rejects_oversized_instruction_length() {
         let malformed = malformed_outline_font_bytes();
         assert!(
             HarfFontRef::new(&malformed).is_ok() && SkrifaFontRef::new(&malformed).is_ok(),
@@ -6224,6 +6277,13 @@ mod tests {
             malformed_outline_font_bytes(),
         );
         assert!(!embedded_fonts_are_parseable(&runtime));
+    }
+
+    #[test]
+    fn embedded_font_validation_contains_dependency_panics() {
+        assert!(!font_parser_panic_boundary(|| panic!(
+            "synthetic font parser panic"
+        )));
     }
 
     fn baseline_origin_text_runtime() -> (RuntimeFile, GraphFile) {

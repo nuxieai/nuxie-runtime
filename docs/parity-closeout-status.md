@@ -1007,24 +1007,19 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** publish the fully floored FL-C2 immutable
-pending-verification candidate, whose corrected complete-family semantic
-commit is `a40b17cd1964d46e5453b7d5278dc158ebb7b64b`, and request independent
-acceptance. The rejected `55856a453a7598be3d734d10af881001dce7cff3`
-candidate dropped malformed focus conditions; the correction retains every
-occurrence and makes a missing or wrong comparator evaluate false, with two
-pinned-C++ differentials and a permanent negative checker. All 12
-transition/condition definition owners now have direct filename
-correspondence; the pinned-C++ comparison-shape matrix and left-ViewModel
-source-consumption rule are implemented with focused and end-to-end
-differential evidence. The corrected-family canonical hot-loop checkpoint is
-durably recorded at 1.661x C++, so the final 1.0x program requirement remains
-open without turning performance into the implementation queue. The pinned-C++
-RT-ED-007 unresolved nested transition-duration binding correction remains
-fully floored without promoting the pending StateMachineInstance row. FL-B,
-FL-C1, and FL-C2 rows remain pending reacceptance/acceptance. Listener groups
-remain in scope beside their actual FL-C4 invocation and FL-E TextInput
-dependencies.
+**Canonical NEXT:** read the complete five-file pinned-C++ layer/state
+occurrence family and commit its closure checklist before production changes
+(FL-C3): `layer_state.cpp`, `state_instance.cpp`,
+`state_machine_layer.cpp`, `system_state_instance.cpp`, and
+`nested_state_machine.cpp`. Exact FL-C2 candidate
+`7546f4f15b05e582c62aa52ecc93430a7048e143` passed independent Standards and
+Spec review with no findings; its 12 mapped frame-loop files, three importer
+rows, and two member rows are promoted by the dedicated reconciliation
+commit. The corrected-family canonical hot-loop checkpoint remains durably
+recorded at 1.661x C++, so the final 1.0x program requirement stays open
+without turning performance into the implementation queue. FL-B and FL-C1
+rows remain pending reacceptance/acceptance. Listener groups remain in scope
+beside their actual FL-C4 invocation and FL-E TextInput dependencies.
 
 ## Next queue (top = next; orchestrator maintains)
 

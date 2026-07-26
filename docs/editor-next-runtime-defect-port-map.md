@@ -28,16 +28,16 @@ This map was prepared from these Editor Next handoff artifacts:
 
 | artifact | SHA-256 |
 |---|---|
-| `nuxie-editor-next-cutover-proposal.md` | `0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983` |
-| `nuxie-editor-next-runtime-defects.md` | `01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67` |
-| `nuxie-editor-next-parity-ledger.json` | `a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04` |
+| `nuxie-editor-next-cutover-proposal.md` | `39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401` |
+| `nuxie-editor-next-runtime-defects.md` | `9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c` |
+| `nuxie-editor-next-parity-ledger.json` | `04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25` |
 
 The source copies live under:
 
 `/Users/levi/.codex/worktrees/7189/nuxie-dev/worktrees/editor-next-cutover-assembly/plans/`
 
 The immutable source checkpoint for those hashes is
-`4da896beb5ec6815f6b01a2433875274a321d06c`.
+`7ca11e331a57cb3ea574848f8e93eb108878c40b`.
 
 The Editor artifacts at this immutable checkpoint consume runtime commit
 `e72323c808b91d706ba3b745396beaca7accd69a`. That is not the same thing as
@@ -47,10 +47,13 @@ row must retain all of those SHAs separately.
 There are 25 unique handoff IDs: seven `RT-ED-*` rows and eighteen `LOC-*`
 rows. `LOC-010` is a reserved tombstone, not a defect row.
 
-Four parity children currently name runtime dependencies. Two name
-`RT-ED-003`, one names `RT-ED-005`, and one names `RT-ED-007`.
+Nine parity children now carry structured runtime links through either
+`runtimeDependencies` or `runtimeDefects`: two name `RT-ED-003`; one names
+`RT-ED-005`; one names `RT-ED-007`; three name `LOC-002`; one names
+`LOC-005`; and one names `LOC-007`. Fifteen additional candidate links remain,
+with 23 unique affected children and only `P09-C01` overlapping.
 `RT-ED-004` is retained only as historical WebGL2 evidence and has no current
-formal child.
+structured child.
 
 ## Boundary
 
@@ -104,11 +107,11 @@ requires the recorded user safety/API decision. `FL-C`
 (StateMachineInstance/layer/transition/action/input/listener ownership) and
 `FL-D` (Artboard/DataBind/event settlement) remain later waves.
 
-An explicitly coordinator-authorized stable-Apple repair is concurrently in
-flight on a separate branch targeting the promoted FL-A line. That exception
-does not release any reservation below: the FL owner remains the sole writer
-for the listed runtime/graph families until the coordinator publishes a new
-lease after that repair and the `didLoop` decision.
+The coordinator canceled Defects Fix's duplicate stable-Apple branch because
+Runtime Fix owns that mechanical repair. This does not release any reservation
+below: the FL owner remains the sole writer for the listed runtime/graph
+families until the coordinator publishes a new lease after that repair and
+the `didLoop` decision.
 
 The FL executor is the sole production writer for this current reservation:
 
@@ -162,8 +165,9 @@ the frame-loop/advance contract, it immediately moves to the deferred set.
 
 ### Work that may be prepared but needs a landing handshake
 
-`F-ED-08/10` may perform qualification now. A resulting fix may be developed
-only when its exact production closure is renderer/backend-only. `F-ED-11`
+`F-ED-08` now needs no-repair independent promotion only. `F-ED-10` may
+perform qualification now, and a resulting fix may be developed only when its
+exact production closure is renderer/backend-only. `F-ED-11`
 production is complete for `LOC-009` and `LOC-019`; those rows need only
 independent landing-provenance promotion.
 Before such a fix lands, the F-ED orchestrator must obtain a fresh handshake
@@ -177,8 +181,8 @@ observation; it has no linked product scenario. An explicitly scheduled
 identical-input proof may requalify the same typed clip on supported WebGPU,
 but it
 authorizes no WebGL2 writer, fork, dependency, or fallback. The active browser
-writer order therefore begins only with a qualified open `F-ED-08` or
-`F-ED-10` closure; landed `F-ED-06/11` have no new writer. Overlap among
+writer order therefore begins only with a qualified open `F-ED-10` closure;
+landed `F-ED-06/11` and no-repair `F-ED-08` have no new writer. Overlap among
 `browser.rs` and WebGPU resource owners serializes any surviving open slices
 even though they are disjoint from FL.
 
@@ -205,20 +209,20 @@ before this table is revised.
 
 The safe next queue is therefore:
 
-1. finish and independently land the Q0/F-ED-00A control-plane refresh using
-   only F-ED-owned paths;
+1. retain merged Q0/F-ED-00A control-plane integrity at runtime main
+   `2e24cd7f23a35fc96a71c5edb5da77d1a8634e08`;
 2. independently promote the landing-provenance records for `RT-ED-003`,
    `RT-ED-005`, `LOC-009`, and `LOC-019`;
 3. fan out read-only direct qualifications; treat `RT-ED-004` only as
    historical WebGL2 evidence unless an explicit WebGPU-only requalification
    is scheduled;
 4. activate only the exact open Scene-only `F-ED-04` or a qualified,
-   renderer-only `F-ED-08/10` production closure that survives the atlas and
+   renderer-only `F-ED-10` production closure that survives the atlas and
    coordinator lease checks;
 5. perform record normalization and local ABI 1.6 qualification;
 6. keep every runtime-owner result as evidence until the corresponding FL
    executor releases or absorbs its owner family;
-7. re-handshake after the in-flight stable-Apple repair, after the `FL-B`
+7. re-handshake after the Runtime Fix stable-Apple repair, after the `FL-B`
    safety/API decision, after every later FL landing, and before any
    renderer-only landing.
 
@@ -332,18 +336,18 @@ fixture in `F-ED-00`.
 |---|---|---|
 | `RT-ED-001` | closed stale-oracle observation | focused current-pin `data_viz_demo` is exact; no further source work |
 | `RT-ED-002` | closed stale-oracle observation | focused current-pin `db_health_tracker` is exact; no further source work |
-| `RT-ED-003` | landed browser presentation/API repair, not runtime traversal; independent promotion pending | PR #55 splits ordinary WebGPU presentation from explicit readback at merge `e72323c8`, consumed by Editor checkpoint `4da896be` |
+| `RT-ED-003` | landed browser presentation/API repair, not runtime traversal; independent promotion pending | PR #55 splits ordinary WebGPU presentation from explicit readback at merge `e72323c8`, consumed by Editor checkpoint `7ca11e33` |
 | `RT-ED-004` | historical WebGL2 capability evidence; current WebGPU parity remains unqualified | preserve the old evidence; any current claim requires a direct current-pin typed rounded-clip WebGPU oracle, with no WebGL2 implementation or fork |
 | `RT-ED-005` | landed high-level generic number/color authoring repair; independent promotion pending | PR #49 merge `08286481` is consumed by Editor; P09-C01 remains separately Partial on FL-E layout/TextStyle ownership |
 | `RT-ED-006` | retracted | retain tombstone only; no source work |
 | `RT-ED-007` | proven high-level authoring-surface generalization gap | nested `ViewModelNumberSource` path for transition duration; low-level path resolution already exists |
 | `LOC-001` | high-confidence structural Scene ownership mistranslation | type-specific remount carry versus one stable retained ViewModel instance |
-| `LOC-002` | high-confidence derived-relation rebind gap | rerun after `LOC-001/005`; then compare C++ immediate current-source evaluation |
+| `LOC-002` | committed Editor evidence isolates rematerialization losing nested ViewModel state | requalify the historical f4bb C++ citations at d788, then route the exact Scene/FL owner collision |
 | `LOC-003` | closed unlinked additive product feature | pinned C++ has no timed-hold primitive; the user decision authorizes no runtime port |
 | `LOC-004` | resolved editor-owned | no runtime work |
-| `LOC-005` | high-confidence same ownership mistranslation as `LOC-001` | one retained ViewModel instance shared by two source artboards |
-| `LOC-006` | current required-WebGPU conditional-visibility candidate | compare identical typed records, draw/hit membership, and pixels with pinned C++; historical backend observations are provenance only |
-| `LOC-007` | high-confidence missing C++ dirt callback | ParametricPath width/height/origin setters through Path, Shape, and retained paint-path invalidation |
+| `LOC-005` | committed Editor evidence isolates independent live cells for one authored shared instance; runtime ownership remains a candidate | run the identical d788 application-owned instance differential before assigning a writer |
+| `LOC-006` | no-repair stale characterization awaiting independent promotion | committed no-hover evidence proves the alleged retained-pixel defect was gesture contamination; promote legally through reproduced/stale-oracle/closed |
+| `LOC-007` | committed Editor evidence plus historical C++ source identifies a missing dirt chain | requalify d788 ParametricPath width/height through Path, Shape, and PathComposer, then track the sole FL-E owner landing |
 | `LOC-008` | candidate public API-surface gap | establish the C++ ownership contract, then expose the exact runtime path only if runtime owns it |
 | `LOC-009` | proven structural WebGPU shader-consumer mistranslation | consume authored target-0 whole-module WGSL and mandatory target-16 `BindingMap` directly, preserving C++ entry selection and shared-module semantics |
 | `LOC-011` | real product symptom, owner unproven | inspect authored text, live VM value, post-bind target, shaped runs, then pixels |
@@ -437,7 +441,7 @@ WebGPU path mapped a texture and copied the returned bytes through
 `bc139955c7e2d30d9cf611dd14c24606fd13520a`. PR #55 final head
 `a1c56b5a80c88db4f6cee6550795b6e242394c46` separates those operations; merge
 `e72323c808b91d706ba3b745396beaca7accd69a` has the same tree. On clean
-Editor checkpoint `4da896beb5ec6815f6b01a2433875274a321d06c`, ordinary WebGPU presentation
+Editor checkpoint `7ca11e331a57cb3ea574848f8e93eb108878c40b`, ordinary WebGPU presentation
 records `getCurrentTexture=1`, `mapAsyncRead=0`, and `putImageData=0`;
 explicit readback records `getCurrentTexture=0` and `mapAsyncRead=1`.
 
@@ -447,14 +451,16 @@ a C++ runtime file port. The product-host proof and unchanged normal-timeout
 device-frame drag gate pass; the atlas row remains reported only until
 independent orchestrator promotion.
 
-### Historical backend evidence and current WebGPU oracles — `RT-ED-004`, `LOC-006`, `LOC-014`
+### Historical backend evidence and current WebGPU oracles — `RT-ED-004`, `LOC-014`
 
 The retired backend's nonrectangular clip allocated full-frame content and
 mask images, then composited with `DestinationIn`; its feather path used a
 locally designed Gaussian image plan. Those dated observations remain
 renderer-backend provenance, never a writer, fork, fallback, or repeatable
-qualification target. `LOC-006` and `LOC-014` are current only insofar as the
-same typed inputs remain candidates on required WebGPU. Any current claim must
+qualification target. `LOC-014` is current only insofar as the same typed
+input remains a candidate on required WebGPU. `LOC-006` is separately closed
+in the committed inbox as gesture-contaminated stale characterization and has
+no renderer writer. Any current `LOC-014` claim must
 be qualified as follows:
 
 1. prove the exact current-pin C++ reference behavior on the same typed input;
@@ -787,28 +793,17 @@ The landed Editor checkpoint has no formal or candidate child for
 `RT-ED-004`. Historical product consumption therefore does not gate this
 evidence row or any independently landed browser repair.
 
-### `F-ED-08` — Conditional visibility: pinned C++ versus required WebGPU
+### `F-ED-08` — Conditional visibility no-repair promotion
 
 Qualification target: `LOC-006`.
 
-Qualify the current required-WebGPU conditional-visibility fixture against the
-identical pinned-C++ input. Its completed frame and stale pixels are distinct
-from `RT-ED-004`'s dated retired-backend construction failure. Compare exact
-records and object order first, then logical membership, layer clear, mask
-composition, destination composition, hit membership, and final pixels step by
-step. The first difference is a localization point only. Re-enter the
-governing classification:
-
-- repair an exact local site only when the surrounding owner family is
-  already faithful;
-- port a complete missing lifecycle;
-- or replace a structurally divergent owner family and delete its displaced
-  mechanism.
-
-The historical retired-backend observation is provenance only: it creates no
-writer, fork, fallback, test target, or serialization edge. If the C++ versus
-WebGPU differential discovers a current defect, that owner serializes by its
-exact Rust touch set and adjacent clip/composite lifecycle.
+Independently verify the committed no-hover bracket and promote the row through
+the legal `reported -> reproduced -> stale-oracle -> closed` path. Five
+post-write frames stay at draw count 30 with no red compositor residue or
+surface/device error; the old 34-draw state returns only after the deliberately
+later hover/clear gesture. This creates no runtime, renderer, browser, or
+Editor writer. The historical retired-backend observation remains provenance
+only and creates no fork, fallback, test target, or serialization edge.
 
 ### `F-ED-09` — Text semantics, variable fonts, and measurement
 
@@ -970,18 +965,18 @@ This is a two-owner handoff:
    reruns the product commands, and updates the Editor parity/defect artifacts
    with exact commands, hashes, and results.
 
-The landed artifact snapshot has four children with formal
-`runtimeDependencies`, but that is not the complete product rerun set. The
-candidate matrix currently maps as follows:
+The landed artifact snapshot has nine children with structured
+`runtimeDependencies` or `runtimeDefects`, but that is not the complete product
+rerun set. The remaining candidate matrix currently maps as follows:
 
 | candidate | directly affected children in the artifact snapshot |
 |---|---|
 | `LOC-001` | `P13-C07` |
-| `LOC-002` | `P04-C11`, `P09-C01`, `P09-C03`, `P09-C06` |
+| `LOC-002` | `P09-C01` (structured links now own `P04-C11`, `P09-C03`, and `P09-C06`) |
 | `LOC-003` | none; closed user decision authorizes no runtime implementation |
-| `LOC-005` | `P09-C05` |
-| `LOC-006` | `P09-C04` |
-| `LOC-007` | `P11-C12` |
+| `LOC-005` | none (`P09-C05` is now a structured runtime-defect link) |
+| `LOC-006` | `P09-C04` (the source assertion remains a candidate link until the stale characterization is independently promoted) |
+| `LOC-007` | none (`P11-C12` is now a structured runtime-defect link) |
 | `LOC-008` | `P08-C06` |
 | `LOC-009` | `P14-C01` |
 | `LOC-011` | `P08-C06` |
@@ -994,7 +989,7 @@ candidate matrix currently maps as follows:
 | `LOC-018` | `P04-C12`, `P07-C04` |
 | `LOC-019` | `P14-C06` |
 
-The candidate set contains 20 unique children. Unioning it with the four
+The candidate set contains 15 unique children. Unioning it with the nine
 formal children yields 23 unique directly affected child IDs because
 `P09-C01` overlaps. The current Editor checkpoint retains `RT-ED-004` only as
 historical WebGL2 evidence and removes all five of its former formal child
@@ -1037,7 +1032,8 @@ the atlas. A shared file is not proof of a semantic dependency.
 
 - None are assumed between `LOC-001/002/005` until the direct owner closure is
   complete. `LOC-002` may collapse into `F-ED-01` or become a separate family.
-- `LOC-006` is semantically distinct from `RT-ED-004`.
+- `LOC-006` is a no-repair stale characterization, semantically distinct from
+  historical `RT-ED-004`; neither has a production writer.
 - `LOC-009` is not blocked by `LOC-019`.
 - `RT-ED-005` and `RT-ED-007` are independent API gaps: the former is landed
   and consumed pending promotion, while the latter remains open
@@ -1067,7 +1063,7 @@ three read-only scouts for the remaining open rows:
    `LOC-001/002/005`, `RT-ED-007`, and `LOC-007`;
 2. browser/renderer:
    historical-only `RT-ED-004` when explicitly requested, plus
-   `LOC-006/012/014`;
+   `LOC-012/014`; `LOC-006` needs independent no-repair promotion only;
 3. text/records:
    `LOC-008/011/013/018`.
 
@@ -1086,7 +1082,7 @@ ownership before activation.
 | candidate lane | order if closure overlaps | expected area to prove |
 |---|---|---|
 | Scene/API | open blocker `F-ED-04`, then qualified candidate work `F-ED-01/02`; landed `F-ED-03` has no writer | `scene.rs`, schema/export/import helpers, and any runtime handle seam |
-| browser | qualified open `F-ED-08/10`; landed `F-ED-06/11` have no writer and `F-ED-07` remains historical-evidence only | `browser.rs`, WebGPU GPU-canvas/scripting seams, and resource owners; no `webgl2.rs` writer |
+| browser | qualified open `F-ED-10`; landed `F-ED-06/11` and no-repair `F-ED-08` have no writer, while `F-ED-07` remains historical-evidence only | `browser.rs`, WebGPU GPU-canvas/scripting seams, and resource owners; no `webgl2.rs` writer |
 | runtime dirt | qualified `F-ED-05` | waits for the exact FL-E Path/Shape owner lock |
 | text-derived | qualified `F-ED-09` rows split by discovered owner | Scene/import/binding, `text.rs`, font parser/shaper, or renderer |
 | renderer feather | qualified `F-ED-10` | exact renderer/backend owner closure |
@@ -1167,13 +1163,18 @@ Exact baseline counts may rise when a slice adds tests; they may never fall.
 No test, expected value, corpus entry, tolerance, resource ceiling, error
 contract, provenance guard, or gate is weakened to admit a repair.
 
-The four children carrying formal JSON `runtimeDependencies` in the landed
-Editor checkpoint are:
+The nine children carrying structured JSON `runtimeDependencies` or
+`runtimeDefects` in the landed Editor checkpoint are:
 
-| child | dependencies |
+| child | structured runtime links |
 |---|---|
 | `P04-C01` | `RT-ED-003` |
+| `P04-C11` | `LOC-002` |
 | `P09-C01` | `RT-ED-005` |
+| `P09-C03` | `LOC-002` |
+| `P09-C05` | `LOC-005` |
+| `P09-C06` | `LOC-002` |
+| `P11-C12` | `LOC-007` |
 | `P19-C03` | `RT-ED-003` |
 | `P19-C09` | `RT-ED-007` |
 

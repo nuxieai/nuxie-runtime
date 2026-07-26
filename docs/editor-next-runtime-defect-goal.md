@@ -36,15 +36,15 @@ in the port map. Update the stale lower-precedence file in the same evidence
 or planning PR.
 
 The immutable Editor source checkpoint is
-`4da896beb5ec6815f6b01a2433875274a321d06c` on
+`7ca11e331a57cb3ea574848f8e93eb108878c40b` on
 `origin/levi/editor-next-cutover-assembly`:
 
 - proposal SHA-256:
-  `0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983`;
+  `39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401`;
 - runtime-defects SHA-256:
-  `01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67`;
+  `9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c`;
 - parity-ledger SHA-256:
-  `a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04`.
+  `04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25`.
 
 The pinned C++ runtime is
 `d788e8ec6e8b598526607d6a1e8818e8b637b60c`. The WebGPU-only runtime
@@ -73,17 +73,24 @@ Intake runs only at an explicit scheduling boundary:
 2. fetch the canonical Editor branch;
 3. compare its latest committed checkpoint with the last consumed checkpoint
    in the atlas/status;
-4. import only new or changed `LOC-*` records, preserving Editor provenance;
+4. import new or changed canonical `LOC-NNN` and `RT-ED-NNN` records,
+   preserving Editor provenance;
 5. validate stable IDs, commands, SHAs, evidence, and ledger links;
 6. leave incomplete records `intake-needs-evidence` without starting chatty
    clarification;
 7. commit the consumed checkpoint and imported rows atomically; and
 8. rebuild the dependency/file-ownership DAG before scheduling new work.
 
-For schema-v2 intake, each complete new or changed record supplies its
-Editor SHA, runtime SHA, exact command, and result/evidence as four
-column-zero, top-level Markdown bullets. Indented or container-nested text
-never satisfies those provenance fields.
+For schema-v2 intake, each complete new or changed record supplies a
+role-labeled Editor SHA, a role-labeled runtime SHA, an exact command or
+reproducer, and result/evidence in column-zero top-level Markdown bullets.
+The original exact `Editor SHA` / `Runtime SHA` / `Command` / `Result` labels
+remain valid. The committed Editor inbox template also permits the narrowly
+enumerated `Exact Editor checkpoint/provenance/base`, `Runtime pin`,
+`Editor/runtime checkpoint`, and command/reproducer labels. A combined
+Editor/runtime checkpoint must contain two distinct full SHAs. An unrelated
+continuation SHA, fixture code span, indented bullet, or container-nested text
+cannot satisfy a missing role.
 
 New inbox rows do not preempt active repairs. They enter the next intake batch
 after active lanes reach a merge or block boundary. Escalate only a safety or
@@ -97,8 +104,9 @@ directly.
 intake boundary, not a live poll during an active repair. The checker
 materializes both recorded commits, verifies their ancestry on the canonical
 local branch, hashes both inbox files, binds every atlas ID to its committed
-defect section, validates formal/candidate ledger links, and derives the exact
-new-or-changed `LOC-*` count. It never fetches by itself. Before a program
+defect section, validates `runtimeDependencies`, `runtimeDefects`, and
+candidate assertion links, and derives the exact new-or-changed canonical
+record count. It never fetches by itself. Before a program
 completion check, the scheduler must fetch once; completion additionally
 requires the recorded newest checkpoint to equal the canonical branch tip and
 the derived unconsumed count to be zero.
@@ -146,13 +154,15 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   `RT-ED-004`.
 - Open Scene/API candidates: `LOC-001`, `LOC-005`, `LOC-008`.
 - Open runtime/FL candidates: `LOC-002`, `LOC-007`, `LOC-011`, `LOC-013`.
-- Open browser/renderer qualification candidates: `LOC-006`, `LOC-012`,
-  and `LOC-014`.
+- No-repair disposition awaiting independent promotion: `LOC-006`, whose
+  committed no-hover evidence classifies the prior renderer symptom as
+  gesture-contaminated stale characterization.
+- Open browser/renderer qualification candidates: `LOC-012` and `LOC-014`.
 - Open artifact/Editor candidates: `LOC-015`, `LOC-016`, `LOC-017`,
   `LOC-018`.
 
-There are four children with formal runtime dependencies, 20
-candidate-linked children, and 23 unique affected children. The goal burns
+There are nine children with structured runtime links, 15 candidate-linked
+children, and 23 unique affected children. The goal burns
 all accepted rows to a terminal, evidence-backed disposition. The linked
 product matrix remains valuable downstream consumption evidence, but Editor
 consumption is not a completion gate for this program.
@@ -197,6 +207,14 @@ replace the divergent Rust mechanism. Do not imitate the visible outcome,
 patch around the Rust design, add a cache, tune a constant, or invent an
 optimization. Every production repair cites the exact pinned C++ files,
 members, and lifecycle it translates.
+
+When that repair translates behavior owned by a focused C++ source file, put
+the new or moved Rust implementation in the corresponding focused Rust module
+by default instead of growing giant files such as `draw.rs` or
+`state_machine.rs`. Preserve existing public APIs through re-exports, make the
+move independently reviewable, and update source correspondence. Apply this
+only to the owner touched by the active defect; it does not authorize a broad
+cleanup.
 
 If pinned C++ lacks the behavior, classify it as an additive product/API
 feature and stop for user direction. Do not disguise it as parity work.
@@ -283,8 +301,9 @@ Current work is:
   linked product scenario and authorizes no implementation. A current
   rounded-clip claim exists only if an explicitly scheduled identical-input
   pinned-C++ versus WebGPU proof creates one;
-- qualify `LOC-006` / `F-ED-08` with its registered required-WebGPU
-  projection-corpus fixture and an identical pinned-C++ input; and
+- independently promote `LOC-006` / `F-ED-08` through the legal
+  `reported -> reproduced -> stale-oracle -> closed` no-repair path using its
+  committed no-hover evidence; and
 - qualify the remaining open renderer rows in Q5 without reopening the landed
   `F-ED-06` or `F-ED-11` implementations.
 

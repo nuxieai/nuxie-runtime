@@ -7,7 +7,8 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: `Q0` control-plane provenance reconciliation;
+- phase: post-Q0 intake reconciliation, immediately followed by the
+  malformed-font crash repair;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - investigation base: `e72323c808b91d706ba3b745396beaca7accd69a`;
 - Editor's last consumed runtime:
@@ -16,23 +17,30 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`,
   and `LOC-004`;
 - open rows: 20;
-- formal product children in the landed Editor snapshot: 4;
-- candidate-linked product children: 20;
+- formal/structured product children in the landed Editor snapshot: 9;
+- candidate-linked product children: 15;
 - union: 23, with only `P09-C01` overlapping;
 - correction rows: 12.
 - fixture rows: 25 total, with `RT-ED-001`, `RT-ED-002`, and `LOC-003`
   directly qualified.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
-- active lane: Q0 control-plane integrity on
-  `levi/f-ed-q0-provenance-refresh`, PR #61;
-- active repair executors: none;
+- latest control-plane landing: Q0 PR #61 rebase-merged at exact runtime main
+  `2e24cd7f23a35fc96a71c5edb5da77d1a8634e08`;
+- active control-plane lane: consume Editor checkpoint `7ca11e33`, accept
+  canonical `LOC-*` and `RT-ED-*` changes under one fail-closed contract, and
+  bind both structured ledger link forms;
+- active production lane: malformed embedded-font outline crash, sole existing
+  writer PR #60 at pre-rebase head
+  `61d5d018aa036882d17cea1065a78d7f2e057547`;
 - defects closed since the preceding Q0 report: 0;
-- runnable repair lanes: none until Q0 lands and the ownership DAG is
-  published;
-- blocked/overlapping lanes: all 20 open rows remain unscheduled during Q0;
-  FL-owned overlaps will route through the coordinator after the DAG is
-  reconciled.
+- runnable repair lanes: finish and rebase PR #60 with the exact 833,949-byte
+  reproducer, focused font-validation module, d788 evidence, reviews, and
+  canonical floors;
+- blocked/overlapping lanes: `LOC-002`, `LOC-007`, and `RT-ED-007` need d788
+  requalification and their FL collision boundary; `LOC-005` needs the direct
+  d788 shared-instance differential. `LOC-006` needs independent no-repair
+  promotion, not code.
 
 Defects Fix owns intake, triage, pinned-C++ qualification, faithful repair
 orchestration, independent verification, PR/landing tracking, and immutable
@@ -42,30 +50,30 @@ close a verified landed repair. A Runtime Fix assignment prevents duplicate
 writers but does not close its row until that owner's landing is independently
 verified.
 
-The FL reservation in the atlas remains deliberately conservative during Q0.
+The FL reservation in the atlas remains deliberately conservative after Q0.
 No runtime, renderer, Scene, state-machine, Editor product, or compiler file is
 authorized by this provenance-only slice.
 
 The current textual FL handoff supersedes the older lease snapshot without
-mutating that atlas table in Q0: FL-A is independently promoted on
-`levi/fl-a` at
+mutating that atlas table in this control-plane follow-up: FL-A is
+independently promoted on `levi/fl-a` at
 `f86d5ba0146697abc996310c62fa45e1f053144b`; FL-B production is blocked on the
 recorded pre-advance `LinearAnimationInstance::didLoop` user safety/API
-decision. An explicitly coordinator-authorized stable-Apple repair remains in
-flight on a separate branch targeting the promoted FL-A line. Therefore all
-listed runtime/graph/ledger reservations remain binding until the coordinator
+decision. Defects Fix's duplicate stable-Apple branch was canceled; Runtime
+Fix owns that mechanical repair. Therefore all listed
+runtime/graph/ledger reservations remain binding until the coordinator
 publishes a new lease after that repair and decision.
 
 The immutable Editor checkpoint records the completed WebGPU-only consumption
 through runtime `e72323c8`: `P14-C01` is 4/4 green, `P14-C06` is 17/17 green,
-and RT-ED-003 direct presentation is consumed. Q0 does not use those product
+and RT-ED-003 direct presentation is consumed. This intake does not use those product
 results to self-promote an atlas row; independent state promotion remains a
 separate step.
 
-The same committed ledger has only four current formal dependency children.
-It removes all five former `RT-ED-004` links because that row is historical
-WebGL2 evidence. Q0 mirrors that source linkage without promoting
-`RT-ED-004` or any other row state, owner, or classification.
+The same committed ledger has nine structured runtime links across
+`runtimeDependencies` and `runtimeDefects`, plus 15 candidate links. It
+retains `RT-ED-004` only as historical WebGL2 evidence. This intake mirrors
+that source linkage without independently promoting any row state.
 
 ## Defect inbox
 
@@ -75,13 +83,13 @@ The committed Editor repository is the mailbox:
 - inbox: `plans/nuxie-editor-next-runtime-defects.md`;
 - linkage: `plans/nuxie-editor-next-parity-ledger.json`;
 - last consumed checkpoint:
-  `4da896beb5ec6815f6b01a2433875274a321d06c`;
+  `7ca11e331a57cb3ea574848f8e93eb108878c40b`;
 - newest known checkpoint:
-  `4da896beb5ec6815f6b01a2433875274a321d06c`;
+  `7ca11e331a57cb3ea574848f8e93eb108878c40b`;
 - inbox SHA-256:
-  `01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67`;
+  `9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c`;
 - linkage SHA-256:
-  `a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04`;
+  `04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25`;
 - unconsumed inbox records: 0;
 - imported atlas rows: 25.
 
@@ -93,9 +101,11 @@ DAG is rebuilt and disjoint lanes refill available capacity. Dependency and
 landing handoffs route through the coordinator; Defects Fix does not task or
 poll Editor Fix directly.
 
-Complete schema-v2 records use column-zero, top-level bullets for the Editor
-SHA, runtime SHA, exact command, and result/evidence. Container-nested or
-indented text cannot satisfy those fields.
+Complete schema-v2 records use role-labeled column-zero, top-level bullets for
+the Editor SHA, runtime SHA, exact command/reproducer, and result/evidence.
+The checker accepts only the enumerated original and current committed inbox
+labels; a combined Editor/runtime checkpoint needs two distinct SHAs, and an
+unrelated continuation SHA or fixture code span cannot fill a missing role.
 
 The recorded newest checkpoint is the last boundary observation, not a live
 poll. The v2 checker proves both recorded commits belong to the canonical
@@ -106,8 +116,8 @@ fresh fetch, exact tip equality, and zero unconsumed records.
 
 ## Editor source snapshot
 
-The last consumed Editor snapshot at the Q0 intake boundary is
-`4da896beb5ec6815f6b01a2433875274a321d06c`. The pinned source checkout and
+The last consumed Editor snapshot at intake cycle 2 is
+`7ca11e331a57cb3ea574848f8e93eb108878c40b`. The pinned source checkout and
 committed blobs used by the checker resolve to that exact SHA, its runtime
 gitlink is `e72323c808b91d706ba3b745396beaca7accd69a`, and the three recorded
 source artifacts match the commit byte-for-byte. This statement does not claim
@@ -117,11 +127,11 @@ tip is fetched and reconciled only at the next explicit intake boundary.
 The landed snapshot hashes are:
 
 - proposal:
-  `0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983`;
+  `39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401`;
 - runtime defects:
-  `01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67`;
+  `9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c`;
 - parity ledger:
-  `a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04`.
+  `04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25`.
 
 The earlier reviewed hashes remain in this file's Git history, but their formal
 dependency map is stale and must not be used for qualification. Any later
@@ -235,14 +245,17 @@ exact local canonical floors; no queued hosted Apple lane is relabeled green.
 
 ## Next queue
 
-1. finish Q0 by validating the immutable Editor checkpoint and the three
-   refreshed browser stimulus hashes with `run-check.sh`;
-2. reconcile and machine-check the formal completion, parallel-work, and
-   committed-inbox contracts in this same control-plane PR;
-3. independently review and merge the provenance-only Q0 diff;
-4. publish the dependency/file-ownership DAG for every current row;
-5. route only concrete Runtime Fix overlaps through the coordinator, then
-   start the first disjoint qualification/repair lanes in parallel.
+1. independently review and merge this focused checkpoint-7ca intake/checker
+   reconciliation;
+2. record the inherited malformed-font crash as `RT-FUZZ-001`, rebase the sole
+   existing PR #60 writer onto current main, and preserve the exact 833,949-byte
+   reproducer;
+3. split the touched font-validation seam into the focused Rust module that
+   corresponds to the C++ font owner, update its source mapping, and prove the
+   empty-outline behavior against pinned d788;
+4. run the focused/full floors and two-axis review, merge PR #60, and update
+   the atlas/status with the exact landing SHA;
+5. refill disjoint qualification lanes from the reconciled ownership DAG.
 
 No production defect repair is authorized by this status file alone. The goal,
 atlas classification, and live writer lease must all authorize the slice.

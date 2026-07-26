@@ -998,7 +998,9 @@ upstream-sync-map registry).
    `docs/runtime-frame-loop-status.md`. FL-0's 337-file/74-member atlas is
    committed. FL-1's dual translations are adjudicated into FLR-1..FLR-15;
    source shaping found the existing owner-family module seams sufficient.
-   FL-A Component ownership is next, followed by dependency-ordered animation,
+   FL-A Component ownership is independently accepted and promoted. FL-B's
+   45-file/eight-member animation owner family is next from frozen spec
+   `docs/runtime-frame-loop-fl-b-spec.md`, followed by dependency-ordered
    state-machine, Artboard/DataBind, and live-draw owner waves. Measure the
    whole corpus only after a complete wave. The sorted slow-scene list is no
    longer the implementation queue.

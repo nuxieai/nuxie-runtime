@@ -1107,6 +1107,13 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   the project safety/API decision
   (`include/rive/animation/linear_animation_instance.hpp:97-100,150`;
   `src/animation/linear_animation_instance.cpp:17-30,193-198,356`).
+  The project made that specific decision on 2026-07-25: safe Rust keeps the
+  existing boolean API and initializes `LinearAnimationInstance::did_loop` to
+  `false` before first advance. Record that one pre-advance value as an FLR-3
+  binding adaptation, not as C++ behavior; every advance path remains a
+  literal C++ translation. Do not generalize this decision to other unset
+  fields, emulate indeterminate memory, or introduce a breaking `Option<bool>`
+  API merely to model the C++ defect.
 - **FLR-4 Publish accumulated dirt before any callback and recurse last.**
   Preserve the duplicate-bit early return, install the complete accumulated
   dirt value, invoke the object's `onDirty`, notify the dependency root, and

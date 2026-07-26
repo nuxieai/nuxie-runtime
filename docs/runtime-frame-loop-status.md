@@ -4,21 +4,25 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-A independently accepted and promoted. Exact accepted production
-  candidate:
-  `249a66015b41190c0ec927a367c763b428f82306`.
+- Phase: FL-B pre-translation boundary committed. FL-A was independently
+  accepted and promoted at
+  `f86d5ba0146697abc996310c62fa45e1f053144b`; exact main
+  `e72323c808b91d706ba3b745396beaca7accd69a` was consumed without overlap at
+  FL-B boundary merge `b5d5bc8afeaa0369cbc248b85366111649cb9010`.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - File closure: 52 / 338. All 52 `component-update-graph` rows are `faithful`
   and `orchestrator-verified`; the 286 later-wave rows remain pending.
 - Member closure: 47 / 75 owner/member rows (41 imported runtime-drawing
   owners plus all six FL-A Component rows); 28 later-wave rows remain.
 - Open mechanism gaps: 7 / 9. FL-G02 is closed; FL-G06 remained closed.
-- Current dependency wave: FL-B preflight. Production remains blocked on the
-  explicit safety/API decision for pre-advance
-  `LinearAnimationInstance::m_didLoop`; no implementation begins before the
-  user decides that contract.
-- Current FL-A landing: accepted candidate
-  `249a66015b41190c0ec927a367c763b428f82306`, published on `levi/fl-a`.
+- Current dependency wave: FL-B. Its frozen 45-file/eight-member mini-map is
+  `docs/runtime-frame-loop-fl-b-spec.md`; production has not started.
+- The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
+  safe Rust retains `false` as the FLR-3 binding adaptation and matches every
+  defined post-advance C++ result. No `Option<bool>` API break or
+  indeterminate-memory emulation is permitted.
+- Current FL-A landing: promotion
+  `f86d5ba0146697abc996310c62fa45e1f053144b`, published on `levi/fl-a`.
 
 ## FL-0 evidence
 
@@ -127,9 +131,14 @@ debug C++ configuration and its provenance stamp.
 
 ## Baseline performance
 
-- Last committed-tree canonical hot-loop artifact:
-  `target/perf-hot-loop-13aedd6d.json`.
-- Aggregate at `13aedd6d`: approximately 1.479× C++.
+- FL-A whole-wave checkpoint on runtime-identical FL-B boundary
+  `b5d5bc8afeaa0369cbc248b85366111649cb9010`:
+  `target/perf-hot-loop-fl-a-b5d5bc8a.json`.
+- Canonical six-entry / 11-sample aggregate: 1.664× C++
+  (41.340 ms C++, 68.769 ms Rust, minimum aggregate, 10,000 repeats).
+- Worst total sample: `ai_assitant@0` at 2.085×. This is unfinished-wave
+  acceptance evidence, not a work queue or an authorization for a Rust-only
+  optimization.
 - This is context, not a work queue. The next checkpoint occurs only after a
   complete dependency wave.
 
@@ -439,10 +448,11 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. STOP-AND-ASK: resolve the pre-advance
-   `LinearAnimationInstance::m_didLoop` safety/API contract. FL-B remains
-   blocked until the user chooses the recorded safe divergence or another
-   explicit contract.
-2. Record the canonical whole-corpus FL-A performance checkpoint, then execute
-   FL-B from the dependency map after the user decision. Performance remains
-   verification evidence, never the source of a work slice.
+1. Commit the frozen FL-B mini-map and FLR-3 `did_loop=false` adaptation
+   evidence before production changes.
+2. Execute FL-B1 through FL-B4 from
+   `docs/runtime-frame-loop-fl-b-spec.md`, deleting each displaced Rust owner
+   path in the same lane.
+3. Run the complete unchanged floor and one canonical whole-corpus FL-B
+   checkpoint. Performance remains verification evidence, never the source of
+   a work slice.

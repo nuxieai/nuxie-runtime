@@ -3,8 +3,12 @@ title = "Runtime frame-loop mechanism and gap inventory"
 upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 
 # User-approved deliberate divergences are recorded here and cited by their
-# parity-gap-register D-row. There are none for the frame-loop port.
-decision = []
+# parity-gap-register D-row.
+
+[[decision]]
+id = "D2"
+source = "docs/parity-gap-register.md#d--deliberate-divergence-register-declare-dont-fix"
+approved = "The project-wide saturating float-to-int policy was already binding; the user reaffirmed on 2026-07-25 that Rust should make the sensible safe choice where C++ relies on a condition Rust cannot represent safely."
 
 [[gap]]
 id = "FL-G01"
@@ -160,6 +164,18 @@ citations = [
   "rust:crates/nuxie-scripting/src/vm/renderer.rs:29-55",
 ]
 closure = "FL-E gives each scripting VM one persistently installed RenderFactory context with C++ lifetime/identity, proves context:shader from every callback family, and deletes callback-scoped factory installation that displaced that owner. LOC-009 remains the renderer/scripting shader-occurrence implementation inside the active-factory boundary."
+
+[[gap]]
+id = "FL-G10"
+status = "closed"
+mechanism = "AnimationReset color replay follows pinned C++'s signed-int to float serialization and signed-int conversion for every defined result. The narrow positive signed-int range that rounds to 2^31 has no defined C++ float-to-int result; project decision D2 binds Rust's saturating conversion instead of preserving the old Rust-only u32 bypass or attempting to emulate undefined behavior."
+citations = [
+  "cpp:src/animation/animation_reset_factory.cpp:126-168",
+  "cpp:src/animation/animation_reset.cpp:30-35",
+  "cpp:src/animation/animation_reset.cpp:54-67",
+  "rust:crates/nuxie-runtime/src/state_machine.rs:2684",
+]
+closure = "A pinned-C++ probe locks 0x011d1d1d to 0x011d1d1c through the real AnimationReset binary buffer; Rust retains that float representation and exact defined conversion. Out-of-range conversion follows the user-approved project D2 saturation policy and is never labeled faithful C++ behavior."
 
 [[ratchet]]
 id = "legacy_image_layout_scale"

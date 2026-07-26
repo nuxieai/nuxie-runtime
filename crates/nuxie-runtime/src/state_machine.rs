@@ -2693,8 +2693,40 @@ enum AnimationResetEntry {
         property_key: u16,
         solid_color_property: bool,
         data_bind_observed: bool,
-        value: u32,
+        value: AnimationResetColorValue,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum AnimationResetColorValue {
+    /// Pinned C++ serializes the signed color through `float` and converts the
+    /// decoded float back to `int` in `CoreRegistry::setColor`.
+    DefinedFloat(f32),
+    /// A positive `int` close enough to `INT_MAX` rounds to 2^31 as `float`;
+    /// converting that value back to `int` is undefined in C++. Preserve the
+    /// serialized float and apply the project's explicit saturating conversion
+    /// decision instead of attempting to emulate undefined behavior.
+    SaturatingFloatToInt(f32),
+}
+
+impl AnimationResetColorValue {
+    fn from_color(value: u32) -> Self {
+        let encoded = (value as i32) as f32;
+        if encoded < 2_147_483_648.0 {
+            Self::DefinedFloat(encoded)
+        } else {
+            Self::SaturatingFloatToInt(encoded)
+        }
+    }
+
+    fn replay(self) -> u32 {
+        match self {
+            Self::DefinedFloat(value) => (value as i32) as u32,
+            // Project divergence D2 binds Rust's saturating conversion where
+            // the corresponding C++ float-to-int conversion is undefined.
+            Self::SaturatingFloatToInt(value) => (value as i32) as u32,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -2797,7 +2829,7 @@ impl AnimationResetFactory {
                                     property_key: keyed_property.property_key,
                                     solid_color_property: *solid_color_property,
                                     data_bind_observed: *data_bind_observed,
-                                    value,
+                                    value: AnimationResetColorValue::from_color(value),
                                 });
                             }
                         }
@@ -2854,10 +2886,10 @@ impl AnimationReset {
                             *local_id,
                             *property_key,
                             *data_bind_observed,
-                            *value,
+                            value.replay(),
                         )
                     } else {
-                        artboard.set_keyed_color_property(*local_id, *property_key, *value)
+                        artboard.set_keyed_color_property(*local_id, *property_key, value.replay())
                     };
                 }
             }
@@ -4318,6 +4350,30 @@ mod tests {
         assert!(
             empty.storage.entries.is_empty(),
             "the factory must return an owned empty reset, not null"
+        );
+    }
+
+    #[test]
+    fn animation_reset_color_uses_cpp_signed_float_round_trip() {
+        assert_eq!(
+            AnimationResetColorValue::from_color(0x011d_1d1d).replay(),
+            0x011d_1d1c,
+            "pinned animation_reset_factory.cpp:126-168 stores color int bits as float"
+        );
+        assert_eq!(
+            AnimationResetColorValue::from_color(0xff1d_1d1d).replay(),
+            0xff1d_1d1d,
+            "negative signed colors also round-trip through the C++ float representation"
+        );
+        assert_eq!(
+            AnimationResetColorValue::from_color(0x7fff_ffff),
+            AnimationResetColorValue::SaturatingFloatToInt(2_147_483_648.0),
+            "2^31 cannot be converted back to C++ int with defined behavior"
+        );
+        assert_eq!(
+            AnimationResetColorValue::from_color(0x7fff_ffff).replay(),
+            0x7fff_ffff,
+            "project divergence D2 saturates the otherwise-undefined conversion"
         );
     }
 }

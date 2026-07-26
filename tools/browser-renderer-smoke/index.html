@@ -16,6 +16,7 @@
         assert_explicit_readback,
         assert_imported_gpu_canvas,
         assert_persistent_surface_acquisition_failure,
+        assert_retained_frame_removal,
         assert_resize,
         assert_surface_acquisition_retry,
         assert_webgpu_gpu_canvas_rejects_invalid_interface,
@@ -100,6 +101,7 @@
         const counters = {
           getCurrentTexture: 0,
           mapAsync: 0,
+          mapRead: 0,
           putImageData: 0,
         };
         const restore = [];
@@ -115,6 +117,12 @@
             ...descriptor,
             value(...args) {
               counters[counter] += 1;
+              if (
+                counter === "mapAsync" &&
+                (args[0] & globalThis.GPUMapMode.READ) !== 0
+              ) {
+                counters.mapRead += 1;
+              }
               return descriptor.value.apply(this, args);
             },
           });
@@ -208,6 +216,102 @@
         } finally {
           bitmap.close();
         }
+      }
+
+      function assertPixelRegion(pixels, width, bounds, expected, label) {
+        const [left, top, right, bottom] = bounds;
+        for (let y = top; y < bottom; y += 1) {
+          for (let x = left; x < right; x += 1) {
+            const offset = (y * width + x) * 4;
+            const actual = Array.from(pixels.slice(offset, offset + 4));
+            if (actual.some((channel, index) => channel !== expected[index])) {
+              throw new Error(
+                `${label} pixel (${x},${y}) was [${actual.join(",")}], expected [${expected.join(",")}]`,
+              );
+            }
+          }
+        }
+      }
+
+      function assertRetainedPresentationPixels(pixels, width, includeChild, label) {
+        assertPixelRegion(
+          pixels,
+          width,
+          [2, 2, 6, 10],
+          [0x20, 0xa0, 0x60, 0xff],
+          `${label} parent`,
+        );
+        assertPixelRegion(
+          pixels,
+          width,
+          includeChild ? [10, 3, 14, 9] : [9, 2, 15, 10],
+          includeChild
+            ? [0xff, 0x00, 0x00, 0xff]
+            : [0x10, 0x20, 0x30, 0xff],
+          `${label} former child`,
+        );
+        if (!includeChild) {
+          for (let offset = 0; offset < pixels.length; offset += 4) {
+            if (
+              pixels[offset] > Math.min(0xff, pixels[offset + 1] + 32) &&
+              pixels[offset] > Math.min(0xff, pixels[offset + 2] + 32)
+            ) {
+              throw new Error(
+                `${label} retained a red child pixel at ${offset / 4}`,
+              );
+            }
+          }
+        }
+      }
+
+      function installRetainedFrameObserver(counters) {
+        const name = "observeRetainedRendererFrame";
+        const previous = Object.getOwnPropertyDescriptor(globalThis, name);
+        Object.defineProperty(globalThis, name, {
+          configurable: true,
+          value: async (canvas, phase) => {
+            const expected = {
+              "explicit-b": [0, 2, 0],
+              "presentation-a": [1, 2, 0],
+              "presentation-b": [2, 2, 0],
+            }[phase];
+            if (!expected) {
+              throw new Error(`unknown retained-frame observation phase ${phase}`);
+            }
+            const actual = [
+              counters.getCurrentTexture,
+              counters.mapRead,
+              counters.putImageData,
+            ];
+            if (actual.some((count, index) => count !== expected[index])) {
+              throw new Error(
+                `retained ${phase} called getCurrentTexture=${actual[0]} mapRead=${actual[1]} mapAsync=${counters.mapAsync} putImageData=${actual[2]}; expected ${expected.join(",")}`,
+              );
+            }
+            if (phase === "explicit-b") return;
+
+            const bitmap = await createImageBitmap(canvas);
+            try {
+              assertRetainedPresentationPixels(
+                readBitmapPixels(bitmap, canvas.width, canvas.height),
+                canvas.width,
+                phase === "presentation-a",
+                `retained ${phase}`,
+              );
+            } finally {
+              bitmap.close();
+            }
+          },
+        });
+        return {
+          restore() {
+            if (previous) {
+              Object.defineProperty(globalThis, name, previous);
+            } else {
+              delete globalThis[name];
+            }
+          },
+        };
       }
 
       function installSurfaceAcquisitionLoss(canvas, persistent = false) {
@@ -763,6 +867,36 @@
               );
             } finally {
               canvasLeaseCalls.restore();
+            }
+
+            const retainedCalls = installPresentationCallCounters();
+            const retainedObserver = installRetainedFrameObserver(
+              retainedCalls.counters,
+            );
+            try {
+              const retainedResult = await assert_retained_frame_removal(
+                document.createElement("canvas"),
+                document.createElement("canvas"),
+              );
+              if (
+                retainedCalls.counters.getCurrentTexture !== 2 ||
+                retainedCalls.counters.mapRead !== 2 ||
+                retainedCalls.counters.putImageData !== 0
+              ) {
+                throw new Error(
+                  "retained frame removal called " +
+                    `getCurrentTexture=${retainedCalls.counters.getCurrentTexture} ` +
+                    `mapRead=${retainedCalls.counters.mapRead} ` +
+                    `mapAsync=${retainedCalls.counters.mapAsync} ` +
+                    `putImageData=${retainedCalls.counters.putImageData}`,
+                );
+              }
+              results.push(
+                `${retainedResult} surface=2 mapRead=2 putImageData=0`,
+              );
+            } finally {
+              retainedObserver.restore();
+              retainedCalls.restore();
             }
 
             const resizeCanvas = document.createElement("canvas");

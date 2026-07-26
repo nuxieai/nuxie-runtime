@@ -76,15 +76,19 @@ that the removed WebGL2 implementation reached C++ renderer parity.
 2. `cargo test -p nuxie-renderer`
 3. `cargo test --workspace`
 4. `make browser-renderer-smoke`
-   proves normal presentation calls neither `GPUBuffer.mapAsync` nor
-   `CanvasRenderingContext2D.putImageData`, while explicit readback performs
-   one mapped readback and returns exact RGBA pixels. The same gate observes
-   typed rejection of overlapping same-canvas owners, frame-retained lease
-   lifetime, and one configure, presentation, and unconfigure per successful
-   ownership generation. It also observes
-   two distinct surface-construction calls for one-shot loss recovery and
-   reruns the half-alpha compositor oracle over blue on the recovered surface.
-   Persistent loss performs exactly two acquisition attempts.
+   proves the clear-only presentation adapter calls neither
+   `GPUBuffer.mapAsync` nor `CanvasRenderingContext2D.putImageData`, while
+   explicit readback performs one mapped readback and returns exact RGBA
+   pixels. Retained geometry frames may remap renderer-owned staging uploads
+   with `GPUMapMode.WRITE`; ordinary presentation must add no
+   `GPUMapMode.READ`, and must not use Canvas2D presentation. The same gate
+   observes retained-child removal in explicit-readback and direct-presentation
+   paths; typed rejection of overlapping same-canvas owners; frame-retained
+   lease lifetime; and one configure, presentation, and unconfigure per
+   successful ownership generation. It also observes two distinct
+   surface-construction calls for one-shot loss recovery and reruns the
+   half-alpha compositor oracle over blue on the recovered surface. Persistent
+   loss performs exactly two acquisition attempts.
 5. `make browser-renderer-gpu-smoke`
 6. `make renderer-golden-same-runner` remains at the unchanged 1,468-row pixel
    floor.

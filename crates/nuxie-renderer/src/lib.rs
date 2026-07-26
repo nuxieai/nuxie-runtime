@@ -13761,6 +13761,77 @@ mod tests {
     }
 
     #[test]
+    fn reused_msaa_frame_attachments_drop_removed_child_pixels() {
+        const WIDTH: usize = 16;
+        const CLEAR: u32 = 0xff10_2030;
+        fn rectangle(factory: &mut WgpuFactory, bounds: [f32; 4]) -> Box<dyn RenderPath> {
+            let [left, top, right, bottom] = bounds;
+            let mut path = factory.make_empty_render_path();
+            path.move_to(left, top);
+            path.line_to(right, top);
+            path.line_to(right, bottom);
+            path.line_to(left, bottom);
+            path.close();
+            path
+        }
+
+        let mut factory = WgpuFactory::new_with_mode(WIDTH as u32, 12, RenderMode::Msaa).unwrap();
+        let parent = rectangle(&mut factory, [1.0, 1.0, 7.0, 11.0]);
+        let child = rectangle(&mut factory, [9.0, 2.0, 15.0, 10.0]);
+        let mut parent_paint = factory.make_render_paint();
+        parent_paint.color(0xff20_a060);
+        let mut child_paint = factory.make_render_paint();
+        child_paint.color(0xffff_0000);
+        let pixel = |pixels: &[u8], x: usize, y: usize| {
+            <[u8; 4]>::try_from(&pixels[(y * WIDTH + x) * 4..][..4]).unwrap()
+        };
+        let attachment = factory.frame_attachments.cached();
+
+        let mut frame_a = factory.begin_frame(CLEAR);
+        frame_a.draw_path(parent.as_ref(), parent_paint.as_ref());
+        frame_a.draw_path(child.as_ref(), child_paint.as_ref());
+        let pixels_a = frame_a.finish().unwrap();
+        assert!(Arc::ptr_eq(
+            &attachment,
+            &factory.frame_attachments.cached()
+        ));
+        for y in 2..10 {
+            for x in 2..6 {
+                assert_eq!(pixel(&pixels_a, x, y), [0x20, 0xa0, 0x60, 0xff]);
+            }
+        }
+        for y in 3..9 {
+            for x in 10..14 {
+                assert_eq!(pixel(&pixels_a, x, y), [0xff, 0x00, 0x00, 0xff]);
+            }
+        }
+
+        let mut frame_b = factory.begin_frame(CLEAR);
+        frame_b.draw_path(parent.as_ref(), parent_paint.as_ref());
+        let pixels_b = frame_b.finish().unwrap();
+        assert!(Arc::ptr_eq(
+            &attachment,
+            &factory.frame_attachments.cached()
+        ));
+        for y in 2..10 {
+            for x in 2..6 {
+                assert_eq!(pixel(&pixels_b, x, y), [0x20, 0xa0, 0x60, 0xff]);
+            }
+        }
+        for y in 2..10 {
+            for x in 9..15 {
+                assert_eq!(pixel(&pixels_b, x, y), [0x10, 0x20, 0x30, 0xff]);
+            }
+        }
+        assert!(
+            !pixels_b.chunks_exact(4).any(|pixel| {
+                pixel[0] > pixel[1].saturating_add(32) && pixel[0] > pixel[2].saturating_add(32)
+            }),
+            "Frame B retained red child pixels"
+        );
+    }
+
+    #[test]
     fn async_factory_and_frame_completion_render_without_sync_wrappers() {
         let pixels = pollster::block_on(async {
             let factory = WgpuFactory::new_async_with_mode(2, 2, RenderMode::Msaa).await?;

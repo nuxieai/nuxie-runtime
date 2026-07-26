@@ -5,7 +5,7 @@ mod wasm {
         GpuCanvasRenderPlan, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
         GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
         GpuCanvasShaderTextureViewDimension, GpuCanvasUniformBuffer, ImageSampler, Mat2D,
-        RecordingFactory, Renderer, RendererError, WgpuFactory,
+        RecordingFactory, RenderPaint, RenderPath, Renderer, RendererError, WgpuFactory,
     };
     use nuxie_render_stream::RenderStream;
     use pixel_compare::{RgbaImage, Tolerance, compare};
@@ -13,8 +13,130 @@ mod wasm {
     use wasm_bindgen_futures::JsFuture;
     use web_sys::HtmlCanvasElement;
 
+    const RETAINED_FRAME_WIDTH: usize = 16;
+    const RETAINED_FRAME_HEIGHT: usize = 12;
+    const RETAINED_FRAME_CLEAR: u32 = 0xff10_2030;
+    const RETAINED_PARENT_RGBA: [u8; 4] = [0x20, 0xa0, 0x60, 0xff];
+    const RETAINED_CHILD_RGBA: [u8; 4] = [0xff, 0x00, 0x00, 0xff];
+    const RETAINED_FRAME_CLEAR_RGBA: [u8; 4] = [0x10, 0x20, 0x30, 0xff];
+
     const IMPORTED_GPU_CANVAS_RIV: &[u8] =
         include_bytes!(concat!(env!("OUT_DIR"), "/imported-gpu-canvas.riv"));
+
+    #[wasm_bindgen]
+    extern "C" {
+        #[wasm_bindgen(
+            catch,
+            js_namespace = globalThis,
+            js_name = observeRetainedRendererFrame
+        )]
+        async fn observe_retained_renderer_frame(
+            canvas: HtmlCanvasElement,
+            phase: String,
+        ) -> Result<(), JsValue>;
+    }
+
+    struct RetainedScene {
+        parent: Box<dyn RenderPath>,
+        child: Box<dyn RenderPath>,
+        parent_paint: Box<dyn RenderPaint>,
+        child_paint: Box<dyn RenderPaint>,
+    }
+
+    impl RetainedScene {
+        fn new(factory: &mut BrowserFactory) -> Self {
+            let rectangle = |factory: &mut BrowserFactory, bounds: [f32; 4]| {
+                let [left, top, right, bottom] = bounds;
+                let mut path = factory.make_empty_render_path();
+                path.move_to(left, top);
+                path.line_to(right, top);
+                path.line_to(right, bottom);
+                path.line_to(left, bottom);
+                path.close();
+                path
+            };
+            let parent = rectangle(factory, [1.0, 1.0, 7.0, 11.0]);
+            let child = rectangle(factory, [9.0, 2.0, 15.0, 10.0]);
+            let mut parent_paint = factory.make_render_paint();
+            parent_paint.color(0xff20_a060);
+            let mut child_paint = factory.make_render_paint();
+            child_paint.color(0xffff_0000);
+            Self {
+                parent,
+                child,
+                parent_paint,
+                child_paint,
+            }
+        }
+
+        fn draw(&self, renderer: &mut impl Renderer, include_child: bool) {
+            renderer.draw_path(self.parent.as_ref(), self.parent_paint.as_ref());
+            if include_child {
+                renderer.draw_path(self.child.as_ref(), self.child_paint.as_ref());
+            }
+        }
+    }
+
+    fn assert_retained_region(
+        pixels: &[u8],
+        bounds: [usize; 4],
+        expected: [u8; 4],
+        label: &str,
+    ) -> Result<(), JsValue> {
+        let [left, top, right, bottom] = bounds;
+        for y in top..bottom {
+            for x in left..right {
+                let offset = (y * RETAINED_FRAME_WIDTH + x) * 4;
+                let actual = <[u8; 4]>::try_from(&pixels[offset..offset + 4])
+                    .expect("validated retained-frame pixel extent");
+                if actual != expected {
+                    return Err(JsValue::from_str(&format!(
+                        "{label} pixel ({x},{y}) was {actual:?}, expected {expected:?}"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn assert_retained_readback(
+        pixels: &[u8],
+        include_child: bool,
+        label: &str,
+    ) -> Result<(), JsValue> {
+        if pixels.len() != RETAINED_FRAME_WIDTH * RETAINED_FRAME_HEIGHT * 4 {
+            return Err(JsValue::from_str(&format!(
+                "{label} returned {} RGBA bytes, expected {}",
+                pixels.len(),
+                RETAINED_FRAME_WIDTH * RETAINED_FRAME_HEIGHT * 4
+            )));
+        }
+        assert_retained_region(pixels, [2, 2, 6, 10], RETAINED_PARENT_RGBA, label)?;
+        assert_retained_region(
+            pixels,
+            if include_child {
+                [10, 3, 14, 9]
+            } else {
+                [9, 2, 15, 10]
+            },
+            if include_child {
+                RETAINED_CHILD_RGBA
+            } else {
+                RETAINED_FRAME_CLEAR_RGBA
+            },
+            label,
+        )?;
+        if !include_child
+            && pixels.chunks_exact(4).any(|pixel| {
+                pixel[0] > pixel[1].saturating_add(32) && pixel[0] > pixel[2].saturating_add(32)
+            })
+        {
+            return Err(JsValue::from_str(
+                "retained explicit Frame B preserved red child pixels",
+            ));
+        }
+        Ok(())
+    }
 
     const IMPORTED_WGSL: &str = r#"
 @vertex
@@ -268,6 +390,62 @@ fn fs_main() -> @location(0) vec4<f32> {
             "browser-readback=explicit rgba-bytes={} exact=true",
             pixels.len()
         ))
+    }
+
+    #[wasm_bindgen]
+    pub async fn assert_retained_frame_removal(
+        readback_canvas: HtmlCanvasElement,
+        presentation_canvas: HtmlCanvasElement,
+    ) -> Result<String, JsValue> {
+        let mut readback_factory = BrowserFactory::new(
+            readback_canvas.clone(),
+            RETAINED_FRAME_WIDTH as u32,
+            RETAINED_FRAME_HEIGHT as u32,
+        )
+        .await
+        .map_err(js_error)?;
+        let readback_scene = RetainedScene::new(&mut readback_factory);
+
+        let mut readback_a = readback_factory
+            .begin_frame(RETAINED_FRAME_CLEAR)
+            .map_err(js_error)?;
+        readback_scene.draw(&mut readback_a, true);
+        let pixels_a = readback_a.finish_with_readback().await.map_err(js_error)?;
+        assert_retained_readback(&pixels_a, true, "retained explicit Frame A")?;
+
+        let mut readback_b = readback_factory
+            .begin_frame(RETAINED_FRAME_CLEAR)
+            .map_err(js_error)?;
+        readback_scene.draw(&mut readback_b, false);
+        let pixels_b = readback_b.finish_with_readback().await.map_err(js_error)?;
+        assert_retained_readback(&pixels_b, false, "retained explicit Frame B")?;
+        observe_retained_renderer_frame(readback_canvas, "explicit-b".into()).await?;
+
+        let mut presentation_factory = BrowserFactory::new(
+            presentation_canvas.clone(),
+            RETAINED_FRAME_WIDTH as u32,
+            RETAINED_FRAME_HEIGHT as u32,
+        )
+        .await
+        .map_err(js_error)?;
+        let presentation_scene = RetainedScene::new(&mut presentation_factory);
+
+        let mut presentation_a = presentation_factory
+            .begin_frame(RETAINED_FRAME_CLEAR)
+            .map_err(js_error)?;
+        presentation_scene.draw(&mut presentation_a, true);
+        presentation_a.present().await.map_err(js_error)?;
+        observe_retained_renderer_frame(presentation_canvas.clone(), "presentation-a".into())
+            .await?;
+
+        let mut presentation_b = presentation_factory
+            .begin_frame(RETAINED_FRAME_CLEAR)
+            .map_err(js_error)?;
+        presentation_scene.draw(&mut presentation_b, false);
+        presentation_b.present().await.map_err(js_error)?;
+        observe_retained_renderer_frame(presentation_canvas, "presentation-b".into()).await?;
+
+        Ok("retained-frame-removal=explicit+direct frame-b=parent-only".into())
     }
 
     #[wasm_bindgen]

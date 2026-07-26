@@ -88,7 +88,9 @@ use transition_number_condition::RuntimeTransitionNumberCondition;
 use transition_property_comparator::{
     RuntimeTransitionPropertyArtboardComparator, RuntimeTransitionPropertyComponentComparator,
 };
-use transition_property_viewmodel_comparator::RuntimeTransitionPropertyViewModelComparator;
+use transition_property_viewmodel_comparator::{
+    RuntimeTransitionPropertyViewModelComparator, compare_view_model_integer_pair,
+};
 use transition_trigger_condition::RuntimeTransitionTriggerCondition;
 
 fn next_view_model_trigger_layer_id() -> u64 {
@@ -1545,10 +1547,7 @@ pub(crate) trait RuntimeScheduledListenerActionExecutor {
         false
     }
 
-    fn retained_view_model_trigger_source(
-        &self,
-        _bindable_global_id: u32,
-    ) -> Option<RuntimeViewModelCell> {
+    fn retained_view_model_source(&self, _bindable_global_id: u32) -> Option<RuntimeViewModelCell> {
         None
     }
 

@@ -8255,7 +8255,7 @@ impl RuntimeDataBindGraph {
         Some(global_id)
     }
 
-    pub(crate) fn retained_trigger_source_for_bindable_target(
+    pub(crate) fn retained_source_for_bindable_target(
         &self,
         bindable_global_id: u32,
     ) -> Option<RuntimeViewModelCell> {
@@ -8273,7 +8273,17 @@ impl RuntimeDataBindGraph {
                 self.targets.get(binding.target.0).is_some_and(|target| {
                     matches!(
                         target.target,
-                        RuntimeDataBindGraphTarget::Trigger { global_id }
+                        RuntimeDataBindGraphTarget::Number { global_id }
+                            | RuntimeDataBindGraphTarget::Integer { global_id }
+                            | RuntimeDataBindGraphTarget::Boolean { global_id }
+                            | RuntimeDataBindGraphTarget::String { global_id }
+                            | RuntimeDataBindGraphTarget::Color { global_id }
+                            | RuntimeDataBindGraphTarget::Enum { global_id }
+                            | RuntimeDataBindGraphTarget::Asset { global_id }
+                            | RuntimeDataBindGraphTarget::Artboard { global_id }
+                            | RuntimeDataBindGraphTarget::List { global_id }
+                            | RuntimeDataBindGraphTarget::Trigger { global_id }
+                            | RuntimeDataBindGraphTarget::ViewModel { global_id }
                             if global_id == bindable_global_id
                     )
                 })
@@ -11045,7 +11055,7 @@ mod tests {
         );
 
         let selected = graph
-            .retained_trigger_source_for_bindable_target(7)
+            .retained_source_for_bindable_target(7)
             .expect("last source-to-target bind retains its trigger source");
         assert!(selected.ptr_eq(&last_to_target));
     }
@@ -11058,9 +11068,7 @@ mod tests {
         append_trigger_binding(&mut graph, 1, 0, None);
 
         assert!(
-            graph
-                .retained_trigger_source_for_bindable_target(7)
-                .is_none(),
+            graph.retained_source_for_bindable_target(7).is_none(),
             "C++ bindableDataBindToTarget keeps the selected DataBind even when its source is unresolved (state_machine_instance.cpp:1754-1804,3212-3221)"
         );
     }

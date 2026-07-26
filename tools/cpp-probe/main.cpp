@@ -96,6 +96,11 @@ size_t randomProviderTotalCalls();
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/animation/state_transition.hpp"
 #include "rive/animation/transition_condition.hpp"
+#define private public
+#define protected public
+#include "rive/animation/transition_viewmodel_condition.hpp"
+#undef protected
+#undef private
 #include "rive/assets/file_asset.hpp"
 #include "rive/bones/skin.hpp"
 #include "rive/bones/tendon.hpp"
@@ -12955,6 +12960,27 @@ void write_animation_reset_color_roundtrip(std::ostream& out,
     out << ",\"storedFloatBits\":" << storedBits;
     out << ",\"output\":" << static_cast<uint32_t>(restored) << "}\n";
 }
+
+void write_transition_integer_comparison_samples(std::ostream& out)
+{
+    constexpr uint32_t left = 0x01000001u;
+    constexpr uint32_t right = 0x01000000u;
+    rive::ConditionOperationEqual equal;
+    rive::ConditionOperationNotEqual notEqual;
+    rive::ConditionOperationLessThan lessThan;
+    rive::ConditionOperationGreaterThan greaterThan;
+
+    out << "{\"left\":" << left;
+    out << ",\"right\":" << right;
+    out << ",\"equal\":" << (equal.compareUints32(left, right) ? "true" : "false");
+    out << ",\"notEqual\":"
+        << (notEqual.compareUints32(left, right) ? "true" : "false");
+    out << ",\"lessThan\":"
+        << (lessThan.compareUints32(left, right) ? "true" : "false");
+    out << ",\"greaterThan\":"
+        << (greaterThan.compareUints32(left, right) ? "true" : "false");
+    out << "}\n";
+}
 } // namespace
 
 int main(int argc, const char* argv[])
@@ -12964,6 +12990,7 @@ int main(int argc, const char* argv[])
     bool converterSamples = false;
     bool numberToListSamples = false;
     bool animationResetColorRoundtrip = false;
+    bool transitionIntegerComparisonSamples = false;
     uint32_t animationResetColor = 0;
 
     for (int i = 1; i < argc; ++i)
@@ -12991,6 +13018,12 @@ int main(int argc, const char* argv[])
             animationResetColorRoundtrip = true;
             animationResetColor =
                 static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 0));
+            continue;
+        }
+
+        if (is_arg(argv[i], "--transition-integer-comparison-samples"))
+        {
+            transitionIntegerComparisonSamples = true;
             continue;
         }
 
@@ -16215,6 +16248,12 @@ int main(int argc, const char* argv[])
     {
         write_animation_reset_color_roundtrip(
             std::cout, animationResetColor);
+        return 0;
+    }
+
+    if (transitionIntegerComparisonSamples)
+    {
+        write_transition_integer_comparison_samples(std::cout);
         return 0;
     }
 

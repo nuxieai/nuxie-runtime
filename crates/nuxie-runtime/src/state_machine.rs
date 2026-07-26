@@ -1,6 +1,6 @@
 use crate::animation::{
     AnimationLoop, LinearAnimationInstance, RuntimeInterpolator, RuntimeKeyedPropertyTarget,
-    RuntimeLinearAnimation,
+    RuntimeLinearAnimation, RuntimeLinearAnimationHandle,
 };
 use crate::components::TransformProperty;
 use crate::data_bind_graph::{
@@ -1257,7 +1257,7 @@ impl RuntimeStateTransition {
             let mut exit_time = self.exit_time_seconds(Some(animation_from.animation), false);
             let duration = animation_from.animation.duration_seconds();
             if exit_time <= duration
-                && AnimationLoop::from_loop_value(animation_from.animation.loop_value)
+                && AnimationLoop::from_loop_value(animation_from.animation.loop_value as i32)
                     != AnimationLoop::OneShot
                 && duration != 0.0
             {
@@ -1636,7 +1636,7 @@ impl BlendState1DInstance {
                 Some(BlendAnimation1DInstance {
                     value: animation.value,
                     animation: LinearAnimationInstance::new(
-                        animation.animation_index,
+                        RuntimeLinearAnimationHandle::new(animation.animation_index),
                         linear_animation,
                         1.0,
                     ),
@@ -1852,7 +1852,7 @@ impl BlendStateDirectInstance {
                 Some(BlendAnimationDirectInstance {
                     source: animation.source.clone(),
                     animation: LinearAnimationInstance::new(
-                        animation.animation_index,
+                        RuntimeLinearAnimationHandle::new(animation.animation_index),
                         linear_animation,
                         1.0,
                     ),
@@ -3110,7 +3110,7 @@ impl StateMachineLayerInstance {
         }
 
         if let Some(animation_instance) = self.current_animation.as_ref() {
-            let animation = artboard.linear_animation(animation_instance.animation_index)?;
+            let animation = artboard.linear_animation(animation_instance.animation_index())?;
             return Some(RuntimeTransitionAnimationRef {
                 instance: animation_instance,
                 animation,
@@ -3127,7 +3127,7 @@ impl StateMachineLayerInstance {
                     .as_ref()
                     .and_then(|blend_state| blend_state.animation_instance(blend_animation_index))
             })?;
-        let animation = artboard.linear_animation(animation_instance.animation_index)?;
+        let animation = artboard.linear_animation(animation_instance.animation_index())?;
         Some(RuntimeTransitionAnimationRef {
             instance: animation_instance,
             animation,
@@ -3174,7 +3174,7 @@ impl StateMachineLayerInstance {
         if transition.pause_on_exit()
             && transition.has_exit_time()
             && let Some(animation_instance) = previous_animation.as_mut()
-            && let Some(animation) = artboard.linear_animation(animation_instance.animation_index)
+            && let Some(animation) = artboard.linear_animation(animation_instance.animation_index())
         {
             animation_instance.set_time(
                 animation,
@@ -3183,7 +3183,7 @@ impl StateMachineLayerInstance {
         }
         let previous_runtime_animation =
             previous_animation.as_ref().and_then(|animation_instance| {
-                artboard.linear_animation(animation_instance.animation_index)
+                artboard.linear_animation(animation_instance.animation_index())
             });
         let duration_override =
             transition_duration_value(targets.transition_durations, transition.global_id);
@@ -3245,10 +3245,10 @@ impl StateMachineLayerInstance {
 
         let mut reset_animation_indices = Vec::new();
         if let Some(animation) = previous_animation.as_ref() {
-            reset_animation_indices.push(animation.animation_index);
+            reset_animation_indices.push(animation.animation_index());
         }
         if let Some(animation) = self.current_animation.as_ref() {
-            reset_animation_indices.push(animation.animation_index);
+            reset_animation_indices.push(animation.animation_index());
         }
         let transition_animation_reset =
             AnimationReset::from_animation_indices(artboard, &reset_animation_indices, false);
@@ -3385,8 +3385,11 @@ impl StateMachineLayerInstance {
             self.current_animation_keep_going = false;
             return;
         };
-        let mut animation_instance =
-            LinearAnimationInstance::new(animation_index, animation, state.speed);
+        let mut animation_instance = LinearAnimationInstance::new(
+            RuntimeLinearAnimationHandle::new(animation_index),
+            animation,
+            state.speed,
+        );
         self.current_animation_keep_going = animation_instance.advance(animation, 0.0);
         self.current_animation = Some(animation_instance);
     }
@@ -3552,7 +3555,7 @@ impl StateMachineLayerInstance {
         }
         Self::for_each_animation_instance_mut(self, |instance| {
             let prototype = graphs
-                .get(instance.animation_index)
+                .get(instance.animation_index())
                 .and_then(Option::as_ref);
             instance.prepare_key_frame_data_binds(prototype);
         });
@@ -3569,7 +3572,7 @@ impl StateMachineLayerInstance {
         let mut keep_going = false;
         Self::for_each_animation_instance_mut(self, |instance| {
             let prototype = graphs
-                .get(instance.animation_index)
+                .get(instance.animation_index())
                 .and_then(Option::as_ref);
             keep_going |= instance.advance_key_frame_data_binds(prototype, elapsed_seconds);
         });
@@ -3630,7 +3633,8 @@ mod animation_tests {
         key_frame_global_id: u32,
         value: f32,
     ) -> LinearAnimationInstance {
-        let mut instance = LinearAnimationInstance::new(0, animation, 1.0);
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), animation, 1.0);
         instance
             .add_key_frame_value_holder(key_frame_global_id, RuntimeKeyFrameValue::Number(value));
         instance

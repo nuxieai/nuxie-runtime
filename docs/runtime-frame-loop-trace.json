@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "aa95e777c0577aeb7541f2f8c30d8a20c657a2f756b29b16d7d2cdbab770fbb9",
+    "cpp_binary_sha256": "e7a216d81b1310c9b1a92217e34e8855807addcc92f60df7c3263999eff0079d",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "03597ca6082be616bdf12796df732736f9b9a962227ad5c56284ef24547c77ec",
-    "rust_coverage_sha256": "8f8c6c22e65be2dcdb83effdf83faa8087ae46af5b515f7572077be14969a80d",
-    "rust_mechanism_coverage_sha256": "6ba549dade2bd3f44e1a1f21d86341be58fc1393cf3a461fc3a4d5d5bf9f20e8",
-    "rust_steady_coverage_sha256": "d743dc56a79b34982fa888410ba7cba2bc7d98d47b8f1d72457c7cec12286716"
+    "rust_binary_sha256": "4272acd9ce6ecb4f33d47c2df5f2b2d423c64019223c8ae37f0336e2c6a21162",
+    "rust_coverage_sha256": "753d7dcd75412dab26476af4b6c385d427d44b55f640c8559011a74e1da24f26",
+    "rust_mechanism_coverage_sha256": "315a2b2caa487e89c89835e111ce4f8717b84214cdbefdaf1ecb1eeb3700f636",
+    "rust_steady_coverage_sha256": "8050888fdf49432fc15c1f6f5c9f2ccacb735a7d20829c4b24396676ba33cc15"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -2129,6 +2129,10 @@
           "name": "<nuxie_runtime::animation::LinearAnimationInstance>::advance_and_report"
         },
         {
+          "count": 31,
+          "name": "<nuxie_runtime::animation::LinearAnimationInstance>::animation_index"
+        },
+        {
           "count": 33,
           "name": "<nuxie_runtime::animation::LinearAnimationInstance>::apply"
         },
@@ -2275,6 +2279,14 @@
         {
           "count": 27,
           "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::start_time_with_speed"
+        },
+        {
+          "count": 64,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::index"
+        },
+        {
+          "count": 27,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::new"
         },
         {
           "count": 4,
@@ -7116,14 +7128,14 @@
   "rust_candidate_source": {
     "file_count": 7150,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "3d344b3c35299b34904352eb84d2b262957cfc796ea5dc88b97ae2b587e09a99"
+    "sha256": "3ddc1910b1e783e1e8726899ae0ce6b47176fe4bca28355a291cd4cfe3394705"
   },
-  "rust_ref": "07cecdc85f3b3b721eeef595870cf2dd94c8d7f7",
+  "rust_ref": "7aad52372d718f42954a75f821de9440a14838a3",
   "rust_runner_provenance": {
     "candidate_source": {
       "file_count": 7150,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "3d344b3c35299b34904352eb84d2b262957cfc796ea5dc88b97ae2b587e09a99"
+      "sha256": "3ddc1910b1e783e1e8726899ae0ce6b47176fe4bca28355a291cd4cfe3394705"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -7148,7 +7160,7 @@
     },
     "dynamic_cpp_functions": 461,
     "dynamic_rust_files": 18,
-    "dynamic_rust_functions": 1183,
+    "dynamic_rust_functions": 1186,
     "static_cpp_files": 338
   },
   "steady_allocation_counts": {

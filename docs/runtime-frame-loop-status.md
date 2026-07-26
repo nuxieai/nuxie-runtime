@@ -4,8 +4,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-B1 KeyFrame/keyed-definition ownership translated and locally
-  gated; FL-A was independently
+- Phase: FL-B2 LinearAnimation definition/occurrence ownership translated
+  and locally gated. FL-B1 is locally gated, and
+  FL-A was independently
   accepted and promoted at
   `f86d5ba0146697abc996310c62fa45e1f053144b`; exact main
   `e72323c808b91d706ba3b745396beaca7accd69a` was consumed without overlap at
@@ -17,8 +18,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   owners plus all six FL-A Component rows); 28 later-wave rows remain.
 - Open mechanism gaps: 7 / 9. FL-G02 is closed; FL-G06 remained closed.
 - Current dependency wave: FL-B. Its frozen 45-file/eight-member mini-map is
-  `docs/runtime-frame-loop-fl-b-spec.md`; FL-B1 is implemented while every
-  FL-B row remains pending until whole-wave independent verification.
+  `docs/runtime-frame-loop-fl-b-spec.md`; FL-B1 and FL-B2 are implemented
+  while every FL-B row remains pending until whole-wave independent
+  verification.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
   defined post-advance C++ result. No `Option<bool>` API break or
@@ -51,6 +53,36 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   317 / 317 entries and 647 / 647 segments with zero divergences; all 24
   checker/capture/summarizer controls; structural checker 338 files,
   75 members, 9 gaps, and all three new FL-B1 zero-ratchets green. Rows and
+  FL-G01 remain pending/open until whole-wave independent acceptance.
+
+## FL-B2 LinearAnimation definition/occurrence evidence
+
+- Pinned ownership translated from `linear_animation.cpp`,
+  `linear_animation_instance.cpp`, and the nested linear/simple/remap owners:
+  the Artboard now retains one immutable `Arc<Vec<RuntimeLinearAnimation>>`
+  definition arena and each occurrence retains one
+  `RuntimeLinearAnimationHandle`; `RuntimeLinearAnimation` is no longer
+  cloneable.
+- `LinearAnimationInstance` now retains the C++ raw signed `-1` loop sentinel.
+  Its copy retains only the C++ copy-constructor state and starts without
+  keyframe holders or cloned bind/converter state.
+- Quantize, seconds conversion, global-to-local time, and advance no longer
+  contain Rust-only zero-fps, zero-duration, or zero-range early returns.
+  Float arithmetic follows the pinned expressions. Where pinned C++ has no
+  defined result, Rust keeps its language-defined safe result rather than
+  inventing a different control-flow branch.
+- The approved binding adaptation is narrow: construction exposes
+  `did_loop=false` before the first advance; zero-delta and every nonzero
+  advance write the exact pinned post-advance result. Direction, time,
+  total/last/spilled time, reset, raw loop override, and copy behavior have
+  focused lifecycle coverage.
+- Local floors: runtime 488 / 488; public facade 146 / 146; all 11
+  `linear_animation_*` C++ probe comparisons green; probe-armed workspace
+  including C++ probe 726 / 726; ordinary and scripted golden each
+  317 / 317 entries and 647 / 647 segments with zero divergences; all 25
+  checker/capture/summarizer controls; source-bound trace 103 / 338 C++
+  files, 18 Rust modules, and 18 landmarks; structural checker 338 files,
+  75 members, 9 gaps, with all four FL-B2 zero-ratchets green. Rows and
   FL-G01 remain pending/open until whole-wave independent acceptance.
 
 ## FL-0 evidence
@@ -477,10 +509,8 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Execute FL-B2 LinearAnimation definition/occurrence ownership from
-   `docs/runtime-frame-loop-fl-b-spec.md`, preserving the approved safe
-   pre-advance `did_loop=false` binding and every defined C++ post-advance
-   transition.
+1. Commit the locally gated FL-B2 LinearAnimation definition/occurrence
+   owner slice.
 2. Execute FL-B3 reset factory lifecycle and FL-B4 blend ownership, deleting
    each displaced Rust owner path in the same lane.
 3. Run the complete unchanged floor and one canonical whole-corpus FL-B

@@ -693,7 +693,7 @@ fn runtime_key_frame_interpolator(
 }
 
 // Mirrors src/animation/linear_animation.cpp plus keyed object/property keyframe sampling.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RuntimeLinearAnimation {
     pub global_id: u32,
     pub name: Option<Arc<str>>,
@@ -773,7 +773,7 @@ impl RuntimeLinearAnimation {
         mix: f32,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
     ) -> bool {
-        let seconds = if self.quantize && self.fps != 0 {
+        let seconds = if self.quantize {
             let fps = self.fps as f32;
             (seconds * fps).floor() / fps
         } else {
@@ -943,26 +943,13 @@ impl RuntimeLinearAnimation {
     }
 
     pub(crate) fn global_to_local_seconds(&self, seconds: f32) -> f32 {
-        match AnimationLoop::from_loop_value(self.loop_value) {
+        match AnimationLoop::from_loop_value(self.loop_value as i32) {
             AnimationLoop::OneShot => seconds + self.start_seconds(),
             AnimationLoop::Loop => {
                 positive_mod(seconds, self.duration_seconds()) + self.start_seconds()
             }
             AnimationLoop::PingPong => {
                 let duration = self.duration_seconds();
-                // Guard zero-length animations. C++ (linear_animation.cpp:142-144)
-                // computes `(int)(seconds / durationSeconds())`, which is UB when
-                // durationSeconds()==0 (division by zero -> inf/NaN cast to int);
-                // Rust instead saturates the cast (inf->i32::MAX, NaN->0), a
-                // different-but-defined result. Neither is meaningful. Since
-                // duration_seconds() == (end - start).abs(), a zero duration means
-                // start_seconds() == end_seconds(), so both ping-pong branches
-                // collapse to that single frame. Return it directly -- a
-                // documented deterministic choice (the C++ value is UB and not
-                // reliably reproducible).
-                if duration == 0.0 {
-                    return self.start_seconds();
-                }
                 let local_time = positive_mod(seconds, duration);
                 let direction = (seconds / duration) as i32 % 2;
                 if direction == 0 {
@@ -1003,9 +990,6 @@ impl RuntimeLinearAnimation {
     }
 
     fn frame_to_seconds(&self, frame: f32) -> f32 {
-        if self.fps == 0 {
-            return 0.0;
-        }
         frame / self.fps_as_f32()
     }
 }
@@ -1557,7 +1541,7 @@ pub(crate) enum AnimationLoop {
 }
 
 impl AnimationLoop {
-    pub(crate) fn from_loop_value(value: u64) -> Self {
+    pub(crate) fn from_loop_value(value: i32) -> Self {
         match value {
             1 => Self::Loop,
             2 => Self::PingPong,
@@ -1567,19 +1551,29 @@ impl AnimationLoop {
 }
 
 fn positive_mod(value: f32, range: f32) -> f32 {
-    if range == 0.0 {
-        return 0.0;
-    }
     ((value % range) + range) % range
+}
+
+/// Stable typed identity for one definition in an Artboard's immutable
+/// LinearAnimation arena. C++ occurrences retain `const LinearAnimation*`;
+/// Rust retains this non-dereferenceable handle and resolves it only through
+/// the owning Artboard arena.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RuntimeLinearAnimationHandle(usize);
+
+impl RuntimeLinearAnimationHandle {
+    pub(crate) fn new(index: usize) -> Self {
+        Self(index)
+    }
+
+    pub fn index(self) -> usize {
+        self.0
+    }
 }
 
 #[derive(Debug)]
 pub struct LinearAnimationInstance {
-    pub(crate) animation_index: usize,
-    /// C++ retains a `const LinearAnimation*` on each instance. Keep the
-    /// immutable Rust animation descriptor alongside the index too, avoiding
-    /// a vector lookup and `Arc`-backed descriptor clone on every apply.
-    animation: RuntimeLinearAnimation,
+    animation: RuntimeLinearAnimationHandle,
     pub(crate) time: f32,
     pub(crate) speed_direction: f32,
     pub(crate) total_time: f32,
@@ -1587,7 +1581,8 @@ pub struct LinearAnimationInstance {
     pub(crate) spilled_time: f32,
     pub(crate) direction: f32,
     pub(crate) did_loop: bool,
-    pub(crate) loop_value: Option<u64>,
+    /// C++ `m_loopValue`: `-1` means use the definition value.
+    pub(crate) loop_value_override: i32,
     key_frame_value_holders: Option<Box<HashMap<u32, RuntimeKeyFrameValue>>>,
     key_frame_data_bind_graph: Option<Box<RuntimeDataBindGraph>>,
     key_frame_prototype_revision: u64,
@@ -1596,8 +1591,7 @@ pub struct LinearAnimationInstance {
 impl Clone for LinearAnimationInstance {
     fn clone(&self) -> Self {
         Self {
-            animation_index: self.animation_index,
-            animation: self.animation.clone(),
+            animation: self.animation,
             time: self.time,
             speed_direction: self.speed_direction,
             total_time: self.total_time,
@@ -1605,7 +1599,7 @@ impl Clone for LinearAnimationInstance {
             spilled_time: self.spilled_time,
             direction: self.direction,
             did_loop: self.did_loop,
-            loop_value: self.loop_value,
+            loop_value_override: self.loop_value_override,
             // Keyframe holders model C++'s per-LAI runtime-owned bind targets.
             // A copied LAI starts unbound; state transitions move the outgoing
             // instance when they need to preserve its concrete binding identity.
@@ -1618,21 +1612,20 @@ impl Clone for LinearAnimationInstance {
 
 impl LinearAnimationInstance {
     pub(crate) fn new(
-        animation_index: usize,
-        animation: &RuntimeLinearAnimation,
+        animation: RuntimeLinearAnimationHandle,
+        definition: &RuntimeLinearAnimation,
         speed_multiplier: f32,
     ) -> Self {
         Self {
-            animation_index,
-            animation: animation.clone(),
-            time: animation.start_time_with_speed(speed_multiplier),
+            animation,
+            time: definition.start_time_with_speed(speed_multiplier),
             speed_direction: if speed_multiplier >= 0.0 { 1.0 } else { -1.0 },
             total_time: 0.0,
             last_total_time: 0.0,
             spilled_time: 0.0,
             direction: 1.0,
             did_loop: false,
-            loop_value: None,
+            loop_value_override: -1,
             key_frame_value_holders: None,
             key_frame_data_bind_graph: None,
             key_frame_prototype_revision: 0,
@@ -1795,7 +1788,11 @@ impl LinearAnimationInstance {
     }
 
     pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
-        self.animation.apply_with_key_frame_values(
+        let definitions = artboard.linear_animations.clone();
+        let Some(definition) = definitions.get(self.animation.index()) else {
+            return false;
+        };
+        definition.apply_with_key_frame_values(
             artboard,
             self.time,
             mix,
@@ -1804,7 +1801,7 @@ impl LinearAnimationInstance {
     }
 
     pub fn animation_index(&self) -> usize {
-        self.animation_index
+        self.animation.index()
     }
 
     pub fn time(&self) -> f32 {
@@ -1831,12 +1828,29 @@ impl LinearAnimationInstance {
         self.direction
     }
 
+    pub fn set_direction(&mut self, direction: i32) {
+        self.direction = if direction > 0 { 1.0 } else { -1.0 };
+    }
+
     pub fn did_loop(&self) -> bool {
         self.did_loop
     }
 
+    pub fn clear_spilled_time(&mut self) {
+        self.spilled_time = 0.0;
+    }
+
     pub fn loop_value(&self) -> Option<u64> {
-        self.loop_value
+        u64::try_from(self.loop_value_override).ok()
+    }
+
+    pub(crate) fn set_loop_value(&mut self, definition: &RuntimeLinearAnimation, value: i32) {
+        if self.loop_value_override == value
+            || (self.loop_value_override == -1 && definition.loop_value as i32 == value)
+        {
+            return;
+        }
+        self.loop_value_override = value;
     }
 
     pub(crate) fn set_time(&mut self, animation: &RuntimeLinearAnimation, value: f32) {
@@ -1845,9 +1859,18 @@ impl LinearAnimationInstance {
         }
         self.time = value;
         let diff = self.total_time - self.last_total_time;
-        self.total_time = value - animation.start_seconds();
+        let start = if animation.enable_work_area {
+            animation.work_start as f32
+        } else {
+            0.0
+        } * animation.fps_as_f32();
+        self.total_time = value - start;
         self.last_total_time = self.total_time - diff;
         self.direction = 1.0;
+    }
+
+    pub(crate) fn reset(&mut self, animation: &RuntimeLinearAnimation, speed_multiplier: f32) {
+        self.time = animation.start_time_with_speed(speed_multiplier);
     }
 
     pub fn directed_speed(&self, animation: &RuntimeLinearAnimation) -> f32 {
@@ -1855,7 +1878,11 @@ impl LinearAnimationInstance {
     }
 
     pub(crate) fn resolved_loop_kind(&self, animation: &RuntimeLinearAnimation) -> AnimationLoop {
-        AnimationLoop::from_loop_value(self.loop_value.unwrap_or(animation.loop_value))
+        AnimationLoop::from_loop_value(if self.loop_value_override != -1 {
+            self.loop_value_override
+        } else {
+            animation.loop_value as i32
+        })
     }
 
     pub(crate) fn keep_going(&self, animation: &RuntimeLinearAnimation) -> bool {
@@ -1933,11 +1960,6 @@ impl LinearAnimationInstance {
             );
         }
         let fps = animation.fps_as_f32();
-        if fps == 0.0 {
-            self.did_loop = false;
-            return self.keep_going_with_speed_multiplier(animation, elapsed_seconds);
-        }
-
         let mut frames = self.time * fps;
         let start = animation.start_frame();
         let end = animation.end_frame();
@@ -1964,7 +1986,7 @@ impl LinearAnimationInstance {
                 }
             }
             AnimationLoop::Loop => {
-                if range != 0.0 && direction == 1 && frames >= end {
+                if direction == 1 && frames >= end {
                     let delta_frames = delta_seconds * fps;
                     let remainder = (frames - start) % range;
                     let spilled_frames_ratio = remainder / delta_frames;
@@ -1985,7 +2007,7 @@ impl LinearAnimationInstance {
                             callbacks,
                         );
                     }
-                } else if range != 0.0 && direction == -1 && frames <= start {
+                } else if direction == -1 && frames <= start {
                     let delta_frames = delta_seconds * fps;
                     let remainder = ((start - frames) % range).abs();
                     let spilled_frames_ratio = (remainder / delta_frames).abs();
@@ -2216,7 +2238,8 @@ mod tests {
     #[test]
     fn data_bound_double_interpolation_uses_both_effective_endpoints() {
         let animation = animation_with_work_area(false);
-        let mut instance = LinearAnimationInstance::new(0, &animation, 1.0);
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
         instance.add_key_frame_value_holder(10, RuntimeKeyFrameValue::Number(100.0));
         instance.add_key_frame_value_holder(20, RuntimeKeyFrameValue::Number(200.0));
         let property = keyed_double_property(10, 1.0, 20, 2.0);
@@ -2230,7 +2253,8 @@ mod tests {
     #[test]
     fn data_bound_color_interpolation_uses_both_effective_endpoints() {
         let animation = animation_with_work_area(false);
-        let mut instance = LinearAnimationInstance::new(0, &animation, 1.0);
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
         let bound_from = 0xFF00_0000;
         let bound_to = 0xFFFF_FFFF;
         instance.add_key_frame_value_holder(30, RuntimeKeyFrameValue::Color(bound_from));
@@ -2303,7 +2327,8 @@ mod tests {
     #[test]
     fn data_bound_boolean_step_uses_the_effective_current_key_frame() {
         let animation = animation_with_work_area(false);
-        let mut instance = LinearAnimationInstance::new(0, &animation, 1.0);
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
         instance.add_key_frame_value_holder(50, RuntimeKeyFrameValue::Boolean(true));
         let mut property = keyed_double_property(10, 1.0, 20, 2.0);
         property.key_frames.clear();
@@ -2336,7 +2361,8 @@ mod tests {
     #[test]
     fn data_bound_string_step_uses_the_effective_current_key_frame() {
         let animation = animation_with_work_area(false);
-        let mut instance = LinearAnimationInstance::new(0, &animation, 1.0);
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
         instance
             .add_key_frame_value_holder(70, RuntimeKeyFrameValue::String(b"bound start".to_vec()));
         let mut property = keyed_double_property(10, 1.0, 20, 2.0);
@@ -2370,7 +2396,8 @@ mod tests {
     #[test]
     fn cloned_animation_instance_starts_without_key_frame_value_holders() {
         let animation = animation_with_work_area(false);
-        let mut instance = LinearAnimationInstance::new(0, &animation, 1.0);
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
         instance.add_key_frame_value_holder(10, RuntimeKeyFrameValue::Number(123.0));
 
         let cloned = instance.clone();
@@ -2380,15 +2407,87 @@ mod tests {
             Some(&RuntimeKeyFrameValue::Number(123.0))
         );
         assert_eq!(cloned.key_frame_value_holder(10), None);
+        assert_eq!(cloned.animation, instance.animation);
+        assert_eq!(cloned.loop_value_override, instance.loop_value_override);
+    }
+
+    #[test]
+    fn raw_loop_override_retains_cpp_minus_one_sentinel() {
+        let animation = animation_with_work_area(false);
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(7), &animation, 1.0);
+
+        assert_eq!(instance.animation_index(), 7);
+        assert_eq!(instance.loop_value_override, -1);
+        assert_eq!(instance.resolved_loop_kind(&animation), AnimationLoop::Loop);
+
+        // linear_animation_instance.cpp:426-434 leaves the sentinel untouched
+        // when the requested value already equals the definition.
+        instance.set_loop_value(&animation, animation.loop_value as i32);
+        assert_eq!(instance.loop_value_override, -1);
+
+        instance.set_loop_value(&animation, 2);
+        assert_eq!(instance.loop_value_override, 2);
+        assert_eq!(
+            instance.resolved_loop_kind(&animation),
+            AnimationLoop::PingPong
+        );
+
+        instance.set_loop_value(&animation, -1);
+        assert_eq!(instance.loop_value_override, -1);
+        assert_eq!(instance.resolved_loop_kind(&animation), AnimationLoop::Loop);
+    }
+
+    #[test]
+    fn pre_advance_did_loop_is_safe_false_then_every_advance_writes_it() {
+        let animation = animation_with_work_area(false);
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+
+        // Binding adaptation: pinned C++ leaves m_didLoop indeterminate until
+        // advance; safe Rust exposes a deterministic false.
+        assert!(!instance.did_loop());
+        assert!(instance.advance(&animation, 2.0));
+        assert!(instance.did_loop());
+        assert!(!instance.advance(&animation, 0.0));
+        assert!(!instance.did_loop());
+    }
+
+    #[test]
+    fn time_and_reset_follow_cpp_occurrence_state_rules() {
+        let animation = animation_with_work_area(true);
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        instance.total_time = 9.0;
+        instance.last_total_time = 7.0;
+        instance.direction = -1.0;
+
+        instance.set_time(&animation, 4.0);
+
+        // linear_animation_instance.cpp:367-380 retains the prior total-time
+        // delta and uses the authored workStart*fps expression verbatim.
+        assert_eq!(instance.total_time, 4.0 - 10.0 * 60.0);
+        assert_eq!(instance.last_total_time, instance.total_time - 2.0);
+        assert_eq!(instance.direction, 1.0);
+
+        instance.direction = -1.0;
+        instance.did_loop = true;
+        instance.reset(&animation, -1.0);
+        assert_eq!(instance.time(), animation.end_seconds());
+        assert_eq!(instance.direction(), -1.0);
+        assert!(instance.did_loop());
     }
 
     #[test]
     fn key_frame_value_holders_are_isolated_per_animation_instance() {
         let animation = animation_with_work_area(false);
         let property = keyed_double_property(10, 1.0, 20, 2.0);
-        let mut first = LinearAnimationInstance::new(0, &animation, 1.0);
-        let mut second = LinearAnimationInstance::new(0, &animation, 1.0);
-        let unbound = LinearAnimationInstance::new(0, &animation, 1.0);
+        let mut first =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut second =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let unbound =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
         first.add_key_frame_value_holder(10, RuntimeKeyFrameValue::Number(100.0));
         second.add_key_frame_value_holder(10, RuntimeKeyFrameValue::Number(200.0));
         *first.key_frame_value_holder_mut(10).unwrap() = RuntimeKeyFrameValue::Number(150.0);
@@ -2410,7 +2509,8 @@ mod tests {
     #[test]
     fn uint_and_id_sampling_ignore_key_frame_value_holders() {
         let animation = animation_with_work_area(false);
-        let mut instance = LinearAnimationInstance::new(0, &animation, 1.0);
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
         instance.add_key_frame_value_holder(90, RuntimeKeyFrameValue::Number(999.0));
         let mut property = keyed_double_property(10, 1.0, 20, 2.0);
         property.key_frames.clear();
@@ -2438,7 +2538,8 @@ mod tests {
         assert!(prototype.bind_default_view_model_context());
         assert!(prototype.set_default_view_model_number_source_for_path(&[0, 0], 10.0));
 
-        let mut state_machine_instance = LinearAnimationInstance::new(0, &animation, 1.0);
+        let mut state_machine_instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
         assert!(state_machine_instance.prepare_key_frame_data_binds(Some(&prototype)));
         assert_eq!(
             state_machine_instance.key_frame_value_holder(10),
@@ -2475,8 +2576,10 @@ mod tests {
         prototype.set_formula_random_values(&[0.25, 0.75]);
         assert!(prototype.bind_default_view_model_context());
 
-        let mut first = LinearAnimationInstance::new(0, &animation, 1.0);
-        let mut second = LinearAnimationInstance::new(0, &animation, 1.0);
+        let mut first =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut second =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
         first.prepare_key_frame_data_binds(Some(&prototype));
         second.prepare_key_frame_data_binds(Some(&prototype));
 
@@ -2529,7 +2632,8 @@ mod tests {
         let mut prototype = RuntimeDataBindGraph::new_key_frame_bindings(&[template])
             .expect("keyframe binding graph");
         assert!(prototype.bind_empty_data_context());
-        let mut instance = LinearAnimationInstance::new(0, &animation, 1.0);
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
         instance.prepare_key_frame_data_binds(Some(&prototype));
         assert_eq!(
             instance.key_frame_value_holder(30),
@@ -2554,10 +2658,10 @@ mod tests {
     }
 
     #[test]
-    fn ping_pong_zero_duration_is_finite_and_deterministic() {
-        // duration==0 makes C++ compute (int)(seconds / 0) -> UB and Rust
-        // saturate an inf/NaN cast; guard collapses both branches to the single
-        // frame. Must never return NaN/inf regardless of the sampled second.
+    fn ping_pong_zero_duration_keeps_the_unguarded_cpp_arithmetic_shape() {
+        // linear_animation.cpp:132-144 has no zero-duration branch. Rust float
+        // remainder therefore produces NaN directly; its float-to-int cast is
+        // defined and memory-safe, while C++'s corresponding cast is undefined.
         let animation = RuntimeLinearAnimation {
             global_id: 1,
             name: None,
@@ -2577,8 +2681,10 @@ mod tests {
         assert_eq!(animation.duration_seconds(), 0.0);
         for seconds in [-2.0_f32, -0.5, 0.0, 0.5, 2.0, 1000.0] {
             let local = animation.global_to_local_seconds(seconds);
-            assert!(local.is_finite(), "local time not finite for {seconds}");
-            assert_eq!(local, animation.start_seconds());
+            assert!(
+                local.is_nan(),
+                "local time unexpectedly finite for {seconds}"
+            );
         }
     }
 }

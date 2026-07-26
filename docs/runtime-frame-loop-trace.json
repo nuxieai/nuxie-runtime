@@ -18,7 +18,7 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "64092c748f8ad9302a6afd3a4743acc1c418f9cef046132f2c852ca9e278b810",
+    "cpp_binary_sha256": "d02021743baef3c8519954f4870b9ee4f1ebfa861bab4c2ddd3bf1b90573aa14",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
@@ -7212,7 +7212,7 @@
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
     "sha256": "defed367946504e7e96d84391fdef9e6bb3f67d4bded14a61cbf55461daba84f"
   },
-  "rust_ref": "89ba87c989cc642dc6003172d76b126f595e590a",
+  "rust_ref": "e27702daea604e64b61402f02636733387824c69",
   "rust_runner_provenance": {
     "candidate_source": {
       "file_count": 7180,

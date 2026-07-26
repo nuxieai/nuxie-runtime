@@ -1466,26 +1466,26 @@ reason = "P08-C08 awaits a mode-labeled direct font differential."
 id = "LOC-014"
 title = "Rust feather raster shifts and strengthens authored box shadows"
 source_class = "candidate"
-state = "reported"
+state = "closed"
 owner_class = "renderer"
-classification = "unqualified"
+classification = "stale-oracle"
 ticket = "F-ED-10"
 fixture_id = "fed.loc_014.feather_owner"
-preliminary_disposition = "High-confidence feather-owner divergence whose current attribution requires the identical pinned-C++ versus supported Rust WebGPU oracle; retired-backend observations are historical provenance only."
-reproduction_sha256 = "22aff767d33f85d33322abbee14d510b80bf6082ef1dbd60c068f5bf204d24c9"
-rust_stimulus = "pending: F-ED-10 must minimize the direct Rust stimulus for LOC-014"
-cpp_stimulus = "pending: F-ED-10 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-014"
-source_files = ["pending: F-ED-10 source-file correspondence"]
-source_members = ["pending: F-ED-10 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-10 lifecycle qualification"]
-rust_owner = "pending: F-ED-10 exact Rust owner"
-displaced_mechanism = "pending: F-ED-10 displaced-mechanism inventory"
-dependencies = ["F-ED-00B","F-ED-10"]
-target_tests = ["pending:F-ED-10"]
+preliminary_disposition = "Closed as a stale visual oracle: the exact Editor-authored clockwise Feather shadow is pixel-identical in pinned C++ Dawn and supported Rust WebGPU."
+reproduction_sha256 = "65c82264f1bcd3cf95e1a84a9444714dbadd86d79feb3cf7edc33857bf48436a"
+rust_stimulus = "renderer-replay --stream loc014-box-shadow.rive-stream --backend rust-wgpu --mode msaa"
+cpp_stimulus = "renderer-replay --stream loc014-box-shadow.rive-stream --backend ffi-dawn --mode msaa at d788e8ec"
+source_files = ["src/shapes/paint/feather.cpp","renderer/src/draw.cpp","renderer/src/render_context.cpp","crates/nuxie-renderer/src/draw.rs","crates/nuxie-renderer/src/lib.rs"]
+source_members = ["Feather::strength","RenderContext::find_feather_radius","find_atlas_feather_scale_factor","feather_atlas_placement","FEATHER_ATLAS_PADDING"]
+lifecycle_phases = ["typed Scene lowering","world-space offset","feather bounds expansion","atlas allocation","MSAA draw","pixel comparison"]
+rust_owner = "crates/nuxie-renderer feather atlas and draw planning, verified equivalent to pinned C++"
+displaced_mechanism = "No mechanism is displaced; the reviewed historical image is not the output of the current authoritative Feather contract."
+dependencies = []
+target_tests = ["tools/editor-next-runtime-defects/check-loc-014-feather.sh"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
-owning_ledger = "pending: F-ED-10 owning-ledger link"
-adaptation_rule = "pending: F-ED-10 rule citation"
-decision_row = "pending: F-ED-10 decision-row disposition"
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#LOC-014"
+adaptation_rule = "Use pinned C++ Feather radius, world-offset, atlas scale, padding, and MSAA selection unchanged; exact parity closes the historical observation without tuning."
+decision_row = "The 180x124 DPR-1 clockwise Feather scene has identical C++ and Rust bounds, resources, and pixels; no runtime or renderer repair is authorized."
 touch = []
 dont_touch = ["@active-fl-lease"]
 formal_children = []
@@ -1496,34 +1496,57 @@ proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
 runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
 parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
-original_localization_rust_sha = { status = "pending", reason = "F-ED-10 must recover the original localization Rust SHA" }
+original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
+investigation_head_sha = "fe0a0a07db302ce2f0282a2d919ea249e83144e5"
+merged_repair_sha = { status = "pending", reason = "No repair exists because the authoritative C++ and Rust outputs are exact." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
 consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
 [defect.renderer_provenance]
-status = "pending"
-reason = "F-ED-10 must stamp backend, mode, features, surface, Dawn, and reference executable."
+status = "complete"
+backend = "pinned C++ ffi-dawn and Rust wgpu, both over Apple Metal"
+dawn_revision = "211333b2e3e429c3508f25c81c547f602adf448c"
+mode = "MSAA; world-space outer Feather strength 24 with offset (0,10)"
+feature_flags = "native WebGPU; no browser, WebGL2, fallback, or retired backend"
+surface = "180x124 DPR-1 RGBA frame, clear 0xfff8fafc, Apple M5 Max"
+reference_executable = "target/renderer-dawn-live-reference/renderer-replay sha256 867ae8ca2fe96cb6321d3d0f4bf5487aa9b7d2a5eb3d36c4d55f4d1d42860765"
+reference_stamp_sha256 = "867ae8ca2fe96cb6321d3d0f4bf5487aa9b7d2a5eb3d36c4d55f4d1d42860765"
+command = "RIVE_RUNTIME_DIR=/Users/levi/dev/oss/rive-runtime tools/editor-next-runtime-defects/check-loc-014-feather.sh"
+evidence = "The driver rejects tracked C++ changes and pins both replay executable hashes. Stream sha256 b66d076a; C++ and Rust PNG sha256 f5c5e920; 0 differing pixels and max channel delta 0. Separate pinned-source plan audit found feather radius 36, scale 4/9, clipped bounds 0,0..180,124, logical padded atlas 84x60, and physical atlas 105x75."
 [defect.executor_verification]
-status = "pending"
-reason = "F-ED-10 executor fixture has not run."
+status = "pass"
+command = "tools/editor-next-runtime-defects/check-loc-014-feather.sh"
+evidence = "Exact main fe0a0a07 rerun passed with different-pixels=0 and max-channel-delta=0."
 [defect.orchestrator_verification]
-status = "pending"
-reason = "F-ED-10 has no executor-green result to verify."
+status = "not-applicable"
+reason = "Stale-oracle closure promotes no renderer ownership or repair."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:LOC-014"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "exact typed clockwise Feather stream replayed through pinned C++ and Rust"
+[[defect.history]]
+state = "stale-oracle"
+actor = "f-ed-executor"
+evidence = "identical bounds, atlas plan, and 180x124 pixels"
+[[defect.history]]
+state = "closed"
+actor = "f-ed-executor"
+evidence = "historical reviewed visual is not the pinned Feather oracle"
 [defect.cpp_result]
-status = "pending"
-reason = "Feather/ShapePaint/LUT ownership has not been compared at the pin."
+status = "pass"
+command = "renderer-replay ffi-dawn msaa at d788e8ec"
+evidence = "PNG sha256 f5c5e920cefde88fea5f4f7e1477151f9614de9730bebe0774a4a96ef55b3fa1."
 [defect.rust_result]
-status = "pending"
-reason = "The supported Rust WebGPU feather owner/resource lifecycle needs direct same-input evidence against pinned C++."
+status = "pass"
+command = "renderer-replay rust-wgpu msaa at fe0a0a07"
+evidence = "Same PNG sha256 f5c5e920 with exact C++ radius, scale, padding, clipped bounds, and pixels."
 [defect.editor_result]
-status = "pending"
-reason = "P08-C09 awaits direct renderer ownership classification."
+status = "not-applicable"
+reason = "Editor records are retained as historical provenance; pinned C++ is the visual authority."
 
 [[defect]]
 id = "LOC-015"

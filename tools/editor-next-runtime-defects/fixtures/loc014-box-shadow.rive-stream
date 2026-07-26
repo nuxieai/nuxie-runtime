@@ -1,0 +1,25 @@
+rive-golden-stream-v1
+source file="typed:box-shadow-card" artboard="Box Shadow Card" scene="static"
+frameSize width=180 height=124
+clearColor value=0xfff8fafc
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=2,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=3,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeRenderPaint {id=4,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+save
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+clipPath path={id=1,fillRule=2,path={verbs=[move,line,line,line,close],points=[(0,0),(180,0),(180,124),(0,124)]}}
+transform matrix=[1,0,0,1,0,0]
+save
+transform matrix=[1,0,0,1,0,10]
+transform matrix=[1,0,0,1,90,58]
+makeEmptyRenderPath {id=2,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=2,fillRule=2,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(-68,-20),(-68,-28.8365555),(-60.8365555,-36),(-52,-36),(52,-36),(60.8365555,-36),(68,-28.8365555),(68,-20),(68,20),(68,28.8365555),(60.8365555,36),(52,36),(-52,36),(-60.8365555,36),(-68,28.8365555),(-68,20),(-68,-20)]}} paint={id=4,style=fill,color=0x380f172a,thickness=1,join=0,cap=0,feather=24,blendMode=3,shader=0}
+restore
+save
+transform matrix=[1,0,0,1,90,58]
+makeEmptyRenderPath {id=3,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=3,fillRule=0,path={verbs=[move,cubic,line,cubic,line,cubic,line,cubic,line,close],points=[(-68,-20),(-68,-28.8365555),(-60.8365555,-36),(-52,-36),(52,-36),(60.8365555,-36),(68,-28.8365555),(68,-20),(68,20),(68,28.8365555),(60.8365555,36),(52,36),(-52,36),(-60.8365555,36),(-68,28.8365555),(-68,20),(-68,-20)]}} paint={id=3,style=fill,color=0xffffffff,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+restore
+restore
+frame

@@ -19,7 +19,7 @@ Active runtime base after the stable-Rust Apple compatibility repair:
 
 ## Finite closure
 
-The executable ledger contains 50 FL-C C++ file rows and these eight pending
+The executable ledger contains 49 FL-C C++ file rows and these eight pending
 member rows:
 
 1. `state_machine.inputs`
@@ -61,7 +61,7 @@ files it creates.
 
 ## Atomic production lanes
 
-### FL-C1 — Inputs and listener-definition ownership (16 files)
+### FL-C1 — Inputs and listener-definition ownership (12 files)
 
 C++ files:
 
@@ -74,10 +74,6 @@ C++ files:
 - `src/animation/listener_types/listener_input_type_keyboard.cpp`
 - `src/animation/listener_types/listener_input_type_semantic.cpp`
 - `src/animation/listener_types/listener_input_type_viewmodel.cpp`
-- `src/animation/gamepad_listener_group.cpp`
-- `src/animation/keyboard_listener_group.cpp`
-- `src/animation/semantic_listener_group.cpp`
-- `src/animation/text_input_listener_group.cpp`
 - `src/inputs/gamepad_input.cpp`
 - `src/inputs/keyboard_input.cpp`
 - `src/inputs/semantic_input.cpp`
@@ -96,6 +92,17 @@ Retention boundary:
 - clone/remount rebuilds occurrence state without copying live input values.
 
 Member closed by the complete lane: `state_machine.inputs`.
+
+Dependency correction: the original mini-map placed four occurrence dispatch
+groups in this definition lane. Pinned source proves the keyboard, gamepad,
+and semantic groups execute listener actions through `ListenerInvocation`, so
+they belong with those owners in FL-C4. `TextInputListenerGroup::processEvent`
+is entirely a client of `TextInput::{startDrag,drag,endDrag,selectWord,
+selectLine}` and therefore moves with the `src/text/text_input.cpp` owner in
+FL-E. No source file leaves the program; this is a topological correction that
+prevents placeholder invocations or partial text-editing behavior.
+The correction moves one source row from FL-C to FL-E, so the finite FL-C
+closure is 49 files; the overall 341-file program closure is unchanged.
 
 ### FL-C2 — Conditions and transition definitions (12 files)
 
@@ -150,7 +157,7 @@ Retention boundary:
 
 Member closed by the complete lane: `state_machine.layer`.
 
-### FL-C4 — Listener actions, events, and focus dispatch (15 files)
+### FL-C4 — Listener actions, events, and focus dispatch (18 files)
 
 C++ files:
 
@@ -158,6 +165,8 @@ C++ files:
 - `src/animation/focus_action_target.cpp`
 - `src/animation/focus_action_traversal.cpp`
 - `src/animation/focus_listener_group.cpp`
+- `src/animation/gamepad_listener_group.cpp`
+- `src/animation/keyboard_listener_group.cpp`
 - `src/animation/listener_action.cpp`
 - `src/animation/listener_align_target.cpp`
 - `src/animation/listener_bool_change.cpp`
@@ -167,6 +176,7 @@ C++ files:
 - `src/animation/listener_number_change.cpp`
 - `src/animation/listener_trigger_change.cpp`
 - `src/animation/listener_viewmodel_change.cpp`
+- `src/animation/semantic_listener_group.cpp`
 - `src/animation/state_machine_fire_action.cpp`
 - `src/animation/state_machine_fire_trigger.cpp`
 

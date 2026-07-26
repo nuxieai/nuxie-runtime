@@ -32,20 +32,22 @@ implementation language in the port map. Update the stale lower-precedence
 file in the same evidence or planning PR.
 
 The immutable Editor source checkpoint is
-`27ef7d471c3034aba4a4b839d2c8150d3bcb40c3` on
+`4da896beb5ec6815f6b01a2433875274a321d06c` on
 `origin/levi/editor-next-cutover-assembly`:
 
 - proposal SHA-256:
-  `148d11f206edc41caad1f48cae0810b268456b2e220ba6253ac6d04ef450b9db`;
+  `0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983`;
 - runtime-defects SHA-256:
-  `a610201cc34c95bd5ff0838d95228af3983f38327ebbef87b253c3e49a357b9c`;
+  `01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67`;
 - parity-ledger SHA-256:
-  `d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c97`.
+  `a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04`.
 
 The pinned C++ runtime is
 `d788e8ec6e8b598526607d6a1e8818e8b637b60c`. The WebGPU-only runtime
 decision landed in PR #47 at
-`95027109c89f651835c76646ebf4d8734f032f07`.
+`95027109c89f651835c76646ebf4d8734f032f07`; the immutable Editor checkpoint
+above consumes current runtime
+`e72323c808b91d706ba3b745396beaca7accd69a`.
 
 ## Session-start ritual
 
@@ -163,7 +165,12 @@ contains no stale snapshot, backend, owner, or dependency claim.
 
 ### Q1 — Consume the WebGPU-only runtime and requalify browser blockers
 
-Runtime handoff: `95027109c89f651835c76646ebf4d8734f032f07`.
+The WebGPU runtime consumption and API-migration prerequisite is complete in
+the immutable Editor checkpoint recorded above. Q1 remains open for the
+explicit requalification and independent-promotion work below. The original
+WebGPU-only handoff was
+`95027109c89f651835c76646ebf4d8734f032f07`; the consumed runtime has since
+advanced to `e72323c808b91d706ba3b745396beaca7accd69a`.
 Editor removes its two `BrowserBackendPreference::WebGpu` arguments, uses
 `BrowserFactory::new(canvas, width, height)`, rebuilds, and reruns the unchanged
 WebGPU normal/proof/product gates.

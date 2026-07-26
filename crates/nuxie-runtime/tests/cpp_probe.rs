@@ -944,6 +944,12 @@ enum SyntheticInputTransitionKind {
 }
 
 #[derive(Debug, Clone, Copy)]
+enum SyntheticFocusComparator {
+    Missing,
+    WrongType,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct SyntheticTransitionOptions {
     duration: u64,
     flags: u64,
@@ -1196,6 +1202,48 @@ fn push_synthetic_bool_transition_condition(bytes: &mut Vec<u8>, input_index: u6
 
 fn synthetic_state_machine_bool_transition(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_input_transition(file_id, SyntheticInputTransitionKind::Bool)
+}
+
+fn synthetic_state_machine_focus_transition(
+    file_id: u64,
+    comparator: SyntheticFocusComparator,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_object_with_properties(bytes, "TransitionFocusCondition", |bytes| {
+            if matches!(comparator, SyntheticFocusComparator::WrongType) {
+                // C++ returns false before applying != when no component
+                // comparator exists (`transition_focus_condition.cpp:30-39`).
+                push_uint_property(bytes, "TransitionFocusCondition", "opValue", 1);
+            }
+        });
+        if matches!(comparator, SyntheticFocusComparator::WrongType) {
+            push_object_with_properties(bytes, "TransitionValueNumberComparator", |bytes| {
+                push_f32_property(bytes, "TransitionValueNumberComparator", "value", 1.0);
+            });
+        }
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
 }
 
 fn push_transition_duration_data_bind_context(bytes: &mut Vec<u8>, path: &[u32]) {
@@ -18920,6 +18968,55 @@ fn focus_transition_conditions_match_cpp_for_duplicate_and_failing_candidates() 
             rust_report,
             *advanced,
             &format!("{label} action {step}"),
+        );
+    }
+}
+
+#[test]
+fn focus_transition_conditions_without_component_comparator_stay_blocked_like_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (offset, comparator) in [
+        SyntheticFocusComparator::Missing,
+        SyntheticFocusComparator::WrongType,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let label = format!(
+            "synthetic/runtime_state_machine_focus_condition_{comparator:?}_comparator.riv"
+        );
+        let bytes = synthetic_state_machine_focus_transition(8820 + offset as u64, comparator);
+        let cpp = read_cpp_probe_bytes_with_args(
+            &probe,
+            &label,
+            &bytes,
+            &[
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+            ],
+        );
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+        rust.update_components();
+
+        compare_state_machine_advance(
+            &cpp.artboards[0].runtime_state_machine_advances[0],
+            &state_machine,
+            advanced,
+            &label,
+        );
+        assert_eq!(
+            rust.component(1).unwrap().transform.local_transform.0[4],
+            2.0,
+            "{label} dropped the authored false focus condition and made its transition unconditional"
         );
     }
 }

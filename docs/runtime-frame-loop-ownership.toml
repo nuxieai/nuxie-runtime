@@ -41,6 +41,7 @@ required_adversarial = [
   "Dispatch",
   "Lifecycle/cloning",
   "Unsupported comparators",
+  "Malformed focus comparators",
   "Permanent structural ratchets",
 ]
 

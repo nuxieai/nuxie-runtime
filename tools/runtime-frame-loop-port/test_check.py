@@ -660,6 +660,16 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 ),
                 0,
             ),
+            (
+                "state_machine_dropped_focus_condition",
+                r"RuntimeTransitionFocusCondition::from_object\([^;]{0,240}\.map\(Self::Focus\)",
+                (
+                    "fn import() { let condition = "
+                    "RuntimeTransitionFocusCondition::from_object(file, object)"
+                    ".map(Self::Focus); }\n"
+                ),
+                0,
+            ),
         ]
         base_gaps = self.gaps.read_text()
         source = self.repo / "crates/runtime/src/state_machine/instance.rs"

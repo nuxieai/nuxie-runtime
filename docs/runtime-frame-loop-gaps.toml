@@ -372,6 +372,12 @@ pattern = "RuntimeTransitionViewModelCondition::from_object\\([^;]{0,240}\\.map\
 max_occurrences = 0
 
 [[ratchet]]
+id = "state_machine_dropped_focus_condition"
+globs = ["crates/nuxie-runtime/src/state_machine/transition_condition.rs"]
+pattern = "RuntimeTransitionFocusCondition::from_object\\([^;]{0,240}\\.map\\(Self::Focus\\)"
+max_occurrences = 0
+
+[[ratchet]]
 id = "follow_path_graph_composer_rediscovery"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "graph\\.path_composers\\.iter\\(\\)\\.find_map"

@@ -41,9 +41,9 @@ impl RuntimeTransitionCondition {
         object: &RuntimeObject,
     ) -> Option<Self> {
         match object.type_name {
-            "TransitionFocusCondition" => {
-                RuntimeTransitionFocusCondition::from_object(file, object).map(Self::Focus)
-            }
+            "TransitionFocusCondition" => Some(Self::Focus(
+                RuntimeTransitionFocusCondition::from_object(file, object),
+            )),
             "ScriptedTransitionCondition" => Some(Self::Scripted(
                 RuntimeScriptedTransitionCondition::from_object(object),
             )),

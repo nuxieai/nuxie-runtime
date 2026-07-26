@@ -70,6 +70,8 @@ use work_metrics::{CountedCommandEncoderExt, CountedDeviceExt, CountedQueueExt};
 pub enum RendererError {
     Adapter(String),
     AtlasPacking(&'static str),
+    /// Another live browser presentation owns the requested canvas.
+    CanvasInUse,
     Device(String),
     InvalidTextureExtent {
         label: &'static str,
@@ -87,6 +89,9 @@ impl fmt::Display for RendererError {
         match self {
             Self::Adapter(message) => write!(f, "wgpu adapter error: {message}"),
             Self::AtlasPacking(message) => write!(f, "atlas packing error: {message}"),
+            Self::CanvasInUse => f.write_str(
+                "browser WebGPU canvas is already in use by another live presentation",
+            ),
             Self::Device(message) => write!(f, "wgpu device error: {message}"),
             Self::InvalidTextureExtent {
                 label,

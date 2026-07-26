@@ -19,6 +19,11 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::HtmlCanvasElement;
 
+thread_local! {
+    static BROWSER_CANVAS_LEASES: js_sys::WeakMap<HtmlCanvasElement, js_sys::Object> =
+        js_sys::WeakMap::new_typed();
+}
+
 /// Failure to retarget a browser renderer's canvas.
 #[derive(Debug)]
 pub enum BrowserResizeError {
@@ -69,12 +74,14 @@ impl BrowserFactory {
     ///
     /// WebGPU Core admission is attempted first, followed by Compatibility.
     /// Browsers without the API or a usable adapter return
-    /// [`RendererError::Adapter`].
+    /// [`RendererError::Adapter`]. A canvas already owned by another live
+    /// browser presentation returns [`RendererError::CanvasInUse`].
     pub async fn new(
         canvas: HtmlCanvasElement,
         width: u32,
         height: u32,
     ) -> Result<Self, RendererError> {
+        let canvas_lease = BrowserCanvasLease::claim(&canvas)?;
         probe_webgpu_adapter()
             .await
             .map_err(RendererError::Adapter)?;
@@ -86,6 +93,7 @@ impl BrowserFactory {
             canvas.clone(),
             width,
             height,
+            canvas_lease,
         )?);
         Ok(Self {
             inner,
@@ -363,6 +371,7 @@ struct BrowserPresentation {
     configuration: RefCell<wgpu::SurfaceConfiguration>,
     presenter: PresentPipeline,
     queue: wgpu::Queue,
+    _canvas_lease: BrowserCanvasLease,
 }
 
 impl BrowserPresentation {
@@ -371,6 +380,7 @@ impl BrowserPresentation {
         canvas: HtmlCanvasElement,
         width: u32,
         height: u32,
+        mut canvas_lease: BrowserCanvasLease,
     ) -> Result<Self, RendererError> {
         let instance = factory.context.instance.clone();
         let device = factory.context.device.clone();
@@ -384,6 +394,7 @@ impl BrowserPresentation {
             })?;
         configuration.alpha_mode = wgpu::CompositeAlphaMode::PreMultiplied;
         surface.configure(&device, &configuration);
+        canvas_lease.mark_configured();
         Ok(Self {
             presenter: PresentPipeline::new(
                 &device,
@@ -396,6 +407,7 @@ impl BrowserPresentation {
             surface: RefCell::new(surface),
             configuration: RefCell::new(configuration),
             queue: factory.context.queue.clone(),
+            _canvas_lease: canvas_lease,
         })
     }
 
@@ -446,6 +458,64 @@ impl BrowserPresentation {
         *self.surface.borrow_mut() = surface;
         Ok(())
     }
+}
+
+struct BrowserCanvasLease {
+    canvas: HtmlCanvasElement,
+    token: js_sys::Object,
+    configured: bool,
+}
+
+impl BrowserCanvasLease {
+    fn claim(canvas: &HtmlCanvasElement) -> Result<Self, RendererError> {
+        BROWSER_CANVAS_LEASES.with(|leases| {
+            if leases.has(canvas) {
+                return Err(RendererError::CanvasInUse);
+            }
+            let token = js_sys::Object::new();
+            leases.set(canvas, &token);
+            Ok(Self {
+                canvas: canvas.clone(),
+                token,
+                configured: false,
+            })
+        })
+    }
+
+    fn mark_configured(&mut self) {
+        self.configured = true;
+    }
+}
+
+impl Drop for BrowserCanvasLease {
+    fn drop(&mut self) {
+        BROWSER_CANVAS_LEASES.with(|leases| {
+            let Some(current_token) = leases.get_checked(&self.canvas) else {
+                return;
+            };
+            if !js_sys::Object::is(current_token.as_ref(), self.token.as_ref()) {
+                return;
+            }
+            if self.configured && !unconfigure_browser_canvas(&self.canvas) {
+                return;
+            }
+            leases.delete(&self.canvas);
+        });
+    }
+}
+
+fn unconfigure_browser_canvas(canvas: &HtmlCanvasElement) -> bool {
+    let Some(context) = canvas.get_context("webgpu").ok().flatten() else {
+        return false;
+    };
+    let Ok(unconfigure) = js_sys::Reflect::get(context.as_ref(), &JsValue::from_str("unconfigure"))
+    else {
+        return false;
+    };
+    let Some(unconfigure) = unconfigure.dyn_ref::<js_sys::Function>() else {
+        return false;
+    };
+    unconfigure.call0(context.as_ref()).is_ok()
 }
 
 fn create_browser_surface(

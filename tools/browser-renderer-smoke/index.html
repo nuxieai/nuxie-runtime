@@ -12,6 +12,7 @@
       import init, {
         assert_direct_presentation,
         assert_direct_gpu_canvas_image,
+        assert_exclusive_canvas_lease,
         assert_explicit_readback,
         assert_imported_gpu_canvas,
         assert_persistent_surface_acquisition_failure,
@@ -31,6 +32,69 @@
       const forceNoAdapter = search.has("force-webgpu-no-adapter");
       const forceDeviceFailure = search.has("force-webgpu-device-failure");
       let compatibilityProbe = null;
+
+      function installCanvasLeaseCallCounters(canvas) {
+        const context = canvas.getContext("webgpu");
+        if (!context) {
+          throw new Error(
+            "browser lacks WebGPU canvas context required by canvas lease proof",
+          );
+        }
+        const counters = {
+          configure: 0,
+          unconfigure: 0,
+          getCurrentTexture: 0,
+        };
+        const events = [];
+        let configuredGeneration = null;
+        let generationIndex = 0;
+        const restore = [];
+        const wrap = (name) => {
+          const prototype = globalThis.GPUCanvasContext?.prototype;
+          if (!prototype) {
+            throw new Error(`browser lacks ${name} prototype required by canvas lease proof`);
+          }
+          const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+          if (!descriptor || typeof descriptor.value !== "function") {
+            throw new Error(`browser lacks callable ${name} required by canvas lease proof`);
+          }
+          Object.defineProperty(prototype, name, {
+            ...descriptor,
+            value(...args) {
+              const result = descriptor.value.apply(this, args);
+              if (this !== context) return result;
+              counters[name] += 1;
+              if (name === "configure") {
+                configuredGeneration =
+                  generationIndex < 26
+                    ? String.fromCharCode("A".charCodeAt(0) + generationIndex)
+                    : `generation-${generationIndex + 1}`;
+                generationIndex += 1;
+                events.push(`${configuredGeneration}:configure`);
+              } else {
+                events.push(
+                  `${configuredGeneration ?? "unowned"}:${
+                    name === "getCurrentTexture" ? "present" : "unconfigure"
+                  }`,
+                );
+                if (name === "unconfigure") configuredGeneration = null;
+              }
+              return result;
+            },
+          });
+          restore.push(() => Object.defineProperty(prototype, name, descriptor));
+        };
+        wrap("configure");
+        wrap("unconfigure");
+        wrap("getCurrentTexture");
+        return {
+          counters,
+          events,
+          restore() {
+            for (const restoreMethod of restore.reverse()) restoreMethod();
+          },
+        };
+      }
 
       function installPresentationCallCounters() {
         const counters = {
@@ -151,39 +215,99 @@
         if (!prototype) {
           throw new Error("browser lacks GPUCanvasContext required by loss proof");
         }
+        const context = canvas.getContext("webgpu");
+        if (!context) {
+          throw new Error(
+            "browser lacks WebGPU canvas context required by loss proof",
+          );
+        }
         const descriptor = Object.getOwnPropertyDescriptor(
           prototype,
           "getCurrentTexture",
+        );
+        const unconfigureDescriptor = Object.getOwnPropertyDescriptor(
+          prototype,
+          "unconfigure",
         );
         if (!descriptor || typeof descriptor.value !== "function") {
           throw new Error(
             "browser lacks callable getCurrentTexture required by loss proof",
           );
         }
+        if (
+          !unconfigureDescriptor ||
+          typeof unconfigureDescriptor.value !== "function"
+        ) {
+          throw new Error(
+            "browser lacks callable unconfigure required by loss proof",
+          );
+        }
         const getContext = canvas.getContext;
         let acquisitions = 0;
         let surfaces = 0;
+        let contextLookups = 0;
+        const events = [];
+        const contextLookupEvents = [
+          "surface:create:getContext",
+          "surface:recreate:getContext",
+          "release:getContext",
+        ];
         Object.defineProperty(canvas, "getContext", {
           configurable: true,
           value(type, ...args) {
-            if (type === "webgpu") {
-              surfaces += 1;
+            const result = getContext.call(this, type, ...args);
+            if (type === "webgpu" && result === context) {
+              const event =
+                contextLookupEvents[contextLookups] ??
+                `unexpected:getContext:${contextLookups + 1}`;
+              events.push(event);
+              if (contextLookups < 2) {
+                surfaces += 1;
+              }
+              contextLookups += 1;
             }
-            return getContext.call(this, type, ...args);
+            return result;
           },
         });
         Object.defineProperty(prototype, "getCurrentTexture", {
           ...descriptor,
           value(...args) {
+            if (this !== context) {
+              return descriptor.value.apply(this, args);
+            }
             acquisitions += 1;
             if (persistent || acquisitions === 1) {
+              events.push(`acquire:${acquisitions}:injected-loss`);
               throw new Error(
                 persistent
                   ? "injected persistent surface acquisition loss"
                   : "injected one-shot surface acquisition loss",
               );
             }
-            return descriptor.value.apply(this, args);
+            try {
+              const result = descriptor.value.apply(this, args);
+              events.push(`acquire:${acquisitions}:success`);
+              return result;
+            } catch (error) {
+              events.push(`acquire:${acquisitions}:error`);
+              throw error;
+            }
+          },
+        });
+        Object.defineProperty(prototype, "unconfigure", {
+          ...unconfigureDescriptor,
+          value(...args) {
+            if (this !== context) {
+              return unconfigureDescriptor.value.apply(this, args);
+            }
+            try {
+              const result = unconfigureDescriptor.value.apply(this, args);
+              events.push("release:unconfigure");
+              return result;
+            } catch (error) {
+              events.push("release:unconfigure:error");
+              throw error;
+            }
           },
         });
         return {
@@ -193,8 +317,14 @@
           get surfaces() {
             return surfaces;
           },
+          events,
           restore() {
             Object.defineProperty(prototype, "getCurrentTexture", descriptor);
+            Object.defineProperty(
+              prototype,
+              "unconfigure",
+              unconfigureDescriptor,
+            );
             delete canvas.getContext;
           },
         };
@@ -467,8 +597,8 @@
             const directCanvas = document.createElement("canvas");
             const directPresentation = await assert_direct_presentation(
               directCanvas,
+              () => assertPremultipliedPresentationPixels(directCanvas),
             );
-            await assertPremultipliedPresentationPixels(directCanvas);
             if (
               presentationCalls.counters.getCurrentTexture !== 1 ||
               presentationCalls.counters.mapAsync !== 0 ||
@@ -528,12 +658,121 @@
                 : `compatibility=selected order=core,compatibility requested-vertex-storage-limit=${compatibilityProbe.requestedVertexStorageLimit} rendered`,
             );
           } else {
+            const canvasLeaseCanvas = document.createElement("canvas");
+            const canvasLeaseCalls =
+              installCanvasLeaseCallCounters(canvasLeaseCanvas);
+            try {
+              const expectedCanvasLeaseCheckpoints = [
+                {
+                  phase: "factory-a-dropped",
+                  unconfigure: 0,
+                  events: ["A:configure", "A:present"],
+                },
+                {
+                  phase: "retained-frame-dropped",
+                  unconfigure: 1,
+                  events: ["A:configure", "A:present", "A:unconfigure"],
+                },
+              ];
+              let canvasLeaseCheckpointIndex = 0;
+              const canvasLeaseResult = await assert_exclusive_canvas_lease(
+                canvasLeaseCanvas,
+                (phase) => {
+                  const expected =
+                    expectedCanvasLeaseCheckpoints[
+                      canvasLeaseCheckpointIndex
+                    ];
+                  if (!expected || phase !== expected.phase) {
+                    throw new Error(
+                      "exclusive canvas lease checkpoint " +
+                        `${canvasLeaseCheckpointIndex + 1} was ${phase}`,
+                    );
+                  }
+                  if (
+                    canvasLeaseCalls.counters.unconfigure !==
+                    expected.unconfigure
+                  ) {
+                    throw new Error(
+                      `exclusive canvas lease checkpoint ${phase} observed ` +
+                        `unconfigure=${canvasLeaseCalls.counters.unconfigure}; ` +
+                        `expected ${expected.unconfigure}`,
+                    );
+                  }
+                  if (
+                    canvasLeaseCalls.events.length !== expected.events.length ||
+                    canvasLeaseCalls.events.some(
+                      (event, index) => event !== expected.events[index],
+                    )
+                  ) {
+                    throw new Error(
+                      `exclusive canvas lease checkpoint ${phase} events were ` +
+                        JSON.stringify(canvasLeaseCalls.events) +
+                        "; expected " +
+                        JSON.stringify(expected.events),
+                    );
+                  }
+                  canvasLeaseCheckpointIndex += 1;
+                },
+              );
+              if (
+                canvasLeaseCheckpointIndex !==
+                expectedCanvasLeaseCheckpoints.length
+              ) {
+                throw new Error(
+                  "exclusive canvas lease observed " +
+                    `${canvasLeaseCheckpointIndex} checkpoints; expected ` +
+                    expectedCanvasLeaseCheckpoints.length,
+                );
+              }
+              if (
+                canvasLeaseCalls.counters.configure !== 2 ||
+                canvasLeaseCalls.counters.unconfigure !== 2 ||
+                canvasLeaseCalls.counters.getCurrentTexture !== 2
+              ) {
+                throw new Error(
+                  "exclusive canvas lease called " +
+                    `configure=${canvasLeaseCalls.counters.configure} ` +
+                    `unconfigure=${canvasLeaseCalls.counters.unconfigure} ` +
+                    `getCurrentTexture=${canvasLeaseCalls.counters.getCurrentTexture}`,
+                );
+              }
+              const expectedCanvasLeaseEvents = [
+                "A:configure",
+                "A:present",
+                "A:unconfigure",
+                "B:configure",
+                "B:present",
+                "B:unconfigure",
+              ];
+              if (
+                canvasLeaseCalls.events.length !==
+                  expectedCanvasLeaseEvents.length ||
+                canvasLeaseCalls.events.some(
+                  (event, index) => event !== expectedCanvasLeaseEvents[index],
+                )
+              ) {
+                throw new Error(
+                  "exclusive canvas lease events were " +
+                    JSON.stringify(canvasLeaseCalls.events) +
+                    "; expected " +
+                    JSON.stringify(expectedCanvasLeaseEvents),
+                );
+              }
+              results.push(
+                `${canvasLeaseResult} configure=2 unconfigure=2 getCurrentTexture=2`,
+              );
+            } finally {
+              canvasLeaseCalls.restore();
+            }
+
             const resizeCanvas = document.createElement("canvas");
-            const resizeResult = await assert_resize(resizeCanvas);
-            await assertOpaquePresentationPixels(
+            const resizeResult = await assert_resize(
               resizeCanvas,
-              [0x65, 0x43, 0x21, 0xff],
-              "resized direct WebGPU presentation",
+              () => assertOpaquePresentationPixels(
+                resizeCanvas,
+                [0x65, 0x43, 0x21, 0xff],
+                "resized direct WebGPU presentation",
+              ),
             );
             results.push(resizeResult);
 
@@ -543,6 +782,7 @@
             try {
               const retryResult = await assert_surface_acquisition_retry(
                 retryCanvas,
+                () => assertPremultipliedPresentationPixels(retryCanvas),
               );
               if (
                 acquisitionLoss.acquisitions !== 2 ||
@@ -552,7 +792,29 @@
                   `surface acquisition recovery observed ${acquisitionLoss.acquisitions} acquisitions and ${acquisitionLoss.surfaces} surfaces`,
                 );
               }
-              await assertPremultipliedPresentationPixels(retryCanvas);
+              const expectedAcquisitionEvents = [
+                "surface:create:getContext",
+                "acquire:1:injected-loss",
+                "surface:recreate:getContext",
+                "acquire:2:success",
+                "release:getContext",
+                "release:unconfigure",
+              ];
+              if (
+                acquisitionLoss.events.length !==
+                  expectedAcquisitionEvents.length ||
+                acquisitionLoss.events.some(
+                  (event, index) =>
+                    event !== expectedAcquisitionEvents[index],
+                )
+              ) {
+                throw new Error(
+                  "surface acquisition recovery events were " +
+                    JSON.stringify(acquisitionLoss.events) +
+                    "; expected " +
+                    JSON.stringify(expectedAcquisitionEvents),
+                );
+              }
               results.push(`${retryResult} acquisitions=2 surfaces=2`);
             } finally {
               acquisitionLoss.restore();
@@ -574,6 +836,29 @@
               ) {
                 throw new Error(
                   `persistent surface acquisition failure observed ${persistentAcquisitionLoss.acquisitions} acquisitions and ${persistentAcquisitionLoss.surfaces} surfaces`,
+                );
+              }
+              const expectedPersistentAcquisitionEvents = [
+                "surface:create:getContext",
+                "acquire:1:injected-loss",
+                "surface:recreate:getContext",
+                "acquire:2:injected-loss",
+                "release:getContext",
+                "release:unconfigure",
+              ];
+              if (
+                persistentAcquisitionLoss.events.length !==
+                  expectedPersistentAcquisitionEvents.length ||
+                persistentAcquisitionLoss.events.some(
+                  (event, index) =>
+                    event !== expectedPersistentAcquisitionEvents[index],
+                )
+              ) {
+                throw new Error(
+                  "persistent surface acquisition failure events were " +
+                    JSON.stringify(persistentAcquisitionLoss.events) +
+                    "; expected " +
+                    JSON.stringify(expectedPersistentAcquisitionEvents),
                 );
               }
               results.push(

@@ -4,11 +4,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-B complete-wave verification. FL-B1 through FL-B4 are translated;
+- Phase: FL-B independent candidate verification. FL-B1 through FL-B4 are
+  translated;
   the focused C++ probes, runtime and probe-armed workspace floors,
   ordinary/scripted differential gates, renderer pixel referee, C API, Apple
   product/release checks, trace/checker, lint, format, and diff checks are
-  green. Committed-tree size and the canonical performance checkpoint remain.
+  green. Committed-tree size is below 9 MiB, and the canonical performance
+  checkpoint is recorded. The exact candidate awaits independent acceptance.
   FL-B1 through FL-B3 are locally gated, and
   FL-A was independently
   accepted and promoted at
@@ -153,9 +155,16 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   structural checker and its negative controls 27 / 27; renderer pixel referee
   1,468 / 1,468 with zero divergences and zero gated failures; C API smoke
   green; Apple release/product floor 66 / 66 plus artifact validation 15 / 15;
-  lint, format, and diff checks green. Committed-tree size and the canonical
-  whole-wave performance checkpoint remain to be recorded after the candidate
-  commit.
+  lint, format, and diff checks green. Committed-tree size at `10bc5b23` is
+  8,017,800 bytes with scripting off and 8,918,904 bytes with scripting on,
+  both below the 9 MiB budget.
+- Canonical whole-corpus FL-B `perf-hot-loop` checkpoint at `10bc5b23`:
+  `target/perf-hot-loop-fl-b-10bc5b23.json`. Across the unchanged six-entry /
+  11-sample corpus and 10,000 benchmark repeats, the minimum aggregate is
+  1.684x C++ (41.707 ms C++, 70.222 ms Rust); individual samples range from
+  1.416x to 2.025x. This remains above the program's final <=1.0x acceptance
+  target. Per the frozen FL-B plan it is wave evidence only: it neither
+  promotes FL-B nor authorizes benchmark-derived work or queue reordering.
 
 ## FL-0 evidence
 
@@ -581,9 +590,10 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Finish FL-B complete-wave verification and refresh the source-bound trace
-   and structural ratchets.
-2. Commit and publish the exact FL-B candidate without promoting pending rows.
-3. Run independent acceptance; only the orchestrator verdict may promote the
-   FL-B rows and close FL-G01. Performance remains verification evidence,
-   never the source of a work slice.
+1. Publish the current FL-B branch tip carrying production candidate
+   `e8cfdc63` and evidence snapshot `10bc5b23`, without promoting pending rows.
+2. Run independent acceptance; only the orchestrator verdict may promote the
+   FL-B rows and close FL-G01.
+3. At accepted FL-B boundary, reconcile the top-level program/status protocol
+   to one canonical NEXT pointer before selecting FL-C. Performance remains
+   verification evidence, never the source of a work slice.

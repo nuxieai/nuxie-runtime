@@ -505,6 +505,61 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     result.stderr,
                 )
 
+    def test_fl_b4_negative_ratchets_reject_displaced_blend_shapes(self) -> None:
+        cases = [
+            (
+                "blend_occurrence_1d_value_copy",
+                r"value\s*:\s*animation\.value",
+                "fn build() { let _ = Occurrence { value: animation.value }; }\n",
+            ),
+            (
+                "blend_occurrence_direct_source_copy",
+                r"source\s*:\s*animation\.source\.clone",
+                "fn build() { let _ = Occurrence { source: animation.source.clone() }; }\n",
+            ),
+            (
+                "blend_occurrence_state_source_copy",
+                r"source\s*:\s*blend_state\.source\.clone",
+                "fn build() { let _ = Occurrence { source: blend_state.source.clone() }; }\n",
+            ),
+            (
+                "blend_invalid_definition_elision",
+                r"\(!animations\.is_empty\(\)\)\.then_some",
+                "fn build() { (!animations.is_empty()).then_some(State { animations }); }\n",
+            ),
+            (
+                "blend_from_to_index_rediscovery",
+                r"let\s+from_index\s*=\s*to_index\.checked_sub",
+                "fn advance() { let from_index = to_index.checked_sub(1); }\n",
+            ),
+        ]
+        base_gaps = self.gaps.read_text()
+        source = self.repo / "crates/runtime/src/state_machine.rs"
+
+        for ratchet_id, pattern, forbidden_source in cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.gaps.write_text(
+                    base_gaps.replace(
+                        "ratchet = []",
+                        textwrap.dedent(
+                        f"""
+                        [[ratchet]]
+                        id = "{ratchet_id}"
+                        globs = ["crates/runtime/src/state_machine.rs"]
+                        pattern = {json.dumps(pattern)}
+                        max_occurrences = 0
+                        """
+                        ).strip(),
+                    )
+                )
+                source.write_text(forbidden_source)
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    f"ratchet {ratchet_id} increased to 1 > 0",
+                    result.stderr,
+                )
+
     def test_mechanism_input_hash_is_fail_closed(self) -> None:
         fixture = self.upstream / "tests/assets/scroll.riv"
         fixture.parent.mkdir(parents=True)

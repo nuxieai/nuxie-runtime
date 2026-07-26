@@ -9,7 +9,7 @@ decision = []
 [[gap]]
 id = "FL-G01"
 status = "open"
-mechanism = "FL-B1/FL-B2/FL-B3 now mirror the C++ KeyFrame, LinearAnimation, and AnimationReset owners: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, one type-safe target enum binds CoreRegistry's single property dispatch, the Artboard owns one immutable definition arena, every animation occurrence retains only a typed definition handle plus C++-shaped mutable state, and each reset occurrence leases one pooled first-seen object/property stream that is cleared and returned on final release. Rust-only StateMachineInstance snapshot clones share that immutable lease instead of cloning factory state. The former read-time fps calculation, six parallel frame vectors, property-family booleans, import-time source snapshots, per-occurrence descriptor clones, Option loop override, local zero guards, flat reset clones, global pair scans, and empty-reset elision are deleted. The gap remains open only until the complete FL-B owner family is independently verified."
+mechanism = "FL-B1/FL-B2/FL-B3/FL-B4 now mirror the C++ KeyFrame, LinearAnimation, AnimationReset, and blend definition/occurrence owners: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, one type-safe target enum binds CoreRegistry's single property dispatch, the Artboard owns one immutable definition arena, every animation occurrence retains only a typed definition handle plus C++-shaped mutable state, and each reset occurrence leases one pooled first-seen object/property stream that is cleared and returned on final release. Each BlendState uniquely owns its ordered BlendAnimation definitions; every embedded blend occurrence retains a handle back to that exact definition, reads live source/value fields during advance, and retains unresolved animation IDs through the shared empty-animation owner. Rust-only StateMachineInstance snapshot clones share immutable definition/reset leases instead of cloning factory state. C++'s process-global empty animation is represented by one safe Artboard-shared definition because Rust's full definition type can contain non-Sync scripting handles; its generated defaults, occurrence sharing, and behavior remain exact. The former read-time fps calculation, six parallel frame vectors, property-family booleans, import-time source snapshots, per-occurrence descriptor clones, copied blend source/value payloads, positional from/to rediscovery, invalid-definition/empty-state elision, Option loop override, local zero guards, flat reset clones, global pair scans, and empty-reset elision are deleted. The gap remains open only until the complete FL-B owner family is independently verified."
 citations = [
   "cpp:src/animation/keyframe.cpp:10",
   "cpp:src/importers/keyed_property_importer.cpp:13-17",
@@ -19,14 +19,23 @@ citations = [
   "cpp:src/animation/linear_animation_instance.cpp:187-435",
   "cpp:src/animation/animation_reset.cpp:8-70",
   "cpp:src/animation/animation_reset_factory.cpp:10-235",
+  "cpp:src/animation/animation_state_instance.cpp:7-41",
+  "cpp:src/animation/blend_animation.cpp:9-38",
+  "cpp:include/rive/animation/blend_animation.hpp:7-18",
+  "cpp:include/rive/animation/blend_state.hpp:13-26",
+  "cpp:include/rive/animation/blend_state_instance.hpp:18-129",
+  "cpp:src/animation/blend_state_1d_instance.cpp:10-149",
+  "cpp:src/animation/blend_state_direct_instance.cpp:10-62",
   "rust:crates/nuxie-runtime/src/animation.rs:329-331",
   "rust:crates/nuxie-runtime/src/animation.rs:1022-1064",
   "rust:crates/nuxie-runtime/src/animation.rs:1338-1421",
   "rust:crates/nuxie-runtime/src/animation.rs:1557-2067",
   "rust:crates/nuxie-runtime/src/artboard.rs:390",
   "rust:crates/nuxie-runtime/src/artboard.rs:4119-4196",
+  "rust:crates/nuxie-runtime/src/state_machine.rs:1507-2062",
+  "rust:crates/nuxie-runtime/src/state_machine.rs:3231-3641",
 ]
-closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty/LinearAnimation/AnimationReset owners without any displaced sidecar, definition clone, or reset clone."
+closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty/LinearAnimation/AnimationReset/BlendState owners without any displaced sidecar, definition clone, reset clone, copied blend payload, dropped definition, or per-occurrence empty fallback."
 
 [[gap]]
 id = "FL-G02"
@@ -270,6 +279,36 @@ max_occurrences = 0
 id = "animation_reset_empty_owner_elision"
 globs = ["crates/nuxie-runtime/src/state_machine.rs"]
 pattern = "if\\s+entries\\.is_empty\\(\\)\\s*\\{\\s*None"
+max_occurrences = 0
+
+[[ratchet]]
+id = "blend_occurrence_1d_value_copy"
+globs = ["crates/nuxie-runtime/src/state_machine.rs"]
+pattern = "value\\s*:\\s*animation\\.value"
+max_occurrences = 0
+
+[[ratchet]]
+id = "blend_occurrence_direct_source_copy"
+globs = ["crates/nuxie-runtime/src/state_machine.rs"]
+pattern = "source\\s*:\\s*animation\\.source\\.clone"
+max_occurrences = 0
+
+[[ratchet]]
+id = "blend_occurrence_state_source_copy"
+globs = ["crates/nuxie-runtime/src/state_machine.rs"]
+pattern = "source\\s*:\\s*blend_state\\.source\\.clone"
+max_occurrences = 0
+
+[[ratchet]]
+id = "blend_invalid_definition_elision"
+globs = ["crates/nuxie-runtime/src/state_machine.rs"]
+pattern = "\\(!animations\\.is_empty\\(\\)\\)\\.then_some"
+max_occurrences = 0
+
+[[ratchet]]
+id = "blend_from_to_index_rediscovery"
+globs = ["crates/nuxie-runtime/src/state_machine.rs"]
+pattern = "let\\s+from_index\\s*=\\s*to_index\\.checked_sub"
 max_occurrences = 0
 
 [[ratchet]]

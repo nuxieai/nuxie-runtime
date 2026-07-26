@@ -757,6 +757,24 @@ impl<'a> RuntimeKeyFrameValueContext<'a> {
 }
 
 impl RuntimeLinearAnimation {
+    pub(crate) fn empty() -> Self {
+        Self {
+            global_id: u32::MAX,
+            name: None,
+            fps: 60,
+            duration: 60,
+            speed: 1.0,
+            loop_value: 0,
+            work_start: u64::from(u32::MAX),
+            work_end: u64::from(u32::MAX),
+            enable_work_area: false,
+            quantize: false,
+            keyed_objects: Arc::new(Vec::new()),
+            key_frame_data_bind_templates: Arc::new(Vec::new()),
+            has_keyed_callbacks: false,
+        }
+    }
+
     pub(crate) fn apply(&self, instance: &mut ArtboardInstance, seconds: f32, mix: f32) -> bool {
         self.apply_with_key_frame_values(
             instance,
@@ -1559,14 +1577,33 @@ fn positive_mod(value: f32, range: f32) -> f32 {
 /// Rust retains this non-dereferenceable handle and resolves it only through
 /// the owning Artboard arena.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RuntimeLinearAnimationHandle(usize);
+pub struct RuntimeLinearAnimationHandle(Option<usize>);
 
 impl RuntimeLinearAnimationHandle {
     pub(crate) fn new(index: usize) -> Self {
-        Self(index)
+        Self(Some(index))
+    }
+
+    pub(crate) fn empty() -> Self {
+        Self(None)
+    }
+
+    pub(crate) fn resolve<'a>(
+        self,
+        definitions: &'a [RuntimeLinearAnimation],
+        empty: &'a RuntimeLinearAnimation,
+    ) -> Option<&'a RuntimeLinearAnimation> {
+        match self.0 {
+            Some(index) => definitions.get(index),
+            None => Some(empty),
+        }
     }
 
     pub fn index(self) -> usize {
+        self.0.unwrap_or(usize::MAX)
+    }
+
+    pub(crate) fn definition_index(self) -> Option<usize> {
         self.0
     }
 }
@@ -1788,8 +1825,12 @@ impl LinearAnimationInstance {
     }
 
     pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
-        let definitions = artboard.linear_animations.clone();
-        let Some(definition) = definitions.get(self.animation.index()) else {
+        let Some(index) = self.animation.definition_index() else {
+            // C++'s shared empty animation owns no KeyedObjects.
+            return false;
+        };
+        let definitions = Arc::clone(&artboard.linear_animations);
+        let Some(definition) = definitions.get(index) else {
             return false;
         };
         definition.apply_with_key_frame_values(
@@ -1802,6 +1843,10 @@ impl LinearAnimationInstance {
 
     pub fn animation_index(&self) -> usize {
         self.animation.index()
+    }
+
+    pub(crate) fn animation_handle(&self) -> RuntimeLinearAnimationHandle {
+        self.animation
     }
 
     pub fn time(&self) -> f32 {

@@ -319,9 +319,20 @@ pub(crate) fn build_state_machines<'a>(
                             .states
                             .into_iter()
                             .map(|state| {
-                                let animation_index = state.animation.and_then(|animation| {
-                                    animation_index_by_global.get(&animation.id).copied()
-                                });
+                                let animation = state
+                                    .object
+                                    .filter(|object| object.type_name == "AnimationState")
+                                    .map(|_| {
+                                        state
+                                            .animation
+                                            .and_then(|animation| {
+                                                animation_index_by_global
+                                                    .get(&animation.id)
+                                                    .copied()
+                                            })
+                                            .map(RuntimeLinearAnimationHandle::new)
+                                            .unwrap_or_else(RuntimeLinearAnimationHandle::empty)
+                                    });
                                 let blend_state_1d = RuntimeBlendState1D::from_imported(
                                     file,
                                     &state,
@@ -335,7 +346,7 @@ pub(crate) fn build_state_machines<'a>(
                                 RuntimeLayerState {
                                     global_id: state.object.map(|object| object.id),
                                     type_name: state.object.map(|object| object.type_name),
-                                    animation_index,
+                                    animation,
                                     blend_state_1d,
                                     blend_state_direct,
                                     speed: state
@@ -1104,7 +1115,7 @@ pub struct RuntimeStateMachineLayer {
 pub struct RuntimeLayerState {
     pub global_id: Option<u32>,
     pub type_name: Option<&'static str>,
-    pub(crate) animation_index: Option<usize>,
+    pub(crate) animation: Option<RuntimeLinearAnimationHandle>,
     pub(crate) blend_state_1d: Option<RuntimeBlendState1D>,
     pub(crate) blend_state_direct: Option<RuntimeBlendStateDirect>,
     pub(crate) speed: f32,
@@ -1523,20 +1534,25 @@ impl RuntimeBlendState1D {
             .blend_animations
             .iter()
             .filter_map(|animation| {
-                let animation_index = animation
+                if animation.object.type_name != "BlendAnimation1D" {
+                    return None;
+                }
+                let definition = animation
                     .animation
-                    .and_then(|animation| animation_index_by_global.get(&animation.id).copied())?;
+                    .and_then(|animation| animation_index_by_global.get(&animation.id).copied())
+                    .map(RuntimeLinearAnimationHandle::new)
+                    .unwrap_or_else(RuntimeLinearAnimationHandle::empty);
                 Some(RuntimeBlendAnimation1D {
-                    animation_index,
+                    animation: definition,
                     value: animation.object.double_property("value").unwrap_or(0.0),
                 })
             })
             .collect::<Vec<_>>();
-        (!animations.is_empty()).then_some(Self { source, animations })
+        Some(Self { source, animations })
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum RuntimeBlendState1DSource {
     Input { input_index: Option<usize> },
     BindableProperty { global_id: Option<u32> },
@@ -1544,7 +1560,7 @@ pub(crate) enum RuntimeBlendState1DSource {
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeBlendAnimation1D {
-    pub(crate) animation_index: usize,
+    pub(crate) animation: RuntimeLinearAnimationHandle,
     pub(crate) value: f32,
 }
 
@@ -1570,26 +1586,28 @@ impl RuntimeBlendStateDirect {
                 if animation.object.type_name != "BlendAnimationDirect" {
                     return None;
                 }
-                let animation_index = animation
+                let definition = animation
                     .animation
-                    .and_then(|animation| animation_index_by_global.get(&animation.id).copied())?;
+                    .and_then(|animation| animation_index_by_global.get(&animation.id).copied())
+                    .map(RuntimeLinearAnimationHandle::new)
+                    .unwrap_or_else(RuntimeLinearAnimationHandle::empty);
                 Some(RuntimeBlendAnimationDirect {
-                    animation_index,
-                    source: RuntimeDirectBlendSource::from_object(file, animation.object)?,
+                    animation: definition,
+                    source: RuntimeDirectBlendSource::from_object(file, animation.object),
                 })
             })
             .collect::<Vec<_>>();
-        (!animations.is_empty()).then_some(Self { animations })
+        Some(Self { animations })
     }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeBlendAnimationDirect {
-    pub(crate) animation_index: usize,
+    pub(crate) animation: RuntimeLinearAnimationHandle,
     pub(crate) source: RuntimeDirectBlendSource,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum RuntimeDirectBlendSource {
     Input { input_index: usize },
     MixValue { value: f32 },
@@ -1597,28 +1615,44 @@ pub(crate) enum RuntimeDirectBlendSource {
 }
 
 impl RuntimeDirectBlendSource {
-    fn from_object(file: &RuntimeFile, object: &RuntimeObject) -> Option<Self> {
+    fn from_object(file: &RuntimeFile, object: &RuntimeObject) -> Self {
         match object.uint_property("blendSource").unwrap_or(0) {
-            0 => Some(Self::Input {
-                input_index: usize::try_from(object.uint_property("inputId")?).ok()?,
-            }),
-            1 => Some(Self::MixValue {
+            1 => Self::MixValue {
                 value: object.double_property("mixValue").unwrap_or(100.0),
-            }),
-            2 => Some(Self::BindableProperty {
+            },
+            2 => Self::BindableProperty {
                 global_id: file
                     .latest_bindable_property_for_object(object)
                     .map(|property| property.id as u32),
-            }),
-            _ => None,
+            },
+            _ => Self::Input {
+                input_index: object
+                    .uint_property("inputId")
+                    .and_then(|input_id| usize::try_from(input_id).ok())
+                    .unwrap_or(usize::MAX),
+            },
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeBlendAnimationHandle(usize);
+
+impl RuntimeBlendAnimationHandle {
+    fn new(index: usize) -> Self {
+        Self(index)
+    }
+
+    fn index(self) -> usize {
+        self.0
     }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct BlendState1DInstance {
-    source: RuntimeBlendState1DSource,
     animations: Vec<BlendAnimation1DInstance>,
+    from: Option<RuntimeBlendAnimationHandle>,
+    to: Option<RuntimeBlendAnimationHandle>,
     animation_reset: Option<AnimationReset>,
 }
 
@@ -1631,12 +1665,13 @@ impl BlendState1DInstance {
         let animations = blend_state
             .animations
             .iter()
-            .filter_map(|animation| {
-                let linear_animation = artboard.linear_animation(animation.animation_index)?;
+            .enumerate()
+            .filter_map(|(definition_index, animation)| {
+                let linear_animation = artboard.linear_animation_definition(animation.animation)?;
                 Some(BlendAnimation1DInstance {
-                    value: animation.value,
+                    definition: RuntimeBlendAnimationHandle::new(definition_index),
                     animation: LinearAnimationInstance::new(
-                        RuntimeLinearAnimationHandle::new(animation.animation_index),
+                        animation.animation,
                         linear_animation,
                         1.0,
                     ),
@@ -1648,7 +1683,7 @@ impl BlendState1DInstance {
             let animation_indices = blend_state
                 .animations
                 .iter()
-                .map(|animation| animation.animation_index)
+                .map(|animation| animation.animation.index())
                 .collect::<Vec<_>>();
             Some(AnimationResetFactory::from_animation_indices(
                 artboard,
@@ -1660,14 +1695,16 @@ impl BlendState1DInstance {
         };
 
         Self {
-            source: blend_state.source.clone(),
             animations,
+            from: None,
+            to: None,
             animation_reset,
         }
     }
 
     pub(crate) fn advance(
         &mut self,
+        blend_state: &RuntimeBlendState1D,
         artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
@@ -1680,12 +1717,13 @@ impl BlendState1DInstance {
             }
         }
 
-        self.update_mix_values(inputs, bindable_numbers);
+        self.update_mix_values(blend_state, inputs, bindable_numbers);
         true
     }
 
     pub(crate) fn advance_with_events(
         &mut self,
+        blend_state: &RuntimeBlendState1D,
         artboard: &mut ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
@@ -1694,6 +1732,7 @@ impl BlendState1DInstance {
     ) -> bool {
         self.advance_and_report(
             artboard,
+            blend_state,
             inputs,
             bindable_numbers,
             elapsed_seconds,
@@ -1704,6 +1743,7 @@ impl BlendState1DInstance {
     fn advance_and_report(
         &mut self,
         artboard: &mut ArtboardInstance,
+        blend_state: &RuntimeBlendState1D,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
@@ -1726,12 +1766,13 @@ impl BlendState1DInstance {
             }
         }
 
-        self.update_mix_values(inputs, bindable_numbers);
+        self.update_mix_values(blend_state, inputs, bindable_numbers);
         true
     }
 
     fn update_mix_values(
         &mut self,
+        blend_state: &RuntimeBlendState1D,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
     ) {
@@ -1739,7 +1780,7 @@ impl BlendState1DInstance {
             return;
         }
 
-        let value = match self.source {
+        let value = match blend_state.source {
             RuntimeBlendState1DSource::Input { input_index } => input_index
                 .and_then(|input_index| inputs.get(input_index))
                 .and_then(StateMachineInputInstance::number_value)
@@ -1749,30 +1790,39 @@ impl BlendState1DInstance {
                 .unwrap_or(0.0),
         };
 
-        let animation_count = self.animations.len();
-        let to_index = self.animation_index(value);
-        let from_index = to_index.checked_sub(1);
-        let to_value = self
-            .animations
-            .get(to_index)
-            .map(|animation| animation.value)
-            .unwrap_or(0.0);
-        let from_value = from_index
+        let to_index = self.animation_index(blend_state, value);
+        self.to = (to_index < self.animations.len()).then(|| self.animations[to_index].definition);
+        self.from = to_index
+            .checked_sub(1)
             .and_then(|index| self.animations.get(index))
+            .map(|animation| animation.definition);
+        let to_value = self
+            .to
+            .and_then(|handle| blend_state.animations.get(handle.index()))
             .map(|animation| animation.value)
             .unwrap_or(0.0);
-        let (mix, mix_from) =
-            if to_index >= animation_count || from_index.is_none() || to_value == from_value {
-                (1.0, 1.0)
-            } else {
-                let mix = (value - from_value) / (to_value - from_value);
-                (mix, 1.0 - mix)
-            };
+        let from_value = self
+            .from
+            .and_then(|handle| blend_state.animations.get(handle.index()))
+            .map(|animation| animation.value)
+            .unwrap_or(0.0);
+        let (mix, mix_from) = if self.to.is_none() || self.from.is_none() || to_value == from_value
+        {
+            (1.0, 1.0)
+        } else {
+            let mix = (value - from_value) / (to_value - from_value);
+            (mix, 1.0 - mix)
+        };
 
         for animation in &mut self.animations {
-            if to_index < animation_count && animation.value == to_value {
+            let animation_value = blend_state
+                .animations
+                .get(animation.definition.index())
+                .map(|definition| definition.value)
+                .unwrap_or(0.0);
+            if self.to.is_some() && animation_value == to_value {
                 animation.mix = mix;
-            } else if from_index.is_some() && animation.value == from_value {
+            } else if self.from.is_some() && animation_value == from_value {
                 animation.mix = mix_from;
             } else {
                 animation.mix = 0.0;
@@ -1780,14 +1830,19 @@ impl BlendState1DInstance {
         }
     }
 
-    fn animation_index(&self, value: f32) -> usize {
+    fn animation_index(&self, blend_state: &RuntimeBlendState1D, value: f32) -> usize {
         let mut index = 0_usize;
         let mut start = 0_isize;
         let mut end = self.animations.len() as isize - 1;
 
         while start <= end {
             let mid = (start + end) >> 1;
-            let closest_value = self.animations[mid as usize].value;
+            let closest_value = self
+                .animations
+                .get(mid as usize)
+                .and_then(|animation| blend_state.animations.get(animation.definition.index()))
+                .map(|animation| animation.value)
+                .unwrap_or(0.0);
             if closest_value < value {
                 start = mid + 1;
             } else if closest_value > value {
@@ -1805,7 +1860,8 @@ impl BlendState1DInstance {
 
     pub(crate) fn animation_instance(&self, index: usize) -> Option<&LinearAnimationInstance> {
         self.animations
-            .get(index)
+            .iter()
+            .find(|animation| animation.definition.index() == index)
             .map(|animation| &animation.animation)
     }
 
@@ -1836,7 +1892,7 @@ impl BlendState1DInstance {
 
 #[derive(Debug, Clone)]
 struct BlendAnimation1DInstance {
-    value: f32,
+    definition: RuntimeBlendAnimationHandle,
     animation: LinearAnimationInstance,
     mix: f32,
 }
@@ -1851,12 +1907,13 @@ impl BlendStateDirectInstance {
         let animations = blend_state
             .animations
             .iter()
-            .filter_map(|animation| {
-                let linear_animation = artboard.linear_animation(animation.animation_index)?;
+            .enumerate()
+            .filter_map(|(definition_index, animation)| {
+                let linear_animation = artboard.linear_animation_definition(animation.animation)?;
                 Some(BlendAnimationDirectInstance {
-                    source: animation.source.clone(),
+                    definition: RuntimeBlendAnimationHandle::new(definition_index),
                     animation: LinearAnimationInstance::new(
-                        RuntimeLinearAnimationHandle::new(animation.animation_index),
+                        animation.animation,
                         linear_animation,
                         1.0,
                     ),
@@ -1870,6 +1927,7 @@ impl BlendStateDirectInstance {
 
     pub(crate) fn advance(
         &mut self,
+        blend_state: &RuntimeBlendStateDirect,
         artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
@@ -1882,12 +1940,13 @@ impl BlendStateDirectInstance {
             }
         }
 
-        self.update_mix_values(inputs, bindable_numbers);
+        self.update_mix_values(blend_state, inputs, bindable_numbers);
         true
     }
 
     pub(crate) fn advance_with_events(
         &mut self,
+        blend_state: &RuntimeBlendStateDirect,
         artboard: &mut ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
@@ -1896,6 +1955,7 @@ impl BlendStateDirectInstance {
     ) -> bool {
         self.advance_and_report(
             artboard,
+            blend_state,
             inputs,
             bindable_numbers,
             elapsed_seconds,
@@ -1906,6 +1966,7 @@ impl BlendStateDirectInstance {
     fn advance_and_report(
         &mut self,
         artboard: &mut ArtboardInstance,
+        blend_state: &RuntimeBlendStateDirect,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
@@ -1928,17 +1989,21 @@ impl BlendStateDirectInstance {
             }
         }
 
-        self.update_mix_values(inputs, bindable_numbers);
+        self.update_mix_values(blend_state, inputs, bindable_numbers);
         true
     }
 
     fn update_mix_values(
         &mut self,
+        blend_state: &RuntimeBlendStateDirect,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
     ) {
         for animation in &mut self.animations {
-            let value = match animation.source {
+            let Some(definition) = blend_state.animations.get(animation.definition.index()) else {
+                continue;
+            };
+            let value = match definition.source {
                 RuntimeDirectBlendSource::Input { input_index } => inputs
                     .get(input_index)
                     .and_then(StateMachineInputInstance::number_value)
@@ -1961,7 +2026,8 @@ impl BlendStateDirectInstance {
 
     pub(crate) fn animation_instance(&self, index: usize) -> Option<&LinearAnimationInstance> {
         self.animations
-            .get(index)
+            .iter()
+            .find(|animation| animation.definition.index() == index)
             .map(|animation| &animation.animation)
     }
 
@@ -1989,7 +2055,7 @@ impl BlendStateDirectInstance {
 
 #[derive(Debug, Clone)]
 struct BlendAnimationDirectInstance {
-    source: RuntimeDirectBlendSource,
+    definition: RuntimeBlendAnimationHandle,
     animation: LinearAnimationInstance,
     mix: f32,
 }
@@ -3171,7 +3237,7 @@ impl StateMachineLayerInstance {
         }
 
         if let Some(animation_instance) = self.current_animation.as_ref() {
-            let animation = artboard.linear_animation(animation_instance.animation_index())?;
+            let animation = artboard.linear_animation_instance_definition(animation_instance)?;
             return Some(RuntimeTransitionAnimationRef {
                 instance: animation_instance,
                 animation,
@@ -3188,7 +3254,7 @@ impl StateMachineLayerInstance {
                     .as_ref()
                     .and_then(|blend_state| blend_state.animation_instance(blend_animation_index))
             })?;
-        let animation = artboard.linear_animation(animation_instance.animation_index())?;
+        let animation = artboard.linear_animation_instance_definition(animation_instance)?;
         Some(RuntimeTransitionAnimationRef {
             instance: animation_instance,
             animation,
@@ -3235,7 +3301,8 @@ impl StateMachineLayerInstance {
         if transition.pause_on_exit()
             && transition.has_exit_time()
             && let Some(animation_instance) = previous_animation.as_mut()
-            && let Some(animation) = artboard.linear_animation(animation_instance.animation_index())
+            && let Some(animation) =
+                artboard.linear_animation_instance_definition(animation_instance)
         {
             animation_instance.set_time(
                 animation,
@@ -3244,7 +3311,7 @@ impl StateMachineLayerInstance {
         }
         let previous_runtime_animation =
             previous_animation.as_ref().and_then(|animation_instance| {
-                artboard.linear_animation(animation_instance.animation_index())
+                artboard.linear_animation_instance_definition(animation_instance)
             });
         let duration_override =
             transition_duration_value(targets.transition_durations, transition.global_id);
@@ -3422,7 +3489,7 @@ impl StateMachineLayerInstance {
             self.current_animation = None;
             let mut blend_instance =
                 BlendState1DInstance::new(blend_state, artboard, state.resets_blend_values());
-            blend_instance.advance(artboard, inputs, bindable_numbers, 0.0);
+            blend_instance.advance(blend_state, artboard, inputs, bindable_numbers, 0.0);
             self.current_blend_state_1d = Some(blend_instance);
             self.current_blend_state_direct = None;
             self.current_animation_keep_going = true;
@@ -3432,28 +3499,25 @@ impl StateMachineLayerInstance {
             self.current_animation = None;
             self.current_blend_state_1d = None;
             let mut blend_instance = BlendStateDirectInstance::new(blend_state, artboard);
-            blend_instance.advance(artboard, inputs, bindable_numbers, 0.0);
+            blend_instance.advance(blend_state, artboard, inputs, bindable_numbers, 0.0);
             self.current_blend_state_direct = Some(blend_instance);
             self.current_animation_keep_going = true;
             return;
         }
         self.current_blend_state_1d = None;
         self.current_blend_state_direct = None;
-        let Some(animation_index) = state.animation_index else {
+        let Some(animation_handle) = state.animation else {
             self.current_animation = None;
             self.current_animation_keep_going = false;
             return;
         };
-        let Some(animation) = artboard.linear_animation(animation_index) else {
+        let Some(animation) = artboard.linear_animation_definition(animation_handle) else {
             self.current_animation = None;
             self.current_animation_keep_going = false;
             return;
         };
-        let mut animation_instance = LinearAnimationInstance::new(
-            RuntimeLinearAnimationHandle::new(animation_index),
-            animation,
-            state.speed,
-        );
+        let mut animation_instance =
+            LinearAnimationInstance::new(animation_handle, animation, state.speed);
         self.current_animation_keep_going = animation_instance.advance(animation, 0.0);
         self.current_animation = Some(animation_instance);
     }
@@ -3467,8 +3531,17 @@ impl StateMachineLayerInstance {
         bindable_numbers: &[StateMachineBindableNumberInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
+        let current_state = self
+            .current_state_index
+            .and_then(|index| layer.states.get(index));
         if let Some(blend_state) = self.current_blend_state_1d.as_mut() {
+            let Some(definition) = current_state.and_then(|state| state.blend_state_1d.as_ref())
+            else {
+                self.current_animation_keep_going = false;
+                return false;
+            };
             self.current_animation_keep_going = blend_state.advance_with_events(
+                definition,
                 artboard,
                 inputs,
                 bindable_numbers,
@@ -3478,7 +3551,14 @@ impl StateMachineLayerInstance {
             return self.current_animation_keep_going;
         }
         if let Some(blend_state) = self.current_blend_state_direct.as_mut() {
+            let Some(definition) =
+                current_state.and_then(|state| state.blend_state_direct.as_ref())
+            else {
+                self.current_animation_keep_going = false;
+                return false;
+            };
             self.current_animation_keep_going = blend_state.advance_with_events(
+                definition,
                 artboard,
                 inputs,
                 bindable_numbers,
@@ -3491,10 +3571,7 @@ impl StateMachineLayerInstance {
             self.current_animation_keep_going = false;
             return false;
         };
-        let Some(state) = self
-            .current_state_index
-            .and_then(|index| layer.states.get(index))
-        else {
+        let Some(state) = current_state else {
             self.current_animation_keep_going = false;
             return false;
         };
@@ -3521,8 +3598,16 @@ impl StateMachineLayerInstance {
         if self.transition_source_paused {
             return false;
         }
+        let source_state = self
+            .transition_source_state_index
+            .and_then(|index| layer.states.get(index));
         if let Some(blend_state) = self.transition_source_blend_state_1d.as_mut() {
+            let Some(definition) = source_state.and_then(|state| state.blend_state_1d.as_ref())
+            else {
+                return false;
+            };
             return blend_state.advance_with_events(
+                definition,
                 artboard,
                 inputs,
                 bindable_numbers,
@@ -3531,7 +3616,12 @@ impl StateMachineLayerInstance {
             );
         }
         if let Some(blend_state) = self.transition_source_blend_state_direct.as_mut() {
+            let Some(definition) = source_state.and_then(|state| state.blend_state_direct.as_ref())
+            else {
+                return false;
+            };
             return blend_state.advance_with_events(
+                definition,
                 artboard,
                 inputs,
                 bindable_numbers,
@@ -3542,10 +3632,7 @@ impl StateMachineLayerInstance {
         let Some(animation_instance) = self.transition_source_animation.as_mut() else {
             return false;
         };
-        let Some(state) = self
-            .transition_source_state_index
-            .and_then(|index| layer.states.get(index))
-        else {
+        let Some(state) = source_state else {
             return false;
         };
         artboard.advance_linear_animation_instance_with_events(
@@ -3709,17 +3796,18 @@ mod animation_tests {
         let animation = empty_animation();
         let mut current_animation = Some(animation_instance_with_holder(&animation, 10, 10.0));
         let mut current_blend_state_1d = Some(BlendState1DInstance {
-            source: RuntimeBlendState1DSource::Input { input_index: None },
             animations: vec![BlendAnimation1DInstance {
-                value: 0.0,
+                definition: RuntimeBlendAnimationHandle::new(0),
                 animation: animation_instance_with_holder(&animation, 20, 20.0),
                 mix: 1.0,
             }],
+            from: None,
+            to: Some(RuntimeBlendAnimationHandle::new(0)),
             animation_reset: None,
         });
         let mut current_blend_state_direct = Some(BlendStateDirectInstance {
             animations: vec![BlendAnimationDirectInstance {
-                source: RuntimeDirectBlendSource::MixValue { value: 100.0 },
+                definition: RuntimeBlendAnimationHandle::new(0),
                 animation: animation_instance_with_holder(&animation, 30, 30.0),
                 mix: 1.0,
             }],
@@ -3805,6 +3893,112 @@ mod tests {
         )
         .join("tests/unit_tests/assets")
         .join(name)
+    }
+
+    #[test]
+    fn blend_occurrences_retain_definition_handles_and_shared_empty_animation() {
+        let file = read_runtime_file(
+            &std::fs::read(rive_runtime_fixture("animation_reset_cases.riv"))
+                .expect("read animation fixture"),
+        )
+        .expect("import animation fixture");
+        let graph = GraphFile::from_runtime_file(&file).expect("build animation graph");
+        let mut artboard = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            graph.artboards.first().expect("fixture artboard"),
+            &graph.artboards,
+        )
+        .expect("instantiate animation artboard");
+        assert!(!artboard.linear_animations().is_empty());
+
+        let blend_state = RuntimeBlendState1D {
+            source: RuntimeBlendState1DSource::Input {
+                input_index: Some(0),
+            },
+            animations: vec![
+                RuntimeBlendAnimation1D {
+                    animation: RuntimeLinearAnimationHandle::new(0),
+                    value: 0.0,
+                },
+                RuntimeBlendAnimation1D {
+                    animation: RuntimeLinearAnimationHandle::empty(),
+                    value: 100.0,
+                },
+            ],
+        };
+        let input_definition =
+            RuntimeStateMachineInput::new_number(1, Some("blend".to_owned()), 25.0);
+        let inputs = vec![StateMachineInputInstance::new(0, &input_definition)];
+        let mut occurrence = BlendState1DInstance::new(&blend_state, &artboard, false);
+
+        assert_eq!(occurrence.animations.len(), blend_state.animations.len());
+        assert_eq!(
+            occurrence.animations[0].definition,
+            RuntimeBlendAnimationHandle::new(0)
+        );
+        assert_eq!(
+            occurrence.animations[1].definition,
+            RuntimeBlendAnimationHandle::new(1)
+        );
+        let empty = artboard
+            .linear_animation_instance_definition(&occurrence.animations[1].animation)
+            .expect("shared empty definition");
+        assert!(std::ptr::eq(
+            empty,
+            artboard.empty_linear_animation.as_ref()
+        ));
+
+        occurrence.advance(&blend_state, &artboard, &inputs, &[], 0.0);
+        assert_eq!(occurrence.from, Some(RuntimeBlendAnimationHandle::new(0)));
+        assert_eq!(occurrence.to, Some(RuntimeBlendAnimationHandle::new(1)));
+        assert_eq!(occurrence.animations[0].mix, 0.75);
+        assert_eq!(occurrence.animations[1].mix, 0.25);
+
+        let mut direct_state = RuntimeBlendStateDirect {
+            animations: vec![RuntimeBlendAnimationDirect {
+                animation: RuntimeLinearAnimationHandle::empty(),
+                source: RuntimeDirectBlendSource::MixValue { value: 200.0 },
+            }],
+        };
+        let mut direct_occurrence = BlendStateDirectInstance::new(&direct_state, &artboard);
+        direct_state.animations[0].source = RuntimeDirectBlendSource::MixValue { value: 40.0 };
+        direct_occurrence.advance(&direct_state, &artboard, &[], &[], 0.0);
+        assert_eq!(
+            direct_occurrence.animations[0].definition,
+            RuntimeBlendAnimationHandle::new(0)
+        );
+        assert_eq!(direct_occurrence.animations[0].mix, 0.4);
+
+        let empty_state = RuntimeLayerState {
+            global_id: Some(2),
+            type_name: Some("AnimationState"),
+            animation: Some(RuntimeLinearAnimationHandle::empty()),
+            blend_state_1d: None,
+            blend_state_direct: None,
+            speed: 1.0,
+            flags: 0,
+            fire_actions: Vec::new(),
+            listener_actions: Vec::new(),
+            transitions: Vec::new(),
+        };
+        let layer = RuntimeStateMachineLayer {
+            global_id: 3,
+            name: None,
+            states: vec![empty_state],
+            entry_state_index: Some(0),
+            any_state_index: None,
+        };
+        let layer_occurrence = StateMachineLayerInstance::new(&layer, &artboard, &[], &[]);
+        let empty_state_animation = layer_occurrence
+            .current_animation()
+            .expect("AnimationState always creates an animation occurrence");
+        assert!(std::ptr::eq(
+            artboard
+                .linear_animation_instance_definition(empty_state_animation)
+                .expect("AnimationState empty definition"),
+            artboard.empty_linear_animation.as_ref()
+        ));
+        assert!(!empty_state_animation.apply(&mut artboard, 1.0));
     }
 
     #[test]

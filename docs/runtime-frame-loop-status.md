@@ -19,7 +19,10 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   scripted condition have been split from the giant entry point into
   filename-corresponding Rust modules. The focus and scripted moves preserve
   the existing pinned behavior while putting their next semantic review on
-  the matching C++ ownership boundary.
+  the matching C++ ownership boundary. The remaining retained property and
+  ViewModel comparison implementation now lives in
+  `state_machine/transition_viewmodel_condition.rs`; the base
+  `transition_condition.rs` is only the shared dispatch boundary.
 - Stable-Rust Apple compatibility repair
   `95eb04b7cfb847f24ba77872bd8a0ee43da1af41` mechanically rewrites the
   experimental match guard in `constraint_bounds` without changing behavior.

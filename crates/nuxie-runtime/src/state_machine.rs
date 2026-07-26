@@ -37,6 +37,7 @@ mod transition_focus_condition;
 mod transition_input_condition;
 mod transition_number_condition;
 mod transition_trigger_condition;
+mod transition_viewmodel_condition;
 pub(crate) use bindables::{
     RuntimeBindableArtboard, RuntimeBindableAsset, RuntimeBindableAssetDefaultViewModelSource,
     RuntimeBindableAssetValue, RuntimeBindableBoolean, RuntimeBindableColor, RuntimeBindableEnum,

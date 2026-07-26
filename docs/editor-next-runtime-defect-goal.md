@@ -148,9 +148,9 @@ Every goal turn, without exception:
 The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 
 - Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`, `LOC-003`,
-  `LOC-004`, `LOC-006`, and `LOC-014`.
-- Landing-provenance and independent-promotion only: `RT-ED-005` and
-  `LOC-019`. Their repairs are merged and consumed; no
+  `LOC-004`, `LOC-006`, `LOC-014`, and `LOC-019`.
+- Landing-provenance and independent-promotion only: `RT-ED-005`. Its repair
+  is merged and consumed; no
   production implementation remains in those lanes.
 - Regression reopened after historical executor-green evidence: `LOC-009`.
   PR #54's `7f1450dc` landing remains immutable history, but independent
@@ -195,7 +195,7 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 - Closed no-repair stale characterization: `LOC-006`; exact committed
   provenance and an independent exact-checkpoint rerun prove the prior
   renderer symptom was caused by the later hover/clear gesture.
-- Open browser/renderer qualification candidates: `LOC-012` and `LOC-014`.
+- Open browser/renderer qualification candidate: `LOC-012`.
 - Open artifact/Editor candidates: `LOC-015`, `LOC-016`, `LOC-017`,
   `LOC-018`.
 
@@ -325,8 +325,8 @@ contains no stale snapshot, backend, owner, or dependency claim.
 ### Q1 — Promote landed WebGPU repairs and qualify surviving browser rows
 
 The WebGPU runtime consumption and API-migration prerequisite is complete in
-the immutable Editor checkpoint recorded above. Q1 remains open for the
-explicit requalification and independent-promotion work below. The original
+the immutable Editor checkpoint recorded above. Q1 remains open only for the
+surviving browser qualification and parked-diagnosis work below. The original
 WebGPU-only handoff was
 `95027109c89f651835c76646ebf4d8734f032f07`; the consumed runtime has since
 advanced to `e72323c808b91d706ba3b745396beaca7accd69a`.
@@ -335,10 +335,9 @@ Editor already removed the backend-preference arguments, consumes
 normal/proof/product evidence at the immutable checkpoint. Do not repeat that
 migration.
 
-Current work is:
+Independent promotion is complete for `RT-ED-003` and `LOC-019`; both rows are
+closed and authorize no further production or promotion work. Current work is:
 
-- independently promote the landing-provenance records for `RT-ED-003` and
-  `LOC-019`; their production repairs and Editor consumption are complete;
 - keep `LOC-009` outside the serialized tracking merge line, parked, and
   frozen while diagnosis waits for a different reliable execution/model
   environment; replacement task `019f9f59-1ac6-7e32-b973-5deb6b457c05`
@@ -424,9 +423,10 @@ No F-ED worktree patches reserved runtime files.
   rerun `LOC-008` as deferred post-port verification; split remaining
   `LOC-013` at the first differing authored-value, bind, shaping, outline, or
   pixel stage.
-- `F-ED-10`: requalify `LOC-012` and `LOC-014` on WebGPU. Port only a proven
-  pinned-C++ owner/resource lifecycle; never tune feather constants or
-  tolerances.
+- `F-ED-10`: qualify `LOC-012` on WebGPU. `LOC-014` is independently closed as
+  a stale oracle after the exact same 180-by-124 typed Feather scene produced
+  zero differing C++/Rust pixels; do not reopen it by tuning feather constants
+  or tolerances.
 - `F-ED-13`: normalize complete records for `LOC-018`; an Editor/lowering
   difference is repaired there before renderer attribution.
 

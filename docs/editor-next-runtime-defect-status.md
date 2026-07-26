@@ -7,29 +7,29 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: serialized evidence-only closure, parked authored-shader diagnosis,
-  and deferred post-port verification;
+- phase: combined evidence-only batch closeout, parked authored-shader
+  diagnosis, and deferred post-port verification;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - investigation base: `e72323c808b91d706ba3b745396beaca7accd69a`;
 - Editor's last consumed runtime:
   `e72323c808b91d706ba3b745396beaca7accd69a`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
 - closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`,
-  `LOC-003`, `LOC-004`, `LOC-006`, and `LOC-014`;
-- open rows: 17;
+  `LOC-003`, `LOC-004`, `LOC-006`, `LOC-014`, and `LOC-019`;
+- open rows: 16;
 - formal/structured product children in the landed Editor snapshot: 9;
 - candidate-linked product children: 15;
 - union: 23, with only `P09-C01` overlapping;
 - correction rows: 12.
-- fixture rows: 25 total, with `RT-ED-001`, `RT-ED-002`, and `LOC-003`
-  directly qualified.
+- fixture rows: 25 total, with `RT-ED-001`, `RT-ED-002`, `RT-ED-003`,
+  `LOC-003`, `LOC-011`, `LOC-014`, and `LOC-019` directly qualified.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
-- latest control-plane landing: checkpoint-7ca reconciliation PR #63
-  rebase-merged at exact runtime main
-  `fe0a0a07db302ce2f0282a2d919ea249e83144e5`;
-- active control-plane lane: serialize the five evidence-only closures in the
-  binding order `LOC-006`, `LOC-014`, `LOC-011`, `RT-ED-003`, then `LOC-019`;
+- latest control-plane landing: stale-visibility closure PR #64 rebase-merged
+  at exact runtime main `789a921489adfb79e7e414ee368a029bfd53e333`;
+- active control-plane lane: one combined batch records `LOC-014` closed as a
+  stale oracle, `LOC-011` handoff-ready as Editor-owned, and the independently
+  verified `RT-ED-003` and `LOC-019` repairs closed;
 - active production-repair lane: `LOC-009` is a confirmed physical
   shader-module error-scope defect requiring a new production landing; it is
   `regression-reopened`, with PR #54 / `7f1450dc` retained only as historical
@@ -61,9 +61,9 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   d788 produces 0.200000003 at `advance(0)` and 0.5 after another 0.5 seconds.
   Non-main `dd3be99c` appears to implement the seam but is not an ancestor of
   fe0/main; the uncommitted Scene patch has no landing claim;
-- defects closed since the preceding Q0 report: 3;
-- serialized evidence-only closures: `LOC-006`, `LOC-014`, `LOC-011`,
-  `RT-ED-003`, then `LOC-019`;
+- defects closed since the preceding Q0 report: 4;
+- completed evidence dispositions in binding order: `LOC-006` on main, then
+  batch rows `LOC-014`, `LOC-011`, `RT-ED-003`, and `LOC-019`;
 - parked repair lane: resume `LOC-009` diagnosis only in a different reliable
   execution/model environment, then assign any production repair after a
   fresh coordinator review; do not close or consume the row without a reviewed
@@ -319,8 +319,8 @@ generated property notifications, target observation, and explicit
 reconcile-origin handling. `COR-01` therefore requires the F-ED source hashes,
 fixture, executable probe, and behavioral assertions to use `d788e8ec`.
 
-`F-ED-11` / `LOC-019` is landed and consumed but remains `executor-green`
-pending independent orchestrator verification. PR #51's final head
+`F-ED-11` / `LOC-019` is landed, consumed, independently verified, and
+closed. PR #51's final head
 `22454fb58bc80d95174ca78d0c0d4d611b0d5a08` rebase-merged at
 `ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9`; those commits have the same
 tree. Clean Editor checkpoint
@@ -328,24 +328,26 @@ tree. Clean Editor checkpoint
 `e72323c808b91d706ba3b745396beaca7accd69a`. Its unchanged required-WebGPU
 `P14-C06` command passes 17/17: ProductRuntimeTools source validation, both
 retained-session fixtures, single and batch snapshots, and all 12 WebGPU
-pixel fixtures reach readiness. The executor record remains limited to its
-exact local canonical floors; no queued hosted Apple lane is relabeled green.
+pixel fixtures reach readiness. Independent promotion verifies real Chrome
+clean-null output at 64 pixels/32 red without a device error, invalid WGSL
+preserving a concrete error, the full WebGPU matrix green, and the native
+corpus 1468 exact/837 byte-exact/0 divergent. No queued hosted Apple lane is
+relabeled green.
 
 ## Next queue
 
-1. independently review and merge the focused `LOC-006` evidence-only closure;
-2. serialize the remaining evidence-only closures in binding order:
-   `LOC-014`, `LOC-011`, `RT-ED-003`, then `LOC-019`;
-3. keep `LOC-009` outside the shared tracking merge line, parked, and frozen
+1. review and merge the one combined evidence-only batch for `LOC-014`,
+   `LOC-011`, `RT-ED-003`, and `LOC-019`;
+2. keep `LOC-009` outside the shared tracking merge line, parked, and frozen
    until diagnosis resumes in a different reliable execution/model
    environment; do not close or consume it without a reviewed new production
    landing;
-4. retain `RT-ED-007`, `LOC-007`, `LOC-008`, and RT-ED-005's remaining
+3. retain `RT-ED-007`, `LOC-007`, `LOC-008`, and RT-ED-005's remaining
    layout/TextStyle execution as deferred post-port verification only; after
    each relevant formal port wave lands, rerun the unchanged acceptance and
    classify it resolved or still open, with no direct Runtime Fix request,
    schedule, or active writer lease;
-5. keep PR #60 and the malformed embedded-font outline crash deferred/parked,
+4. keep PR #60 and the malformed embedded-font outline crash deferred/parked,
    then refill other disjoint qualification lanes from the reconciled
    ownership DAG.
 

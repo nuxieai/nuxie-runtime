@@ -936,13 +936,13 @@ note = "Direct filename correspondence established in FL-C1; semantic fidelity r
 upstream = "src/animation/state_machine_instance.cpp"
 status = "pending"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/animation.rs"
+rust_module = "crates/nuxie-runtime/src/state_machine/instance.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0077"
 b6_verdict = "DIVERGENT"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Consolidated Rust port for animation."
+note = "Direct owner is state_machine/instance.rs. Focused per-instance transition-duration DataBind retention lives in state_machine/transition_duration_binding.rs, with generic source retention in bindables.rs and deferred live-context resolution in data_bind_graph.rs; semantic fidelity remains pending for the complete owner."
 
 [[file]]
 upstream = "src/animation/state_machine_layer.cpp"

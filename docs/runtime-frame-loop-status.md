@@ -14,8 +14,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   FL-C's corrected 49-file/eight-member lane map is
   `docs/runtime-frame-loop-fl-c-spec.md`; FL-C1 inputs/listener definitions is
   implemented with a green lane-boundary floor and pending independent
-  acceptance, and FL-C2 transition conditions is the exact next production
-  lane.
+  acceptance. FL-C2 transition conditions is active; its direct transition
+  owner and direct bool/number/trigger condition owners have been split from
+  the giant entry point into filename-corresponding Rust modules.
 - Stable-Rust Apple compatibility repair
   `95eb04b7cfb847f24ba77872bd8a0ee43da1af41` mechanically rewrites the
   experimental match guard in `constraint_bounds` without changing behavior.
@@ -97,6 +98,21 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   scripting and 8.51 MiB with scripting under the 9 MiB budget; and the
   same-runner Dawn pixel corpus 1,468 / 1,468 with 1,370 byte-exact and zero
   divergences. This evidence does not promote the pending FL-C1 rows.
+- Editor defect RT-ED-007 overlaps the state-machine instance owner currently
+  being ported. Pinned C++ retains each unresolved DataBindContext path on the
+  StateMachineInstance before live data exists, then resolves it from
+  `internalDataContext` when the context is attached
+  (`state_machine_instance.cpp:1742-1766,2901-2905`;
+  `data_bind_container.cpp:25-33`). Rust previously required the authored
+  default instance to resolve the complete transition-duration source and
+  silently discarded nested paths when that child was not materialized yet.
+  Runtime Fix owns the correction on `levi/fl-b` in
+  `state_machine/transition_duration_binding.rs`, `state_machine/bindables.rs`,
+  and the existing `data_bind_graph.rs` live-context resolver. The focused
+  unresolved-path regression, the unchanged nested set/fire/`advance(0)`
+  occurrence-isolation Scene regression (1 / 1 in an isolated active-runtime
+  overlay), and runtime 508 / 508 floor are green. The row remains pending
+  until the complete StateMachineInstance owner is accepted.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
   defined post-advance C++ result. No `Option<bool>` API break or
@@ -666,14 +682,10 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Wait for the coordinator-owned stable-Rust `constraints.rs` repair to land
-   on `origin/main`; do not edit that FL-A owner in the FL-B correction series.
-2. Rebase `levi/fl-b` onto that exact landed main SHA, rerun the mandatory
-   Apple XCFramework floor and every full-battery artifact whose source/commit
-   provenance changed, then publish a new immutable FL-B candidate without
-   promoting pending rows.
-3. Request independent acceptance; only a binary orchestrator PROMOTE verdict
-   may promote the FL-B rows and close FL-G01.
-4. At accepted FL-B boundary, reconcile the top-level program/status protocol
-   to one canonical NEXT pointer before selecting FL-C. Performance remains
-   verification evidence, never the source of a work slice.
+1. Finish and floor the faithful RT-ED-007 nested transition-duration binding
+   correction inside the current state-machine owner.
+2. Resume FL-C2 from its direct transition/condition modules, translate the
+   remaining property/view-model/scripted condition owners, refresh trace and
+   evidence, and stop at the complete lane boundary for independent review.
+3. Keep FL-B and FL-C1 rows pending until independent acceptance. Performance
+   remains verification evidence, never the source of a work slice.

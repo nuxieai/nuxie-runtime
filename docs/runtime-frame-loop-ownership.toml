@@ -245,6 +245,7 @@ rust_modules = [
   "crates/nuxie-runtime/src/state_machine/transition_bool_condition.rs",
   "crates/nuxie-runtime/src/state_machine/transition_condition_op.rs",
   "crates/nuxie-runtime/src/state_machine/transition_condition.rs",
+  "crates/nuxie-runtime/src/state_machine/transition_duration_binding.rs",
   "crates/nuxie-runtime/src/state_machine/transition_input_condition.rs",
   "crates/nuxie-runtime/src/state_machine/transition_number_condition.rs",
   "crates/nuxie-runtime/src/state_machine/transition_trigger_condition.rs",
@@ -941,7 +942,7 @@ status = "pending"
 upstream = "src/animation/state_machine_instance.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
 dynamically_reached = true
 status = "pending"
 

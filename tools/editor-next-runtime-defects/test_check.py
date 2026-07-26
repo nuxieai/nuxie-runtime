@@ -57,8 +57,8 @@ CHILDREN = {
     "RT-ED-003": (["P04-C01", "P19-C03"], [], []),
     "RT-ED-005": (["P09-C01"], [], []),
     "RT-ED-007": (["P19-C09"], [], []),
-    "LOC-001": ([], ["P13-C07"], []),
-    "LOC-002": (["P04-C11", "P09-C03", "P09-C06"], ["P09-C01"], []),
+    "LOC-001": (["P13-C07"], [], []),
+    "LOC-002": (["P04-C11", "P09-C01", "P09-C03", "P09-C06"], [], []),
     "LOC-005": (["P09-C05"], [], []),
     "LOC-006": ([], ["P09-C04"], []),
     "LOC-007": (["P11-C12"], [], []),
@@ -446,10 +446,10 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
                 corrections_file = "docs/corrections.toml"
                 fixtures_file = "docs/fixtures.toml"
                 expected_defects = 25
-                expected_formal_children = 9
-                expected_candidate_children = 15
+                expected_formal_children = 10
+                expected_candidate_children = 13
                 expected_union_children = 23
-                expected_overlap_children = ["P09-C01"]
+                expected_overlap_children = []
                 reserved_ids = ["LOC-010"]
 
                 [program]
@@ -2230,16 +2230,16 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
         child = next(
             child
             for child in ledger["rows"][0]["children"]
-            if child["id"] == "P13-C07"
+            if child["id"] == "P04-C12"
         )
-        child["assertion"] = child["assertion"].replace("LOC-001", "LOC one")
+        child["assertion"] = child["assertion"].replace("LOC-018", "LOC eighteen")
         path.write_text(json.dumps(ledger, indent=2) + "\n")
         self.refresh_source_bindings()
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "LOC-001 candidate child P13-C07 assertion does not contain "
-            "the exact defect id LOC-001",
+            "LOC-018 candidate child P04-C12 assertion does not contain "
+            "the exact defect id LOC-018",
             result.stderr,
         )
 
@@ -4557,14 +4557,14 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
     def test_child_overlap_ratchet_is_exact(self) -> None:
         self.atlas.write_text(
             self.atlas.read_text().replace(
-                'expected_overlap_children = ["P09-C01"]',
+                "expected_overlap_children = []",
                 'expected_overlap_children = ["P04-C12"]',
             )
         )
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "child-overlap ratchet names P04-C12, actual overlap is P09-C01",
+            "child-overlap ratchet names P04-C12, actual overlap is empty",
             result.stderr,
         )
 

@@ -38,15 +38,15 @@ in the port map. Update the stale lower-precedence file in the same evidence
 or planning PR.
 
 The immutable Editor source checkpoint is
-`7ca11e331a57cb3ea574848f8e93eb108878c40b` on
+`c7e4f313e8cd9237186e83546566537a341e3cfa` on
 `origin/levi/editor-next-cutover-assembly`:
 
 - proposal SHA-256:
-  `39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401`;
+  `4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e`;
 - runtime-defects SHA-256:
-  `9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c`;
+  `6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a`;
 - parity-ledger SHA-256:
-  `04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25`.
+  `3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1`.
 
 The pinned C++ runtime is
 `d788e8ec6e8b598526607d6a1e8818e8b637b60c`. The WebGPU-only runtime
@@ -149,9 +149,11 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 
 - Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`, `LOC-003`,
   `LOC-004`, `LOC-006`, `LOC-014`, and `LOC-019`.
-- Landing-provenance and independent-promotion only: `RT-ED-005`. Its repair
-  is merged and consumed; no
-  production implementation remains in those lanes.
+- Changed intake needs evidence: `RT-ED-005`. Its historical repair is merged,
+  consumed, and executor-green, with no production implementation remaining,
+  but the changed committed inbox record does not separately label one full
+  Editor SHA and one full Runtime SHA. The current cycle cannot independently
+  promote it until that fail-closed evidence requirement is satisfied.
 - Regression reopened after historical executor-green evidence: `LOC-009`.
   PR #54's `7f1450dc` landing remains immutable history, but independent
   real-GPU verification found an unresolved physical shader-module
@@ -182,12 +184,13 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   acceptance.
 - Historical WebGL2 evidence only, with no linked product child:
   `RT-ED-004`.
-- Open Scene/API candidates: `LOC-001`, `LOC-005`.
+- Mapped Scene/API owner family: `LOC-001`, with `LOC-002` and `LOC-005` as
+  duplicate acceptance cases under the same retained-owner repair.
 - Deferred post-port verification: `LOC-007` path dirt, `LOC-008` intrinsic
   text measurement, and ordinary layout/TextStyle execution. These records
   make no direct implementation request or schedule. Escalate only an actual
   simultaneous file-writer collision or a safety/data-loss issue.
-- Open runtime/FL candidates: `LOC-002`, `LOC-013`.
+- Open runtime/FL candidate: `LOC-013`.
 - Qualified non-runtime Editor/artifact handoff: `LOC-011`; one identical
   explicit-empty source-first file is empty through encode, import, bind,
   shaping, and draw in pinned C++ and Rust, so the original artifact/overlay
@@ -196,11 +199,12 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   provenance and an independent exact-checkpoint rerun prove the prior
   renderer symptom was caused by the later hover/clear gesture.
 - Open browser/renderer qualification candidate: `LOC-012`.
-- Open artifact/Editor candidates: `LOC-015`, `LOC-016`, `LOC-017`,
-  `LOC-018`.
+- Open artifact/Editor candidates: `LOC-015`, `LOC-016`, and `LOC-017`.
+- Changed intake needs evidence while an already-authorized additive Scene
+  candidate remains under review: `LOC-018`.
 
-There are nine children with structured runtime links, 15 candidate-linked
-children, and 23 unique affected children. The goal burns
+There are ten unique children with eleven structured runtime links, 13
+candidate-linked children, and 23 unique affected children. The goal burns
 all accepted rows to a terminal, evidence-backed disposition. The linked
 product matrix remains valuable downstream consumption evidence, but Editor
 consumption is not a completion gate for this program.
@@ -362,10 +366,32 @@ must not reintroduce any prohibited WebGL2 surface.
 
 `F-ED-03` (`RT-ED-005`) is merged and consumed. Its generic number/color
 property-key authoring, direction semantics, record round trips, runtime
-behavior, and executor floors are landing provenance awaiting independent
-promotion only. Do not reopen that Scene implementation. `P09-C01`'s ordinary
-layout/TextStyle execution is deferred post-port verification after the
-relevant layout/text wave, not an implementation request from this program.
+behavior, and executor floors remain historical landing provenance. The
+changed committed inbox record is `intake-needs-evidence` because it omits
+separately labeled full Editor and Runtime SHAs, so independent promotion is
+blocked on evidence—not production code. Do not reopen that Scene
+implementation. `P09-C01` is green
+for the generic property-target primitive and remains a nonblocking Known
+Runtime Defect only for the separate `LOC-002` retained-owner behavior.
+Ordinary layout padding and TextStyle font-size/line-height remain under
+`P08-C01` / `LOC-018`; their runtime dirt/reflow acceptance is deferred until
+the relevant layout/text port wave lands.
+
+The separate `LOC-018` additive Scene-authoring gap is active in PR #66 from
+exact main `85e69a8215ef7caaef2c91437b0f435a5b830a56`. It may add the complete
+typed public `LayoutComponent` 409 / `LayoutComponentStyle` 420 hierarchy,
+property domain, owner IDs, record order, and encode/import/export fixpoint in
+`crates/nuxie/build.rs`, `crates/nuxie/src/scene.rs`, and focused
+`crates/nuxie` tests only. It must cover every concrete pinned-C++
+`KeyFrameInterpolator` descendant accepted by `interpolatorId`, including
+semantic ScriptAsset ordinal mapping. Its honest current-product claim is
+only +60 type-409 plus +60 type-420 records (410 -> 530). The remaining ten
+records and product traversal/order are Editor-owned; runtime layout/dirt/text
+execution and pixels remain post-port verification. Its changed committed
+inbox record is `intake-needs-evidence` because it does not separately label
+one full Editor SHA and one full Runtime SHA. The already-authorized PR may
+finish as a reviewed additive candidate, but the row cannot promote until the
+committed-evidence gap is resolved.
 
 `F-ED-04` (`RT-ED-007`) is a confirmed runtime defect retained as deferred
 post-port verification. The recovered e723 producer plus dirty
@@ -385,15 +411,15 @@ although its emitted bytes are qualified correct. Defects Fix retains the
 unchanged set → fire → `advance(0)` acceptance and records its independent
 result after the relevant state-machine port wave lands.
 
-### Q3 — Qualify and close Scene ownership candidates
+### Q3 — Close the mapped Scene ownership family
 
-Qualify `LOC-001`, `LOC-005`, then adversarial `LOC-002` using one identical
-C++/Rust/Editor stimulus.
-
-If the first divergence is confined to the public Scene facade, port the
-stable retained ViewModel handle/rebind lifecycle in a Scene-owned PR. If it
-enters Artboard/DataBind ownership, hand the exact closure to FL-D. Never add
-more type-specific remount carry.
+Qualification has localized the current repair to the Scene facade. The
+active `levi/loc-001-retained-viewmodel-instance` branch must preserve one
+Scene-lifecycle-owned ViewModel-instance handle per authored
+`ViewModelInstanceId` across artboard rematerialization. `LOC-002` and
+`LOC-005` remain unchanged acceptance cases for the same owner lifecycle.
+There is no commit, PR, or landing claim yet; any need to edit lower-level
+runtime owners stops this lane.
 
 Retain `LOC-008` intrinsic text measurement as deferred post-port
 verification. After the relevant text-measurement wave lands, rerun the
@@ -402,7 +428,7 @@ not request or schedule an implementation from this program.
 
 ### Q4 — Absorb runtime-owner defects through FL
 
-For `LOC-002` when runtime-owned and `LOC-013`:
+For `LOC-013`:
 
 1. minimize the current failure;
 2. build the pinned C++ direct probe;

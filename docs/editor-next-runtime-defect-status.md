@@ -7,7 +7,7 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: combined evidence-only batch closeout, parked authored-shader
+- phase: two Scene-owned production repairs, parked authored-shader
   diagnosis, and deferred post-port verification;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - investigation base: `e72323c808b91d706ba3b745396beaca7accd69a`;
@@ -17,19 +17,41 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`,
   `LOC-003`, `LOC-004`, `LOC-006`, `LOC-014`, and `LOC-019`;
 - open rows: 16;
-- formal/structured product children in the landed Editor snapshot: 9;
-- candidate-linked product children: 15;
-- union: 23, with only `P09-C01` overlapping;
+- state counts: 9 `closed`, 1 `handoff-ready`, 2
+  `intake-needs-evidence`, 3 `mapped`, 1 `regression-reopened`, and 9
+  `reported`;
+- formal/structured product children in the landed Editor snapshot: 10;
+- candidate-linked product children: 13;
+- union: 23, with no formal/candidate overlap;
 - correction rows: 12.
 - fixture rows: 25 total, with `RT-ED-001`, `RT-ED-002`, `RT-ED-003`,
   `LOC-003`, `LOC-011`, `LOC-014`, and `LOC-019` directly qualified.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
-- latest control-plane landing: stale-visibility closure PR #64 rebase-merged
-  at exact runtime main `789a921489adfb79e7e414ee368a029bfd53e333`;
-- active control-plane lane: one combined batch records `LOC-014` closed as a
-  stale oracle, `LOC-011` handoff-ready as Editor-owned, and the independently
+- latest control-plane landing: combined evidence PR #65 rebase-merged at
+  exact runtime main `85e69a8215ef7caaef2c91437b0f435a5b830a56`;
+- active control-plane lane: none. PR #65 records `LOC-014` closed as a stale
+  oracle, `LOC-011` handoff-ready as Editor-owned, and the independently
   verified `RT-ED-003` and `LOC-019` repairs closed;
+- active Scene-owned repair: `LOC-018` has an open additive-authoring PR #66
+  based on exact main `85e69a82`. It is merge-blocked until the public
+  `LayoutComponentStyle::interpolatorId` model covers all four concrete pinned
+  C++ interpolators (`CubicEase`, `CubicValue`, `Elastic`, and `Scripted`) with
+  exact fields, defaults, presence, and semantic ScriptAsset ordinal mapping.
+  Its claim is limited to stable typed 409/420 hierarchy and the current
+  Editor stream's +60 `LayoutComponent` plus +60 `LayoutComponentStyle`
+  records (410 -> 530). The remaining ten product records and retained product
+  traversal/order are Editor-owned; layout execution, dirt, pixels, and final
+  product closure remain deferred post-port verification;
+  the changed committed inbox record is currently `intake-needs-evidence`
+  because it does not separately label one full Editor SHA and one full
+  Runtime SHA. The already-authorized candidate may finish review, but the row
+  cannot promote until that committed-evidence gap is resolved;
+- active Scene-owned repair: `LOC-001` owns one retained ViewModel-instance
+  handle per authored `ViewModelInstanceId` across artboard rematerialization,
+  with `LOC-002` and `LOC-005` retained as duplicate acceptance cases. The
+  uncommitted `levi/loc-001-retained-viewmodel-instance` branch has no landing
+  claim yet and must not edit lower-level runtime owners;
 - active production-repair lane: `LOC-009` is a confirmed physical
   shader-module error-scope defect requiring a new production landing; it is
   `regression-reopened`, with PR #54 / `7f1450dc` retained only as historical
@@ -90,13 +112,13 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
     The pinned-C++ shaper expectation is exact intrinsic width and multiline
     height: the 354-wide subtitle occupies 47.59375 over two lines, and
     intrinsic labels do not retain the 180-pixel fallback.
-  - RT-ED-005's remaining ordinary layout/TextStyle execution retains the
-    exact `P09-C01` command:
-    `CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home rustup run stable cargo test --manifest-path tools/rive-compiler/scene-shared/Cargo.toml -p nuxie-scene-compiler canonical_projection_corpus_lowers_to_typed_native_sources --offline && CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p editor canonical_projection_corpus_shares_retained_cold_hot_and_exact_riv_records --offline && CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p browser-host --test product_host runtime_retains_selected_product_relation_across_structural_remount --offline -- --exact && CI=1 corepack pnpm --dir apps/nuxie-dashboard exec vitest run tests/unit/ai-tools/projection-corpus-fixpoint.test.ts tests/unit/ai-tools/view-html-parser.test.ts && CI=1 corepack pnpm --dir packages/view-compiler exec vitest run src/views/react-projection-corpus-boundary.test.ts && CI=1 corepack pnpm --dir packages/build-templates/bun_react_shadcn_ts exec vitest run tests/unit/view/screen-renderer.test.tsx && PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor projection-corpus-product-route.spec.ts`.
+  - `LOC-018`'s remaining assembled ordinary-layout/TextStyle execution retains
+    the exact `P08-C01` command:
+    `pnpm --dir apps/nuxie-dashboard run test:visual:style && PAGE_PARITY_ASSERT=1 pnpm --dir apps/nuxie-dashboard run test:visual:page && PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor outline-visual-consistency.spec.ts unit-conversion-matrix.spec.ts safe-area-env-guide.spec.ts design-token-layout.spec.ts && NUXIE_EDITOR_PERF_REQUIRE_HEALTHY_ENV=1 NUXIE_EDITOR_STREAMING_CAPACITY=1 PLAYWRIGHT_START_WEB_SERVER=1 pnpm --dir apps/nuxie-dashboard run test:editor:perf`.
     Pinned C++ expects property-key-driven
     LayoutComponentStyle/TextStyle changes to dirty and reflow the same
-    retained layout. This is separate from the already landed generic
-    number/color authoring primitive.
+    retained layout. This is separate from the already landed and consumed
+    `RT-ED-005` generic number/color authoring primitive.
   - `RT-ED-007` retains exact artifact SHA-256
     `b8e1696a3166959ab7afbca6d7e8ba4abaf99c9e04a15f144327699ce54ebe70`
     and unchanged
@@ -108,9 +130,9 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - post-port verification escalates only for an actual simultaneous file-writer
   collision or a safety/data-loss issue, never merely because a formal port
   wave is in progress;
-- open qualification/overlap lanes: `LOC-002` still needs its d788
-  requalification and FL collision boundary; `LOC-005` needs the direct d788
-  shared-instance differential.
+- `LOC-002` and `LOC-005` are mapped duplicate acceptance cases for the active
+  Scene-only `LOC-001` retained-owner repair. They have no separate
+  qualification or writer lane.
 
 Defects Fix owns intake, triage, pinned-C++ qualification, faithful repair
 orchestration, independent verification, PR/landing tracking, and immutable
@@ -154,10 +176,10 @@ or uncaptured errors. Draw count 34 returns only after the separate
 the committed 171,784-byte machine report has SHA-256
 `f78b93d7575c3543e57de49bd73dce5783648b4c5a258328cfdd1f5eeb2652b5`.
 
-The same committed ledger has nine structured runtime links across
-`runtimeDependencies` and `runtimeDefects`, plus 15 candidate links. It
-retains `RT-ED-004` only as historical WebGL2 evidence. This intake mirrors
-that source linkage without independently promoting any row state.
+The same committed ledger has ten unique structured runtime children across
+eleven `runtimeDependencies` / `runtimeDefects` links, plus 13 candidate
+links. It retains `RT-ED-004` only as historical WebGL2 evidence. This intake
+mirrors that source linkage without independently promoting any row state.
 
 ## Defect inbox
 
@@ -167,15 +189,17 @@ The committed Editor repository is the mailbox:
 - inbox: `plans/nuxie-editor-next-runtime-defects.md`;
 - linkage: `plans/nuxie-editor-next-parity-ledger.json`;
 - last consumed checkpoint:
-  `7ca11e331a57cb3ea574848f8e93eb108878c40b`;
+  `c7e4f313e8cd9237186e83546566537a341e3cfa`;
 - newest known checkpoint:
-  `7ca11e331a57cb3ea574848f8e93eb108878c40b`;
+  `c7e4f313e8cd9237186e83546566537a341e3cfa`;
 - inbox SHA-256:
-  `9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c`;
+  `6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a`;
 - linkage SHA-256:
-  `04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25`;
+  `3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1`;
 - unconsumed inbox records: 0;
-- imported atlas rows: 25.
+- imported atlas rows: 25;
+- changed records consumed at this boundary: `LOC-001`, `LOC-002`,
+  `LOC-018`, and `RT-ED-005`.
 
 Intake runs only after the current control-plane or scheduled batch reaches a
 merge/block boundary. Missing record evidence becomes
@@ -200,8 +224,8 @@ fresh fetch, exact tip equality, and zero unconsumed records.
 
 ## Editor source snapshot
 
-The last consumed Editor snapshot at intake cycle 2 is
-`7ca11e331a57cb3ea574848f8e93eb108878c40b`. The pinned source checkout and
+The last consumed Editor snapshot at intake cycle 3 is
+`c7e4f313e8cd9237186e83546566537a341e3cfa`. The pinned source checkout and
 committed blobs used by the checker resolve to that exact SHA, its runtime
 gitlink is `e72323c808b91d706ba3b745396beaca7accd69a`, and the three recorded
 source artifacts match the commit byte-for-byte. This statement does not claim
@@ -211,11 +235,11 @@ tip is fetched and reconciled only at the next explicit intake boundary.
 The landed snapshot hashes are:
 
 - proposal:
-  `39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401`;
+  `4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e`;
 - runtime defects:
-  `9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c`;
+  `6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a`;
 - parity ledger:
-  `04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25`.
+  `3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1`.
 
 The earlier reviewed hashes remain in this file's Git history, but their formal
 dependency map is stale and must not be used for qualification. Any later
@@ -296,15 +320,18 @@ encoded `File::import` behavior tests. Independent review found the missing
 converter-free direction surface; the follow-up now proves numeric
 `ToSource`, numeric source-first `TwoWay`, and color source-first `TwoWay`
 through exact re-import and reverse propagation. Clean Editor checkpoint
-`4da896beb5ec6815f6b01a2433875274a321d06c` consumes descendant runtime
+`c7e4f313e8cd9237186e83546566537a341e3cfa` consumes descendant runtime
 `e72323c808b91d706ba3b745396beaca7accd69a`, including the generic
 number/color paint primitive for existing `Stroke` and `SolidColor` targets.
-The row remains `reported` until independent orchestrator verification and
-promotion are recorded. `P09-C01`'s ordinary layout-container/style and
-TextStyle dirt/reflow acceptance is deferred post-port verification after the
-relevant formal layout/text wave, not an assigned implementation lane; that
-downstream result is not required to close the verified landed RT-ED-005
-repair.
+Historical executor evidence remains green, but the changed committed
+`RT-ED-005` inbox record is `intake-needs-evidence`: it does not separately
+label one full Editor SHA and one full Runtime SHA, so this intake cycle cannot
+promote the row yet. `P09-C01` is green for the generic property-target
+primitive and remains a nonblocking Known Runtime Defect only for the separate
+`LOC-002` retained-owner behavior. Ordinary layout padding and TextStyle
+font-size/line-height remain under `P08-C01` / `LOC-018`; their post-port
+dirt/reflow acceptance is not required to close the landed `RT-ED-005`
+implementation.
 Its executor battery was green:
 the 721-test probe-armed workspace suite, 317/317 ordinary and
 scripted golden entries with 647/647 segments each, 1468/1468 renderer rows,
@@ -336,18 +363,22 @@ relabeled green.
 
 ## Next queue
 
-1. review and merge the one combined evidence-only batch for `LOC-014`,
-   `LOC-011`, `RT-ED-003`, and `LOC-019`;
-2. keep `LOC-009` outside the shared tracking merge line, parked, and frozen
+1. complete the four-variant interpolator correction, independently review,
+   and land the additive `LOC-018` Scene-authoring repair without expanding
+   its execution or product claim;
+2. complete and independently verify the `LOC-001` retained-owner repair,
+   including unchanged `LOC-002` / `LOC-005` acceptance, before publishing
+   any Scene production SHA;
+3. keep `LOC-009` outside the shared tracking merge line, parked, and frozen
    until diagnosis resumes in a different reliable execution/model
    environment; do not close or consume it without a reviewed new production
    landing;
-3. retain `RT-ED-007`, `LOC-007`, `LOC-008`, and RT-ED-005's remaining
-   layout/TextStyle execution as deferred post-port verification only; after
-   each relevant formal port wave lands, rerun the unchanged acceptance and
-   classify it resolved or still open, with no direct Runtime Fix request,
+4. retain `RT-ED-007`, `LOC-007`, `LOC-008`, and `LOC-018`'s remaining
+   runtime layout/TextStyle execution as deferred post-port verification only;
+   after each relevant formal port wave lands, rerun the unchanged acceptance
+   and classify it resolved or still open, with no direct Runtime Fix request,
    schedule, or active writer lease;
-4. keep PR #60 and the malformed embedded-font outline crash deferred/parked,
+5. keep PR #60 and the malformed embedded-font outline crash deferred/parked,
    then refill other disjoint qualification lanes from the reconciled
    ownership DAG.
 

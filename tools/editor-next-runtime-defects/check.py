@@ -36,10 +36,10 @@ EXPECTED_CHILDREN = {
     "RT-ED-005": ({"P09-C01"}, set(), set()),
     "RT-ED-006": (set(), set(), set()),
     "RT-ED-007": ({"P19-C09"}, set(), set()),
-    "LOC-001": (set(), {"P13-C07"}, set()),
+    "LOC-001": ({"P13-C07"}, set(), set()),
     "LOC-002": (
-        {"P04-C11", "P09-C03", "P09-C06"},
-        {"P09-C01"},
+        {"P04-C11", "P09-C01", "P09-C03", "P09-C06"},
+        set(),
         set(),
     ),
     "LOC-003": (set(), set(), set()),

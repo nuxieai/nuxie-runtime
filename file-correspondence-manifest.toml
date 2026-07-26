@@ -648,13 +648,13 @@ note = "F13: nested trigger listener-input resolution remains incomplete; second
 upstream = "src/animation/listener_types/listener_input_type.cpp"
 status = "pending"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/animation.rs"
+rust_module = "crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0053"
 b6_verdict = "ADAPTED"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Consolidated Rust port for animation."
+note = "Direct filename correspondence established in FL-C1; device-specific constraints remain pending."
 
 [[file]]
 upstream = "src/animation/listener_types/listener_input_type_gamepad.cpp"

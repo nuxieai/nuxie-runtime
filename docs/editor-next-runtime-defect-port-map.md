@@ -152,16 +152,16 @@ The following work can proceed without waiting for an FL landing:
 | `F-ED-00A` atlas/checker/evidence spine | maintain and independently verify the atlas, status, checker, correction manifest, and direct fixtures; run existing ledgers read-only | do not edit shared harness files, probe translation units, or FL ledgers; queue shared-ledger links for the owning FL executor |
 | all direct C++/Rust/Editor qualifications | inspect, build, probe, and record evidence in new F-ED-owned files | qualification grants no production-runtime edit |
 | `F-ED-03` / `RT-ED-005` | independently verify and promote the exact PR #49 landing provenance | the production authoring repair is complete; do not reopen it or conflate the separate FL-E layout/TextStyle dependency |
-| `F-ED-04` / `RT-ED-007` | after atlas qualification, implement the thin `nuxie::Scene` nested transition-duration authoring surface and disjoint tests | exact `TOUCH` set must stay in `crates/nuxie/src/scene.rs` and non-runtime schema/export/import helpers; no runtime, graph, Scene-advance, or frame-loop semantics |
+| `F-ED-04` / `RT-ED-007` | preserve diagnosis/tests and independently verify the Runtime Fix landing | Defects Fix has no Scene-authoring writer; Runtime Fix exclusively owns the production repair |
 | `F-ED-06` / `RT-ED-003` | independently verify and promote the exact PR #55 landing provenance | the production browser-presentation repair is complete; do not reopen it or mix it with historical `F-ED-07` |
 | `F-ED-12` | locally build and qualify the existing ABI 1.6 artifact | no header/C-API source change without a fresh scope review; no external publication before the user checkpoint |
 | `F-ED-13` | normalize and compare records and repair an Editor/lowering-only first divergence | identical records are required before any renderer attribution; no runtime edit |
 
-Only open `F-ED-04` is a conditionally production-safe Scene implementation in
-this table; it is not pre-approved. `F-ED-03` and `F-ED-06` are merged
-landing-provenance rows awaiting independent promotion only. `F-ED-00A` must
-still prove any new closure. If an open lane needs a reserved file or changes
-the frame-loop/advance contract, it immediately moves to the deferred set.
+`F-ED-04` is assigned to Runtime Fix and authorizes no Defects Fix production
+writer. `F-ED-03` and `F-ED-06` are merged landing-provenance rows awaiting
+independent promotion only. `F-ED-00A` must still prove any new closure. If an
+open lane needs a reserved file or changes the frame-loop/advance contract, it
+immediately moves to the deferred set.
 
 ### Work that may be prepared but needs a landing handshake
 
@@ -215,8 +215,8 @@ before this table is revised.
 
 The safe next queue is therefore:
 
-1. retain merged Q0/F-ED-00A control-plane integrity at runtime main
-   `2e24cd7f23a35fc96a71c5edb5da77d1a8634e08`;
+1. retain checkpoint-7ca reconciliation PR #63 control-plane integrity at
+   exact runtime main `fe0a0a07db302ce2f0282a2d919ea249e83144e5`;
 2. serialize the evidence-only closures in binding order: `LOC-006`,
    `LOC-014`, `LOC-011`, `RT-ED-003`, then `LOC-019`;
 3. keep `LOC-009` outside that shared tracking line while its new production
@@ -226,8 +226,9 @@ The safe next queue is therefore:
 4. fan out read-only direct qualifications; treat `RT-ED-004` only as
    historical WebGL2 evidence unless an explicit WebGPU-only requalification
    is scheduled;
-5. activate only the exact open Scene-only `F-ED-04` or a qualified,
-   renderer-only `F-ED-10` production closure that survives the atlas and
+5. leave `F-ED-04` production exclusively with Runtime Fix and prepare only
+   Defects Fix's independent post-landing verification; activate a qualified
+   renderer-only `F-ED-10` closure only if it survives the atlas and
    coordinator lease checks;
 6. perform record normalization and local ABI 1.6 qualification;
 7. keep every runtime-owner result as evidence until the corresponding FL
@@ -310,7 +311,11 @@ stale-oracle | retracted → closed
   `regression-reopened`. The historical executor result is retained separately,
   while current executor and orchestrator gates fail closed. A fresh
   qualification, mapping, production landing, executor result, and independent
-  verification are required before promotion.
+  verification are required before promotion. The current merge and optional
+  downstream-consumption revisions remain pending while reopened; a fresh
+  executor-green event must record a full merge SHA distinct from the
+  historical landing and command/evidence distinct from the historical
+  executor record.
 - Only an `editor` or `artifact` owner may move directly from `qualified` to
   `handoff-ready`; runtime, API, and renderer rows must traverse the complete
   mapped/executor/orchestrator path.
@@ -358,7 +363,7 @@ fixture in `F-ED-00`.
 | `RT-ED-004` | historical WebGL2 capability evidence; current WebGPU parity remains unqualified | preserve the old evidence; any current claim requires a direct current-pin typed rounded-clip WebGPU oracle, with no WebGL2 implementation or fork |
 | `RT-ED-005` | landed high-level generic number/color authoring repair; independent promotion pending | PR #49 merge `08286481` is consumed by Editor; P09-C01 remains separately Partial on FL-E layout/TextStyle ownership |
 | `RT-ED-006` | retracted | retain tombstone only; no source work |
-| `RT-ED-007` | proven high-level authoring-surface generalization gap | nested `ViewModelNumberSource` path for transition duration; low-level path resolution already exists |
+| `RT-ED-007` | proven high-level authoring-surface generalization gap assigned to Runtime Fix | Defects Fix preserves the nested `ViewModelNumberSource` diagnosis/tests and independently verifies after the Runtime Fix landing; no duplicate Scene writer |
 | `LOC-001` | high-confidence structural Scene ownership mistranslation | type-specific remount carry versus one stable retained ViewModel instance |
 | `LOC-002` | committed Editor evidence isolates rematerialization losing nested ViewModel state | requalify the historical f4bb C++ citations at d788, then route the exact Scene/FL owner collision |
 | `LOC-003` | closed unlinked additive product feature | pinned C++ has no timed-hold primitive; the user decision authorizes no runtime port |
@@ -447,8 +452,13 @@ fixture in:
 - `tests/unit_tests/runtime/state_machine_test.cpp:719-748`;
 - `transition_duration_bind_nested.riv`.
 
-The repair belongs in the typed authoring facade, not the state-machine
-runtime.
+The exported authoring seam remains `crates/nuxie/src/scene.rs`, but the
+recorded owner path crosses Runtime Fix's active
+`crates/nuxie-runtime/src/state_machine.rs` and
+`crates/nuxie-runtime/src/state_machine/bindables.rs` work. Runtime Fix owns
+that complete production path. Defects Fix keeps its Scene candidate
+quarantined and owns only unchanged set → fire → `advance(0)` verification
+after the exact Runtime Fix landing.
 
 ### Browser presentation — `RT-ED-003`
 
@@ -715,12 +725,16 @@ The atlas row remains reported solely pending independent promotion.
 
 Target: `RT-ED-007`.
 
-Change the typed authoring operation to accept a `ViewModelNumberSource`
-path, validate every segment, and emit the same nested path shape as pinned
-C++. Reuse the existing low-level resolver.
+Runtime Fix owns the complete production change across the exported
+`crates/nuxie/src/scene.rs` seam and its active
+`crates/nuxie-runtime/src/state_machine.rs` /
+`crates/nuxie-runtime/src/state_machine/bindables.rs` owner path. Defects Fix
+must not author or duplicate that Scene/runtime change.
 
-Acceptance includes direct root and nested cases, invalid-path diagnostics,
-round-trip record identity, runtime duration updates, and linked `P19-C09`.
+Defects Fix preserves acceptance evidence for direct root and nested cases,
+invalid-path diagnostics, round-trip record identity, linked `P19-C09`, and
+the unchanged set → fire → `advance(0)` runtime-duration check, then
+independently verifies those results after Runtime Fix lands.
 
 ### `F-ED-05` — ParametricPath dirt callbacks
 
@@ -958,6 +972,23 @@ required after internal Lua WebAssembly repair task
 `019f9f34-a75f-7a11-a580-e9f54e610d93` on
 `levi/fix-wasm-lua-coroutine-resume`.
 
+The current negative proof is local/non-hosted at unfixed main
+`fe0a0a07db302ce2f0282a2d919ea249e83144e5` (tree `4512e0d7`) on Apple M5
+Max/Metal. The temporary, uncommitted `loc009_real_gpu_fail_closed_probe`
+records `max_bind_groups=4`, authors group 4 binding 0, expects `Err`/no
+shader, but receives `Ok` plus an uncaught `Device::create_shader_module`
+validation error. Its 2,129-byte raw log has SHA-256
+`93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611`.
+PR #54's positive-path 7/7 and browser results remain valid historical evidence
+but never exercised a device-rejected physical module.
+
+The canonical browser path separately remains a valid crash at
+`luaG_indexerror` / `luaD_throw`. Its cause is under investigation in the
+focused Lua WebAssembly dependency task, which now uses short durable
+diagnostic checkpoints after repeated system errors. LOC-009 is frozen outside
+the shared tracking line and its reopened cycle has consumed no runtime or
+superproject landing.
+
 The two rows share a real-Chrome smoke harness but not a defect mechanism:
 `LOC-019` owns nullable WebIDL error-scope decoding, while `LOC-009` owns RSTB
 and authored-WGSL consumption.
@@ -1070,8 +1101,8 @@ the atlas. A shared file is not proof of a semantic dependency.
   historical `RT-ED-004`; neither has a production writer.
 - `LOC-009` is not blocked by `LOC-019`.
 - `RT-ED-005` and `RT-ED-007` are independent API gaps: the former is landed
-  and consumed pending promotion, while the latter remains open
-  implementation work.
+  and consumed pending promotion, while the latter is assigned to Runtime Fix;
+  Defects Fix retains no production writer.
 
 ### Writer/file-lock order
 
@@ -1117,7 +1148,7 @@ ownership before activation.
 
 | candidate lane | order if closure overlaps | expected area to prove |
 |---|---|---|
-| Scene/API | open blocker `F-ED-04`, then qualified candidate work `F-ED-01/02`; landed `F-ED-03` has no writer | `scene.rs`, schema/export/import helpers, and any runtime handle seam |
+| Scene/API | Runtime Fix exclusively owns open blocker `F-ED-04`; Defects Fix may independently verify its landing before qualified candidate work `F-ED-01/02`; landed `F-ED-03` has no writer | `scene.rs`, schema/export/import helpers, and any runtime handle seam |
 | browser | qualified open `F-ED-10`; landed `F-ED-06/11` and no-repair `F-ED-08` have no writer, while `F-ED-07` remains historical-evidence only | `browser.rs`, WebGPU GPU-canvas/scripting seams, and resource owners; no `webgl2.rs` writer |
 | runtime dirt | qualified `F-ED-05` | waits for the exact FL-E Path/Shape owner lock |
 | text-derived | qualified `F-ED-09` rows split by discovered owner | Scene/import/binding, `text.rs`, font parser/shaper, or renderer |

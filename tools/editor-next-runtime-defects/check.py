@@ -424,13 +424,15 @@ LANDED_REPAIR_PROVENANCE = {
         "consumed_runtime_sha": "e72323c808b91d706ba3b745396beaca7accd69a",
         "consumed_superproject_sha": "4da896beb5ec6815f6b01a2433875274a321d06c",
     },
-    "LOC-009": {
-        "merged_repair_sha": "7f1450dc22ca7370eac9dc9f422351c2dfcc07ee",
+    "LOC-019": {
+        "merged_repair_sha": "ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9",
         "consumed_runtime_sha": "e72323c808b91d706ba3b745396beaca7accd69a",
         "consumed_superproject_sha": "4da896beb5ec6815f6b01a2433875274a321d06c",
     },
-    "LOC-019": {
-        "merged_repair_sha": "ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9",
+}
+HISTORICAL_LANDED_REPAIR_PROVENANCE = {
+    "LOC-009": {
+        "merged_repair_sha": "7f1450dc22ca7370eac9dc9f422351c2dfcc07ee",
         "consumed_runtime_sha": "e72323c808b91d706ba3b745396beaca7accd69a",
         "consumed_superproject_sha": "4da896beb5ec6815f6b01a2433875274a321d06c",
     },
@@ -1867,6 +1869,7 @@ def validate_prior_id_ratchet(
             )
         prior_revisions = prior_row.get("revisions")
         current_revisions = current_row.get("revisions")
+        historical_revisions = current_row.get("historical_revisions")
         if not isinstance(prior_revisions, dict) or not isinstance(
             current_revisions, dict
         ):
@@ -1878,11 +1881,19 @@ def validate_prior_id_ratchet(
                 and SHA_RE.fullmatch(prior_revision)
                 and current_revisions.get(field) != prior_revision
             ):
-                errors.append(
-                    f"{defect_id} immutable revision {field} changed "
-                    f"from {prior_revision!r} to "
-                    f"{current_revisions.get(field)!r}"
+                preserved_by_reopen = (
+                    len(current_history) > len(prior_history)
+                    and current_history[len(prior_history)].get("state")
+                    == "regression-reopened"
+                    and isinstance(historical_revisions, dict)
+                    and historical_revisions.get(field) == prior_revision
                 )
+                if not preserved_by_reopen:
+                    errors.append(
+                        f"{defect_id} immutable revision {field} changed "
+                        f"from {prior_revision!r} to "
+                        f"{current_revisions.get(field)!r}"
+                    )
     return prior
 
 
@@ -2258,6 +2269,14 @@ def validate_history(
         ):
             errors.append(
                 f"{defect_id} orchestrator-verified was not promoted by "
+                "independent-orchestrator"
+            )
+        if (
+            row_state == "regression-reopened"
+            and row.get("actor") != "independent-orchestrator"
+        ):
+            errors.append(
+                f"{defect_id} regression-reopened was not recorded by "
                 "independent-orchestrator"
             )
     for previous, current in zip(history_states, history_states[1:]):
@@ -2855,6 +2874,8 @@ def validate_history_verifications(
     orchestrator_verification: Any,
     errors: list[str],
     historical_executor_verification: Any = None,
+    revisions: Any = None,
+    historical_revisions: Any = None,
 ) -> None:
     history_states = [
         str(row.get("state", ""))
@@ -2900,16 +2921,88 @@ def validate_history_verifications(
                 f"{defect_id} historical_executor_verification pass has no evidence"
             )
 
+        if not isinstance(historical_revisions, dict):
+            errors.append(
+                f"{defect_id} regression-reopened history must preserve the "
+                "prior landing in historical_revisions"
+            )
+            historical_merged_repair = None
+        else:
+            historical_merged_repair = historical_revisions.get(
+                "merged_repair_sha"
+            )
+            expected_historical = HISTORICAL_LANDED_REPAIR_PROVENANCE.get(
+                defect_id
+            )
+            if expected_historical is not None:
+                for field, expected_value in expected_historical.items():
+                    if historical_revisions.get(field) != expected_value:
+                        errors.append(
+                            f"{defect_id} historical_revisions.{field} must "
+                            f"preserve {expected_value}"
+                        )
+            elif (
+                not isinstance(historical_merged_repair, str)
+                or SHA_RE.fullmatch(historical_merged_repair) is None
+            ):
+                errors.append(
+                    f"{defect_id} historical_revisions.merged_repair_sha "
+                    "must be a full SHA"
+                )
+
         fresh_executor_green = "executor-green" in current_cycle_states
         fresh_orchestrator_verified = (
             "orchestrator-verified" in current_cycle_states
         )
+        current_merged_repair = (
+            revisions.get("merged_repair_sha")
+            if isinstance(revisions, dict)
+            else None
+        )
+        current_landing_is_sha = (
+            isinstance(current_merged_repair, str)
+            and SHA_RE.fullmatch(current_merged_repair) is not None
+        )
+        if (
+            current_landing_is_sha
+            and current_merged_repair == historical_merged_repair
+        ):
+            errors.append(
+                f"{defect_id} regression-reopened current repair cycle "
+                "cannot reuse historical merged_repair_sha"
+            )
+        if current_landing_is_sha and not fresh_executor_green:
+            errors.append(
+                f"{defect_id} regression-reopened current repair cycle "
+                "cannot record merged_repair_sha before a fresh "
+                "executor-green event"
+            )
+        if fresh_executor_green and not current_landing_is_sha:
+            errors.append(
+                f"{defect_id} current repair cycle cannot reach executor-green "
+                "without a new merged_repair_sha"
+            )
         if fresh_executor_green:
             if executor_status != "pass":
                 errors.append(
                     f"{defect_id} current repair cycle contains executor-green "
                     "but executor_verification is not pass"
                 )
+            elif isinstance(historical_executor_verification, dict):
+                if executor_verification.get(
+                    "command"
+                ) == historical_executor_verification.get("command"):
+                    errors.append(
+                        f"{defect_id} current executor command must differ "
+                        "from historical_executor_verification"
+                    )
+                if executor_verification.get(
+                    "evidence"
+                ) == historical_executor_verification.get("evidence"):
+                    errors.append(
+                        f"{defect_id} current executor evidence must differ "
+                        "from historical_executor_verification"
+                    )
         elif executor_status not in {"pending", "fail"}:
             errors.append(
                 f"{defect_id} regression-reopened current repair cycle must "
@@ -3138,6 +3231,8 @@ def validate_closure_schema(
         row.get("orchestrator_verification"),
         errors,
         row.get("historical_executor_verification"),
+        row.get("revisions"),
+        row.get("historical_revisions"),
     )
 
     reproduction = str(row.get("reproduction_sha256", ""))
@@ -3659,6 +3754,24 @@ def check(
                 state,
                 errors,
             )
+        if defect_id == "LOC-009" and state == "regression-reopened":
+            for layer in ("rust", "editor"):
+                validate_result(
+                    defect_id,
+                    f"historical_{layer}",
+                    row.get(f"historical_{layer}_result"),
+                    state,
+                    errors,
+                )
+                current_result = row.get(f"{layer}_result")
+                if (
+                    not isinstance(current_result, dict)
+                    or current_result.get("status") != "fail"
+                ):
+                    errors.append(
+                        f"LOC-009 regression-reopened current {layer}_result "
+                        "must fail"
+                    )
 
         touch = {str(value) for value in row.get("touch", [])}
         declared_dont_touch = {

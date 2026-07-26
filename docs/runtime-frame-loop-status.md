@@ -4,13 +4,20 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-B independent candidate verification. FL-B1 through FL-B4 are
-  translated;
-  the focused C++ probes, runtime and probe-armed workspace floors,
-  ordinary/scripted differential gates, renderer pixel referee, C API, Apple
-  product/release checks, trace/checker, lint, format, and diff checks are
-  green. Committed-tree size is below 9 MiB, and the canonical performance
-  checkpoint is recorded. The exact candidate awaits independent acceptance.
+- Phase: FL-B acceptance correction. FL-B1 through FL-B4 are translated, but
+  rejected candidate `3ef06dd5ae07c16c5dc2aa29984412b926ae5426` is not
+  promotable. Correction commit
+  `89e4e3b1c9c04cab2e9cf7d52c76afac0e5fe62b` now carries the exact
+  AnimationReset color round-trip, fail-closed C++ probe archive provenance,
+  FLR adaptation validation, and durable performance evidence. Its focused
+  C++ probes, runtime and probe-armed workspace floors, ordinary/scripted
+  differential gates, renderer pixel referee, C API, Apple product/release
+  checks, trace/checker, lint, format, diff, size, and performance evidence are
+  current. The mandatory XCFramework floor exposed a pre-existing FL-A
+  stable-Rust compile defect in `constraints.rs`; per coordinator direction,
+  that separate repair must land on `origin/main`, then FL-B must rebase and
+  rerun every provenance-affected floor before a new immutable candidate is
+  published. No acceptance request is active and FL-C remains blocked.
   FL-B1 through FL-B3 are locally gated, and
   FL-A was independently
   accepted and promoted at
@@ -117,10 +124,10 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   membership vector, and empty-entry `None` elision are deleted.
 - Focused first-seen order, supported-family filtering, shared-lease, replay,
   and owned-empty-reset coverage is green. Full local floors: runtime
-  489 / 489; public facade 171 / 171; probe-armed workspace including C++
-  probe 726 / 726; ordinary and scripted golden each 317 / 317 entries and
+  491 / 491; public facade 171 / 171; probe-armed workspace including C++
+  probe 727 / 727; ordinary and scripted golden each 317 / 317 entries and
   647 / 647 segments with zero divergences, including `data_viz_demo` and
-  `db_health_tracker`; all 26 checker/capture/summarizer controls. Source
+  `db_health_tracker`; all 29 checker/capture/summarizer controls. Source
   trace and structural checks were refreshed on the candidate. All FL-B rows
   and FL-G01 remain pending/open until whole-wave independent acceptance.
 
@@ -153,22 +160,23 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   and direct-source reads, and AnimationState's required no-op occurrence.
   Pinned debug C++ probes are green for all nine `blend_state_*` cases plus
   direct-transition, animation-state, and mutable-bind-source cases (12 / 12).
-  Current local floors: runtime 490 / 490; probe-armed workspace runtime
-  490 / 490, facade 171 / 171, and C++ probe 726 / 726; ordinary and scripted
+  Current local floors: runtime 491 / 491; probe-armed workspace runtime
+  491 / 491, facade 171 / 171, and C++ probe 727 / 727; ordinary and scripted
   golden each 317 / 317 entries and 647 / 647 segments with zero divergences;
   source-bound trace 103 / 338 C++ files, 18 Rust modules, and 18 landmarks;
-  structural checker and its negative controls 27 / 27; renderer pixel referee
-  1,468 / 1,468 with zero divergences and zero gated failures; C API smoke
-  green; Apple release/product floor 66 / 66 plus artifact validation 15 / 15;
-  lint, format, and diff checks green. Committed-tree size at `10bc5b23` is
-  8,017,800 bytes with scripting off and 8,918,904 bytes with scripting on,
+  structural checker and its negative controls 29 / 29; renderer pixel referee
+  1,468 / 1,468 with 1,370 byte-exact, zero divergences, and zero gated
+  failures; C API smoke green; Apple release/product floor 66 / 66 plus
+  artifact validation 15 / 15; lint, format, and diff checks green.
+  Committed-tree size at `89e4e3b1` is 8,017,816 bytes with scripting off and
+  8,918,920 bytes with scripting on,
   both below the 9 MiB budget.
-- Canonical whole-corpus FL-B `perf-hot-loop` checkpoint at `10bc5b23`:
-  `docs/evidence/perf-hot-loop-fl-b-10bc5b23.json`, tracked with SHA-256
-  `6f55d78483446374a1cb690f22e3b0a22991ecf6300331d8f7f3b4830ff996bf`.
+- Canonical whole-corpus FL-B `perf-hot-loop` checkpoint at `89e4e3b1`:
+  `docs/evidence/perf-hot-loop-fl-b-89e4e3b1.json`, tracked with SHA-256
+  `3857f02a3a6b80c21d92a871e3a7ef7862adebac7dd167e677cf8cbfb7514987`.
   Across the unchanged six-entry / 11-sample corpus and 10,000 benchmark
-  repeats, the minimum aggregate is 1.684x C++ (41.707 ms C++, 70.222 ms
-  Rust); individual samples range from 1.416x to 2.025x. This remains above
+  repeats, the minimum aggregate is 1.628x C++ (42.982 ms C++, 69.988 ms
+  Rust); individual samples range from 1.158x to 2.026x. This remains above
   the program's final <=1.0x acceptance target. Per the frozen FL-B plan it is
   wave evidence only: it neither promotes FL-B nor authorizes
   benchmark-derived work or queue reordering.
@@ -597,10 +605,14 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Publish the current FL-B branch tip carrying production candidate
-   `e8cfdc63` and evidence snapshot `10bc5b23`, without promoting pending rows.
-2. Run independent acceptance; only the orchestrator verdict may promote the
-   FL-B rows and close FL-G01.
-3. At accepted FL-B boundary, reconcile the top-level program/status protocol
+1. Wait for the coordinator-owned stable-Rust `constraints.rs` repair to land
+   on `origin/main`; do not edit that FL-A owner in the FL-B correction series.
+2. Rebase `levi/fl-b` onto that exact landed main SHA, rerun the mandatory
+   Apple XCFramework floor and every full-battery artifact whose source/commit
+   provenance changed, then publish a new immutable FL-B candidate without
+   promoting pending rows.
+3. Request independent acceptance; only a binary orchestrator PROMOTE verdict
+   may promote the FL-B rows and close FL-G01.
+4. At accepted FL-B boundary, reconcile the top-level program/status protocol
    to one canonical NEXT pointer before selecting FL-C. Performance remains
    verification evidence, never the source of a work slice.

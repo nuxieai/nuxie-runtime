@@ -272,5 +272,8 @@ product/release/XCFramework checks, lint/format/diff, and committed-tree
 9 MiB size gate. FL-B and FL-C rows remain pending until their respective
 whole-wave independent verification.
 
-One canonical whole-corpus `perf-hot-loop` checkpoint is recorded after FL-C.
-Its result is acceptance evidence only; it does not reorder FL-D/FL-E.
+No performance checkpoint runs at the FL-C boundary. Canonical timing is
+deferred until every mapped FL-A-through-FL-E code row is ported and the
+complete correctness/structure floor is green. FL-C acceptance is therefore
+based on its source-corresponding behavioral, differential, structural, pixel,
+ABI, Apple, size, and provenance evidence; timing cannot reorder FL-D/FL-E.

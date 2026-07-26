@@ -66,9 +66,36 @@ or the next hot method. This is a binding pre-publication sequence:
 Focused tests run continuously while the family is being translated. The
 expensive full battery runs once after the checklist is closed and before the
 immutable candidate is published. Do not start the next production family
-until the current candidate has an acceptance verdict. Performance validates a
-faithful mapped port after structural closure; it never selects ad hoc patches
-within an incomplete family.
+until the current candidate has an acceptance verdict.
+
+Long-running gates and independent review do not create research idle time.
+While they run, prepare the **next** dependency-ready family's read-only C++
+source walk and closure checklist. That preparation may add no production
+writer, may not alter the frozen candidate base, and may not begin semantic
+Rust edits before the current verdict. Large waves such as DataBind/Artboard
+and Text/Layout must be partitioned into dependency-complete owner-family
+checklists before their first production edit; a wave-sized file count is not
+itself a reviewable family.
+
+One publication packet carries the complete checklist, exact pinned-C++
+citations, adversarial cases, permanent structural ratchets, immutable
+candidate SHA, and all applicable gate results. Reviewers must not reconstruct
+the closure from commits or discover missing family members incrementally.
+Every review finding becomes a durable differential or checker negative before
+resubmission.
+
+Keep one production writer. Parallel work is limited to read-only source
+mapping, oracle-probe design, and independent review. Rebase only at declared
+family boundaries. Reuse Cargo and C++ artifacts when their provenance keys
+(source SHA, compiler, configuration, feature defines, and archive hash) still
+match; clean-tree validation proves source identity and must not force an
+otherwise identical rebuild.
+
+Performance validates the completed FL-A-through-FL-E structural port. Do not
+run family- or wave-level timing gates while mapped FL production rows remain
+pending, and never use individual benchmark entries as implementation slices.
+After all FL code is ported and the correctness/structure floors are green,
+run the canonical performance acceptance once against the complete port.
 
 ---
 

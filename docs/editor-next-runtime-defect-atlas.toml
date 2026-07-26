@@ -1,5 +1,5 @@
-schema = "nuxie.editor-next.runtime-defect-atlas/v1"
-version = 1
+schema = "nuxie.editor-next.runtime-defect-atlas/v2"
+version = 2
 upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 editor_consumed_runtime_ref = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_base_ref = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -8,11 +8,40 @@ source_snapshot_ref = "4da896beb5ec6815f6b01a2433875274a321d06c"
 corrections_file = "docs/editor-next-runtime-defect-corrections.toml"
 fixtures_file = "tools/editor-next-runtime-defects/fixtures.toml"
 expected_defects = 25
-expected_formal_children = 8
+expected_formal_children = 4
 expected_candidate_children = 20
-expected_union_children = 27
+expected_union_children = 23
 expected_overlap_children = ["P09-C01"]
 reserved_ids = ["LOC-010"]
+
+[program]
+formal_objective = "own-complete-editor-reported-runtime-defect-queue"
+state_source = "docs/editor-next-runtime-defect-atlas.toml"
+schedule_source = "docs/editor-next-runtime-defect-status.md"
+completion_source = "docs/editor-next-runtime-defect-goal.md"
+port_plan = "docs/editor-next-runtime-defect-port-map.md"
+porting_law = "docs/PORTING.md"
+collision_ledger = "docs/runtime-frame-loop-ownership.toml"
+coordinator_thread = "019f9c97-edcf-76d3-a786-11f443da22d3"
+editor_consumption_required = false
+editor_merge_blocks_program = false
+parallel_execution = true
+runtime_fix_assignment_requires_tracked_dependency = true
+terminal_state = "closed"
+intake_cycle = 1
+
+[inbox]
+canonical_branch = "origin/levi/editor-next-cutover-assembly"
+runtime_defects_path = "plans/nuxie-editor-next-runtime-defects.md"
+parity_ledger_path = "plans/nuxie-editor-next-parity-ledger.json"
+last_consumed_editor_ref = "4da896beb5ec6815f6b01a2433875274a321d06c"
+last_consumed_runtime_defects_sha256 = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+last_consumed_parity_ledger_sha256 = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+newest_available_editor_ref = "4da896beb5ec6815f6b01a2433875274a321d06c"
+newest_available_runtime_defects_sha256 = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+newest_available_parity_ledger_sha256 = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+unconsumed_records = 0
+imported_atlas_count = 25
 
 [floors]
 runtime_tests = 414
@@ -234,22 +263,22 @@ owner_class = "renderer"
 classification = "unqualified"
 ticket = "F-ED-06"
 fixture_id = "fed.rt_ed_003.browser_present_readback"
-preliminary_disposition = "Browser presentation adapter defect outside runtime traversal."
-reproduction_sha256 = "13695005c41c1d398a27f6a15c1f7e9ec5b29ad65196fa60b911d9bbf62b005f"
-rust_stimulus = "pending: F-ED-06 must minimize the direct Rust stimulus for RT-ED-003"
-cpp_stimulus = "pending: F-ED-06 must minimize the pinned-C++ stimulus or prove no equivalent for RT-ED-003"
-source_files = ["pending: F-ED-06 source-file correspondence"]
-source_members = ["pending: F-ED-06 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-06 lifecycle qualification"]
-rust_owner = "pending: F-ED-06 exact Rust owner"
-displaced_mechanism = "pending: F-ED-06 displaced-mechanism inventory"
+preliminary_disposition = "Resolved WebGPU presentation adapter defect outside runtime traversal: PR #55 separates ordinary direct presentation from explicit RGBA readback; the row remains reported pending independent promotion."
+reproduction_sha256 = "971813001f3bde9cc86954dc1a0369b5858b1958d286e77d53eebc6f6c4433fe"
+rust_stimulus = "BrowserFactory constructs one required-WebGPU canvas presentation domain; BrowserFrame::present acquires and directly presents the current surface texture without CPU readback, while BrowserFrame::finish_with_readback alone maps and returns exact RGBA. The lifecycle fixtures cover resize/frame leases, bounded Outdated reconfiguration, bounded Lost recreation on the retained device/canvas, persistent typed failure, frame release, and disposal."
+cpp_stimulus = "not-applicable: pinned C++ d788e8ec6e8b598526607d6a1e8818e8b637b60c has no browser canvas adapter, BrowserFactory, BrowserFrame, or WebGPU surface-acquisition API. Its ordinary render-versus-explicit-snapshot separation is conceptual evidence only; this additive Nuxie browser adapter is governed by the WebGPU presentation contract and unchanged renderer pixels."
+source_files = ["crates/nuxie-renderer/src/browser.rs","crates/nuxie-renderer/src/browser_surface_lifecycle.rs","crates/nuxie-renderer/src/present_pipeline.rs","crates/nuxie-renderer/src/surface.rs","tools/browser-renderer-smoke/src/lib.rs","tools/browser-renderer-smoke/run-browser.cjs","tools/check-browser-webgpu-only.sh","apps/nuxie-dashboard/tests/e2e/project-editor/device-frame-bezel-drag.spec.ts","apps/nuxie-dashboard/tests/e2e/editor-next-browser-proof/browser-proof.spec.ts","scripts/audit-editor-readback-boundary.mjs"]
+source_members = ["BrowserFactory::new","BrowserFactory::resize","BrowserFactory::begin_frame","BrowserFrame::present","BrowserFrame::finish_with_readback","BrowserFrameLease::drop","BrowserPresentation::current_texture","BrowserPresentation::reconfigure_surface","BrowserPresentation::recreate_surface","acquire_surface_texture","SurfaceRecoveryAction","PresentPipeline::new","PresentPipeline::encode"]
+lifecycle_phases = ["required-WebGPU factory/device/canvas-surface construction","premultiplied-alpha surface configuration","frame begin and active-frame lease retention","ordinary direct surface acquisition and GPU presentation without MAP_READ","explicit finish_with_readback GPU-to-CPU RGBA mapping","idle resize reconfiguration and in-flight resize rejection","Outdated reconfigure-and-retry exactly once","Lost recreate-and-retry exactly once on the retained device and canvas","persistent second acquisition failure returned as a typed bounded error","frame lease release and factory disposal"]
+rust_owner = "crates/nuxie-renderer/src/browser.rs owns BrowserFactory/BrowserFrame and the BrowserPresentation surface; browser_surface_lifecycle.rs owns bounded acquisition recovery; present_pipeline.rs and surface.rs own the shared GPU-only presentation blit and alpha contract; browser smoke and Editor proof files own executable boundary evidence."
+displaced_mechanism = "PR #55 removed the browser wrapper contract that made every ordinary finish allocate/map a full RGBA result and present through CPU ImageData. Ordinary frames now present directly; only explicit finish_with_readback retains the readback path."
 dependencies = ["F-ED-00B","F-ED-06"]
-target_tests = ["pending:F-ED-06"]
+target_tests = ["make browser-webgpu-only-check","cargo test -p nuxie-renderer --lib","pnpm --dir apps/nuxie-dashboard run editor-next:product-host:browser-proof","node scripts/audit-editor-readback-boundary.mjs","PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor device-frame-bezel-drag.spec.ts --workers=1"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
-owning_ledger = "pending: F-ED-06 owning-ledger link"
-adaptation_rule = "pending: F-ED-06 rule citation"
-decision_row = "pending: F-ED-06 decision-row disposition"
-touch = []
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#RT-ED-003"
+adaptation_rule = "No direct pinned-C++ porting rule applies to the additive browser adapter. Preserve one GPU-native ordinary-presentation owner, a separate explicit-readback owner, exact surface identity, bounded recovery, and typed persistent failure; do not add a CPU presentation fallback or WebGL2 path."
+decision_row = "Pinned C++ has no directly corresponding browser adapter, so this is not a runtime owner-family port. The exact additive Nuxie repair separates ordinary direct WebGPU presentation from explicit RGBA capture and preserves bounded surface recovery without changing the renderer/runtime boundary."
+touch = ["crates/nuxie-renderer/src/browser.rs","crates/nuxie-renderer/src/browser_surface_lifecycle.rs","crates/nuxie-renderer/src/present_pipeline.rs","crates/nuxie-renderer/src/surface.rs","tools/browser-renderer-smoke/src/lib.rs","tools/browser-renderer-smoke/run-browser.cjs","tools/check-browser-webgpu-only.sh"]
 dont_touch = ["@active-fl-lease"]
 formal_children = ["P04-C01", "P19-C03"]
 candidate_children = []
@@ -259,45 +288,56 @@ proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
 runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
 parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
-original_localization_rust_sha = { status = "pending", reason = "F-ED-06 must recover the original localization Rust SHA" }
-editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
-consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
-consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
+editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+investigation_head_sha = "a1c56b5a80c88db4f6cee6550795b6e242394c46"
+merged_repair_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+consumed_superproject_sha = "4da896beb5ec6815f6b01a2433875274a321d06c"
 [defect.renderer_provenance]
-status = "pending"
-reason = "F-ED-06 must stamp backend, mode, features, surface, Dawn, and reference executable."
+status = "complete"
+backend = "BrowserWebGpu required-WebGPU presentation; rust-wgpu over Metal for the unchanged native pixel referee"
+dawn_revision = "211333b2e3e429c3508f25c81c547f602adf448c"
+mode = "ordinary browser direct presentation versus explicit RGBA readback"
+feature_flags = "WebGPU-only; no backend selector, fallback, CPU presentation blit, or ordinary-frame MAP_READ"
+surface = "ProductHost browser canvas plus explicit readback texture; native Apple M5 Max Metal corpus as renderer referee"
+reference_executable = "ProductHost browser proof and renderer-replay-ffi-dawn static reference corpus"
+reference_stamp_sha256 = "9077e7a86823453b7820e0bfb0fa13f7235a0d6f5e9df99d74d4353a5f4e05b5"
+command = "pnpm --dir apps/nuxie-dashboard run editor-next:product-host:browser-proof; node scripts/audit-editor-readback-boundary.mjs; PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor device-frame-bezel-drag.spec.ts --workers=1"
+evidence = "At committed Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c consuming e72323c808b91d706ba3b745396beaca7accd69a, each ordinary frame records getCurrentTexture=1, mapAsyncRead=0, and putImageData=0; explicit readback records getCurrentTexture=0 and mapAsyncRead=1 while preserving exact RGBA output. The readback audit reports zero prohibited matches and the unchanged normal-timeout device-frame drag gate passes 1/1."
 [defect.executor_verification]
-status = "pending"
-reason = "F-ED-06 executor fixture has not run."
+status = "pass"
+command = "PR #55 local closeout at head a1c56b5a80c88db4f6cee6550795b6e242394c46"
+evidence = "The corrected head passed the full Browser WebGPU smoke matrix, adversarial same-present lifecycle checks, renderer unit tests (418 passed, 0 failed, 40 ignored), host and wasm Clippy, format, and the exact fuzz-smoke gate. Its tree rebase-merged as e72323c808b91d706ba3b745396beaca7accd69a."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "F-ED-06 has no executor-green result to verify."
+reason = "RT-ED-003 has exact merged and consumed evidence but remains reported until independent orchestrator verification and promotion."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:RT-ED-003"
 [defect.cpp_result]
-status = "pending"
-reason = "Presentation/readback equivalence has not been normalized at the pinned reference."
+status = "not-applicable"
+reason = "Pinned C++ has no browser canvas adapter or WebGPU surface-acquisition API. The direct-presentation versus explicit-readback repair is additive Nuxie browser infrastructure and is refereed by the WebGPU contract plus unchanged native renderer pixels, not claimed as a C++ runtime-file port."
 [defect.rust_result]
-status = "pending"
-reason = "Direct browser presentation fixture has not been rerun at the investigation base."
+status = "pass"
+command = "PR #55 WebGPU browser and renderer lifecycle gates at a1c56b5a80c88db4f6cee6550795b6e242394c46"
+evidence = "Ordinary frames present directly to the WebGPU surface; explicit capture alone enters the MAP_READ path. Lost and outdated surface recovery is bounded, premultiplied alpha is retained, and persistent failure remains typed."
 [defect.editor_result]
-status = "pending"
-reason = "Linked product fixtures await normalized three-layer evidence."
+status = "pass"
+command = "pnpm --dir apps/nuxie-dashboard run editor-next:product-host:browser-proof && node scripts/audit-editor-readback-boundary.mjs && PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor device-frame-bezel-drag.spec.ts --workers=1"
+evidence = "Committed Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c consumes e72323c808b91d706ba3b745396beaca7accd69a. Ordinary presentation records getCurrentTexture=1/mapAsyncRead=0/putImageData=0; explicit readback records getCurrentTexture=0/mapAsyncRead=1; the product-host proof and unchanged normal-timeout device-frame drag gate pass, including the focused drag result 1/1. P19-C03 is complete; P04-C01's remaining Editor work is not a runtime-presentation repair dependency."
 
 [[defect]]
 id = "RT-ED-004"
 title = "WebGL2 cannot execute the typed rounded content clip"
-source_class = "active-runtime-dependency"
+source_class = "historical-webgl2-evidence"
 state = "reported"
 owner_class = "renderer"
 classification = "unqualified"
 ticket = "F-ED-07"
 fixture_id = "fed.rt_ed_004.webgl2_rounded_clip_402x874_r57"
-preliminary_disposition = "Capability failure; C++ parity versus additive backend feature is still unproved."
+preliminary_disposition = "Historical WebGL2 capability evidence only: WebGL2 is retired and no implementation or dependency fork is authorized; any current clip claim must be requalified against pinned C++ on the supported WebGPU path."
 reproduction_sha256 = "5267a1f0d056131b477e8854de6c33744648c9831f8ea393b22bc0390e810870"
 rust_stimulus = "pending: F-ED-07 must minimize the direct Rust stimulus for RT-ED-004"
 cpp_stimulus = "pending: F-ED-07 must minimize the pinned-C++ stimulus or prove no equivalent for RT-ED-004"
@@ -314,7 +354,7 @@ adaptation_rule = "pending: F-ED-07 rule citation"
 decision_row = "pending: F-ED-07 decision-row disposition"
 touch = []
 dont_touch = ["@active-fl-lease"]
-formal_children = ["P04-C01", "P05-C01", "P10-C01", "P12-C01", "P15-C01"]
+formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
@@ -330,7 +370,7 @@ consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed a
 consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
 [defect.renderer_provenance]
 status = "pending"
-reason = "F-ED-07 must stamp backend, mode, features, surface, Dawn, and reference executable."
+reason = "Historical WebGL2 evidence is preserved without authorizing that backend; any current claim must stamp a WebGPU-only backend, mode, features, surface, Dawn revision, and reference executable."
 [defect.executor_verification]
 status = "pending"
 reason = "F-ED-07 executor fixture has not run."
@@ -343,13 +383,13 @@ actor = "editor-cutover"
 evidence = "runtime-defects:RT-ED-004"
 [defect.cpp_result]
 status = "pending"
-reason = "The exact current-pin typed rounded-clip oracle is the first qualification action."
+reason = "The exact current-pin typed rounded-clip oracle remains required for any new WebGPU-only claim; the historical WebGL2 observation is not a current parity verdict."
 [defect.rust_result]
 status = "pending"
-reason = "The exact WebGL2 typed rounded-clip fixture has not been rerun by F-ED."
+reason = "No WebGL2 rerun or repair is authorized; a current Rust result must use the supported WebGPU path and the exact typed rounded-clip stimulus."
 [defect.editor_result]
 status = "pending"
-reason = "Linked product children await normalized three-layer evidence."
+reason = "There are no current formal or candidate product children; the historical observation remains evidence-only pending any explicit WebGPU-only requalification."
 
 [[defect]]
 id = "RT-ED-005"
@@ -360,7 +400,7 @@ owner_class = "api"
 classification = "api-surface-gap"
 ticket = "F-ED-03"
 fixture_id = "fed.rt_ed_005.generic_visual_property_bind"
-preliminary_disposition = "Exact Scene authoring API repair implemented at 4eec745b704e9920f67098138963dc973e7b2d87 with the independent-review direction closure at e2d274d8d3b8de3af705d18506a6d48eadebfc0c: generic typed propertyKey binds and stable LayoutComponentStyle targets now reuse the existing faithful runtime DataBind owner."
+preliminary_disposition = "Exact Scene authoring API repair implemented at 4eec745b704e9920f67098138963dc973e7b2d87 with the independent-review direction closure at e2d274d8d3b8de3af705d18506a6d48eadebfc0c; PR #49 final head f0bd914fbac1fd4cf82814216f2ddc88c3e32083 rebase-merged as the same tree at 08286481b4e7420768f625f901a944f313b84903. Generic typed propertyKey binds and stable LayoutComponentStyle targets reuse the existing faithful runtime DataBind owner."
 reproduction_sha256 = "cc870d4edc91d644d52f93adfc079d40289b27a23b15c3a0fba4d74331284918"
 rust_stimulus = "public Scene authors number/color binds for Rectangle.width, SolidColor.colorValue, converter-free ToSource and source-first TwoWay, converted TwoWay worldOpacity, all four LayoutComponentStyle padding keys, and two component-list occurrence-local widths; records are encoded and reimported through File::import before runtime assertions"
 cpp_stimulus = "historical Editor localization f4bb3025e263ad1a646ef6971358577a0aa6bfa2 retained as provenance; per COR-01, current F-ED oracle is data_binding_test.cpp:39-111 plus DataBind propertyKey/target-adjacency/context-value/reconcile source audit and executable probe at d788e8ec6e8b598526607d6a1e8818e8b637b60c"
@@ -386,18 +426,18 @@ runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96
 parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-investigation_head_sha = "e2d274d8d3b8de3af705d18506a6d48eadebfc0c"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
-consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
-consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+investigation_head_sha = "f0bd914fbac1fd4cf82814216f2ddc88c3e32083"
+merged_repair_sha = "08286481b4e7420768f625f901a944f313b84903"
+consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+consumed_superproject_sha = "4da896beb5ec6815f6b01a2433875274a321d06c"
 [defect.renderer_provenance]
 status = "not-applicable"
 reason = "This row does not qualify renderer output."
 [defect.executor_verification]
 status = "pass"
-command = "make cpp-probe; env -u CPP_CONFIG -u RUST_PROFILE make cpp-oracle-workspace-tests; env -u CPP_CONFIG -u RUST_PROFILE make golden-compare; env -u CPP_CONFIG -u RUST_PROFILE make scripted-golden-compare; make capi-smoke; make apple-runtime-check; make runtime-frame-loop-port-check; make b6-audit-check; make lint-gate; cargo fmt --all -- --check; git diff --check; make size-report; make renderer-golden; make browser-webgpu-only-check; post-review: cargo test -p nuxie --lib; cargo test -p nuxie --test scene_authoring; cargo test -p nuxie --test data_converter_authoring; cargo test -p nuxie-runtime --lib; CPP_CONFIG=release make cpp-probe"
-evidence = "The original executor battery passed all 721 probe-armed workspace tests, 317/317 ordinary golden entries and 647/647 segments, 317/317 scripted entries and 647/647 segments, 1468/1468 renderer rows, CAPI/Apple/frame-loop/B-6/lint/format/diff/WebGPU floors, and the 8.74 MiB SDK ceiling. The independent-review closure reran 144/144 nuxie lib, 170/170 Scene authoring, 10/10 converter authoring, 414/414 runtime lib, format/diff/lint, and an executable C++ data_binding_test.riv probe against freshly rebuilt d788e8ec libraries."
+command = "PR #49 closeout at final head f0bd914fbac1fd4cf82814216f2ddc88c3e32083; make cpp-probe; env -u CPP_CONFIG -u RUST_PROFILE make cpp-oracle-workspace-tests; env -u CPP_CONFIG -u RUST_PROFILE make golden-compare; env -u CPP_CONFIG -u RUST_PROFILE make scripted-golden-compare; make capi-smoke; make apple-runtime-check; make runtime-frame-loop-port-check; make b6-audit-check; make lint-gate; cargo fmt --all -- --check; git diff --check; make size-report; make renderer-golden; make browser-webgpu-only-check"
+evidence = "PR #49 final head f0bd914fbac1fd4cf82814216f2ddc88c3e32083 and merge 08286481b4e7420768f625f901a944f313b84903 have the same tree. The executor battery passed all 721 probe-armed workspace tests, 317/317 ordinary and scripted golden entries with 647/647 segments each, 1468/1468 renderer rows, CAPI/Apple/frame-loop/B-6/lint/format/diff/WebGPU floors, and the 8.74 MiB SDK ceiling. Independent review also reran 144/144 nuxie lib, 170/170 Scene authoring, 10/10 converter authoring, 414/414 runtime lib, and an executable C++ data_binding_test.riv probe."
 [defect.orchestrator_verification]
 status = "pending"
 reason = "F-ED-03 is executor-green and awaits the orchestrator's independent unchanged-floor verification."
@@ -414,8 +454,9 @@ status = "pass"
 command = "cargo test -p nuxie --lib; cargo test -p nuxie --test scene_authoring; cargo test -p nuxie --test data_converter_authoring; cargo test -p nuxie-runtime --lib"
 evidence = "144/144 nuxie lib, 170/170 Scene authoring, 10/10 converter authoring, and 414/414 runtime lib passed; exact encoded File::import tests cover number, color, converter-free ToSource/source-first TwoWay, converted TwoWay, four padding keys, and occurrence-local values."
 [defect.editor_result]
-status = "pending"
-reason = "P09-C01 and the focused paywall reproduction are not yet bound to one fixture."
+status = "pass"
+command = "Editor RT-ED-005 retained/cold/exact-RIV property-bind consumer at clean checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c"
+evidence = "Editor consumes descendant runtime e72323c808b91d706ba3b745396beaca7accd69a, including PR #49 merge 08286481b4e7420768f625f901a944f313b84903. The occurrence-local generic number/color primitive is consumed for existing Stroke and SolidColor paint targets without an Editor raw-record or remount workaround. P09-C01 remains separately Partial because ordinary LayoutComponent/LayoutComponentStyle padding and TextStyle font-size/line-height authoring plus C++ dirt/reflow parity belong to the FL-E layout/text dependency, not because the landed RT-ED-005 paint primitive is unconsumed."
 
 [[defect]]
 id = "RT-ED-006"
@@ -909,15 +950,15 @@ reason = "P09-C05 awaits the identical direct owner proof."
 
 [[defect]]
 id = "LOC-006"
-title = "Nested conditional child remains in WebGL2 pixels after visibility write"
+title = "Nested conditional child remains in required-WebGPU pixels after visibility write"
 source_class = "candidate"
 state = "reported"
 owner_class = "renderer"
 classification = "unqualified"
 ticket = "F-ED-08"
-fixture_id = "fed.loc_006.webgl2_stale_pixels"
-preliminary_disposition = "WebGL2 clip/composite candidate distinct from RT-ED-004."
-reproduction_sha256 = "640a99c530800931847e251ee8415e29f0ec641bb7e964f9cb290351bd1a034c"
+fixture_id = "fed.loc_006.webgpu_conditional_visibility"
+preliminary_disposition = "Current required-WebGPU conditional-visibility candidate distinct from the historical RT-ED-004 backend observation."
+reproduction_sha256 = "860b0ed269da38febed8415518024638ebec637016d5a08c021925eb7674c6c3"
 rust_stimulus = "pending: F-ED-08 must minimize the direct Rust stimulus for LOC-006"
 cpp_stimulus = "pending: F-ED-08 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-006"
 source_files = ["pending: F-ED-08 source-file correspondence"]
@@ -965,7 +1006,7 @@ status = "pending"
 reason = "Identical draw/hit/pixel fixture has not been run through the pinned reference."
 [defect.rust_result]
 status = "pending"
-reason = "Direct WebGL2 logical membership and pixel stages need normalization."
+reason = "Direct required-WebGPU logical membership and pixel stages need normalization against the identical pinned-C++ stimulus."
 [defect.editor_result]
 status = "pending"
 reason = "P09-C04 awaits direct backend localization."
@@ -1131,11 +1172,11 @@ runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96
 parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = "ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9"
-editor_last_consumed_runtime_sha = "ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9"
-investigation_head_sha = "22e4900243ee92a436afc1609f456525e8312352"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
-consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
-consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+investigation_head_sha = "1fc9ac4f5926b7a0799211cd66cbf9231a6843fd"
+merged_repair_sha = "7f1450dc22ca7370eac9dc9f422351c2dfcc07ee"
+consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+consumed_superproject_sha = "4da896beb5ec6815f6b01a2433875274a321d06c"
 [defect.renderer_provenance]
 status = "complete"
 backend = "BrowserWebGpu WebGPU for the required-browser fixture; rust-wgpu over Metal for native retained-image and pixel qualification"
@@ -1149,8 +1190,8 @@ command = "cargo test -p nuxie-renderer --lib; cargo test -p nuxie --features sc
 evidence = "Focused last-wins decoder, malformed-sidecar, arbitrary logical/physical entry, declaration-order default, named-entry pixel differential, ModuleInfo usage/visibility, shared-module, converter-deletion, imported-script, real Metal pixel, and wasm32 WebGPU compile gates are green; the required-WebGPU browser matrix and 1,468-row native renderer corpus pass at the exact code checkpoint."
 [defect.executor_verification]
 status = "pass"
-command = "complete closeout battery at 22e4900243ee92a436afc1609f456525e8312352"
-evidence = "414/414 runtime, 144/144 nuxie, 721/721 pinned-C++ probes in the debug probe-armed workspace, ordinary and scripted 317/317 entries plus 647/647 segments with zero divergences, renderer 1468/1468, required-WebGPU real-Chrome, renderer consumer, C API, Apple, frame-loop, B-6, lint, format, and diff gates are green; the release-size SDK closures are 7984504 bytes without scripting and 8885736 bytes with scripting, both below the 9437184-byte ceiling."
+command = "final PR #54 closeout at head 1fc9ac4f5926b7a0799211cd66cbf9231a6843fd"
+evidence = "The final corrective PR #54 head passed the local canonical Apple, C-ABI, ABI/header, XCFramework, and release floors. Hosted parity, Phase R pixels, and every hosted non-Apple canonical check completed green on that landing candidate. The four hosted Apple jobs remained queued because no self-hosted runner was assigned; they were recorded as infrastructure state, not claimed green or waived code failures. PR #54 then rebase-merged the same repair at 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee."
 [defect.orchestrator_verification]
 status = "pending"
 reason = "LOC-009 is executor-green and awaits independent orchestrator verification."
@@ -1183,9 +1224,9 @@ status = "pass"
 command = "cargo test -p nuxie-scripting; cargo test -p nuxie-renderer --lib; cargo test -p nuxie --features scripting --test imported_gpu_canvas; cargo check -p nux-capi --features size-report-roots; rustup run stable cargo check -p browser-renderer-smoke --target wasm32-unknown-unknown"
 evidence = "The exact inner RSTB hash is 546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d; 9 focused decoder rows, 2 focused scripting selection rows, the complete scripting suite, 409 renderer rows, 3 imported scripting rows with real Metal pixels, C API public-root compilation, and wasm32 WebGPU compilation pass. Source ratchets prove the target-1 GLSL translator, wgpu GLSL feature, and pp-rs/unicode-xid closure are absent."
 [defect.editor_result]
-status = "fail"
+status = "pass"
 command = "GPU_CANVAS_GPU=1 PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor editor-next-cutover.spec.ts gpu-canvas-preview.spec.ts"
-evidence = "At consumed runtime ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9, the unchanged four-test ordinary-route command reports 3 passed and 1 failed in 1.5 minutes, exit 1. Editor producer checkpoint f9d798dd3b1f9b2dfdbeb74dcdf4485aae4519f6 emits exact target-0 WGSL plus target-16 BindingMap and reaches ready WebGPU resources before typed RuntimeRejected. The unchanged P14-C01 rerun awaits the merged runtime consumer repair."
+evidence = "At clean Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c consuming runtime e72323c808b91d706ba3b745396beaca7accd69a, the unchanged P14-C01 ordinary required-WebGPU command passed 4/4 in 1.6 minutes, exit 0. Retained console SHA-256 c2324d04cf1baa6ac024ae3b4f0607ca3a4ad64ecace7ac67e612707480527f0; retained complete report/results archive SHA-256 515f53c5710c8069bf60f4c64c64568c219ee3cfb242fbe8e59846b1c0f96bd3. PR #54 merged the corrective runtime repair at 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee; this row remains executor-green only until independent orchestrator verification and promotion."
 
 [[defect]]
 id = "LOC-011"
@@ -1252,14 +1293,14 @@ reason = "P08-C06 shares measurement and empty-text candidates."
 
 [[defect]]
 id = "LOC-012"
-title = "One published artifact rasterizes differently across Rust backends"
+title = "One published artifact needs a pinned-C++ versus Rust WebGPU raster differential"
 source_class = "candidate"
 state = "reported"
 owner_class = "renderer"
 classification = "unqualified"
 ticket = "F-ED-10"
 fixture_id = "fed.loc_012.backend_raster_decomposition"
-preliminary_disposition = "Renderer-backend differential with conflicting pixel counts."
+preliminary_disposition = "Current renderer differential must compare pinned C++ with the supported Rust WebGPU path; retired-backend counts are historical provenance only."
 reproduction_sha256 = "8637e5eb0d472f75c8eb81a4bcb36dd40a44a7ed3ca9546b7eece439587c53e6"
 rust_stimulus = "pending: F-ED-10 must minimize the direct Rust stimulus for LOC-012"
 cpp_stimulus = "pending: F-ED-10 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-012"
@@ -1308,7 +1349,7 @@ status = "pending"
 reason = "Applicable C++ renderer path and exact capture provenance are not normalized."
 [defect.rust_result]
 status = "pending"
-reason = "WebGPU and WebGL2 counts need mode-labeled artifacts."
+reason = "The supported Rust WebGPU result needs a mode-labeled, same-input comparison with the pinned C++ reference."
 [defect.editor_result]
 status = "pending"
 reason = "P19-C08 awaits separation of text and feather effects."
@@ -1385,7 +1426,7 @@ owner_class = "renderer"
 classification = "unqualified"
 ticket = "F-ED-10"
 fixture_id = "fed.loc_014.feather_owner"
-preliminary_disposition = "High-confidence backend mechanism divergence; symptom attribution remains unproved."
+preliminary_disposition = "High-confidence feather-owner divergence whose current attribution requires the identical pinned-C++ versus supported Rust WebGPU oracle; retired-backend observations are historical provenance only."
 reproduction_sha256 = "22aff767d33f85d33322abbee14d510b80bf6082ef1dbd60c068f5bf204d24c9"
 rust_stimulus = "pending: F-ED-10 must minimize the direct Rust stimulus for LOC-014"
 cpp_stimulus = "pending: F-ED-10 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-014"
@@ -1434,7 +1475,7 @@ status = "pending"
 reason = "Feather/ShapePaint/LUT ownership has not been compared at the pin."
 [defect.rust_result]
 status = "pending"
-reason = "The local Gaussian image plan needs direct owner/resource evidence."
+reason = "The supported Rust WebGPU feather owner/resource lifecycle needs direct same-input evidence against pinned C++."
 [defect.editor_result]
 status = "pending"
 reason = "P08-C09 awaits direct renderer ownership classification."
@@ -1726,11 +1767,11 @@ runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96
 parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = "95027109c89f651835c76646ebf4d8734f032f07"
-editor_last_consumed_runtime_sha = "95027109c89f651835c76646ebf4d8734f032f07"
-investigation_head_sha = "df453bb4b771361755ea1166fd2dd7954cee1dc9"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
-consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
-consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+investigation_head_sha = "22454fb58bc80d95174ca78d0c0d4d611b0d5a08"
+merged_repair_sha = "ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9"
+consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+consumed_superproject_sha = "4da896beb5ec6815f6b01a2433875274a321d06c"
 [defect.renderer_provenance]
 status = "complete"
 backend = "BrowserWebGpu WebGPU for the focused error-scope fixture; rust-wgpu over Metal for the native pixel referee"
@@ -1744,8 +1785,8 @@ command = "make browser-webgpu-only-check && make renderer-golden"
 evidence = "Focused clean-scope row returns a 64-pixel buffer with 32 red pixels and the paired invalid-WGSL row returns a concrete validation error; browser prohibited-surface count is zero; renderer-corpus exact=1468 diverges=0 gated=0 total=1468."
 [defect.executor_verification]
 status = "pass"
-command = "complete closeout battery at b6b5031a0bab850e71b02a375d696c02ce079719; focused real-Chrome and immutable provenance rerun at df453bb4b771361755ea1166fd2dd7954cee1dc9"
-evidence = "414/414 runtime, 141/141 nuxie, 721/721 C++ probes, ordinary and scripted 317/317 entries plus 647/647 segments with zero divergences, renderer 1468/1468, C API and workspace green, and size 9168392 bytes under 9437184 at b6b5031a; exact clean-null, 32-red-pixel, concrete-GPUError, WebGPU-only, and immutable Editor provenance checks pass at df453bb4."
+command = "PR #51 local closeout at final head 22454fb58bc80d95174ca78d0c0d4d611b0d5a08"
+evidence = "PR #51 final head 22454fb58bc80d95174ca78d0c0d4d611b0d5a08 and merge ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9 have the same tree. Local executor evidence includes 414/414 runtime, 141/141 nuxie, 721/721 C++ probes, ordinary and scripted 317/317 entries plus 647/647 segments with zero divergences, renderer 1468/1468, C API and workspace green, and size 9168392 bytes under 9437184; exact clean-null, 32-red-pixel, concrete-GPUError, and required-WebGPU provenance checks pass."
 [defect.orchestrator_verification]
 status = "pending"
 reason = "F-ED-11 executor-green result awaits independent orchestrator verification."
@@ -1777,6 +1818,6 @@ status = "pass"
 command = "make browser-webgpu-only-check"
 evidence = "The pre-repair row traps at vendored wgpu Error::from_js on a clean null result; the repaired row returns a 64-pixel buffer with exactly 32 red pixels and reports a clean scope, while an invalid-WGSL scope returns a concrete validation error and existing device/interface/uniform failure checks remain green. Complete repository floors are green at b6b5031a and focused review corrections are green at df453bb4."
 [defect.editor_result]
-status = "fail"
+status = "pass"
 command = "GPU_CANVAS_GPU=1 pnpm --dir apps/nuxie-dashboard exec playwright test --config playwright.gpu-canvas.config.ts"
-evidence = "At runtime 95027109: 1 passed, 16 failed in 15.3m. Every inspected real-Chrome trace traps before readiness in wgpu BrowserWebGpu Error::from_js via MakeSendFuture. Editor rerun awaits a merged repair SHA."
+evidence = "At clean Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c consuming runtime e72323c808b91d706ba3b745396beaca7accd69a, the unchanged required-WebGPU P14-C06 command passes 17/17: ProductRuntimeTools source validation, both retained-session fixtures, single and batch snapshots, and all 12 WebGPU pixel fixtures reach readiness. PR #51 merged the nullable-error repair at ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9; the row remains executor-green pending independent orchestrator verification."

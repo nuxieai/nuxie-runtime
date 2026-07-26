@@ -7,8 +7,8 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: serialized evidence-only closure and active validation of the landed
-  authored-shader repair;
+- phase: serialized evidence-only closure and an active-but-waiting
+  authored-shader production repair;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - investigation base: `e72323c808b91d706ba3b745396beaca7accd69a`;
 - Editor's last consumed runtime:
@@ -28,10 +28,14 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - latest control-plane landing: checkpoint-7ca reconciliation PR #63
   rebase-merged at exact runtime main
   `fe0a0a07db302ce2f0282a2d919ea249e83144e5`;
-- active control-plane lane: serialize the five evidence-only closures with
-  `LOC-006` first while the `LOC-009` validation lane remains active;
-- active production-repair validation lane: `LOC-009` awaitable authored-shader
-  validation of the already-landed repair;
+- active control-plane lane: serialize the five evidence-only closures in the
+  binding order `LOC-006`, `LOC-014`, `LOC-011`, `RT-ED-003`, then `LOC-019`;
+- active production-repair lane: `LOC-009` is a confirmed physical
+  shader-module error-scope defect requiring a new production landing; it is
+  active but waiting on internal wasm Luau resume task
+  `019f9f34-a75f-7a11-a580-e9f54e610d93` and branch
+  `levi/fix-wasm-lua-coroutine-resume`, and remains outside the shared tracking
+  merge line;
 - deferred/parked production lane: malformed embedded-font outline crash and
   its existing PR #60 writer at head
   `61d5d018aa036882d17cea1065a78d7f2e057547`; do not finish, rebase, or land it
@@ -39,10 +43,11 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - assigned production lane: `RT-ED-007` belongs to Runtime Fix; Defects Fix
   must not create a duplicate writer;
 - defects closed since the preceding Q0 report: 1;
-- serialized evidence-only closures: `LOC-006` first, then `RT-ED-003`,
-  `RT-ED-005`, `LOC-009`, and `LOC-019`;
-- runnable repair lane: complete the awaitable authored-shader validation for
-  `LOC-009` without reopening its landed production implementation;
+- serialized evidence-only closures: `LOC-006`, `LOC-014`, `LOC-011`,
+  `RT-ED-003`, then `LOC-019`;
+- waiting repair lane: resume the `LOC-009` production repair only after the
+  internal wasm Luau resume dependency lands; do not close it without its new
+  production landing;
 - blocked/overlapping lanes: `LOC-002` and `LOC-007` need d788 requalification
   and their FL collision boundary; `LOC-005` needs the direct d788
   shared-instance differential.
@@ -263,12 +268,15 @@ exact local canonical floors; no queued hosted Apple lane is relabeled green.
 ## Next queue
 
 1. independently review and merge the focused `LOC-006` evidence-only closure;
-2. serialize the remaining evidence-only closures in order: `RT-ED-003`,
-   `RT-ED-005`, then complete the awaitable authored-shader validation and
-   close `LOC-009` without reopening its landed implementation, then
-   `LOC-019`;
-3. leave `RT-ED-007` with Runtime Fix and do not create a duplicate writer;
-4. keep PR #60 and the malformed embedded-font outline crash deferred/parked,
+2. serialize the remaining evidence-only closures in binding order:
+   `LOC-014`, `LOC-011`, `RT-ED-003`, then `LOC-019`;
+3. keep `LOC-009` outside the shared tracking merge line; resume its production
+   repair only after internal wasm Luau resume task
+   `019f9f34-a75f-7a11-a580-e9f54e610d93` on
+   `levi/fix-wasm-lua-coroutine-resume` lands, and do not close it without a
+   new production landing;
+4. leave `RT-ED-007` with Runtime Fix and do not create a duplicate writer;
+5. keep PR #60 and the malformed embedded-font outline crash deferred/parked,
    then refill other disjoint qualification lanes from the reconciled
    ownership DAG.
 

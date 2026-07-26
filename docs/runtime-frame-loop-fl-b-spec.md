@@ -38,7 +38,7 @@ Tests, the frame-loop ledger/checker, and evidence documents may change with
 the owner family. Renderer backend code and later FL-C/FL-D/FL-E production
 owners do not.
 
-## Binding safety adaptation
+## Binding safety adaptations
 
 Pinned C++ declares `LinearAnimationInstance::m_didLoop` without a constructor
 initializer and exposes `didLoop()` before the first `advance`
@@ -54,6 +54,16 @@ The user decision on 2026-07-25 applies FLR-3 as follows:
 - every `advance` path writes the exact C++ result;
 - Rust does not emulate indeterminate memory, add `Option<bool>`, or break the
   existing public boolean API.
+
+Pinned `AnimationResetFactory` serializes signed color `int` values through
+`float`, and `AnimationReset::apply` converts the decoded float back to `int`
+(`src/animation/animation_reset_factory.cpp:126-168`;
+`src/animation/animation_reset.cpp:30-35,54-67`). Rust retains and replays
+that exact float representation for every defined result. For the narrow
+positive range whose float representation is 2^31, C++ float-to-int conversion
+is undefined; user-approved project decision D2 applies Rust's saturating
+conversion. FL-G10 records this boundary so it is never mislabeled as C++
+behavior.
 
 ## Atomic production lanes
 

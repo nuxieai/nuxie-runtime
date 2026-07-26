@@ -176,8 +176,8 @@ def check_status(
     rule = str(row.get("rule", ""))
     decision = str(row.get("decision", ""))
     if status == "adapted":
-        if not re.fullmatch(r"(?:AF|RF)-\d+", rule):
-            errors.append(f"{subject} is adapted without an AF/RF rule")
+        if not re.fullmatch(r"(?:AF|RF|FLR)-\d+", rule):
+            errors.append(f"{subject} is adapted without an AF/RF/FLR rule")
         elif f"**{rule} " not in porting_rules:
             errors.append(f"{subject} cites missing PORTING.md rule {rule}")
     elif rule:

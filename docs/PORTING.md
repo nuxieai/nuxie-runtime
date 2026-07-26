@@ -373,6 +373,15 @@ C++ UB — usually a feature, occasionally a divergence to guard (e.g. add a
 `duration == 0.0` guard). Byte-clamp sites round-then-saturate on purpose:
 `(255.0 * opacity.clamp(0.0, 1.0)).round() as u8` (`draw.rs:11938`).
 
+`AnimationReset` is another constructible site. Pinned C++ reinterprets each
+color as signed `int`, serializes it through `float`, and converts the decoded
+float back to `int`. Rust must preserve that signed-float round-trip wherever
+the result is representable; for the narrow positive range that rounds to
+2^31, project decision D2 binds Rust's saturating conversion instead of
+attempting to emulate C++ undefined behavior
+(`src/animation/animation_reset_factory.cpp:126-168`;
+`src/animation/animation_reset.cpp:30-35,54-67`).
+
 ### 3.4 Integer overflow policy
 
 Two profiles, one landed and one planned:

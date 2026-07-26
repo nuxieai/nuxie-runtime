@@ -22,7 +22,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   and `orchestrator-verified`; the 286 later-wave rows remain pending.
 - Member closure: 47 / 75 owner/member rows (41 imported runtime-drawing
   owners plus all six FL-A Component rows); 28 later-wave rows remain.
-- Open mechanism gaps: 7 / 9. FL-G02 is closed; FL-G06 remained closed.
+- Open mechanism gaps: 7 / 10. FL-G02 and FL-G06 remain closed; FL-G10 records
+  the user-approved D2 saturation choice for AnimationReset's otherwise
+  undefined float-to-int edge.
 - Current dependency wave: FL-B. Its frozen 45-file/eight-member mini-map is
   `docs/runtime-frame-loop-fl-b-spec.md`; FL-B1 through FL-B4 are implemented,
   FL-B4 is in whole-wave verification, and
@@ -105,11 +107,14 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 - Rust's public `StateMachineInstance::clone` snapshot extension shares the
   immutable reset lease. It neither clones reset entries nor creates a second
   factory resource; the final snapshot owner performs the release.
-- The typed Rust replay retains color values in the integer representation
-  consumed by the generated setter; the exact golden oracle rejected an
-  additional Rust-side float round trip. The former flat cloneable entry
-  owner, global `(object, property)` membership vector, and empty-entry `None`
-  elision are deleted.
+- The typed Rust replay reinterprets color bits as C++ signed `int`, retains
+  the exact serialized `float`, and converts that float back to signed `int`
+  on replay. The pinned probe locks the observable non-exact case
+  `0x011d1d1d -> 0x011d1d1c`. The narrow positive range that rounds to 2^31
+  follows user-approved project decision D2's Rust saturation because C++ has
+  no defined result there; FL-G10 records that safety boundary. The former
+  integer bypass, flat cloneable entry owner, global `(object, property)`
+  membership vector, and empty-entry `None` elision are deleted.
 - Focused first-seen order, supported-family filtering, shared-lease, replay,
   and owned-empty-reset coverage is green. Full local floors: runtime
   489 / 489; public facade 171 / 171; probe-armed workspace including C++
@@ -159,12 +164,14 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   8,017,800 bytes with scripting off and 8,918,904 bytes with scripting on,
   both below the 9 MiB budget.
 - Canonical whole-corpus FL-B `perf-hot-loop` checkpoint at `10bc5b23`:
-  `target/perf-hot-loop-fl-b-10bc5b23.json`. Across the unchanged six-entry /
-  11-sample corpus and 10,000 benchmark repeats, the minimum aggregate is
-  1.684x C++ (41.707 ms C++, 70.222 ms Rust); individual samples range from
-  1.416x to 2.025x. This remains above the program's final <=1.0x acceptance
-  target. Per the frozen FL-B plan it is wave evidence only: it neither
-  promotes FL-B nor authorizes benchmark-derived work or queue reordering.
+  `docs/evidence/perf-hot-loop-fl-b-10bc5b23.json`, tracked with SHA-256
+  `6f55d78483446374a1cb690f22e3b0a22991ecf6300331d8f7f3b4830ff996bf`.
+  Across the unchanged six-entry / 11-sample corpus and 10,000 benchmark
+  repeats, the minimum aggregate is 1.684x C++ (41.707 ms C++, 70.222 ms
+  Rust); individual samples range from 1.416x to 2.025x. This remains above
+  the program's final <=1.0x acceptance target. Per the frozen FL-B plan it is
+  wave evidence only: it neither promotes FL-B nor authorizes
+  benchmark-derived work or queue reordering.
 
 ## FL-0 evidence
 

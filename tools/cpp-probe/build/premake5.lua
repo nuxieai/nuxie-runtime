@@ -2,6 +2,10 @@ workspace('rive_rust_cpp_probe')
 configurations({ 'debug', 'release' })
 
 local rive_runtime = os.getenv('RIVE_RUNTIME_DIR') or '/Users/levi/dev/oss/rive-runtime'
+local runtime_libdir = os.getenv('RIVE_CPP_PROBE_RUNTIME_LIBDIR')
+if not runtime_libdir then
+    error('RIVE_CPP_PROBE_RUNTIME_LIBDIR must name a provenance-verified archive directory')
+end
 local dep_cache = rive_runtime .. '/dependencies/' .. os.host() .. '/cache'
 
 local function first_dir(pattern)
@@ -54,12 +58,11 @@ files({
 })
 
 libdirs({
-    rive_runtime .. '/out/%{cfg.buildcfg}',
-    -- The canonical CI/local probe archive is the lean root build produced
-    -- with premake5_v2.lua + text + layout. A tests/out archive can carry
-    -- renderer/tools feature flags whose C++ class layout does not match this
-    -- probe and can emit valid JSON before crashing during teardown.
-    rive_runtime .. '/tests/out/%{cfg.buildcfg}',
+    -- `build.sh` creates and verifies exactly one dedicated archive with the
+    -- pinned revision, config, feature defines, compiler, and archive digest.
+    -- Do not search generic root/tests outputs: they may carry an incompatible
+    -- ABI while still producing superficially valid probe JSON.
+    runtime_libdir,
     rive_runtime .. '/build/%{cfg.system}/bin/%{cfg.buildcfg}',
     dep_cache .. '/bin/%{cfg.buildcfg}',
     '/usr/local/lib',

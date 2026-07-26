@@ -45,6 +45,14 @@ fn probe_path() -> Option<PathBuf> {
     path.exists().then_some(path)
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppAnimationResetColorRoundtrip {
+    input: u32,
+    stored_float_bits: u32,
+    output: u32,
+}
+
 fn cpp_runtime_fixture(relative: &str) -> PathBuf {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
@@ -17399,6 +17407,31 @@ fn linear_animation_apply_matches_cpp_probe() {
 
         compare_cpp_runtime_update(&cpp, &rust, &report, label);
     }
+}
+
+#[test]
+fn animation_reset_color_roundtrip_matches_pinned_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let output = Command::new(&probe)
+        .args(["--animation-reset-color-roundtrip", "0x011d1d1d"])
+        .output()
+        .unwrap_or_else(|err| panic!("failed to run {}: {err}", probe.display()));
+    assert!(
+        output.status.success(),
+        "C++ reset-color probe failed\nstatus: {}\nstdout:\n{}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let cpp: CppAnimationResetColorRoundtrip =
+        serde_json::from_slice(&output.stdout).expect("valid reset-color probe JSON");
+    assert_eq!(cpp.input, 0x011d_1d1d);
+    assert_eq!(cpp.stored_float_bits, 0x4b8e_8e8e);
+    assert_eq!(cpp.output, 0x011d_1d1c);
 }
 
 #[test]

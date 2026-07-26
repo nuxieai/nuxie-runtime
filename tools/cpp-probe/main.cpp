@@ -69,6 +69,9 @@ size_t randomProviderTotalCalls();
 #include "rive/animation/keyed_callback_reporter.hpp"
 #include "rive/animation/keyed_property.hpp"
 #include "rive/animation/keyframe.hpp"
+#define private public
+#include "rive/animation/animation_reset.hpp"
+#undef private
 #include "rive/animation/animation_state.hpp"
 #include "rive/animation/layer_state.hpp"
 #include "rive/animation/linear_animation.hpp"
@@ -12926,6 +12929,32 @@ bool parse_bool_arg(const char* arg)
     return arg != nullptr &&
            (std::strcmp(arg, "true") == 0 || std::strcmp(arg, "1") == 0);
 }
+
+void write_animation_reset_color_roundtrip(std::ostream& out,
+                                           uint32_t colorBits)
+{
+    rive::AnimationReset reset;
+    reset.writeObjectId(0);
+    reset.writeTotalProperties(1);
+    reset.writePropertyKey(0);
+    reset.writePropertyValue(
+        static_cast<float>(static_cast<int32_t>(colorBits)));
+    reset.complete();
+
+    reset.m_binaryReader.reset(&reset.m_WriteBuffer.front());
+    (void)reset.m_binaryReader.readVarUint32();
+    (void)reset.m_binaryReader.readVarUint32();
+    (void)reset.m_binaryReader.readVarUint32();
+    const float stored = reset.m_binaryReader.readFloat32();
+    const int restored = static_cast<int>(stored);
+    uint32_t storedBits = 0;
+    static_assert(sizeof(storedBits) == sizeof(stored));
+    std::memcpy(&storedBits, &stored, sizeof(storedBits));
+
+    out << "{\"input\":" << colorBits;
+    out << ",\"storedFloatBits\":" << storedBits;
+    out << ",\"output\":" << static_cast<uint32_t>(restored) << "}\n";
+}
 } // namespace
 
 int main(int argc, const char* argv[])
@@ -12934,6 +12963,8 @@ int main(int argc, const char* argv[])
     ProbeOptions options;
     bool converterSamples = false;
     bool numberToListSamples = false;
+    bool animationResetColorRoundtrip = false;
+    uint32_t animationResetColor = 0;
 
     for (int i = 1; i < argc; ++i)
     {
@@ -12946,6 +12977,20 @@ int main(int argc, const char* argv[])
         if (is_arg(argv[i], "--number-to-list-samples"))
         {
             numberToListSamples = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--animation-reset-color-roundtrip"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr
+                    << "--animation-reset-color-roundtrip requires colorBits\n";
+                return 2;
+            }
+            animationResetColorRoundtrip = true;
+            animationResetColor =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 0));
             continue;
         }
 
@@ -16163,6 +16208,13 @@ int main(int argc, const char* argv[])
     if (converterSamples)
     {
         write_converter_samples(std::cout);
+        return 0;
+    }
+
+    if (animationResetColorRoundtrip)
+    {
+        write_animation_reset_color_roundtrip(
+            std::cout, animationResetColor);
         return 0;
     }
 

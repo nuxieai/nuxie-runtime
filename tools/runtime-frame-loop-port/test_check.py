@@ -36,6 +36,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
         (self.repo / "docs/PORTING.md").write_text(
             "- **AF-1 Test adaptation.** Fixture.\n"
+            "- **FLR-3 Frame-loop binding adaptation.** Fixture.\n"
         )
         (self.repo / "crates/runtime/src/animation.rs").write_text(
             "struct RuntimeAnimation;\n"
@@ -295,6 +296,26 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("cites missing PORTING.md rule AF-999", result.stderr)
+
+    def test_frame_loop_adaptation_accepts_existing_flr_rule(self) -> None:
+        self.write_files(file_status="adapted")
+        content = self.ledger.read_text().replace('rule = "AF-1"', 'rule = "FLR-3"')
+        self.ledger.write_text(content)
+        content = self.manifest.read_text().replace(
+            'status = "pending"\nverification = "pending-verification"',
+            'status = "faithful"\nverification = "orchestrator-verified"',
+        )
+        self.manifest.write_text(content)
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_frame_loop_adaptation_rejects_missing_flr_rule(self) -> None:
+        self.write_files(file_status="adapted")
+        content = self.ledger.read_text().replace('rule = "AF-1"', 'rule = "FLR-999"')
+        self.ledger.write_text(content)
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cites missing PORTING.md rule FLR-999", result.stderr)
 
     def test_dynamic_reachability_marker_must_match_trace(self) -> None:
         trace = json.loads((self.repo / "docs/trace.json").read_text())

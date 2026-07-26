@@ -44,6 +44,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   occurrence. The two input files and the `state_machine.inputs` member remain
   pending until the complete 13-file input/listener lane is translated and
   independently accepted.
+- FL-C1 listener qualification found four real absent branches rather than
+  benchmark defects: import currently discards authored Keyboard,
+  SemanticAction, Gamepad, and TextInput listener types, and the public runtime
+  has no matching dispatch surface. Pinned C++ owns their constraints on the
+  typed listener-input definitions and their mutable dispatch state on fresh
+  per-StateMachineInstance listener groups. Those owners stay in the current
+  13-file lane; no Editor or renderer workaround is permitted.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
   defined post-advance C++ result. No `Option<bool>` API break or

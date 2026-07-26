@@ -3,10 +3,12 @@
 This is the operating protocol for the Editor Next runtime-defect program.
 Its formal objective is to own the complete queue of runtime, API, renderer,
 browser, and artifact defects reported by Editor Fix; qualify each against
-pinned C++; faithfully repair every confirmed Rust defect either directly or
-through its sole active Runtime Fix owner; independently verify and land each
-repair; maintain exact status; and return immutable landing evidence for
-downstream consumption.
+pinned C++; faithfully repair every confirmed Rust defect directly or through
+an explicitly delegated sole external owner for genuinely non-port work, while
+retaining port-covered findings as formal-port-wave dependencies for unchanged
+post-port verification; independently verify and land each repair; maintain
+exact status; and return immutable landing evidence for downstream
+consumption.
 
 Editor may merge before this queue is empty. Editor consumption is a tracked
 downstream state, not a prerequisite for closing a landed repair or completing
@@ -154,25 +156,38 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   PR #54's `7f1450dc` landing remains immutable history, but independent
   real-GPU verification found an unresolved physical shader-module
   error-scope regression. The row is not promotable or complete and requires
-  a new production landing after replacement clean-worktree task
-  `019f9f59-1ac6-7e32-b973-5deb6b457c05` (“Diagnose browser Lua crash”).
-  That task must verify origin/main `fe0a0a07`, start read-only with minimal
-  instrumentation, and must not copy the prior dirty harness. The current
+  a new production landing. Diagnosis is parked pending a different reliable
+  execution/model environment; replacement clean-worktree task
+  `019f9f59-1ac6-7e32-b973-5deb6b457c05` (“Diagnose browser Lua crash”)
+  ended without authoritative output. The current
   evidence is a temporary, uncommitted real-GPU probe at exact `fe0a0a07` /
   tree `4512e0d7`; its
   2,129-byte local log has SHA-256
   `93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611`.
   The sole authoritative browser observation is the canonical Chrome abort at
   `luaG_indexerror` / `luaD_throw`; its cause remains under investigation.
-  LOC-009 remains frozen, its reopened cycle has consumed nothing, and it may
-  consume only a reviewed landed replacement SHA.
-- Open formal implementation blocker assigned to Runtime Fix: `RT-ED-007`.
-  Defects Fix preserves its diagnosis and tests but has no Scene-authoring
-  writer; it records independent verification after the Runtime Fix landing.
+  LOC-009 remains parked and frozen, its reopened cycle has consumed nothing,
+  and it may consume only a reviewed landed replacement SHA.
+- Confirmed runtime defect retained for deferred post-port verification:
+  `RT-ED-007`.
+  The completed five-part report proves the recovered Scene producer emits
+  target property 158 and complete nested source path `[0,0,0]`; identical
+  bytes animate at pinned d788 but fail at fe0 because
+  `runtime_transition_duration_bindings` drops an unresolved nested default
+  reference. The first divergence is narrowly in `state_machine.rs` /
+  `state_machine/bindables.rs` (or a focused extracted module), but this row
+  makes no direct Runtime Fix request or schedule. The uncommitted Scene API
+  patch has no landing claim. After the relevant state-machine port wave
+  lands, Defects Fix reruns only the unchanged set → fire → `advance(0)`
+  acceptance.
 - Historical WebGL2 evidence only, with no linked product child:
   `RT-ED-004`.
-- Open Scene/API candidates: `LOC-001`, `LOC-005`, `LOC-008`.
-- Open runtime/FL candidates: `LOC-002`, `LOC-007`, `LOC-011`, `LOC-013`.
+- Open Scene/API candidates: `LOC-001`, `LOC-005`.
+- Deferred post-port verification: `LOC-007` path dirt, `LOC-008` intrinsic
+  text measurement, and ordinary layout/TextStyle execution. These records
+  make no direct implementation request or schedule. Escalate only an actual
+  simultaneous file-writer collision or a safety/data-loss issue.
+- Open runtime/FL candidates: `LOC-002`, `LOC-011`, `LOC-013`.
 - Closed no-repair stale characterization: `LOC-006`; exact committed
   provenance and an independent exact-checkpoint rerun prove the prior
   renderer symptom was caused by the later hover/clear gesture.
@@ -202,9 +217,12 @@ A confirmed Rust repair is complete when:
 Editor consumption may advance a downstream state, but it is not required to
 close the repair. A row may also close through proven Editor ownership, a
 stale oracle, retraction, artifact correction, or explicit user decision.
-Assignment to an active Runtime Fix owner is an allowed implementation
-dependency, not permission for a duplicate writer; the row remains tracked
-until that owner lands and the repair is independently verified, or the row
+Explicit delegation to a sole external owner is an allowed implementation
+dependency for genuinely non-port work, not permission for a duplicate writer.
+A port-covered row may instead remain a tracked formal-port-wave dependency
+with no implementation request, schedule, assignment, or writer lease. In
+either case the row remains tracked until the external landing or relevant
+port wave is independently verified with the unchanged acceptance, or the row
 otherwise reaches a non-repair evidence-backed disposition.
 
 ## Parallel work model
@@ -266,10 +284,11 @@ The FL executor owns the reserved runtime/graph files and the component,
 dirt, update, clone, DataBind queue, animation, and state-machine owner
 internals listed in the live FL ledgers.
 
-`LOC-007` has already been handed to that owner with the exact Editor
-three-test reproduction and pinned C++ ParametricPath citations. This program
-keeps the product test red and adds no workaround while FL implements the
-faithful callback/dirt closure. The same handoff rule applies to any other
+`LOC-007` retains the exact Editor three-test reproduction and pinned C++
+ParametricPath citations as deferred post-port verification. This program
+keeps the product test red and adds no workaround, implementation request, or
+schedule; it reruns the unchanged acceptance after the relevant path/dirt port
+wave lands. The same post-port verification rule applies to any other
 qualification whose first divergence enters a reserved owner.
 
 ### One independently reviewable PR per thing
@@ -316,12 +335,12 @@ Current work is:
 
 - independently promote the landing-provenance records for `RT-ED-003` and
   `LOC-019`; their production repairs and Editor consumption are complete;
-- keep `LOC-009` outside the serialized tracking merge line and frozen while
-  replacement task `019f9f59-1ac6-7e32-b973-5deb6b457c05` diagnoses the
-  canonical Chrome abort from verified origin/main `fe0a0a07` in a clean
-  worktree; preserve PR #54 at `7f1450dc` as historical evidence, but do not
-  promote, close, or consume the row without a reviewed new production
-  landing;
+- keep `LOC-009` outside the serialized tracking merge line, parked, and
+  frozen while diagnosis waits for a different reliable execution/model
+  environment; replacement task `019f9f59-1ac6-7e32-b973-5deb6b457c05`
+  ended without authoritative output. Preserve PR #54 at `7f1450dc` as
+  historical evidence, but do not promote, close, or consume the row without
+  a reviewed new production landing;
 - retain `RT-ED-004` / `F-ED-07` only as historical WebGL2 evidence. It has no
   linked product scenario and authorizes no implementation. A current
   rounded-clip claim exists only if an explicitly scheduled identical-input
@@ -336,23 +355,32 @@ Current work is:
 Runtime-side WebGPU work must keep `make browser-webgpu-only-check` green and
 must not reintroduce any prohibited WebGL2 surface.
 
-### Q2 — Promote RT-ED-005 and verify Runtime Fix's RT-ED-007 landing
+### Q2 — Promote RT-ED-005 and retain RT-ED-007 post-port verification
 
 `F-ED-03` (`RT-ED-005`) is merged and consumed. Its generic number/color
 property-key authoring, direction semantics, record round trips, runtime
 behavior, and executor floors are landing provenance awaiting independent
-promotion only. Do not reopen that Scene implementation. `P09-C01` remains
-separately dependent on the FL-E layout/TextStyle owner family.
+promotion only. Do not reopen that Scene implementation. `P09-C01`'s ordinary
+layout/TextStyle execution is deferred post-port verification after the
+relevant layout/text wave, not an implementation request from this program.
 
-`F-ED-04` (`RT-ED-007`) remains the one open formal Scene authoring
-implementation, assigned exclusively to Runtime Fix. Defects Fix retains the
-diagnosis as read-only evidence and must keep its Scene candidate quarantined.
-Runtime Fix owns the complete path
-through the exported `scene.rs` seam and its active `state_machine.rs` /
-`state_machine/bindables.rs` work. After Runtime Fix lands the nested
-`ViewModelNumberSource` repair with its own merged SHA, Defects Fix runs only
-the unchanged set → fire → `advance(0)` verification and records the
-independent result.
+`F-ED-04` (`RT-ED-007`) is a confirmed runtime defect retained as deferred
+post-port verification. The recovered e723 producer plus dirty
+`scene.rs` patch emits a 323-byte artifact whose normalized record 26 carries
+property 158 and source path `[0,0,0]`. The same bytes animate at pinned d788;
+fe0 recognizes the target but resolves no nested default source because
+`runtime_transition_duration_bindings` uses the default-instance-only helper
+and drops the unresolved reference.
+
+The first divergence is narrowly in
+`crates/nuxie-runtime/src/state_machine.rs` and
+`crates/nuxie-runtime/src/state_machine/bindables.rs`, or a focused
+`transition_duration_binding` module extracted from that seam. This row makes
+no direct Runtime Fix request or schedule and grants no Scene writer or broad
+Scene/runtime lease. The uncommitted Scene API patch has no landing claim,
+although its emitted bytes are qualified correct. Defects Fix retains the
+unchanged set → fire → `advance(0)` acceptance and records its independent
+result after the relevant state-machine port wave lands.
 
 ### Q3 — Qualify and close Scene ownership candidates
 
@@ -364,12 +392,14 @@ stable retained ViewModel handle/rebind lifecycle in a Scene-owned PR. If it
 enters Artboard/DataBind ownership, hand the exact closure to FL-D. Never add
 more type-specific remount carry.
 
-Qualify `LOC-008` separately. Add a typed measurement facade only if the
-exact low-level runtime measurement path already owns the complete contract.
+Retain `LOC-008` intrinsic text measurement as deferred post-port
+verification. After the relevant text-measurement wave lands, rerun the
+unchanged product acceptance and classify any surviving first divergence; do
+not request or schedule an implementation from this program.
 
 ### Q4 — Absorb runtime-owner defects through FL
 
-For `LOC-002` when runtime-owned, `LOC-007`, `LOC-011`, and `LOC-013`:
+For `LOC-002` when runtime-owned, `LOC-011`, and `LOC-013`:
 
 1. minimize the current failure;
 2. build the pinned C++ direct probe;
@@ -384,8 +414,9 @@ No F-ED worktree patches reserved runtime files.
 
 ### Q5 — Close remaining renderer, text, and record candidates
 
-- `F-ED-09`: split `LOC-008`, `LOC-011`, and `LOC-013` at the first
-  differing authored-value, bind, shaping, measurement, outline, or pixel
+- `F-ED-09`: after the relevant text-measurement port wave, rerun `LOC-008`
+  as deferred post-port verification; split `LOC-011` and `LOC-013` at the
+  first differing authored-value, bind, shaping, measurement, outline, or pixel
   stage; do not assume one owner.
 - `F-ED-10`: requalify `LOC-012` and `LOC-014` on WebGPU. Port only a proven
   pinned-C++ owner/resource lifecycle; never tune feather constants or
@@ -509,9 +540,12 @@ Mark this formal goal complete only when all of the following are true:
 
 - every accepted Editor-reported row has a terminal, evidence-backed
   disposition;
-- every confirmed Rust parity defect is faithfully repaired and merged, or is
-  explicitly assigned to a sole active Runtime Fix owner whose tracked landing
-  is independently verified before the row closes, with no duplicate writer;
+- every confirmed Rust parity defect is faithfully repaired and merged,
+  explicitly delegated as genuinely non-port work to a sole external owner
+  whose tracked landing is independently verified, or retained as a
+  formal-port-wave dependency whose unchanged post-port acceptance is
+  independently rerun and classified resolved before the row closes, with no
+  duplicate writer;
 - every landed repair records immutable C++ evidence, tests, applicable
   repository floors, independent reviews, PR, and exact landing SHA;
 - every API gap emits and round-trips the exact underlying record;

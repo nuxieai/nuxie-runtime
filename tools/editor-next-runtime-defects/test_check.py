@@ -4101,6 +4101,193 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
             errors,
         )
 
+    def test_reopen_requires_exact_origin_main_historical_copies(self) -> None:
+        runtime = pathlib.Path(self.temp.name) / "runtime-reopen-ratchet"
+        self.init_git_repo(runtime)
+        (runtime / "docs").mkdir()
+        prior_reproduction = "1" * 64
+        original = "a" * 40
+        merged = "b" * 40
+        consumed = "c" * 40
+        superproject = "d" * 40
+        prior_executor = {
+            "status": "pass",
+            "command": "prior executor command",
+            "evidence": "prior executor evidence",
+        }
+        prior_rust = {
+            "status": "pass",
+            "command": "prior rust command",
+            "evidence": "prior rust evidence",
+        }
+        prior_editor = {
+            "status": "pass",
+            "command": "prior editor command",
+            "evidence": "prior editor evidence",
+        }
+        (runtime / "docs/editor-next-runtime-defect-atlas.toml").write_text(
+            textwrap.dedent(
+                f"""
+                schema = "nuxie.editor-next.runtime-defect-atlas/v2"
+                version = 2
+
+                [[defect]]
+                id = "LOC-020"
+                state = "executor-green"
+                reproduction_sha256 = "{prior_reproduction}"
+
+                [defect.revisions]
+                original_localization_rust_sha = "{original}"
+                merged_repair_sha = "{merged}"
+                consumed_runtime_sha = "{consumed}"
+                consumed_superproject_sha = "{superproject}"
+
+                [defect.executor_verification]
+                status = "pass"
+                command = "prior executor command"
+                evidence = "prior executor evidence"
+
+                [[defect.history]]
+                state = "executor-green"
+                actor = "executor"
+                evidence = "prior executor-green"
+
+                [defect.rust_result]
+                status = "pass"
+                command = "prior rust command"
+                evidence = "prior rust evidence"
+
+                [defect.editor_result]
+                status = "pass"
+                command = "prior editor command"
+                evidence = "prior editor evidence"
+                """
+            ).lstrip()
+        )
+        subprocess.run(["git", "add", "."], cwd=runtime, check=True)
+        subprocess.run(
+            ["git", "commit", "-qm", "prior reopened evidence"],
+            cwd=runtime,
+            check=True,
+        )
+        prior = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=runtime,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "update-ref", "refs/remotes/origin/main", prior],
+            cwd=runtime,
+            check=True,
+        )
+
+        current = {
+            "id": "LOC-020",
+            "state": "regression-reopened",
+            "reproduction_sha256": "2" * 64,
+            "historical_reproduction_sha256": prior_reproduction,
+            "revisions": {
+                "original_localization_rust_sha": original,
+                "merged_repair_sha": {
+                    "status": "pending",
+                    "reason": "new cycle",
+                },
+                "consumed_runtime_sha": {
+                    "status": "pending",
+                    "reason": "new cycle",
+                },
+                "consumed_superproject_sha": {
+                    "status": "pending",
+                    "reason": "new cycle",
+                },
+            },
+            "historical_revisions": {
+                "merged_repair_sha": merged,
+                "consumed_runtime_sha": consumed,
+                "consumed_superproject_sha": superproject,
+            },
+            "historical_executor_verification": prior_executor,
+            "historical_rust_result": prior_rust,
+            "historical_editor_result": prior_editor,
+            "history": [
+                {
+                    "state": "executor-green",
+                    "actor": "executor",
+                    "evidence": "prior executor-green",
+                },
+                {
+                    "state": "regression-reopened",
+                    "actor": "independent-orchestrator",
+                    "evidence": "new regression",
+                },
+            ],
+        }
+        errors: list[str] = []
+        CHECKER.validate_prior_id_ratchet(runtime, [current], errors)
+        self.assertEqual(errors, [])
+
+        cases = [
+            (
+                "fabricated executor command",
+                lambda row: row["historical_executor_verification"].__setitem__(
+                    "command", "fabricated command"
+                ),
+                "historical_executor_verification must exactly preserve",
+            ),
+            (
+                "fabricated executor evidence",
+                lambda row: row["historical_executor_verification"].__setitem__(
+                    "evidence", "fabricated evidence"
+                ),
+                "historical_executor_verification must exactly preserve",
+            ),
+            (
+                "altered original localization",
+                lambda row: (
+                    row["revisions"].__setitem__(
+                        "original_localization_rust_sha", "e" * 40
+                    ),
+                    row["historical_revisions"].__setitem__(
+                        "original_localization_rust_sha", original
+                    ),
+                ),
+                "immutable revision original_localization_rust_sha changed",
+            ),
+            (
+                "altered historical reproduction",
+                lambda row: row.__setitem__(
+                    "historical_reproduction_sha256", "3" * 64
+                ),
+                "historical_reproduction_sha256 must exactly preserve",
+            ),
+            (
+                "altered historical rust result",
+                lambda row: row["historical_rust_result"].__setitem__(
+                    "evidence", "rewritten rust result"
+                ),
+                "historical_rust_result must exactly preserve",
+            ),
+            (
+                "altered historical editor result",
+                lambda row: row["historical_editor_result"].__setitem__(
+                    "command", "rewritten editor command"
+                ),
+                "historical_editor_result must exactly preserve",
+            ),
+        ]
+        for name, mutate, expected in cases:
+            with self.subTest(name=name):
+                changed = json.loads(json.dumps(current))
+                mutate(changed)
+                errors = []
+                CHECKER.validate_prior_id_ratchet(runtime, [changed], errors)
+                self.assertTrue(
+                    any(expected in error for error in errors),
+                    errors,
+                )
+
     def test_require_closed_binds_zero_intake_to_canonical_branch_tip(
         self,
     ) -> None:
@@ -4179,6 +4366,20 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("uses non-executable driver", result.stderr)
         self.assertIn("implemented but atlas row RT-ED-001 is reported", result.stderr)
+
+    def test_qualified_fixture_rejects_temporary_local_only_driver(self) -> None:
+        self.fixtures.write_text(
+            self.fixtures.read_text()
+            .replace('status = "registered"', 'status = "qualified"', 1)
+            .replace(
+                'driver = "standalone"',
+                'driver = "temporary-local-only:not committed"',
+                1,
+            )
+        )
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("uses non-executable driver", result.stderr)
 
     def test_cpp_probe_registry_must_exactly_match_cpp_driven_fixtures(self) -> None:
         self.fixtures.write_text(

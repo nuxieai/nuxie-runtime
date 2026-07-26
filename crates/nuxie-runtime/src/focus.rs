@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::parent_traversal::{ParentTraversal, ParentTraversalFrame};
@@ -802,7 +804,13 @@ struct RuntimeFocusDescriptor {
     parent: Option<RuntimeFocusOccurrenceKey>,
     sibling_index: usize,
     node: FocusNode,
-    root_target_local: Option<usize>,
+    target: Option<(u64, usize)>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RuntimeFocusDomain {
+    manager: FocusManager,
+    targets: BTreeMap<(u64, usize), FocusNodeId>,
 }
 
 /// One state-machine instance's authored focus domain.
@@ -810,18 +818,52 @@ struct RuntimeFocusDescriptor {
 /// The keys describe concrete mounted occurrences, not just file-global
 /// objects. A component-list row therefore retains its FocusNode when moved,
 /// while a genuinely removed row is blurred and discarded.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug)]
 pub(crate) struct RuntimeFocusTree {
     inert: bool,
-    manager: FocusManager,
+    domain: Rc<RefCell<RuntimeFocusDomain>>,
+    owner_identity: u64,
+    owns_projection: bool,
     nodes_by_key: BTreeMap<RuntimeFocusOccurrenceKey, FocusNodeId>,
     parents_by_key: BTreeMap<RuntimeFocusOccurrenceKey, Option<RuntimeFocusOccurrenceKey>>,
-    target_nodes: BTreeMap<usize, FocusNodeId>,
+}
+
+impl Default for RuntimeFocusTree {
+    fn default() -> Self {
+        Self {
+            inert: false,
+            domain: Rc::new(RefCell::new(RuntimeFocusDomain::default())),
+            owner_identity: 0,
+            owns_projection: true,
+            nodes_by_key: BTreeMap::new(),
+            parents_by_key: BTreeMap::new(),
+        }
+    }
+}
+
+impl Clone for RuntimeFocusTree {
+    fn clone(&self) -> Self {
+        // A public Rust state-machine snapshot is a new occurrence. Copy the
+        // retained focus domain rather than aliasing focus mutations back to
+        // the source occurrence. Nested machines are reattached to the new
+        // root domain when their owning parent instance is constructed.
+        Self {
+            inert: self.inert,
+            domain: Rc::new(RefCell::new(self.domain.borrow().clone())),
+            owner_identity: self.owner_identity,
+            owns_projection: self.owns_projection,
+            nodes_by_key: self.nodes_by_key.clone(),
+            parents_by_key: self.parents_by_key.clone(),
+        }
+    }
 }
 
 impl RuntimeFocusTree {
     pub(crate) fn from_artboard(artboard: &ArtboardInstance) -> Self {
-        let mut tree = Self::default();
+        let mut tree = Self {
+            owner_identity: artboard.instance_identity(),
+            ..Self::default()
+        };
         tree.sync(artboard);
         // An empty projection cannot gain authored focus content later: lists
         // and data-bound nested hosts contribute persistent structural scopes
@@ -830,13 +872,28 @@ impl RuntimeFocusTree {
         tree
     }
 
+    /// Install the same manager used by the parent occurrence while retaining
+    /// the child occurrence's own authored target namespace. Pinned C++ calls
+    /// `setExternalFocusManager` before `syncNestedStateMachine` so the child
+    /// contributes to one traversal domain without copying manager state.
+    pub(crate) fn external_for_owner(&self, owner_identity: u64) -> Self {
+        Self {
+            inert: self.inert,
+            domain: Rc::clone(&self.domain),
+            owner_identity,
+            owns_projection: false,
+            nodes_by_key: BTreeMap::new(),
+            parents_by_key: BTreeMap::new(),
+        }
+    }
+
     #[inline]
     pub(crate) fn is_inert(&self) -> bool {
         self.inert
     }
 
     pub(crate) fn sync(&mut self, artboard: &ArtboardInstance) {
-        if self.inert {
+        if self.inert || !self.owns_projection {
             return;
         }
         let mut descriptors = Vec::new();
@@ -845,7 +902,7 @@ impl RuntimeFocusTree {
             artboard,
             &root_key,
             None,
-            true,
+            Some(artboard.instance_identity()),
             true,
             Mat2D::IDENTITY,
             &mut descriptors,
@@ -879,16 +936,16 @@ impl RuntimeFocusTree {
             .collect::<Vec<_>>();
         for key in removed_roots {
             if let Some(node_id) = self.nodes_by_key.get(&key).copied() {
-                self.manager.remove_subtree(node_id);
+                self.domain.borrow_mut().manager.remove_subtree(node_id);
             }
         }
         self.nodes_by_key
-            .retain(|_, node_id| self.manager.contains(*node_id));
+            .retain(|_, node_id| self.domain.borrow().manager.contains(*node_id));
 
         for descriptor in &descriptors {
             let node_id = match self.nodes_by_key.get(&descriptor.key).copied() {
                 Some(node_id) => {
-                    if let Some(node) = self.manager.node_mut(node_id) {
+                    if let Some(node) = self.domain.borrow_mut().manager.node_mut(node_id) {
                         node.has_focusable = descriptor.node.has_focusable;
                         node.set_can_focus(descriptor.node.can_focus());
                         node.set_can_touch(descriptor.node.can_touch());
@@ -902,7 +959,11 @@ impl RuntimeFocusTree {
                     node_id
                 }
                 None => {
-                    let node_id = self.manager.create_node(descriptor.node.clone());
+                    let node_id = self
+                        .domain
+                        .borrow_mut()
+                        .manager
+                        .create_node(descriptor.node.clone());
                     self.nodes_by_key.insert(descriptor.key.clone(), node_id);
                     node_id
                 }
@@ -912,59 +973,68 @@ impl RuntimeFocusTree {
                 .as_ref()
                 .and_then(|key| self.nodes_by_key.get(key))
                 .copied();
-            self.manager
-                .insert_child(parent, node_id, descriptor.sibling_index);
+            self.domain.borrow_mut().manager.insert_child(
+                parent,
+                node_id,
+                descriptor.sibling_index,
+            );
         }
 
         self.parents_by_key = descriptors
             .iter()
             .map(|descriptor| (descriptor.key.clone(), descriptor.parent.clone()))
             .collect();
-        self.target_nodes.clear();
+        let mut domain = self.domain.borrow_mut();
+        domain.targets.clear();
         for descriptor in descriptors {
-            let Some(target_local) = descriptor.root_target_local else {
+            let Some(target) = descriptor.target else {
                 continue;
             };
             let Some(node_id) = self.nodes_by_key.get(&descriptor.key).copied() else {
                 continue;
             };
-            self.target_nodes.insert(target_local, node_id);
+            domain.targets.insert(target, node_id);
         }
-        self.manager.drop_focus_if_ineligible();
+        domain.manager.drop_focus_if_ineligible();
     }
 
     pub(crate) fn has_focusable_content(&self) -> bool {
-        self.manager.has_focusable_content()
+        self.domain.borrow().manager.has_focusable_content()
     }
 
     pub(crate) fn set_focus_target(&mut self, target_local: usize) -> bool {
-        self.target_nodes
-            .get(&target_local)
+        let mut domain = self.domain.borrow_mut();
+        domain
+            .targets
+            .get(&(self.owner_identity, target_local))
             .copied()
-            .is_some_and(|node_id| self.manager.set_focus(node_id))
+            .is_some_and(|node_id| domain.manager.set_focus(node_id))
     }
 
     pub(crate) fn clear_focus(&mut self) -> bool {
-        self.manager.clear_focus()
+        self.domain.borrow_mut().manager.clear_focus()
     }
 
     pub(crate) fn traverse(&mut self, traversal_kind: u64) -> bool {
+        let mut domain = self.domain.borrow_mut();
         match traversal_kind {
-            0 => self.manager.focus_next(),
-            1 => self.manager.focus_previous(),
-            2 => self.manager.focus_up(),
-            3 => self.manager.focus_down(),
-            4 => self.manager.focus_left(),
-            5 => self.manager.focus_right(),
-            _ => self.manager.focus_next(),
+            0 => domain.manager.focus_next(),
+            1 => domain.manager.focus_previous(),
+            2 => domain.manager.focus_up(),
+            3 => domain.manager.focus_down(),
+            4 => domain.manager.focus_left(),
+            5 => domain.manager.focus_right(),
+            _ => domain.manager.focus_next(),
         }
     }
 
     pub(crate) fn target_has_focus(&self, target_local: usize) -> bool {
-        self.target_nodes
-            .get(&target_local)
+        let domain = self.domain.borrow();
+        domain
+            .targets
+            .get(&(self.owner_identity, target_local))
             .copied()
-            .is_some_and(|node_id| self.manager.has_focus(node_id))
+            .is_some_and(|node_id| domain.manager.has_focus(node_id))
     }
 }
 
@@ -972,7 +1042,7 @@ fn collect_artboard_focus_descriptors(
     artboard: &ArtboardInstance,
     occurrence_key: &RuntimeFocusOccurrenceKey,
     parent_focus: Option<RuntimeFocusOccurrenceKey>,
-    root_occurrence: bool,
+    target_owner: Option<u64>,
     inherited_eligible: bool,
     root_transform: Mat2D,
     descriptors: &mut Vec<RuntimeFocusDescriptor>,
@@ -993,7 +1063,7 @@ fn collect_artboard_focus_descriptors(
         root_local,
         occurrence_key,
         parent_focus,
-        root_occurrence,
+        target_owner,
         inherited_eligible,
         root_transform,
         descriptors,
@@ -1005,7 +1075,7 @@ fn collect_component_focus_descriptors(
     local_id: usize,
     occurrence_key: &RuntimeFocusOccurrenceKey,
     parent_focus: Option<RuntimeFocusOccurrenceKey>,
-    root_occurrence: bool,
+    target_owner: Option<u64>,
     inherited_eligible: bool,
     root_transform: Mat2D,
     descriptors: &mut Vec<RuntimeFocusDescriptor>,
@@ -1058,7 +1128,7 @@ fn collect_component_focus_descriptors(
                 &nested.child,
                 &child_key,
                 host_parent.clone(),
-                false,
+                Some(nested.child.instance_identity()),
                 inherited_eligible
                     && component_and_ancestors_allow_focus(artboard, local_id)
                     && !nested_host_is_paused(artboard, local_id),
@@ -1121,7 +1191,7 @@ fn collect_component_focus_descriptors(
                     &item.child,
                     &child_key,
                     Some(row_key),
-                    false,
+                    Some(item.child.instance_identity()),
                     inherited_eligible && component_and_ancestors_allow_focus(artboard, local_id),
                     root_transform.multiply(host_world).multiply(
                         item_transforms
@@ -1157,7 +1227,7 @@ fn collect_component_focus_descriptors(
             focus_key.clone(),
             parent_focus,
             authored_focus_node(artboard, focus_local, inherited_eligible, root_transform),
-            root_occurrence.then_some(local_id),
+            target_owner.map(|owner| (owner, local_id)),
         );
         Some(focus_key)
     } else {
@@ -1176,7 +1246,7 @@ fn collect_component_focus_descriptors(
                 *child_local,
                 occurrence_key,
                 recurse_parent.clone(),
-                root_occurrence,
+                target_owner,
                 inherited_eligible,
                 root_transform,
                 descriptors,
@@ -1190,14 +1260,14 @@ fn push_focus_descriptor(
     key: RuntimeFocusOccurrenceKey,
     parent: Option<RuntimeFocusOccurrenceKey>,
     node: FocusNode,
-    root_target_local: Option<usize>,
+    target: Option<(u64, usize)>,
 ) {
     descriptors.push(RuntimeFocusDescriptor {
         key,
         parent,
         sibling_index: 0,
         node,
-        root_target_local,
+        target,
     });
 }
 
@@ -1878,5 +1948,28 @@ mod tests {
         manager.set_focus(center);
         assert!(manager.focus_down());
         assert_eq!(manager.primary_focus(), Some(down));
+    }
+
+    #[test]
+    fn nested_occurrence_uses_parent_domain_but_snapshot_clone_isolated() {
+        let root = RuntimeFocusTree {
+            owner_identity: 11,
+            ..RuntimeFocusTree::default()
+        };
+        let child_target = {
+            let mut domain = root.domain.borrow_mut();
+            let target = domain.manager.create_node(FocusNode::new());
+            domain.manager.add_child(None, target);
+            domain.targets.insert((22, 7), target);
+            target
+        };
+        let mut child = root.external_for_owner(22);
+
+        assert!(child.set_focus_target(7));
+        assert!(root.domain.borrow().manager.has_focus(child_target));
+
+        let mut snapshot = child.clone();
+        assert!(snapshot.clear_focus());
+        assert!(root.domain.borrow().manager.has_focus(child_target));
     }
 }

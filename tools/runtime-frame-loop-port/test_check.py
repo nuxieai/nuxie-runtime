@@ -728,6 +728,89 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     result.stderr,
                 )
 
+    def test_fl_c3_negative_ratchets_reject_displaced_layer_occurrence_shapes(self) -> None:
+        cases = [
+            (
+                "state_machine_empty_any_shortcut",
+                r"any_state[^\n]{0,160}transitions\.is_empty\(\)",
+                "fn update(any_state: State) { if any_state.transitions.is_empty() {} }\n",
+            ),
+            (
+                "state_machine_parallel_occurrence_indices",
+                r"(?:current|source)_state_index\s*:",
+                "struct Layer { current_state_index: usize }\n",
+            ),
+            (
+                "state_machine_copied_active_transition_payload",
+                r"active_transition_(?:actions|duration|interpolator|listener)",
+                "struct Layer { active_transition_duration: f32 }\n",
+            ),
+            (
+                "state_machine_prebuilt_state_occurrences",
+                r"state_occurrences\s*:\s*(?:Vec|BTreeMap|HashMap)",
+                "struct Layer { state_occurrences: Vec<State> }\n",
+            ),
+            (
+                "state_machine_nested_owner_scan",
+                r"nested_artboards[^;]{0,400}find_map[^;]{0,400}RuntimeNestedAnimationInstance::StateMachine",
+                (
+                    "fn find() { nested_artboards.iter().find_map(|nested| "
+                    "matches!(nested, RuntimeNestedAnimationInstance::StateMachine(_)).then_some(nested)); }\n"
+                ),
+            ),
+            (
+                "state_machine_shared_layer_occurrence_alias",
+                r"(?:any_state|current_state|state_from)\s*:\s*Option<(?:Rc|Arc)<",
+                "struct Layer { state_from: Option<Rc<State>> }\n",
+            ),
+            (
+                "state_machine_advance_source_before_mix",
+                r"advance_transition_source_animation[\s\S]{0,1200}update_transition_mix",
+                (
+                    "fn advance() { self.advance_transition_source_animation(); "
+                    "self.update_transition_mix(); }\n"
+                ),
+            ),
+            (
+                "nested_state_machine_public_clone_copies_live_occurrence",
+                (
+                    r"impl Clone for RuntimeNestedArtboardInstance"
+                    r"[\s\S]{0,2400}animations:\s*self\.animations\.clone\(\)"
+                ),
+                (
+                    "impl Clone for RuntimeNestedArtboardInstance { fn clone(&self) -> Self { "
+                    "Self { animations: self.animations.clone() } } }\n"
+                ),
+            ),
+        ]
+        base_gaps = self.gaps.read_text()
+
+        for ratchet_id, pattern, forbidden_source in cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.gaps.write_text(
+                    base_gaps.replace(
+                        "ratchet = []",
+                        textwrap.dedent(
+                            f"""
+                            [[ratchet]]
+                            id = "{ratchet_id}"
+                            globs = ["crates/runtime/src/state_machine/instance.rs"]
+                            pattern = {json.dumps(pattern)}
+                            max_occurrences = 0
+                            """
+                        ).strip(),
+                    )
+                )
+                source = self.repo / "crates/runtime/src/state_machine/instance.rs"
+                source.parent.mkdir(parents=True, exist_ok=True)
+                source.write_text(forbidden_source)
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    f"ratchet {ratchet_id} increased to 1 > 0",
+                    result.stderr,
+                )
+
     def test_mechanism_input_hash_is_fail_closed(self) -> None:
         fixture = self.upstream / "tests/assets/scroll.riv"
         fixture.parent.mkdir(parents=True)

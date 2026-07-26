@@ -515,12 +515,9 @@ impl RuntimeScheduledListenerActionExecutor for RuntimeStateMachineListenerActio
         )
     }
 
-    fn retained_view_model_trigger_source(
-        &self,
-        bindable_global_id: u32,
-    ) -> Option<RuntimeViewModelCell> {
+    fn retained_view_model_source(&self, bindable_global_id: u32) -> Option<RuntimeViewModelCell> {
         self.data_bind_graph
-            .retained_trigger_source_for_bindable_target(bindable_global_id)
+            .retained_source_for_bindable_target(bindable_global_id)
     }
 
     fn fire_view_model_trigger(&mut self, path: &RuntimeStateMachineFireTriggerPath) -> bool {

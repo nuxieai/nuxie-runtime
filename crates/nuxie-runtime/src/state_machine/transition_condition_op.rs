@@ -54,12 +54,4 @@ impl TransitionConditionOp {
             _ => false,
         }
     }
-
-    pub(super) fn compare_u64_equal_only(self, input_value: u64, value: u64) -> bool {
-        match self {
-            Self::Equal => input_value == value,
-            Self::NotEqual => input_value != value,
-            _ => false,
-        }
-    }
 }

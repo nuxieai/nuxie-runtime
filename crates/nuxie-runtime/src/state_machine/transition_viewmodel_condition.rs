@@ -12,7 +12,7 @@ use super::{
     TransitionEvaluationContext, bindable_artboard_value, bindable_asset_value,
     bindable_boolean_value, bindable_color_value, bindable_enum_value, bindable_integer_value,
     bindable_number_value, bindable_string_value, bindable_trigger_value,
-    bindable_view_model_value, runtime_transition_comparators,
+    bindable_view_model_value, compare_view_model_integer_pair, runtime_transition_comparators,
 };
 use crate::ArtboardInstance;
 use crate::components::TransformProperty;
@@ -69,6 +69,16 @@ pub(super) enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
         value: u64,
     },
+    ViewModelArtboard {
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+        value: u64,
+    },
+    ViewModelIntegerPair {
+        left_bindable_global_id: u32,
+        right_bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
     ViewModelNumberPair {
         left: RuntimeViewModelNumberValue,
         right: RuntimeViewModelNumberValue,
@@ -104,8 +114,13 @@ pub(super) enum RuntimeTransitionCondition {
         right_bindable_global_id: u32,
         op: TransitionConditionOp,
     },
-    ViewModelTrigger {
+    ViewModelSourceChanged {
         bindable_global_id: u32,
+    },
+    ViewModelTriggerPair {
+        left_bindable_global_id: u32,
+        right_bindable_global_id: u32,
+        op: TransitionConditionOp,
     },
     ViewModelPointer {
         left_bindable_global_id: u32,
@@ -171,41 +186,49 @@ pub(super) enum RuntimeTransitionCondition {
     ComponentViewModelInteger {
         component: RuntimeComponentUintValue,
         bindable_global_id: u32,
+        component_on_left: bool,
         op: TransitionConditionOp,
     },
     ComponentViewModelBoolean {
         component: RuntimeComponentBoolValue,
         bindable_global_id: u32,
+        component_on_left: bool,
         op: TransitionConditionOp,
     },
     ComponentViewModelString {
         component: RuntimeComponentStringValue,
         bindable_global_id: u32,
+        component_on_left: bool,
         op: TransitionConditionOp,
     },
     ComponentViewModelColor {
         component: RuntimeComponentColorValue,
         bindable_global_id: u32,
+        component_on_left: bool,
         op: TransitionConditionOp,
     },
     ComponentViewModelEnum {
         component: RuntimeComponentUintValue,
         bindable_global_id: u32,
+        component_on_left: bool,
         op: TransitionConditionOp,
     },
     ComponentViewModelAsset {
         component: RuntimeComponentUintValue,
         bindable_global_id: u32,
+        component_on_left: bool,
         op: TransitionConditionOp,
     },
     ComponentViewModelTrigger {
         component: RuntimeComponentUintValue,
         bindable_global_id: u32,
+        component_on_left: bool,
         op: TransitionConditionOp,
     },
     ComponentViewModelArtboard {
         component: RuntimeComponentUintValue,
         bindable_global_id: u32,
+        component_on_left: bool,
         op: TransitionConditionOp,
     },
     ArtboardComponentNumber {
@@ -217,6 +240,11 @@ pub(super) enum RuntimeTransitionCondition {
         property_type: u64,
         op: TransitionConditionOp,
         threshold: f32,
+    },
+    ArtboardViewModelNumber {
+        property_type: u64,
+        op: TransitionConditionOp,
+        view_model: RuntimeViewModelNumberValue,
     },
 }
 
@@ -276,6 +304,21 @@ impl RuntimeTransitionCondition {
                 {
                     return Self::from_artboard_component(file, graph, object, left, right);
                 }
+                if left.type_name == "TransitionPropertyArtboardComparator"
+                    && right.type_name == "TransitionPropertyViewModelComparator"
+                {
+                    let property = RuntimeTransitionPropertyArtboardComparator::from_object(left)?;
+                    let bindable =
+                        RuntimeTransitionPropertyViewModelComparator::from_object(file, right)?
+                            .bindable();
+                    return Some(Self::ArtboardViewModelNumber {
+                        property_type: property.property_type(),
+                        op: TransitionConditionOp::from_value(
+                            object.uint_property("opValue").unwrap_or(0),
+                        ),
+                        view_model: RuntimeViewModelNumberValue::from_bindable(bindable)?,
+                    });
+                }
                 if left.type_name == "TransitionPropertyComponentComparator"
                     && right.type_name == "TransitionPropertyComponentComparator"
                 {
@@ -297,14 +340,20 @@ impl RuntimeTransitionCondition {
                 if left.type_name != "TransitionPropertyViewModelComparator" {
                     return None;
                 }
-                if right.type_name == "TransitionValueTriggerComparator"
-                    || right.type_name == "TransitionSelfComparator"
-                {
+                if right.type_name == "TransitionSelfComparator" {
+                    let bindable =
+                        RuntimeTransitionPropertyViewModelComparator::from_object(file, left)?
+                            .bindable();
+                    return Some(Self::ViewModelSourceChanged {
+                        bindable_global_id: bindable.id,
+                    });
+                }
+                if right.type_name == "TransitionValueTriggerComparator" {
                     let bindable =
                         RuntimeTransitionPropertyViewModelComparator::from_object(file, left)?
                             .bindable();
                     if bindable.type_name == "BindablePropertyTrigger" {
-                        return Some(Self::ViewModelTrigger {
+                        return Some(Self::ViewModelSourceChanged {
                             bindable_global_id: bindable.id,
                         });
                     }
@@ -320,6 +369,15 @@ impl RuntimeTransitionCondition {
                     let op = TransitionConditionOp::from_value(
                         object.uint_property("opValue").unwrap_or(0),
                     );
+                    if left_bindable.type_name == "BindablePropertyInteger"
+                        && right_bindable.type_name == "BindablePropertyInteger"
+                    {
+                        return Some(Self::ViewModelIntegerPair {
+                            left_bindable_global_id: left_bindable.id,
+                            right_bindable_global_id: right_bindable.id,
+                            op,
+                        });
+                    }
                     if left_bindable.type_name == "BindablePropertyNumber"
                         || left_bindable.type_name == "BindablePropertyInteger"
                     {
@@ -383,6 +441,15 @@ impl RuntimeTransitionCondition {
                             op,
                         });
                     }
+                    if left_bindable.type_name == "BindablePropertyTrigger"
+                        && right_bindable.type_name == "BindablePropertyTrigger"
+                    {
+                        return Some(Self::ViewModelTriggerPair {
+                            left_bindable_global_id: left_bindable.id,
+                            right_bindable_global_id: right_bindable.id,
+                            op,
+                        });
+                    }
                     if left_bindable.type_name == "BindablePropertyViewModel"
                         && right_bindable.type_name == "BindablePropertyViewModel"
                     {
@@ -400,6 +467,7 @@ impl RuntimeTransitionCondition {
                     && right.type_name != "TransitionValueStringComparator"
                     && right.type_name != "TransitionValueEnumComparator"
                     && right.type_name != "TransitionValueAssetComparator"
+                    && right.type_name != "TransitionValueArtboardComparator"
                 {
                     return None;
                 }
@@ -486,6 +554,17 @@ impl RuntimeTransitionCondition {
                         value: right.uint_property("value").unwrap_or(u64::from(u32::MAX)),
                     });
                 }
+                if bindable.type_name == "BindablePropertyArtboard"
+                    && right.type_name == "TransitionValueArtboardComparator"
+                {
+                    return Some(Self::ViewModelArtboard {
+                        bindable_global_id: bindable.id,
+                        op: TransitionConditionOp::from_value(
+                            object.uint_property("opValue").unwrap_or(0),
+                        ),
+                        value: right.uint_property("value").unwrap_or(u64::from(u32::MAX)),
+                    });
+                }
                 None
             }
             _ => None,
@@ -532,6 +611,7 @@ impl RuntimeTransitionCondition {
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
+                    component_on_left,
                     op,
                 })
             }
@@ -561,6 +641,7 @@ impl RuntimeTransitionCondition {
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
+                    component_on_left,
                     op,
                 })
             }
@@ -573,6 +654,7 @@ impl RuntimeTransitionCondition {
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
+                    component_on_left,
                     op,
                 })
             }
@@ -585,6 +667,7 @@ impl RuntimeTransitionCondition {
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
+                    component_on_left,
                     op,
                 })
             }
@@ -597,6 +680,7 @@ impl RuntimeTransitionCondition {
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
+                    component_on_left,
                     op,
                 })
             }
@@ -609,6 +693,7 @@ impl RuntimeTransitionCondition {
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
+                    component_on_left,
                     op,
                 })
             }
@@ -621,6 +706,7 @@ impl RuntimeTransitionCondition {
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
+                    component_on_left,
                     op,
                 })
             }
@@ -633,6 +719,7 @@ impl RuntimeTransitionCondition {
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
+                    component_on_left,
                     op,
                 })
             }
@@ -1043,7 +1130,7 @@ impl RuntimeTransitionCondition {
                 }
                 let input_value =
                     bindable_enum_value(bindable_enums, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(input_value, *value)
+                op.compare_u32_equal_only(input_value as u32, *value as u32)
             }
             Self::ViewModelAsset {
                 bindable_global_id,
@@ -1055,7 +1142,33 @@ impl RuntimeTransitionCondition {
                 }
                 let input_value =
                     bindable_asset_value(bindable_assets, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(input_value, *value)
+                op.compare_u32_equal_only(input_value as u32, *value as u32)
+            }
+            Self::ViewModelArtboard {
+                bindable_global_id,
+                op,
+                value,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let input_value =
+                    bindable_artboard_value(bindable_artboards, *bindable_global_id).unwrap_or(0);
+                op.compare_u32_equal_only(input_value as u32, *value as u32)
+            }
+            Self::ViewModelIntegerPair {
+                left_bindable_global_id,
+                right_bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let left = bindable_integer_value(bindable_integers, *left_bindable_global_id)
+                    .unwrap_or(0);
+                let right = bindable_integer_value(bindable_integers, *right_bindable_global_id)
+                    .unwrap_or(0);
+                compare_view_model_integer_pair(*op, left, right)
             }
             Self::ViewModelNumberPair { left, right, op } => {
                 if !data_context_present {
@@ -1120,7 +1233,7 @@ impl RuntimeTransitionCondition {
                     bindable_enum_value(bindable_enums, *left_bindable_global_id).unwrap_or(0);
                 let right =
                     bindable_enum_value(bindable_enums, *right_bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(left, right)
+                op.compare_u32_equal_only(left as u32, right as u32)
             }
             Self::ViewModelAssetPair {
                 left_bindable_global_id,
@@ -1134,7 +1247,7 @@ impl RuntimeTransitionCondition {
                     bindable_asset_value(bindable_assets, *left_bindable_global_id).unwrap_or(0);
                 let right =
                     bindable_asset_value(bindable_assets, *right_bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(left, right)
+                op.compare_u32_equal_only(left as u32, right as u32)
             }
             Self::ViewModelArtboardPair {
                 left_bindable_global_id,
@@ -1148,15 +1261,29 @@ impl RuntimeTransitionCondition {
                     .unwrap_or(0);
                 let right = bindable_artboard_value(bindable_artboards, *right_bindable_global_id)
                     .unwrap_or(0);
-                op.compare_u64_equal_only(left, right)
+                op.compare_u32_equal_only(left as u32, right as u32)
             }
-            Self::ViewModelTrigger { bindable_global_id } => {
+            Self::ViewModelSourceChanged { bindable_global_id } => {
                 if !data_context_present {
                     return false;
                 }
                 executor
-                    .retained_view_model_trigger_source(*bindable_global_id)
+                    .retained_view_model_source(*bindable_global_id)
                     .is_some_and(|cell| cell.is_changed_for_layer(view_model_trigger_layer_id))
+            }
+            Self::ViewModelTriggerPair {
+                left_bindable_global_id,
+                right_bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let left = bindable_trigger_value(bindable_triggers, *left_bindable_global_id)
+                    .unwrap_or(0);
+                let right = bindable_trigger_value(bindable_triggers, *right_bindable_global_id)
+                    .unwrap_or(0);
+                op.compare_u32_equal_only(left as u32, right as u32)
             }
             Self::ViewModelPointer {
                 left_bindable_global_id,
@@ -1214,9 +1341,9 @@ impl RuntimeTransitionCondition {
                 component,
                 op,
                 value,
-            } => op.compare_u64_equal_only(component.value(artboard), *value),
+            } => op.compare_u32_equal_only(component.value(artboard) as u32, *value as u32),
             Self::ComponentUintPair { left, right, op } => {
-                op.compare_u64_equal_only(left.value(artboard), right.value(artboard))
+                op.compare_u32_equal_only(left.value(artboard) as u32, right.value(artboard) as u32)
             }
             Self::ComponentViewModelNumber {
                 component,
@@ -1239,18 +1366,20 @@ impl RuntimeTransitionCondition {
                 component,
                 bindable_global_id,
                 op,
+                ..
             } => {
                 if !data_context_present {
                     return false;
                 }
                 let view_model_value =
                     bindable_integer_value(bindable_integers, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(component.value(artboard), view_model_value)
+                op.compare_u32_equal_only(component.value(artboard) as u32, view_model_value as u32)
             }
             Self::ComponentViewModelBoolean {
                 component,
                 bindable_global_id,
                 op,
+                ..
             } => {
                 if !data_context_present {
                     return false;
@@ -1263,6 +1392,7 @@ impl RuntimeTransitionCondition {
                 component,
                 bindable_global_id,
                 op,
+                ..
             } => {
                 if !data_context_present {
                     return false;
@@ -1275,6 +1405,7 @@ impl RuntimeTransitionCondition {
                 component,
                 bindable_global_id,
                 op,
+                ..
             } => {
                 if !data_context_present {
                     return false;
@@ -1287,49 +1418,53 @@ impl RuntimeTransitionCondition {
                 component,
                 bindable_global_id,
                 op,
+                ..
             } => {
                 if !data_context_present {
                     return false;
                 }
                 let view_model_value =
                     bindable_enum_value(bindable_enums, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(component.value(artboard), view_model_value)
+                op.compare_u32_equal_only(component.value(artboard) as u32, view_model_value as u32)
             }
             Self::ComponentViewModelAsset {
                 component,
                 bindable_global_id,
                 op,
+                ..
             } => {
                 if !data_context_present {
                     return false;
                 }
                 let view_model_value =
                     bindable_asset_value(bindable_assets, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(component.value(artboard), view_model_value)
+                op.compare_u32_equal_only(component.value(artboard) as u32, view_model_value as u32)
             }
             Self::ComponentViewModelTrigger {
                 component,
                 bindable_global_id,
                 op,
+                ..
             } => {
                 if !data_context_present {
                     return false;
                 }
                 let view_model_value =
                     bindable_trigger_value(bindable_triggers, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(component.value(artboard), view_model_value)
+                op.compare_u32_equal_only(component.value(artboard) as u32, view_model_value as u32)
             }
             Self::ComponentViewModelArtboard {
                 component,
                 bindable_global_id,
                 op,
+                ..
             } => {
                 if !data_context_present {
                     return false;
                 }
                 let view_model_value =
                     bindable_artboard_value(bindable_artboards, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(component.value(artboard), view_model_value)
+                op.compare_u32_equal_only(component.value(artboard) as u32, view_model_value as u32)
             }
             Self::ArtboardComponentNumber {
                 property_type,
@@ -1344,6 +1479,19 @@ impl RuntimeTransitionCondition {
                 op,
                 threshold,
             } => op.compare(artboard.artboard_property_value(*property_type), *threshold),
+            Self::ArtboardViewModelNumber {
+                property_type,
+                op,
+                view_model,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                op.compare(
+                    artboard.artboard_property_value(*property_type),
+                    view_model.value(bindable_numbers, bindable_integers),
+                )
+            }
         }
     }
 
@@ -1360,6 +1508,119 @@ impl RuntimeTransitionCondition {
         }
     }
 
+    fn left_view_model_bindable_global_id(&self) -> Option<u32> {
+        match self {
+            Self::ViewModelNumber {
+                bindable_global_id, ..
+            }
+            | Self::ViewModelIntegerNumber {
+                bindable_global_id, ..
+            }
+            | Self::ViewModelBoolean {
+                bindable_global_id, ..
+            }
+            | Self::ViewModelColor {
+                bindable_global_id, ..
+            }
+            | Self::ViewModelString {
+                bindable_global_id, ..
+            }
+            | Self::ViewModelEnum {
+                bindable_global_id, ..
+            }
+            | Self::ViewModelAsset {
+                bindable_global_id, ..
+            }
+            | Self::ViewModelArtboard {
+                bindable_global_id, ..
+            }
+            | Self::ViewModelSourceChanged { bindable_global_id } => Some(*bindable_global_id),
+            Self::ViewModelIntegerPair {
+                left_bindable_global_id,
+                ..
+            }
+            | Self::ViewModelBooleanPair {
+                left_bindable_global_id,
+                ..
+            }
+            | Self::ViewModelColorPair {
+                left_bindable_global_id,
+                ..
+            }
+            | Self::ViewModelStringPair {
+                left_bindable_global_id,
+                ..
+            }
+            | Self::ViewModelEnumPair {
+                left_bindable_global_id,
+                ..
+            }
+            | Self::ViewModelAssetPair {
+                left_bindable_global_id,
+                ..
+            }
+            | Self::ViewModelArtboardPair {
+                left_bindable_global_id,
+                ..
+            }
+            | Self::ViewModelTriggerPair {
+                left_bindable_global_id,
+                ..
+            }
+            | Self::ViewModelPointer {
+                left_bindable_global_id,
+                ..
+            } => Some(*left_bindable_global_id),
+            Self::ViewModelNumberPair { left, .. } => Some(left.bindable_global_id()),
+            Self::ComponentViewModelNumber {
+                view_model,
+                component_on_left: false,
+                ..
+            } => Some(view_model.bindable_global_id()),
+            Self::ComponentViewModelInteger {
+                bindable_global_id,
+                component_on_left: false,
+                ..
+            }
+            | Self::ComponentViewModelBoolean {
+                bindable_global_id,
+                component_on_left: false,
+                ..
+            }
+            | Self::ComponentViewModelString {
+                bindable_global_id,
+                component_on_left: false,
+                ..
+            }
+            | Self::ComponentViewModelColor {
+                bindable_global_id,
+                component_on_left: false,
+                ..
+            }
+            | Self::ComponentViewModelEnum {
+                bindable_global_id,
+                component_on_left: false,
+                ..
+            }
+            | Self::ComponentViewModelAsset {
+                bindable_global_id,
+                component_on_left: false,
+                ..
+            }
+            | Self::ComponentViewModelTrigger {
+                bindable_global_id,
+                component_on_left: false,
+                ..
+            }
+            | Self::ComponentViewModelArtboard {
+                bindable_global_id,
+                component_on_left: false,
+                ..
+            } => Some(*bindable_global_id),
+            _ => None,
+        }
+    }
+
     pub(super) fn use_input(
         &self,
         executor: &dyn RuntimeScheduledListenerActionExecutor,
@@ -1367,16 +1628,13 @@ impl RuntimeTransitionCondition {
         layer_index: usize,
         view_model_trigger_layer_id: u64,
     ) {
-        match self {
-            Self::Trigger(condition) => condition.use_input(inputs, layer_index),
-            Self::ViewModelTrigger { bindable_global_id } => {
-                if let Some(trigger) =
-                    executor.retained_view_model_trigger_source(*bindable_global_id)
-                {
-                    trigger.use_in_layer(view_model_trigger_layer_id);
-                }
+        if let Self::Trigger(condition) = self {
+            condition.use_input(inputs, layer_index);
+        }
+        if let Some(bindable_global_id) = self.left_view_model_bindable_global_id() {
+            if let Some(source) = executor.retained_view_model_source(bindable_global_id) {
+                source.use_in_layer(view_model_trigger_layer_id);
             }
-            _ => {}
         }
     }
 }
@@ -1716,6 +1974,14 @@ impl RuntimeViewModelNumberValue {
             }
             Self::Integer { bindable_global_id } => {
                 bindable_integer_value(bindable_integers, bindable_global_id).unwrap_or(0) as f32
+            }
+        }
+    }
+
+    fn bindable_global_id(self) -> u32 {
+        match self {
+            Self::Number { bindable_global_id } | Self::Integer { bindable_global_id } => {
+                bindable_global_id
             }
         }
     }

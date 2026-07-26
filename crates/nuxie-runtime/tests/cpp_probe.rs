@@ -53,6 +53,17 @@ struct CppAnimationResetColorRoundtrip {
     output: u32,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppTransitionIntegerComparisonSamples {
+    left: u32,
+    right: u32,
+    equal: bool,
+    not_equal: bool,
+    less_than: bool,
+    greater_than: bool,
+}
+
 fn cpp_runtime_fixture(relative: &str) -> PathBuf {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
@@ -14410,6 +14421,114 @@ fn synthetic_state_machine_component_artboard_unsupported_direction(file_id: u64
     })
 }
 
+fn synthetic_state_machine_viewmodel_comparator_matrix_case(
+    file_id: u64,
+    push_condition: impl FnOnce(&mut Vec<u8>),
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_f32_property(bytes, "Artboard", "width", 200.0);
+            push_f32_property(bytes, "Artboard", "height", 100.0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_condition(bytes);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_viewmodel_integer_pair_condition(
+    file_id: u64,
+    left: u64,
+    right: u64,
+    op_value: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_viewmodel_comparator_matrix_case(file_id, |bytes| {
+        push_bindable_integer_data_bind(bytes, left);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_bindable_integer_data_bind(bytes, right);
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+    })
+}
+
+fn synthetic_state_machine_viewmodel_trigger_pair_condition(
+    file_id: u64,
+    left: u64,
+    right: u64,
+    op_value: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_viewmodel_comparator_matrix_case(file_id, |bytes| {
+        push_bindable_trigger_data_bind(bytes, left);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_bindable_trigger_data_bind(bytes, right);
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+    })
+}
+
+fn synthetic_state_machine_viewmodel_artboard_literal_condition(
+    file_id: u64,
+    left: u64,
+    right: u64,
+    op_value: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_viewmodel_comparator_matrix_case(file_id, |bytes| {
+        push_bindable_artboard_data_bind(bytes, left);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_object_with_properties(bytes, "TransitionValueArtboardComparator", |bytes| {
+            push_uint_property(bytes, "TransitionValueArtboardComparator", "value", right);
+        });
+    })
+}
+
+fn synthetic_state_machine_artboard_viewmodel_number_condition(
+    file_id: u64,
+    right: f32,
+    op_value: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_viewmodel_comparator_matrix_case(file_id, |bytes| {
+        push_bindable_number_data_bind(bytes, right);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyArtboardComparator", |bytes| {
+            push_uint_property(
+                bytes,
+                "TransitionPropertyArtboardComparator",
+                "propertyType",
+                0,
+            );
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+    })
+}
+
 #[derive(Clone, Copy)]
 enum SyntheticComponentViewModelOrder {
     ComponentLeft,
@@ -17432,6 +17551,34 @@ fn animation_reset_color_roundtrip_matches_pinned_cpp_probe() {
     assert_eq!(cpp.input, 0x011d_1d1d);
     assert_eq!(cpp.stored_float_bits, 0x4b8e_8e8e);
     assert_eq!(cpp.output, 0x011d_1d1c);
+}
+
+#[test]
+fn transition_integer_comparison_matches_pinned_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let output = Command::new(&probe)
+        .arg("--transition-integer-comparison-samples")
+        .output()
+        .unwrap_or_else(|err| panic!("failed to run {}: {err}", probe.display()));
+    assert!(
+        output.status.success(),
+        "C++ transition-integer probe failed\nstatus: {}\nstdout:\n{}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let cpp: CppTransitionIntegerComparisonSamples =
+        serde_json::from_slice(&output.stdout).expect("valid transition-integer probe JSON");
+    assert_eq!(cpp.left, 0x0100_0001);
+    assert_eq!(cpp.right, 0x0100_0000);
+    assert!(!cpp.equal);
+    assert!(cpp.not_equal);
+    assert!(!cpp.less_than);
+    assert!(!cpp.greater_than);
 }
 
 #[test]
@@ -75662,6 +75809,95 @@ fn state_machine_default_viewmodel_nested_boolean_source_handle_mutation_matches
         compare_state_machine_boolean_binding(cpp_state_machine, rust_state_machine, 0, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_viewmodel_comparator_matrix_edges_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, bytes) in [
+        (
+            "synthetic/runtime_state_machine_viewmodel_integer_pair_exact_cpp.riv",
+            synthetic_state_machine_viewmodel_integer_pair_condition(
+                8360,
+                0x0100_0001,
+                0x0100_0000,
+                1,
+            ),
+        ),
+        (
+            "synthetic/runtime_state_machine_viewmodel_trigger_pair_cpp.riv",
+            synthetic_state_machine_viewmodel_trigger_pair_condition(8361, 7, 7, 0),
+        ),
+        (
+            "synthetic/runtime_state_machine_viewmodel_artboard_literal_cpp.riv",
+            synthetic_state_machine_viewmodel_artboard_literal_condition(8362, 11, 11, 0),
+        ),
+        (
+            "synthetic/runtime_state_machine_artboard_viewmodel_number_cpp.riv",
+            synthetic_state_machine_artboard_viewmodel_number_condition(8363, 150.0, 5),
+        ),
+    ] {
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-bind-empty-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+        ];
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        let mut rust_reports = Vec::new();
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        assert!(
+            state_machine.bind_empty_data_context(),
+            "{label} failed to bind empty data context"
+        );
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ));
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
 }
 
 #[test]

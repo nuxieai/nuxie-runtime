@@ -2794,6 +2794,13 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
                 "command": "historical executor command",
                 "evidence": "historical executor evidence",
             },
+            {
+                "merged_repair_sha": {
+                    "status": "pending",
+                    "reason": "No current landing.",
+                },
+            },
+            {"merged_repair_sha": "1" * 40},
         )
         self.assertEqual(errors, [])
 
@@ -2818,11 +2825,155 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
                 "command": "old command",
                 "evidence": "old evidence",
             },
+            {
+                "merged_repair_sha": {
+                    "status": "pending",
+                    "reason": "No current landing.",
+                },
+            },
+            {"merged_repair_sha": "1" * 40},
         )
         self.assertIn(
             "LOC-020 regression-reopened current repair cycle must keep "
             "executor_verification pending or fail until a fresh "
             "executor-green event",
+            errors,
+        )
+
+    def test_reopened_cycle_rejects_historical_landing_as_current(self) -> None:
+        errors: list[str] = []
+        history = [
+            {"state": "executor-green"},
+            {"state": "regression-reopened"},
+            {"state": "qualified"},
+            {"state": "mapped"},
+            {"state": "executor-green"},
+        ]
+        CHECKER.validate_history_verifications(
+            "LOC-020",
+            history,
+            {
+                "status": "pass",
+                "command": "fresh command",
+                "evidence": "fresh evidence",
+            },
+            {"status": "pending"},
+            errors,
+            {
+                "status": "pass",
+                "command": "old command",
+                "evidence": "old evidence",
+            },
+            {"merged_repair_sha": "1" * 40},
+            {"merged_repair_sha": "1" * 40},
+        )
+        self.assertIn(
+            "LOC-020 regression-reopened current repair cycle cannot reuse "
+            "historical merged_repair_sha",
+            errors,
+        )
+
+    def test_reopened_cycle_requires_landing_before_fresh_executor(self) -> None:
+        errors: list[str] = []
+        history = [
+            {"state": "executor-green"},
+            {"state": "regression-reopened"},
+            {"state": "qualified"},
+            {"state": "mapped"},
+            {"state": "executor-green"},
+        ]
+        CHECKER.validate_history_verifications(
+            "LOC-020",
+            history,
+            {
+                "status": "pass",
+                "command": "fresh command",
+                "evidence": "fresh evidence",
+            },
+            {"status": "pending"},
+            errors,
+            {
+                "status": "pass",
+                "command": "old command",
+                "evidence": "old evidence",
+            },
+            {
+                "merged_repair_sha": {
+                    "status": "pending",
+                    "reason": "No current landing.",
+                },
+            },
+            {"merged_repair_sha": "1" * 40},
+        )
+        self.assertIn(
+            "LOC-020 current repair cycle cannot reach executor-green "
+            "without a new merged_repair_sha",
+            errors,
+        )
+
+    def test_reopened_cycle_rejects_landing_before_fresh_executor(self) -> None:
+        errors: list[str] = []
+        history = [
+            {"state": "executor-green"},
+            {"state": "regression-reopened"},
+            {"state": "qualified"},
+            {"state": "mapped"},
+        ]
+        CHECKER.validate_history_verifications(
+            "LOC-020",
+            history,
+            {"status": "pending"},
+            {"status": "pending"},
+            errors,
+            {
+                "status": "pass",
+                "command": "old command",
+                "evidence": "old evidence",
+            },
+            {"merged_repair_sha": "2" * 40},
+            {"merged_repair_sha": "1" * 40},
+        )
+        self.assertIn(
+            "LOC-020 regression-reopened current repair cycle cannot record "
+            "merged_repair_sha before a fresh executor-green event",
+            errors,
+        )
+
+    def test_reopened_cycle_rejects_copied_executor_evidence(self) -> None:
+        errors: list[str] = []
+        history = [
+            {"state": "executor-green"},
+            {"state": "regression-reopened"},
+            {"state": "qualified"},
+            {"state": "mapped"},
+            {"state": "executor-green"},
+        ]
+        CHECKER.validate_history_verifications(
+            "LOC-020",
+            history,
+            {
+                "status": "pass",
+                "command": "old command",
+                "evidence": "old evidence",
+            },
+            {"status": "pending"},
+            errors,
+            {
+                "status": "pass",
+                "command": "old command",
+                "evidence": "old evidence",
+            },
+            {"merged_repair_sha": "2" * 40},
+            {"merged_repair_sha": "1" * 40},
+        )
+        self.assertIn(
+            "LOC-020 current executor command must differ from "
+            "historical_executor_verification",
+            errors,
+        )
+        self.assertIn(
+            "LOC-020 current executor evidence must differ from "
+            "historical_executor_verification",
             errors,
         )
 
@@ -2892,6 +3043,8 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
                 "command": "old command",
                 "evidence": "old evidence",
             },
+            {"merged_repair_sha": "2" * 40},
+            {"merged_repair_sha": "1" * 40},
         )
         self.assertIn(
             "LOC-020 has illegal state transition qualified -> "
@@ -2945,6 +3098,51 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
         )
         self.assertIn(
             "LOC-020 has illegal state transition executor-green -> qualified",
+            errors,
+        )
+
+    def test_regression_reopened_requires_independent_actor(self) -> None:
+        errors: list[str] = []
+        CHECKER.validate_history(
+            "LOC-020",
+            "regression-reopened",
+            [
+                {
+                    "state": "reported",
+                    "actor": "editor-cutover",
+                    "evidence": "source-artifact",
+                },
+                {
+                    "state": "reproduced",
+                    "actor": "f-ed-executor",
+                    "evidence": "exact reproducer",
+                },
+                {
+                    "state": "qualified",
+                    "actor": "f-ed-executor",
+                    "evidence": "qualification",
+                },
+                {
+                    "state": "mapped",
+                    "actor": "f-ed-executor",
+                    "evidence": "map",
+                },
+                {
+                    "state": "executor-green",
+                    "actor": "f-ed-executor",
+                    "evidence": "gates",
+                },
+                {
+                    "state": "regression-reopened",
+                    "actor": "f-ed-executor",
+                    "evidence": "not independent",
+                },
+            ],
+            errors,
+        )
+        self.assertIn(
+            "LOC-020 regression-reopened was not recorded by "
+            "independent-orchestrator",
             errors,
         )
 

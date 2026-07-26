@@ -156,8 +156,17 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   error-scope regression. The row is not promotable or complete and requires a
   new production landing after internal Lua WebAssembly repair task
   `019f9f34-a75f-7a11-a580-e9f54e610d93` on
-  `levi/fix-wasm-lua-coroutine-resume`.
-- Open formal implementation blocker: `RT-ED-007`.
+  `levi/fix-wasm-lua-coroutine-resume`. The current evidence is a temporary,
+  uncommitted real-GPU probe at exact `fe0a0a07` / tree `4512e0d7`; its
+  2,129-byte local log has SHA-256
+  `93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611`.
+  The canonical browser path still crashes at `luaG_indexerror` /
+  `luaD_throw`; its cause remains under investigation in that focused
+  dependency task using short durable checkpoints after repeated system
+  errors. LOC-009 remains frozen and its reopened cycle has consumed nothing.
+- Open formal implementation blocker assigned to Runtime Fix: `RT-ED-007`.
+  Defects Fix preserves its diagnosis and tests but has no Scene-authoring
+  writer; it records independent verification after the Runtime Fix landing.
 - Historical WebGL2 evidence only, with no linked product child:
   `RT-ED-004`.
 - Open Scene/API candidates: `LOC-001`, `LOC-005`, `LOC-008`.
@@ -325,7 +334,7 @@ Current work is:
 Runtime-side WebGPU work must keep `make browser-webgpu-only-check` green and
 must not reintroduce any prohibited WebGL2 surface.
 
-### Q2 — Promote RT-ED-005 and implement RT-ED-007
+### Q2 — Promote RT-ED-005 and verify Runtime Fix's RT-ED-007 landing
 
 `F-ED-03` (`RT-ED-005`) is merged and consumed. Its generic number/color
 property-key authoring, direction semantics, record round trips, runtime
@@ -334,11 +343,14 @@ promotion only. Do not reopen that Scene implementation. `P09-C01` remains
 separately dependent on the FL-E layout/TextStyle owner family.
 
 `F-ED-04` (`RT-ED-007`) remains the one open formal Scene authoring
-implementation in this phase. Its exact `TOUCH` set must remain outside FL
-reservations. Nested transition duration must accept and validate the complete
-nested `ViewModelNumberSource` path, reuse the existing low-level resolver, and
-receive direct record round-trip tests, runtime behavior tests, linked
-`P19-C09`, independent review, and its own merged SHA.
+implementation, assigned exclusively to Runtime Fix. Defects Fix retains the
+diagnosis, direct record/runtime test requirements, and linked `P19-C09`, but
+must keep its Scene candidate quarantined. Runtime Fix owns the complete path
+through the exported `scene.rs` seam and its active `state_machine.rs` /
+`state_machine/bindables.rs` work. After Runtime Fix lands the nested
+`ViewModelNumberSource` repair with its own merged SHA, Defects Fix runs only
+the unchanged set → fire → `advance(0)` verification and records the
+independent result.
 
 ### Q3 — Qualify and close Scene ownership candidates
 

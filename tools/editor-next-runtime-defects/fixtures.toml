@@ -160,7 +160,7 @@ id = "fed.loc_009.gpu_canvas_records"
 defect_id = "LOC-009"
 kind = "browser-renderer"
 status = "qualified"
-driver = "cargo-test:F-ED-11 exact target-0/16 decode, direct authored-WGSL draw, and imported GPU-canvas pixels"
+driver = "temporary-local-only:not committed; exact fe0a0a07 loc009_real_gpu_fail_closed_probe reaches physical shader-module creation and exposes uncaught max_bind_groups validation while Rust returns Ok; log sha256 93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611; PR #54 positive-path passes remain historical"
 stimulus_files = [
   { root = "rive", path = "src/assets/shader_asset.cpp", sha256 = "fadff3f2fbb73574e47080a032b34f35046890de09d3fd7b38e42a7b27071437" },
   { root = "rive", path = "src/lua/renderer/lua_gpu.cpp", sha256 = "2b36c01d2fa21f4886cf1063f6ea4a1396eee8fe45c491baf7326778743d035c" },

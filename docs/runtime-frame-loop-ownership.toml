@@ -4,7 +4,7 @@ upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 porting_rules_file = "docs/PORTING.md"
 file_correspondence_manifest = "file-correspondence-manifest.toml"
 trace_evidence_file = "docs/runtime-frame-loop-trace.json"
-phase = "atlas-open"
+phase = "fl-a-promoted"
 
 [expected_trace_landmarks]
 frame = [
@@ -99,10 +99,10 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 0
+faithful = 52
 adapted = 0
 divergent-by-decision = 0
-pending = 338
+pending = 286
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
@@ -324,7 +324,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/animation_reset.cpp"
@@ -1116,7 +1116,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/bones/root_bone.cpp"
@@ -1124,7 +1124,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/bones/skin.cpp"
@@ -1132,7 +1132,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/bones/skinnable.cpp"
@@ -1140,7 +1140,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/bones/tendon.cpp"
@@ -1148,7 +1148,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/bones/weight.cpp"
@@ -1156,7 +1156,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/component.cpp"
@@ -1164,7 +1164,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/command_server.cpp"
@@ -1183,7 +1183,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/constraint.cpp"
@@ -1191,7 +1191,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/distance_constraint.cpp"
@@ -1199,7 +1199,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/draggable_constraint.cpp"
@@ -1207,7 +1207,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/follow_path_constraint.cpp"
@@ -1215,7 +1215,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/ik_constraint.cpp"
@@ -1223,7 +1223,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/list_constraint.cpp"
@@ -1231,7 +1231,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/list_follow_path_constraint.cpp"
@@ -1239,7 +1239,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/rotation_constraint.cpp"
@@ -1247,7 +1247,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/scale_constraint.cpp"
@@ -1255,7 +1255,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/scrolling/clamped_scroll_physics.cpp"
@@ -1263,7 +1263,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/scrolling/elastic_scroll_physics.cpp"
@@ -1271,7 +1271,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint.cpp"
@@ -1279,7 +1279,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_bar_constraint_proxy.cpp"
@@ -1287,7 +1287,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint.cpp"
@@ -1295,7 +1295,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_constraint_proxy.cpp"
@@ -1303,7 +1303,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_physics.cpp"
@@ -1311,7 +1311,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/scrolling/scroll_virtualizer.cpp"
@@ -1319,7 +1319,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/targeted_constraint.cpp"
@@ -1327,7 +1327,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/transform_constraint.cpp"
@@ -1335,7 +1335,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/translation_constraint.cpp"
@@ -1343,7 +1343,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/container_component.cpp"
@@ -1351,7 +1351,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_target_value.cpp"
@@ -1719,7 +1719,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/draw_rules.cpp"
@@ -1743,7 +1743,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/event.cpp"
@@ -1887,7 +1887,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/bezier_utils.cpp"
@@ -1895,7 +1895,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/bit_field_loc.cpp"
@@ -1903,7 +1903,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/contour_measure.cpp"
@@ -1911,7 +1911,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/hit_test.cpp"
@@ -1919,7 +1919,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/mat2d.cpp"
@@ -1927,7 +1927,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/mat2d_find_max_scale.cpp"
@@ -1935,7 +1935,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/n_slicer_helpers.cpp"
@@ -1943,7 +1943,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/path_measure.cpp"
@@ -1951,7 +1951,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/random.cpp"
@@ -1959,7 +1959,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/raw_path.cpp"
@@ -1967,7 +1967,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/raw_path_utils.cpp"
@@ -1975,7 +1975,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/rectangles_to_contour.cpp"
@@ -1983,7 +1983,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/rectangles_to_contour.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/vec2d.cpp"
@@ -1991,7 +1991,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/nested_artboard.cpp"
@@ -2031,7 +2031,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/parent_traversal.cpp"
@@ -2039,7 +2039,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/parent_traversal.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/resetting_component.cpp"
@@ -2047,7 +2047,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/script_input_artboard.cpp"
@@ -2711,7 +2711,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/data_enum.cpp"
@@ -3015,7 +3015,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/world_transform_component.cpp"
@@ -3023,7 +3023,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[member]]
 id = "component.identity"

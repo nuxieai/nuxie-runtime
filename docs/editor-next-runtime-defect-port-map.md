@@ -220,28 +220,27 @@ before this table is revised.
 
 The safe next queue is therefore:
 
-1. retain combined evidence PR #65 at exact runtime main
-   `85e69a8215ef7caaef2c91437b0f435a5b830a56`; its four dispositions are
-   integrated and no evidence-only merge lane remains active;
-2. finish the Scene-only additive `LOC-018` 409/420 authoring repair, including
-   all four concrete pinned-C++ interpolator variants and semantic ScriptAsset
-   ordinal mapping, then land only the +60/+60 (410 -> 530) authoring claim;
-3. finish the Scene-only `LOC-001` retained ViewModel-instance owner repair,
+1. retain intake reconciliation PR #67 at
+   `74368a874130a91c9837439b691f0cf44fa4c4a6` and additive `LOC-018` PR #66
+   at `d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3`; the implementation is landed
+   with only the +60/+60 (410 -> 530) authoring claim, while the incomplete
+   inbox row remains evidence-blocked;
+2. finish the Scene-only `LOC-001` retained ViewModel-instance owner repair,
    with `LOC-002` and `LOC-005` as unchanged duplicate acceptance cases;
-4. keep `LOC-009` outside that shared tracking line, parked, and frozen while
+3. keep `LOC-009` outside that shared tracking line, parked, and frozen while
    diagnosis waits for a different reliable execution/model environment;
-5. fan out read-only direct qualifications; treat `RT-ED-004` only as
+4. fan out read-only direct qualifications; treat `RT-ED-004` only as
    historical WebGL2 evidence unless an explicit WebGPU-only requalification
    is scheduled;
-6. retain `F-ED-04` as deferred post-port verification of the narrow
+5. retain `F-ED-04` as deferred post-port verification of the narrow
    state-machine/bindables seam, with no direct Runtime Fix request, schedule,
    Scene writer, or active runtime lease; activate a qualified
    renderer-only `F-ED-10` closure only if it survives the atlas and
    coordinator lease checks;
-7. perform record normalization and local ABI 1.6 qualification;
-8. keep every runtime-owner result as evidence until the corresponding FL
+6. perform record normalization and local ABI 1.6 qualification;
+7. keep every runtime-owner result as evidence until the corresponding FL
    executor releases or absorbs its owner family;
-9. re-handshake after the Runtime Fix stable-Apple repair, after the `FL-B`
+8. re-handshake after the Runtime Fix stable-Apple repair, after the `FL-B`
    safety/API decision, after every later FL landing, and before any
    renderer-only landing.
 
@@ -388,7 +387,7 @@ fixture in `F-ED-00`.
 | `LOC-015` | stale ABI 1.5 artifact evidence | publish ABI 1.6, pin URL/checksum, rerun |
 | `LOC-016` | source implementation already present; publication gap | publish ABI 1.6 typed animation selection and integrate it |
 | `LOC-017` | invalid old native capture | rerun ABI 1.6 with typed player/time and production host composition |
-| `LOC-018` | changed intake needs evidence while its already-authorized additive Scene candidate remains under review | finish PR #66's exact typed 409/420 hierarchy/fixpoint, but do not promote the row until the committed inbox separately labels full Editor and Runtime SHAs; remaining ten product records stay Editor-owned and runtime execution/pixels stay post-port |
+| `LOC-018` | additive Scene authoring repair landed, changed intake still needs evidence | PR #66 / `d7cef0a8` supplies exact typed 409/420 hierarchy/fixpoint, but the row cannot promote until the committed inbox separately labels full Editor and Runtime SHAs; remaining ten product records stay Editor-owned and runtime execution/pixels stay post-port |
 | `LOC-019` | closed independently verified BrowserWebGpu nullable-error repair | real Chrome clean-null and concrete-error paths, the full WebGPU matrix, and corpus 1468 exact/837 byte-exact/0 divergent verify merge `ef9dcedd` in consumed runtime `e72323c8` |
 
 There is no `LOC-010` in the source artifacts. `F-ED-00` records an explicit

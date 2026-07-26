@@ -7,10 +7,11 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: two Scene-owned production repairs, parked authored-shader
+- phase: one Scene-owned production repair, one landed additive Scene seam,
+  parked authored-shader
   diagnosis, and deferred post-port verification;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
-- investigation base: `e72323c808b91d706ba3b745396beaca7accd69a`;
+- investigation base: `d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3`;
 - Editor's last consumed runtime:
   `e72323c808b91d706ba3b745396beaca7accd69a`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
@@ -28,25 +29,25 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   `LOC-003`, `LOC-011`, `LOC-014`, and `LOC-019` directly qualified.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
-- latest control-plane landing: combined evidence PR #65 rebase-merged at
-  exact runtime main `85e69a8215ef7caaef2c91437b0f435a5b830a56`;
-- active control-plane lane: none. PR #65 records `LOC-014` closed as a stale
-  oracle, `LOC-011` handoff-ready as Editor-owned, and the independently
-  verified `RT-ED-003` and `LOC-019` repairs closed;
-- active Scene-owned repair: `LOC-018` has an open additive-authoring PR #66
-  based on exact main `85e69a82`. It is merge-blocked until the public
-  `LayoutComponentStyle::interpolatorId` model covers all four concrete pinned
-  C++ interpolators (`CubicEase`, `CubicValue`, `Elastic`, and `Scripted`) with
-  exact fields, defaults, presence, and semantic ScriptAsset ordinal mapping.
-  Its claim is limited to stable typed 409/420 hierarchy and the current
+- latest control-plane landing: intake reconciliation PR #67 rebase-merged at
+  exact runtime main `74368a874130a91c9837439b691f0cf44fa4c4a6`;
+- active control-plane lane: this post-landing reconciliation records the
+  additive Scene implementation without promoting its incomplete inbox row;
+- landed Scene-owned repair: `LOC-018` PR #66 exact head
+  `2707280cb3507f8d5c2f48cfe58f1cf0990e9ed0` rebase-merged at
+  `d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3`. It covers all four concrete
+  pinned C++ interpolators (`CubicEase`, `CubicValue`, `Elastic`, and
+  `Scripted`) with exact fields, defaults, presence, and semantic ScriptAsset
+  ordinal mapping. Its claim is limited to stable typed 409/420 hierarchy and
+  the current
   Editor stream's +60 `LayoutComponent` plus +60 `LayoutComponentStyle`
   records (410 -> 530). The remaining ten product records and retained product
   traversal/order are Editor-owned; layout execution, dirt, pixels, and final
   product closure remain deferred post-port verification;
   the changed committed inbox record is currently `intake-needs-evidence`
   because it does not separately label one full Editor SHA and one full
-  Runtime SHA. The already-authorized candidate may finish review, but the row
-  cannot promote until that committed-evidence gap is resolved;
+  Runtime SHA. The implementation is merged, but the row cannot promote until
+  that committed-evidence gap is resolved;
 - active Scene-owned repair: `LOC-001` owns one retained ViewModel-instance
   handle per authored `ViewModelInstanceId` across artboard rematerialization,
   with `LOC-002` and `LOC-005` retained as duplicate acceptance cases. The
@@ -363,12 +364,12 @@ relabeled green.
 
 ## Next queue
 
-1. complete the four-variant interpolator correction, independently review,
-   and land the additive `LOC-018` Scene-authoring repair without expanding
-   its execution or product claim;
-2. complete and independently verify the `LOC-001` retained-owner repair,
+1. complete and independently verify the `LOC-001` retained-owner repair,
    including unchanged `LOC-002` / `LOC-005` acceptance, before publishing
    any Scene production SHA;
+2. keep merged `LOC-018` in `intake-needs-evidence` until its committed source
+   separately labels full Editor and Runtime SHAs; preserve the exact additive
+   claim and do not conflate downstream product/runtime execution;
 3. keep `LOC-009` outside the shared tracking merge line, parked, and frozen
    until diagnosis resumes in a different reliable execution/model
    environment; do not close or consume it without a reviewed new production

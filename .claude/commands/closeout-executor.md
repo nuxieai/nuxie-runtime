@@ -14,6 +14,16 @@ newer). Resume state lives ONLY in files, never in memory:
 - `docs/b6-audit/` — structural audit results, TRIAGE.md, spec.
 - `docs/parity-gap-register.md` — gap register incl. D-rows.
 
+## Canonical program precedence
+
+The static queue below is historical closeout context, not the live NEXT
+pointer. The authoritative program federation and sole NEXT pointer live in
+`docs/parity-closeout-status.md`; the active dependency-wave state lives in
+`docs/runtime-frame-loop-status.md`; executable row truth lives in
+`docs/runtime-frame-loop-ownership.toml` and
+`file-correspondence-manifest.toml`. When these sources differ, follow that
+precedence and update this file rather than reviving a stale queue item.
+
 ## Session start ritual (every session, no exceptions)
 
 1. `git -C /Users/levi/dev/oss/rive-runtime rev-parse HEAD` MUST print
@@ -51,7 +61,7 @@ Commit with ticket tags (`[RB-1]`, `[RD-1]`, `[B-5]`...), push to main
 after gates; `git pull --rebase` first (a teammate lands editor work on
 main — their changes are audited by the same gates, not trusted).
 
-## The queue (work top to bottom; details in the status file)
+## Historical closeout queue (do not use as the live NEXT pointer)
 
 1. **#RB-1 e5** (three parts, separate commits — full brief is in the
    status file's mini-queue and the dispatched lane prompt):

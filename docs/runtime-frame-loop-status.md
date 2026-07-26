@@ -4,26 +4,26 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-B acceptance correction. FL-B1 through FL-B4 are translated, but
-  rejected candidate `3ef06dd5ae07c16c5dc2aa29984412b926ae5426` is not
-  promotable. Correction commit
-  `89e4e3b1c9c04cab2e9cf7d52c76afac0e5fe62b` now carries the exact
-  AnimationReset color round-trip, fail-closed C++ probe archive provenance,
-  FLR adaptation validation, and durable performance evidence. Its focused
-  C++ probes, runtime and probe-armed workspace floors, ordinary/scripted
-  differential gates, renderer pixel referee, C API, Apple product/release
-  checks, trace/checker, lint, format, diff, size, and performance evidence are
-  current. The mandatory XCFramework floor exposed a pre-existing FL-A
-  stable-Rust compile defect in `constraints.rs`; per coordinator direction,
-  that separate repair must land on `origin/main`, then FL-B must rebase and
-  rerun every provenance-affected floor before a new immutable candidate is
-  published. No acceptance request is active and FL-C remains blocked.
-  FL-B1 through FL-B3 are locally gated, and
-  FL-A was independently
-  accepted and promoted at
+- Phase: FL-C provisional implementation. FL-B1 through FL-B4 are translated
+  on provisional tip
+  `0b08970fccc42ff3677534d4dcece0f05f69a0bc`, but rejected candidate
+  `3ef06dd5ae07c16c5dc2aa29984412b926ae5426` remains unpromoted and every
+  FL-B file/member row remains pending until reacceptance.
+- Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
+  on that provisional implementation without claiming FL-B verification.
+  FL-C's frozen 47-file/eight-member lane map is
+  `docs/runtime-frame-loop-fl-c-spec.md`; FL-C1 inputs/listener definitions is
+  the exact current production lane.
+- Stable-Rust Apple compatibility repair
+  `95eb04b7cfb847f24ba77872bd8a0ee43da1af41` mechanically rewrites the
+  experimental match guard in `constraint_bounds` without changing behavior.
+  Fmt, focused constraint evidence (1 / 1), runtime (491 / 491), and the full
+  Apple XCFramework build/package/ABI/header/Swift verification are green.
+- FL-A remains independently accepted/promoted at
   `f86d5ba0146697abc996310c62fa45e1f053144b`; exact main
   `e72323c808b91d706ba3b745396beaca7accd69a` was consumed without overlap at
   FL-B boundary merge `b5d5bc8afeaa0369cbc248b85366111649cb9010`.
+  No FL-B or FL-C acceptance request is active.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - File closure: 52 / 338. All 52 `component-update-graph` rows are `faithful`
   and `orchestrator-verified`; the 286 later-wave rows remain pending.
@@ -32,10 +32,10 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 - Open mechanism gaps: 7 / 10. FL-G02 and FL-G06 remain closed; FL-G10 records
   the user-approved D2 saturation choice for AnimationReset's otherwise
   undefined float-to-int edge.
-- Current dependency wave: FL-B. Its frozen 45-file/eight-member mini-map is
-  `docs/runtime-frame-loop-fl-b-spec.md`; FL-B1 through FL-B4 are implemented,
-  FL-B4 is in whole-wave verification, and
-  every FL-B row remains pending until whole-wave independent verification.
+- Current dependency wave: FL-C. FL-B's frozen 45-file/eight-member mini-map
+  remains implemented but pending reacceptance. FL-C consumes that
+  implementation provisionally under the coordinator override; its first
+  lane is the 13-file `state_machine.inputs` owner family.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
   defined post-advance C++ result. No `Option<bool>` API break or

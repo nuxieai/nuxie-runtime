@@ -1236,3 +1236,17 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   structured error; never panic on imported data. Do not move parenting,
   registration, or callbacks into validation merely to make the type
   convenient (`src/component.cpp:13-30`; §3.1).
+- **FLR-16 Preserve source-file correspondence as part of ownership.** Each
+  meaningful pinned C++ implementation file maps to a similarly named Rust
+  file that owns the same class or narrowly coupled responsibility. A large
+  parent module may declare modules, expose shared types, coordinate complete
+  owner families, and re-export stable public APIs; it may not accumulate the
+  bodies of unrelated C++ classes. When a port touches an owner currently
+  buried in `artboard.rs`, `animation.rs`, `draw.rs`, or `state_machine.rs`,
+  move that owner into its corresponding file before or alongside the semantic
+  translation. Prefer a separate behavior-preserving move commit when it makes
+  review clearer. Update both mechanical correspondence ledgers with the exact
+  Rust path. Tiny generated helpers or code that the pinned C++ source itself
+  keeps inseparable may remain shared, but the mapping must explain the
+  exception in plain language. This rule is incremental: do not launch a
+  whole-runtime file shuffle or delay the dependency-ready owner family.

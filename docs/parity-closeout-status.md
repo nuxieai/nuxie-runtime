@@ -992,20 +992,39 @@ upstream-sync-map registry).
 - [ ] #HD-5 publish the parity claim doc
 - [ ] #LT-* long tail (each opens by USER-GATE)
 
+## Canonical program federation
+
+The overall objective remains the complete parity closeout in
+`docs/parity-closeout-map.md`. The current dependency subplan is the finite
+C++-corresponding runtime frame-loop program in
+`docs/runtime-frame-loop-port-map.md`, with live subplan state in
+`docs/runtime-frame-loop-status.md` and mechanical truth in
+`docs/runtime-frame-loop-ownership.toml` plus
+`file-correspondence-manifest.toml`. `docs/PORTING.md` is binding law.
+
+Precedence is: this top-level live status selects the current program
+milestone; the current subplan status selects its exact wave/lane; executable
+ledgers prove row state; maps define scope/order; static executor queue text is
+historical unless it agrees with these sources.
+
+**Canonical NEXT:** FL-C1 inputs/listener-definition ownership on provisional
+runtime base `95eb04b7cfb847f24ba77872bd8a0ee43da1af41`. FL-B rows remain pending
+reacceptance and are not promoted by starting FL-C.
+
 ## Next queue (top = next; orchestrator maintains)
 
 1. Execute the finite C++-corresponding runtime frame-loop port recorded in
    `docs/runtime-frame-loop-status.md`. FL-0's 337-file/74-member atlas is
    committed. FL-1's dual translations are adjudicated into FLR-1..FLR-15;
    source shaping found the existing owner-family module seams sufficient.
-   FL-A Component ownership is independently accepted and promoted. FL-B1's
-   KeyFrame/keyed-definition owner and FL-B2 LinearAnimation
-   definition/occurrence owner and FL-B3 AnimationReset factory lifecycle are
-   translated and locally gated within the frozen 45-file/eight-member spec
-   `docs/runtime-frame-loop-fl-b-spec.md`, followed by dependency-ordered
-   state-machine, Artboard/DataBind, and live-draw owner waves. Measure the
-   whole corpus only after a complete wave. The sorted slow-scene list is no
-   longer the implementation queue.
+   FL-A Component ownership is independently accepted and promoted. FL-B1
+   through FL-B4 are translated on a provisional tip and remain pending
+   reacceptance. Coordinator direction authorizes FL-C to proceed without
+   falsely promoting FL-B. Execute FL-C1 through FL-C5 from the frozen
+   47-file/eight-member spec `docs/runtime-frame-loop-fl-c-spec.md`, followed
+   by dependency-ordered Artboard/DataBind and live-draw owner waves. Measure
+   the whole corpus only after a complete wave. The sorted slow-scene list is
+   no longer the implementation queue.
 2. Independent orchestrator verification may promote completed #RD-1
    correspondence rows from `pending-verification`. #B-6 is complete; the
    next ordinary closeout-spine implementation item after the frame-loop port

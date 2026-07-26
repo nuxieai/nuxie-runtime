@@ -344,8 +344,8 @@ separately dependent on the FL-E layout/TextStyle owner family.
 
 `F-ED-04` (`RT-ED-007`) remains the one open formal Scene authoring
 implementation, assigned exclusively to Runtime Fix. Defects Fix retains the
-diagnosis, direct record/runtime test requirements, and linked `P19-C09`, but
-must keep its Scene candidate quarantined. Runtime Fix owns the complete path
+diagnosis as read-only evidence and must keep its Scene candidate quarantined.
+Runtime Fix owns the complete path
 through the exported `scene.rs` seam and its active `state_machine.rs` /
 `state_machine/bindables.rs` work. After Runtime Fix lands the nested
 `ViewModelNumberSource` repair with its own merged SHA, Defects Fix runs only

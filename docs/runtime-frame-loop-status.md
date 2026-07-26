@@ -13,8 +13,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 49-file/eight-member lane map is
   `docs/runtime-frame-loop-fl-c-spec.md`; FL-C1 inputs/listener definitions is
-  implemented and pending lane-boundary evidence, and FL-C2 transition
-  conditions is the exact next production lane.
+  implemented with a green lane-boundary floor and pending independent
+  acceptance, and FL-C2 transition conditions is the exact next production
+  lane.
 - Stable-Rust Apple compatibility repair
   `95eb04b7cfb847f24ba77872bd8a0ee43da1af41` mechanically rewrites the
   experimental match guard in `constraint_bounds` without changing behavior.
@@ -88,6 +89,14 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `None` invocations, and invented Rust editing behavior. FL-C1 is therefore
   implementation-complete at 12 source-corresponding files; all rows remain
   pending until lane acceptance.
+- FL-C1 boundary floor at `6bca78080cddf94d983ca03f9460ebb129d28477`
+  is green: fmt; runtime 507 / 507; probe-armed workspace including C++ probe
+  727 / 727; ordinary and scripted golden each 317 / 317 entries and 647 /
+  647 segments with zero divergences; C API smoke; Apple XCFramework
+  build/package/ABI/header/Swift verification; size 7.66 MiB without
+  scripting and 8.51 MiB with scripting under the 9 MiB budget; and the
+  same-runner Dawn pixel corpus 1,468 / 1,468 with 1,370 byte-exact and zero
+  divergences. This evidence does not promote the pending FL-C1 rows.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
   defined post-advance C++ result. No `Option<bool>` API break or

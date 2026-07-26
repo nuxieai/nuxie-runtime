@@ -1,6 +1,10 @@
+//! Retained transition-condition definitions and base dispatch.
+
 use super::{
-    RuntimeScheduledListenerActionExecutor, StateMachineBindableIntegerInstance,
-    StateMachineBindableNumberInstance, StateMachineInputInstance, TransitionEvaluationContext,
+    RuntimeScheduledListenerActionExecutor, RuntimeTransitionBoolCondition,
+    RuntimeTransitionNumberCondition, RuntimeTransitionTriggerCondition,
+    StateMachineBindableIntegerInstance, StateMachineBindableNumberInstance,
+    StateMachineInputInstance, TransitionConditionOp, TransitionEvaluationContext,
     bindable_artboard_value, bindable_asset_value, bindable_boolean_value, bindable_color_value,
     bindable_enum_value, bindable_integer_value, bindable_number_value, bindable_string_value,
     bindable_trigger_value, bindable_view_model_value,
@@ -31,18 +35,9 @@ pub(super) enum RuntimeTransitionCondition {
     Scripted {
         global_id: u32,
     },
-    Bool {
-        input_index: usize,
-        op: TransitionConditionOp,
-    },
-    Number {
-        input_index: usize,
-        op: TransitionConditionOp,
-        value: f32,
-    },
-    Trigger {
-        input_index: usize,
-    },
+    Bool(RuntimeTransitionBoolCondition),
+    Number(RuntimeTransitionNumberCondition),
+    Trigger(RuntimeTransitionTriggerCondition),
     ViewModelNumber {
         bindable_global_id: u32,
         op: TransitionConditionOp,
@@ -231,10 +226,7 @@ pub(super) enum RuntimeTransitionCondition {
 
 impl RuntimeTransitionCondition {
     pub(super) fn is_direct_input(&self) -> bool {
-        matches!(
-            self,
-            Self::Bool { .. } | Self::Number { .. } | Self::Trigger { .. }
-        )
+        matches!(self, Self::Bool(_) | Self::Number(_) | Self::Trigger(_))
     }
 
     pub(super) fn can_change_during_artboard_update(&self) -> bool {
@@ -244,10 +236,7 @@ impl RuntimeTransitionCondition {
         // condition family can observe component, focus, script, or bound
         // view-model work performed after that loop and therefore still needs
         // C++'s post-update transition probe.
-        !matches!(
-            self,
-            Self::Bool { .. } | Self::Number { .. } | Self::Trigger { .. }
-        )
+        !matches!(self, Self::Bool(_) | Self::Number(_) | Self::Trigger(_))
     }
 
     pub(super) fn from_object(
@@ -279,27 +268,13 @@ impl RuntimeTransitionCondition {
                 global_id: object.id,
             }),
             "TransitionBoolCondition" => {
-                let input_index = usize::try_from(object.uint_property("inputId")?).ok()?;
-                Some(Self::Bool {
-                    input_index,
-                    op: TransitionConditionOp::from_value(
-                        object.uint_property("opValue").unwrap_or(0),
-                    ),
-                })
+                RuntimeTransitionBoolCondition::from_object(object).map(Self::Bool)
             }
             "TransitionNumberCondition" => {
-                let input_index = usize::try_from(object.uint_property("inputId")?).ok()?;
-                Some(Self::Number {
-                    input_index,
-                    op: TransitionConditionOp::from_value(
-                        object.uint_property("opValue").unwrap_or(0),
-                    ),
-                    value: object.double_property("value").unwrap_or(0.0),
-                })
+                RuntimeTransitionNumberCondition::from_object(object).map(Self::Number)
             }
             "TransitionTriggerCondition" => {
-                let input_index = usize::try_from(object.uint_property("inputId")?).ok()?;
-                Some(Self::Trigger { input_index })
+                RuntimeTransitionTriggerCondition::from_object(object).map(Self::Trigger)
             }
             "TransitionViewModelCondition" | "TransitionArtboardCondition" => {
                 let comparators = file.transition_view_model_condition_comparators(object)?;
@@ -1010,37 +985,9 @@ impl RuntimeTransitionCondition {
                 }
             }
             Self::Scripted { global_id } => executor.evaluate_scripted_condition(*global_id),
-            Self::Bool { input_index, op } => {
-                let Some(value) = inputs
-                    .get(*input_index)
-                    .and_then(StateMachineInputInstance::bool_value)
-                else {
-                    return true;
-                };
-                (value && *op == TransitionConditionOp::Equal)
-                    || (!value && *op == TransitionConditionOp::NotEqual)
-            }
-            Self::Number {
-                input_index,
-                op,
-                value,
-            } => {
-                let Some(input_value) = inputs
-                    .get(*input_index)
-                    .and_then(StateMachineInputInstance::number_value)
-                else {
-                    return true;
-                };
-                op.compare(input_value, *value)
-            }
-            Self::Trigger { input_index } => {
-                let Some(input) = inputs.get(*input_index) else {
-                    return true;
-                };
-                input
-                    .trigger_is_fireable_for_layer(layer_index)
-                    .unwrap_or(true)
-            }
+            Self::Bool(condition) => condition.evaluate(inputs),
+            Self::Number(condition) => condition.evaluate(inputs),
+            Self::Trigger(condition) => condition.evaluate(inputs, layer_index),
             Self::ViewModelNumber {
                 bindable_global_id,
                 op,
@@ -1421,31 +1368,9 @@ impl RuntimeTransitionCondition {
         layer_index: usize,
     ) -> Option<bool> {
         match self {
-            Self::Bool { input_index, op } => {
-                let value = inputs
-                    .get(*input_index)
-                    .and_then(StateMachineInputInstance::bool_value);
-                Some(value.is_none_or(|value| {
-                    (value && *op == TransitionConditionOp::Equal)
-                        || (!value && *op == TransitionConditionOp::NotEqual)
-                }))
-            }
-            Self::Number {
-                input_index,
-                op,
-                value,
-            } => {
-                let input_value = inputs
-                    .get(*input_index)
-                    .and_then(StateMachineInputInstance::number_value);
-                Some(input_value.is_none_or(|input_value| op.compare(input_value, *value)))
-            }
-            Self::Trigger { input_index } => Some(
-                inputs
-                    .get(*input_index)
-                    .and_then(|input| input.trigger_is_fireable_for_layer(layer_index))
-                    .unwrap_or(true),
-            ),
+            Self::Bool(condition) => Some(condition.evaluate(inputs)),
+            Self::Number(condition) => Some(condition.evaluate(inputs)),
+            Self::Trigger(condition) => Some(condition.evaluate(inputs, layer_index)),
             _ => None,
         }
     }
@@ -1458,11 +1383,7 @@ impl RuntimeTransitionCondition {
         view_model_trigger_layer_id: u64,
     ) {
         match self {
-            Self::Trigger { input_index } => {
-                if let Some(input) = inputs.get_mut(*input_index) {
-                    input.use_trigger_in_layer(layer_index);
-                }
-            }
+            Self::Trigger(condition) => condition.use_input(inputs, layer_index),
             Self::ViewModelTrigger { bindable_global_id } => {
                 if let Some(trigger) =
                     executor.retained_view_model_trigger_source(*bindable_global_id)
@@ -1556,18 +1477,18 @@ mod scripted_tests {
     #[test]
     fn only_direct_inputs_are_stable_across_artboard_updates() {
         assert!(
-            !RuntimeTransitionCondition::Number {
-                input_index: 0,
-                op: TransitionConditionOp::Equal,
-                value: 1.0,
-            }
+            !RuntimeTransitionCondition::Number(RuntimeTransitionNumberCondition::new(
+                0,
+                TransitionConditionOp::Equal,
+                1.0,
+            ))
             .can_change_during_artboard_update()
         );
         assert!(
-            !RuntimeTransitionCondition::Bool {
-                input_index: 0,
-                op: TransitionConditionOp::Equal,
-            }
+            !RuntimeTransitionCondition::Bool(RuntimeTransitionBoolCondition::new(
+                0,
+                TransitionConditionOp::Equal,
+            ))
             .can_change_during_artboard_update()
         );
         assert!(
@@ -1931,70 +1852,4 @@ fn runtime_component_string_value(
         .filter(|_| supports_property)
         .and_then(|object| runtime_object_string_property_by_key(object, property_key))
         .unwrap_or_default()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum TransitionConditionOp {
-    Equal,
-    NotEqual,
-    LessThanOrEqual,
-    GreaterThanOrEqual,
-    LessThan,
-    GreaterThan,
-}
-
-impl TransitionConditionOp {
-    fn from_value(value: u64) -> Self {
-        match value {
-            1 => Self::NotEqual,
-            2 => Self::LessThanOrEqual,
-            3 => Self::GreaterThanOrEqual,
-            4 => Self::LessThan,
-            5 => Self::GreaterThan,
-            _ => Self::Equal,
-        }
-    }
-
-    fn compare(self, input_value: f32, value: f32) -> bool {
-        match self {
-            Self::Equal => input_value == value,
-            Self::NotEqual => input_value != value,
-            Self::LessThanOrEqual => input_value <= value,
-            Self::GreaterThanOrEqual => input_value >= value,
-            Self::LessThan => input_value < value,
-            Self::GreaterThan => input_value > value,
-        }
-    }
-
-    fn compare_bool(self, input_value: bool, value: bool) -> bool {
-        match self {
-            Self::Equal => input_value == value,
-            Self::NotEqual => input_value != value,
-            _ => false,
-        }
-    }
-
-    fn compare_u32_equal_only(self, input_value: u32, value: u32) -> bool {
-        match self {
-            Self::Equal => input_value == value,
-            Self::NotEqual => input_value != value,
-            _ => false,
-        }
-    }
-
-    fn compare_bytes_equal_only(self, input_value: &[u8], value: &[u8]) -> bool {
-        match self {
-            Self::Equal => input_value == value,
-            Self::NotEqual => input_value != value,
-            _ => false,
-        }
-    }
-
-    fn compare_u64_equal_only(self, input_value: u64, value: u64) -> bool {
-        match self {
-            Self::Equal => input_value == value,
-            Self::NotEqual => input_value != value,
-            _ => false,
-        }
-    }
 }

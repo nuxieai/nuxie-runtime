@@ -35,7 +35,7 @@ The production Rust closure is:
 
 - `crates/nuxie-runtime/src/state_machine.rs`
 - `crates/nuxie-runtime/src/state_machine/instance.rs`
-- `crates/nuxie-runtime/src/state_machine/transition_conditions.rs`
+- `crates/nuxie-runtime/src/state_machine/transition_condition.rs`
 - `crates/nuxie-runtime/src/animation.rs` only where the existing animation
   owner boundary is the direct C++ counterpart
 - `crates/nuxie-runtime/src/artboard.rs` only for construction/advance owner

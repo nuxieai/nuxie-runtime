@@ -165,8 +165,8 @@ the frame-loop/advance contract, it immediately moves to the deferred set.
 
 ### Work that may be prepared but needs a landing handshake
 
-`F-ED-08` now needs no-repair independent promotion only. `F-ED-10` may
-perform qualification now, and a resulting fix may be developed only when its
+`F-ED-08` is independently closed as a no-repair stale characterization.
+`F-ED-10` may perform qualification now, and a resulting fix may be developed only when its
 exact production closure is renderer/backend-only. `F-ED-11`
 production is complete for `LOC-009` and `LOC-019`; those rows need only
 independent landing-provenance promotion.
@@ -346,7 +346,7 @@ fixture in `F-ED-00`.
 | `LOC-003` | closed unlinked additive product feature | pinned C++ has no timed-hold primitive; the user decision authorizes no runtime port |
 | `LOC-004` | resolved editor-owned | no runtime work |
 | `LOC-005` | committed Editor evidence isolates independent live cells for one authored shared instance; runtime ownership remains a candidate | run the identical d788 application-owned instance differential before assigning a writer |
-| `LOC-006` | no-repair stale characterization awaiting independent promotion | committed no-hover evidence proves the alleged retained-pixel defect was gesture contamination; promote legally through reproduced/stale-oracle/closed |
+| `LOC-006` | closed no-repair stale characterization | exact committed provenance plus the independent no-hover rerun prove the alleged retained-pixel defect was gesture contamination; the legal reproduced/stale-oracle/closed path is complete |
 | `LOC-007` | committed Editor evidence plus historical C++ source identifies a missing dirt chain | requalify d788 ParametricPath width/height through Path, Shape, and PathComposer, then track the sole FL-E owner landing |
 | `LOC-008` | candidate public API-surface gap | establish the C++ ownership contract, then expose the exact runtime path only if runtime owns it |
 | `LOC-009` | proven structural WebGPU shader-consumer mistranslation | consume authored target-0 whole-module WGSL and mandatory target-16 `BindingMap` directly, preserving C++ entry selection and shared-module semantics |
@@ -793,17 +793,26 @@ The landed Editor checkpoint has no formal or candidate child for
 `RT-ED-004`. Historical product consumption therefore does not gate this
 evidence row or any independently landed browser repair.
 
-### `F-ED-08` — Conditional visibility no-repair promotion
+### `F-ED-08` — Closed conditional-visibility stale report
 
-Qualification target: `LOC-006`.
+Closed row: `LOC-006`.
 
-Independently verify the committed no-hover bracket and promote the row through
-the legal `reported -> reproduced -> stale-oracle -> closed` path. Five
-post-write frames stay at draw count 30 with no red compositor residue or
-surface/device error; the old 34-draw state returns only after the deliberately
-later hover/clear gesture. This creates no runtime, renderer, browser, or
-Editor writer. The historical retired-backend observation remains provenance
-only and creates no fork, fallback, test target, or serialization edge.
+Independent verification completed the legal
+`reported -> reproduced -> stale-oracle -> closed` path. At exact Editor
+checkpoint `7ca11e331a57cb3ea574848f8e93eb108878c40b` and runtime
+`e72323c808b91d706ba3b745396beaca7accd69a`, the focused Chromium diagnostic
+passed 1/1. Its exact five-frame sequence is `post-write-no-hover-1` through
+`post-write-no-hover-4`, followed by `post-capture-no-hover-5`; all remain at
+draw count 30 with identical timing-stripped frame hashes, no red compositor
+residue, zero probe errors, and no rejected maps, device loss, or uncaptured
+errors. The old 34-draw state returns only after the deliberately later
+`hoverAt` plus `clearHover` gesture. The fresh 70,947-byte run log has SHA-256
+`1a9b91fcb8a64296a4c464ad1848be839e9bc91da8d9dfdef337707a0a09f328`;
+the committed 171,784-byte machine report has SHA-256
+`f78b93d7575c3543e57de49bd73dce5783648b4c5a258328cfdd1f5eeb2652b5`.
+This creates no runtime, renderer, browser, or Editor writer. The historical
+retired-backend observation remains provenance only and creates no fork,
+fallback, test target, or serialization edge.
 
 ### `F-ED-09` — Text semantics, variable fonts, and measurement
 
@@ -975,7 +984,7 @@ rerun set. The remaining candidate matrix currently maps as follows:
 | `LOC-002` | `P09-C01` (structured links now own `P04-C11`, `P09-C03`, and `P09-C06`) |
 | `LOC-003` | none; closed user decision authorizes no runtime implementation |
 | `LOC-005` | none (`P09-C05` is now a structured runtime-defect link) |
-| `LOC-006` | `P09-C04` (the source assertion remains a candidate link until the stale characterization is independently promoted) |
+| `LOC-006` | `P09-C04` (historical source linkage retained after the stale characterization closed; it authorizes no writer) |
 | `LOC-007` | none (`P11-C12` is now a structured runtime-defect link) |
 | `LOC-008` | `P08-C06` |
 | `LOC-009` | `P14-C01` |
@@ -1063,7 +1072,7 @@ three read-only scouts for the remaining open rows:
    `LOC-001/002/005`, `RT-ED-007`, and `LOC-007`;
 2. browser/renderer:
    historical-only `RT-ED-004` when explicitly requested, plus
-   `LOC-012/014`; `LOC-006` needs independent no-repair promotion only;
+   `LOC-012/014`; closed `LOC-006` is historical no-repair evidence only;
 3. text/records:
    `LOC-008/011/013/018`.
 

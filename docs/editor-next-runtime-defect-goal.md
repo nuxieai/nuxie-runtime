@@ -145,7 +145,8 @@ Every goal turn, without exception:
 
 The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 
-- Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`, `LOC-004`.
+- Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`, `LOC-004`,
+  `LOC-006`.
 - Landing-provenance and independent-promotion only: `RT-ED-003`,
   `RT-ED-005`, `LOC-009`, and `LOC-019`. Their repairs are merged and
   consumed; no production implementation remains in those lanes.
@@ -154,9 +155,9 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   `RT-ED-004`.
 - Open Scene/API candidates: `LOC-001`, `LOC-005`, `LOC-008`.
 - Open runtime/FL candidates: `LOC-002`, `LOC-007`, `LOC-011`, `LOC-013`.
-- No-repair disposition awaiting independent promotion: `LOC-006`, whose
-  committed no-hover evidence classifies the prior renderer symptom as
-  gesture-contaminated stale characterization.
+- Closed no-repair stale characterization: `LOC-006`; exact committed
+  provenance and an independent exact-checkpoint rerun prove the prior
+  renderer symptom was caused by the later hover/clear gesture.
 - Open browser/renderer qualification candidates: `LOC-012` and `LOC-014`.
 - Open artifact/Editor candidates: `LOC-015`, `LOC-016`, `LOC-017`,
   `LOC-018`.
@@ -231,9 +232,10 @@ Consequences for the defect program:
   runtime workaround is permitted;
 - historical WebGL2 rows and fixtures remain immutable evidence until their
   state transitions are recorded;
-- `RT-ED-004`, `LOC-006`, and any WebGL2 portion of `LOC-012` or `LOC-014`
-  require an evidence-backed WebGPU disposition; downstream Editor reruns are
-  tracked when available but do not gate a landed runtime repair;
+- `RT-ED-004` and any WebGL2 portion of `LOC-012` or `LOC-014` require an
+  evidence-backed WebGPU disposition; `LOC-006` has completed that disposition
+  as a no-repair stale characterization. Downstream Editor reruns are tracked
+  when available but do not gate a landed runtime repair;
 - a surviving WebGPU failure is requalified against its real WebGPU/runtime
   owner. Retirement of WebGL2 is not evidence that the product scenario
   works;
@@ -301,9 +303,9 @@ Current work is:
   linked product scenario and authorizes no implementation. A current
   rounded-clip claim exists only if an explicitly scheduled identical-input
   pinned-C++ versus WebGPU proof creates one;
-- independently promote `LOC-006` / `F-ED-08` through the legal
-  `reported -> reproduced -> stale-oracle -> closed` no-repair path using its
-  committed no-hover evidence; and
+- retain the completed `LOC-006` / `F-ED-08`
+  `reported -> reproduced -> stale-oracle -> closed` path as immutable
+  no-repair evidence; and
 - qualify the remaining open renderer rows in Q5 without reopening the landed
   `F-ED-06` or `F-ED-11` implementations.
 

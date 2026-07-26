@@ -953,28 +953,28 @@ evidence = "At committed Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c
 
 [[defect]]
 id = "LOC-006"
-title = "Nested conditional child remains in required-WebGPU pixels after visibility write"
-source_class = "candidate"
-state = "reported"
-owner_class = "renderer"
-classification = "unqualified"
+title = "Stale conditional-visibility report caused by a later hover/clear gesture"
+source_class = "corrected-stale-characterization"
+state = "closed"
+owner_class = "editor"
+classification = "stale-oracle"
 ticket = "F-ED-08"
 fixture_id = "fed.loc_006.webgpu_conditional_visibility"
-preliminary_disposition = "The committed no-hover diagnostic closes the reported symptom as gesture-contaminated stale characterization with no runtime or renderer repair. Atlas state remains reported until independent promotion records the legal reproduced -> stale-oracle -> closed path."
+preliminary_disposition = "Closed as gesture-contaminated stale characterization. Five exact post-write frames captured before any hover remain clean; the old 34-draw/red-pixel observation returns only after the later hoverAt plus clearHover gesture. No runtime, renderer, browser, or Editor production repair is required."
 reproduction_sha256 = "2ca77de7d6d6c67aa0be2156d6aba1337261ab69ce652f75285eee431674e734"
 rust_stimulus = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'"
-cpp_stimulus = "not-applicable after independent promotion: the corrected no-hover browser fixture falsifies the alleged runtime/renderer failure before a C++ differential is needed"
-source_files = ["apps/nuxie-dashboard/tests/e2e/project-editor/projection-corpus-product-route.spec.ts","plans/artifacts/editor-next-p09-c04/provenance.json"]
+cpp_stimulus = "not-applicable: the corrected no-hover browser fixture falsifies the alleged runtime/renderer failure before a C++ differential is needed"
+source_files = ["apps/nuxie-dashboard/tests/e2e/project-editor/projection-corpus-product-route.spec.ts","plans/artifacts/editor-next-p09-c04/loc006-nohover-diagnostic-source.ts.txt","plans/artifacts/editor-next-p09-c04/provenance.json"]
 source_members = ["direct false ViewModel write","five no-hover frame captures","later hoverAt plus clearHover gesture"]
 lifecycle_phases = ["visible frame","typed false write","five no-hover frames","compositor capture","later hover and clear"]
-rust_owner = "not-applicable after independent promotion: no runtime or renderer defect remains"
-displaced_mechanism = "pending: F-ED-08 displaced-mechanism inventory"
+rust_owner = "not-applicable: no runtime or renderer defect remains"
+displaced_mechanism = "The original observation sampled after a stateful hoverAt plus clearHover gesture; the corrected bracket samples the five post-write frames before either gesture."
 dependencies = ["F-ED-00B","F-ED-08"]
-target_tests = ["pending:F-ED-08"]
+target_tests = ["editor-e2e:DEBUG-LOC006-NOHOVER-BRACKET"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
-owning_ledger = "pending: F-ED-08 owning-ledger link"
-adaptation_rule = "pending: F-ED-08 rule citation"
-decision_row = "pending: F-ED-08 decision-row disposition"
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml"
+adaptation_rule = "not-applicable: corrected gesture ordering closes a stale observation without a production adaptation"
+decision_row = "independent F-ED-08 review 2026-07-26: exact committed provenance and a fresh exact-checkpoint rerun prove the five no-hover frames are clean"
 touch = []
 dont_touch = ["@active-fl-lease"]
 formal_children = []
@@ -985,35 +985,49 @@ proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
 runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
 parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
-original_localization_rust_sha = { status = "pending", reason = "F-ED-08 must recover the original localization Rust SHA" }
+original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
 merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
 consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
 [defect.renderer_provenance]
-status = "pending"
-reason = "F-ED-08 must stamp backend, mode, features, surface, Dawn, and reference executable."
+status = "not-applicable"
+reason = "The Editor-owned no-hover bracket disproves the reported renderer symptom before renderer qualification; it promotes no renderer work."
 [defect.executor_verification]
-status = "pending"
-reason = "F-ED-08 executor fixture has not run."
+status = "pass"
+command = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'"
+evidence = "Fresh exact-checkpoint Chromium rerun passed 1/1 in 32.4s. Log is 70,947 bytes with SHA-256 1a9b91fcb8a64296a4c464ad1848be839e9bc91da8d9dfdef337707a0a09f328."
 [defect.orchestrator_verification]
-status = "pending"
-reason = "F-ED-08 has no executor-green result to verify."
+status = "not-applicable"
+reason = "Stale-oracle closure promotes no owning implementation ledger row."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:LOC-006"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-independent-verifier"
+evidence = "Hash-verified Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b provenance plus fresh exact-checkpoint 1/1 Chromium rerun"
+[[defect.history]]
+state = "stale-oracle"
+actor = "f-ed-independent-verifier"
+evidence = "post-write-no-hover-1 through post-write-no-hover-4 and post-capture-no-hover-5 all remain at draw count 30 with clean compositor/device state; 34 returns only after hoverAt plus clearHover"
+[[defect.history]]
+state = "closed"
+actor = "f-ed-independent-verifier"
+evidence = "gesture-contaminated characterization is stale; no runtime or renderer failure remains"
 [defect.cpp_result]
-status = "pending"
-reason = "Identical draw/hit/pixel fixture has not been run through the pinned reference."
+status = "not-applicable"
+reason = "The corrected Editor browser fixture falsifies the alleged runtime/renderer failure before a pinned-C++ differential is needed."
 [defect.rust_result]
-status = "pending"
-reason = "Direct required-WebGPU logical membership and pixel stages need normalization against the identical pinned-C++ stimulus."
+status = "pass"
+command = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'"
+evidence = "Fresh 1/1 pass at Editor 7ca11e331a57cb3ea574848f8e93eb108878c40b and runtime e72323c808b91d706ba3b745396beaca7accd69a independently confirms the exact committed five-frame bracket."
 [defect.editor_result]
 status = "pass"
 command = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'"
-evidence = "At Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b and runtime e72323c8, five no-hover frames remain at draw count 30 with no red compositor residue or device/surface error; only the later hover/clear gesture restores 34. The committed provenance manifest records the exact artifact hashes."
+evidence = "At Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b and runtime e72323c8, post-write-no-hover-1 through -4 and post-capture-no-hover-5 remain at draw count 30 with identical timing-stripped frame hashes, no red compositor residue, zero probe errors, and no rejected maps, device loss, or uncaptured errors. Only the later hover/clear gesture restores 34. The committed machine report is 171,784 bytes with SHA-256 f78b93d7575c3543e57de49bd73dce5783648b4c5a258328cfdd1f5eeb2652b5."
 
 [[defect]]
 id = "LOC-007"

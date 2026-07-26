@@ -15,8 +15,8 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   `e72323c808b91d706ba3b745396beaca7accd69a`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
 - closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`,
-  and `LOC-004`;
-- open rows: 20;
+  `LOC-004`, and `LOC-006`;
+- open rows: 19;
 - formal/structured product children in the landed Editor snapshot: 9;
 - candidate-linked product children: 15;
 - union: 23, with only `P09-C01` overlapping;
@@ -33,14 +33,13 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - active production lane: malformed embedded-font outline crash, sole existing
   writer PR #60 at pre-rebase head
   `61d5d018aa036882d17cea1065a78d7f2e057547`;
-- defects closed since the preceding Q0 report: 0;
+- defects closed since the preceding Q0 report: 1;
 - runnable repair lanes: finish and rebase PR #60 with the exact 833,949-byte
   reproducer, focused font-validation module, d788 evidence, reviews, and
   canonical floors;
 - blocked/overlapping lanes: `LOC-002`, `LOC-007`, and `RT-ED-007` need d788
   requalification and their FL collision boundary; `LOC-005` needs the direct
-  d788 shared-instance differential. `LOC-006` needs independent no-repair
-  promotion, not code.
+  d788 shared-instance differential.
 
 Defects Fix owns intake, triage, pinned-C++ qualification, faithful repair
 orchestration, independent verification, PR/landing tracking, and immutable
@@ -69,6 +68,18 @@ through runtime `e72323c8`: `P14-C01` is 4/4 green, `P14-C06` is 17/17 green,
 and RT-ED-003 direct presentation is consumed. This intake does not use those product
 results to self-promote an atlas row; independent state promotion remains a
 separate step.
+
+The stale conditional-visibility report is now independently closed without a
+production change. At Editor checkpoint `7ca11e33` and runtime `e72323c8`, the
+exact no-hover diagnostic passed 1/1 in Chromium. Its five frames
+(`post-write-no-hover-1` through `-4`, then `post-capture-no-hover-5`) all stay
+at draw count 30 with identical timing-stripped frame hashes, no red pixels in
+any compositor capture, zero probe errors, and no rejected maps, device loss,
+or uncaptured errors. Draw count 34 returns only after the separate
+`hoverAt`/`clearHover` gesture. The fresh 70,947-byte run log has SHA-256
+`1a9b91fcb8a64296a4c464ad1848be839e9bc91da8d9dfdef337707a0a09f328`;
+the committed 171,784-byte machine report has SHA-256
+`f78b93d7575c3543e57de49bd73dce5783648b4c5a258328cfdd1f5eeb2652b5`.
 
 The same committed ledger has nine structured runtime links across
 `runtimeDependencies` and `runtimeDefects`, plus 15 candidate links. It

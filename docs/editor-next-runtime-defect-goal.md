@@ -153,7 +153,7 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 - Regression reopened after historical executor-green evidence: `LOC-009`.
   PR #54's `7f1450dc` landing remains immutable history, but independent
   real-GPU verification found an unresolved physical shader-module
-  error-scope regression. The row is not promotable or complete and requires a
+  error-scope regression. The row is not promotable or complete and requires
   a new production landing after replacement clean-worktree task
   `019f9f59-1ac6-7e32-b973-5deb6b457c05` (“Diagnose browser Lua crash”).
   That task must verify origin/main `fe0a0a07`, start read-only with minimal

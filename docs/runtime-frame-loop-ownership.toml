@@ -105,7 +105,7 @@ steady = false
 faithful = 52
 adapted = 0
 divergent-by-decision = 0
-pending = 286
+pending = 289
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
@@ -231,6 +231,7 @@ include = [
   "src/animation/focus*.cpp",
   "src/animation/*listener_group.cpp",
   "src/animation/system_state_instance.cpp",
+  "src/inputs/*.cpp",
 ]
 exclude = [
   "src/animation/blend_state*.cpp",
@@ -1769,6 +1770,30 @@ upstream = "src/intrinsically_sizeable.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/inputs/gamepad_input.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/inputs/keyboard_input.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
+dynamically_reached = false
+status = "pending"
+
+[[file]]
+upstream = "src/inputs/semantic_input.cpp"
+source_set = "state-machine"
+wave = "FL-C"
+rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
 dynamically_reached = false
 status = "pending"
 

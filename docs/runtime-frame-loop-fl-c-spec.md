@@ -19,7 +19,7 @@ Active runtime base after the stable-Rust Apple compatibility repair:
 
 ## Finite closure
 
-The executable ledger contains 47 FL-C C++ file rows and these eight pending
+The executable ledger contains 50 FL-C C++ file rows and these eight pending
 member rows:
 
 1. `state_machine.inputs`
@@ -61,7 +61,7 @@ files it creates.
 
 ## Atomic production lanes
 
-### FL-C1 — Inputs and listener-definition ownership (13 files)
+### FL-C1 — Inputs and listener-definition ownership (16 files)
 
 C++ files:
 
@@ -78,6 +78,9 @@ C++ files:
 - `src/animation/keyboard_listener_group.cpp`
 - `src/animation/semantic_listener_group.cpp`
 - `src/animation/text_input_listener_group.cpp`
+- `src/inputs/gamepad_input.cpp`
+- `src/inputs/keyboard_input.cpp`
+- `src/inputs/semantic_input.cpp`
 
 Retention boundary:
 
@@ -87,6 +90,9 @@ Retention boundary:
   authored input, including nullable/unsupported slots required by FLR-5;
 - listener input types retain their authored source identity instead of
   rediscovering it during advance;
+- concrete keyboard/gamepad/semantic constraint records attach to their
+  current listener-input definition in file order, matching the three C++
+  importer handoffs;
 - clone/remount rebuilds occurrence state without copying live input values.
 
 Member closed by the complete lane: `state_machine.inputs`.

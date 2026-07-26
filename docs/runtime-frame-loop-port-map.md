@@ -69,9 +69,9 @@ FL-0 has three evidence layers:
 3. Static virtual-dispatch/dependency closure. The source sets are the union,
    so cold-but-valid frame-loop branches remain in scope.
 
-The six source sets each carry their static-closure rationale. Their 337
-explicit file rows mark 103 files dynamically reached and 234 cold in this
-capture. A cold row remains in scope until pinned C++ proves that its virtual
+The six source sets each carry their static-closure rationale. Their 341
+explicit file rows currently mark 103 files dynamically reached and 238 cold.
+A cold row remains in scope until pinned C++ proves that its virtual
 branch cannot be reached from the frame-loop boundary; corpus coverage alone
 can never remove it.
 

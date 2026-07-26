@@ -11,7 +11,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   FL-B file/member row remains pending until reacceptance.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
-  FL-C's frozen 47-file/eight-member lane map is
+  FL-C's corrected 50-file/eight-member lane map is
   `docs/runtime-frame-loop-fl-c-spec.md`; FL-C1 inputs/listener definitions is
   the exact current production lane.
 - Stable-Rust Apple compatibility repair
@@ -25,8 +25,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   FL-B boundary merge `b5d5bc8afeaa0369cbc248b85366111649cb9010`.
   No FL-B or FL-C acceptance request is active.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
-- File closure: 52 / 338. All 52 `component-update-graph` rows are `faithful`
-  and `orchestrator-verified`; the 286 later-wave rows remain pending.
+- File closure: 52 / 341. All 52 `component-update-graph` rows are `faithful`
+  and `orchestrator-verified`; the 289 later-wave rows remain pending.
 - Member closure: 47 / 75 owner/member rows (41 imported runtime-drawing
   owners plus all six FL-A Component rows); 28 later-wave rows remain.
 - Open mechanism gaps: 7 / 10. FL-G02 and FL-G06 remain closed; FL-G10 records
@@ -35,14 +35,14 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 - Current dependency wave: FL-C. FL-B's frozen 45-file/eight-member mini-map
   remains implemented but pending reacceptance. FL-C consumes that
   implementation provisionally under the coordinator override; its first
-  lane is the 13-file `state_machine.inputs` owner family.
+  lane is the 16-file `state_machine.inputs` owner family.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
   mutable occurrence. Each occurrence retains a handle into the one authored
   input arena and reads id/name/kind through it, matching pinned
   `SMIInput::m_input`; only bool/number/trigger state is copied into the
   occurrence. The two input files and the `state_machine.inputs` member remain
-  pending until the complete 13-file input/listener lane is translated and
+  pending until the complete 16-file input/listener lane is translated and
   independently accepted.
 - FL-C1 listener qualification found four real absent branches rather than
   benchmark defects: import currently discards authored Keyboard,
@@ -50,7 +50,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   has no matching dispatch surface. Pinned C++ owns their constraints on the
   typed listener-input definitions and their mutable dispatch state on fresh
   per-StateMachineInstance listener groups. Those owners stay in the current
-  13-file lane; no Editor or renderer workaround is permitted.
+  16-file lane; no Editor or renderer workaround is permitted.
+- FL-C1 map correction: pinned `KeyboardInput`, `GamepadInput`, and
+  `SemanticInput` each perform a distinct importer handoff into their typed
+  listener-input owner. The original 13-file map omitted those three required
+  C++ sources, so the executable source set now includes `src/inputs/*.cpp`
+  and the lane contains 16 files. This is scope completion, not a new feature
+  choice; all three rows remain pending.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
   defined post-advance C++ result. No `Option<bool>` API break or

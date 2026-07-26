@@ -1110,7 +1110,7 @@ b6_row_id = "B6-0091"
 b6_verdict = "DIVERGENT"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Direct retained ViewModel-property comparator correspondence established in FL-C2; semantic fidelity remains pending."
+note = "Direct retained ViewModel-property comparator correspondence established in FL-C2. Exact uint32 comparison shape, left-source layer consumption, and pinned-probe evidence are implemented; independent verification remains pending."
 
 [[file]]
 upstream = "src/animation/transition_trigger_condition.cpp"
@@ -1134,7 +1134,7 @@ b6_row_id = "B6-0093"
 b6_verdict = "DIVERGENT"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "The large retained property/ViewModel comparison owner moved to direct filename correspondence in FL-C2; semantic fidelity remains pending."
+note = "Direct filename correspondence and the pinned C++ comparison matrix are implemented in FL-C2, including integer/trigger pairs, artboard literals, artboard-to-ViewModel numeric comparison, and TransitionSelf across bindable kinds. Independent verification remains pending."
 
 [[file]]
 upstream = "src/artboard.cpp"

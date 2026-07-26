@@ -255,6 +255,35 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             result.stderr,
         )
 
+    def test_planning_owner_family_accepts_open_adversarial_rows(self) -> None:
+        self.ledger.write_text(
+            self.ledger.read_text().replace(
+                'required_adversarial = ["Zero values"]',
+                'checklist_state = "planning"\n'
+                'required_adversarial = ["Zero values"]',
+            )
+        )
+        checklist = self.repo / "docs/owner-family-closure.md"
+        checklist.write_text(
+            "`src/animation/linear_animation.cpp`\n"
+            "- [ ] Zero values: differential required before publication.\n"
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_candidate_owner_family_rejects_open_adversarial_rows(self) -> None:
+        checklist = self.repo / "docs/owner-family-closure.md"
+        checklist.write_text(
+            "`src/animation/linear_animation.cpp`\n"
+            "- [ ] Zero values: differential required before publication.\n"
+        )
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "active owner-family checklist omits completed adversarial row",
+            result.stderr,
+        )
+
     def test_stale_untracked_candidate_source_fails(self) -> None:
         self.refresh_source_fingerprint()
         (self.repo / "crates/runtime/src/new_owner.rs").write_text(

@@ -10,38 +10,30 @@ provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
 fl_b_verification = "pending-reacceptance"
 
 [active_owner_family]
-id = "FL-C2-transition-conditions"
-checklist = "docs/runtime-frame-loop-fl-c2-closure.md"
+id = "FL-C3-layer-state-occurrences"
+checklist = "docs/runtime-frame-loop-fl-c3-closure.md"
+checklist_state = "planning"
 cpp_files = [
-  "src/animation/state_transition.cpp",
-  "src/animation/scripted_transition_condition.cpp",
-  "src/animation/transition_bool_condition.cpp",
-  "src/animation/transition_comparator.cpp",
-  "src/animation/transition_condition.cpp",
-  "src/animation/transition_focus_condition.cpp",
-  "src/animation/transition_input_condition.cpp",
-  "src/animation/transition_number_condition.cpp",
-  "src/animation/transition_property_comparator.cpp",
-  "src/animation/transition_property_viewmodel_comparator.cpp",
-  "src/animation/transition_trigger_condition.cpp",
-  "src/animation/transition_viewmodel_condition.cpp",
-  "src/importers/state_machine_importer.cpp",
-  "src/importers/state_transition_importer.cpp",
-  "src/importers/transition_viewmodel_condition_importer.cpp",
+  "src/animation/layer_state.cpp",
+  "src/animation/state_instance.cpp",
+  "src/animation/state_machine_layer.cpp",
+  "src/animation/system_state_instance.cpp",
+  "src/animation/nested_state_machine.cpp",
 ]
 required_adversarial = [
-  "Wrong input type",
-  "Out-of-range input index",
-  "Nullable input occurrence",
-  "Duplicate candidates",
-  "Duplicate DataBinds",
-  "Zero duration",
-  "Nested path",
-  "Same-frame timing",
-  "Dispatch",
-  "Lifecycle/cloning",
-  "Unsupported comparators",
-  "Malformed focus comparators",
+  "Missing required system state",
+  "Duplicate system states",
+  "Nullable/unknown state",
+  "Bad transition target",
+  "Empty AnyState",
+  "Same-state target",
+  "Transition interruption",
+  "Reset aliases",
+  "Zero-time and same-frame chaining",
+  "Nested input ordering",
+  "Nested focus and pointer forwarding",
+  "Nested context lifecycle",
+  "Clone/remount isolation",
   "Permanent structural ratchets",
 ]
 

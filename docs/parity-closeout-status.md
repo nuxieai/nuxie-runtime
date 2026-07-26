@@ -1008,11 +1008,15 @@ ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
 **Canonical NEXT:** publish the fully floored FL-C2 immutable
-pending-verification candidate and request independent acceptance. All 12
+pending-verification candidate, whose complete-family semantic commit is
+`712c862d27a429f299430a2de0d635d611aa029d`, and request independent
+acceptance. All 12
 transition/condition definition owners now have direct filename
 correspondence; the pinned-C++ comparison-shape matrix and left-ViewModel
 source-consumption rule are implemented with focused and end-to-end
-differential evidence. The pinned-C++ RT-ED-007 unresolved nested
+differential evidence. The canonical hot-loop checkpoint is durably recorded
+at 1.761452x C++, so the final 1.0x program requirement remains open without
+turning performance into the implementation queue. The pinned-C++ RT-ED-007 unresolved nested
 transition-duration binding correction remains fully floored without
 promoting the pending StateMachineInstance row. FL-B, FL-C1, and FL-C2 rows
 remain pending reacceptance/acceptance. Listener groups remain in scope beside

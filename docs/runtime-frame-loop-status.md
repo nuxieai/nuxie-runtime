@@ -25,16 +25,21 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   (`transition_viewmodel_condition.cpp:49-60,535-970,1038-1045,1066-1124`;
   `transition_property_viewmodel_comparator.cpp:50-67`). The focused C++
   probe, four-edge end-to-end differential matrix, and existing 15-family
-  condition differential set are green. The complete lane battery is also
-  green on the pending-verification implementation: runtime 509 / 509;
-  probe-armed workspace including pinned-C++ probes 729 / 729; ordinary and
+  condition differential set are green. The complete corrected family is
+  frozen at `712c862d27a429f299430a2de0d635d611aa029d`. Its behavioral,
+  structural, packaging, and size battery is green on the
+  pending-verification implementation: runtime 509 / 509; probe-armed
+  workspace including pinned-C++ probes 735 / 735; ordinary and
   scripted golden each 317 / 317 entries and 647 / 647 segments with zero
   divergences, including `data_viz_demo` and `db_health_tracker`; C API smoke;
   Apple XCFramework build/package/ABI/header/C/Swift verification; size
-  8,034,440 bytes without scripting and 8,919,032 bytes with scripting, both
+  8,017,864 bytes without scripting and 8,918,968 bytes with scripting, both
   below 9 MiB; and the same-runner renderer referee 1,468 / 1,468 with 1,370
-  byte-exact and zero divergences. Independent acceptance remains pending, so
-  no FL-C2 row is promoted.
+  byte-exact and zero divergences. The required canonical hot-loop checkpoint
+  is recorded, but remains above the final program target at 1.761452x C++;
+  performance therefore stays open as wave evidence and does not become an
+  ad hoc scene-patching queue. Independent acceptance remains pending, so no
+  FL-C2 row is promoted.
 - Stable-Rust Apple compatibility repair
   `95eb04b7cfb847f24ba77872bd8a0ee43da1af41` mechanically rewrites the
   experimental match guard in `constraint_bounds` without changing behavior.
@@ -383,6 +388,15 @@ debug C++ configuration and its provenance stamp.
 
 ## Baseline performance
 
+- FL-C2 complete-family checkpoint on exact semantic commit
+  `712c862d27a429f299430a2de0d635d611aa029d`:
+  `docs/evidence/perf-hot-loop-fl-c2-712c862d.json`, tracked with SHA-256
+  `0885ffd2a55affb25034af93aa92d455a69e1ddd352d7d15e22582b630cec3dc`.
+- Canonical six-entry / 11-sample aggregate: 1.761452x C++
+  (58.836180 ms C++, 103.637127 ms Rust, minimum aggregate, 10,000 repeats).
+  The unchanged 1.0x final threshold correctly rejected the measurement.
+  This is an open whole-program performance result, not a transition-family
+  semantic rejection and not authorization for benchmark-driven patching.
 - FL-A whole-wave checkpoint on runtime-identical FL-B boundary
   `b5d5bc8afeaa0369cbc248b85366111649cb9010`:
   `target/perf-hot-loop-fl-a-b5d5bc8a.json`.
@@ -700,8 +714,10 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Publish the immutable FL-C2 pending-verification candidate and request
-   independent review; do not promote its rows before that verdict.
+1. Publish the immutable FL-C2 pending-verification candidate containing
+   semantic commit `712c862d27a429f299430a2de0d635d611aa029d`
+   plus its durable evidence, and request independent review; do not promote
+   its rows before that verdict.
 2. Keep FL-B and FL-C1 rows pending until their independent acceptance.
    Performance remains verification evidence, never the source of a work
    slice.

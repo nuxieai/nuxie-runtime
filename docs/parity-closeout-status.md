@@ -1014,14 +1014,17 @@ reacceptance and are not promoted by starting FL-C.
 ## Next queue (top = next; orchestrator maintains)
 
 1. Execute the finite C++-corresponding runtime frame-loop port recorded in
-   `docs/runtime-frame-loop-status.md`. FL-0's 337-file/74-member atlas is
-   committed. FL-1's dual translations are adjudicated into FLR-1..FLR-15;
+   `docs/runtime-frame-loop-status.md`. The executable atlas now contains
+   341 files and 75 members after FL-C1 added the three pinned concrete
+   listener-input importer owners omitted by the original capture. FL-1's
+   dual translations are adjudicated into FLR-1..FLR-16;
    source shaping found the existing owner-family module seams sufficient.
    FL-A Component ownership is independently accepted and promoted. FL-B1
    through FL-B4 are translated on a provisional tip and remain pending
    reacceptance. Coordinator direction authorizes FL-C to proceed without
    falsely promoting FL-B. Execute FL-C1 through FL-C5 from the frozen
-   47-file/eight-member spec `docs/runtime-frame-loop-fl-c-spec.md`, followed
+   corrected 50-file/eight-member spec
+   `docs/runtime-frame-loop-fl-c-spec.md`, followed
    by dependency-ordered Artboard/DataBind and live-draw owner waves. Measure
    the whole corpus only after a complete wave. The sorted slow-scene list is
    no longer the implementation queue.

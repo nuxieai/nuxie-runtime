@@ -4,28 +4,21 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-A production translation complete in the isolated `levi/fl-a`
-  checkout. The six Component member rows are closed locally; the candidate
-  publish battery and candidate commit are green. Rebase onto the final
-  LOC-009/main boundary is complete, and the post-rebase retained DataBind
-  target-dirt remediation plus every local publish gate are green. The
-  candidate is published; orchestrator verification remains.
+- Phase: FL-A independently accepted and promoted. Exact accepted production
+  candidate:
+  `249a66015b41190c0ec927a367c763b428f82306`.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
-- File closure: formally 0 / 338 until the file-correspondence manifest's
-  52 FL-A rows receive the required orchestrator-verified promotion. Their
-  implementation mapping remains `pending-verification`; no row is promoted
-  by this checkout.
+- File closure: 52 / 338. All 52 `component-update-graph` rows are `faithful`
+  and `orchestrator-verified`; the 286 later-wave rows remain pending.
 - Member closure: 47 / 75 owner/member rows (41 imported runtime-drawing
   owners plus all six FL-A Component rows); 28 later-wave rows remain.
 - Open mechanism gaps: 7 / 9. FL-G02 is closed; FL-G06 remained closed.
-- Current dependency wave: FL-A publish verification. FL-B does not begin
-  from this checkout until the FL-A landing and orchestrator promotion are
-  accepted.
-- Current FL-A landing: published `levi/fl-a` is rebased through exact
-  LOC-009/main `7f1450dc22ca7370eac9dc9f422351c2dfcc07ee`; the complete reviewed
-  candidate runs through evidence commit `e6633d4c`, with the pre-rebase
-  remote lineage preserved by merge commit
-  `7a9c9b2c450dfc5cf72ff1b81d794e4aa9da3828`.
+- Current dependency wave: FL-B preflight. Production remains blocked on the
+  explicit safety/API decision for pre-advance
+  `LinearAnimationInstance::m_didLoop`; no implementation begins before the
+  user decides that contract.
+- Current FL-A landing: accepted candidate
+  `249a66015b41190c0ec927a367c763b428f82306`, published on `levi/fl-a`.
 
 ## FL-0 evidence
 
@@ -391,9 +384,15 @@ FL-A post-rebase floor, refreshed after final independent review:
     and owner rediscovery. Unchanged-frame allocations remain 0 / 107 and
     stay open under FL-G07.
 - Structural checker: all 23 unit/negative controls pass; current ledger
-  counts are 338 files pending, 47 / 75 members closed, 9 gaps with 7 open,
-  and all FL-A zero-ratchets hold. File rows intentionally remain
-  pending-verification until the orchestrator's independent battery.
+  counts are 52 faithful and 286 pending files, 47 / 75 members closed, 9 gaps
+  with 7 open, and all FL-A zero-ratchets hold.
+- Independent orchestrator acceptance: PROMOTE exact
+  `249a66015b41190c0ec927a367c763b428f82306`. The detached acceptance checkout
+  verified the corrective delta and pinned-C++ parent ownership, focused
+  rejection, runtime 480 / 480, probe-armed workspace runtime 480 / 480 plus
+  C++ probe 726 / 726, checker 23 / 23 with source fingerprint, format/diff,
+  ordinary 317 / 317 and 647 / 647 zero, and scripted 317 / 317 and 647 / 647
+  zero including `data_viz_demo` and `db_health_tracker`.
 - Trace evidence is source-bound: capture fingerprints the complete tracked
   plus intended-untracked candidate (including content, executable mode,
   symlink target, and deletion state), verifies it did not change during the
@@ -440,8 +439,10 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. The orchestrator independently reruns the battery and alone promotes the
-   52 file-correspondence rows from pending-verification.
-2. After accepted FL-A closure, run the canonical whole-corpus performance
-   checkpoint and proceed to FL-B from the dependency map. Performance remains
+1. STOP-AND-ASK: resolve the pre-advance
+   `LinearAnimationInstance::m_didLoop` safety/API contract. FL-B remains
+   blocked until the user chooses the recorded safe divergence or another
+   explicit contract.
+2. Record the canonical whole-corpus FL-A performance checkpoint, then execute
+   FL-B from the dependency map after the user decision. Performance remains
    verification evidence, never the source of a work slice.

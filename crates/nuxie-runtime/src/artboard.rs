@@ -389,6 +389,11 @@ pub struct ArtboardInstance {
     component_lists: Vec<ComponentHandle>,
     pub(crate) joysticks_apply_before_update: bool,
     pub(crate) linear_animations: Arc<Vec<RuntimeLinearAnimation>>,
+    /// C++ uses one process-global empty LinearAnimation for unresolved
+    /// AnimationState/BlendAnimation pointers. Runtime definitions can retain
+    /// single-threaded script handles in Rust, so each Artboard owns one shared
+    /// safe equivalent and all of its unresolved occurrences point here.
+    pub(crate) empty_linear_animation: Arc<RuntimeLinearAnimation>,
     pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
     pub(crate) script_instances_by_global:
         RuntimeScriptState<BTreeMap<u32, RuntimeScriptInstanceHandle>>,
@@ -505,6 +510,7 @@ impl Clone for ArtboardInstance {
             component_lists: self.component_lists.clone(),
             joysticks_apply_before_update: self.joysticks_apply_before_update,
             linear_animations: self.linear_animations.clone(),
+            empty_linear_animation: self.empty_linear_animation.clone(),
             state_machines: self.state_machines.clone(),
             script_instances_by_global: self.script_instances_by_global.clone(),
             scripted_data_converter_instances_by_global: self
@@ -2281,6 +2287,7 @@ impl ArtboardInstance {
             component_lists,
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
             linear_animations: Arc::new(linear_animations),
+            empty_linear_animation: Arc::new(RuntimeLinearAnimation::empty()),
             state_machines: Arc::new(state_machines),
             script_instances_by_global: RuntimeScriptState::default(),
             scripted_data_converter_instances_by_global: RuntimeScriptState::default(),
@@ -4147,7 +4154,10 @@ impl ArtboardInstance {
         instance: &mut LinearAnimationInstance,
         elapsed_seconds: f32,
     ) -> bool {
-        let Some(animation) = self.linear_animation(instance.animation_index()) else {
+        let Some(animation) = instance
+            .animation_handle()
+            .resolve(&self.linear_animations, &self.empty_linear_animation)
+        else {
             return false;
         };
         instance.advance(animation, elapsed_seconds)
@@ -4160,7 +4170,10 @@ impl ArtboardInstance {
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         let (mut changed, keyed_callbacks) = {
-            let Some(animation) = self.linear_animation(instance.animation_index()) else {
+            let Some(animation) = instance
+                .animation_handle()
+                .resolve(&self.linear_animations, &self.empty_linear_animation)
+            else {
                 return false;
             };
             if !animation.has_keyed_callbacks {
@@ -4190,10 +4203,29 @@ impl ArtboardInstance {
     }
 
     pub fn linear_animation_instance_keep_going(&self, instance: &LinearAnimationInstance) -> bool {
-        let Some(animation) = self.linear_animation(instance.animation_index()) else {
+        let Some(animation) = instance
+            .animation_handle()
+            .resolve(&self.linear_animations, &self.empty_linear_animation)
+        else {
             return false;
         };
         instance.keep_going(animation)
+    }
+
+    pub(crate) fn linear_animation_instance_definition(
+        &self,
+        instance: &LinearAnimationInstance,
+    ) -> Option<&RuntimeLinearAnimation> {
+        instance
+            .animation_handle()
+            .resolve(&self.linear_animations, &self.empty_linear_animation)
+    }
+
+    pub(crate) fn linear_animation_definition(
+        &self,
+        handle: RuntimeLinearAnimationHandle,
+    ) -> Option<&RuntimeLinearAnimation> {
+        handle.resolve(&self.linear_animations, &self.empty_linear_animation)
     }
 
     pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
@@ -10911,6 +10943,7 @@ mod tests {
             component_lists,
             joysticks_apply_before_update: true,
             linear_animations: Arc::new(Vec::new()),
+            empty_linear_animation: Arc::new(RuntimeLinearAnimation::empty()),
             state_machines: Arc::new(Vec::new()),
             script_instances_by_global: RuntimeScriptState::default(),
             scripted_data_converter_instances_by_global: RuntimeScriptState::default(),
@@ -11210,7 +11243,7 @@ mod tests {
             states: vec![RuntimeLayerState {
                 global_id: Some(3),
                 type_name: Some("BlendState1DInput"),
-                animation_index: None,
+                animation: None,
                 blend_state_1d: Some(RuntimeBlendState1D {
                     source: RuntimeBlendState1DSource::Input {
                         input_index: Some(0),

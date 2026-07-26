@@ -1083,6 +1083,18 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   while runtime state-machine instances reference the completed definition
   (`include/rive/animation/linear_animation_instance.hpp:38-39,140-182`;
   `include/rive/animation/state_machine.hpp:19-29`).
+  C++'s process-global empty `LinearAnimation` fallback is immutable and has no
+  cross-Artboard observable identity. Rust's full animation definition type
+  can retain single-threaded scripting handles and therefore cannot inhabit a
+  safe process-global `Sync` static. Retain one `Arc`-owned empty definition
+  per Artboard arena, share it across every unresolved AnimationState and
+  BlendAnimation occurrence (and across Artboard snapshots), and preserve the
+  generated C++ defaults exactly. This is owner-scoped storage adaptation, not
+  permission to synthesize a fresh empty definition per occurrence or to drop
+  an unresolved authored BlendAnimation
+  (`src/animation/animation_state_instance.cpp:7-23`;
+  `src/animation/blend_animation.cpp:9-38`;
+  `include/rive/animation/blend_animation.hpp:9-18`).
 - **FLR-2 A non-owning owner back-pointer may become explicit owner
   mediation, never hidden ownership.** A raw C++ pointer to the containing
   Artboard may be represented either by a stable typed id or by requiring the

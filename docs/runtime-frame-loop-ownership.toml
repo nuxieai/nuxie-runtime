@@ -1006,7 +1006,7 @@ status = "pending"
 upstream = "src/animation/transition_comparator.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_comparator.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -1046,7 +1046,7 @@ status = "pending"
 upstream = "src/animation/transition_property_comparator.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_property_comparator.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -1054,7 +1054,7 @@ status = "pending"
 upstream = "src/animation/transition_property_viewmodel_comparator.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_property_viewmodel_comparator.rs"]
 dynamically_reached = false
 status = "pending"
 

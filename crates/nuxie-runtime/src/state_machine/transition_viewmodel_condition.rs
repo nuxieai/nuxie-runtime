@@ -5,12 +5,14 @@
 use super::{
     RuntimeScheduledListenerActionExecutor, RuntimeScriptedTransitionCondition,
     RuntimeTransitionBoolCondition, RuntimeTransitionFocusCondition,
-    RuntimeTransitionNumberCondition, RuntimeTransitionTriggerCondition,
-    StateMachineBindableIntegerInstance, StateMachineBindableNumberInstance,
-    StateMachineInputInstance, TransitionConditionOp, TransitionEvaluationContext,
-    bindable_artboard_value, bindable_asset_value, bindable_boolean_value, bindable_color_value,
-    bindable_enum_value, bindable_integer_value, bindable_number_value, bindable_string_value,
-    bindable_trigger_value, bindable_view_model_value,
+    RuntimeTransitionNumberCondition, RuntimeTransitionPropertyArtboardComparator,
+    RuntimeTransitionPropertyComponentComparator, RuntimeTransitionPropertyViewModelComparator,
+    RuntimeTransitionTriggerCondition, StateMachineBindableIntegerInstance,
+    StateMachineBindableNumberInstance, StateMachineInputInstance, TransitionConditionOp,
+    TransitionEvaluationContext, bindable_artboard_value, bindable_asset_value,
+    bindable_boolean_value, bindable_color_value, bindable_enum_value, bindable_integer_value,
+    bindable_number_value, bindable_string_value, bindable_trigger_value,
+    bindable_view_model_value, runtime_transition_comparators,
 };
 use crate::ArtboardInstance;
 use crate::components::TransformProperty;
@@ -255,7 +257,7 @@ impl RuntimeTransitionCondition {
                 RuntimeTransitionTriggerCondition::from_object(object).map(Self::Trigger)
             }
             "TransitionViewModelCondition" | "TransitionArtboardCondition" => {
-                let comparators = file.transition_view_model_condition_comparators(object)?;
+                let comparators = runtime_transition_comparators(file, object)?;
                 let left = comparators.left?;
                 let right = comparators.right?;
                 if left.type_name == "TransitionPropertyArtboardComparator"
@@ -298,7 +300,9 @@ impl RuntimeTransitionCondition {
                 if right.type_name == "TransitionValueTriggerComparator"
                     || right.type_name == "TransitionSelfComparator"
                 {
-                    let bindable = file.latest_bindable_property_for_object(left)?;
+                    let bindable =
+                        RuntimeTransitionPropertyViewModelComparator::from_object(file, left)?
+                            .bindable();
                     if bindable.type_name == "BindablePropertyTrigger" {
                         return Some(Self::ViewModelTrigger {
                             bindable_global_id: bindable.id,
@@ -307,8 +311,12 @@ impl RuntimeTransitionCondition {
                     return None;
                 }
                 if right.type_name == "TransitionPropertyViewModelComparator" {
-                    let left_bindable = file.latest_bindable_property_for_object(left)?;
-                    let right_bindable = file.latest_bindable_property_for_object(right)?;
+                    let left_bindable =
+                        RuntimeTransitionPropertyViewModelComparator::from_object(file, left)?
+                            .bindable();
+                    let right_bindable =
+                        RuntimeTransitionPropertyViewModelComparator::from_object(file, right)?
+                            .bindable();
                     let op = TransitionConditionOp::from_value(
                         object.uint_property("opValue").unwrap_or(0),
                     );
@@ -395,7 +403,9 @@ impl RuntimeTransitionCondition {
                 {
                     return None;
                 }
-                let bindable = file.latest_bindable_property_for_object(left)?;
+                let bindable =
+                    RuntimeTransitionPropertyViewModelComparator::from_object(file, left)?
+                        .bindable();
                 if bindable.type_name == "BindablePropertyNumber"
                     && right.type_name == "TransitionValueNumberComparator"
                 {
@@ -490,10 +500,12 @@ impl RuntimeTransitionCondition {
         viewmodel: &RuntimeObject,
         component_on_left: bool,
     ) -> Option<Self> {
-        let local_id = usize::try_from(component.uint_property("objectId")?).ok()?;
-        let property_key = u16::try_from(component.uint_property("propertyKey")?).ok()?;
+        let component = RuntimeTransitionPropertyComponentComparator::from_object(component)?;
+        let local_id = component.local_id();
+        let property_key = component.property_key();
         let component_kind = RuntimeComponentComparandKind::from_property_key(property_key)?;
-        let bindable = file.latest_bindable_property_for_object(viewmodel)?;
+        let bindable =
+            RuntimeTransitionPropertyViewModelComparator::from_object(file, viewmodel)?.bindable();
         let viewmodel_kind = RuntimeComponentComparandKind::from_bindable(bindable)?;
         if !component_kind.is_compatible_with(viewmodel_kind) {
             return None;
@@ -635,8 +647,10 @@ impl RuntimeTransitionCondition {
         left: &RuntimeObject,
         right: &RuntimeObject,
     ) -> Option<Self> {
-        let local_id = usize::try_from(right.uint_property("objectId")?).ok()?;
-        let property_key = u16::try_from(right.uint_property("propertyKey")?).ok()?;
+        let left = RuntimeTransitionPropertyArtboardComparator::from_object(left)?;
+        let right = RuntimeTransitionPropertyComponentComparator::from_object(right)?;
+        let local_id = right.local_id();
+        let property_key = right.property_key();
         let kind = RuntimeComponentComparandKind::from_property_key(property_key)?;
         if !kind.is_number() {
             return None;
@@ -645,7 +659,7 @@ impl RuntimeTransitionCondition {
         let source_object = component_source_object(file, graph, local_id);
         let supports_property = component_supports_property(source_object, property_key);
         Some(Self::ArtboardComponentNumber {
-            property_type: left.uint_property("propertyType").unwrap_or(0),
+            property_type: left.property_type(),
             op: TransitionConditionOp::from_value(condition.uint_property("opValue").unwrap_or(0)),
             component: RuntimeComponentNumberValue::from_parts(
                 local_id,
@@ -664,8 +678,9 @@ impl RuntimeTransitionCondition {
         left: &RuntimeObject,
         right: &RuntimeObject,
     ) -> Option<Self> {
-        let local_id = usize::try_from(left.uint_property("objectId")?).ok()?;
-        let property_key = u16::try_from(left.uint_property("propertyKey")?).ok()?;
+        let left = RuntimeTransitionPropertyComponentComparator::from_object(left)?;
+        let local_id = left.local_id();
+        let property_key = left.property_key();
         let kind = RuntimeComponentComparandKind::from_property_key(property_key)?;
         let op = TransitionConditionOp::from_value(condition.uint_property("opValue").unwrap_or(0));
         let source_object = graph
@@ -790,10 +805,12 @@ impl RuntimeTransitionCondition {
         left: &RuntimeObject,
         right: &RuntimeObject,
     ) -> Option<Self> {
-        let left_local_id = usize::try_from(left.uint_property("objectId")?).ok()?;
-        let right_local_id = usize::try_from(right.uint_property("objectId")?).ok()?;
-        let left_property_key = u16::try_from(left.uint_property("propertyKey")?).ok()?;
-        let right_property_key = u16::try_from(right.uint_property("propertyKey")?).ok()?;
+        let left = RuntimeTransitionPropertyComponentComparator::from_object(left)?;
+        let right = RuntimeTransitionPropertyComponentComparator::from_object(right)?;
+        let left_local_id = left.local_id();
+        let right_local_id = right.local_id();
+        let left_property_key = left.property_key();
+        let right_property_key = right.property_key();
         let left_kind = RuntimeComponentComparandKind::from_property_key(left_property_key)?;
         let right_kind = RuntimeComponentComparandKind::from_property_key(right_property_key)?;
         if !left_kind.is_compatible_with(right_kind) {

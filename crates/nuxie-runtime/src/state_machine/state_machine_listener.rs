@@ -1,5 +1,8 @@
 use super::RuntimeScheduledListenerAction;
-use super::listener_types::{RuntimeListenerInputTypeKeyboard, RuntimeListenerType};
+use super::listener_types::{
+    RuntimeGamepadInputEvent, RuntimeListenerInputTypeGamepad, RuntimeListenerInputTypeKeyboard,
+    RuntimeListenerInputTypeSemantic, RuntimeListenerType,
+};
 use super::state_machine_listener_single::{
     runtime_listener_single_event_local_indices, runtime_listener_single_type,
     runtime_listener_single_view_model_property_path,
@@ -16,7 +19,9 @@ pub(crate) struct RuntimeStateMachineListener {
     pub(crate) event_local_indices: Vec<usize>,
     pub(crate) view_model_index: Option<usize>,
     pub(crate) view_model_property_path: Option<Vec<usize>>,
+    pub(crate) gamepad_input_types: Vec<RuntimeListenerInputTypeGamepad>,
     pub(crate) keyboard_input_types: Vec<RuntimeListenerInputTypeKeyboard>,
+    pub(crate) semantic_input_types: Vec<RuntimeListenerInputTypeSemantic>,
     pub(crate) hit_paths: Vec<RuntimeListenerHitPath>,
     pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
 }
@@ -53,6 +58,14 @@ impl RuntimeStateMachineListener {
             is_pressed,
             is_repeat,
         )
+    }
+
+    pub(crate) fn gamepad_constraints_met(&self, event: RuntimeGamepadInputEvent) -> bool {
+        RuntimeListenerInputTypeGamepad::constraints_met(&self.gamepad_input_types, event)
+    }
+
+    pub(crate) fn semantic_constraints_met(&self, action_type: u32) -> bool {
+        RuntimeListenerInputTypeSemantic::constraints_met(&self.semantic_input_types, action_type)
     }
 }
 
@@ -117,6 +130,8 @@ pub(super) fn runtime_state_machine_listener(
                     RuntimeListenerType::Event
                         | RuntimeListenerType::ViewModel
                         | RuntimeListenerType::Keyboard
+                        | RuntimeListenerType::Gamepad
+                        | RuntimeListenerType::SemanticAction
                 )
         })
         .collect::<Vec<_>>();
@@ -148,7 +163,9 @@ pub(super) fn runtime_state_machine_listener(
         event_local_indices,
         view_model_index,
         view_model_property_path,
+        gamepad_input_types: runtime_listener_input_type_gamepads(listener),
         keyboard_input_types: runtime_listener_input_type_keyboards(listener),
+        semantic_input_types: runtime_listener_input_type_semantics(listener),
         hit_paths,
         listener_actions: listener
             .actions
@@ -164,6 +181,20 @@ pub(super) fn runtime_state_machine_listener(
     })
 }
 
+fn runtime_listener_input_type_gamepads(
+    listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
+) -> Vec<RuntimeListenerInputTypeGamepad> {
+    listener
+        .listener_input_types
+        .iter()
+        .zip(&listener.listener_input_type_inputs)
+        .filter(|(input_type, _)| input_type.type_name == "ListenerInputTypeGamepad")
+        .map(|(input_type, inputs)| {
+            RuntimeListenerInputTypeGamepad::from_imported(input_type, inputs)
+        })
+        .collect()
+}
+
 fn runtime_listener_input_type_keyboards(
     listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
 ) -> Vec<RuntimeListenerInputTypeKeyboard> {
@@ -174,6 +205,20 @@ fn runtime_listener_input_type_keyboards(
         .filter(|(input_type, _)| input_type.type_name == "ListenerInputTypeKeyboard")
         .map(|(input_type, inputs)| {
             RuntimeListenerInputTypeKeyboard::from_imported(input_type, inputs)
+        })
+        .collect()
+}
+
+fn runtime_listener_input_type_semantics(
+    listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
+) -> Vec<RuntimeListenerInputTypeSemantic> {
+    listener
+        .listener_input_types
+        .iter()
+        .zip(&listener.listener_input_type_inputs)
+        .filter(|(input_type, _)| input_type.type_name == "ListenerInputTypeSemantic")
+        .map(|(input_type, inputs)| {
+            RuntimeListenerInputTypeSemantic::from_imported(input_type, inputs)
         })
         .collect()
 }
@@ -388,6 +433,84 @@ mod tests {
         assert!(listener.keyboard_constraints_met(65, 2, true, false));
         assert!(listener.keyboard_constraints_met(66, 0, false, false));
         assert!(!listener.keyboard_constraints_met(65, 0, true, false));
+    }
+
+    #[test]
+    fn imported_listener_retains_gamepad_and_semantic_owners() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+            record("StateMachine", Vec::new()),
+            record(
+                "StateMachineListener",
+                vec![property("StateMachineListener", "targetId", 0)],
+            ),
+            record(
+                "ListenerInputTypeGamepad",
+                vec![property(
+                    "ListenerInputTypeGamepad",
+                    "listenerTypeValue",
+                    RuntimeListenerType::Gamepad as u64,
+                )],
+            ),
+            record(
+                "GamepadInput",
+                vec![
+                    property("GamepadInput", "kind", 0),
+                    property("GamepadInput", "mapping", 1),
+                    property("GamepadInput", "inputIndex", 3),
+                    property("GamepadInput", "buttonPhase", 2),
+                ],
+            ),
+            record(
+                "ListenerInputTypeSemantic",
+                vec![property(
+                    "ListenerInputTypeSemantic",
+                    "listenerTypeValue",
+                    RuntimeListenerType::SemanticAction as u64,
+                )],
+            ),
+            record(
+                "SemanticInput",
+                vec![property("SemanticInput", "actionType", 2)],
+            ),
+        ])
+        .expect("gamepad and semantic listener records import");
+        let graph = GraphFile::from_runtime_file(&file).expect("listener graph builds");
+        let authored = file.artboard_state_machine_graphs(0);
+        let listener = runtime_state_machine_listener(
+            &file,
+            graph.artboards.first().expect("artboard graph"),
+            &[],
+            &authored[0].listeners[0],
+        )
+        .expect("gamepad and semantic listener is retained");
+
+        assert!(listener.has_listener(RuntimeListenerType::Gamepad));
+        assert!(listener.has_listener(RuntimeListenerType::SemanticAction));
+        assert_eq!(listener.gamepad_input_types[0].global_id, 4);
+        assert_eq!(
+            listener.gamepad_input_types[0]
+                .gamepad_input(0)
+                .map(|input| input.global_id),
+            Some(5)
+        );
+        assert_eq!(listener.semantic_input_types[0].global_id, 6);
+        assert_eq!(
+            listener.semantic_input_types[0]
+                .semantic_input(0)
+                .map(|input| input.global_id),
+            Some(7)
+        );
+        assert!(
+            listener.gamepad_constraints_met(RuntimeGamepadInputEvent::Button {
+                index: 3,
+                value: 0.0,
+                standard_intent: None,
+            })
+        );
+        assert!(listener.semantic_constraints_met(2));
+        assert!(!listener.semantic_constraints_met(1));
     }
 
     const KEY_PHASE_DOWN_FOR_TEST: u64 = 1;

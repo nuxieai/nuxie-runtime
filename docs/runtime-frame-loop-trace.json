@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "1ec30691264a5784a344f2935b0ef1a85452b5a5d75e0ffeec2eed482f4a55f9",
+    "cpp_binary_sha256": "aa95e777c0577aeb7541f2f8c30d8a20c657a2f756b29b16d7d2cdbab770fbb9",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "2b1357d4dff3d14bd2cc6a71b389ca5ecda045a55f08953fd0793a484b62783c",
-    "rust_coverage_sha256": "372438c31692f917766ed3d4926d87acba3bc9afc320dec52f5d6dbbd1231602",
-    "rust_mechanism_coverage_sha256": "0c8b0390bd56a95e98ff487c85573fad110cd38d37482191e59a4a07a4680d21",
-    "rust_steady_coverage_sha256": "06edb499a699395c8ed88a43a359e8ffcb2ed7a28f601f0aa63d6eb0aa752092"
+    "rust_binary_sha256": "03597ca6082be616bdf12796df732736f9b9a962227ad5c56284ef24547c77ec",
+    "rust_coverage_sha256": "8f8c6c22e65be2dcdb83effdf83faa8087ae46af5b515f7572077be14969a80d",
+    "rust_mechanism_coverage_sha256": "6ba549dade2bd3f44e1a1f21d86341be58fc1393cf3a461fc3a4d5d5bf9f20e8",
+    "rust_steady_coverage_sha256": "d743dc56a79b34982fa888410ba7cba2bc7d98d47b8f1d72457c7cec12286716"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -2165,48 +2165,36 @@
           "name": "<nuxie_runtime::animation::RuntimeInterpolator>::transform_value"
         },
         {
-          "count": 12,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameBool as nuxie_runtime::animation::RuntimeKeyFrameTiming>::seconds"
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_bool"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_color"
+        },
+        {
+          "count": 169,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_double"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::as_uint"
+        },
+        {
+          "count": 344,
+          "name": "<nuxie_runtime::animation::RuntimeKeyFrame>::seconds"
         },
         {
           "count": 4,
           "name": "<nuxie_runtime::animation::RuntimeKeyFrameBool>::effective_value"
         },
         {
-          "count": 12,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameBool>::seconds"
-        },
-        {
-          "count": 6,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameColor as nuxie_runtime::animation::RuntimeKeyFrameTiming>::seconds"
-        },
-        {
           "count": 4,
           "name": "<nuxie_runtime::animation::RuntimeKeyFrameColor>::effective_value"
         },
         {
-          "count": 6,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameColor>::seconds"
-        },
-        {
-          "count": 320,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameDouble as nuxie_runtime::animation::RuntimeKeyFrameTiming>::seconds"
-        },
-        {
           "count": 167,
           "name": "<nuxie_runtime::animation::RuntimeKeyFrameDouble>::effective_value"
-        },
-        {
-          "count": 450,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameDouble>::seconds"
-        },
-        {
-          "count": 6,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameUint as nuxie_runtime::animation::RuntimeKeyFrameTiming>::seconds"
-        },
-        {
-          "count": 8,
-          "name": "<nuxie_runtime::animation::RuntimeKeyFrameUint>::seconds"
         },
         {
           "count": 4,
@@ -2225,7 +2213,7 @@
           "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::bool_value_at"
         },
         {
-          "count": 124,
+          "count": 134,
           "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::closest_frame_index"
         },
         {
@@ -2235,6 +2223,10 @@
         {
           "count": 124,
           "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::double_frame_value_at"
+        },
+        {
+          "count": 1,
+          "name": "<nuxie_runtime::animation::RuntimeKeyedProperty>::first_double_value"
         },
         {
           "count": 2,
@@ -2250,7 +2242,7 @@
         },
         {
           "count": 4,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#2}"
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#1}"
         },
         {
           "count": 5,
@@ -2286,51 +2278,23 @@
         },
         {
           "count": 4,
-          "name": "nuxie_runtime::animation::apply_key_frame_color_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#2}>"
+          "name": "nuxie_runtime::animation::apply_key_frame_color_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#1}>"
         },
         {
           "count": 4,
-          "name": "nuxie_runtime::animation::apply_key_frame_color_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#2}>::{closure#0}"
+          "name": "nuxie_runtime::animation::apply_key_frame_color_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#1}>::{closure#0}"
         },
         {
-          "count": 67,
+          "count": 124,
           "name": "nuxie_runtime::animation::apply_key_frame_double_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#0}>"
         },
         {
-          "count": 57,
-          "name": "nuxie_runtime::animation::apply_key_frame_double_mix::<<nuxie_runtime::animation::RuntimeLinearAnimation>::apply_with_key_frame_values::{closure#1}>"
+          "count": 134,
+          "name": "nuxie_runtime::animation::closest_key_frame_index"
         },
         {
-          "count": 4,
-          "name": "nuxie_runtime::animation::closest_key_frame_index::<nuxie_runtime::animation::RuntimeKeyFrameBool>"
-        },
-        {
-          "count": 4,
-          "name": "nuxie_runtime::animation::closest_key_frame_index::<nuxie_runtime::animation::RuntimeKeyFrameColor>"
-        },
-        {
-          "count": 124,
-          "name": "nuxie_runtime::animation::closest_key_frame_index::<nuxie_runtime::animation::RuntimeKeyFrameDouble>"
-        },
-        {
-          "count": 2,
-          "name": "nuxie_runtime::animation::closest_key_frame_index::<nuxie_runtime::animation::RuntimeKeyFrameUint>"
-        },
-        {
-          "count": 4,
-          "name": "nuxie_runtime::animation::closest_key_frame_index_with_exact_offset::<nuxie_runtime::animation::RuntimeKeyFrameBool>"
-        },
-        {
-          "count": 4,
-          "name": "nuxie_runtime::animation::closest_key_frame_index_with_exact_offset::<nuxie_runtime::animation::RuntimeKeyFrameColor>"
-        },
-        {
-          "count": 124,
-          "name": "nuxie_runtime::animation::closest_key_frame_index_with_exact_offset::<nuxie_runtime::animation::RuntimeKeyFrameDouble>"
-        },
-        {
-          "count": 2,
-          "name": "nuxie_runtime::animation::closest_key_frame_index_with_exact_offset::<nuxie_runtime::animation::RuntimeKeyFrameUint>"
+          "count": 134,
+          "name": "nuxie_runtime::animation::closest_key_frame_index_with_exact_offset"
         },
         {
           "count": 416,
@@ -7152,14 +7116,14 @@
   "rust_candidate_source": {
     "file_count": 7150,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "7d61c1cd00d34d40a234cfa37f9d6de7f14cd5d07901b40a7170eaecbd55e556"
+    "sha256": "3d344b3c35299b34904352eb84d2b262957cfc796ea5dc88b97ae2b587e09a99"
   },
-  "rust_ref": "b5d5bc8afeaa0369cbc248b85366111649cb9010",
+  "rust_ref": "07cecdc85f3b3b721eeef595870cf2dd94c8d7f7",
   "rust_runner_provenance": {
     "candidate_source": {
       "file_count": 7150,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "7d61c1cd00d34d40a234cfa37f9d6de7f14cd5d07901b40a7170eaecbd55e556"
+      "sha256": "3d344b3c35299b34904352eb84d2b262957cfc796ea5dc88b97ae2b587e09a99"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -7184,7 +7148,7 @@
     },
     "dynamic_cpp_functions": 461,
     "dynamic_rust_files": 18,
-    "dynamic_rust_functions": 1192,
+    "dynamic_rust_functions": 1183,
     "static_cpp_files": 338
   },
   "steady_allocation_counts": {

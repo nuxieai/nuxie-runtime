@@ -5,16 +5,14 @@ use crate::data_bind_graph::{
 };
 use crate::draw::color_lerp;
 use crate::properties::{
-    artboard_index_for_graph, mix_value, runtime_object_bool_property_by_key,
-    runtime_object_color_property_by_key, runtime_object_double_property_by_key,
-    runtime_object_field_kind_by_key, solid_color_value_property_key, transform_property_for_key,
+    artboard_index_for_graph, mix_value, solid_color_value_property_key, transform_property_for_key,
 };
 use crate::{ArtboardInstance, InstanceSlot, StateMachineReportedEvent, TransformProperty};
 use nuxie_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use nuxie_graph::ArtboardGraph;
 use nuxie_schema::{
-    CoreRegistryFieldKind, FieldKind, core_registry_field_kind_by_property_key,
-    definition_by_type_key, is_callback_property_key, object_supports_property,
+    CoreRegistryFieldKind, core_registry_field_kind_by_property_key, definition_by_type_key,
+    is_callback_property_key, object_supports_property,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -299,6 +297,39 @@ fn callback_event_for_keyed_property(
     ))
 }
 
+fn keyed_property_target(
+    target_local_id: usize,
+    target: &RuntimeObject,
+    property_key: u16,
+) -> Option<RuntimeKeyedPropertyTarget> {
+    if is_callback_property_key(property_key) {
+        return Some(RuntimeKeyedPropertyTarget::Callback {
+            event: callback_event_for_keyed_property(target_local_id, target, property_key),
+        });
+    }
+
+    let transform_property = transform_property_for_key(property_key);
+    match core_registry_field_kind_by_property_key(property_key)? {
+        CoreRegistryFieldKind::Double => {
+            Some(RuntimeKeyedPropertyTarget::Double { transform_property })
+        }
+        CoreRegistryFieldKind::Color => Some(RuntimeKeyedPropertyTarget::Color {
+            solid_color_property: target.type_name == "SolidColor"
+                && solid_color_value_property_key() == Some(property_key),
+            data_bind_observed: false,
+        }),
+        CoreRegistryFieldKind::Bool => Some(RuntimeKeyedPropertyTarget::Bool),
+        CoreRegistryFieldKind::Uint => Some(RuntimeKeyedPropertyTarget::Uint),
+        CoreRegistryFieldKind::StringOrBytes => Some(RuntimeKeyedPropertyTarget::String),
+    }
+}
+
+// Mirrors KeyFrame::computeSeconds (`src/animation/keyframe.cpp`) as invoked
+// once by KeyedPropertyImporter::resolve (`src/importers/keyed_property_importer.cpp`).
+fn retained_key_frame_seconds(frame: u64, fps: u64) -> f32 {
+    frame as f32 / fps as f32
+}
+
 pub(crate) fn build_linear_animations<'a>(
     file: &'a RuntimeFile,
     graph: &ArtboardGraph,
@@ -397,6 +428,10 @@ pub(crate) fn build_linear_animations<'a>(
                 current_keyed_property = None;
                 continue;
             }
+            let Some(target) = keyed_property_target(target_local_id, target, property_key) else {
+                current_keyed_property = None;
+                continue;
+            };
 
             let keyed_objects = Arc::make_mut(&mut animations[animation_index].keyed_objects);
             keyed_objects[keyed_object_index]
@@ -404,40 +439,8 @@ pub(crate) fn build_linear_animations<'a>(
                 .push(RuntimeKeyedProperty {
                     global_id: global_id as u32,
                     property_key,
-                    transform_property: transform_property_for_key(property_key),
-                    double_property: core_registry_field_kind_by_property_key(property_key)
-                        == Some(CoreRegistryFieldKind::Double),
-                    double_source_value: runtime_object_double_property_by_key(
-                        target,
-                        property_key,
-                    )
-                    .unwrap_or(0.0),
-                    color_property: core_registry_field_kind_by_property_key(property_key)
-                        == Some(CoreRegistryFieldKind::Color),
-                    solid_color_property: target.type_name == "SolidColor"
-                        && solid_color_value_property_key() == Some(property_key),
-                    data_bind_observed: false,
-                    color_source_value: runtime_object_color_property_by_key(target, property_key)
-                        .unwrap_or(0),
-                    bool_property: core_registry_field_kind_by_property_key(property_key)
-                        == Some(CoreRegistryFieldKind::Bool),
-                    bool_source_value: runtime_object_bool_property_by_key(target, property_key)
-                        .unwrap_or(false),
-                    uint_property: core_registry_field_kind_by_property_key(property_key)
-                        == Some(CoreRegistryFieldKind::Uint),
-                    string_property: runtime_object_field_kind_by_key(target, property_key)
-                        == Some(FieldKind::String),
-                    callback_event: callback_event_for_keyed_property(
-                        target_local_id,
-                        target,
-                        property_key,
-                    ),
+                    target,
                     key_frames: Vec::new(),
-                    color_key_frames: Vec::new(),
-                    bool_key_frames: Vec::new(),
-                    uint_key_frames: Vec::new(),
-                    string_key_frames: Vec::new(),
-                    callback_key_frames: Vec::new(),
                 });
             current_keyed_property = Some((
                 keyed_object_index,
@@ -450,6 +453,8 @@ pub(crate) fn build_linear_animations<'a>(
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
+            let frame = object.uint_property("frame").unwrap_or(0);
+            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
                 animation_index,
@@ -457,118 +462,134 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_property_index,
             )
             .key_frames
-            .push(RuntimeKeyFrameDouble {
+            .push(RuntimeKeyFrame::Double(RuntimeKeyFrameDouble {
                 global_id: global_id as u32,
-                frame: object.uint_property("frame").unwrap_or(0),
+                frame,
+                seconds,
                 interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                 interpolator_id: normalized_interpolator_id(object),
                 interpolator: runtime_key_frame_interpolator(file, artboard_index, object),
                 value: object.double_property("value").unwrap_or(0.0),
-            });
+            }));
         }
 
         if object.type_name == "KeyFrameColor" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
+            let frame = object.uint_property("frame").unwrap_or(0);
+            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
                 animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
-            .color_key_frames
-            .push(RuntimeKeyFrameColor {
+            .key_frames
+            .push(RuntimeKeyFrame::Color(RuntimeKeyFrameColor {
                 global_id: global_id as u32,
-                frame: object.uint_property("frame").unwrap_or(0),
+                frame,
+                seconds,
                 interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                 interpolator_id: normalized_interpolator_id(object),
                 interpolator: runtime_key_frame_interpolator(file, artboard_index, object),
                 value: object.color_property("value").unwrap_or(0),
-            });
+            }));
         }
 
         if object.type_name == "KeyFrameBool" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
+            let frame = object.uint_property("frame").unwrap_or(0);
+            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
                 animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
-            .bool_key_frames
-            .push(RuntimeKeyFrameBool {
+            .key_frames
+            .push(RuntimeKeyFrame::Bool(RuntimeKeyFrameBool {
                 global_id: global_id as u32,
-                frame: object.uint_property("frame").unwrap_or(0),
+                frame,
+                seconds,
                 interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                 interpolator_id: normalized_interpolator_id(object),
                 value: object.bool_property("value").unwrap_or(false),
-            });
+            }));
         }
 
         if object.type_name == "KeyFrameUint" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
+            let frame = object.uint_property("frame").unwrap_or(0);
+            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
                 animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
-            .uint_key_frames
-            .push(RuntimeKeyFrameUint {
+            .key_frames
+            .push(RuntimeKeyFrame::Uint(RuntimeKeyFrameUint {
                 global_id: global_id as u32,
-                frame: object.uint_property("frame").unwrap_or(0),
+                frame,
+                seconds,
                 interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                 interpolator_id: normalized_interpolator_id(object),
                 value: object.uint_property("value").unwrap_or(0),
-            });
+            }));
         }
 
         if object.type_name == "KeyFrameId" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
+            let frame = object.uint_property("frame").unwrap_or(0);
+            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
                 animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
-            .uint_key_frames
-            .push(RuntimeKeyFrameUint {
+            .key_frames
+            .push(RuntimeKeyFrame::Uint(RuntimeKeyFrameUint {
                 global_id: global_id as u32,
-                frame: object.uint_property("frame").unwrap_or(0),
+                frame,
+                seconds,
                 interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                 interpolator_id: normalized_interpolator_id(object),
                 value: object.uint_property("value").unwrap_or(0),
-            });
+            }));
         }
 
         if object.type_name == "KeyFrameString" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
+            let frame = object.uint_property("frame").unwrap_or(0);
+            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
                 animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
-            .string_key_frames
-            .push(RuntimeKeyFrameString {
+            .key_frames
+            .push(RuntimeKeyFrame::String(RuntimeKeyFrameString {
                 global_id: global_id as u32,
-                frame: object.uint_property("frame").unwrap_or(0),
+                frame,
+                seconds,
                 interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                 interpolator_id: normalized_interpolator_id(object),
                 value: object
                     .string_property_bytes("value")
                     .unwrap_or_default()
                     .to_vec(),
-            });
+            }));
         }
 
         if object.type_name == "KeyFrameCallback" {
@@ -576,17 +597,20 @@ pub(crate) fn build_linear_animations<'a>(
                 continue;
             };
             animations[animation_index].has_keyed_callbacks = true;
+            let frame = object.uint_property("frame").unwrap_or(0);
+            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
                 animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
-            .callback_key_frames
-            .push(RuntimeKeyFrameCallback {
+            .key_frames
+            .push(RuntimeKeyFrame::Callback(RuntimeKeyFrameCallback {
                 global_id: global_id as u32,
-                frame: object.uint_property("frame").unwrap_or(0),
-            });
+                frame,
+                seconds,
+            }));
         }
     }
 
@@ -601,20 +625,7 @@ pub(crate) fn build_linear_animations<'a>(
                     property
                         .key_frames
                         .iter()
-                        .map(|frame| frame.global_id)
-                        .chain(
-                            property
-                                .color_key_frames
-                                .iter()
-                                .map(|frame| frame.global_id),
-                        )
-                        .chain(property.bool_key_frames.iter().map(|frame| frame.global_id))
-                        .chain(
-                            property
-                                .string_key_frames
-                                .iter()
-                                .map(|frame| frame.global_id),
-                        )
+                        .filter_map(RuntimeKeyFrame::bindable_global_id)
                 })
                 .collect::<std::collections::HashSet<_>>();
             animation.key_frame_data_bind_templates = Arc::new(
@@ -774,59 +785,57 @@ impl RuntimeLinearAnimation {
             for keyed_property in &keyed_object.keyed_properties {
                 // CoreRegistry assigns exactly one field type per property,
                 // matching C++ KeyedProperty's single virtual apply dispatch.
-                if let Some(property) = keyed_property.transform_property {
-                    let Some(frame_value) =
-                        keyed_property.double_frame_value_at(seconds, self.fps, key_frame_values)
-                    else {
-                        continue;
-                    };
-                    let Some(value) = apply_key_frame_double_mix(frame_value, mix, || {
-                        instance.transform_property_with_key(
-                            keyed_object.target_local_id,
-                            property,
-                            keyed_property.property_key,
-                        )
-                    }) else {
-                        continue;
-                    };
-                    changed |= instance.set_transform_property_with_key(
-                        keyed_object.target_local_id,
-                        property,
-                        keyed_property.property_key,
-                        value,
-                    );
-                } else if keyed_property.double_property {
-                    let Some(frame_value) =
-                        keyed_property.double_frame_value_at(seconds, self.fps, key_frame_values)
-                    else {
-                        continue;
-                    };
-                    let Some(value) = apply_key_frame_double_mix(frame_value, mix, || {
-                        Some(
-                            instance
-                                .double_property(
-                                    keyed_object.target_local_id,
-                                    keyed_property.property_key,
-                                )
-                                .unwrap_or(keyed_property.double_source_value),
-                        )
-                    }) else {
-                        continue;
-                    };
-                    changed |= instance.set_keyed_double_property(
-                        keyed_object.target_local_id,
-                        keyed_property.property_key,
-                        value,
-                    );
-                } else if keyed_property.color_property {
-                    let Some(frame_value) =
-                        keyed_property.color_frame_value_at(seconds, self.fps, key_frame_values)
-                    else {
-                        continue;
-                    };
-                    let Some(value) = apply_key_frame_color_mix(frame_value, mix, || {
-                        Some(
-                            if keyed_property.solid_color_property {
+                match &keyed_property.target {
+                    RuntimeKeyedPropertyTarget::Double { transform_property } => {
+                        let Some(frame_value) =
+                            keyed_property.double_frame_value_at(seconds, key_frame_values)
+                        else {
+                            continue;
+                        };
+                        let Some(value) =
+                            apply_key_frame_double_mix(
+                                frame_value,
+                                mix,
+                                || match transform_property {
+                                    Some(property) => instance.transform_property_with_key(
+                                        keyed_object.target_local_id,
+                                        *property,
+                                        keyed_property.property_key,
+                                    ),
+                                    None => instance.double_property(
+                                        keyed_object.target_local_id,
+                                        keyed_property.property_key,
+                                    ),
+                                },
+                            )
+                        else {
+                            continue;
+                        };
+                        changed |= match transform_property {
+                            Some(property) => instance.set_transform_property_with_key(
+                                keyed_object.target_local_id,
+                                *property,
+                                keyed_property.property_key,
+                                value,
+                            ),
+                            None => instance.set_keyed_double_property(
+                                keyed_object.target_local_id,
+                                keyed_property.property_key,
+                                value,
+                            ),
+                        };
+                    }
+                    RuntimeKeyedPropertyTarget::Color {
+                        solid_color_property,
+                        data_bind_observed,
+                    } => {
+                        let Some(frame_value) =
+                            keyed_property.color_frame_value_at(seconds, key_frame_values)
+                        else {
+                            continue;
+                        };
+                        let Some(value) = apply_key_frame_color_mix(frame_value, mix, || {
+                            if *solid_color_property {
                                 instance.solid_color_value(keyed_object.target_local_id)
                             } else {
                                 instance.color_property(
@@ -834,56 +843,57 @@ impl RuntimeLinearAnimation {
                                     keyed_property.property_key,
                                 )
                             }
-                            .unwrap_or(keyed_property.color_source_value),
-                        )
-                    }) else {
-                        continue;
-                    };
-                    changed |= if keyed_property.solid_color_property {
-                        instance.set_keyed_solid_color_property(
+                        }) else {
+                            continue;
+                        };
+                        changed |= if *solid_color_property {
+                            instance.set_keyed_solid_color_property(
+                                keyed_object.target_local_id,
+                                keyed_property.property_key,
+                                *data_bind_observed,
+                                value,
+                            )
+                        } else {
+                            instance.set_keyed_color_property(
+                                keyed_object.target_local_id,
+                                keyed_property.property_key,
+                                value,
+                            )
+                        };
+                    }
+                    RuntimeKeyedPropertyTarget::Bool => {
+                        let Some(value) = keyed_property.bool_value_at(seconds, key_frame_values)
+                        else {
+                            continue;
+                        };
+                        changed |= instance.set_bool_property(
                             keyed_object.target_local_id,
                             keyed_property.property_key,
-                            keyed_property.data_bind_observed,
                             value,
-                        )
-                    } else {
-                        instance.set_keyed_color_property(
+                        );
+                    }
+                    RuntimeKeyedPropertyTarget::Uint => {
+                        let Some(value) = keyed_property.uint_value_at(seconds) else {
+                            continue;
+                        };
+                        changed |= instance.set_uint_property(
                             keyed_object.target_local_id,
                             keyed_property.property_key,
                             value,
-                        )
-                    };
-                } else if keyed_property.bool_property {
-                    let Some(value) =
-                        keyed_property.bool_value_at(seconds, self.fps, key_frame_values)
-                    else {
-                        continue;
-                    };
-                    changed |= instance.set_bool_property(
-                        keyed_object.target_local_id,
-                        keyed_property.property_key,
-                        value,
-                    );
-                } else if keyed_property.uint_property {
-                    let Some(value) = keyed_property.uint_value_at(seconds, self.fps) else {
-                        continue;
-                    };
-                    changed |= instance.set_uint_property(
-                        keyed_object.target_local_id,
-                        keyed_property.property_key,
-                        value,
-                    );
-                } else if keyed_property.string_property {
-                    let Some(value) =
-                        keyed_property.string_value_at(seconds, self.fps, key_frame_values)
-                    else {
-                        continue;
-                    };
-                    changed |= instance.set_string_property(
-                        keyed_object.target_local_id,
-                        keyed_property.property_key,
-                        value,
-                    );
+                        );
+                    }
+                    RuntimeKeyedPropertyTarget::String => {
+                        let Some(value) = keyed_property.string_value_at(seconds, key_frame_values)
+                        else {
+                            continue;
+                        };
+                        changed |= instance.set_string_property(
+                            keyed_object.target_local_id,
+                            keyed_property.property_key,
+                            value,
+                        );
+                    }
+                    RuntimeKeyedPropertyTarget::Callback { .. } => {}
                 }
             }
         }
@@ -912,7 +922,6 @@ impl RuntimeLinearAnimation {
                     keyed_object.target_local_id,
                     seconds_from,
                     seconds_to,
-                    self.fps,
                     is_at_start_frame,
                     reported_events,
                     keyed_callbacks,
@@ -1013,28 +1022,43 @@ pub struct RuntimeKeyedObject {
 pub struct RuntimeKeyedProperty {
     pub global_id: u32,
     pub property_key: u16,
-    pub transform_property: Option<TransformProperty>,
-    pub double_property: bool,
-    pub double_source_value: f32,
-    pub color_property: bool,
-    /// The import-time equivalent of C++'s concrete `SolidColor*` target.
-    /// Avoids repeating CoreRegistry/type discovery for every sampled frame.
-    pub(crate) solid_color_property: bool,
-    /// C++ keeps an intrusive observer head on each concrete Core object.
-    /// Rust resolves the equivalent subscription once at artboard build time.
-    pub(crate) data_bind_observed: bool,
-    pub color_source_value: u32,
-    pub bool_property: bool,
-    pub bool_source_value: bool,
-    pub uint_property: bool,
-    pub string_property: bool,
-    pub(crate) callback_event: Option<StateMachineReportedEvent>,
-    pub key_frames: Vec<RuntimeKeyFrameDouble>,
-    pub color_key_frames: Vec<RuntimeKeyFrameColor>,
-    pub bool_key_frames: Vec<RuntimeKeyFrameBool>,
-    pub uint_key_frames: Vec<RuntimeKeyFrameUint>,
-    pub string_key_frames: Vec<RuntimeKeyFrameString>,
-    pub(crate) callback_key_frames: Vec<RuntimeKeyFrameCallback>,
+    /// Rust's type-safe binding for C++ CoreRegistry's single virtual property
+    /// dispatch. Exactly one target family is retained per KeyedProperty.
+    pub target: RuntimeKeyedPropertyTarget,
+    /// Mirrors C++ `KeyedProperty::m_keyFrames`: one insertion-ordered owner
+    /// sequence containing the concrete KeyFrame occurrence.
+    pub key_frames: Vec<RuntimeKeyFrame>,
+}
+
+#[derive(Debug, Clone)]
+pub enum RuntimeKeyedPropertyTarget {
+    Double {
+        transform_property: Option<TransformProperty>,
+    },
+    Color {
+        /// The import-time equivalent of C++'s concrete `SolidColor*` target.
+        solid_color_property: bool,
+        /// C++ keeps an intrusive observer head on each concrete Core object.
+        /// Rust resolves the equivalent subscription once at artboard build.
+        data_bind_observed: bool,
+    },
+    Bool,
+    Uint,
+    String,
+    Callback {
+        event: Option<StateMachineReportedEvent>,
+    },
+}
+
+impl RuntimeKeyedPropertyTarget {
+    pub(crate) fn set_data_bind_observed(&mut self, observed: bool) {
+        if let Self::Color {
+            data_bind_observed, ..
+        } = self
+        {
+            *data_bind_observed = observed;
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1072,41 +1096,56 @@ fn apply_key_frame_color_mix(
 }
 
 impl RuntimeKeyedProperty {
+    pub(crate) fn first_double_value(&self) -> Option<f32> {
+        self.key_frames
+            .first()?
+            .as_double()
+            .map(|frame| frame.value)
+    }
+
+    pub(crate) fn first_color_value(&self) -> Option<u32> {
+        self.key_frames.first()?.as_color().map(|frame| frame.value)
+    }
+
     fn double_frame_value_at(
         &self,
         seconds: f32,
-        fps: u64,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
     ) -> Option<f32> {
         if self.key_frames.is_empty() {
             return None;
         }
 
-        let idx = self.closest_frame_index(seconds, fps);
+        let idx = self.closest_frame_index(seconds);
         let value = if idx == 0 {
-            self.key_frames[0].effective_value(key_frame_values)
+            self.key_frames[0]
+                .as_double()?
+                .effective_value(key_frame_values)
         } else if idx < self.key_frames.len() {
-            let from = &self.key_frames[idx - 1];
-            let to = &self.key_frames[idx];
-            if seconds == to.seconds(fps) {
+            let from = self.key_frames[idx - 1].as_double()?;
+            let to = self.key_frames[idx].as_double()?;
+            if seconds == to.seconds {
                 to.effective_value(key_frame_values)
             } else if from.interpolation_type == 0 {
                 from.effective_value(key_frame_values)
             } else if from.interpolator_id.is_some() {
-                let frame_mix = frame_mix(seconds, from.seconds(fps), to.seconds(fps));
+                let frame_mix = frame_mix(seconds, from.seconds, to.seconds);
                 from.interpolator?.transform_value(
                     from.effective_value(key_frame_values),
                     to.effective_value(key_frame_values),
                     frame_mix,
                 )
             } else {
-                let frame_mix = frame_mix(seconds, from.seconds(fps), to.seconds(fps));
+                let frame_mix = frame_mix(seconds, from.seconds, to.seconds);
                 let from_value = from.effective_value(key_frame_values);
                 let to_value = to.effective_value(key_frame_values);
                 from_value + (to_value - from_value) * frame_mix
             }
         } else {
-            self.key_frames.last()?.effective_value(key_frame_values)
+            self.key_frames
+                .last()?
+                .as_double()?
+                .effective_value(key_frame_values)
         };
 
         Some(value)
@@ -1115,32 +1154,33 @@ impl RuntimeKeyedProperty {
     fn color_frame_value_at(
         &self,
         seconds: f32,
-        fps: u64,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
     ) -> Option<u32> {
-        if self.color_key_frames.is_empty() {
+        if self.key_frames.is_empty() {
             return None;
         }
 
-        let idx = closest_key_frame_index(&self.color_key_frames, seconds, fps);
+        let idx = self.closest_frame_index(seconds);
         let value = if idx == 0 {
-            self.color_key_frames[0].effective_value(key_frame_values)
-        } else if idx < self.color_key_frames.len() {
-            let from = &self.color_key_frames[idx - 1];
-            let to = &self.color_key_frames[idx];
-            if seconds == to.seconds(fps) {
+            self.key_frames[0]
+                .as_color()?
+                .effective_value(key_frame_values)
+        } else if idx < self.key_frames.len() {
+            let from = self.key_frames[idx - 1].as_color()?;
+            let to = self.key_frames[idx].as_color()?;
+            if seconds == to.seconds {
                 to.effective_value(key_frame_values)
             } else if from.interpolation_type == 0 {
                 from.effective_value(key_frame_values)
             } else if from.interpolator_id.is_some() {
-                let frame_mix = frame_mix(seconds, from.seconds(fps), to.seconds(fps));
+                let frame_mix = frame_mix(seconds, from.seconds, to.seconds);
                 color_lerp(
                     from.effective_value(key_frame_values),
                     to.effective_value(key_frame_values),
                     from.interpolator?.transform(frame_mix),
                 )
             } else {
-                let frame_mix = frame_mix(seconds, from.seconds(fps), to.seconds(fps));
+                let frame_mix = frame_mix(seconds, from.seconds, to.seconds);
                 color_lerp(
                     from.effective_value(key_frame_values),
                     to.effective_value(key_frame_values),
@@ -1148,8 +1188,9 @@ impl RuntimeKeyedProperty {
                 )
             }
         } else {
-            self.color_key_frames
+            self.key_frames
                 .last()?
+                .as_color()?
                 .effective_value(key_frame_values)
         };
 
@@ -1159,51 +1200,53 @@ impl RuntimeKeyedProperty {
     fn bool_value_at(
         &self,
         seconds: f32,
-        fps: u64,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
     ) -> Option<bool> {
-        if self.bool_key_frames.is_empty() {
+        if self.key_frames.is_empty() {
             return None;
         }
 
-        let idx = closest_key_frame_index(&self.bool_key_frames, seconds, fps);
+        let idx = self.closest_frame_index(seconds);
         let value = if idx == 0 {
-            self.bool_key_frames[0].effective_value(key_frame_values)
-        } else if idx < self.bool_key_frames.len() {
-            let from = &self.bool_key_frames[idx - 1];
-            let to = &self.bool_key_frames[idx];
-            if seconds == to.seconds(fps) {
+            self.key_frames[0]
+                .as_bool()?
+                .effective_value(key_frame_values)
+        } else if idx < self.key_frames.len() {
+            let from = self.key_frames[idx - 1].as_bool()?;
+            let to = self.key_frames[idx].as_bool()?;
+            if seconds == to.seconds {
                 to.effective_value(key_frame_values)
             } else {
                 from.effective_value(key_frame_values)
             }
         } else {
-            self.bool_key_frames
+            self.key_frames
                 .last()?
+                .as_bool()?
                 .effective_value(key_frame_values)
         };
 
         Some(value)
     }
 
-    fn uint_value_at(&self, seconds: f32, fps: u64) -> Option<u64> {
-        if self.uint_key_frames.is_empty() {
+    fn uint_value_at(&self, seconds: f32) -> Option<u64> {
+        if self.key_frames.is_empty() {
             return None;
         }
 
-        let idx = closest_key_frame_index(&self.uint_key_frames, seconds, fps);
+        let idx = self.closest_frame_index(seconds);
         let value = if idx == 0 {
-            self.uint_key_frames[0].value
-        } else if idx < self.uint_key_frames.len() {
-            let from = &self.uint_key_frames[idx - 1];
-            let to = &self.uint_key_frames[idx];
-            if seconds == to.seconds(fps) {
+            self.key_frames[0].as_uint()?.value
+        } else if idx < self.key_frames.len() {
+            let from = self.key_frames[idx - 1].as_uint()?;
+            let to = self.key_frames[idx].as_uint()?;
+            if seconds == to.seconds {
                 to.value
             } else {
                 from.value
             }
         } else {
-            self.uint_key_frames.last()?.value
+            self.key_frames.last()?.as_uint()?.value
         };
 
         Some(value)
@@ -1212,22 +1255,21 @@ impl RuntimeKeyedProperty {
     fn string_value_at(
         &self,
         seconds: f32,
-        fps: u64,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
     ) -> Option<Vec<u8>> {
-        if self.string_key_frames.is_empty() {
+        if self.key_frames.is_empty() {
             return None;
         }
 
-        let idx = closest_key_frame_index(&self.string_key_frames, seconds, fps);
+        let idx = self.closest_frame_index(seconds);
         let key_frame = if idx == 0 {
-            &self.string_key_frames[0]
-        } else if idx < self.string_key_frames.len() {
-            let from = &self.string_key_frames[idx - 1];
-            let to = &self.string_key_frames[idx];
-            if seconds == to.seconds(fps) { to } else { from }
+            self.key_frames[0].as_string()?
+        } else if idx < self.key_frames.len() {
+            let from = self.key_frames[idx - 1].as_string()?;
+            let to = self.key_frames[idx].as_string()?;
+            if seconds == to.seconds { to } else { from }
         } else {
-            self.string_key_frames.last()?
+            self.key_frames.last()?.as_string()?
         };
 
         Some(key_frame.effective_value(key_frame_values))
@@ -1238,12 +1280,11 @@ impl RuntimeKeyedProperty {
         target_local_id: usize,
         seconds_from: f32,
         seconds_to: f32,
-        fps: u64,
         is_at_start_frame: bool,
         reported_events: &mut Vec<StateMachineReportedEvent>,
         keyed_callbacks: &mut Vec<RuntimeKeyedCallback>,
     ) {
-        if self.callback_key_frames.is_empty() || seconds_from == seconds_to {
+        if self.key_frames.is_empty() || seconds_from == seconds_to {
             return;
         }
 
@@ -1259,15 +1300,13 @@ impl RuntimeKeyedProperty {
         }
 
         let mut index = closest_key_frame_index_with_exact_offset(
-            &self.callback_key_frames,
+            &self.key_frames,
             seconds_from,
-            fps,
             from_exact_offset,
         );
         let mut index_to = closest_key_frame_index_with_exact_offset(
-            &self.callback_key_frames,
+            &self.key_frames,
             seconds_to,
-            fps,
             to_exact_offset,
         );
         if index_to < index {
@@ -1275,14 +1314,14 @@ impl RuntimeKeyedProperty {
         }
 
         while index_to > index {
-            let key_frame = &self.callback_key_frames[index];
-            let seconds_delay = seconds_to - key_frame.seconds(fps);
+            let key_frame = &self.key_frames[index];
+            let seconds_delay = seconds_to - key_frame.seconds();
             keyed_callbacks.push(RuntimeKeyedCallback {
                 target_local_id,
                 property_key: self.property_key,
                 seconds_delay,
             });
-            if let Some(event) = self.callback_event.as_ref() {
+            if let RuntimeKeyedPropertyTarget::Callback { event: Some(event) } = &self.target {
                 let mut reported_event = event.clone();
                 reported_event.seconds_delay = seconds_delay;
                 reported_events.push(reported_event);
@@ -1291,31 +1330,22 @@ impl RuntimeKeyedProperty {
         }
     }
 
-    fn closest_frame_index(&self, seconds: f32, fps: u64) -> usize {
-        closest_key_frame_index(&self.key_frames, seconds, fps)
+    fn closest_frame_index(&self, seconds: f32) -> usize {
+        closest_key_frame_index(&self.key_frames, seconds)
     }
 }
 
-trait RuntimeKeyFrameTiming {
-    fn seconds(&self, fps: u64) -> f32;
+fn closest_key_frame_index(key_frames: &[RuntimeKeyFrame], seconds: f32) -> usize {
+    closest_key_frame_index_with_exact_offset(key_frames, seconds, 0)
 }
 
-fn closest_key_frame_index<T: RuntimeKeyFrameTiming>(
-    key_frames: &[T],
+fn closest_key_frame_index_with_exact_offset(
+    key_frames: &[RuntimeKeyFrame],
     seconds: f32,
-    fps: u64,
-) -> usize {
-    closest_key_frame_index_with_exact_offset(key_frames, seconds, fps, 0)
-}
-
-fn closest_key_frame_index_with_exact_offset<T: RuntimeKeyFrameTiming>(
-    key_frames: &[T],
-    seconds: f32,
-    fps: u64,
     exact_offset: usize,
 ) -> usize {
     let last = key_frames.len() - 1;
-    if seconds > key_frames[last].seconds(fps) {
+    if seconds > key_frames[last].seconds() {
         return key_frames.len();
     }
 
@@ -1323,7 +1353,7 @@ fn closest_key_frame_index_with_exact_offset<T: RuntimeKeyFrameTiming>(
     let mut end = last;
     while start <= end {
         let mid = (start + end) >> 1;
-        let closest = key_frames[mid].seconds(fps);
+        let closest = key_frames[mid].seconds();
         if closest < seconds {
             start = mid + 1;
         } else if closest > seconds {
@@ -1346,10 +1376,93 @@ fn frame_mix(seconds: f32, from_seconds: f32, to_seconds: f32) -> f32 {
     }
 }
 
+/// The concrete keyframe occurrence owned by a `RuntimeKeyedProperty`.
+///
+/// Mirrors C++ `KeyedProperty::m_keyFrames`: concrete subclasses share one
+/// insertion-ordered owner sequence instead of being partitioned by Rust type.
+#[derive(Debug, Clone)]
+pub enum RuntimeKeyFrame {
+    Double(RuntimeKeyFrameDouble),
+    Color(RuntimeKeyFrameColor),
+    Bool(RuntimeKeyFrameBool),
+    Uint(RuntimeKeyFrameUint),
+    String(RuntimeKeyFrameString),
+    Callback(RuntimeKeyFrameCallback),
+}
+
+impl RuntimeKeyFrame {
+    fn global_id(&self) -> u32 {
+        match self {
+            Self::Double(frame) => frame.global_id,
+            Self::Color(frame) => frame.global_id,
+            Self::Bool(frame) => frame.global_id,
+            Self::Uint(frame) => frame.global_id,
+            Self::String(frame) => frame.global_id,
+            Self::Callback(frame) => frame.global_id,
+        }
+    }
+
+    fn seconds(&self) -> f32 {
+        match self {
+            Self::Double(frame) => frame.seconds,
+            Self::Color(frame) => frame.seconds,
+            Self::Bool(frame) => frame.seconds,
+            Self::Uint(frame) => frame.seconds,
+            Self::String(frame) => frame.seconds,
+            Self::Callback(frame) => frame.seconds,
+        }
+    }
+
+    fn bindable_global_id(&self) -> Option<u32> {
+        match self {
+            Self::Double(_) | Self::Color(_) | Self::Bool(_) | Self::String(_) => {
+                Some(self.global_id())
+            }
+            Self::Uint(_) | Self::Callback(_) => None,
+        }
+    }
+
+    fn as_double(&self) -> Option<&RuntimeKeyFrameDouble> {
+        match self {
+            Self::Double(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    fn as_color(&self) -> Option<&RuntimeKeyFrameColor> {
+        match self {
+            Self::Color(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    fn as_bool(&self) -> Option<&RuntimeKeyFrameBool> {
+        match self {
+            Self::Bool(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    fn as_uint(&self) -> Option<&RuntimeKeyFrameUint> {
+        match self {
+            Self::Uint(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    fn as_string(&self) -> Option<&RuntimeKeyFrameString> {
+        match self {
+            Self::String(frame) => Some(frame),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RuntimeKeyFrameDouble {
     pub global_id: u32,
     pub frame: u64,
+    pub seconds: f32,
     pub interpolation_type: u64,
     pub interpolator_id: Option<u64>,
     pub(crate) interpolator: Option<RuntimeInterpolator>,
@@ -1362,25 +1475,13 @@ impl RuntimeKeyFrameDouble {
             .number(self.global_id)
             .unwrap_or(self.value)
     }
-
-    fn seconds(&self, fps: u64) -> f32 {
-        if fps == 0 {
-            return 0.0;
-        }
-        self.frame as f32 / fps as f32
-    }
-}
-
-impl RuntimeKeyFrameTiming for RuntimeKeyFrameDouble {
-    fn seconds(&self, fps: u64) -> f32 {
-        self.seconds(fps)
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct RuntimeKeyFrameColor {
     pub global_id: u32,
     pub frame: u64,
+    pub seconds: f32,
     pub interpolation_type: u64,
     pub interpolator_id: Option<u64>,
     pub(crate) interpolator: Option<RuntimeInterpolator>,
@@ -1391,25 +1492,13 @@ impl RuntimeKeyFrameColor {
     fn effective_value(&self, key_frame_values: RuntimeKeyFrameValueContext<'_>) -> u32 {
         key_frame_values.color(self.global_id).unwrap_or(self.value)
     }
-
-    fn seconds(&self, fps: u64) -> f32 {
-        if fps == 0 {
-            return 0.0;
-        }
-        self.frame as f32 / fps as f32
-    }
-}
-
-impl RuntimeKeyFrameTiming for RuntimeKeyFrameColor {
-    fn seconds(&self, fps: u64) -> f32 {
-        self.seconds(fps)
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct RuntimeKeyFrameBool {
     pub global_id: u32,
     pub frame: u64,
+    pub seconds: f32,
     pub interpolation_type: u64,
     pub interpolator_id: Option<u64>,
     pub value: bool,
@@ -1421,49 +1510,23 @@ impl RuntimeKeyFrameBool {
             .boolean(self.global_id)
             .unwrap_or(self.value)
     }
-
-    fn seconds(&self, fps: u64) -> f32 {
-        if fps == 0 {
-            return 0.0;
-        }
-        self.frame as f32 / fps as f32
-    }
-}
-
-impl RuntimeKeyFrameTiming for RuntimeKeyFrameBool {
-    fn seconds(&self, fps: u64) -> f32 {
-        self.seconds(fps)
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct RuntimeKeyFrameUint {
     pub global_id: u32,
     pub frame: u64,
+    pub seconds: f32,
     pub interpolation_type: u64,
     pub interpolator_id: Option<u64>,
     pub value: u64,
-}
-
-impl RuntimeKeyFrameUint {
-    fn seconds(&self, fps: u64) -> f32 {
-        if fps == 0 {
-            return 0.0;
-        }
-        self.frame as f32 / fps as f32
-    }
-}
-
-impl RuntimeKeyFrameTiming for RuntimeKeyFrameUint {
-    fn seconds(&self, fps: u64) -> f32 {
-        self.seconds(fps)
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct RuntimeKeyFrameString {
     pub global_id: u32,
     pub frame: u64,
+    pub seconds: f32,
     pub interpolation_type: u64,
     pub interpolator_id: Option<u64>,
     pub value: Vec<u8>,
@@ -1476,40 +1539,13 @@ impl RuntimeKeyFrameString {
             .unwrap_or(&self.value)
             .to_vec()
     }
-
-    fn seconds(&self, fps: u64) -> f32 {
-        if fps == 0 {
-            return 0.0;
-        }
-        self.frame as f32 / fps as f32
-    }
-}
-
-impl RuntimeKeyFrameTiming for RuntimeKeyFrameString {
-    fn seconds(&self, fps: u64) -> f32 {
-        self.seconds(fps)
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct RuntimeKeyFrameCallback {
     pub global_id: u32,
     pub frame: u64,
-}
-
-impl RuntimeKeyFrameCallback {
-    fn seconds(&self, fps: u64) -> f32 {
-        if fps == 0 {
-            return 0.0;
-        }
-        self.frame as f32 / fps as f32
-    }
-}
-
-impl RuntimeKeyFrameTiming for RuntimeKeyFrameCallback {
-    fn seconds(&self, fps: u64) -> f32 {
-        self.seconds(fps)
-    }
+    pub seconds: f32,
 }
 
 // Mirrors src/animation/linear_animation_instance.cpp and include/rive/animation/loop.hpp.
@@ -2065,42 +2101,116 @@ mod tests {
         RuntimeKeyedProperty {
             global_id: 1,
             property_key: 1,
-            transform_property: None,
-            double_property: true,
-            double_source_value: 0.0,
-            color_property: false,
-            solid_color_property: false,
-            data_bind_observed: false,
-            color_source_value: 0,
-            bool_property: false,
-            bool_source_value: false,
-            uint_property: false,
-            string_property: false,
-            callback_event: None,
+            target: RuntimeKeyedPropertyTarget::Double {
+                transform_property: None,
+            },
             key_frames: vec![
-                RuntimeKeyFrameDouble {
+                RuntimeKeyFrame::Double(RuntimeKeyFrameDouble {
                     global_id: from_global_id,
                     frame: 0,
+                    seconds: 0.0,
                     interpolation_type: 1,
                     interpolator_id: None,
                     interpolator: None,
                     value: from_value,
-                },
-                RuntimeKeyFrameDouble {
+                }),
+                RuntimeKeyFrame::Double(RuntimeKeyFrameDouble {
                     global_id: to_global_id,
                     frame: 10,
+                    seconds: 1.0,
                     interpolation_type: 1,
                     interpolator_id: None,
                     interpolator: None,
                     value: to_value,
-                },
+                }),
             ],
-            color_key_frames: Vec::new(),
-            bool_key_frames: Vec::new(),
-            uint_key_frames: Vec::new(),
-            string_key_frames: Vec::new(),
-            callback_key_frames: Vec::new(),
         }
+    }
+
+    fn callback_frame(global_id: u32, frame: u64, seconds: f32) -> RuntimeKeyFrame {
+        RuntimeKeyFrame::Callback(RuntimeKeyFrameCallback {
+            global_id,
+            frame,
+            seconds,
+        })
+    }
+
+    #[test]
+    fn key_frame_seconds_are_retained_at_attachment() {
+        let mut animation = animation_with_work_area(false);
+        let property = keyed_double_property(10, 1.0, 20, 2.0);
+
+        animation.fps = 20;
+
+        assert_eq!(property.key_frames[1].seconds(), 1.0);
+        assert_eq!(
+            property.double_frame_value_at(0.5, RuntimeKeyFrameValueContext::default()),
+            Some(1.5)
+        );
+    }
+
+    #[test]
+    fn zero_fps_seconds_follow_cpp_float_division() {
+        assert!(retained_key_frame_seconds(0, 0).is_nan());
+        assert_eq!(retained_key_frame_seconds(10, 0), f32::INFINITY);
+    }
+
+    #[test]
+    fn keyed_property_retains_one_mixed_concrete_frame_sequence() {
+        let frames = vec![
+            callback_frame(10, 0, 0.0),
+            RuntimeKeyFrame::Double(RuntimeKeyFrameDouble {
+                global_id: 20,
+                frame: 10,
+                seconds: 1.0,
+                interpolation_type: 1,
+                interpolator_id: None,
+                interpolator: None,
+                value: 2.0,
+            }),
+            RuntimeKeyFrame::Color(RuntimeKeyFrameColor {
+                global_id: 30,
+                frame: 20,
+                seconds: 2.0,
+                interpolation_type: 1,
+                interpolator_id: None,
+                interpolator: None,
+                value: 0,
+            }),
+        ];
+
+        assert_eq!(
+            frames
+                .iter()
+                .map(RuntimeKeyFrame::global_id)
+                .collect::<Vec<_>>(),
+            vec![10, 20, 30]
+        );
+        assert!(matches!(frames[0], RuntimeKeyFrame::Callback(_)));
+        assert!(matches!(frames[1], RuntimeKeyFrame::Double(_)));
+        assert!(matches!(frames[2], RuntimeKeyFrame::Color(_)));
+    }
+
+    #[test]
+    fn closest_frame_index_matches_cpp_exact_offsets_and_duplicates() {
+        let frames = vec![
+            callback_frame(10, 0, 0.0),
+            callback_frame(20, 10, 1.0),
+            callback_frame(30, 10, 1.0),
+            callback_frame(40, 20, 2.0),
+        ];
+
+        assert_eq!(closest_key_frame_index(&frames, -1.0), 0);
+        assert_eq!(closest_key_frame_index(&frames, 0.5), 1);
+        assert_eq!(
+            closest_key_frame_index_with_exact_offset(&frames, 1.0, 0),
+            1
+        );
+        assert_eq!(
+            closest_key_frame_index_with_exact_offset(&frames, 1.0, 1),
+            2
+        );
+        assert_eq!(closest_key_frame_index(&frames, 2.1), frames.len());
     }
 
     #[test]
@@ -2112,7 +2222,7 @@ mod tests {
         let property = keyed_double_property(10, 1.0, 20, 2.0);
 
         assert_eq!(
-            property.double_frame_value_at(0.5, 10, instance.key_frame_value_context(),),
+            property.double_frame_value_at(0.5, instance.key_frame_value_context()),
             Some(150.0)
         );
     }
@@ -2126,30 +2236,34 @@ mod tests {
         instance.add_key_frame_value_holder(30, RuntimeKeyFrameValue::Color(bound_from));
         instance.add_key_frame_value_holder(40, RuntimeKeyFrameValue::Color(bound_to));
         let mut property = keyed_double_property(10, 1.0, 20, 2.0);
-        property.double_property = false;
         property.key_frames.clear();
-        property.color_property = true;
-        property.color_key_frames = vec![
-            RuntimeKeyFrameColor {
+        property.target = RuntimeKeyedPropertyTarget::Color {
+            solid_color_property: false,
+            data_bind_observed: false,
+        };
+        property.key_frames = vec![
+            RuntimeKeyFrame::Color(RuntimeKeyFrameColor {
                 global_id: 30,
                 frame: 0,
+                seconds: 0.0,
                 interpolation_type: 1,
                 interpolator_id: None,
                 interpolator: None,
                 value: 0xFF00_FF00,
-            },
-            RuntimeKeyFrameColor {
+            }),
+            RuntimeKeyFrame::Color(RuntimeKeyFrameColor {
                 global_id: 40,
                 frame: 10,
+                seconds: 1.0,
                 interpolation_type: 1,
                 interpolator_id: None,
                 interpolator: None,
                 value: 0xFF00_00FF,
-            },
+            }),
         ];
 
         assert_eq!(
-            property.color_frame_value_at(0.5, 10, instance.key_frame_value_context(),),
+            property.color_frame_value_at(0.5, instance.key_frame_value_context()),
             Some(color_lerp(bound_from, bound_to, 0.5))
         );
     }
@@ -2192,28 +2306,29 @@ mod tests {
         let mut instance = LinearAnimationInstance::new(0, &animation, 1.0);
         instance.add_key_frame_value_holder(50, RuntimeKeyFrameValue::Boolean(true));
         let mut property = keyed_double_property(10, 1.0, 20, 2.0);
-        property.double_property = false;
         property.key_frames.clear();
-        property.bool_property = true;
-        property.bool_key_frames = vec![
-            RuntimeKeyFrameBool {
+        property.target = RuntimeKeyedPropertyTarget::Bool;
+        property.key_frames = vec![
+            RuntimeKeyFrame::Bool(RuntimeKeyFrameBool {
                 global_id: 50,
                 frame: 0,
+                seconds: 0.0,
                 interpolation_type: 1,
                 interpolator_id: None,
                 value: false,
-            },
-            RuntimeKeyFrameBool {
+            }),
+            RuntimeKeyFrame::Bool(RuntimeKeyFrameBool {
                 global_id: 60,
                 frame: 10,
+                seconds: 1.0,
                 interpolation_type: 1,
                 interpolator_id: None,
                 value: false,
-            },
+            }),
         ];
 
         assert_eq!(
-            property.bool_value_at(0.5, 10, instance.key_frame_value_context()),
+            property.bool_value_at(0.5, instance.key_frame_value_context()),
             Some(true)
         );
     }
@@ -2225,28 +2340,29 @@ mod tests {
         instance
             .add_key_frame_value_holder(70, RuntimeKeyFrameValue::String(b"bound start".to_vec()));
         let mut property = keyed_double_property(10, 1.0, 20, 2.0);
-        property.double_property = false;
         property.key_frames.clear();
-        property.string_property = true;
-        property.string_key_frames = vec![
-            RuntimeKeyFrameString {
+        property.target = RuntimeKeyedPropertyTarget::String;
+        property.key_frames = vec![
+            RuntimeKeyFrame::String(RuntimeKeyFrameString {
                 global_id: 70,
                 frame: 0,
+                seconds: 0.0,
                 interpolation_type: 1,
                 interpolator_id: None,
                 value: b"authored start".to_vec(),
-            },
-            RuntimeKeyFrameString {
+            }),
+            RuntimeKeyFrame::String(RuntimeKeyFrameString {
                 global_id: 80,
                 frame: 10,
+                seconds: 1.0,
                 interpolation_type: 1,
                 interpolator_id: None,
                 value: b"authored end".to_vec(),
-            },
+            }),
         ];
 
         assert_eq!(
-            property.string_value_at(0.5, 10, instance.key_frame_value_context()),
+            property.string_value_at(0.5, instance.key_frame_value_context()),
             Some(b"bound start".to_vec())
         );
     }
@@ -2278,15 +2394,15 @@ mod tests {
         *first.key_frame_value_holder_mut(10).unwrap() = RuntimeKeyFrameValue::Number(150.0);
 
         assert_eq!(
-            property.double_frame_value_at(0.0, 10, first.key_frame_value_context()),
+            property.double_frame_value_at(0.0, first.key_frame_value_context()),
             Some(150.0)
         );
         assert_eq!(
-            property.double_frame_value_at(0.0, 10, second.key_frame_value_context()),
+            property.double_frame_value_at(0.0, second.key_frame_value_context()),
             Some(200.0)
         );
         assert_eq!(
-            property.double_frame_value_at(0.0, 10, unbound.key_frame_value_context()),
+            property.double_frame_value_at(0.0, unbound.key_frame_value_context()),
             Some(1.0)
         );
     }
@@ -2297,20 +2413,20 @@ mod tests {
         let mut instance = LinearAnimationInstance::new(0, &animation, 1.0);
         instance.add_key_frame_value_holder(90, RuntimeKeyFrameValue::Number(999.0));
         let mut property = keyed_double_property(10, 1.0, 20, 2.0);
-        property.double_property = false;
         property.key_frames.clear();
-        property.uint_property = true;
-        property.uint_key_frames = vec![RuntimeKeyFrameUint {
+        property.target = RuntimeKeyedPropertyTarget::Uint;
+        property.key_frames = vec![RuntimeKeyFrame::Uint(RuntimeKeyFrameUint {
             global_id: 90,
             frame: 0,
+            seconds: 0.0,
             interpolation_type: 1,
             interpolator_id: None,
             value: 7,
-        }];
+        })];
 
         // KeyFrameUint and KeyFrameId share this runtime sampler. Upstream
         // intentionally leaves both types unsupported by keyframe value binds.
-        assert_eq!(property.uint_value_at(0.0, 10), Some(7));
+        assert_eq!(property.uint_value_at(0.0), Some(7));
     }
 
     #[test]

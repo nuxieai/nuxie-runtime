@@ -365,6 +365,51 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("golden-stream work counts differ", result.stderr)
 
+    def test_fl_b1_negative_ratchets_reject_displaced_keyframe_shapes(self) -> None:
+        cases = [
+            (
+                "keyframe_read_time_seconds",
+                r"fn\s+seconds\s*\(\s*&self\s*,\s*fps",
+                "fn seconds(&self, fps: u64) -> f32 { 0.0 }\n",
+            ),
+            (
+                "keyed_property_parallel_frame_vectors",
+                r"\b(?:color_key_frames|bool_key_frames|uint_key_frames|string_key_frames|callback_key_frames)\b",
+                "struct RuntimeKeyedProperty { color_key_frames: Vec<u8> }\n",
+            ),
+            (
+                "keyed_property_family_sidecars",
+                r"\b(?:double_source_value|color_source_value|bool_source_value|double_property|color_property|bool_property|uint_property|string_property|callback_event)\s*:",
+                "struct RuntimeKeyedProperty { double_source_value: f32 }\n",
+            ),
+        ]
+        base_gaps = self.gaps.read_text()
+        source = self.repo / "crates/runtime/src/animation.rs"
+
+        for ratchet_id, pattern, forbidden_source in cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.gaps.write_text(
+                    base_gaps.replace(
+                        "ratchet = []",
+                        textwrap.dedent(
+                        f"""
+                        [[ratchet]]
+                        id = "{ratchet_id}"
+                        globs = ["crates/runtime/src/animation.rs"]
+                        pattern = {json.dumps(pattern)}
+                        max_occurrences = 0
+                        """
+                        ).strip(),
+                    )
+                )
+                source.write_text(forbidden_source)
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    f"ratchet {ratchet_id} increased to 1 > 0",
+                    result.stderr,
+                )
+
     def test_mechanism_input_hash_is_fail_closed(self) -> None:
         fixture = self.upstream / "tests/assets/scroll.riv"
         fixture.parent.mkdir(parents=True)

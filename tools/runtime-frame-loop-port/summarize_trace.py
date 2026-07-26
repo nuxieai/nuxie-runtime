@@ -108,11 +108,6 @@ LANDMARKS = {
                 "<<nuxie_runtime::animation::RuntimeLinearAnimation>"
                 "::apply_with_key_frame_values::{closure#0}>"
             ),
-            (
-                "nuxie_runtime::animation::apply_key_frame_double_mix::"
-                "<<nuxie_runtime::animation::RuntimeLinearAnimation>"
-                "::apply_with_key_frame_values::{closure#1}>"
-            ),
         ],
     },
     "event_apply_batch": {

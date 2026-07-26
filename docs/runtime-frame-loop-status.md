@@ -24,10 +24,17 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   transition consumes the left ViewModel source for that layer
   (`transition_viewmodel_condition.cpp:49-60,535-970,1038-1045,1066-1124`;
   `transition_property_viewmodel_comparator.cpp:50-67`). The focused C++
-  probe, four-edge end-to-end differential matrix, existing 15-family
-  condition differential set, and runtime 509 / 509 are green. The complete
-  lane battery and independent acceptance remain pending, so no FL-C2 row is
-  promoted.
+  probe, four-edge end-to-end differential matrix, and existing 15-family
+  condition differential set are green. The complete lane battery is also
+  green on the pending-verification implementation: runtime 509 / 509;
+  probe-armed workspace including pinned-C++ probes 729 / 729; ordinary and
+  scripted golden each 317 / 317 entries and 647 / 647 segments with zero
+  divergences, including `data_viz_demo` and `db_health_tracker`; C API smoke;
+  Apple XCFramework build/package/ABI/header/C/Swift verification; size
+  8,034,440 bytes without scripting and 8,919,032 bytes with scripting, both
+  below 9 MiB; and the same-runner renderer referee 1,468 / 1,468 with 1,370
+  byte-exact and zero divergences. Independent acceptance remains pending, so
+  no FL-C2 row is promoted.
 - Stable-Rust Apple compatibility repair
   `95eb04b7cfb847f24ba77872bd8a0ee43da1af41` mechanically rewrites the
   experimental match guard in `constraint_bounds` without changing behavior.
@@ -693,7 +700,8 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Refresh FL-C2 trace/evidence, run its complete required floor, and publish
-   the immutable pending-verification candidate for independent review.
-2. Keep FL-B and FL-C1 rows pending until independent acceptance. Performance
-   remains verification evidence, never the source of a work slice.
+1. Publish the immutable FL-C2 pending-verification candidate and request
+   independent review; do not promote its rows before that verdict.
+2. Keep FL-B and FL-C1 rows pending until their independent acceptance.
+   Performance remains verification evidence, never the source of a work
+   slice.

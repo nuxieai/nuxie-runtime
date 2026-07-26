@@ -1007,16 +1007,16 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** finish the FL-C2 lane battery and publish its immutable
-pending-verification candidate. All 12 transition/condition definition owners
-now have direct filename correspondence; the pinned-C++ comparison-shape
-matrix and left-ViewModel source-consumption rule are implemented with focused
-and end-to-end differential evidence. The pinned-C++ RT-ED-007 unresolved
-nested transition-duration binding correction remains fully floored without
-promoting the pending StateMachineInstance row. FL-B and FL-C1 rows remain
-pending reacceptance/acceptance and are not promoted by continuing FL-C.
-Listener groups remain in scope beside their actual FL-C4
-invocation and FL-E TextInput dependencies.
+**Canonical NEXT:** publish the fully floored FL-C2 immutable
+pending-verification candidate and request independent acceptance. All 12
+transition/condition definition owners now have direct filename
+correspondence; the pinned-C++ comparison-shape matrix and left-ViewModel
+source-consumption rule are implemented with focused and end-to-end
+differential evidence. The pinned-C++ RT-ED-007 unresolved nested
+transition-duration binding correction remains fully floored without
+promoting the pending StateMachineInstance row. FL-B, FL-C1, and FL-C2 rows
+remain pending reacceptance/acceptance. Listener groups remain in scope beside
+their actual FL-C4 invocation and FL-E TextInput dependencies.
 
 ## Next queue (top = next; orchestrator maintains)
 

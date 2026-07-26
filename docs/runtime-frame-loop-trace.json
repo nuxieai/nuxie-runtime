@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "706514d0c46d5a7421e68a5c2286fee5a640cdd770c953aec10eac637f277dd4",
+    "cpp_binary_sha256": "b4f956dbd2134680fdf446e512952da0450d3f4310365494d474b30f52beb716",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "f5b63cf4d6330e889152ccc80799ad4def0fb32cd28b6159a16d9b4abdc5f1ca",
-    "rust_coverage_sha256": "97d8df7e2fe9ae0901803fe670653aeaa6e024d390851dabc58257853bbc555f",
-    "rust_mechanism_coverage_sha256": "2ce8b02201c4090a9637b503e8167a824cae03a9ccffd8c8fc61fa280030301b",
-    "rust_steady_coverage_sha256": "733d10d019b904920939ae1dcea6f41e3947397a088184e9203c05780d4dcfed"
+    "rust_binary_sha256": "acf04bd569227235a16e146254633af8553ea33347c19d27bac269e9b9ca43c5",
+    "rust_coverage_sha256": "689f744a10d7b01bf58f3fcde7b950c0764275dce1706212fcbe441103a6829f",
+    "rust_mechanism_coverage_sha256": "bc9254acbe9207e6edf401e4628dd1ae414a238c443824c666375699cc992e85",
+    "rust_steady_coverage_sha256": "897d06df9431e73b49975af5f688aecec3870daf3361bde233ccce196e27ec34"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -6115,42 +6115,6 @@
           "name": "<nuxie_runtime::state_machine::RuntimeScheduledListenerActionTargetsMut>::reborrow"
         },
         {
-          "count": 2,
-          "name": "<nuxie_runtime::state_machine::RuntimeStateTransition>::allow"
-        },
-        {
-          "count": 31,
-          "name": "<nuxie_runtime::state_machine::RuntimeStateTransition>::allow_direct_inputs"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::state_machine::RuntimeStateTransition>::allow_exit_time"
-        },
-        {
-          "count": 33,
-          "name": "<nuxie_runtime::state_machine::RuntimeStateTransition>::is_simple_supported"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::state_machine::RuntimeStateTransition>::pause_on_exit"
-        },
-        {
-          "count": 52,
-          "name": "<nuxie_runtime::state_machine::RuntimeStateTransition>::perform_fire_actions"
-        },
-        {
-          "count": 52,
-          "name": "<nuxie_runtime::state_machine::RuntimeStateTransition>::perform_listener_actions"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::state_machine::RuntimeStateTransition>::transition_duration_seconds"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::state_machine::RuntimeStateTransition>::use_inputs"
-        },
-        {
           "count": 31,
           "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance"
         },
@@ -6249,10 +6213,6 @@
         {
           "count": 26,
           "name": "nuxie_runtime::state_machine::take_current_animation_instances"
-        },
-        {
-          "count": 26,
-          "name": "nuxie_runtime::state_machine::transition_duration_value"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/bindables.rs": [
@@ -6347,6 +6307,48 @@
         {
           "count": 7,
           "name": "<nuxie_runtime::state_machine::state_machine_input_instance::StateMachineInputInstance>::number_value"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/state_transition.rs": [
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::allow"
+        },
+        {
+          "count": 31,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::allow_direct_inputs"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::allow_exit_time"
+        },
+        {
+          "count": 33,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::is_simple_supported"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::pause_on_exit"
+        },
+        {
+          "count": 52,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::perform_fire_actions"
+        },
+        {
+          "count": 52,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::perform_listener_actions"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::transition_duration_seconds"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::use_inputs"
+        },
+        {
+          "count": 26,
+          "name": "nuxie_runtime::state_machine::state_transition::transition_duration_value"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/transition_conditions.rs": [
@@ -7196,16 +7198,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 7167,
+    "file_count": 7168,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "f26a91b3113aaba505f70a3638cf44ebe141ef4efc480accf7328d7b7e0ca721"
+    "sha256": "f2f73085c067e36f3395e0f0a89b9e72f85dde725b23a1b417e4699751054970"
   },
-  "rust_ref": "204b7055e93f060da594464727fe5b5221d52c85",
+  "rust_ref": "a057f9a635c90a8b2484c7f878fe359d7a242102",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7167,
+      "file_count": 7168,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "f26a91b3113aaba505f70a3638cf44ebe141ef4efc480accf7328d7b7e0ca721"
+      "sha256": "f2f73085c067e36f3395e0f0a89b9e72f85dde725b23a1b417e4699751054970"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -7229,7 +7231,7 @@
       "state-machine": 7
     },
     "dynamic_cpp_functions": 461,
-    "dynamic_rust_files": 19,
+    "dynamic_rust_files": 20,
     "dynamic_rust_functions": 1203,
     "static_cpp_files": 341
   },

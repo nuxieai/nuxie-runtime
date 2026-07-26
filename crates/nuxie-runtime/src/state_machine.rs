@@ -30,12 +30,15 @@ mod state_machine_listener;
 mod state_machine_listener_single;
 mod state_transition;
 mod transition_bool_condition;
+mod transition_comparator;
 mod transition_condition;
 mod transition_condition_op;
 mod transition_duration_binding;
 mod transition_focus_condition;
 mod transition_input_condition;
 mod transition_number_condition;
+mod transition_property_comparator;
+mod transition_property_viewmodel_comparator;
 mod transition_trigger_condition;
 mod transition_viewmodel_condition;
 pub(crate) use bindables::{
@@ -72,6 +75,7 @@ use state_transition::{
     transition_duration_value,
 };
 use transition_bool_condition::RuntimeTransitionBoolCondition;
+use transition_comparator::runtime_transition_comparators;
 use transition_condition::RuntimeTransitionCondition;
 use transition_condition_op::TransitionConditionOp;
 use transition_duration_binding::runtime_transition_duration_bindings;
@@ -81,6 +85,10 @@ pub(crate) use transition_duration_binding::{
 use transition_focus_condition::RuntimeTransitionFocusCondition;
 use transition_input_condition::RuntimeTransitionInputCondition;
 use transition_number_condition::RuntimeTransitionNumberCondition;
+use transition_property_comparator::{
+    RuntimeTransitionPropertyArtboardComparator, RuntimeTransitionPropertyComponentComparator,
+};
+use transition_property_viewmodel_comparator::RuntimeTransitionPropertyViewModelComparator;
 use transition_trigger_condition::RuntimeTransitionTriggerCondition;
 
 fn next_view_model_trigger_layer_id() -> u64 {

@@ -22,7 +22,10 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   the matching C++ ownership boundary. The remaining retained property and
   ViewModel comparison implementation now lives in
   `state_machine/transition_viewmodel_condition.rs`; the base
-  `transition_condition.rs` is only the shared dispatch boundary.
+  `transition_condition.rs` is only the shared dispatch boundary. Comparator
+  attachment, component/artboard property identity, and ViewModel bindable
+  identity now also live in their three filename-corresponding Rust modules
+  instead of `animation.rs`.
 - Stable-Rust Apple compatibility repair
   `95eb04b7cfb847f24ba77872bd8a0ee43da1af41` mechanically rewrites the
   experimental match guard in `constraint_bounds` without changing behavior.

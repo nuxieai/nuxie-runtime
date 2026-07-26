@@ -968,7 +968,7 @@ status = "pending"
 upstream = "src/animation/state_transition.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/state_transition.rs"]
 dynamically_reached = true
 status = "pending"
 
@@ -3275,7 +3275,7 @@ status = "pending"
 id = "state_machine.transitions"
 wave = "FL-C"
 cpp_files = ["src/animation/state_transition.cpp", "src/animation/blend_state_transition.cpp"]
-rust_file = "crates/nuxie-runtime/src/state_machine.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_transition.rs"
 rust_anchor = "pub(crate) struct RuntimeStateTransition"
 status = "pending"
 

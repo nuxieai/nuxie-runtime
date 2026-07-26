@@ -984,13 +984,13 @@ note = "Direct filename correspondence established in FL-C1; semantic fidelity r
 upstream = "src/animation/state_transition.cpp"
 status = "pending"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/animation.rs"
+rust_module = "crates/nuxie-runtime/src/state_machine/state_transition.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0081"
 b6_verdict = "ADAPTED"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Consolidated Rust port for animation."
+note = "Direct filename correspondence established by the FL-C2 behavior-preserving owner split; semantic fidelity remains pending."
 
 [[file]]
 upstream = "src/animation/system_state_instance.cpp"

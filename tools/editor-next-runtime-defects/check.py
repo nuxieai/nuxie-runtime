@@ -140,6 +140,7 @@ STATES = {
     "qualified",
     "mapped",
     "executor-green",
+    "regression-reopened",
     "orchestrator-verified",
     "handoff-ready",
     "editor-consumed",
@@ -154,7 +155,8 @@ TRANSITIONS = {
     "reproduced": {"qualified", "user-decided", "stale-oracle", "retracted"},
     "qualified": {"mapped"},
     "mapped": {"executor-green"},
-    "executor-green": {"orchestrator-verified"},
+    "executor-green": {"regression-reopened", "orchestrator-verified"},
+    "regression-reopened": {"qualified"},
     "orchestrator-verified": {"handoff-ready"},
     "handoff-ready": {"editor-consumed", "closed"},
     "editor-consumed": {"closed"},
@@ -441,6 +443,7 @@ NORMAL_PIPELINE_STATES = {
     "qualified",
     "mapped",
     "executor-green",
+    "regression-reopened",
     "orchestrator-verified",
     "handoff-ready",
     "editor-consumed",
@@ -2813,10 +2816,11 @@ def validate_verification(
     if status == "pending":
         pending_allowed_late = (
             field == "executor_verification"
-            and state in {"qualified", "mapped"}
+            and state in {"qualified", "mapped", "regression-reopened"}
         ) or (
             field == "orchestrator_verification"
-            and state in {"qualified", "mapped", "executor-green"}
+            and state
+            in {"qualified", "mapped", "executor-green", "regression-reopened"}
         )
         validate_pending_value(
             defect_id,
@@ -2826,12 +2830,12 @@ def validate_verification(
             errors,
             pending_allowed_late=pending_allowed_late,
         )
-    elif status == "pass":
+    elif status in {"pass", "fail"}:
         if not str(value.get("command", "")).strip():
-            errors.append(f"{defect_id} {field} pass has no command")
+            errors.append(f"{defect_id} {field} {status} has no command")
         if not str(value.get("evidence", "")).strip():
-            errors.append(f"{defect_id} {field} pass has no evidence")
-        if field == "orchestrator_verification" and (
+            errors.append(f"{defect_id} {field} {status} has no evidence")
+        if status == "pass" and field == "orchestrator_verification" and (
             value.get("actor") != "independent-orchestrator"
         ):
             errors.append(
@@ -2850,12 +2854,13 @@ def validate_history_verifications(
     executor_verification: Any,
     orchestrator_verification: Any,
     errors: list[str],
+    historical_executor_verification: Any = None,
 ) -> None:
-    history_states = {
+    history_states = [
         str(row.get("state", ""))
         for row in history
         if isinstance(row, dict)
-    } if isinstance(history, list) else set()
+    ] if isinstance(history, list) else []
     executor_status = (
         executor_verification.get("status")
         if isinstance(executor_verification, dict)
@@ -2866,6 +2871,70 @@ def validate_history_verifications(
         if isinstance(orchestrator_verification, dict)
         else None
     )
+    last_reopened = max(
+        (
+            index
+            for index, history_state in enumerate(history_states)
+            if history_state == "regression-reopened"
+        ),
+        default=-1,
+    )
+    current_cycle_states = history_states[last_reopened + 1 :]
+    if last_reopened >= 0:
+        historical_status = (
+            historical_executor_verification.get("status")
+            if isinstance(historical_executor_verification, dict)
+            else None
+        )
+        if historical_status != "pass":
+            errors.append(
+                f"{defect_id} regression-reopened history must preserve the "
+                "prior executor result in historical_executor_verification"
+            )
+        elif not str(historical_executor_verification.get("command", "")).strip():
+            errors.append(
+                f"{defect_id} historical_executor_verification pass has no command"
+            )
+        elif not str(historical_executor_verification.get("evidence", "")).strip():
+            errors.append(
+                f"{defect_id} historical_executor_verification pass has no evidence"
+            )
+
+        fresh_executor_green = "executor-green" in current_cycle_states
+        fresh_orchestrator_verified = (
+            "orchestrator-verified" in current_cycle_states
+        )
+        if fresh_executor_green:
+            if executor_status != "pass":
+                errors.append(
+                    f"{defect_id} current repair cycle contains executor-green "
+                    "but executor_verification is not pass"
+                )
+        elif executor_status not in {"pending", "fail"}:
+            errors.append(
+                f"{defect_id} regression-reopened current repair cycle must "
+                "keep executor_verification pending or fail until a fresh "
+                "executor-green event"
+            )
+        if fresh_orchestrator_verified:
+            if not fresh_executor_green:
+                errors.append(
+                    f"{defect_id} current repair cycle cannot reach "
+                    "orchestrator-verified without a fresh executor-green event"
+                )
+            if orchestrator_status != "pass":
+                errors.append(
+                    f"{defect_id} current repair cycle contains "
+                    "orchestrator-verified but orchestrator_verification is not pass"
+                )
+        elif orchestrator_status not in {"pending", "fail"}:
+            errors.append(
+                f"{defect_id} regression-reopened current repair cycle must "
+                "keep orchestrator_verification pending or fail until a fresh "
+                "orchestrator-verified event"
+            )
+        return
+
     if "executor-green" in history_states and executor_status != "pass":
         errors.append(
             f"{defect_id} history contains executor-green but "
@@ -3068,6 +3137,7 @@ def validate_closure_schema(
         row.get("executor_verification"),
         row.get("orchestrator_verification"),
         errors,
+        row.get("historical_executor_verification"),
     )
 
     reproduction = str(row.get("reproduction_sha256", ""))

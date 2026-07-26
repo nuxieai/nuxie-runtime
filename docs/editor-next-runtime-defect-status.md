@@ -32,7 +32,8 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   binding order `LOC-006`, `LOC-014`, `LOC-011`, `RT-ED-003`, then `LOC-019`;
 - active production-repair lane: `LOC-009` is a confirmed physical
   shader-module error-scope defect requiring a new production landing; it is
-  active but waiting on internal wasm Luau resume task
+  `regression-reopened`, with PR #54 / `7f1450dc` retained only as historical
+  evidence, and is active but waiting on internal wasm Luau resume task
   `019f9f34-a75f-7a11-a580-e9f54e610d93` and branch
   `levi/fix-wasm-lua-coroutine-resume`, and remains outside the shared tracking
   merge line;

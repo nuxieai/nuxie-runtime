@@ -2746,6 +2746,208 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
             errors,
         )
 
+    def test_executor_green_regression_reopens_fail_closed(self) -> None:
+        errors: list[str] = []
+        history = [
+            {
+                "state": "reported",
+                "actor": "editor-cutover",
+                "evidence": "source-artifact",
+            },
+            {
+                "state": "reproduced",
+                "actor": "f-ed-executor",
+                "evidence": "exact reproducer",
+            },
+            {
+                "state": "qualified",
+                "actor": "f-ed-executor",
+                "evidence": "pinned C++ differential",
+            },
+            {
+                "state": "mapped",
+                "actor": "f-ed-executor",
+                "evidence": "owner-family map",
+            },
+            {
+                "state": "executor-green",
+                "actor": "f-ed-executor",
+                "evidence": "historical required gates",
+            },
+            {
+                "state": "regression-reopened",
+                "actor": "independent-orchestrator",
+                "evidence": "independent current-path regression",
+            },
+        ]
+        CHECKER.validate_history(
+            "LOC-020", "regression-reopened", history, errors
+        )
+        CHECKER.validate_history_verifications(
+            "LOC-020",
+            history,
+            {"status": "pending"},
+            {"status": "pending"},
+            errors,
+            {
+                "status": "pass",
+                "command": "historical executor command",
+                "evidence": "historical executor evidence",
+            },
+        )
+        self.assertEqual(errors, [])
+
+    def test_reopened_cycle_rejects_historical_pass_as_current(self) -> None:
+        errors: list[str] = []
+        history = [
+            {"state": "executor-green"},
+            {"state": "regression-reopened"},
+        ]
+        CHECKER.validate_history_verifications(
+            "LOC-020",
+            history,
+            {
+                "status": "pass",
+                "command": "old command",
+                "evidence": "old evidence",
+            },
+            {"status": "pending"},
+            errors,
+            {
+                "status": "pass",
+                "command": "old command",
+                "evidence": "old evidence",
+            },
+        )
+        self.assertIn(
+            "LOC-020 regression-reopened current repair cycle must keep "
+            "executor_verification pending or fail until a fresh "
+            "executor-green event",
+            errors,
+        )
+
+    def test_reopened_cycle_cannot_skip_fresh_mapped_executor_gate(self) -> None:
+        errors: list[str] = []
+        history = [
+            {
+                "state": "reported",
+                "actor": "editor-cutover",
+                "evidence": "source-artifact",
+            },
+            {
+                "state": "reproduced",
+                "actor": "f-ed-executor",
+                "evidence": "exact reproducer",
+            },
+            {
+                "state": "qualified",
+                "actor": "f-ed-executor",
+                "evidence": "old qualification",
+            },
+            {
+                "state": "mapped",
+                "actor": "f-ed-executor",
+                "evidence": "old map",
+            },
+            {
+                "state": "executor-green",
+                "actor": "f-ed-executor",
+                "evidence": "old gates",
+            },
+            {
+                "state": "regression-reopened",
+                "actor": "independent-orchestrator",
+                "evidence": "current regression",
+            },
+            {
+                "state": "qualified",
+                "actor": "f-ed-executor",
+                "evidence": "fresh qualification",
+            },
+            {
+                "state": "orchestrator-verified",
+                "actor": "independent-orchestrator",
+                "evidence": "invalid skipped gates",
+            },
+        ]
+        CHECKER.validate_history(
+            "LOC-020",
+            "orchestrator-verified",
+            history,
+            errors,
+        )
+        CHECKER.validate_history_verifications(
+            "LOC-020",
+            history,
+            {"status": "pending"},
+            {
+                "status": "pass",
+                "actor": "independent-orchestrator",
+                "command": "invalid command",
+                "evidence": "invalid evidence",
+            },
+            errors,
+            {
+                "status": "pass",
+                "command": "old command",
+                "evidence": "old evidence",
+            },
+        )
+        self.assertIn(
+            "LOC-020 has illegal state transition qualified -> "
+            "orchestrator-verified",
+            errors,
+        )
+        self.assertIn(
+            "LOC-020 current repair cycle cannot reach orchestrator-verified "
+            "without a fresh executor-green event",
+            errors,
+        )
+
+    def test_executor_green_cannot_move_backward_without_reopening(self) -> None:
+        errors: list[str] = []
+        CHECKER.validate_history(
+            "LOC-020",
+            "qualified",
+            [
+                {
+                    "state": "reported",
+                    "actor": "editor-cutover",
+                    "evidence": "source-artifact",
+                },
+                {
+                    "state": "reproduced",
+                    "actor": "f-ed-executor",
+                    "evidence": "exact reproducer",
+                },
+                {
+                    "state": "qualified",
+                    "actor": "f-ed-executor",
+                    "evidence": "qualification",
+                },
+                {
+                    "state": "mapped",
+                    "actor": "f-ed-executor",
+                    "evidence": "map",
+                },
+                {
+                    "state": "executor-green",
+                    "actor": "f-ed-executor",
+                    "evidence": "gates",
+                },
+                {
+                    "state": "qualified",
+                    "actor": "f-ed-executor",
+                    "evidence": "invalid backward transition",
+                },
+            ],
+            errors,
+        )
+        self.assertIn(
+            "LOC-020 has illegal state transition executor-green -> qualified",
+            errors,
+        )
+
     def test_closed_repair_can_retain_pending_editor_consumption_revisions(
         self,
     ) -> None:

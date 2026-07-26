@@ -168,8 +168,14 @@ the frame-loop/advance contract, it immediately moves to the deferred set.
 `F-ED-08` is independently closed as a no-repair stale characterization.
 `F-ED-10` may perform qualification now, and a resulting fix may be developed only when its
 exact production closure is renderer/backend-only. `F-ED-11`
-production is complete for `LOC-009` and `LOC-019`; those rows need only
-independent landing-provenance promotion.
+production is complete for `LOC-019`, which needs only independent
+landing-provenance promotion. PR #54's `LOC-009` consumer repair at
+`7f1450dc` remains historical evidence, but independent real-GPU verification
+reopened that row on an unresolved physical shader-module error-scope
+regression. `LOC-009` is not promotable or complete and requires a new
+production landing after internal Lua WebAssembly repair task
+`019f9f34-a75f-7a11-a580-e9f54e610d93` on
+`levi/fix-wasm-lua-coroutine-resume`.
 Before such a fix lands, the F-ED orchestrator must obtain a fresh handshake
 from the FL executor and rerun the unchanged 1,468-row pixel referee. The
 renderer backend is outside the FL port boundary, but FL uses its pixels as a
@@ -211,18 +217,22 @@ The safe next queue is therefore:
 
 1. retain merged Q0/F-ED-00A control-plane integrity at runtime main
    `2e24cd7f23a35fc96a71c5edb5da77d1a8634e08`;
-2. independently promote the landing-provenance records for `RT-ED-003`,
-   `RT-ED-005`, `LOC-009`, and `LOC-019`;
-3. fan out read-only direct qualifications; treat `RT-ED-004` only as
+2. serialize the evidence-only closures in binding order: `LOC-006`,
+   `LOC-014`, `LOC-011`, `RT-ED-003`, then `LOC-019`;
+3. keep `LOC-009` outside that shared tracking line while its new production
+   repair waits on internal Lua WebAssembly repair task
+   `019f9f34-a75f-7a11-a580-e9f54e610d93` and branch
+   `levi/fix-wasm-lua-coroutine-resume`;
+4. fan out read-only direct qualifications; treat `RT-ED-004` only as
    historical WebGL2 evidence unless an explicit WebGPU-only requalification
    is scheduled;
-4. activate only the exact open Scene-only `F-ED-04` or a qualified,
+5. activate only the exact open Scene-only `F-ED-04` or a qualified,
    renderer-only `F-ED-10` production closure that survives the atlas and
    coordinator lease checks;
-5. perform record normalization and local ABI 1.6 qualification;
-6. keep every runtime-owner result as evidence until the corresponding FL
+6. perform record normalization and local ABI 1.6 qualification;
+7. keep every runtime-owner result as evidence until the corresponding FL
    executor releases or absorbs its owner family;
-7. re-handshake after the Runtime Fix stable-Apple repair, after the `FL-B`
+8. re-handshake after the Runtime Fix stable-Apple repair, after the `FL-B`
    safety/API decision, after every later FL landing, and before any
    renderer-only landing.
 
@@ -256,7 +266,7 @@ symptom is never sufficient authority for an implementation.
 
 Classification and execution state are separate fields. Atlas schema
 `nuxie.editor-next.runtime-defect-atlas/v2` and its checker permit only these
-forward transitions:
+transitions:
 
 ```text
 reported
@@ -267,6 +277,9 @@ reported
 qualified
   → mapped → executor-green → orchestrator-verified → handoff-ready
   → handoff-ready                         # editor/artifact owner only; no runtime edit
+
+executor-green → regression-reopened → qualified
+                                          # failed independent current-path verification
 
 handoff-ready → closed
               → editor-consumed → closed
@@ -293,6 +306,11 @@ stale-oracle | retracted → closed
 - A V-row remains `reproduced` until the missing observation channel exists.
 - Only the independent orchestrator may move an executor result past
   `executor-green`.
+- Independent current-path verification may move `executor-green` to
+  `regression-reopened`. The historical executor result is retained separately,
+  while current executor and orchestrator gates fail closed. A fresh
+  qualification, mapping, production landing, executor result, and independent
+  verification are required before promotion.
 - Only an `editor` or `artifact` owner may move directly from `qualified` to
   `handoff-ready`; runtime, API, and renderer rows must traverse the complete
   mapped/executor/orchestrator path.
@@ -349,7 +367,7 @@ fixture in `F-ED-00`.
 | `LOC-006` | closed no-repair stale characterization | exact committed provenance plus the independent no-hover rerun prove the alleged retained-pixel defect was gesture contamination; the legal reproduced/stale-oracle/closed path is complete |
 | `LOC-007` | committed Editor evidence plus historical C++ source identifies a missing dirt chain | requalify d788 ParametricPath width/height through Path, Shape, and PathComposer, then track the sole FL-E owner landing |
 | `LOC-008` | candidate public API-surface gap | establish the C++ ownership contract, then expose the exact runtime path only if runtime owns it |
-| `LOC-009` | proven structural WebGPU shader-consumer mistranslation | consume authored target-0 whole-module WGSL and mandatory target-16 `BindingMap` directly, preserving C++ entry selection and shared-module semantics |
+| `LOC-009` | historical structural WebGPU consumer repair with a confirmed real-GPU shader-module validation regression | preserve PR #54 / `7f1450dc` as history; new production repair is active but waits on Lua WebAssembly task `019f9f34-a75f-7a11-a580-e9f54e610d93` / `levi/fix-wasm-lua-coroutine-resume` |
 | `LOC-011` | real product symptom, owner unproven | inspect authored text, live VM value, post-bind target, shaped runs, then pixels |
 | `LOC-012` | current renderer differential | compare the supported Rust WebGPU result with pinned C++ only after text/feather rows are separated |
 | `LOC-013` | text/font-pipeline candidate, exact stage unproven | same font bytes, axes, glyph IDs, advances, and outlines through C++ and Rust |
@@ -862,8 +880,10 @@ only and do not participate in the current oracle.
 
 ### `F-ED-11` — WebGPU setup and GPU-canvas qualification
 
-Qualification targets: `LOC-019`, `LOC-009`. They are independently localized
-and repaired; neither row is an Editor workaround or a WebGL2 fallback.
+Qualification targets: `LOC-019`, `LOC-009`. `LOC-019` is independently
+localized and repaired. `LOC-009` preserves its independently localized
+consumer repair as history, but a later independent real-GPU regression
+reopened the row; neither row is an Editor workaround or a WebGL2 fallback.
 
 `LOC-019` is no longer an adapter-selection or fallback hypothesis. At runtime
 `95027109`, real Chrome creates the WebGPU device and executes a valid draw.
@@ -930,8 +950,13 @@ Clean Editor checkpoint
 and its retained complete report/results archive SHA-256 is
 `515f53c5710c8069bf60f4c64c64568c219ee3cfb242fbe8e59846b1c0f96bd3`.
 Those immutable merge and consumption records replace the stale
-awaiting-merge/awaiting-rerun language. The row remains `executor-green`
-pending independent orchestrator verification and promotion.
+awaiting-merge/awaiting-rerun language and remain historical evidence.
+Independent later real-GPU verification found an unresolved physical
+shader-module error-scope regression, so the row is now
+`regression-reopened`, not promotable or complete. A new production landing is
+required after internal Lua WebAssembly repair task
+`019f9f34-a75f-7a11-a580-e9f54e610d93` on
+`levi/fix-wasm-lua-coroutine-resume`.
 
 The two rows share a real-Chrome smoke harness but not a defect mechanism:
 `LOC-019` owns nullable WebIDL error-scope decoding, while `LOC-009` owns RSTB
@@ -1064,9 +1089,11 @@ Qualification fan-out is broader than implementation fan-out.
 ### Qualification wave
 
 One orchestrator owns the atlas/status. Landing-provenance reviewers handle
-`RT-ED-003`, `RT-ED-005`, `LOC-009`, and `LOC-019`; no implementation scout or
-writer is assigned to those completed repairs. The orchestrator may dispatch
-three read-only scouts for the remaining open rows:
+`RT-ED-003`, `RT-ED-005`, and `LOC-019`; no implementation scout or writer is
+assigned to those completed repairs. `LOC-009` stays outside the shared
+tracking line and receives a new production writer only after the dedicated
+Lua WebAssembly dependency lands. The orchestrator may dispatch three
+read-only scouts for the remaining open rows:
 
 1. Scene/ViewModel/DataBind/StateMachine:
    `LOC-001/002/005`, `RT-ED-007`, and `LOC-007`;

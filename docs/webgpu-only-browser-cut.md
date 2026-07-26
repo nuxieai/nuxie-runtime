@@ -21,6 +21,10 @@ that the removed WebGL2 implementation reached C++ renderer parity.
   backend-selection enums, and all public `WebGl2*` exports.
 - Make `webgpu_adapter_info` return `&WgpuAdapterInfo`, not `Option`.
 - Keep active-frame resize protection.
+- Give each `HtmlCanvasElement` one exclusive live `BrowserPresentation`
+  owner. Reject overlapping construction with `RendererError::CanvasInUse`,
+  retain ownership through detached `BrowserFrame`s, and unconfigure the
+  canvas context when the final owner releases it.
 - Make ordinary `BrowserFrame::present` submit directly to the WebGPU canvas
   surface without GPU-to-CPU readback or Canvas2D presentation.
 - Configure the browser surface for premultiplied alpha and preserve the
@@ -75,6 +79,9 @@ that the removed WebGL2 implementation reached C++ renderer parity.
    proves normal presentation calls neither `GPUBuffer.mapAsync` nor
    `CanvasRenderingContext2D.putImageData`, while explicit readback performs
    one mapped readback and returns exact RGBA pixels. The same gate observes
+   typed rejection of overlapping same-canvas owners, frame-retained lease
+   lifetime, and one configure, presentation, and unconfigure per successful
+   ownership generation. It also observes
    two distinct surface-construction calls for one-shot loss recovery and
    reruns the half-alpha compositor oracle over blue on the recovered surface.
    Persistent loss performs exactly two acquisition attempts.

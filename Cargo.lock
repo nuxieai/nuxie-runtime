@@ -155,6 +155,7 @@ dependencies = [
 name = "browser-renderer-smoke"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "luaur-common",
  "luaur-compiler",
  "nuxie",

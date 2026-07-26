@@ -5,11 +5,12 @@ mod wasm {
         GpuCanvasRenderPlan, GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
         GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
         GpuCanvasShaderTextureViewDimension, GpuCanvasUniformBuffer, ImageSampler, Mat2D,
-        RecordingFactory, Renderer, WgpuFactory,
+        RecordingFactory, Renderer, RendererError, WgpuFactory,
     };
     use nuxie_render_stream::RenderStream;
     use pixel_compare::{RgbaImage, Tolerance, compare};
     use wasm_bindgen::prelude::*;
+    use wasm_bindgen_futures::JsFuture;
     use web_sys::HtmlCanvasElement;
 
     const IMPORTED_GPU_CANVAS_RIV: &[u8] =
@@ -131,7 +132,10 @@ fn fs_main() -> @location(0) vec4<f32> {
     }
 
     #[wasm_bindgen]
-    pub async fn assert_direct_presentation(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
+    pub async fn assert_direct_presentation(
+        canvas: HtmlCanvasElement,
+        inspect_presented_canvas: js_sys::Function,
+    ) -> Result<String, JsValue> {
         let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
         factory
             .begin_frame(0x80ff_0000)
@@ -139,7 +143,106 @@ fn fs_main() -> @location(0) vec4<f32> {
             .present()
             .await
             .map_err(js_error)?;
+        run_presentation_inspection(&inspect_presented_canvas).await?;
         Ok("browser-presentation=direct-webgpu alpha=premultiplied".into())
+    }
+
+    #[wasm_bindgen]
+    pub async fn assert_exclusive_canvas_lease(
+        canvas: HtmlCanvasElement,
+        inspect_lease_checkpoint: js_sys::Function,
+    ) -> Result<String, JsValue> {
+        let initial_canvas_extent = (canvas.width(), canvas.height());
+        match BrowserFactory::new(canvas.clone(), 0, 3).await {
+            Err(RendererError::InvalidTextureExtent {
+                label: "render target",
+                width: 0,
+                height: 3,
+                max_dimension,
+            }) if max_dimension >= 4 => {}
+            Ok(_) => {
+                return Err(JsValue::from_str(
+                    "invalid-extent BrowserFactory unexpectedly initialized",
+                ));
+            }
+            Err(error) => {
+                return Err(JsValue::from_str(&format!(
+                    "invalid-extent BrowserFactory returned the wrong error: {error:?}"
+                )));
+            }
+        }
+        if (canvas.width(), canvas.height()) != initial_canvas_extent {
+            return Err(JsValue::from_str(
+                "failed invalid-extent BrowserFactory changed the canvas extent",
+            ));
+        }
+
+        let factory_a = BrowserFactory::new(canvas.clone(), 4, 3)
+            .await
+            .map_err(js_error)?;
+        factory_a
+            .begin_frame(0xff12_3456)
+            .map_err(js_error)?
+            .present()
+            .await
+            .map_err(js_error)?;
+
+        expect_canvas_in_use(
+            BrowserFactory::new(canvas.clone(), 13, 9).await,
+            "while the first factory was live",
+        )?;
+        if (canvas.width(), canvas.height()) != (4, 3) {
+            return Err(JsValue::from_str(
+                "rejected same-canvas factory changed the canvas extent",
+            ));
+        }
+
+        let retained_frame = factory_a.begin_frame(0xff65_4321).map_err(js_error)?;
+        drop(factory_a);
+        inspect_lease_checkpoint
+            .call1(&JsValue::UNDEFINED, &JsValue::from_str("factory-a-dropped"))?;
+        expect_canvas_in_use(
+            BrowserFactory::new(canvas.clone(), 17, 11).await,
+            "while a detached frame retained the first presentation",
+        )?;
+        if (canvas.width(), canvas.height()) != (4, 3) {
+            return Err(JsValue::from_str(
+                "frame-retained same-canvas rejection changed the canvas extent",
+            ));
+        }
+
+        drop(retained_frame);
+        inspect_lease_checkpoint.call1(
+            &JsValue::UNDEFINED,
+            &JsValue::from_str("retained-frame-dropped"),
+        )?;
+        let factory_b = BrowserFactory::new(canvas, 5, 2).await.map_err(js_error)?;
+        factory_b
+            .begin_frame(0xffab_cdef)
+            .map_err(js_error)?
+            .present()
+            .await
+            .map_err(js_error)?;
+
+        Ok(
+            "canvas-lease=exclusive rejection=typed retained-frame=blocking generations=2 presented=2"
+                .into(),
+        )
+    }
+
+    fn expect_canvas_in_use(
+        result: Result<BrowserFactory, RendererError>,
+        phase: &str,
+    ) -> Result<(), JsValue> {
+        match result {
+            Ok(_) => Err(JsValue::from_str(&format!(
+                "same-canvas BrowserFactory unexpectedly initialized {phase}"
+            ))),
+            Err(RendererError::CanvasInUse) => Ok(()),
+            Err(error) => Err(JsValue::from_str(&format!(
+                "same-canvas BrowserFactory returned the wrong error {phase}: {error}"
+            ))),
+        }
     }
 
     #[wasm_bindgen]
@@ -168,7 +271,10 @@ fn fs_main() -> @location(0) vec4<f32> {
     }
 
     #[wasm_bindgen]
-    pub async fn assert_resize(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
+    pub async fn assert_resize(
+        canvas: HtmlCanvasElement,
+        inspect_presented_canvas: js_sys::Function,
+    ) -> Result<String, JsValue> {
         let mut factory = BrowserFactory::new(canvas.clone(), 8, 6)
             .await
             .map_err(js_error)?;
@@ -219,12 +325,14 @@ fn fs_main() -> @location(0) vec4<f32> {
             .present()
             .await
             .map_err(js_error)?;
+        run_presentation_inspection(&inspect_presented_canvas).await?;
         Ok("resize=webgpu in-flight=rejected extent=13x9 presented=true".into())
     }
 
     #[wasm_bindgen]
     pub async fn assert_surface_acquisition_retry(
         canvas: HtmlCanvasElement,
+        inspect_presented_canvas: js_sys::Function,
     ) -> Result<String, JsValue> {
         let factory = BrowserFactory::new(canvas, 4, 3).await.map_err(js_error)?;
         factory
@@ -233,6 +341,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             .present()
             .await
             .map_err(js_error)?;
+        run_presentation_inspection(&inspect_presented_canvas).await?;
         Ok("surface-acquisition-loss=recreated retry=same-present alpha=premultiplied".into())
     }
 
@@ -797,11 +906,19 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
     fn js_error(error: impl ToString) -> JsValue {
         JsValue::from_str(&error.to_string())
     }
+
+    async fn run_presentation_inspection(
+        inspect_presented_canvas: &js_sys::Function,
+    ) -> Result<(), JsValue> {
+        let result = inspect_presented_canvas.call0(&JsValue::UNDEFINED)?;
+        JsFuture::from(js_sys::Promise::resolve(&result)).await?;
+        Ok(())
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
 pub use wasm::{
-    assert_direct_gpu_canvas_image, assert_imported_gpu_canvas,
+    assert_direct_gpu_canvas_image, assert_exclusive_canvas_lease, assert_imported_gpu_canvas,
     assert_persistent_surface_acquisition_failure, assert_resize, assert_surface_acquisition_retry,
     assert_webgpu_clean_error_scope, assert_webgpu_gpu_canvas_rejects_invalid_interface,
     assert_webgpu_uniform_limit_rejection, recording_float_probe, run_backend, run_stream_case,

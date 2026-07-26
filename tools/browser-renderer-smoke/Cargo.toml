@@ -22,4 +22,5 @@ luaur-compiler = "=0.1.8"
 nuxie-schema = { path = "../../crates/nuxie-schema" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
 wasm-bindgen-futures = "0.4"

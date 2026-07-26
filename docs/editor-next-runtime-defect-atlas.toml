@@ -1160,12 +1160,12 @@ reason = "P08-C06 shares text symptoms with LOC-011 and awaits stage localizatio
 id = "LOC-009"
 title = "Persisted GPU-canvas scene is rejected by typed WebGPU draw"
 source_class = "candidate"
-state = "executor-green"
+state = "regression-reopened"
 owner_class = "renderer"
 classification = "structural-mistranslation"
 ticket = "F-ED-11"
 fixture_id = "fed.loc_009.gpu_canvas_records"
-preliminary_disposition = "Exact WebGPU RSTB consumer plus ownership correction: retain one backend-neutral file-owned ShaderAsset across bare and folder-qualified aliases; select authored whole-module WGSL target 0 plus mandatory BindingMap target 16 only at lookup; create one fresh ScriptedShader/backend module per successful lookup occurrence; preserve explicit vertex/fragment occurrences independently and share the handle only for omitted fragment; key retained pipelines by occurrence identity; return nil and continue on lookup/materialization failure; and keep the invented target-1 GLSL cross-translation path deleted."
+preliminary_disposition = "PR #54's exact WebGPU RSTB consumer and ownership correction is retained as historical evidence, but independent real-GPU verification found an unresolved physical shader-module error-scope regression. LOC-009 is not promotable or complete and requires a new production landing after internal Lua WebAssembly repair task 019f9f34-a75f-7a11-a580-e9f54e610d93 on branch levi/fix-wasm-lua-coroutine-resume. The new repair must preserve the prior file-owned ShaderAsset, target-0 whole-module WGSL plus mandatory target-16 BindingMap selection, fresh occurrence identity, exact explicit/omitted stage behavior, nil-and-continue failure semantics, and deletion of the invented target-1 GLSL cross-translation path."
 reproduction_sha256 = "7a2f4bbe72b607875db643c6507b6dc6681ac03ac1fc9f5b23eeb049b5e3f1cf"
 rust_stimulus = "The exact one-UBO RSTB emitted by Editor checkpoint f9d798dd3b1f9b2dfdbeb74dcdf4485aae4519f6 (inner SHA-256 546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d), plus malformed/missing/duplicate/append-only variants, direct authored WGSL, imported .riv scripting, real native pixels, and required-WebGPU browser smoke."
 cpp_stimulus = "Historical Editor localization f4bb3025e263ad1a646ef6971358577a0aa6bfa2 retained as provenance; current pinned d788e8ec6e8b598526607d6a1e8818e8b637b60c governs file-owned neutral ShaderAsset decode, bare/folder-qualified lookup, fresh ScriptedShader construction per successful lookup, zero-value lookup failure, independent explicit stages, omitted-fragment reuse, target-0/16 WebGPU selection, and one module shared by the entries of that lookup occurrence."
@@ -1207,13 +1207,16 @@ reference_executable = "renderer-replay-ffi-dawn static reference corpus"
 reference_stamp_sha256 = "9077e7a86823453b7820e0bfb0fa13f7235a0d6f5e9df99d74d4353a5f4e05b5"
 command = "cargo test -p nuxie-renderer --lib; cargo test -p nuxie --features scripting --test imported_gpu_canvas; rustup run stable cargo check -p browser-renderer-smoke --target wasm32-unknown-unknown; make browser-webgpu-only-check; make renderer-golden"
 evidence = "Focused last-wins decoder, malformed-sidecar, arbitrary logical/physical entry, declaration-order default, named-entry pixel differential, ModuleInfo usage/visibility, shared-module, converter-deletion, imported-script, real Metal pixel, and wasm32 WebGPU compile gates are green; the required-WebGPU browser matrix and 1,468-row native renderer corpus pass at the exact code checkpoint."
-[defect.executor_verification]
+[defect.historical_executor_verification]
 status = "pass"
 command = "final PR #54 closeout at head 1fc9ac4f5926b7a0799211cd66cbf9231a6843fd"
-evidence = "The final corrective PR #54 head passed the local canonical Apple, C-ABI, ABI/header, XCFramework, and release floors. Hosted parity, Phase R pixels, and every hosted non-Apple canonical check completed green on that landing candidate. The four hosted Apple jobs remained queued because no self-hosted runner was assigned; they were recorded as infrastructure state, not claimed green or waived code failures. PR #54 then rebase-merged the same repair at 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee."
+evidence = "Historical result only: the final corrective PR #54 head passed the local canonical Apple, C-ABI, ABI/header, XCFramework, and release floors. Hosted parity, Phase R pixels, and every hosted non-Apple canonical check completed green on that landing candidate. The four hosted Apple jobs remained queued because no self-hosted runner was assigned; they were recorded as infrastructure state, not claimed green or waived code failures. PR #54 then rebase-merged the same repair at 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee. Independent later real-GPU verification found a physical shader-module error-scope regression, so this executor-green history cannot be promoted."
+[defect.executor_verification]
+status = "pending"
+reason = "The current repair cycle has no executor result. A fresh executor-green event is required after regression-reopened -> qualified -> mapped and a new production landing."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "LOC-009 is executor-green and awaits independent orchestrator verification."
+reason = "Independent real-GPU verification found an unresolved physical shader-module error-scope regression after the historical PR #54 executor result. LOC-009 is not promotable or complete; it requires a new production landing after internal Lua WebAssembly repair task 019f9f34-a75f-7a11-a580-e9f54e610d93 on branch levi/fix-wasm-lua-coroutine-resume."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
@@ -1234,6 +1237,10 @@ evidence = "Mapped to the file-disjoint scripting decoder, render API carrier, a
 state = "executor-green"
 actor = "f-ed-executor"
 evidence = "The exact post-review code checkpoint 22e490 preserves C++ last-wins descriptors, arbitrary logical/physical entries, declaration-order defaults, named selection, and target-16 visibility against retained ModuleInfo; the complete workspace, golden, browser, renderer, native API, Apple, structural, and size floors pass."
+[[defect.history]]
+state = "regression-reopened"
+actor = "independent-orchestrator"
+evidence = "Independent real-GPU verification found an unresolved physical shader-module error-scope regression after PR #54. The historical 7f1450dc repair remains evidence, but LOC-009 is not promotable or complete and requires a new production landing after internal Lua WebAssembly repair task 019f9f34-a75f-7a11-a580-e9f54e610d93 on branch levi/fix-wasm-lua-coroutine-resume."
 [defect.cpp_result]
 status = "pass"
 command = "git -C /Users/levi/dev/oss/rive-runtime diff f4bb3025e263ad1a646ef6971358577a0aa6bfa2..d788e8ec6e8b598526607d6a1e8818e8b637b60c -- src/assets/shader_asset.cpp src/lua/renderer/lua_gpu.cpp renderer/include/rive/renderer/ore/ore_context_wgpu.hpp renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp renderer/src/ore/ore_binding_map.cpp; pinned source and unchanged unit-fixture audit"
@@ -1245,7 +1252,7 @@ evidence = "The exact inner RSTB hash is 546517d0dc9fbdaf9585f3daa6e440628e62292
 [defect.editor_result]
 status = "pass"
 command = "GPU_CANVAS_GPU=1 PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor editor-next-cutover.spec.ts gpu-canvas-preview.spec.ts"
-evidence = "At clean Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c consuming runtime e72323c808b91d706ba3b745396beaca7accd69a, the unchanged P14-C01 ordinary required-WebGPU command passed 4/4 in 1.6 minutes, exit 0. Retained console SHA-256 c2324d04cf1baa6ac024ae3b4f0607ca3a4ad64ecace7ac67e612707480527f0; retained complete report/results archive SHA-256 515f53c5710c8069bf60f4c64c64568c219ee3cfb242fbe8e59846b1c0f96bd3. PR #54 merged the corrective runtime repair at 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee; this row remains executor-green only until independent orchestrator verification and promotion."
+evidence = "Historical result only: at clean Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c consuming runtime e72323c808b91d706ba3b745396beaca7accd69a, the unchanged P14-C01 ordinary required-WebGPU command passed 4/4 in 1.6 minutes, exit 0. Retained console SHA-256 c2324d04cf1baa6ac024ae3b4f0607ca3a4ad64ecace7ac67e612707480527f0; retained complete report/results archive SHA-256 515f53c5710c8069bf60f4c64c64568c219ee3cfb242fbe8e59846b1c0f96bd3. PR #54 merged the corrective runtime repair at 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee. Independent later real-GPU verification found an unresolved physical shader-module error-scope regression; this historical pass does not authorize promotion or closure."
 
 [[defect]]
 id = "LOC-011"

@@ -148,8 +148,15 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 - Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`, `LOC-004`,
   `LOC-006`.
 - Landing-provenance and independent-promotion only: `RT-ED-003`,
-  `RT-ED-005`, `LOC-009`, and `LOC-019`. Their repairs are merged and
-  consumed; no production implementation remains in those lanes.
+  `RT-ED-005`, and `LOC-019`. Their repairs are merged and consumed; no
+  production implementation remains in those lanes.
+- Regression reopened after historical executor-green evidence: `LOC-009`.
+  PR #54's `7f1450dc` landing remains immutable history, but independent
+  real-GPU verification found an unresolved physical shader-module
+  error-scope regression. The row is not promotable or complete and requires a
+  new production landing after internal Lua WebAssembly repair task
+  `019f9f34-a75f-7a11-a580-e9f54e610d93` on
+  `levi/fix-wasm-lua-coroutine-resume`.
 - Open formal implementation blocker: `RT-ED-007`.
 - Historical WebGL2 evidence only, with no linked product child:
   `RT-ED-004`.
@@ -296,9 +303,14 @@ migration.
 
 Current work is:
 
-- independently promote the landing-provenance records for `RT-ED-003`,
-  `LOC-009`, and `LOC-019`; their production repairs and Editor consumption
-  are complete;
+- independently promote the landing-provenance records for `RT-ED-003` and
+  `LOC-019`; their production repairs and Editor consumption are complete;
+- keep `LOC-009` outside the serialized tracking merge line while its new
+  production repair waits on internal Lua WebAssembly repair task
+  `019f9f34-a75f-7a11-a580-e9f54e610d93` and branch
+  `levi/fix-wasm-lua-coroutine-resume`; preserve PR #54 at `7f1450dc` as
+  historical evidence, but do not promote or close the row without a new
+  production landing;
 - retain `RT-ED-004` / `F-ED-07` only as historical WebGL2 evidence. It has no
   linked product scenario and authorizes no implementation. A current
   rounded-clip claim exists only if an explicitly scheduled identical-input
@@ -307,7 +319,8 @@ Current work is:
   `reported -> reproduced -> stale-oracle -> closed` path as immutable
   no-repair evidence; and
 - qualify the remaining open renderer rows in Q5 without reopening the landed
-  `F-ED-06` or `F-ED-11` implementations.
+  `F-ED-06` implementation or discarding the historical `F-ED-11` repair
+  evidence.
 
 Runtime-side WebGPU work must keep `make browser-webgpu-only-check` green and
 must not reintroduce any prohibited WebGL2 surface.

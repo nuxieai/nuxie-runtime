@@ -7,9 +7,16 @@ pub(super) struct RuntimeTransitionTriggerCondition {
 }
 
 impl RuntimeTransitionTriggerCondition {
-    pub(super) fn from_object(object: &RuntimeObject) -> Option<Self> {
+    pub(super) fn from_object(
+        state_machine_inputs: &[Option<&RuntimeObject>],
+        object: &RuntimeObject,
+    ) -> Option<Self> {
         Some(Self {
-            input: RuntimeTransitionInputCondition::from_object(object)?,
+            input: RuntimeTransitionInputCondition::from_object(
+                state_machine_inputs,
+                "StateMachineTrigger",
+                object,
+            )?,
         })
     }
 

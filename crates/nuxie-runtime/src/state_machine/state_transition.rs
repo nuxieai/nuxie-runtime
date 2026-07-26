@@ -19,7 +19,6 @@ pub(crate) struct RuntimeStateTransition {
     pub(crate) exit_time: u64,
     pub(crate) flags: u64,
     pub(crate) random_weight: u64,
-    pub(crate) condition_count: usize,
     pub(super) conditions: Vec<RuntimeTransitionCondition>,
     pub(super) direct_input_conditions_only: bool,
     pub(crate) fire_actions: Vec<RuntimeStateMachineFireAction>,
@@ -44,7 +43,6 @@ impl RuntimeStateTransition {
 
     pub(super) fn is_simple_supported(&self) -> bool {
         self.state_to_index.is_some()
-            && self.condition_count == self.conditions.len()
             && !self.has_unsupported_interpolator
             && self.flags & Self::DISABLED == 0
     }
@@ -96,7 +94,6 @@ impl RuntimeStateTransition {
             if exit_time <= duration
                 && AnimationLoop::from_loop_value(animation_from.animation.loop_value as i32)
                     != AnimationLoop::OneShot
-                && duration != 0.0
             {
                 exit_time +=
                     (animation_from.instance.last_total_time / duration).floor() * duration;
@@ -209,6 +206,7 @@ pub(super) fn transition_duration_value(
 ) -> Option<f32> {
     transition_durations
         .iter()
+        .rev()
         .find(|duration| duration.transition_global_id == transition_global_id)
         .map(StateMachineTransitionDurationInstance::value)
 }

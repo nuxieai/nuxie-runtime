@@ -1239,17 +1239,19 @@ impl StateMachineInstance {
     }
 
     pub fn input(&self, index: usize) -> Option<&StateMachineInputInstance> {
-        self.inputs.get(index)
+        self.inputs.get(index).filter(|input| !input.is_null())
     }
 
     pub fn input_named(&self, name: &str) -> Option<&StateMachineInputInstance> {
-        self.inputs.iter().find(|input| input.name() == Some(name))
+        self.inputs
+            .iter()
+            .find(|input| !input.is_null() && input.name() == Some(name))
     }
 
     pub fn input_index_named(&self, name: &str) -> Option<usize> {
         self.inputs
             .iter()
-            .position(|input| input.name() == Some(name))
+            .position(|input| !input.is_null() && input.name() == Some(name))
     }
 
     pub fn set_bool(&mut self, index: usize, value: bool) -> bool {
@@ -5023,6 +5025,24 @@ impl StateMachineInstance {
 
     pub fn data_bind_formula_random_call_count(&self) -> usize {
         self.data_bind_graph.formula_random_call_count()
+    }
+
+    /// Retained transition-duration DataBind occurrence count, in authored order.
+    ///
+    /// This is exposed for pinned-C++ differential evidence. Each occurrence
+    /// has independent converter/source ownership even when several target the
+    /// same transition.
+    #[doc(hidden)]
+    pub fn transition_duration_binding_count(&self) -> usize {
+        self.transition_durations.len()
+    }
+
+    /// Current retained value of one authored transition-duration occurrence.
+    #[doc(hidden)]
+    pub fn transition_duration_binding_value(&self, index: usize) -> Option<f32> {
+        self.transition_durations
+            .get(index)
+            .map(StateMachineTransitionDurationInstance::value)
     }
 
     pub fn bind_view_model_instance_context(

@@ -19,9 +19,12 @@ what is idiomatic Rust.
 
 **Ground rules that shape every idiom (from `docs/porting-map-v2.md`):**
 
-- Port *code, not behaviors*: one C++ class/file, translated coarsely in one
-  sitting, with a comment naming its C++ source. Goldens judge correctness, not
-  you; mark uncertain lines `// TODO(golden):` rather than researching each one.
+- Port *code, not benchmark symptoms*: select one dependency-complete C++ owner
+  family, read that whole family before editing, and keep one direct Rust file
+  per meaningful C++ file. A family is not publishable while any import,
+  ownership, ordering, cloning, lifecycle, floating-point, or dispatch row is
+  still uncertain. `// TODO(golden):` may mark an internal work-in-progress,
+  but never substitutes for closure evidence in a review candidate.
 - During Phase R's mechanical renderer translation, `nuxie-schema` and
   `nuxie-binary` are frozen — do not touch them. A Phase S upstream-sync cycle
   may regenerate schema artifacts and update the binary decoder when the
@@ -31,6 +34,41 @@ what is idiomatic Rust.
   performance unless it mirrors an audited C++ gate. The golden harness only
   samples corpus timelines; invented invalidation breaks the timelines it does
   not sample.
+
+---
+
+## 0. Owner-Family Closure Workflow
+
+A review candidate is one complete C++ owner family, not the next failing test
+or the next hot method. This is a binding pre-publication sequence:
+
+1. **Read the whole family first.** Read every mapped implementation and header,
+   plus the importer and concrete subclasses that establish its lifecycle.
+   Record import validation, retained ownership, authored ordering, cloning,
+   construction/destruction, float edge behavior, and virtual dispatch.
+2. **Write a closure checklist.** Before production edits, map every relevant
+   C++ file/member to its direct Rust file, its live C++ differential or
+   source-cited structural proof, and its permanent checker rule. Missing
+   evidence is an open implementation row, not a review follow-up.
+3. **Port the family coherently.** Preserve one writer and a frozen base.
+   File-to-file moves stay behavior-preserving where practical; semantic edits
+   then port the complete family without Editor-specific or benchmark-driven
+   compensation.
+4. **Adversarially review the checklist.** At minimum probe wrong types, bad
+   indices, duplicate authored occurrences, failed candidates, zero values,
+   nested paths, same-frame timing, clone isolation, and malformed import
+   behavior wherever the family admits them.
+5. **Publish only a closed checklist.** Every row must have a live pinned-C++
+   differential or a source-cited structural proof. Turn each review finding
+   into a permanent differential or checker negative control before
+   resubmission.
+
+Focused tests run continuously while the family is being translated. The
+expensive full battery runs once after the checklist is closed and before the
+immutable candidate is published. Do not start the next production family
+until the current candidate has an acceptance verdict. Performance validates a
+faithful mapped port after structural closure; it never selects ad hoc patches
+within an incomplete family.
 
 ---
 

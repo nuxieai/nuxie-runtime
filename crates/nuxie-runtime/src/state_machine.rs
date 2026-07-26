@@ -103,7 +103,7 @@ pub struct RuntimeStateMachine {
     pub global_id: u32,
     pub name: Option<Arc<str>>,
     pub(crate) default_view_model_index: Option<usize>,
-    pub inputs: Arc<Vec<RuntimeStateMachineInput>>,
+    pub inputs: Arc<Vec<Option<RuntimeStateMachineInput>>>,
     pub(crate) listeners: Arc<Vec<RuntimeStateMachineListener>>,
     pub layers: Arc<Vec<RuntimeStateMachineLayer>>,
     pub(crate) bindable_numbers: Arc<Vec<RuntimeBindableNumber>>,
@@ -237,8 +237,7 @@ pub(crate) fn build_state_machines<'a>(
                     state_machine
                         .inputs
                         .iter()
-                        .copied()
-                        .filter_map(runtime_state_machine_input)
+                        .map(|input| input.and_then(runtime_state_machine_input))
                         .collect(),
                 ),
                 listeners: Arc::new(
@@ -348,7 +347,10 @@ pub(crate) fn build_state_machines<'a>(
                                                 .iter()
                                                 .filter_map(|condition| {
                                                     RuntimeTransitionCondition::from_object(
-                                                        file, graph, condition,
+                                                        file,
+                                                        graph,
+                                                        &state_machine.inputs,
+                                                        condition,
                                                     )
                                                 })
                                                 .collect::<Vec<_>>();
@@ -376,7 +378,6 @@ pub(crate) fn build_state_machines<'a>(
                                                     .object
                                                     .uint_property("randomWeight")
                                                     .unwrap_or(1),
-                                                condition_count: transition.conditions.len(),
                                                 conditions,
                                                 direct_input_conditions_only,
                                                 fire_actions: transition
@@ -3142,11 +3143,11 @@ mod tests {
                 },
             ],
         };
-        let input_definitions = Arc::new(vec![RuntimeStateMachineInput::new_number(
+        let input_definitions = Arc::new(vec![Some(RuntimeStateMachineInput::new_number(
             1,
             Some("blend".to_owned()),
             25.0,
-        )]);
+        ))]);
         let inputs = vec![StateMachineInputInstance::new(0, input_definitions)];
         let mut occurrence = BlendState1DInstance::new(&blend_state, &artboard, false);
 

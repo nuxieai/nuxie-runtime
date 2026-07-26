@@ -4036,22 +4036,55 @@ pub(crate) struct RuntimeDataBindGraphTargetNode {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RuntimeDataBindGraphTarget {
-    Number { global_id: u32 },
-    Integer { global_id: u32 },
-    Boolean { global_id: u32 },
-    String { global_id: u32 },
-    Color { global_id: u32 },
-    Enum { global_id: u32 },
-    Asset { global_id: u32 },
-    Artboard { global_id: u32 },
-    List { global_id: u32 },
-    Trigger { global_id: u32 },
-    ViewModel { global_id: u32 },
-    TransitionDuration { transition_global_id: u32 },
-    KeyFrameNumber { global_id: u32 },
-    KeyFrameColor { global_id: u32 },
-    KeyFrameBoolean { global_id: u32 },
-    KeyFrameString { global_id: u32 },
+    Number {
+        global_id: u32,
+    },
+    Integer {
+        global_id: u32,
+    },
+    Boolean {
+        global_id: u32,
+    },
+    String {
+        global_id: u32,
+    },
+    Color {
+        global_id: u32,
+    },
+    Enum {
+        global_id: u32,
+    },
+    Asset {
+        global_id: u32,
+    },
+    Artboard {
+        global_id: u32,
+    },
+    List {
+        global_id: u32,
+    },
+    Trigger {
+        global_id: u32,
+    },
+    ViewModel {
+        global_id: u32,
+    },
+    TransitionDuration {
+        transition_global_id: u32,
+        occurrence_index: usize,
+    },
+    KeyFrameNumber {
+        global_id: u32,
+    },
+    KeyFrameColor {
+        global_id: u32,
+    },
+    KeyFrameBoolean {
+        global_id: u32,
+    },
+    KeyFrameString {
+        global_id: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4380,7 +4413,11 @@ impl RuntimeDataBindGraph {
                 }
             }
         }
-        for binding in state_machine.transition_duration_bindings.iter() {
+        for (occurrence_index, binding) in state_machine
+            .transition_duration_bindings
+            .iter()
+            .enumerate()
+        {
             let source = &binding.source;
             let source_handle = Self::push_default_view_model_binding(
                 &mut sources,
@@ -4392,6 +4429,7 @@ impl RuntimeDataBindGraph {
                 source.converter.clone(),
                 RuntimeDataBindGraphTarget::TransitionDuration {
                     transition_global_id: binding.transition_global_id,
+                    occurrence_index,
                 },
                 source.value.clone(),
             );
@@ -10655,13 +10693,14 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
             (
                 RuntimeDataBindGraphTarget::TransitionDuration {
                     transition_global_id,
+                    occurrence_index,
                 },
                 RuntimeDataBindGraphValue::Number(value),
             ) => {
                 if let Some(target) = self
                     .transition_durations
-                    .iter_mut()
-                    .find(|target| target.transition_global_id == *transition_global_id)
+                    .get_mut(*occurrence_index)
+                    .filter(|target| target.transition_global_id == *transition_global_id)
                 {
                     target.set_value(*value);
                 }

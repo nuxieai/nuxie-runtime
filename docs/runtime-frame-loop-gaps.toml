@@ -328,6 +328,50 @@ pattern = "let\\s+from_index\\s*=\\s*to_index\\.checked_sub"
 max_occurrences = 0
 
 [[ratchet]]
+id = "state_machine_per_advance_collection_rebuild"
+globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+pattern = "let\\s+(?:mut\\s+)?(?:inputs|layers|transitions|conditions|listeners|actions)\\s*=\\s*[^;]*\\.collect"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_occurrence_definition_copy"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "(?:input|layer|transition|condition|listener|action)_definition\\s*:\\s*[^,\\n]*\\.clone\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_replacement_candidate_container"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "(?:let\\s+(?:mut\\s+)?|pub(?:\\([^)]*\\))?\\s+)?(?:transition|condition|listener|action)_candidates\\s*(?::\\s*(?:Vec|BTreeMap|HashMap)|=\\s*(?:Vec|BTreeMap|HashMap)::new)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_event_listener_rescan"
+globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+pattern = "(?:events|listeners)\\.iter\\(\\)\\s*\\.(?:find|find_map|position|any)"
+# One pre-existing event/listener rescan belongs to the still-pending FL-C4
+# queue owner. FL-C2 may not add another; FL-C4 must reduce this cap to zero.
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_transition_search_early_exit"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "if\\s+(?:transition|conditions?)\\.[^\\n]*\\{\\s*return\\s+(?:Ok\\(false\\)|None|false)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_invented_transition_return_guard"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "(?:condition_count\\s*==\\s*self\\.conditions\\.len\\(\\)|duration\\s*!=\\s*0\\.0)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_dropped_viewmodel_condition"
+globs = ["crates/nuxie-runtime/src/state_machine/transition_condition.rs"]
+pattern = "RuntimeTransitionViewModelCondition::from_object\\([^;]{0,240}\\.map\\(Self::ViewModel\\)"
+max_occurrences = 0
+
+[[ratchet]]
 id = "follow_path_graph_composer_rediscovery"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "graph\\.path_composers\\.iter\\(\\)\\.find_map"

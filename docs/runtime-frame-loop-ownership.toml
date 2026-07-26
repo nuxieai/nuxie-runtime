@@ -9,6 +9,41 @@ provisional_runtime_base = "95eb04b7cfb847f24ba77872bd8a0ee43da1af41"
 provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
 fl_b_verification = "pending-reacceptance"
 
+[active_owner_family]
+id = "FL-C2-transition-conditions"
+checklist = "docs/runtime-frame-loop-fl-c2-closure.md"
+cpp_files = [
+  "src/animation/state_transition.cpp",
+  "src/animation/scripted_transition_condition.cpp",
+  "src/animation/transition_bool_condition.cpp",
+  "src/animation/transition_comparator.cpp",
+  "src/animation/transition_condition.cpp",
+  "src/animation/transition_focus_condition.cpp",
+  "src/animation/transition_input_condition.cpp",
+  "src/animation/transition_number_condition.cpp",
+  "src/animation/transition_property_comparator.cpp",
+  "src/animation/transition_property_viewmodel_comparator.cpp",
+  "src/animation/transition_trigger_condition.cpp",
+  "src/animation/transition_viewmodel_condition.cpp",
+  "src/importers/state_machine_importer.cpp",
+  "src/importers/state_transition_importer.cpp",
+  "src/importers/transition_viewmodel_condition_importer.cpp",
+]
+required_adversarial = [
+  "Wrong input type",
+  "Out-of-range input index",
+  "Nullable input occurrence",
+  "Duplicate candidates",
+  "Duplicate DataBinds",
+  "Zero duration",
+  "Nested path",
+  "Same-frame timing",
+  "Dispatch",
+  "Lifecycle/cloning",
+  "Unsupported comparators",
+  "Permanent structural ratchets",
+]
+
 [expected_trace_landmarks]
 frame = [
   "artboard_draw",
@@ -3293,7 +3328,7 @@ cpp_files = [
   "src/animation/transition_number_condition.cpp",
   "src/animation/transition_property_viewmodel_comparator.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/state_machine/transition_viewmodel_condition.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/transition_condition.rs"
 rust_anchor = "pub(super) enum RuntimeTransitionCondition"
 status = "pending"
 

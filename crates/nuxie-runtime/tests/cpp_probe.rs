@@ -6,15 +6,19 @@ use nuxie_runtime::{
     RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
-    RuntimeShapePaintPathKind, RuntimeShapePaintState, RuntimeViewModelLinkError,
-    StateMachineInputKind, StateMachineInstance, TransformProperty,
-    bound_script_view_model_from_owned_context, runtime_data_context_lookup_reports,
-    script_view_model_from_owned,
+    RuntimeShapePaintPathKind, RuntimeShapePaintState, RuntimeViewModelLinkError, ScriptError,
+    ScriptHost, ScriptInstance, ScriptMethod, ScriptValue, StateMachineInputKind,
+    StateMachineInstance, TransformProperty, bound_script_view_model_from_owned_context,
+    runtime_data_context_lookup_reports, script_view_model_from_owned,
 };
 use nuxie_schema::definition_by_name;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -42,6 +46,26 @@ fn probe_path() -> Option<PathBuf> {
     }
 
     let path = default_probe_path();
+    path.exists().then_some(path)
+}
+
+fn scripted_probe_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("RIVE_CPP_PROBE_SCRIPTED") {
+        let path = PathBuf::from(path);
+        if path.is_absolute() {
+            return Some(path);
+        }
+        return Some(repo_root().join(path));
+    }
+
+    let os = match std::env::consts::OS {
+        "macos" => "macosx",
+        other => other,
+    };
+    let path = repo_root()
+        .join("tools/cpp-probe/build")
+        .join(os)
+        .join("bin/debug/rive_cpp_probe_scripted");
     path.exists().then_some(path)
 }
 
@@ -927,6 +951,7 @@ struct SyntheticTransitionOptions {
     any_state_transition: bool,
     source_second_frame: u64,
     source_second_value: f32,
+    source_animation_duration: u64,
     cubic_transition_interpolator: bool,
     elastic_transition_interpolator: bool,
 }
@@ -940,6 +965,7 @@ impl Default for SyntheticTransitionOptions {
             any_state_transition: false,
             source_second_frame: 10,
             source_second_value: 12.0,
+            source_animation_duration: 20,
             cubic_transition_interpolator: false,
             elastic_transition_interpolator: false,
         }
@@ -977,6 +1003,34 @@ fn synthetic_state_machine_input_transition_with_options(
     kind: SyntheticInputTransitionKind,
     transition: SyntheticTransitionOptions,
 ) -> Vec<u8> {
+    synthetic_state_machine_input_transition_with_condition(file_id, kind, kind, 0, transition)
+}
+
+fn synthetic_state_machine_input_transition_with_condition(
+    file_id: u64,
+    input_kind: SyntheticInputTransitionKind,
+    condition_kind: SyntheticInputTransitionKind,
+    condition_input_id: u64,
+    transition: SyntheticTransitionOptions,
+) -> Vec<u8> {
+    synthetic_state_machine_input_transition_with_condition_and_null_slot(
+        file_id,
+        input_kind,
+        condition_kind,
+        condition_input_id,
+        transition,
+        false,
+    )
+}
+
+fn synthetic_state_machine_input_transition_with_condition_and_null_slot(
+    file_id: u64,
+    input_kind: SyntheticInputTransitionKind,
+    condition_kind: SyntheticInputTransitionKind,
+    condition_input_id: u64,
+    transition: SyntheticTransitionOptions,
+    null_input_prefix: bool,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
         push_object_with_properties(bytes, "Artboard", |_| {});
@@ -1001,7 +1055,12 @@ fn synthetic_state_machine_input_transition_with_options(
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
         push_object_with_properties(bytes, "LinearAnimation", |bytes| {
             push_uint_property(bytes, "LinearAnimation", "fps", 10);
-            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+            push_uint_property(
+                bytes,
+                "LinearAnimation",
+                "duration",
+                transition.source_animation_duration,
+            );
         });
         push_object_with_properties(bytes, "KeyedObject", |bytes| {
             push_uint_property(bytes, "KeyedObject", "objectId", animated_local_id);
@@ -1039,7 +1098,12 @@ fn synthetic_state_machine_input_transition_with_options(
         push_keyframe_double(bytes, 0, 20.0, 1);
         push_keyframe_double(bytes, 10, 30.0, 0);
         push_object_with_properties(bytes, "StateMachine", |_| {});
-        match kind {
+        if null_input_prefix {
+            // The abstract base decodes as a C++ null object. The
+            // StateMachineImporter consumes it as an input occurrence.
+            push_object_with_properties(bytes, "StateMachineInput", |_| {});
+        }
+        match input_kind {
             SyntheticInputTransitionKind::Bool => {
                 push_object_with_properties(bytes, "StateMachineBool", |bytes| {
                     push_string_property(bytes, "StateMachineBool", "name", "armed");
@@ -1063,7 +1127,7 @@ fn synthetic_state_machine_input_transition_with_options(
                 push_uint_property(bytes, "StateTransition", "stateToId", 3);
                 push_synthetic_transition_options(bytes, transition);
             });
-            push_synthetic_transition_condition(bytes, kind);
+            push_synthetic_transition_condition(bytes, condition_kind, condition_input_id);
         }
         push_object_with_properties(bytes, "EntryState", |_| {});
         push_object_with_properties(bytes, "StateTransition", |bytes| {
@@ -1076,7 +1140,7 @@ fn synthetic_state_machine_input_transition_with_options(
             push_uint_property(bytes, "StateTransition", "stateToId", 3);
             push_synthetic_transition_options(bytes, transition);
         });
-        push_synthetic_transition_condition(bytes, kind);
+        push_synthetic_transition_condition(bytes, condition_kind, condition_input_id);
         push_object_with_properties(bytes, "AnimationState", |bytes| {
             push_uint_property(bytes, "AnimationState", "animationId", 1);
         });
@@ -1099,21 +1163,25 @@ fn push_synthetic_transition_options(bytes: &mut Vec<u8>, transition: SyntheticT
     }
 }
 
-fn push_synthetic_transition_condition(bytes: &mut Vec<u8>, kind: SyntheticInputTransitionKind) {
+fn push_synthetic_transition_condition(
+    bytes: &mut Vec<u8>,
+    kind: SyntheticInputTransitionKind,
+    input_id: u64,
+) {
     match kind {
         SyntheticInputTransitionKind::Bool => {
-            push_synthetic_bool_transition_condition(bytes, 0);
+            push_synthetic_bool_transition_condition(bytes, input_id);
         }
         SyntheticInputTransitionKind::Number => {
             push_object_with_properties(bytes, "TransitionNumberCondition", |bytes| {
-                push_uint_property(bytes, "TransitionNumberCondition", "inputId", 0);
+                push_uint_property(bytes, "TransitionNumberCondition", "inputId", input_id);
                 push_uint_property(bytes, "TransitionNumberCondition", "opValue", 5);
                 push_f32_property(bytes, "TransitionNumberCondition", "value", 3.0);
             });
         }
         SyntheticInputTransitionKind::Trigger => {
             push_object_with_properties(bytes, "TransitionTriggerCondition", |bytes| {
-                push_uint_property(bytes, "TransitionTriggerCondition", "inputId", 0);
+                push_uint_property(bytes, "TransitionTriggerCondition", "inputId", input_id);
             });
         }
     }
@@ -1128,6 +1196,155 @@ fn push_synthetic_bool_transition_condition(bytes: &mut Vec<u8>, input_index: u6
 
 fn synthetic_state_machine_bool_transition(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_input_transition(file_id, SyntheticInputTransitionKind::Bool)
+}
+
+fn push_transition_duration_data_bind_context(bytes: &mut Vec<u8>, path: &[u32]) {
+    let mut source_path_ids = Vec::new();
+    for path_id in path {
+        push_var_uint(&mut source_path_ids, u64::from(*path_id));
+    }
+    push_object_with_properties(bytes, "DataBindContext", |bytes| {
+        push_uint_property(
+            bytes,
+            "DataBindContext",
+            "propertyKey",
+            u64::from(property_key_for_name("StateTransition", "duration")),
+        );
+        push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
+    });
+}
+
+fn synthetic_state_machine_duplicate_transition_duration_bindings(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        for name in ["first", "second"] {
+            push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+                push_string_property(bytes, "ViewModelPropertyNumber", "name", name);
+            });
+        }
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        for (property_id, value) in [(0, 1000.0), (1, 0.0)] {
+            push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "ViewModelInstanceNumber",
+                    "viewModelPropertyId",
+                    property_id,
+                );
+                push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", value);
+            });
+        }
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "go");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "duration", 500);
+        });
+        push_transition_duration_data_bind_context(bytes, &[0, 0]);
+        push_transition_duration_data_bind_context(bytes, &[0, 1]);
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_nested_transition_duration_binding(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "child");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                1,
+            );
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Child");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "duration");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "child");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 1000.0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "go");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "duration", 1000);
+        });
+        push_transition_duration_data_bind_context(bytes, &[0, 0, 0]);
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
 }
 
 fn synthetic_state_machine_entry_timed_transition(file_id: u64) -> Vec<u8> {
@@ -1508,7 +1725,7 @@ fn synthetic_state_machine_trigger_done_event(file_id: u64) -> Vec<u8> {
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 3);
         });
-        push_synthetic_transition_condition(bytes, SyntheticInputTransitionKind::Trigger);
+        push_synthetic_transition_condition(bytes, SyntheticInputTransitionKind::Trigger, 0);
         push_state_machine_fire_event(bytes, DONE_EVENT, 0);
         push_object_with_properties(bytes, "AnimationState", |bytes| {
             push_uint_property(bytes, "AnimationState", "animationId", 1);
@@ -1975,7 +2192,7 @@ fn synthetic_state_machine_scheduled_listener_input_change(
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 3);
         });
-        push_synthetic_transition_condition(bytes, kind);
+        push_synthetic_transition_condition(bytes, kind, 0);
         push_object_with_properties(bytes, "AnimationState", |bytes| {
             push_uint_property(bytes, "AnimationState", "animationId", 1);
         });
@@ -18245,6 +18462,7 @@ fn state_machine_timed_transition_mixing_matches_cpp_probe() {
 #[test]
 fn state_machine_exit_time_transition_matches_cpp_probe() {
     const ENABLE_EXIT_TIME: u64 = 1 << 2;
+    const EXIT_TIME_IS_PERCENTAGE: u64 = 1 << 3;
 
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -18277,6 +18495,23 @@ fn state_machine_exit_time_transition_matches_cpp_probe() {
                     ..Default::default()
                 },
             ),
+            vec![0.0],
+        ),
+        (
+            "synthetic/runtime_state_machine_zero_duration_loop_exit_time_cpp.riv",
+            synthetic_state_machine_input_transition_with_options(
+                8246,
+                SyntheticInputTransitionKind::Bool,
+                SyntheticTransitionOptions {
+                    flags: ENABLE_EXIT_TIME | EXIT_TIME_IS_PERCENTAGE,
+                    exit_time: Some(0),
+                    source_animation_duration: 0,
+                    ..Default::default()
+                },
+            ),
+            // Pinned C++ computes floor(0/0)*0, producing NaN. `time < NaN`
+            // is false, so the transition is allowed on this same advance
+            // (`state_transition.cpp:147-174`).
             vec![0.0],
         ),
     ] {
@@ -18330,6 +18565,480 @@ fn state_machine_exit_time_transition_matches_cpp_probe() {
             compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         }
         compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
+fn state_machine_input_conditions_reject_wrong_types_and_bad_indices_like_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let cases = [
+        (
+            "bool-wrong-type",
+            SyntheticInputTransitionKind::Number,
+            SyntheticInputTransitionKind::Bool,
+            0,
+        ),
+        (
+            "bool-bad-index",
+            SyntheticInputTransitionKind::Bool,
+            SyntheticInputTransitionKind::Bool,
+            1,
+        ),
+        (
+            "number-wrong-type",
+            SyntheticInputTransitionKind::Trigger,
+            SyntheticInputTransitionKind::Number,
+            0,
+        ),
+        (
+            "number-bad-index",
+            SyntheticInputTransitionKind::Number,
+            SyntheticInputTransitionKind::Number,
+            1,
+        ),
+        (
+            "trigger-wrong-type",
+            SyntheticInputTransitionKind::Bool,
+            SyntheticInputTransitionKind::Trigger,
+            0,
+        ),
+        (
+            "trigger-bad-index",
+            SyntheticInputTransitionKind::Trigger,
+            SyntheticInputTransitionKind::Trigger,
+            1,
+        ),
+    ];
+
+    for (offset, (case, input_kind, condition_kind, input_id)) in cases.into_iter().enumerate() {
+        let label = format!("synthetic/runtime_state_machine_input_condition_{case}.riv");
+        let bytes = synthetic_state_machine_input_transition_with_condition(
+            8800 + offset as u64,
+            input_kind,
+            condition_kind,
+            input_id,
+            SyntheticTransitionOptions::default(),
+        );
+        let cpp = read_cpp_probe_bytes_with_args(
+            &probe,
+            &label,
+            &bytes,
+            &[
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+            ],
+        );
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+        rust.update_components();
+        compare_state_machine_advance(
+            &cpp.artboards[0].runtime_state_machine_advances[0],
+            &state_machine,
+            advanced,
+            &label,
+        );
+        assert_eq!(
+            rust.component(1).unwrap().transform.local_transform.0[4],
+            20.0,
+            "{label} retained a direct-input condition C++ rejects during import"
+        );
+    }
+}
+
+#[test]
+fn state_machine_input_conditions_preserve_cpp_null_slots_and_evaluate_them_true() {
+    for (offset, kind) in [
+        SyntheticInputTransitionKind::Bool,
+        SyntheticInputTransitionKind::Number,
+        SyntheticInputTransitionKind::Trigger,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let label = format!("synthetic/runtime_state_machine_null_{kind:?}_condition.riv");
+        let bytes = synthetic_state_machine_input_transition_with_condition_and_null_slot(
+            8810 + offset as u64,
+            kind,
+            kind,
+            0,
+            SyntheticTransitionOptions::default(),
+            true,
+        );
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        assert_eq!(
+            state_machine.input_count(),
+            2,
+            "{label} compacted the null slot"
+        );
+        assert!(
+            state_machine.input(0).is_none(),
+            "{label} exposed a null C++ input occurrence"
+        );
+        assert!(
+            state_machine.input(1).is_some(),
+            "{label} shifted away the later concrete input"
+        );
+
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+        rust.update_components();
+        assert!(advanced);
+        assert_eq!(
+            rust.component(1).unwrap().transform.local_transform.0[4],
+            20.0,
+            "{label} did not evaluate the null input condition true as required by pinned C++ transition bool/number/trigger condition sources"
+        );
+    }
+}
+
+#[test]
+fn transition_duration_bindings_preserve_duplicate_authored_order_like_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_duplicate_transition_duration_binds_cpp.riv";
+    let bytes = synthetic_state_machine_duplicate_transition_duration_bindings(8806);
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_default_view_model_context());
+    assert!(state_machine.advance_data_context());
+    assert_eq!(
+        state_machine.transition_duration_binding_count(),
+        2,
+        "{label} must retain both authored DataBind occurrences"
+    );
+    let mut rust_reports = vec![(false, state_machine.clone())];
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        [
+            state_machine.transition_duration_binding_value(0),
+            state_machine.transition_duration_binding_value(1),
+        ],
+        [Some(1000.0), Some(0.0)],
+        "{label} must retain transition-duration occurrences in authored order"
+    );
+    assert!(state_machine.set_bool(0, true));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust.update_components();
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), rust_reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(cpp_report, rust_report, *advanced, &step_label);
+    }
+    assert_eq!(
+        rust.component(1).unwrap().transform.local_transform.0[4],
+        20.0,
+        "{label} must read the last authored duration occurrence"
+    );
+}
+
+#[test]
+fn nested_transition_duration_path_resolves_before_same_advance_fire_like_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_nested_transition_duration_bind_cpp.riv";
+    let bytes = synthetic_state_machine_nested_transition_duration_binding(8807);
+    let args = [
+        "--runtime-bind-owned-view-model-number-name-path-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "child/duration".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+
+    assert!(context.set_number_by_property_name_path("child/duration", 0.0));
+    assert!(state_machine.bind_owned_view_model_context(&context));
+    assert!(state_machine.advance_data_context());
+    let mut rust_reports = vec![(false, state_machine.clone())];
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(state_machine.set_bool(0, true));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust.update_components();
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), rust_reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} action {step}"),
+        );
+    }
+    assert_eq!(
+        rust.component(1).unwrap().transform.local_transform.0[4],
+        20.0,
+        "{label} nested duration must settle before the same zero-second advance"
+    );
+}
+
+#[test]
+fn focus_transition_conditions_match_cpp_for_duplicate_and_failing_candidates() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "focus_test.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read C++ focus fixture {label}: {error}"));
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.016".to_owned(),
+        "--runtime-pointer-down-state-machine".to_owned(),
+        "0".to_owned(),
+        "55".to_owned(),
+        "65".to_owned(),
+        "--runtime-pointer-up-state-machine".to_owned(),
+        "0".to_owned(),
+        "55".to_owned(),
+        "65".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.016".to_owned(),
+        "--runtime-pointer-down-state-machine".to_owned(),
+        "0".to_owned(),
+        "442".to_owned(),
+        "65".to_owned(),
+        "--runtime-pointer-up-state-machine".to_owned(),
+        "0".to_owned(),
+        "442".to_owned(),
+        "65".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.016".to_owned(),
+    ];
+    let cpp = read_cpp_probe_fixture_with_args(&probe, label, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    assert!(state_machine.bind_default_view_model_context());
+
+    let mut rust_reports = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.016);
+    rust_reports.push((advanced, state_machine.clone()));
+    rust.update_components();
+    state_machine.pointer_down(&mut rust, 55.0, 65.0, 0);
+    rust_reports.push((false, state_machine.clone()));
+    state_machine.pointer_up(&mut rust, 55.0, 65.0, 0);
+    rust_reports.push((false, state_machine.clone()));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.016);
+    rust_reports.push((advanced, state_machine.clone()));
+    rust.update_components();
+    state_machine.pointer_down(&mut rust, 442.0, 65.0, 0);
+    rust_reports.push((false, state_machine.clone()));
+    state_machine.pointer_up(&mut rust, 442.0, 65.0, 0);
+    rust_reports.push((false, state_machine.clone()));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.016);
+    rust_reports.push((advanced, state_machine.clone()));
+    rust.update_components();
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), rust_reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} action {step}"),
+        );
+    }
+}
+
+struct DifferentialScriptedTransitionCondition {
+    result: Arc<AtomicBool>,
+}
+
+impl ScriptInstance for DifferentialScriptedTransitionCondition {
+    fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+        Ok(method == ScriptMethod::Evaluate)
+    }
+
+    fn call_method(
+        &mut self,
+        method: ScriptMethod,
+        _args: &[ScriptValue],
+        _host: &mut dyn ScriptHost,
+    ) -> Result<ScriptValue, ScriptError> {
+        if method != ScriptMethod::Evaluate {
+            return Err(ScriptError::new("unexpected scripted transition method"));
+        }
+        Ok(ScriptValue::Bool(self.result.load(Ordering::Relaxed)))
+    }
+
+    fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+        Ok(ScriptValue::Nil)
+    }
+
+    fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn scripted_transition_conditions_match_live_cpp_success_and_failure_order() {
+    let Some(probe) = scripted_probe_path() else {
+        eprintln!(
+            "skipping scripted C++ runtime comparison; set RIVE_CPP_PROBE_SCRIPTED to enable"
+        );
+        return;
+    };
+
+    let label = "scripted_transition_condition.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read C++ scripted fixture {label}: {error}"));
+    let args = [
+        "--runtime-bind-created-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.1".to_owned(),
+        "--runtime-set-owned-view-model-source-bool-by-name".to_owned(),
+        "0".to_owned(),
+        "timelineBool".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.016".to_owned(),
+        "--runtime-set-owned-view-model-source-bool-by-name".to_owned(),
+        "0".to_owned(),
+        "anyStateBool".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.016".to_owned(),
+    ];
+    let cpp = read_cpp_probe_fixture_with_args(&probe, label, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing Rust default view-model context for {label}"));
+    assert!(state_machine.bind_owned_view_model_context(&context));
+
+    let scripted_globals = runtime
+        .objects
+        .iter()
+        .flatten()
+        .filter(|object| object.type_name == "ScriptedTransitionCondition")
+        .map(|object| object.id)
+        .collect::<Vec<_>>();
+    assert_eq!(scripted_globals.len(), 2);
+    let timeline_result = Arc::new(AtomicBool::new(false));
+    let any_state_result = Arc::new(AtomicBool::new(false));
+    for (global_id, result) in [
+        (scripted_globals[0], timeline_result.clone()),
+        (scripted_globals[1], any_state_result.clone()),
+    ] {
+        state_machine.set_script_instance_for_global(
+            global_id,
+            Box::new(DifferentialScriptedTransitionCondition { result }),
+        );
+    }
+
+    let mut rust_reports = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.1);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(context.set_boolean_by_property_name("timelineBool", true));
+    timeline_result.store(true, Ordering::Relaxed);
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.016);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(context.set_boolean_by_property_name("anyStateBool", true));
+    any_state_result.store(true, Ordering::Relaxed);
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.016);
+    rust_reports.push((advanced, state_machine.clone()));
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), rust_reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} action {step}"),
+        );
     }
 }
 
@@ -54965,6 +55674,13 @@ fn artboard_default_viewmodel_list_to_component_list_direct_update_matches_cpp_p
         rust.bind_default_view_model_artboard_list_context(&runtime),
         "{label} failed to apply default artboard list context"
     );
+    // Match the probe's direct `Artboard::updateDataBinds(true)` call
+    // (`src/artboard.cpp:1195-1201`). Binding the Rust context alone is the
+    // pre-update boundary.
+    assert!(
+        rust.advance_artboard_data_binds(),
+        "{label} failed to update artboard data binds"
+    );
 
     let cpp_artboard = cpp
         .artboards
@@ -55429,6 +56145,13 @@ fn artboard_default_viewmodel_number_to_list_component_list_direct_update_matche
     assert!(
         rust.bind_default_view_model_artboard_list_context(&runtime),
         "{label} failed to apply default artboard list context"
+    );
+    // Match the probe's direct `Artboard::updateDataBinds(true)` call
+    // (`src/artboard.cpp:1195-1201`). Binding the Rust context alone is the
+    // pre-update boundary.
+    assert!(
+        rust.advance_artboard_data_binds(),
+        "{label} failed to update artboard data binds"
     );
 
     let cpp_artboard = cpp

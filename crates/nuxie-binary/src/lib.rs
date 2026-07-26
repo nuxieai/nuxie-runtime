@@ -5295,6 +5295,7 @@ impl RuntimeFile {
         let mut current_state_machine: Option<usize> = None;
         let mut current_layer: Option<usize> = None;
         let mut current_listener: Option<usize> = None;
+        let mut current_listener_input_type: Option<usize> = None;
         let mut current_layer_component: Option<RuntimeStateMachineLayerComponentOwner> = None;
         let mut current_state_machine_scripted_object: Option<
             RuntimeStateMachineScriptedObjectOwner,
@@ -5340,6 +5341,7 @@ impl RuntimeFile {
                 current_state_machine = Some(state_machines.len() - 1);
                 current_layer = None;
                 current_listener = None;
+                current_listener_input_type = None;
                 current_state_machine_scripted_object = None;
                 continue;
             }
@@ -5347,6 +5349,25 @@ impl RuntimeFile {
             let Some(state_machine_index) = current_state_machine else {
                 continue;
             };
+
+            if matches!(
+                definition.name,
+                "GamepadInput" | "KeyboardInput" | "SemanticInput"
+            ) {
+                if let (Some(listener_index), Some(input_type_index)) =
+                    (current_listener, current_listener_input_type)
+                    && let Some(listener_input_type) = state_machines[state_machine_index]
+                        .listeners
+                        .get_mut(listener_index)
+                    && let Some(inputs) = listener_input_type
+                        .listener_input_type_inputs
+                        .get_mut(input_type_index)
+                {
+                    inputs.push(object);
+                }
+                continue;
+            }
+            current_listener_input_type = None;
 
             if definition_adds_cpp_state_machine_scripted_object(definition) {
                 state_machines[state_machine_index]
@@ -5567,6 +5588,7 @@ impl RuntimeFile {
                         object,
                         actions: Vec::new(),
                         listener_input_types: Vec::new(),
+                        listener_input_type_inputs: Vec::new(),
                     });
                 current_layer = None;
                 current_listener = Some(state_machines[state_machine_index].listeners.len() - 1);
@@ -5623,9 +5645,11 @@ impl RuntimeFile {
 
             if definition.is_a("ListenerInputType") {
                 if let Some(listener_index) = current_listener {
-                    state_machines[state_machine_index].listeners[listener_index]
-                        .listener_input_types
-                        .push(object);
+                    let listener =
+                        &mut state_machines[state_machine_index].listeners[listener_index];
+                    listener.listener_input_types.push(object);
+                    listener.listener_input_type_inputs.push(Vec::new());
+                    current_listener_input_type = Some(listener.listener_input_types.len() - 1);
                 }
                 continue;
             }
@@ -8293,6 +8317,11 @@ pub struct RuntimeStateMachineListener<'a> {
     pub object: &'a RuntimeObject,
     pub actions: Vec<RuntimeListenerAction<'a>>,
     pub listener_input_types: Vec<&'a RuntimeObject>,
+    /// Concrete KeyboardInput/GamepadInput/SemanticInput records retained by
+    /// the corresponding C++ ListenerInputType importer. The outer vector is
+    /// index-aligned with `listener_input_types`; each inner vector preserves
+    /// file order.
+    pub listener_input_type_inputs: Vec<Vec<&'a RuntimeObject>>,
 }
 
 #[derive(Debug, Clone)]

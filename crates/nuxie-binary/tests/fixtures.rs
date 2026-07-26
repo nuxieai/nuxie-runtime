@@ -2682,6 +2682,46 @@ fn runtime_state_machine_graphs_match_cpp_child_grouping() {
 }
 
 #[test]
+fn runtime_state_machine_listener_input_types_retain_concrete_inputs_in_order() {
+    let file = read_runtime_file(&synthetic_runtime_file(4340, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "Artboard");
+        push_empty_object(bytes, "StateMachine");
+        push_empty_object(bytes, "StateMachineListener");
+        push_empty_object(bytes, "ListenerInputTypeKeyboard");
+        push_object_with_properties(bytes, "KeyboardInput", |bytes| {
+            push_uint_property(bytes, "KeyboardInput", "keyType", 65);
+            push_uint_property(bytes, "KeyboardInput", "keyPhase", 1);
+        });
+        push_object_with_properties(bytes, "KeyboardInput", |bytes| {
+            push_uint_property(bytes, "KeyboardInput", "keyType", 66);
+            push_uint_property(bytes, "KeyboardInput", "keyPhase", 4);
+        });
+    }))
+    .expect("synthetic listener-input stream imports");
+
+    let state_machines = file.artboard_state_machine_graphs(0);
+    let listener = &state_machines[0].listeners[0];
+    assert_eq!(listener.listener_input_types.len(), 1);
+    assert_eq!(listener.listener_input_type_inputs.len(), 1);
+    assert_eq!(
+        listener.listener_input_type_inputs[0]
+            .iter()
+            .map(|input| input.id)
+            .collect::<Vec<_>>(),
+        vec![5, 6]
+    );
+    assert_eq!(
+        listener.listener_input_type_inputs[0][0].uint_property("keyType"),
+        Some(65)
+    );
+    assert_eq!(
+        listener.listener_input_type_inputs[0][1].uint_property("keyPhase"),
+        Some(4)
+    );
+}
+
+#[test]
 fn runtime_data_binds_resolve_cpp_data_converter_ids() {
     let file = read_runtime_file(&synthetic_runtime_file(4340, |bytes| {
         push_empty_object(bytes, "DataConverterRounder");

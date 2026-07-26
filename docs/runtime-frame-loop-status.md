@@ -14,7 +14,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   FL-C's corrected 49-file/eight-member lane map is
   `docs/runtime-frame-loop-fl-c-spec.md`; FL-C1 inputs/listener definitions is
   implemented with a green lane-boundary floor and pending independent
-  acceptance. FL-C2 transition conditions is active. Every one of its 12 C++
+  acceptance. FL-C2 transition conditions is accepted and promoted. Every one
+  of its 12 C++
   owners now has a filename-corresponding Rust module; `state_machine.rs` and
   `transition_condition.rs` retain only shared dispatch/re-exports. The pinned
   comparison matrix is represented directly: two integer comparands retain
@@ -34,7 +35,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   exactly as `transition_focus_condition.cpp:30-39` requires. Pinned-C++
   differentials cover both malformed cases and the checker permanently
   rejects the drop shape. Its behavioral, structural, packaging, and size
-  battery is green on the pending-verification implementation: runtime
+  battery is green on the candidate: runtime
   509 / 509; probe-armed workspace including pinned-C++ probes 736 / 736;
   ordinary and
   scripted golden each 317 / 317 entries and 647 / 647 segments with zero
@@ -45,8 +46,11 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   byte-exact and zero divergences. The required canonical hot-loop checkpoint
   is recorded, but remains above the final program target at 1.661x C++;
   performance therefore stays open as wave evidence and does not become an
-  ad hoc scene-patching queue. Independent acceptance remains pending, so no
-  FL-C2 row is promoted.
+  ad hoc scene-patching queue. Independent Standards and Spec review both
+  passed exact `7546f4f15b05e582c62aa52ecc93430a7048e143` with no findings.
+  The 12 mapped frame-loop file rows, the three corresponding importer rows,
+  and the `state_machine.conditions` plus `state_machine.transitions` member
+  rows are promoted only by this acceptance.
 - Stable-Rust Apple compatibility repair
   `95eb04b7cfb847f24ba77872bd8a0ee43da1af41` mechanically rewrites the
   experimental match guard in `constraint_bounds` without changing behavior.
@@ -58,18 +62,22 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   FL-B boundary merge `b5d5bc8afeaa0369cbc248b85366111649cb9010`.
   No FL-B or FL-C acceptance request is active.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
-- File closure: 52 / 341. All 52 `component-update-graph` rows are `faithful`
-  and `orchestrator-verified`; the 289 later-wave rows remain pending.
-- Member closure: 47 / 75 owner/member rows (41 imported runtime-drawing
-  owners plus all six FL-A Component rows); 28 later-wave rows remain.
+- File closure: 64 / 341. The 52 `component-update-graph` rows and all 12
+  FL-C2 transition/condition rows are `faithful`; the 277 later-wave rows
+  remain pending. The file-correspondence manifest additionally promotes the
+  three accepted importer rows.
+- Member closure: 49 / 75 owner/member rows (41 imported runtime-drawing
+  owners, all six FL-A Component rows, and the two FL-C2 rows); 26 later-wave
+  rows remain.
 - Open mechanism gaps: 7 / 10. FL-G02 and FL-G06 remain closed; FL-G10 records
   the user-approved D2 saturation choice for AnimationReset's otherwise
   undefined float-to-int edge.
 - Current dependency wave: FL-C. FL-B's frozen 45-file/eight-member mini-map
   remains implemented but pending reacceptance. FL-C consumes that
-  implementation provisionally under the coordinator override; its completed
-  first lane is the 12-file `state_machine.inputs` owner family and its next
-  lane is the 12-file transition/condition definition family.
+  implementation provisionally under the coordinator override. FL-C2 is
+  independently closed; the exact next lane is the five-file layer/state
+  occurrence family (FL-C3), beginning with a whole-family C++ walk and
+  closure checklist before production changes.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
   mutable occurrence. Each occurrence retains a handle into the one authored
@@ -721,10 +729,10 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Publish the immutable FL-C2 pending-verification candidate containing
-   corrected semantic commit `a40b17cd1964d46e5453b7d5278dc158ebb7b64b`
-   plus its durable evidence, and request independent review; do not promote
-   its rows before that verdict.
+1. Read the complete five-file pinned-C++ layer/state-occurrence family and
+   commit its closure checklist before production changes (FL-C3):
+   `layer_state.cpp`, `state_instance.cpp`, `state_machine_layer.cpp`,
+   `system_state_instance.cpp`, and `nested_state_machine.cpp`.
 2. Keep FL-B and FL-C1 rows pending until their independent acceptance.
    Performance remains verification evidence, never the source of a work
    slice.

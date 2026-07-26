@@ -138,19 +138,19 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 52
+faithful = 64
 adapted = 0
 divergent-by-decision = 0
-pending = 289
+pending = 277
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
 # are the state-bearing frame-loop owners still requiring member-level proof.
 [expected_member_status_counts]
-faithful = 7
+faithful = 9
 adapted = 40
 divergent-by-decision = 0
-pending = 28
+pending = 26
 compensation = 0
 
 [[wave]]
@@ -916,7 +916,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/scripted_transition_condition.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/semantic_listener_group.cpp"
@@ -1012,7 +1012,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/state_transition.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/system_state_instance.cpp"
@@ -1036,7 +1036,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_bool_condition.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/transition_comparator.cpp"
@@ -1044,7 +1044,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_comparator.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/transition_condition.cpp"
@@ -1052,7 +1052,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_condition.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/transition_focus_condition.cpp"
@@ -1060,7 +1060,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_focus_condition.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/transition_input_condition.cpp"
@@ -1068,7 +1068,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_input_condition.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/transition_number_condition.cpp"
@@ -1076,7 +1076,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_number_condition.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/transition_property_comparator.cpp"
@@ -1084,7 +1084,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_property_comparator.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/transition_property_viewmodel_comparator.cpp"
@@ -1092,7 +1092,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_property_viewmodel_comparator.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/transition_trigger_condition.cpp"
@@ -1100,7 +1100,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_trigger_condition.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/transition_viewmodel_condition.cpp"
@@ -1108,7 +1108,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_viewmodel_condition.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/artboard.cpp"
@@ -3319,7 +3319,16 @@ wave = "FL-C"
 cpp_files = ["src/animation/state_transition.cpp", "src/animation/blend_state_transition.cpp"]
 rust_file = "crates/nuxie-runtime/src/state_machine/state_transition.rs"
 rust_anchor = "pub(crate) struct RuntimeStateTransition"
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/animation/state_transition.cpp:65-80", "rust:crates/nuxie-runtime/src/state_machine.rs:338-410"]
+retain = ["cpp:src/animation/state_transition.cpp:77-80", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:13-28"]
+dirty = ["cpp:src/animation/state_transition.cpp:28-63", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:37-73"]
+update = ["cpp:src/animation/state_transition.cpp:147-206", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:50-107"]
+advance = ["cpp:src/animation/state_transition.cpp:147-230", "rust:crates/nuxie-runtime/src/state_machine.rs:2386-2439"]
+draw = ["cpp:src/animation/state_transition.cpp:208-220", "rust:crates/nuxie-runtime/src/state_machine.rs:2481-2535"]
+clone = ["cpp:src/animation/state_transition.cpp:77-80", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:13-28"]
+drop = ["cpp:src/animation/state_transition.cpp:20-26", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:13-28"]
 
 [[member]]
 id = "state_machine.conditions"
@@ -3331,7 +3340,16 @@ cpp_files = [
 ]
 rust_file = "crates/nuxie-runtime/src/state_machine/transition_condition.rs"
 rust_anchor = "pub(super) enum RuntimeTransitionCondition"
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/animation/transition_condition.cpp:17-26", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:37-73"]
+retain = ["cpp:src/animation/state_transition.cpp:77-80", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:13-28"]
+dirty = ["cpp:src/animation/transition_condition.cpp:7-15", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:37-73"]
+update = ["cpp:src/animation/state_transition.cpp:147-163", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:75-103"]
+advance = ["cpp:src/animation/state_transition.cpp:147-205", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:50-107"]
+draw = ["cpp:src/animation/state_transition.cpp:208-220", "rust:crates/nuxie-runtime/src/state_machine.rs:2481-2535"]
+clone = ["cpp:src/animation/state_transition.cpp:77-80", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:18-26"]
+drop = ["cpp:src/animation/state_transition.cpp:20-26", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:18-26"]
 
 [[member]]
 id = "state_machine.actions"

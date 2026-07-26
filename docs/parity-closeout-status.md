@@ -1007,11 +1007,14 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** read the complete five-file pinned-C++ layer/state
-occurrence family and commit its closure checklist before production changes
-(FL-C3): `layer_state.cpp`, `state_instance.cpp`,
-`state_machine_layer.cpp`, `system_state_instance.cpp`, and
-`nested_state_machine.cpp`. Exact FL-C2 candidate
+**Canonical NEXT:** port the complete five-file pinned-C++ layer/state
+occurrence family against the committed whole-family checklist
+`docs/runtime-frame-loop-fl-c3-closure.md` (FL-C3), including the private
+layer-occurrence lifecycle, adversarial differentials, and structural
+ratchets; do not publish a partial layer/nested/reset/interruption slice. The
+source walk corrected the old retention wording: C++ retains ordered state
+definitions, while each layer occurrence dynamically owns only `any`,
+`current`, and transition-source occurrences. Exact FL-C2 candidate
 `7546f4f15b05e582c62aa52ecc93430a7048e143` passed independent Standards and
 Spec review with no findings; its 12 mapped frame-loop files, three importer
 rows, and two member rows are promoted by the dedicated reconciliation

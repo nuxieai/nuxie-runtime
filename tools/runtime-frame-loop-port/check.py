@@ -431,14 +431,27 @@ def check(
         adversarial = [
             str(value) for value in active_family.get("required_adversarial", [])
         ]
+        checklist_state = str(active_family.get("checklist_state", "candidate"))
+        if checklist_state not in {"planning", "candidate"}:
+            errors.append(
+                f"active owner family {family_id!r} has invalid checklist_state "
+                f"{checklist_state!r}"
+            )
         if not adversarial:
             errors.append(
                 f"active owner family {family_id!r} has no adversarial checklist"
             )
         for item in adversarial:
-            if checklist and f"- [x] {item}:" not in checklist:
+            completed = f"- [x] {item}:" in checklist
+            planned = f"- [ ] {item}:" in checklist
+            if checklist_state == "candidate" and not completed:
                 errors.append(
                     f"active owner-family checklist omits completed "
+                    f"adversarial row {item!r}"
+                )
+            elif checklist_state == "planning" and not (planned or completed):
+                errors.append(
+                    f"active owner-family checklist omits required "
                     f"adversarial row {item!r}"
                 )
 

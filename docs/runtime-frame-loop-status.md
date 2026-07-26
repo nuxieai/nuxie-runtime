@@ -75,9 +75,14 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 - Current dependency wave: FL-C. FL-B's frozen 45-file/eight-member mini-map
   remains implemented but pending reacceptance. FL-C consumes that
   implementation provisionally under the coordinator override. FL-C2 is
-  independently closed; the exact next lane is the five-file layer/state
-  occurrence family (FL-C3), beginning with a whole-family C++ walk and
-  closure checklist before production changes.
+  independently closed. The complete five-file layer/state family (FL-C3) has
+  been walked end to end and its pre-production checklist is
+  `docs/runtime-frame-loop-fl-c3-closure.md`. That walk corrected the old
+  retention wording: C++ retains an ordered state-definition collection, but
+  a layer occurrence dynamically owns only `any`, `current`, and
+  transition-source state occurrences. The exact next action is the coherent
+  five-file translation against that checklist, not a partial test-driven
+  slice.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
   mutable occurrence. Each occurrence retains a handle into the one authored
@@ -729,10 +734,11 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Read the complete five-file pinned-C++ layer/state-occurrence family and
-   commit its closure checklist before production changes (FL-C3):
-   `layer_state.cpp`, `state_instance.cpp`, `state_machine_layer.cpp`,
-   `system_state_instance.cpp`, and `nested_state_machine.cpp`.
+1. Port the complete five-file pinned-C++ layer/state-occurrence family
+   against `docs/runtime-frame-loop-fl-c3-closure.md`, including the private
+   `StateMachineLayerInstance` lifecycle subsection, focused filename
+   correspondence, adversarial differentials, and structural ratchets. Do not
+   publish a partial layer/nested/reset/interruption slice.
 2. Keep FL-B and FL-C1 rows pending until their independent acceptance.
    Performance remains verification evidence, never the source of a work
    slice.

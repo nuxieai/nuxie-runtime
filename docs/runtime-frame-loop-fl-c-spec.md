@@ -149,13 +149,23 @@ C++ files:
 
 Retention boundary:
 
-- each layer occurrence owns one stable ordered state-occurrence collection;
-- current, previous, waiting, from, and to identities point into retained
-  occurrences rather than copied descriptors;
+- each layer definition owns one stable ordered state-definition collection;
+- each layer occurrence owns only C++'s dynamically created `any`, `current`,
+  and transition-source (`stateFrom`) occurrences; it does not prebuild one
+  occurrence per definition;
+- current, source, transition, and waiting identities are retained typed
+  handles rather than copied definition/action/animation descriptors;
 - state entry/exit, transition interruption, reset, copy, and teardown follow
   the pinned initializer and visitation order.
 
 Member closed by the complete lane: `state_machine.layer`.
+
+The private `StateMachineLayerInstance` class lives inside
+`state_machine_instance.cpp:140-711`, so that subsection is a read-only
+supporting oracle for FL-C3 even though the whole
+`state_machine_instance.cpp` file row remains in FL-C5. Rust maps that private
+class to `state_machine/state_machine_layer_instance.rs`; this does not promote
+the later whole-instance row.
 
 ### FL-C4 — Listener actions, events, and focus dispatch (18 files)
 

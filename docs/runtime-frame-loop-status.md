@@ -36,6 +36,14 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   remains implemented but pending reacceptance. FL-C consumes that
   implementation provisionally under the coordinator override; its first
   lane is the 13-file `state_machine.inputs` owner family.
+- FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
+  owns the authored definition and `state_machine_input_instance.rs` owns the
+  mutable occurrence. Each occurrence retains a handle into the one authored
+  input arena and reads id/name/kind through it, matching pinned
+  `SMIInput::m_input`; only bool/number/trigger state is copied into the
+  occurrence. The two input files and the `state_machine.inputs` member remain
+  pending until the complete 13-file input/listener lane is translated and
+  independently accepted.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
   defined post-advance C++ result. No `Option<bool>` API break or

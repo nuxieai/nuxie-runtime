@@ -3747,9 +3747,12 @@ mod tests {
                 },
             ],
         };
-        let input_definition =
-            RuntimeStateMachineInput::new_number(1, Some("blend".to_owned()), 25.0);
-        let inputs = vec![StateMachineInputInstance::new(0, &input_definition)];
+        let input_definitions = Arc::new(vec![RuntimeStateMachineInput::new_number(
+            1,
+            Some("blend".to_owned()),
+            25.0,
+        )]);
+        let inputs = vec![StateMachineInputInstance::new(0, input_definitions)];
         let mut occurrence = BlendState1DInstance::new(&blend_state, &artboard, false);
 
         assert_eq!(occurrence.animations.len(), blend_state.animations.len());

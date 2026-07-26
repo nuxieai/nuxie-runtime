@@ -856,11 +856,8 @@ impl StateMachineInstance {
             .get(state_machine_index)
             .filter(|definition| std::ptr::eq(*definition, state_machine))
             .map(|_| Arc::clone(&artboard.state_machines));
-        let inputs = state_machine
-            .inputs
-            .iter()
-            .enumerate()
-            .map(|(index, input)| StateMachineInputInstance::new(index, input))
+        let inputs = (0..state_machine.inputs.len())
+            .map(|index| StateMachineInputInstance::new(index, Arc::clone(&state_machine.inputs)))
             .collect::<Vec<_>>();
         let bindable_numbers = state_machine
             .bindable_numbers

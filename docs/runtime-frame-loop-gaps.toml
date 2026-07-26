@@ -37,7 +37,7 @@ citations = [
   "rust:crates/nuxie-runtime/src/artboard.rs:390",
   "rust:crates/nuxie-runtime/src/artboard.rs:4119-4196",
   "rust:crates/nuxie-runtime/src/state_machine.rs:1492-2128",
-  "rust:crates/nuxie-runtime/src/state_machine.rs:3036-3628",
+  "rust:crates/nuxie-runtime/src/state_machine.rs:3036-3554",
 ]
 closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty/LinearAnimation/AnimationReset/BlendState owners without any displaced sidecar, definition clone, reset clone, copied blend payload, dropped definition, or per-occurrence empty fallback."
 

@@ -4396,15 +4396,18 @@ fn constraint_bounds(
                 return layout.constraint_bounds();
             }
         }
-        RuntimeConstraintBoundsKind::Text
+        RuntimeConstraintBoundsKind::Text => {
             if let (Some(runtime), Some(graph)) =
                 (artboard.runtime_file(), artboard.runtime_graph())
-                && let Some(bounds) =
-                    static_text_constraint_bounds(runtime, graph, artboard, component.local_id) =>
-        {
-            return bounds;
+            {
+                if let Some(bounds) =
+                    static_text_constraint_bounds(runtime, graph, artboard, component.local_id)
+                {
+                    return bounds;
+                }
+            }
         }
-        RuntimeConstraintBoundsKind::Default | RuntimeConstraintBoundsKind::Text => {}
+        RuntimeConstraintBoundsKind::Default => {}
     }
 
     // C++ `TransformComponent::constraintBounds()` defaults to an empty AABB.

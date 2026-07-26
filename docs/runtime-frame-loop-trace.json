@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "9ed13f9576c40ee4cf55411297534dcfb91662bbe4ac46255d0948472b927d9e",
+    "cpp_binary_sha256": "64092c748f8ad9302a6afd3a4743acc1c418f9cef046132f2c852ca9e278b810",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "3abc6fbfb1218752a02385fb8e42684abbc43b0765c95255eb98888cb4bfc89e",
-    "rust_coverage_sha256": "1e6c1e5cf14daa7ced67cc14f9897141582c80906a7fa52294d68c662884ce7f",
-    "rust_mechanism_coverage_sha256": "1dc48c47169ec84aad746fb74ccd1499ff029e1fc25b9d078af482f3948cb539",
-    "rust_steady_coverage_sha256": "222e76b487dcabd6b91b7756100df6ef28747a3caca0f43c420daf29ba7f3f2e"
+    "rust_binary_sha256": "2448cacbf3b5a75638bd437bc186444c387189ea4a1d299040f625c04786c231",
+    "rust_coverage_sha256": "31caea076742c983c434b5e67d1b2125f720b9e47cd48cac08cb1ded13553d43",
+    "rust_mechanism_coverage_sha256": "237f4da9e5d23438a4b957679f0c9ce40a31a63a93898a280e9db37e6e49da03",
+    "rust_steady_coverage_sha256": "9daf5ae5fd3f4bb080bb7a12a0c5745c8707d6e6744e1177a60e4342f9b46a3e"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -6357,16 +6357,6 @@
           "name": "<nuxie_runtime::state_machine::transition_bool_condition::RuntimeTransitionBoolCondition>::evaluate"
         }
       ],
-      "crates/nuxie-runtime/src/state_machine/transition_condition.rs": [
-        {
-          "count": 2,
-          "name": "<nuxie_runtime::state_machine::transition_condition::RuntimeTransitionCondition>::evaluate"
-        },
-        {
-          "count": 5,
-          "name": "<nuxie_runtime::state_machine::transition_condition::RuntimeTransitionCondition>::evaluate_direct_input"
-        }
-      ],
       "crates/nuxie-runtime/src/state_machine/transition_condition_op.rs": [
         {
           "count": 2,
@@ -6377,6 +6367,16 @@
         {
           "count": 5,
           "name": "<nuxie_runtime::state_machine::transition_input_condition::RuntimeTransitionInputCondition>::input_index"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/transition_viewmodel_condition.rs": [
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::state_machine::transition_viewmodel_condition::RuntimeTransitionCondition>::evaluate"
+        },
+        {
+          "count": 5,
+          "name": "<nuxie_runtime::state_machine::transition_viewmodel_condition::RuntimeTransitionCondition>::evaluate_direct_input"
         }
       ],
       "crates/nuxie-runtime/src/text.rs": [
@@ -7208,16 +7208,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 7174,
+    "file_count": 7180,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "181ce40d57d88d9d5ced537ab88382cf93dd3d55e18a44e13f976f21f5dfed06"
+    "sha256": "defed367946504e7e96d84391fdef9e6bb3f67d4bded14a61cbf55461daba84f"
   },
-  "rust_ref": "e75c6269ee16c5141399ecb029f19cefd1b385ec",
+  "rust_ref": "89ba87c989cc642dc6003172d76b126f595e590a",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7174,
+      "file_count": 7180,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "181ce40d57d88d9d5ced537ab88382cf93dd3d55e18a44e13f976f21f5dfed06"
+      "sha256": "defed367946504e7e96d84391fdef9e6bb3f67d4bded14a61cbf55461daba84f"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [

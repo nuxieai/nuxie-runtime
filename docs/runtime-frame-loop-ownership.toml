@@ -3293,8 +3293,8 @@ cpp_files = [
   "src/animation/transition_number_condition.cpp",
   "src/animation/transition_property_viewmodel_comparator.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/state_machine/transition_condition.rs"
-rust_anchor = "TransitionEvaluationContext"
+rust_file = "crates/nuxie-runtime/src/state_machine/transition_viewmodel_condition.rs"
+rust_anchor = "pub(super) enum RuntimeTransitionCondition"
 status = "pending"
 
 [[member]]

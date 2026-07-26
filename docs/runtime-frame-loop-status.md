@@ -14,18 +14,20 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   FL-C's corrected 49-file/eight-member lane map is
   `docs/runtime-frame-loop-fl-c-spec.md`; FL-C1 inputs/listener definitions is
   implemented with a green lane-boundary floor and pending independent
-  acceptance. FL-C2 transition conditions is active; its direct transition
-  owner, direct bool/number/trigger condition owners, focus condition, and
-  scripted condition have been split from the giant entry point into
-  filename-corresponding Rust modules. The focus and scripted moves preserve
-  the existing pinned behavior while putting their next semantic review on
-  the matching C++ ownership boundary. The remaining retained property and
-  ViewModel comparison implementation now lives in
-  `state_machine/transition_viewmodel_condition.rs`; the base
-  `transition_condition.rs` is only the shared dispatch boundary. Comparator
-  attachment, component/artboard property identity, and ViewModel bindable
-  identity now also live in their three filename-corresponding Rust modules
-  instead of `animation.rs`.
+  acceptance. FL-C2 transition conditions is active. Every one of its 12 C++
+  owners now has a filename-corresponding Rust module; `state_machine.rs` and
+  `transition_condition.rs` retain only shared dispatch/re-exports. The pinned
+  comparison matrix is represented directly: two integer comparands retain
+  exact `uint32` shape, trigger pairs and ViewModel-artboard literals are
+  admitted, artboard runtime properties can compare to ViewModel numbers,
+  `TransitionSelfComparator` accepts every bindable kind, and a successful
+  transition consumes the left ViewModel source for that layer
+  (`transition_viewmodel_condition.cpp:49-60,535-970,1038-1045,1066-1124`;
+  `transition_property_viewmodel_comparator.cpp:50-67`). The focused C++
+  probe, four-edge end-to-end differential matrix, existing 15-family
+  condition differential set, and runtime 509 / 509 are green. The complete
+  lane battery and independent acceptance remain pending, so no FL-C2 row is
+  promoted.
 - Stable-Rust Apple compatibility repair
   `95eb04b7cfb847f24ba77872bd8a0ee43da1af41` mechanically rewrites the
   experimental match guard in `constraint_bounds` without changing behavior.
@@ -691,10 +693,7 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Finish and floor the faithful RT-ED-007 nested transition-duration binding
-   correction inside the current state-machine owner.
-2. Resume FL-C2 from its direct transition/condition modules, translate the
-   remaining property/view-model/scripted condition owners, refresh trace and
-   evidence, and stop at the complete lane boundary for independent review.
-3. Keep FL-B and FL-C1 rows pending until independent acceptance. Performance
+1. Refresh FL-C2 trace/evidence, run its complete required floor, and publish
+   the immutable pending-verification candidate for independent review.
+2. Keep FL-B and FL-C1 rows pending until independent acceptance. Performance
    remains verification evidence, never the source of a work slice.

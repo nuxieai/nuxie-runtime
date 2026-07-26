@@ -54,8 +54,12 @@ files({
 })
 
 libdirs({
-    rive_runtime .. '/tests/out/%{cfg.buildcfg}',
     rive_runtime .. '/out/%{cfg.buildcfg}',
+    -- The canonical CI/local probe archive is the lean root build produced
+    -- with premake5_v2.lua + text + layout. A tests/out archive can carry
+    -- renderer/tools feature flags whose C++ class layout does not match this
+    -- probe and can emit valid JSON before crashing during teardown.
+    rive_runtime .. '/tests/out/%{cfg.buildcfg}',
     rive_runtime .. '/build/%{cfg.system}/bin/%{cfg.buildcfg}',
     dep_cache .. '/bin/%{cfg.buildcfg}',
     '/usr/local/lib',

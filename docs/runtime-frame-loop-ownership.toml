@@ -750,7 +750,7 @@ status = "pending"
 upstream = "src/animation/listener_types/listener_input_type_gamepad.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type_gamepad.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -766,7 +766,7 @@ status = "pending"
 upstream = "src/animation/listener_types/listener_input_type_semantic.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type_semantic.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -1777,7 +1777,7 @@ status = "pending"
 upstream = "src/inputs/gamepad_input.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/gamepad_input.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -1793,7 +1793,7 @@ status = "pending"
 upstream = "src/inputs/semantic_input.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/semantic_input.rs"]
 dynamically_reached = false
 status = "pending"
 

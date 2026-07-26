@@ -1165,7 +1165,7 @@ owner_class = "renderer"
 classification = "structural-mistranslation"
 ticket = "F-ED-11"
 fixture_id = "fed.loc_009.gpu_canvas_records"
-preliminary_disposition = "PR #54's exact WebGPU RSTB consumer and ownership correction is retained as historical evidence, but independent real-GPU verification found an unresolved physical shader-module error-scope regression. The canonical browser path also still crashes at luaG_indexerror/luaD_throw; its cause remains under investigation in internal Lua WebAssembly task 019f9f34-a75f-7a11-a580-e9f54e610d93 on branch levi/fix-wasm-lua-coroutine-resume, which uses short durable diagnostic checkpoints after repeated system errors. LOC-009 is frozen, not promotable or complete, and its reopened cycle has consumed nothing. A new production landing must preserve the prior file-owned ShaderAsset, target-0 whole-module WGSL plus mandatory target-16 BindingMap selection, fresh occurrence identity, exact explicit/omitted stage behavior, nil-and-continue failure semantics, and deletion of the invented target-1 GLSL cross-translation path."
+preliminary_disposition = "PR #54's exact WebGPU RSTB consumer and ownership correction is retained as historical evidence, but independent real-GPU verification found an unresolved physical shader-module error-scope regression. The canonical Chrome path also still aborts at luaG_indexerror/luaD_throw; its cause remains under investigation in replacement task 019f9f59-1ac6-7e32-b973-5deb6b457c05 (Diagnose browser Lua crash), which starts from verified origin/main fe0 in a clean worktree with read-only/minimal instrumentation and must not copy the prior dirty harness. LOC-009 is frozen, not promotable or complete, and its reopened cycle has consumed nothing. It may consume only a reviewed landed replacement SHA that preserves the prior file-owned ShaderAsset, target-0 whole-module WGSL plus mandatory target-16 BindingMap selection, fresh occurrence identity, exact explicit/omitted stage behavior, nil-and-continue failure semantics, and deletion of the invented target-1 GLSL cross-translation path."
 reproduction_sha256 = "1ba36c10117b17066ca0217fb17ce33b83d1b8c9246923ea0d83eb0599569eb1"
 historical_reproduction_sha256 = "7a2f4bbe72b607875db643c6507b6dc6681ac03ac1fc9f5b23eeb049b5e3f1cf"
 current_real_gpu_log_sha256 = "93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611"
@@ -1223,7 +1223,7 @@ status = "pending"
 reason = "The current repair cycle has no executor result. A fresh executor-green event is required after regression-reopened -> qualified -> mapped and a new production landing."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "Independent real-GPU verification found an unresolved physical shader-module error-scope regression after the historical PR #54 executor result. LOC-009 is not promotable or complete; it requires a new production landing after internal Lua WebAssembly repair task 019f9f34-a75f-7a11-a580-e9f54e610d93 on branch levi/fix-wasm-lua-coroutine-resume."
+reason = "Independent real-GPU verification found an unresolved physical shader-module error-scope regression after the historical PR #54 executor result. LOC-009 is frozen, not promotable or complete, and may consume only a reviewed landed replacement SHA after clean-worktree diagnosis task 019f9f59-1ac6-7e32-b973-5deb6b457c05."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
@@ -1247,7 +1247,7 @@ evidence = "The exact post-review code checkpoint 22e490 preserves C++ last-wins
 [[defect.history]]
 state = "regression-reopened"
 actor = "independent-orchestrator"
-evidence = "Independent real-GPU verification found an unresolved physical shader-module error-scope regression after PR #54. The historical 7f1450dc repair remains evidence, but LOC-009 is not promotable or complete and requires a new production landing after internal Lua WebAssembly repair task 019f9f34-a75f-7a11-a580-e9f54e610d93 on branch levi/fix-wasm-lua-coroutine-resume."
+evidence = "Independent real-GPU verification found an unresolved physical shader-module error-scope regression after PR #54. The historical 7f1450dc repair remains evidence, but LOC-009 is frozen, not promotable or complete, and may consume only a reviewed landed replacement SHA after clean-worktree diagnosis task 019f9f59-1ac6-7e32-b973-5deb6b457c05."
 [defect.cpp_result]
 status = "pass"
 command = "git -C /Users/levi/dev/oss/rive-runtime diff f4bb3025e263ad1a646ef6971358577a0aa6bfa2..d788e8ec6e8b598526607d6a1e8818e8b637b60c -- src/assets/shader_asset.cpp src/lua/renderer/lua_gpu.cpp renderer/include/rive/renderer/ore/ore_context_wgpu.hpp renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp renderer/src/ore/ore_binding_map.cpp; pinned source and unchanged unit-fixture audit"
@@ -1266,8 +1266,8 @@ command = "GPU_CANVAS_GPU=1 PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKE
 evidence = "Historical result only: at clean Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c consuming runtime e72323c808b91d706ba3b745396beaca7accd69a, the unchanged P14-C01 ordinary required-WebGPU command passed 4/4 in 1.6 minutes, exit 0. Retained console SHA-256 c2324d04cf1baa6ac024ae3b4f0607ca3a4ad64ecace7ac67e612707480527f0; retained complete report/results archive SHA-256 515f53c5710c8069bf60f4c64c64568c219ee3cfb242fbe8e59846b1c0f96bd3. PR #54 merged the corrective runtime repair at 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee. Independent later real-GPU verification found an unresolved physical shader-module error-scope regression; this historical pass does not authorize promotion or closure."
 [defect.editor_result]
 status = "fail"
-command = "canonical browser LOC-009 reproduction tracked by internal Lua WebAssembly task 019f9f34-a75f-7a11-a580-e9f54e610d93 on branch levi/fix-wasm-lua-coroutine-resume"
-evidence = "The still-valid canonical browser path crashes at luaG_indexerror/luaD_throw. Cause remains under investigation; the focused dependency task uses short durable diagnostic checkpoints after repeated system errors. LOC-009 is frozen and the reopened repair cycle has consumed no runtime or superproject landing."
+command = "canonical Chrome LOC-009 reproduction tracked by replacement clean-worktree task 019f9f59-1ac6-7e32-b973-5deb6b457c05 (Diagnose browser Lua crash)"
+evidence = "The sole authoritative browser observation is the canonical Chrome abort at luaG_indexerror/luaD_throw. Cause remains under investigation. The replacement task must verify origin/main fe0, begin read-only with minimal instrumentation, and must not copy the prior dirty harness. LOC-009 is frozen, its reopened cycle has consumed no runtime or superproject landing, and it may consume only a reviewed landed replacement SHA."
 
 [[defect]]
 id = "LOC-011"

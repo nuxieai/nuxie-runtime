@@ -15,8 +15,8 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   `e72323c808b91d706ba3b745396beaca7accd69a`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
 - closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`,
-  `LOC-004`, and `LOC-006`;
-- open rows: 19;
+  `LOC-004`, `LOC-006`, and `LOC-014`;
+- open rows: 18;
 - formal/structured product children in the landed Editor snapshot: 9;
 - candidate-linked product children: 15;
 - union: 23, with only `P09-C01` overlapping;
@@ -61,7 +61,7 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   d788 produces 0.200000003 at `advance(0)` and 0.5 after another 0.5 seconds.
   Non-main `dd3be99c` appears to implement the seam but is not an ancestor of
   fe0/main; the uncommitted Scene patch has no landing claim;
-- defects closed since the preceding Q0 report: 1;
+- defects closed since the preceding Q0 report: 2;
 - serialized evidence-only closures: `LOC-006`, `LOC-014`, `LOC-011`,
   `RT-ED-003`, then `LOC-019`;
 - parked repair lane: resume `LOC-009` diagnosis only in a different reliable

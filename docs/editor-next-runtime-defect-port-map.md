@@ -378,7 +378,7 @@ fixture in `F-ED-00`.
 | `LOC-011` | real product symptom, owner unproven | inspect authored text, live VM value, post-bind target, shaped runs, then pixels |
 | `LOC-012` | current renderer differential | compare the supported Rust WebGPU result with pinned C++ only after text/feather rows are separated |
 | `LOC-013` | text/font-pipeline candidate, exact stage unproven | same font bytes, axes, glyph IDs, advances, and outlines through C++ and Rust |
-| `LOC-014` | high-confidence mechanism divergence; symptom attribution still needs the oracle | compare Rust feather image plan with C++ Feather/ShapePaint/renderer-LUT ownership; do not tune constants |
+| `LOC-014` | closed stale-oracle observation | exact 180x124 clockwise Feather replay matches pinned C++ and Rust in bounds, atlas plan, and every pixel; do not tune constants |
 | `LOC-015` | stale ABI 1.5 artifact evidence | publish ABI 1.6, pin URL/checksum, rerun |
 | `LOC-016` | source implementation already present; publication gap | publish ABI 1.6 typed animation selection and integrate it |
 | `LOC-017` | invalid old native capture | rerun ABI 1.6 with typed player/time and production host composition |

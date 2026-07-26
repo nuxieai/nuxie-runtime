@@ -202,8 +202,15 @@ driver = "cpp_probe/registry.cpp"
 id = "fed.loc_014.feather_owner"
 defect_id = "LOC-014"
 kind = "browser-renderer"
-status = "registered"
-driver = "pending:F-ED-10"
+status = "qualified"
+driver = "tools/editor-next-runtime-defects/check-loc-014-feather.sh"
+stimulus_files = [
+  { root = "rive", path = "src/shapes/paint/feather.cpp", sha256 = "dad5d7965fa3dd9330f9953883920eaf1129a22e4e3a795096d63b139acae3d5" },
+  { root = "rive", path = "renderer/src/draw.cpp", sha256 = "1f136704f4297906d8f45f12bd7ff8778f6e3e7d96b3ba045023eaa93e167caa" },
+  { root = "rive", path = "renderer/src/render_context.cpp", sha256 = "0c8ce1652ccaa3e4d6effe1e7d86cfd5f781c1e596f3bcab3cdd16873ab90ef5" },
+  { root = "repo", path = "crates/nuxie-renderer/src/draw.rs", sha256 = "b46b0efe731ba3213bfbe19713adc849275a43616ed07d642250e3b8b51bb386" },
+  { root = "repo", path = "crates/nuxie-renderer/src/lib.rs", sha256 = "7d6c60c9ebb2cacc2ea93c32920561f5f40d5ef1e9699ff5627032d77d390ec2" },
+]
 
 [[fixture]]
 id = "fed.loc_015.apple_abi_1_6_draw"

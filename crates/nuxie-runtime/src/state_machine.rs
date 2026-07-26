@@ -1,5 +1,6 @@
 use crate::animation::{
-    AnimationLoop, LinearAnimationInstance, RuntimeInterpolator, RuntimeLinearAnimation,
+    AnimationLoop, LinearAnimationInstance, RuntimeInterpolator, RuntimeKeyedPropertyTarget,
+    RuntimeLinearAnimation,
 };
 use crate::components::TransformProperty;
 use crate::data_bind_graph::{
@@ -2622,60 +2623,64 @@ impl AnimationReset {
             let use_baseline = use_first_as_baseline && animation_order == 0;
             for keyed_object in animation.keyed_objects.iter() {
                 for keyed_property in &keyed_object.keyed_properties {
-                    if !keyed_property.double_property && !keyed_property.color_property {
-                        continue;
-                    };
                     let key = (keyed_object.target_local_id, keyed_property.property_key);
-                    if seen.contains(&key) {
-                        continue;
-                    }
-                    seen.push(key);
-                    if keyed_property.double_property {
-                        let value = if use_baseline {
-                            keyed_property.key_frames.first().map(|frame| frame.value)
-                        } else {
-                            current_animation_reset_double_value(
-                                artboard,
-                                keyed_object.target_local_id,
-                                keyed_property,
-                            )
-                        };
-                        if let Some(value) = value {
-                            entries.push(AnimationResetEntry::Double {
-                                local_id: keyed_object.target_local_id,
-                                property_key: keyed_property.property_key,
-                                transform_property: keyed_property.transform_property,
-                                value,
-                            });
+                    match &keyed_property.target {
+                        RuntimeKeyedPropertyTarget::Double { transform_property } => {
+                            if seen.contains(&key) {
+                                continue;
+                            }
+                            seen.push(key);
+                            let value = if use_baseline {
+                                keyed_property.first_double_value()
+                            } else {
+                                current_animation_reset_double_value(
+                                    artboard,
+                                    keyed_object.target_local_id,
+                                    keyed_property.property_key,
+                                    *transform_property,
+                                )
+                            };
+                            if let Some(value) = value {
+                                entries.push(AnimationResetEntry::Double {
+                                    local_id: keyed_object.target_local_id,
+                                    property_key: keyed_property.property_key,
+                                    transform_property: *transform_property,
+                                    value,
+                                });
+                            }
                         }
-                    } else if keyed_property.color_property {
-                        let value = if use_baseline {
-                            keyed_property
-                                .color_key_frames
-                                .first()
-                                .map(|frame| frame.value)
-                        } else {
-                            Some(
-                                if keyed_property.solid_color_property {
-                                    artboard.solid_color_value(keyed_object.target_local_id)
-                                } else {
-                                    artboard.color_property(
-                                        keyed_object.target_local_id,
-                                        keyed_property.property_key,
-                                    )
-                                }
-                                .unwrap_or(keyed_property.color_source_value),
-                            )
-                        };
-                        if let Some(value) = value {
-                            entries.push(AnimationResetEntry::Color {
-                                local_id: keyed_object.target_local_id,
-                                property_key: keyed_property.property_key,
-                                solid_color_property: keyed_property.solid_color_property,
-                                data_bind_observed: keyed_property.data_bind_observed,
-                                value,
-                            });
+                        RuntimeKeyedPropertyTarget::Color {
+                            solid_color_property,
+                            data_bind_observed,
+                        } => {
+                            if seen.contains(&key) {
+                                continue;
+                            }
+                            seen.push(key);
+                            let value = if use_baseline {
+                                keyed_property.first_color_value()
+                            } else if *solid_color_property {
+                                artboard.solid_color_value(keyed_object.target_local_id)
+                            } else {
+                                artboard.color_property(
+                                    keyed_object.target_local_id,
+                                    keyed_property.property_key,
+                                )
+                            };
+                            if let Some(value) = value {
+                                entries.push(AnimationResetEntry::Color {
+                                    local_id: keyed_object.target_local_id,
+                                    property_key: keyed_property.property_key,
+                                    solid_color_property: *solid_color_property,
+                                    data_bind_observed: *data_bind_observed,
+                                    value,
+                                });
+                            }
                         }
+                        RuntimeKeyedPropertyTarget::Bool
+                        | RuntimeKeyedPropertyTarget::Uint
+                        | RuntimeKeyedPropertyTarget::String
+                        | RuntimeKeyedPropertyTarget::Callback { .. } => {}
                     }
                 }
             }
@@ -2737,16 +2742,13 @@ impl AnimationReset {
 fn current_animation_reset_double_value(
     artboard: &ArtboardInstance,
     local_id: usize,
-    keyed_property: &crate::animation::RuntimeKeyedProperty,
+    property_key: u16,
+    transform_property: Option<TransformProperty>,
 ) -> Option<f32> {
-    if let Some(property) = keyed_property.transform_property {
+    if let Some(property) = transform_property {
         artboard.transform_property(local_id, property)
     } else {
-        Some(
-            artboard
-                .double_property(local_id, keyed_property.property_key)
-                .unwrap_or(keyed_property.double_source_value),
-        )
+        artboard.double_property(local_id, property_key)
     }
 }
 

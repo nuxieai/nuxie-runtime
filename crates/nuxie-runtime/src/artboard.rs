@@ -2226,11 +2226,12 @@ impl ArtboardInstance {
         for animation in &mut linear_animations {
             for keyed_object in Arc::make_mut(&mut animation.keyed_objects) {
                 for keyed_property in &mut keyed_object.keyed_properties {
-                    keyed_property.data_bind_observed = artboard_data_bind_source_queues
-                        .observes_target_property(
+                    keyed_property.target.set_data_bind_observed(
+                        artboard_data_bind_source_queues.observes_target_property(
                             keyed_object.target_local_id,
                             keyed_property.property_key,
-                        );
+                        ),
+                    );
                 }
             }
         }
@@ -10511,7 +10512,10 @@ fn apply_authored_nested_input_values(
 mod tests {
     use super::*;
     use crate::Mat2D;
-    use crate::animation::{RuntimeKeyFrameCallback, RuntimeKeyedObject, RuntimeKeyedProperty};
+    use crate::animation::{
+        RuntimeKeyFrame, RuntimeKeyFrameCallback, RuntimeKeyedObject, RuntimeKeyedProperty,
+        RuntimeKeyedPropertyTarget,
+    };
     use crate::components::{
         DataBindHandle, RuntimeComponentCapabilities, SoloMappingWork, TransformRuntimeState,
         reset_solo_mapping_work, solo_mapping_work,
@@ -12763,36 +12767,23 @@ mod tests {
                 keyed_properties: vec![RuntimeKeyedProperty {
                     global_id: 2,
                     property_key: 0,
-                    transform_property: None,
-                    double_property: false,
-                    double_source_value: 0.0,
-                    color_property: false,
-                    solid_color_property: false,
-                    data_bind_observed: false,
-                    color_source_value: 0,
-                    bool_property: false,
-                    bool_source_value: false,
-                    uint_property: false,
-                    string_property: false,
-                    callback_event: Some(StateMachineReportedEvent {
-                        event_local_index: 0,
-                        event_core_type: 0,
-                        name: Some("callback".to_owned()),
-                        url: None,
-                        target: None,
-                        string_properties: Vec::new(),
-                        context: None,
-                        seconds_delay: 0.0,
-                    }),
-                    key_frames: Vec::new(),
-                    color_key_frames: Vec::new(),
-                    bool_key_frames: Vec::new(),
-                    uint_key_frames: Vec::new(),
-                    string_key_frames: Vec::new(),
-                    callback_key_frames: vec![RuntimeKeyFrameCallback {
+                    target: RuntimeKeyedPropertyTarget::Callback {
+                        event: Some(StateMachineReportedEvent {
+                            event_local_index: 0,
+                            event_core_type: 0,
+                            name: Some("callback".to_owned()),
+                            url: None,
+                            target: None,
+                            string_properties: Vec::new(),
+                            context: None,
+                            seconds_delay: 0.0,
+                        }),
+                    },
+                    key_frames: vec![RuntimeKeyFrame::Callback(RuntimeKeyFrameCallback {
                         global_id: 3,
                         frame: 1,
-                    }],
+                        seconds: 1.0,
+                    })],
                 }],
             }]
         } else {

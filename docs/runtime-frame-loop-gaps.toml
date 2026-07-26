@@ -9,12 +9,16 @@ decision = []
 [[gap]]
 id = "FL-G01"
 status = "open"
-mechanism = "KeyFrame seconds are represented separately from the authored keyframe values in the current retained-seconds experiment; the complete KeyFrame owner translation must decide the exact Rust owner."
+mechanism = "FL-B1 now mirrors the C++ KeyFrame owner: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, and one type-safe target enum binds CoreRegistry's single property dispatch. The former read-time fps calculation, six parallel frame vectors, property-family booleans, and import-time source snapshots are deleted. The gap remains open only until the complete FL-B owner family is independently verified."
 citations = [
   "cpp:src/animation/keyframe.cpp:10",
-  "rust:crates/nuxie-runtime/src/animation.rs:1055",
+  "cpp:src/importers/keyed_property_importer.cpp:13-17",
+  "cpp:src/animation/keyed_property.cpp:15-52",
+  "rust:crates/nuxie-runtime/src/animation.rs:329-331",
+  "rust:crates/nuxie-runtime/src/animation.rs:1022-1064",
+  "rust:crates/nuxie-runtime/src/animation.rs:1338-1421",
 ]
-closure = "FL-B either lands the complete C++ KeyFrame owner with retained seconds or removes the experiment."
+closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty owner without any displaced sidecar."
 
 [[gap]]
 id = "FL-G02"
@@ -198,6 +202,24 @@ max_occurrences = 0
 id = "runtime_path_composer_schedule_sidecar"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\b(?:path_composer_order|path_composer_dirt|pending_settlement_component_locals)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "keyframe_read_time_seconds"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+seconds\\s*\\(\\s*&self\\s*,\\s*fps"
+max_occurrences = 0
+
+[[ratchet]]
+id = "keyed_property_parallel_frame_vectors"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\b(?:color_key_frames|bool_key_frames|uint_key_frames|string_key_frames|callback_key_frames)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "keyed_property_family_sidecars"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "\\b(?:double_source_value|color_source_value|bool_source_value|double_property|color_property|bool_property|uint_property|string_property|callback_event)\\s*:"
 max_occurrences = 0
 
 [[ratchet]]

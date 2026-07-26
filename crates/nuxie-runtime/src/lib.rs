@@ -21,9 +21,9 @@ pub mod retained_data_bind;
 pub mod view_model_cell;
 
 pub use animation::{
-    LinearAnimationInstance, RuntimeKeyFrameBool, RuntimeKeyFrameCallback, RuntimeKeyFrameColor,
-    RuntimeKeyFrameDouble, RuntimeKeyFrameString, RuntimeKeyFrameUint, RuntimeKeyedObject,
-    RuntimeKeyedProperty, RuntimeLinearAnimation,
+    LinearAnimationInstance, RuntimeKeyFrame, RuntimeKeyFrameBool, RuntimeKeyFrameCallback,
+    RuntimeKeyFrameColor, RuntimeKeyFrameDouble, RuntimeKeyFrameString, RuntimeKeyFrameUint,
+    RuntimeKeyedObject, RuntimeKeyedProperty, RuntimeKeyedPropertyTarget, RuntimeLinearAnimation,
 };
 pub use artboard::{
     ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,

@@ -4,7 +4,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-B pre-translation boundary committed. FL-A was independently
+- Phase: FL-B1 KeyFrame/keyed-definition ownership translated and locally
+  gated; FL-A was independently
   accepted and promoted at
   `f86d5ba0146697abc996310c62fa45e1f053144b`; exact main
   `e72323c808b91d706ba3b745396beaca7accd69a` was consumed without overlap at
@@ -16,13 +17,41 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   owners plus all six FL-A Component rows); 28 later-wave rows remain.
 - Open mechanism gaps: 7 / 9. FL-G02 is closed; FL-G06 remained closed.
 - Current dependency wave: FL-B. Its frozen 45-file/eight-member mini-map is
-  `docs/runtime-frame-loop-fl-b-spec.md`; production has not started.
+  `docs/runtime-frame-loop-fl-b-spec.md`; FL-B1 is implemented while every
+  FL-B row remains pending until whole-wave independent verification.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
   defined post-advance C++ result. No `Option<bool>` API break or
   indeterminate-memory emulation is permitted.
 - Current FL-A landing: promotion
   `f86d5ba0146697abc996310c62fa45e1f053144b`, published on `levi/fl-a`.
+
+## FL-B1 KeyFrame/keyed-definition evidence
+
+- Pinned ownership translated from `keyframe.cpp`,
+  `keyed_property.cpp`, `keyed_object.cpp`, and
+  `keyed_property_importer.cpp`: every concrete KeyFrame occurrence retains
+  attachment-time seconds and one KeyedProperty owns one insertion-ordered
+  concrete-frame sequence.
+- Rust CoreRegistry binding is one `RuntimeKeyedPropertyTarget` enum, not
+  parallel family flags. The old six frame vectors, read-time
+  `seconds(..., fps)`, family booleans, and import-time double/color/bool
+  fallback snapshots are deleted.
+- Zero-fps seconds use the same float division as pinned C++ (`0/0 -> NaN`,
+  nonzero/0 -> infinity); no Rust-only zero guard remains.
+- Focused evidence covers retained seconds after fps mutation, mixed concrete
+  owner order, duplicate/exact-offset binary search, effective bound values,
+  full-mix lazy reads, and uint/id non-bindability.
+- Source-bound trace refreshed on the candidate: canonical
+  `keyframe_double_apply_steps` remains exactly 124 / 124 C++/Rust. The trace
+  harness now counts the single target-dispatch instantiation and excludes
+  its partial-mix current-value closure.
+- Local floors: runtime 484 / 484; public facade 146 / 146; probe-armed
+  workspace including C++ probe 726 / 726; ordinary and scripted golden each
+  317 / 317 entries and 647 / 647 segments with zero divergences; all 24
+  checker/capture/summarizer controls; structural checker 338 files,
+  75 members, 9 gaps, and all three new FL-B1 zero-ratchets green. Rows and
+  FL-G01 remain pending/open until whole-wave independent acceptance.
 
 ## FL-0 evidence
 
@@ -448,11 +477,12 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Commit the frozen FL-B mini-map and FLR-3 `did_loop=false` adaptation
-   evidence before production changes.
-2. Execute FL-B1 through FL-B4 from
-   `docs/runtime-frame-loop-fl-b-spec.md`, deleting each displaced Rust owner
-   path in the same lane.
+1. Execute FL-B2 LinearAnimation definition/occurrence ownership from
+   `docs/runtime-frame-loop-fl-b-spec.md`, preserving the approved safe
+   pre-advance `did_loop=false` binding and every defined C++ post-advance
+   transition.
+2. Execute FL-B3 reset factory lifecycle and FL-B4 blend ownership, deleting
+   each displaced Rust owner path in the same lane.
 3. Run the complete unchanged floor and one canonical whole-corpus FL-B
    checkpoint. Performance remains verification evidence, never the source of
    a work slice.

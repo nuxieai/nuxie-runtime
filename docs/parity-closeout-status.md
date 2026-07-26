@@ -1007,22 +1007,25 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** port the complete five-file pinned-C++ layer/state
-occurrence family against the committed whole-family checklist
-`docs/runtime-frame-loop-fl-c3-closure.md` (FL-C3), including the private
-layer-occurrence lifecycle, adversarial differentials, and structural
-ratchets; do not publish a partial layer/nested/reset/interruption slice. The
-source walk corrected the old retention wording: C++ retains ordered state
-definitions, while each layer occurrence dynamically owns only `any`,
-`current`, and transition-source occurrences. Exact FL-C2 candidate
+**Canonical NEXT:** publish the complete five-file layer/state-occurrence
+family implemented at semantic commit
+`93a902558ad9860e1ecaeeef8e710223841e2dca` against
+`docs/runtime-frame-loop-fl-c3-closure.md` (FL-C3), then obtain one independent
+whole-family verdict before any FL-C4 production edit. The exact source walk,
+adversarial differentials, structural ratchets, and once-per-candidate
+non-performance battery are closed; no partial layer/nested/reset/interruption
+slice was submitted and no row is self-promoted. Active publication branch is
+`levi/fl-c`; there is no PR. Exact FL-C2 candidate
 `7546f4f15b05e582c62aa52ecc93430a7048e143` passed independent Standards and
 Spec review with no findings; its 12 mapped frame-loop files, three importer
 rows, and two member rows are promoted by the dedicated reconciliation
-commit. The corrected-family canonical hot-loop checkpoint remains durably
-recorded at 1.661x C++, so the final 1.0x program requirement stays open
-without turning performance into the implementation queue. FL-B and FL-C1
-rows remain pending reacceptance/acceptance. Listener groups remain in scope
-beside their actual FL-C4 invocation and FL-E TextInput dependencies.
+commit. User direction on 2026-07-26 defers all further timing until every
+mapped FL-A-through-FL-E code row is ported and the complete
+correctness/structure floor is green. The historical 1.661x checkpoint remains
+context and the final 1.0x requirement remains open, but performance is not a
+family gate or implementation queue. FL-B and FL-C1 rows remain pending
+reacceptance/acceptance. Listener groups remain in scope beside their actual
+FL-C4 invocation and FL-E TextInput dependencies.
 
 ## Next queue (top = next; orchestrator maintains)
 
@@ -1038,9 +1041,10 @@ beside their actual FL-C4 invocation and FL-E TextInput dependencies.
    falsely promoting FL-B. Execute FL-C1 through FL-C5 from the frozen
    corrected 49-file/eight-member spec
    `docs/runtime-frame-loop-fl-c-spec.md`, followed
-   by dependency-ordered Artboard/DataBind and live-draw owner waves. Measure
-   the whole corpus only after a complete wave. The sorted slow-scene list is
-   no longer the implementation queue.
+   by dependency-ordered Artboard/DataBind and live-draw owner waves. Run the
+   canonical whole-corpus measurement only after every mapped FL-A-through-FL-E
+   code row is ported and the complete correctness/structure floor is green.
+   The sorted slow-scene list is no longer the implementation queue.
 2. Independent orchestrator verification may promote completed #RD-1
    correspondence rows from `pending-verification`. #B-6 is complete; the
    next ordinary closeout-spine implementation item after the frame-loop port

@@ -12,7 +12,7 @@ fl_b_verification = "pending-reacceptance"
 [active_owner_family]
 id = "FL-C3-layer-state-occurrences"
 checklist = "docs/runtime-frame-loop-fl-c3-closure.md"
-checklist_state = "planning"
+checklist_state = "candidate"
 cpp_files = [
   "src/animation/layer_state.cpp",
   "src/animation/state_instance.cpp",
@@ -970,7 +970,10 @@ status = "pending"
 upstream = "src/animation/state_machine_instance.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/state_machine/instance.rs",
+  "crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -978,10 +981,7 @@ status = "pending"
 upstream = "src/animation/state_machine_layer.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = [
-  "crates/nuxie-runtime/src/state_machine/state_machine_layer.rs",
-  "crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs",
-]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/state_machine_layer.rs"]
 dynamically_reached = false
 status = "pending"
 

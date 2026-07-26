@@ -163,6 +163,30 @@ The candidate checker must have injected negative controls for:
 
 Use focused tests while editing. Run the expensive runtime/workspace-probe,
 ordinary/scripted golden, renderer pixel, ABI, size, format/lint, structural,
-and performance floors once after every checklist row is closed on one frozen
-candidate. Publish one immutable SHA for one independent whole-family verdict;
-do not submit a partial layer, nested, reset, or transition-interruption slice.
+and packaging floors once after every checklist row is closed on one frozen
+candidate. Performance is deliberately deferred until every mapped
+FL-A-through-FL-E code row is ported and the complete correctness/structure
+floor is green. Publish one immutable SHA for one independent whole-family
+verdict; do not submit a partial layer, nested, reset, or
+transition-interruption slice.
+
+The complete semantic translation is
+`93a902558ad9860e1ecaeeef8e710223841e2dca`. Its once-per-candidate
+non-performance floor is green:
+
+- runtime 514 / 514;
+- probe-armed workspace and pinned-C++ probes 742 / 742;
+- ordinary and scripted golden each 317 / 317 entries and 647 / 647 segments,
+  zero divergences;
+- same-runner pixel corpus 1,468 / 1,468, 1,370 byte-exact, zero divergences;
+- C API, native Apple, lint, format, and diff checks;
+- committed-tree size 8,034,424 bytes without scripting and 8,935,528 bytes
+  with scripting, both below the 9 MiB limit;
+- Apple XCFramework build/package/ABI/header/C/Swift checks, checksum
+  `a12debbaf9a81590bf7d79056018f3929c109c8c371dee3cf62352afa66935c5`;
+- structural checker and all eight injected negative controls.
+
+The review packet is this checklist plus its direct C++ citations, focused
+adversarial tests, structural ratchets, exact pushed candidate SHA, and the
+gate results above. All five file rows and `state_machine.layer` remain
+pending-verification until the independent verdict.

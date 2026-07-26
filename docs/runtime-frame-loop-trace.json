@@ -9,23 +9,23 @@
       "spotify_kids_demo": 3216
     },
     "rust": {
-      "advance_blend_mode": 696,
-      "ai_assitant": 225170,
-      "align_target": 6544,
-      "animated_clipping": 2890,
+      "advance_blend_mode": 697,
+      "ai_assitant": 225187,
+      "align_target": 6546,
+      "animated_clipping": 2891,
       "animation_reset_cases": 3188,
-      "spotify_kids_demo": 25237
+      "spotify_kids_demo": 25239
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "1cda2ad32fa45bde599cd6ea9a41723a7dd3f4263307ed1166e1f68b09e2b622",
+    "cpp_binary_sha256": "263d37957a997617a90c137cb3b6853f93758c6b494b5f8c785b0bc05e5f4432",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "64248aa6d94e382757c08056d22c66afbc4299a198d2dcd5515903dea8cefdc8",
-    "rust_coverage_sha256": "730cd554d22c4c4a0f7944fd77001ff5c944718aace85ae5aa4457848f7f11c6",
-    "rust_mechanism_coverage_sha256": "197bcd40dde387df24e52dd2bcadad89b06f032793642d113df333526375c4c6",
-    "rust_steady_coverage_sha256": "3bb218a99ea4bdc6a02ddd1493e662fd07e4fc7f9688577243b0a10d23104626"
+    "rust_binary_sha256": "7ab122c01ab6586e9bccf06d2fc901cdcc84d132cdfce8b00fbb09270e8ca3b5",
+    "rust_coverage_sha256": "8d263d50e8dc2cdc0975eeb151ff50c0f9ca60b78c238df184d182a8c4a30b97",
+    "rust_mechanism_coverage_sha256": "b257293b51712ef73958fda12e09c1f1792c453b655b2ada74a405dad03306e4",
+    "rust_steady_coverage_sha256": "008407e6f6e871369e62dc6629e68750a97320d08c444e8870dba63c90c86427"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -2133,8 +2133,16 @@
           "name": "<nuxie_runtime::animation::LinearAnimationInstance>::animation_handle"
         },
         {
+          "count": 50,
+          "name": "<nuxie_runtime::animation::LinearAnimationInstance>::animation_index"
+        },
+        {
           "count": 33,
           "name": "<nuxie_runtime::animation::LinearAnimationInstance>::apply"
+        },
+        {
+          "count": 24,
+          "name": "<nuxie_runtime::animation::LinearAnimationInstance>::clear_spilled_time"
         },
         {
           "count": 38,
@@ -2155,6 +2163,10 @@
         {
           "count": 27,
           "name": "<nuxie_runtime::animation::LinearAnimationInstance>::new"
+        },
+        {
+          "count": 27,
+          "name": "<nuxie_runtime::animation::LinearAnimationInstance>::prepare_key_frame_data_binds"
         },
         {
           "count": 47,
@@ -2285,7 +2297,7 @@
           "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::definition_index"
         },
         {
-          "count": 2,
+          "count": 52,
           "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::index"
         },
         {
@@ -6028,6 +6040,10 @@
         },
         {
           "count": 1,
+          "name": "<nuxie_runtime::state_machine::BlendState1DInstance>::for_each_animation_instance_mut::<<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::prepare_key_frame_data_binds::{closure#0}>"
+        },
+        {
+          "count": 1,
           "name": "<nuxie_runtime::state_machine::BlendState1DInstance>::new"
         },
         {
@@ -6072,6 +6088,10 @@
         },
         {
           "count": 2,
+          "name": "<nuxie_runtime::state_machine::BlendStateDirectInstance>::for_each_animation_instance_mut::<<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::prepare_key_frame_data_binds::{closure#0}>"
+        },
+        {
+          "count": 2,
           "name": "<nuxie_runtime::state_machine::BlendStateDirectInstance>::new"
         },
         {
@@ -6091,108 +6111,12 @@
           "name": "<nuxie_runtime::state_machine::RuntimeBlendAnimationHandle>::new"
         },
         {
-          "count": 52,
-          "name": "<nuxie_runtime::state_machine::RuntimeLayerState>::perform_fire_actions"
-        },
-        {
-          "count": 52,
-          "name": "<nuxie_runtime::state_machine::RuntimeLayerState>::perform_listener_actions"
-        },
-        {
-          "count": 1,
-          "name": "<nuxie_runtime::state_machine::RuntimeLayerState>::resets_blend_values"
-        },
-        {
-          "count": 77,
-          "name": "<nuxie_runtime::state_machine::RuntimeLayerState>::uses_random_transition_selection"
-        },
-        {
           "count": 33,
           "name": "<nuxie_runtime::state_machine::RuntimeScheduledListenerActionTargetsMut>::evaluation_context"
         },
         {
-          "count": 269,
+          "count": 295,
           "name": "<nuxie_runtime::state_machine::RuntimeScheduledListenerActionTargetsMut>::reborrow"
-        },
-        {
-          "count": 31,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance"
-        },
-        {
-          "count": 31,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance_current_animation"
-        },
-        {
-          "count": 31,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance_current_animation::{closure#0}"
-        },
-        {
-          "count": 4,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance_current_animation::{closure#1}"
-        },
-        {
-          "count": 1,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance_current_animation::{closure#2}"
-        },
-        {
-          "count": 31,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance_key_frame_data_binds"
-        },
-        {
-          "count": 31,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance_transition_source_animation"
-        },
-        {
-          "count": 57,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::apply_animations"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::change_state"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::change_state::{closure#0}"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::clear_transition_source"
-        },
-        {
-          "count": 33,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::current_transition_animation"
-        },
-        {
-          "count": 234,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::has_transition_source"
-        },
-        {
-          "count": 171,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::is_transitioning"
-        },
-        {
-          "count": 57,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::prepare_key_frame_data_binds"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::refresh_current_animation"
-        },
-        {
-          "count": 26,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::refresh_current_animation::{closure#0}"
-        },
-        {
-          "count": 154,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::try_change_state"
-        },
-        {
-          "count": 77,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::update_state"
-        },
-        {
-          "count": 31,
-          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::update_transition_mix"
         },
         {
           "count": 2,
@@ -6209,10 +6133,6 @@
         {
           "count": 104,
           "name": "nuxie_runtime::state_machine::perform_state_machine_fire_actions"
-        },
-        {
-          "count": 26,
-          "name": "nuxie_runtime::state_machine::take_current_animation_instances"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/bindables.rs": [
@@ -6295,6 +6215,92 @@
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::update_data_binds_false"
         }
       ],
+      "crates/nuxie-runtime/src/state_machine/layer_state.rs": [
+        {
+          "count": 52,
+          "name": "<nuxie_runtime::state_machine::layer_state::RuntimeLayerState>::perform_fire_actions"
+        },
+        {
+          "count": 52,
+          "name": "<nuxie_runtime::state_machine::layer_state::RuntimeLayerState>::perform_listener_actions"
+        },
+        {
+          "count": 1,
+          "name": "<nuxie_runtime::state_machine::layer_state::RuntimeLayerState>::resets_blend_values"
+        },
+        {
+          "count": 154,
+          "name": "<nuxie_runtime::state_machine::layer_state::RuntimeLayerState>::uses_random_transition_selection"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/nested_state_machine.rs": [
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::state_machine::nested_state_machine::RuntimeNestedStateMachineInstance>::advance"
+        },
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::state_machine::nested_state_machine::RuntimeNestedStateMachineInstance>::state_machine_mut"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/state_instance.rs": [
+        {
+          "count": 31,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::advance"
+        },
+        {
+          "count": 57,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::apply"
+        },
+        {
+          "count": 31,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::clear_spilled_time"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::for_each_animation_instance_mut::<<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::prepare_key_frame_data_binds::{closure#0}>"
+        },
+        {
+          "count": 33,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::is_same_definition"
+        },
+        {
+          "count": 6,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::keep_going"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::make"
+        },
+        {
+          "count": 188,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::plain_animation"
+        },
+        {
+          "count": 31,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::plain_animation_mut"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::prepare_key_frame_data_binds"
+        },
+        {
+          "count": 27,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::prepare_key_frame_data_binds::{closure#0}"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::spilled_time"
+        },
+        {
+          "count": 213,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::state_index"
+        },
+        {
+          "count": 33,
+          "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::transition_animation"
+        }
+      ],
       "crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs": [
         {
           "count": 22,
@@ -6309,6 +6315,88 @@
           "name": "<nuxie_runtime::state_machine::state_machine_input_instance::StateMachineInputInstance>::number_value"
         }
       ],
+      "crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs": [
+        {
+          "count": 31,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::advance"
+        },
+        {
+          "count": 31,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::advance_current_animation"
+        },
+        {
+          "count": 31,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::advance_current_animation::{closure#0}"
+        },
+        {
+          "count": 31,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::advance_key_frame_data_binds"
+        },
+        {
+          "count": 31,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::advance_transition_source_animation"
+        },
+        {
+          "count": 57,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::apply_animations"
+        },
+        {
+          "count": 32,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::apply_animations::{closure#1}"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::change_state"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::change_state::{closure#0}"
+        },
+        {
+          "count": 33,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::current_state_index"
+        },
+        {
+          "count": 33,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::current_transition_animation"
+        },
+        {
+          "count": 171,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::has_transition_source"
+        },
+        {
+          "count": 114,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::is_transitioning"
+        },
+        {
+          "count": 57,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::prepare_key_frame_data_binds"
+        },
+        {
+          "count": 134,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::refresh_resolved_transition_duration"
+        },
+        {
+          "count": 84,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::refresh_resolved_transition_duration::{closure#0}"
+        },
+        {
+          "count": 154,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::try_change_state"
+        },
+        {
+          "count": 33,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::try_change_state::{closure#0}"
+        },
+        {
+          "count": 77,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::update_state"
+        },
+        {
+          "count": 57,
+          "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::update_transition_mix"
+        }
+      ],
       "crates/nuxie-runtime/src/state_machine/state_transition.rs": [
         {
           "count": 2,
@@ -6321,6 +6409,10 @@
         {
           "count": 26,
           "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::allow_exit_time"
+        },
+        {
+          "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::has_exit_time"
         },
         {
           "count": 33,
@@ -6339,7 +6431,7 @@
           "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::perform_listener_actions"
         },
         {
-          "count": 26,
+          "count": 110,
           "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::transition_duration_seconds"
         },
         {
@@ -6348,7 +6440,25 @@
         },
         {
           "count": 26,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransitionHandle>::new"
+        },
+        {
+          "count": 116,
+          "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransitionHandle>::resolve"
+        },
+        {
+          "count": 110,
           "name": "nuxie_runtime::state_machine::state_transition::transition_duration_value"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/system_state_instance.rs": [
+        {
+          "count": 25,
+          "name": "<nuxie_runtime::state_machine::system_state_instance::RuntimeSystemStateInstance>::advance"
+        },
+        {
+          "count": 25,
+          "name": "<nuxie_runtime::state_machine::system_state_instance::RuntimeSystemStateInstance>::apply"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/transition_bool_condition.rs": [
@@ -7070,7 +7180,7 @@
     },
     "per_frame_allocations": {
       "cpp": 7008,
-      "rust": 263725
+      "rust": 263748
     },
     "state_machine_advance": {
       "cpp": 30,
@@ -7095,10 +7205,10 @@
     },
     "rust": {
       "complex_ik_dependency": 301,
-      "component_list_follow_path": 591,
-      "component_list_virtualized": 431,
-      "scroll_intent": 60457,
-      "scroll_test": 1306
+      "component_list_follow_path": 592,
+      "component_list_virtualized": 432,
+      "scroll_intent": 60458,
+      "scroll_test": 1310
     }
   },
   "mechanism_construction_landmarks": {
@@ -7189,7 +7299,7 @@
     },
     "per_frame_allocations": {
       "cpp": 4218,
-      "rust": 63086
+      "rust": 63093
     },
     "resetting_dispatches": {
       "cpp": 6,
@@ -7214,16 +7324,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 7184,
+    "file_count": 7190,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "af3abc347add422e6341908621929957c9b66382a490e423a9887c680c33326a"
+    "sha256": "b58a154bd34417a0b1dd404b8b89214e963f5ff751966d2c0dd5eab7d6ef7bff"
   },
-  "rust_ref": "5bf0d6590d9c21e53767e034fe08b971c5c7c506",
+  "rust_ref": "93a902558ad9860e1ecaeeef8e710223841e2dca",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7184,
+      "file_count": 7190,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "af3abc347add422e6341908621929957c9b66382a490e423a9887c680c33326a"
+      "sha256": "b58a154bd34417a0b1dd404b8b89214e963f5ff751966d2c0dd5eab7d6ef7bff"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -7247,8 +7357,8 @@
       "state-machine": 7
     },
     "dynamic_cpp_functions": 461,
-    "dynamic_rust_files": 24,
-    "dynamic_rust_functions": 1205,
+    "dynamic_rust_files": 29,
+    "dynamic_rust_functions": 1230,
     "static_cpp_files": 341
   },
   "steady_allocation_counts": {

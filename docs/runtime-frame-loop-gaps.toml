@@ -36,8 +36,9 @@ citations = [
   "rust:crates/nuxie-runtime/src/animation.rs:1557-2067",
   "rust:crates/nuxie-runtime/src/artboard.rs:390",
   "rust:crates/nuxie-runtime/src/artboard.rs:4119-4196",
-  "rust:crates/nuxie-runtime/src/state_machine.rs:1492-2128",
-  "rust:crates/nuxie-runtime/src/state_machine.rs:3036-3554",
+  "rust:crates/nuxie-runtime/src/state_machine.rs:770-1110",
+  "rust:crates/nuxie-runtime/src/state_machine.rs:1746-2040",
+  "rust:crates/nuxie-runtime/src/state_machine/state_instance.rs:1-180",
 ]
 closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty/LinearAnimation/AnimationReset/BlendState owners without any displaced sidecar, definition clone, reset clone, copied blend payload, dropped definition, or per-occurrence empty fallback."
 
@@ -173,7 +174,7 @@ citations = [
   "cpp:src/animation/animation_reset_factory.cpp:126-168",
   "cpp:src/animation/animation_reset.cpp:30-35",
   "cpp:src/animation/animation_reset.cpp:54-67",
-  "rust:crates/nuxie-runtime/src/state_machine.rs:2684",
+  "rust:crates/nuxie-runtime/src/state_machine.rs:1914-1975",
 ]
 closure = "A pinned-C++ probe locks 0x011d1d1d to 0x011d1d1c through the real AnimationReset binary buffer; Rust retains that float representation and exact defined conversion. Out-of-range conversion follows the user-approved project D2 saturation policy and is never labeled faithful C++ behavior."
 
@@ -375,6 +376,54 @@ max_occurrences = 0
 id = "state_machine_dropped_focus_condition"
 globs = ["crates/nuxie-runtime/src/state_machine/transition_condition.rs"]
 pattern = "RuntimeTransitionFocusCondition::from_object\\([^;]{0,240}\\.map\\(Self::Focus\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_empty_any_shortcut"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "any_state[^\\n]{0,160}transitions\\.is_empty\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_parallel_occurrence_indices"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "(?:current|source)_state_index\\s*:"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_copied_active_transition_payload"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "active_transition_(?:actions|duration|interpolator|listener)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_prebuilt_state_occurrences"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "state_occurrences\\s*:\\s*(?:Vec|BTreeMap|HashMap)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_nested_owner_scan"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "nested_artboards[^;]{0,400}find_map[^;]{0,400}RuntimeNestedAnimationInstance::StateMachine"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_shared_layer_occurrence_alias"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "(?:any_state|current_state|state_from)\\s*:\\s*Option<(?:Rc|Arc)<"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_advance_source_before_mix"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "advance_transition_source_animation[\\s\\S]{0,1200}update_transition_mix"
+max_occurrences = 0
+
+[[ratchet]]
+id = "nested_state_machine_public_clone_copies_live_occurrence"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "impl Clone for RuntimeNestedArtboardInstance[\\s\\S]{0,2400}animations:\\s*self\\.animations\\.clone\\(\\)"
 max_occurrences = 0
 
 [[ratchet]]

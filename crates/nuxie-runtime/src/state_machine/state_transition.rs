@@ -27,6 +27,37 @@ pub(crate) struct RuntimeStateTransition {
     pub(crate) has_unsupported_interpolator: bool,
 }
 
+/// Stable handle to one authored transition definition.
+///
+/// C++ keeps `StateMachineLayerInstance::m_transition` as a pointer to the
+/// retained definition. Rust uses the owning state slot plus transition slot
+/// instead of copying actions, interpolation, or duration into the occurrence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct RuntimeStateTransitionHandle {
+    state_index: usize,
+    transition_index: usize,
+}
+
+impl RuntimeStateTransitionHandle {
+    pub(super) fn new(state_index: usize, transition_index: usize) -> Self {
+        Self {
+            state_index,
+            transition_index,
+        }
+    }
+
+    pub(super) fn resolve<'a>(
+        self,
+        layer: &'a super::RuntimeStateMachineLayer,
+    ) -> Option<&'a RuntimeStateTransition> {
+        layer
+            .states
+            .get(self.state_index)?
+            .transitions
+            .get(self.transition_index)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(super) struct RuntimeTransitionAnimationRef<'a> {
     pub(super) instance: &'a LinearAnimationInstance,

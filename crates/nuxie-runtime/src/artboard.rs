@@ -75,8 +75,8 @@ use crate::scripting::{
     ScriptInstance, ScriptMethod, ScriptValue, ScriptViewModel,
 };
 use crate::state_machine::{
-    RuntimeStateMachine, StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
-    build_state_machines,
+    RuntimeNestedStateMachineInstance, RuntimeStateMachine, StateMachineInputKind,
+    StateMachineInstance, StateMachineReportedEvent, build_state_machines,
 };
 use crate::view_model::{
     RuntimeFontAssetValue, RuntimeImportedViewModelInstanceContext,
@@ -694,6 +694,24 @@ impl Clone for RuntimeNestedArtboardInstance {
         // pending) frame from the source occurrence.
         let mut child = self.child.as_ref().clone();
         child.reset_layout_constraint_bounds_for_new_occurrence();
+        let animations = self
+            .animations
+            .iter()
+            .map(|animation| match animation {
+                RuntimeNestedAnimationInstance::StateMachine(occurrence) => {
+                    RuntimeNestedAnimationInstance::StateMachine(
+                        occurrence
+                            .cold_clone(&mut child)
+                            .expect("a validated nested state machine must clone against the same child definition"),
+                    )
+                }
+                // The separate NestedSimpleAnimation and NestedRemap clone
+                // families remain outside FL-C3. Preserve their established
+                // behavior here; only the touched NestedStateMachine owner is
+                // reconstructed cold in this slice.
+                animation => animation.clone(),
+            })
+            .collect();
         Self {
             child: Box::new(child),
             render_cache_revision: self.render_cache_revision,
@@ -714,7 +732,7 @@ impl Clone for RuntimeNestedArtboardInstance {
             data_bind_context_source_locals_by_path: self
                 .data_bind_context_source_locals_by_path
                 .clone(),
-            animations: self.animations.clone(),
+            animations,
             is_paused: self.is_paused,
             speed: self.speed,
             quantize: self.quantize,
@@ -732,6 +750,7 @@ impl Clone for RuntimeNestedArtboardInstance {
 pub(crate) struct RuntimeNestedArtboards {
     entries: Vec<(usize, RuntimeNestedArtboardInstance)>,
     entry_by_local: Vec<Option<usize>>,
+    state_machine_owner_by_local: Vec<Option<(usize, usize)>>,
 }
 
 impl RuntimeNestedArtboards {
@@ -763,7 +782,9 @@ impl RuntimeNestedArtboards {
             self.entry_by_local.resize(local_id.saturating_add(1), None);
         }
         if let Some(entry) = self.entry_by_local[local_id] {
-            return Some(std::mem::replace(&mut self.entries[entry].1, nested));
+            let previous = std::mem::replace(&mut self.entries[entry].1, nested);
+            self.rebuild_state_machine_index();
+            return Some(previous);
         }
 
         let entry = self
@@ -774,6 +795,7 @@ impl RuntimeNestedArtboards {
         for (entry, (local_id, _)) in self.entries.iter().enumerate().skip(entry) {
             self.entry_by_local[*local_id] = Some(entry);
         }
+        self.rebuild_state_machine_index();
         None
     }
 
@@ -783,6 +805,7 @@ impl RuntimeNestedArtboards {
         for (entry, (local_id, _)) in self.entries.iter().enumerate().skip(entry) {
             self.entry_by_local[*local_id] = Some(entry);
         }
+        self.rebuild_state_machine_index();
         Some(nested)
     }
 
@@ -804,6 +827,48 @@ impl RuntimeNestedArtboards {
         &mut self,
     ) -> impl Iterator<Item = &mut RuntimeNestedArtboardInstance> {
         self.entries.iter_mut().map(|(_, nested)| nested)
+    }
+
+    fn state_machine_mut(
+        &mut self,
+        local_id: usize,
+    ) -> Option<&mut RuntimeNestedStateMachineInstance> {
+        let (host_entry, animation_index) = self
+            .state_machine_owner_by_local
+            .get(local_id)
+            .copied()
+            .flatten()?;
+        match self
+            .entries
+            .get_mut(host_entry)?
+            .1
+            .animations
+            .get_mut(animation_index)?
+        {
+            RuntimeNestedAnimationInstance::StateMachine(occurrence)
+                if occurrence.local_id() == local_id =>
+            {
+                Some(occurrence)
+            }
+            _ => None,
+        }
+    }
+
+    fn rebuild_state_machine_index(&mut self) {
+        self.state_machine_owner_by_local.clear();
+        for (host_entry, (_, nested)) in self.entries.iter().enumerate() {
+            for (animation_index, animation) in nested.animations.iter().enumerate() {
+                let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
+                    continue;
+                };
+                let local_id = occurrence.local_id();
+                if self.state_machine_owner_by_local.len() <= local_id {
+                    self.state_machine_owner_by_local
+                        .resize(local_id.saturating_add(1), None);
+                }
+                self.state_machine_owner_by_local[local_id] = Some((host_entry, animation_index));
+            }
+        }
     }
 }
 
@@ -1011,10 +1076,7 @@ enum RuntimeNestedAnimationInstance {
         animation: LinearAnimationInstance,
         mix: f32,
     },
-    StateMachine {
-        local_id: usize,
-        state_machine: StateMachineInstance,
-    },
+    StateMachine(RuntimeNestedStateMachineInstance),
 }
 
 fn state_machine_requires_outer_update_probe(instance: &StateMachineInstance) -> bool {
@@ -1125,6 +1187,12 @@ impl ArtboardInstance {
         self.layout_constraint_bounds = source.layout_constraint_bounds.clone();
         for (local_id, source_nested) in source.nested_artboards.iter() {
             if let Some(cloned_nested) = self.nested_artboards.get_mut(local_id) {
+                // A transient layout clone is a non-mutating view of this
+                // exact mounted occurrence, not a generated public clone.
+                // Restore its live nested-animation snapshot after the public
+                // clone path deliberately reconstructed NestedStateMachine
+                // occurrences cold.
+                cloned_nested.animations = source_nested.animations.clone();
                 cloned_nested.layout_data_transferred = source_nested.layout_data_transferred;
                 cloned_nested.layout_data_transfer_key = source_nested.layout_data_transfer_key;
                 cloned_nested.initial_layout_paint_frame.replace(None);
@@ -2192,6 +2260,11 @@ impl ArtboardInstance {
         let joysticks = build_runtime_joysticks(graph, &linear_animations);
         let state_machines =
             build_state_machines(file, graph, &linear_animations, &mut converter_cache);
+        for state_machine in &state_machines {
+            for layer in state_machine.layers.iter() {
+                layer.validate_imported_references()?;
+            }
+        }
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
         let mut artboard_authored_data_bind_states =
             build_artboard_authored_data_bind_states(file, graph, &objects);
@@ -4318,10 +4391,11 @@ impl ArtboardInstance {
                 .animations
                 .iter()
                 .find_map(|animation| match animation {
-                    RuntimeNestedAnimationInstance::StateMachine { state_machine, .. }
-                        if state_machine.state_machine_index() == state_machine_index =>
+                    RuntimeNestedAnimationInstance::StateMachine(occurrence)
+                        if occurrence.state_machine().state_machine_index()
+                            == state_machine_index =>
                     {
-                        Some(state_machine)
+                        Some(occurrence.state_machine())
                     }
                     _ => None,
                 }),
@@ -4379,10 +4453,11 @@ impl ArtboardInstance {
                 .animations
                 .iter_mut()
                 .find_map(|animation| match animation {
-                    RuntimeNestedAnimationInstance::StateMachine { state_machine, .. }
-                        if state_machine.state_machine_index() == state_machine_index =>
+                    RuntimeNestedAnimationInstance::StateMachine(occurrence)
+                        if occurrence.state_machine().state_machine_index()
+                            == state_machine_index =>
                     {
-                        Some(state_machine)
+                        Some(occurrence.state_machine_mut())
                     }
                     _ => None,
                 }),
@@ -5175,7 +5250,10 @@ impl ArtboardInstance {
         instance.advance_after_state_probe(self, state_machine, elapsed_seconds)
     }
 
-    fn try_change_state_machine_instance(&mut self, instance: &mut StateMachineInstance) -> bool {
+    pub(crate) fn try_change_state_machine_instance(
+        &mut self,
+        instance: &mut StateMachineInstance,
+    ) -> bool {
         // Root and component-list machines complete their direct-input
         // transition loop during ordinary advance. Mounted nested machines
         // additionally owe one C++-matching outer-update probe.
@@ -9239,19 +9317,9 @@ impl ArtboardInstance {
         &mut self,
         state_machine_local_id: usize,
     ) -> Option<&mut StateMachineInstance> {
-        for nested in self.nested_artboards.values_mut() {
-            for animation in &mut nested.animations {
-                if let RuntimeNestedAnimationInstance::StateMachine {
-                    local_id,
-                    state_machine,
-                } = animation
-                    && *local_id == state_machine_local_id
-                {
-                    return Some(state_machine);
-                }
-            }
-        }
-        None
+        self.nested_artboards
+            .state_machine_mut(state_machine_local_id)
+            .map(RuntimeNestedStateMachineInstance::state_machine_mut)
     }
 
     fn set_nested_state_machine_bool(
@@ -9585,6 +9653,17 @@ impl ArtboardInstance {
     }
 }
 
+impl ArtboardInstance {
+    pub(crate) fn install_nested_external_focus_domain(
+        &mut self,
+        parent_focus: &crate::focus::RuntimeFocusTree,
+    ) {
+        for (_, nested) in &mut self.nested_artboards.entries {
+            nested.install_external_focus_domain(parent_focus);
+        }
+    }
+}
+
 fn reset_component_list_instances(
     list: &mut RuntimeConstrainableListState,
     should_reset_instances: bool,
@@ -9638,6 +9717,18 @@ fn component_list_default_state_machine_index(
 }
 
 impl RuntimeNestedArtboardInstance {
+    fn install_external_focus_domain(&mut self, parent_focus: &crate::focus::RuntimeFocusTree) {
+        let child_identity = self.child.instance_identity();
+        for animation in &mut self.animations {
+            let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
+                continue;
+            };
+            occurrence.install_external_focus(parent_focus, child_identity);
+        }
+        self.child
+            .install_nested_external_focus_domain(parent_focus);
+    }
+
     fn reuse_owned_stateful_view_model_context(&mut self, existing: &Self) -> bool {
         if self.stateful_view_model_instance_local.is_some()
             || existing.stateful_view_model_instance_local.is_some()
@@ -9675,14 +9766,10 @@ impl RuntimeNestedArtboardInstance {
     ) -> bool {
         let mut changed = false;
         for animation in &mut self.animations {
-            let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } = animation
-            else {
+            let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
                 continue;
             };
-            if state_machine.bind_owned_view_model_context_chain(file, context, context_chain) {
-                changed = true;
-                changed |= state_machine.advance_data_context();
-            }
+            changed |= occurrence.bind_owned_view_model_context_chain(file, context, context_chain);
         }
         changed
     }
@@ -9693,14 +9780,10 @@ impl RuntimeNestedArtboardInstance {
     ) -> bool {
         let mut changed = false;
         for animation in &mut self.animations {
-            let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } = animation
-            else {
+            let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
                 continue;
             };
-            if state_machine.bind_owned_view_model_data_context(data_context) {
-                changed = true;
-                changed |= state_machine.advance_data_context();
-            }
+            changed |= occurrence.bind_owned_data_context(data_context);
         }
         changed
     }
@@ -9721,10 +9804,8 @@ impl RuntimeNestedArtboardInstance {
             // NewFrame skip, then unconditionally probes nested state machines
             // during the following non-NewFrame outer pass.
             for animation in &mut self.animations {
-                if let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } =
-                    animation
-                {
-                    state_machine.schedule_post_update_probe();
+                if let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation {
+                    occurrence.state_machine_mut().schedule_post_update_probe();
                 }
             }
             return Ok(true);
@@ -9766,8 +9847,10 @@ impl RuntimeNestedArtboardInstance {
 
     fn reset_outer_state_machine_changed_state_counts(&mut self) {
         for animation in &mut self.animations {
-            if let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } = animation {
-                state_machine.reset_changed_state_count_for_outer_settlement();
+            if let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation {
+                occurrence
+                    .state_machine_mut()
+                    .reset_changed_state_count_for_outer_settlement();
             }
         }
         self.child
@@ -9786,10 +9869,10 @@ impl RuntimeNestedArtboardInstance {
         let local_elapsed_seconds = self.calculate_local_elapsed_seconds(0.0);
         let mut changed = false;
         for animation in &mut self.animations {
-            let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } = animation
-            else {
+            let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
                 continue;
             };
+            let state_machine = occurrence.state_machine_mut();
             if self.child.try_change_state_machine_instance(state_machine) {
                 changed = true;
                 changed |= self.child.advance_state_machine_instance_after_state_probe(
@@ -9857,7 +9940,7 @@ impl RuntimeNestedArtboardInstance {
             let (animation_local_id, mix) = match animation {
                 RuntimeNestedAnimationInstance::Simple { local_id, mix, .. }
                 | RuntimeNestedAnimationInstance::Remap { local_id, mix, .. } => (local_id, mix),
-                RuntimeNestedAnimationInstance::StateMachine { .. } => continue,
+                RuntimeNestedAnimationInstance::StateMachine(_) => continue,
             };
             if *animation_local_id != local_id || *mix == value {
                 continue;
@@ -9958,7 +10041,7 @@ impl RuntimeNestedAnimationInstance {
                 ..
             } => *is_playing && child.linear_animation_instance_keep_going(animation),
             Self::Remap { .. } => false,
-            Self::StateMachine { state_machine, .. } => state_machine.needs_advance(),
+            Self::StateMachine(occurrence) => occurrence.state_machine().needs_advance(),
         }
     }
 
@@ -9966,7 +10049,7 @@ impl RuntimeNestedAnimationInstance {
         &mut self,
         child: &mut ArtboardInstance,
         elapsed_seconds: f32,
-        mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
+        reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
     ) -> bool {
         match self {
             Self::Simple {
@@ -9992,16 +10075,8 @@ impl RuntimeNestedAnimationInstance {
                 }
                 child.apply_linear_animation_instance(animation, *mix)
             }
-            Self::StateMachine { state_machine, .. } => {
-                let changed = child.advance_state_machine_instance(state_machine, elapsed_seconds);
-                if let Some(reported_events) = reported_events.as_mut() {
-                    for index in 0..state_machine.reported_event_count() {
-                        if let Some(event) = state_machine.reported_event(index) {
-                            (**reported_events).push(event.clone());
-                        }
-                    }
-                }
-                changed
+            Self::StateMachine(occurrence) => {
+                occurrence.advance(child, elapsed_seconds, reported_events)
             }
         }
     }
@@ -10481,65 +10556,8 @@ fn nested_state_machine_instance(
     object: &nuxie_binary::RuntimeObject,
     child: &mut ArtboardInstance,
 ) -> Option<RuntimeNestedAnimationInstance> {
-    let state_machine_index = usize::try_from(object.uint_property("animationId")?).ok()?;
-    let mut state_machine = child.state_machine_instance(state_machine_index)?;
-    state_machine.schedule_post_update_probe();
-    state_machine.bind_default_view_model_context();
-    state_machine.advance_data_context();
-    apply_authored_nested_input_values(file, graph, local_id, &mut state_machine);
-    Some(RuntimeNestedAnimationInstance::StateMachine {
-        local_id,
-        state_machine,
-    })
-}
-
-fn apply_authored_nested_input_values(
-    file: &RuntimeFile,
-    graph: &ArtboardGraph,
-    state_machine_local_id: usize,
-    state_machine: &mut StateMachineInstance,
-) -> bool {
-    let mut changed = false;
-    for local_object in &graph.local_objects {
-        let Some(object) = file.object(local_object.global_id as usize) else {
-            continue;
-        };
-        if object.uint_property("parentId") != Some(state_machine_local_id as u64) {
-            continue;
-        }
-        let Some(input_id) = object
-            .uint_property("inputId")
-            .and_then(|input_id| usize::try_from(input_id).ok())
-        else {
-            continue;
-        };
-        match object.type_name {
-            "NestedBool" => {
-                if state_machine
-                    .input(input_id)
-                    .is_some_and(|input| input.kind() == StateMachineInputKind::Bool)
-                {
-                    changed |= state_machine.set_bool(
-                        input_id,
-                        object.bool_property("nestedValue").unwrap_or(false),
-                    );
-                }
-            }
-            "NestedNumber" => {
-                if state_machine
-                    .input(input_id)
-                    .is_some_and(|input| input.kind() == StateMachineInputKind::Number)
-                {
-                    changed |= state_machine.set_number(
-                        input_id,
-                        object.double_property("nestedValue").unwrap_or(0.0),
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-    changed
+    RuntimeNestedStateMachineInstance::from_imported(file, graph, local_id, object, child)
+        .map(RuntimeNestedAnimationInstance::StateMachine)
 }
 
 #[cfg(test)]
@@ -11263,6 +11281,7 @@ mod tests {
             }],
             entry_state_index: Some(0),
             any_state_index: None,
+            exit_state_index: None,
         }]);
         state_machine
     }
@@ -11271,7 +11290,7 @@ mod tests {
     fn ordinary_direct_input_blend_does_not_require_outer_state_probe() {
         let definition = direct_input_blend_state_machine(11);
         let mut artboard = synthetic_instance(Vec::new(), Vec::new());
-        let mut state_machine = StateMachineInstance::new(0, &definition, &artboard);
+        let mut state_machine = StateMachineInstance::new(0, &definition, &mut artboard);
         artboard.state_machines = Arc::new(vec![definition]);
 
         assert!(artboard.advance_state_machine_instance(&mut state_machine, 0.0));
@@ -11306,23 +11325,26 @@ mod tests {
             )),
         ]);
         let mut nested = synthetic_nested_artboard_instance(22);
-        let bool_state_machine = StateMachineInstance::new(0, &definition, &nested.child);
-        let number_state_machine = StateMachineInstance::new(0, &definition, &nested.child);
-        let trigger_state_machine = StateMachineInstance::new(0, &definition, &nested.child);
+        let bool_state_machine = StateMachineInstance::new(0, &definition, &mut nested.child);
+        let number_state_machine = StateMachineInstance::new(0, &definition, &mut nested.child);
+        let trigger_state_machine = StateMachineInstance::new(0, &definition, &mut nested.child);
         nested.child.state_machines = Arc::new(vec![definition]);
         nested.animations.extend([
-            RuntimeNestedAnimationInstance::StateMachine {
-                local_id: 7,
-                state_machine: bool_state_machine,
-            },
-            RuntimeNestedAnimationInstance::StateMachine {
-                local_id: 8,
-                state_machine: number_state_machine,
-            },
-            RuntimeNestedAnimationInstance::StateMachine {
-                local_id: 9,
-                state_machine: trigger_state_machine,
-            },
+            RuntimeNestedAnimationInstance::StateMachine(RuntimeNestedStateMachineInstance::new(
+                7,
+                bool_state_machine,
+                Vec::new(),
+            )),
+            RuntimeNestedAnimationInstance::StateMachine(RuntimeNestedStateMachineInstance::new(
+                8,
+                number_state_machine,
+                Vec::new(),
+            )),
+            RuntimeNestedAnimationInstance::StateMachine(RuntimeNestedStateMachineInstance::new(
+                9,
+                trigger_state_machine,
+                Vec::new(),
+            )),
         ]);
         let mut parent = synthetic_instance(Vec::new(), Vec::new());
         parent.nested_artboards.insert(3, nested);
@@ -11351,10 +11373,142 @@ mod tests {
     }
 
     #[test]
+    fn nested_state_machine_retains_authored_input_slots_and_skips_initial_trigger() {
+        let mut definition = empty_state_machine(11);
+        definition.inputs = Arc::new(vec![
+            Some(RuntimeStateMachineInput::new_bool(
+                1,
+                Some("duplicate".to_owned()),
+                false,
+            )),
+            Some(RuntimeStateMachineInput::new_number(
+                2,
+                Some("duplicate".to_owned()),
+                0.0,
+            )),
+            Some(RuntimeStateMachineInput::new_trigger(
+                3,
+                Some("fire".to_owned()),
+            )),
+        ]);
+        let mut child = synthetic_instance(Vec::new(), Vec::new());
+        let state_machine = StateMachineInstance::new(0, &definition, &mut child);
+        let occurrence = RuntimeNestedStateMachineInstance::new(
+            7,
+            state_machine,
+            vec![
+                (0, Some("duplicate".to_owned()), Some(true), None),
+                (1, Some("duplicate".to_owned()), None, Some(7.5)),
+                (2, Some("fire".to_owned()), None, None),
+            ],
+        );
+
+        assert_eq!(occurrence.input_count(), 3);
+        assert_eq!(occurrence.input_id_at(0), Some(0));
+        assert_eq!(occurrence.input_id_at(3), None);
+        assert_eq!(occurrence.input_id_named("duplicate"), Some(0));
+        assert_eq!(
+            occurrence
+                .state_machine()
+                .input(0)
+                .and_then(|input| input.bool_value()),
+            Some(true)
+        );
+        assert_eq!(
+            occurrence
+                .state_machine()
+                .input(1)
+                .and_then(|input| input.number_value()),
+            Some(7.5)
+        );
+        assert_eq!(
+            occurrence
+                .state_machine()
+                .input(2)
+                .and_then(|input| input.trigger_fired()),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn nested_state_machine_forwards_empty_child_results_and_context_lifecycle() {
+        let definition = empty_state_machine(11);
+        let mut child = synthetic_instance(Vec::new(), Vec::new());
+        let state_machine = StateMachineInstance::new(0, &definition, &mut child);
+        child.state_machines = Arc::new(vec![definition]);
+        let mut occurrence = RuntimeNestedStateMachineInstance::new(7, state_machine, Vec::new());
+
+        assert!(!occurrence.hit_test(&child, 0.0, 0.0));
+        assert!(!occurrence.pointer_down(&mut child, 0.0, 0.0, 1));
+        assert!(!occurrence.pointer_move(&mut child, 0.0, 0.0, 0.25, 1));
+        assert!(!occurrence.pointer_up(&mut child, 0.0, 0.0, 1));
+        assert!(!occurrence.pointer_exit(&mut child, 0.0, 0.0, 1));
+        assert!(!occurrence.drag_start(&mut child, 0.0, 0.0, 0.25, 1));
+        assert!(!occurrence.drag_end(&mut child, 0.0, 0.0, 0.5, 1));
+        assert!(!occurrence.try_change_state(&mut child));
+
+        let data_context = RuntimeOwnedDataContext::default();
+        assert!(occurrence.bind_owned_data_context(&data_context));
+        assert!(occurrence.clear_data_context());
+    }
+
+    #[test]
+    fn public_clone_rebuilds_nested_state_machine_cold_but_transient_clone_keeps_live_value() {
+        let mut definition = empty_state_machine(11);
+        definition.inputs = Arc::new(vec![Some(RuntimeStateMachineInput::new_bool(
+            1,
+            Some("enabled".to_owned()),
+            false,
+        ))]);
+        let mut nested = synthetic_nested_artboard_instance(22);
+        nested.child.state_machines = Arc::new(vec![definition.clone()]);
+        let state_machine = StateMachineInstance::new(0, &definition, &mut nested.child);
+        let mut occurrence = RuntimeNestedStateMachineInstance::new(
+            7,
+            state_machine,
+            vec![(0, Some("enabled".to_owned()), Some(true), None)],
+        );
+        assert!(occurrence.state_machine_mut().set_bool(0, false));
+        nested
+            .animations
+            .push(RuntimeNestedAnimationInstance::StateMachine(occurrence));
+
+        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        parent.nested_artboards.insert(3, nested);
+        let cloned = parent.clone();
+        let transient = parent.clone_for_transient_layout();
+
+        let bool_value = |artboard: &ArtboardInstance| {
+            let nested = artboard
+                .nested_artboards
+                .get(&3)
+                .expect("nested occurrence");
+            let RuntimeNestedAnimationInstance::StateMachine(occurrence) = &nested.animations[0]
+            else {
+                panic!("nested animation remains a state machine");
+            };
+            occurrence
+                .state_machine()
+                .input(0)
+                .and_then(|input| input.bool_value())
+        };
+        assert_eq!(
+            bool_value(&cloned),
+            Some(true),
+            "public generated clone reapplies the authored nested input"
+        );
+        assert_eq!(
+            bool_value(&transient),
+            Some(false),
+            "transient layout clone views the live occurrence snapshot"
+        );
+    }
+
+    #[test]
     fn quantized_nested_skip_schedules_outer_state_probe() {
         let definition = empty_state_machine(11);
         let mut child = synthetic_instance(Vec::new(), Vec::new());
-        let state_machine = StateMachineInstance::new(0, &definition, &child);
+        let state_machine = StateMachineInstance::new(0, &definition, &mut child);
         child.state_machines = Arc::new(vec![definition]);
         let mut nested = RuntimeNestedArtboardInstance {
             child: Box::new(child),
@@ -11372,10 +11526,9 @@ mod tests {
             data_bind_property_source_locals: Vec::new(),
             data_bind_image_source_locals: Vec::new(),
             data_bind_context_source_locals_by_path: BTreeMap::new(),
-            animations: vec![RuntimeNestedAnimationInstance::StateMachine {
-                local_id: 1,
-                state_machine,
-            }],
+            animations: vec![RuntimeNestedAnimationInstance::StateMachine(
+                RuntimeNestedStateMachineInstance::new(1, state_machine, Vec::new()),
+            )],
             is_paused: false,
             speed: 1.0,
             quantize: 1.0,
@@ -11384,19 +11537,17 @@ mod tests {
 
         let mut script_mode = RuntimeScriptAdvanceMode::Disabled;
         assert!(nested.advance(0.25, &mut script_mode, None).unwrap());
-        let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } =
-            &nested.animations[0]
-        else {
+        let RuntimeNestedAnimationInstance::StateMachine(occurrence) = &nested.animations[0] else {
             panic!("nested animation remains a state machine");
         };
-        assert!(state_machine.post_update_probe_pending());
+        assert!(occurrence.state_machine().post_update_probe_pending());
     }
 
     #[test]
     fn mounted_nested_state_probe_is_consumed_once() {
         let definition = empty_state_machine(11);
         let mut artboard = synthetic_instance(Vec::new(), Vec::new());
-        let mut state_machine = StateMachineInstance::new(0, &definition, &artboard);
+        let mut state_machine = StateMachineInstance::new(0, &definition, &mut artboard);
         artboard.state_machines = Arc::new(vec![definition]);
 
         assert!(!state_machine.post_update_probe_pending());
@@ -12112,11 +12263,11 @@ mod tests {
         );
         parent.nested_artboard_locals.push(0);
         parent.state_machines = Arc::new(vec![empty_state_machine(11), empty_state_machine(12)]);
-        let mut machines = parent
-            .state_machines
+        let definitions = Arc::clone(&parent.state_machines);
+        let mut machines = definitions
             .iter()
             .enumerate()
-            .map(|(index, definition)| StateMachineInstance::new(index, definition, &parent))
+            .map(|(index, definition)| StateMachineInstance::new(index, definition, &mut parent))
             .collect::<Vec<_>>();
 
         let mut factory = RecordingFactory::new();

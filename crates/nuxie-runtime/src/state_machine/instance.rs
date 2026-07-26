@@ -878,6 +878,14 @@ fn relink_view_model_listener_cell(
 }
 
 impl StateMachineInstance {
+    pub(crate) fn install_external_focus(
+        &mut self,
+        parent_focus: &RuntimeFocusTree,
+        owner_identity: u64,
+    ) {
+        self.focus = parent_focus.external_for_owner(owner_identity);
+    }
+
     fn rebind_file_trigger_cells_after_clone(
         &mut self,
         active_file_view_model_binding: Option<(usize, usize)>,
@@ -902,7 +910,7 @@ impl StateMachineInstance {
     pub(crate) fn new(
         state_machine_index: usize,
         state_machine: &RuntimeStateMachine,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
     ) -> Self {
         let state_machine_definitions = artboard
             .state_machines
@@ -982,13 +990,6 @@ impl StateMachineInstance {
             .iter()
             .map(StateMachineTransitionDurationInstance::new)
             .collect::<Vec<_>>();
-        let layers = state_machine
-            .layers
-            .iter()
-            .map(|layer| {
-                StateMachineLayerInstance::new(layer, artboard, &inputs, &bindable_numbers)
-            })
-            .collect();
         let mut data_bind_graph = RuntimeDataBindGraph::new(state_machine);
         data_bind_graph
             .attach_scripted_instances(&artboard.scripted_data_converter_instances_by_global);
@@ -1010,6 +1011,19 @@ impl StateMachineInstance {
         if key_frame_data_bind_graphs.iter().all(Option::is_none) {
             key_frame_data_bind_graphs.clear();
         }
+        let layers = state_machine
+            .layers
+            .iter()
+            .map(|layer| {
+                StateMachineLayerInstance::new(
+                    layer,
+                    artboard,
+                    &inputs,
+                    &bindable_numbers,
+                    &key_frame_data_bind_graphs,
+                )
+            })
+            .collect();
         let listener_definitions = Arc::clone(&state_machine.listeners);
         let view_model_listeners = (0..listener_definitions.len())
             .filter_map(|listener_index| {
@@ -1019,7 +1033,12 @@ impl StateMachineInstance {
                 )
             })
             .collect();
-        Self {
+        // Pinned C++ installs the parent's FocusManager on every mounted
+        // NestedStateMachine before synchronizing the nested tree
+        // (`nested_state_machine.cpp:26-57`).
+        let focus = RuntimeFocusTree::from_artboard(artboard);
+        artboard.install_nested_external_focus_domain(&focus);
+        let mut instance = Self {
             state_machine_index,
             state_machine_definitions,
             default_view_model_index: state_machine.default_view_model_index,
@@ -1065,11 +1084,73 @@ impl StateMachineInstance {
             pointer_positions: Vec::new(),
             draggable_proxies: runtime_draggable_proxies(artboard),
             scripted_instances_by_global: BTreeMap::new(),
-            focus: RuntimeFocusTree::from_artboard(artboard),
+            focus,
             scripted_listener_action_definitions: state_machine.scripted_listener_actions.clone(),
             scripted_listener_action_instances: BTreeMap::new(),
             script_error: None,
             view_model_listeners,
+        };
+        instance.initialize_layer_entry_actions(artboard, state_machine);
+        instance
+    }
+
+    fn initialize_layer_entry_actions(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        state_machine: &RuntimeStateMachine,
+    ) {
+        let file_data_context_instance =
+            self.active_file_view_model_binding
+                .and_then(|(view_model_index, instance_index)| {
+                    self.file_view_model_instances
+                        .as_ref()?
+                        .instance(view_model_index, instance_index)
+                });
+        let mut host = NoopScriptHost;
+        for (layer_index, layer) in state_machine
+            .layers
+            .iter()
+            .enumerate()
+            .take(self.layers.len())
+        {
+            let result = {
+                let mut executor = RuntimeStateMachineListenerActionExecutor {
+                    data_bind_graph: &mut self.data_bind_graph,
+                    owned_view_model_context: None,
+                    owned_data_context: self.owned_data_context.clone(),
+                    file_data_context_instance: file_data_context_instance.clone(),
+                    scripted_listener_action_instances: &self.scripted_listener_action_instances,
+                    scripted_instances_by_global: &self.scripted_instances_by_global,
+                    script_error: &mut self.script_error,
+                    focus: &mut self.focus,
+                    host: &mut host,
+                };
+                self.layers[layer_index].perform_initial_entry_actions(
+                    artboard,
+                    layer,
+                    RuntimeScheduledListenerActionTargetsMut {
+                        inputs: &mut self.inputs,
+                        reported_events: &mut self.reported_events,
+                        bindable_numbers: &mut self.bindable_numbers,
+                        bindable_integers: &mut self.bindable_integers,
+                        bindable_colors: &mut self.bindable_colors,
+                        bindable_strings: &mut self.bindable_strings,
+                        bindable_enums: &mut self.bindable_enums,
+                        bindable_assets: &mut self.bindable_assets,
+                        bindable_artboards: &mut self.bindable_artboards,
+                        bindable_lists: &mut self.bindable_lists,
+                        bindable_triggers: &mut self.bindable_triggers,
+                        bindable_view_models: &mut self.bindable_view_models,
+                        bindable_booleans: &mut self.bindable_booleans,
+                        transition_durations: &mut self.transition_durations,
+                    },
+                    &mut executor,
+                )
+            };
+            if let Err(error) = result {
+                self.script_error = Some(error);
+                break;
+            }
         }
     }
 
@@ -1224,6 +1305,72 @@ impl StateMachineInstance {
 
     pub fn changed_state_count(&self) -> usize {
         self.changed_state_count
+    }
+
+    /// Re-enter every layer's retained EntryState occurrence.
+    ///
+    /// This mirrors pinned C++ `StateMachineInstance::resetState` and is
+    /// deliberately distinct from resetting Artboard component dirt.
+    pub fn reset_state(&mut self, artboard: &mut ArtboardInstance) {
+        let Some(definitions) = self.retained_state_machine_definitions() else {
+            return;
+        };
+        let Some(state_machine) = definitions.get(self.state_machine_index) else {
+            return;
+        };
+        let file_data_context_instance =
+            self.active_file_view_model_binding
+                .and_then(|(view_model_index, instance_index)| {
+                    self.file_view_model_instances
+                        .as_ref()?
+                        .instance(view_model_index, instance_index)
+                });
+        let mut host = NoopScriptHost;
+        for (layer_index, layer) in state_machine
+            .layers
+            .iter()
+            .enumerate()
+            .take(self.layers.len())
+        {
+            let mut executor = RuntimeStateMachineListenerActionExecutor {
+                data_bind_graph: &mut self.data_bind_graph,
+                owned_view_model_context: None,
+                owned_data_context: self.owned_data_context.clone(),
+                file_data_context_instance: file_data_context_instance.clone(),
+                scripted_listener_action_instances: &self.scripted_listener_action_instances,
+                scripted_instances_by_global: &self.scripted_instances_by_global,
+                script_error: &mut self.script_error,
+                focus: &mut self.focus,
+                host: &mut host,
+            };
+            let result = self.layers[layer_index].reset_state(
+                artboard,
+                layer,
+                &self.key_frame_data_bind_graphs,
+                RuntimeScheduledListenerActionTargetsMut {
+                    inputs: &mut self.inputs,
+                    reported_events: &mut self.reported_events,
+                    bindable_numbers: &mut self.bindable_numbers,
+                    bindable_integers: &mut self.bindable_integers,
+                    bindable_colors: &mut self.bindable_colors,
+                    bindable_strings: &mut self.bindable_strings,
+                    bindable_enums: &mut self.bindable_enums,
+                    bindable_assets: &mut self.bindable_assets,
+                    bindable_artboards: &mut self.bindable_artboards,
+                    bindable_lists: &mut self.bindable_lists,
+                    bindable_triggers: &mut self.bindable_triggers,
+                    bindable_view_models: &mut self.bindable_view_models,
+                    bindable_booleans: &mut self.bindable_booleans,
+                    transition_durations: &mut self.transition_durations,
+                },
+                &mut executor,
+            );
+            if let Err(error) = result {
+                self.script_error = Some(error);
+                break;
+            }
+        }
+        self.needs_advance = true;
     }
 
     pub(crate) fn reset_changed_state_count_for_outer_settlement(&mut self) {
@@ -1480,6 +1627,42 @@ impl StateMachineInstance {
     ) -> bool {
         self.try_pointer_down_with_script_host(artboard, x, y, pointer_id, &mut NoopScriptHost)
             .unwrap_or(false)
+    }
+
+    pub(crate) fn hit_test(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
+        if !x.is_finite() || !y.is_finite() {
+            return false;
+        }
+        if self
+            .draggable_proxies
+            .iter()
+            .any(|proxy| runtime_draggable_proxy_hit_test(artboard, proxy, (x, y)))
+        {
+            return true;
+        }
+        let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
+            return false;
+        };
+        for listener in state_machine.listeners.iter() {
+            if [
+                RuntimeListenerType::Down,
+                RuntimeListenerType::Up,
+                RuntimeListenerType::Move,
+                RuntimeListenerType::Enter,
+                RuntimeListenerType::Exit,
+                RuntimeListenerType::Click,
+                RuntimeListenerType::Drag,
+                RuntimeListenerType::DragStart,
+                RuntimeListenerType::DragEnd,
+            ]
+            .into_iter()
+            .any(|kind| listener.has_listener(kind))
+                && listener.hit_test(artboard, x, y)
+            {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn pointer_down_with_event_context(
@@ -2024,6 +2207,65 @@ impl StateMachineInstance {
         pointer_id: i32,
     ) -> bool {
         self.try_pointer_exit_with_script_host(artboard, x, y, pointer_id, &mut NoopScriptHost)
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn drag_start(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    ) -> bool {
+        validate_pointer_timestamp(timestamp_seconds)
+            .and_then(|()| {
+                self.dispatch_direct_pointer_listener_type(
+                    artboard,
+                    pointer_id,
+                    RuntimeListenerType::DragStart,
+                    x,
+                    y,
+                    timestamp_seconds,
+                    None,
+                    &mut NoopScriptHost,
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn drag_end(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        x: f32,
+        y: f32,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    ) -> bool {
+        validate_pointer_timestamp(timestamp_seconds)
+            .and_then(|()| {
+                let mut hit = self.dispatch_direct_pointer_listener_type(
+                    artboard,
+                    pointer_id,
+                    RuntimeListenerType::DragEnd,
+                    x,
+                    y,
+                    timestamp_seconds,
+                    None,
+                    &mut NoopScriptHost,
+                )?;
+                hit |= self.update_pointer_listeners_with_script_host(
+                    artboard,
+                    RuntimeListenerType::Move,
+                    x,
+                    y,
+                    pointer_id,
+                    timestamp_seconds,
+                    None,
+                    &mut NoopScriptHost,
+                )?;
+                Ok(hit)
+            })
             .unwrap_or(false)
     }
 
@@ -6028,6 +6270,7 @@ impl StateMachineInstance {
             let layer_changed = self.layers[layer_index].update_state(
                 artboard,
                 layer,
+                &self.key_frame_data_bind_graphs,
                 data_context_present,
                 layer_index,
                 RuntimeScheduledListenerActionTargetsMut {

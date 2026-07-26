@@ -690,7 +690,7 @@ status = "pending"
 upstream = "src/animation/layer_state.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/layer_state.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -874,7 +874,7 @@ status = "pending"
 upstream = "src/animation/nested_state_machine.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
 dynamically_reached = true
 status = "pending"
 
@@ -922,7 +922,7 @@ status = "pending"
 upstream = "src/animation/state_instance.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/state_instance.rs"]
 dynamically_reached = true
 status = "pending"
 
@@ -978,7 +978,10 @@ status = "pending"
 upstream = "src/animation/state_machine_layer.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/state_machine/state_machine_layer.rs",
+  "crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs",
+]
 dynamically_reached = false
 status = "pending"
 
@@ -1010,7 +1013,7 @@ status = "faithful"
 upstream = "src/animation/system_state_instance.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/system_state_instance.rs"]
 dynamically_reached = true
 status = "pending"
 
@@ -3301,7 +3304,7 @@ status = "pending"
 id = "state_machine.layer"
 wave = "FL-C"
 cpp_files = ["src/animation/state_machine_layer.cpp", "src/animation/state_instance.cpp"]
-rust_file = "crates/nuxie-runtime/src/state_machine.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"
 rust_anchor = "pub(crate) struct StateMachineLayerInstance"
 status = "pending"
 
@@ -3317,8 +3320,8 @@ construct = ["cpp:src/animation/state_transition.cpp:65-80", "rust:crates/nuxie-
 retain = ["cpp:src/animation/state_transition.cpp:77-80", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:13-28"]
 dirty = ["cpp:src/animation/state_transition.cpp:28-63", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:37-73"]
 update = ["cpp:src/animation/state_transition.cpp:147-206", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:50-107"]
-advance = ["cpp:src/animation/state_transition.cpp:147-230", "rust:crates/nuxie-runtime/src/state_machine.rs:2386-2439"]
-draw = ["cpp:src/animation/state_transition.cpp:208-220", "rust:crates/nuxie-runtime/src/state_machine.rs:2481-2535"]
+advance = ["cpp:src/animation/state_transition.cpp:147-230", "rust:crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs:122-190"]
+draw = ["cpp:src/animation/state_transition.cpp:208-220", "rust:crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs:829-866"]
 clone = ["cpp:src/animation/state_transition.cpp:77-80", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:13-28"]
 drop = ["cpp:src/animation/state_transition.cpp:20-26", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:13-28"]
 
@@ -3339,7 +3342,7 @@ retain = ["cpp:src/animation/state_transition.cpp:77-80", "rust:crates/nuxie-run
 dirty = ["cpp:src/animation/transition_condition.cpp:7-15", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:37-73"]
 update = ["cpp:src/animation/state_transition.cpp:147-163", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:75-103"]
 advance = ["cpp:src/animation/state_transition.cpp:147-205", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:50-107"]
-draw = ["cpp:src/animation/state_transition.cpp:208-220", "rust:crates/nuxie-runtime/src/state_machine.rs:2481-2535"]
+draw = ["cpp:src/animation/state_transition.cpp:208-220", "rust:crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs:829-866"]
 clone = ["cpp:src/animation/state_transition.cpp:77-80", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:18-26"]
 drop = ["cpp:src/animation/state_transition.cpp:20-26", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:18-26"]
 

@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "0deb0385851faa4f9eafebed67e7ce802e0f2dac58091994b4c2d31c9cbfab2b",
+    "cpp_binary_sha256": "a58c266cb571d78425adc1750f6e729427e5c938bb26d9dc284856cce18f2765",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "fb34c0f19ca5f80e30612d8eaed1fd4ef19ca6d37a8800e115fd5bdf7350d3b0",
-    "rust_coverage_sha256": "9e2311fe9b3492f01f39e9c4214b28f1bec1c945d6086a35eea25f0e9dc8ba7e",
-    "rust_mechanism_coverage_sha256": "66175afda4da4e159919bfddb02ba0b61eb593c1c96a200f13248eefa633f28e",
-    "rust_steady_coverage_sha256": "0cc4e4b00706e4678d595d829caabf8765a1867f3180c1ee6ecc863d46b54fc8"
+    "rust_binary_sha256": "8b008222a779ef335de9d57031608aec9eae9e20b35c6e01efc6eb8876f4eca2",
+    "rust_coverage_sha256": "ae2310987196a28c98cffcc768e5df1538e4fe33bac70e54dee6da92f79ffa59",
+    "rust_mechanism_coverage_sha256": "983594c95e59ca52065356c64f6142088e2f82101e654526ae6dc859b76bcb17",
+    "rust_steady_coverage_sha256": "c02087c40a044ba648fa2b55040dc31546cfc0ef16f4d22b88e2aa68d704a570"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -6151,18 +6151,6 @@
           "name": "<nuxie_runtime::state_machine::RuntimeStateTransition>::use_inputs"
         },
         {
-          "count": 22,
-          "name": "<nuxie_runtime::state_machine::StateMachineInputInstance>::advanced"
-        },
-        {
-          "count": 5,
-          "name": "<nuxie_runtime::state_machine::StateMachineInputInstance>::bool_value"
-        },
-        {
-          "count": 7,
-          "name": "<nuxie_runtime::state_machine::StateMachineInputInstance>::number_value"
-        },
-        {
           "count": 31,
           "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance"
         },
@@ -6345,6 +6333,20 @@
         {
           "count": 19,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::update_data_binds_false"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs": [
+        {
+          "count": 22,
+          "name": "<nuxie_runtime::state_machine::state_machine_input_instance::StateMachineInputInstance>::advanced"
+        },
+        {
+          "count": 5,
+          "name": "<nuxie_runtime::state_machine::state_machine_input_instance::StateMachineInputInstance>::bool_value"
+        },
+        {
+          "count": 7,
+          "name": "<nuxie_runtime::state_machine::state_machine_input_instance::StateMachineInputInstance>::number_value"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/transition_conditions.rs": [
@@ -7194,16 +7196,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 7153,
+    "file_count": 7155,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "ad32fbdf8009049b97349236e12c227e6f18facdfe36d77ed685e709de7ea36e"
+    "sha256": "3098bc022ea018589db5588700f9bb1f2db2e817c8ca219ba74b3a676d1ff4fb"
   },
-  "rust_ref": "95eb04b7cfb847f24ba77872bd8a0ee43da1af41",
+  "rust_ref": "b09f8e321f29c8a0213520c224739240df9a8393",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7153,
+      "file_count": 7155,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "ad32fbdf8009049b97349236e12c227e6f18facdfe36d77ed685e709de7ea36e"
+      "sha256": "3098bc022ea018589db5588700f9bb1f2db2e817c8ca219ba74b3a676d1ff4fb"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -7227,7 +7229,7 @@
       "state-machine": 7
     },
     "dynamic_cpp_functions": 461,
-    "dynamic_rust_files": 18,
+    "dynamic_rust_files": 19,
     "dynamic_rust_functions": 1203,
     "static_cpp_files": 338
   },

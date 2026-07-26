@@ -917,7 +917,7 @@ status = "pending"
 upstream = "src/animation/state_machine_input.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/state_machine_input.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -925,7 +925,7 @@ status = "pending"
 upstream = "src/animation/state_machine_input_instance.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -3283,8 +3283,8 @@ cpp_files = [
   "src/animation/state_machine_input.cpp",
   "src/animation/state_machine_input_instance.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
-rust_anchor = "inputs: Vec<StateMachineInputInstance>"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs"
+rust_anchor = "pub struct StateMachineInputInstance"
 status = "pending"
 
 [[member]]

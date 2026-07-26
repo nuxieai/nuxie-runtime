@@ -1439,14 +1439,12 @@ impl ScriptAnimation {
             ScriptAnimationTime::Frames => value / self.fps,
             ScriptAnimationTime::Percentage => value * self.duration,
         };
-        let Some(animation) = artboard
-            .linear_animation(self.instance.animation_index())
-            .cloned()
-        else {
+        let definitions = artboard.linear_animations.clone();
+        let Some(animation) = definitions.get(self.instance.animation_index()) else {
             return;
         };
         self.instance
-            .set_time(&animation, animation.global_to_local_seconds(seconds));
+            .set_time(animation, animation.global_to_local_seconds(seconds));
         artboard.apply_linear_animation_instance(&self.instance, 1.0);
     }
 }

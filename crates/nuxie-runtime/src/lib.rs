@@ -24,6 +24,7 @@ pub use animation::{
     LinearAnimationInstance, RuntimeKeyFrame, RuntimeKeyFrameBool, RuntimeKeyFrameCallback,
     RuntimeKeyFrameColor, RuntimeKeyFrameDouble, RuntimeKeyFrameString, RuntimeKeyFrameUint,
     RuntimeKeyedObject, RuntimeKeyedProperty, RuntimeKeyedPropertyTarget, RuntimeLinearAnimation,
+    RuntimeLinearAnimationHandle,
 };
 pub use artboard::{
     ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,

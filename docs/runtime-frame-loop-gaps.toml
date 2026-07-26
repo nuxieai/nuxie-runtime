@@ -9,16 +9,22 @@ decision = []
 [[gap]]
 id = "FL-G01"
 status = "open"
-mechanism = "FL-B1 now mirrors the C++ KeyFrame owner: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, and one type-safe target enum binds CoreRegistry's single property dispatch. The former read-time fps calculation, six parallel frame vectors, property-family booleans, and import-time source snapshots are deleted. The gap remains open only until the complete FL-B owner family is independently verified."
+mechanism = "FL-B1/FL-B2 now mirror the C++ KeyFrame and LinearAnimation owners: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, one type-safe target enum binds CoreRegistry's single property dispatch, the Artboard owns one immutable definition arena, and every occurrence retains only a typed definition handle plus C++-shaped mutable state. The former read-time fps calculation, six parallel frame vectors, property-family booleans, import-time source snapshots, per-occurrence descriptor clones, Option loop override, and local zero guards are deleted. The gap remains open only until the complete FL-B owner family is independently verified."
 citations = [
   "cpp:src/animation/keyframe.cpp:10",
   "cpp:src/importers/keyed_property_importer.cpp:13-17",
   "cpp:src/animation/keyed_property.cpp:15-52",
+  "cpp:src/animation/linear_animation.cpp:27-150",
+  "cpp:src/animation/linear_animation_instance.cpp:17-79",
+  "cpp:src/animation/linear_animation_instance.cpp:187-435",
   "rust:crates/nuxie-runtime/src/animation.rs:329-331",
   "rust:crates/nuxie-runtime/src/animation.rs:1022-1064",
   "rust:crates/nuxie-runtime/src/animation.rs:1338-1421",
+  "rust:crates/nuxie-runtime/src/animation.rs:1557-2067",
+  "rust:crates/nuxie-runtime/src/artboard.rs:390",
+  "rust:crates/nuxie-runtime/src/artboard.rs:4119-4196",
 ]
-closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty owner without any displaced sidecar."
+closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty/LinearAnimation owners without any displaced sidecar or definition clone."
 
 [[gap]]
 id = "FL-G02"
@@ -220,6 +226,30 @@ max_occurrences = 0
 id = "keyed_property_family_sidecars"
 globs = ["crates/nuxie-runtime/src/animation.rs"]
 pattern = "\\b(?:double_source_value|color_source_value|bool_source_value|double_property|color_property|bool_property|uint_property|string_property|callback_event)\\s*:"
+max_occurrences = 0
+
+[[ratchet]]
+id = "linear_animation_occurrence_descriptor"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\banimation\\s*:\\s*RuntimeLinearAnimation\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "linear_animation_option_loop_override"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bloop_value\\s*:\\s*Option\\s*<\\s*u64\\s*>"
+max_occurrences = 0
+
+[[ratchet]]
+id = "linear_animation_local_zero_guard"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "if\\s+(?:self\\.fps\\s*==\\s*0|fps\\s*==\\s*0\\.0|duration\\s*==\\s*0\\.0|range\\s*!=\\s*0\\.0)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "linear_animation_definition_vec_owner"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\blinear_animations\\s*:\\s*Vec\\s*<\\s*RuntimeLinearAnimation\\s*>"
 max_occurrences = 0
 
 [[ratchet]]

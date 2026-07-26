@@ -410,6 +410,56 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     result.stderr,
                 )
 
+    def test_fl_b2_negative_ratchets_reject_displaced_occurrence_shapes(self) -> None:
+        cases = [
+            (
+                "linear_animation_occurrence_descriptor",
+                r"\banimation\s*:\s*RuntimeLinearAnimation\b",
+                "struct Instance { animation: RuntimeLinearAnimation }\n",
+            ),
+            (
+                "linear_animation_option_loop_override",
+                r"\bloop_value\s*:\s*Option\s*<\s*u64\s*>",
+                "struct Instance { loop_value: Option<u64> }\n",
+            ),
+            (
+                "linear_animation_local_zero_guard",
+                r"if\s+(?:self\.fps\s*==\s*0|fps\s*==\s*0\.0|duration\s*==\s*0\.0|range\s*!=\s*0\.0)",
+                "fn advance(fps: f32) { if fps == 0.0 {} }\n",
+            ),
+            (
+                "linear_animation_definition_vec_owner",
+                r"\blinear_animations\s*:\s*Vec\s*<\s*RuntimeLinearAnimation\s*>",
+                "struct Artboard { linear_animations: Vec<RuntimeLinearAnimation> }\n",
+            ),
+        ]
+        base_gaps = self.gaps.read_text()
+        source = self.repo / "crates/runtime/src/animation.rs"
+
+        for ratchet_id, pattern, forbidden_source in cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.gaps.write_text(
+                    base_gaps.replace(
+                        "ratchet = []",
+                        textwrap.dedent(
+                        f"""
+                        [[ratchet]]
+                        id = "{ratchet_id}"
+                        globs = ["crates/runtime/src/animation.rs"]
+                        pattern = {json.dumps(pattern)}
+                        max_occurrences = 0
+                        """
+                        ).strip(),
+                    )
+                )
+                source.write_text(forbidden_source)
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    f"ratchet {ratchet_id} increased to 1 > 0",
+                    result.stderr,
+                )
+
     def test_mechanism_input_hash_is_fail_closed(self) -> None:
         fixture = self.upstream / "tests/assets/scroll.riv"
         fixture.parent.mkdir(parents=True)

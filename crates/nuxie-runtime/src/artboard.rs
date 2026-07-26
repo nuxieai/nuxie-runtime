@@ -16,7 +16,8 @@ use nuxie_schema::definition_by_name;
 
 use crate::animation::{
     LinearAnimationInstance, RuntimeInterpolator, RuntimeJoystick, RuntimeKeyedCallback,
-    RuntimeLinearAnimation, build_linear_animations, build_runtime_joysticks,
+    RuntimeLinearAnimation, RuntimeLinearAnimationHandle, build_linear_animations,
+    build_runtime_joysticks,
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardAuthoredDataBindStates, RuntimeArtboardContextSourceValue,
@@ -387,7 +388,7 @@ pub struct ArtboardInstance {
     /// (`src/artboard.cpp:330-395`).
     component_lists: Vec<ComponentHandle>,
     pub(crate) joysticks_apply_before_update: bool,
-    pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
+    pub(crate) linear_animations: Arc<Vec<RuntimeLinearAnimation>>,
     pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
     pub(crate) script_instances_by_global:
         RuntimeScriptState<BTreeMap<u32, RuntimeScriptInstanceHandle>>,
@@ -2279,7 +2280,7 @@ impl ArtboardInstance {
             resetting_components,
             component_lists,
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
-            linear_animations,
+            linear_animations: Arc::new(linear_animations),
             state_machines: Arc::new(state_machines),
             script_instances_by_global: RuntimeScriptState::default(),
             scripted_data_converter_instances_by_global: RuntimeScriptState::default(),
@@ -3491,7 +3492,7 @@ impl ArtboardInstance {
     }
 
     pub fn linear_animations(&self) -> &[RuntimeLinearAnimation] {
-        &self.linear_animations
+        self.linear_animations.as_slice()
     }
 
     pub fn state_machine(&self, index: usize) -> Option<&RuntimeStateMachine> {
@@ -4117,7 +4118,8 @@ impl ArtboardInstance {
     }
 
     pub fn apply_linear_animation(&mut self, index: usize, seconds: f32, mix: f32) -> bool {
-        let Some(animation) = self.linear_animations.get(index).cloned() else {
+        let definitions = self.linear_animations.clone();
+        let Some(animation) = definitions.get(index) else {
             return false;
         };
         animation.apply(self, seconds, mix)
@@ -4134,7 +4136,7 @@ impl ArtboardInstance {
     ) -> Option<LinearAnimationInstance> {
         let animation = self.linear_animation(index)?;
         Some(LinearAnimationInstance::new(
-            index,
+            RuntimeLinearAnimationHandle::new(index),
             animation,
             speed_multiplier,
         ))
@@ -4145,7 +4147,7 @@ impl ArtboardInstance {
         instance: &mut LinearAnimationInstance,
         elapsed_seconds: f32,
     ) -> bool {
-        let Some(animation) = self.linear_animation(instance.animation_index) else {
+        let Some(animation) = self.linear_animation(instance.animation_index()) else {
             return false;
         };
         instance.advance(animation, elapsed_seconds)
@@ -4158,7 +4160,7 @@ impl ArtboardInstance {
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         let (mut changed, keyed_callbacks) = {
-            let Some(animation) = self.linear_animation(instance.animation_index) else {
+            let Some(animation) = self.linear_animation(instance.animation_index()) else {
                 return false;
             };
             if !animation.has_keyed_callbacks {
@@ -4184,11 +4186,11 @@ impl ArtboardInstance {
         instance: &LinearAnimationInstance,
         mix: f32,
     ) -> bool {
-        self.apply_linear_animation(instance.animation_index, instance.time, mix)
+        instance.apply(self, mix)
     }
 
     pub fn linear_animation_instance_keep_going(&self, instance: &LinearAnimationInstance) -> bool {
-        let Some(animation) = self.linear_animation(instance.animation_index) else {
+        let Some(animation) = self.linear_animation(instance.animation_index()) else {
             return false;
         };
         instance.keep_going(animation)
@@ -9806,7 +9808,7 @@ impl RuntimeNestedArtboardInstance {
             if *local_id != remap_local_id {
                 continue;
             }
-            let Some(linear_animation) = self.child.linear_animation(animation.animation_index)
+            let Some(linear_animation) = self.child.linear_animation(animation.animation_index())
             else {
                 return false;
             };
@@ -10908,7 +10910,7 @@ mod tests {
             resetting_components,
             component_lists,
             joysticks_apply_before_update: true,
-            linear_animations: Vec::new(),
+            linear_animations: Arc::new(Vec::new()),
             state_machines: Arc::new(Vec::new()),
             script_instances_by_global: RuntimeScriptState::default(),
             scripted_data_converter_instances_by_global: RuntimeScriptState::default(),
@@ -12331,7 +12333,11 @@ mod tests {
                 key_frame_data_bind_templates: Arc::new(Vec::new()),
                 has_keyed_callbacks: false,
             };
-            LinearAnimationInstance::new(animation_index, &animation, 1.0)
+            LinearAnimationInstance::new(
+                RuntimeLinearAnimationHandle::new(animation_index),
+                &animation,
+                1.0,
+            )
         };
 
         let mut host = synthetic_component(0, 0);
@@ -12810,7 +12816,8 @@ mod tests {
     fn animation_advance_routes_only_callback_definitions_through_event_reporting() {
         for (has_keyed_callbacks, expected_events) in [(false, 0), (true, 1)] {
             let mut artboard = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
-            artboard.linear_animations = vec![callback_route_animation(has_keyed_callbacks)];
+            artboard.linear_animations =
+                Arc::new(vec![callback_route_animation(has_keyed_callbacks)]);
             let mut animation = artboard
                 .linear_animation_instance(0)
                 .expect("test animation instance");
@@ -12824,6 +12831,26 @@ mod tests {
             assert_eq!(animation.time(), 1.0);
             assert_eq!(events.len(), expected_events);
         }
+    }
+
+    #[test]
+    fn artboard_clones_share_one_linear_animation_definition_arena() {
+        let mut artboard = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
+        artboard.linear_animations = Arc::new(vec![callback_route_animation(false)]);
+
+        let cloned = artboard.clone();
+        let first = artboard
+            .linear_animation_instance(0)
+            .expect("first occurrence");
+        let second = cloned
+            .linear_animation_instance(0)
+            .expect("cloned occurrence");
+
+        assert!(Arc::ptr_eq(
+            &artboard.linear_animations,
+            &cloned.linear_animations
+        ));
+        assert_eq!(first.animation_index(), second.animation_index());
     }
 
     #[test]

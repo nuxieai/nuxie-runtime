@@ -878,7 +878,7 @@ status = "pending"
 upstream = "src/animation/scripted_transition_condition.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/scripted_transition_condition.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -1022,7 +1022,7 @@ status = "pending"
 upstream = "src/animation/transition_focus_condition.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_focus_condition.rs"]
 dynamically_reached = false
 status = "pending"
 

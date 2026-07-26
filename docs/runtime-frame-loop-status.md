@@ -15,8 +15,11 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `docs/runtime-frame-loop-fl-c-spec.md`; FL-C1 inputs/listener definitions is
   implemented with a green lane-boundary floor and pending independent
   acceptance. FL-C2 transition conditions is active; its direct transition
-  owner and direct bool/number/trigger condition owners have been split from
-  the giant entry point into filename-corresponding Rust modules.
+  owner, direct bool/number/trigger condition owners, focus condition, and
+  scripted condition have been split from the giant entry point into
+  filename-corresponding Rust modules. The focus and scripted moves preserve
+  the existing pinned behavior while putting their next semantic review on
+  the matching C++ ownership boundary.
 - Stable-Rust Apple compatibility repair
   `95eb04b7cfb847f24ba77872bd8a0ee43da1af41` mechanically rewrites the
   experimental match guard in `constraint_bounds` without changing behavior.

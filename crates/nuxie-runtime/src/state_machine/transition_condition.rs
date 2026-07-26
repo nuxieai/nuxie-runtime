@@ -1,7 +1,8 @@
 //! Retained transition-condition definitions and base dispatch.
 
 use super::{
-    RuntimeScheduledListenerActionExecutor, RuntimeTransitionBoolCondition,
+    RuntimeScheduledListenerActionExecutor, RuntimeScriptedTransitionCondition,
+    RuntimeTransitionBoolCondition, RuntimeTransitionFocusCondition,
     RuntimeTransitionNumberCondition, RuntimeTransitionTriggerCondition,
     StateMachineBindableIntegerInstance, StateMachineBindableNumberInstance,
     StateMachineInputInstance, TransitionConditionOp, TransitionEvaluationContext,
@@ -17,24 +18,15 @@ use crate::properties::{
     runtime_object_string_property_by_key, runtime_object_uint_property_by_key,
     transform_property_for_key,
 };
-use crate::scripting::RuntimeScriptInstanceHandle;
-use crate::{NoopScriptHost, ScriptMethod, ScriptValue};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use nuxie_graph::ArtboardGraph;
 use nuxie_schema::{
     CoreRegistryFieldKind, core_registry_field_kind_by_property_key, object_supports_property,
 };
-use std::collections::BTreeMap;
-
 #[derive(Debug, Clone)]
 pub(super) enum RuntimeTransitionCondition {
-    Focus {
-        target_local_id: usize,
-        op: TransitionConditionOp,
-    },
-    Scripted {
-        global_id: u32,
-    },
+    Focus(RuntimeTransitionFocusCondition),
+    Scripted(RuntimeScriptedTransitionCondition),
     Bool(RuntimeTransitionBoolCondition),
     Number(RuntimeTransitionNumberCondition),
     Trigger(RuntimeTransitionTriggerCondition),
@@ -246,27 +238,11 @@ impl RuntimeTransitionCondition {
     ) -> Option<Self> {
         match object.type_name {
             "TransitionFocusCondition" => {
-                let comparators = file.transition_view_model_condition_comparators(object)?;
-                let comparator = comparators
-                    .right
-                    .filter(|comparator| {
-                        comparator.type_name == "TransitionPropertyComponentComparator"
-                    })
-                    .or_else(|| {
-                        comparators.left.filter(|comparator| {
-                            comparator.type_name == "TransitionPropertyComponentComparator"
-                        })
-                    })?;
-                Some(Self::Focus {
-                    target_local_id: usize::try_from(comparator.uint_property("objectId")?).ok()?,
-                    op: TransitionConditionOp::from_value(
-                        object.uint_property("opValue").unwrap_or(0),
-                    ),
-                })
+                RuntimeTransitionFocusCondition::from_object(file, object).map(Self::Focus)
             }
-            "ScriptedTransitionCondition" => Some(Self::Scripted {
-                global_id: object.id,
-            }),
+            "ScriptedTransitionCondition" => Some(Self::Scripted(
+                RuntimeScriptedTransitionCondition::from_object(object),
+            )),
             "TransitionBoolCondition" => {
                 RuntimeTransitionBoolCondition::from_object(object).map(Self::Bool)
             }
@@ -973,18 +949,8 @@ impl RuntimeTransitionCondition {
             view_model_trigger_layer_id,
         } = context;
         match self {
-            Self::Focus {
-                target_local_id,
-                op,
-            } => {
-                let focused = executor.target_has_focus(*target_local_id);
-                if *op == TransitionConditionOp::Equal {
-                    focused
-                } else {
-                    !focused
-                }
-            }
-            Self::Scripted { global_id } => executor.evaluate_scripted_condition(*global_id),
+            Self::Focus(condition) => condition.evaluate(executor),
+            Self::Scripted(condition) => condition.evaluate(executor),
             Self::Bool(condition) => condition.evaluate(inputs),
             Self::Number(condition) => condition.evaluate(inputs),
             Self::Trigger(condition) => condition.evaluate(inputs, layer_index),
@@ -1396,83 +1362,9 @@ impl RuntimeTransitionCondition {
     }
 }
 
-pub(super) fn evaluate_scripted_condition(
-    global_id: u32,
-    scripted_instances: &BTreeMap<u32, RuntimeScriptInstanceHandle>,
-) -> bool {
-    scripted_instances
-        .get(&global_id)
-        .and_then(|instance| {
-            instance
-                .borrow_mut()
-                .call_method(ScriptMethod::Evaluate, &[], &mut NoopScriptHost)
-                .ok()
-        })
-        .is_some_and(|value| value == ScriptValue::Bool(true))
-}
-
 #[cfg(test)]
-mod scripted_tests {
+mod tests {
     use super::*;
-    use crate::{ScriptError, ScriptHost, ScriptInstance};
-
-    struct ConditionScript {
-        result: Result<ScriptValue, ScriptError>,
-    }
-
-    impl ScriptInstance for ConditionScript {
-        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
-            Ok(method == ScriptMethod::Evaluate)
-        }
-
-        fn call_method(
-            &mut self,
-            method: ScriptMethod,
-            _args: &[ScriptValue],
-            _host: &mut dyn ScriptHost,
-        ) -> Result<ScriptValue, ScriptError> {
-            assert_eq!(method, ScriptMethod::Evaluate);
-            self.result.clone()
-        }
-
-        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
-            Ok(ScriptValue::Nil)
-        }
-
-        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
-            Ok(())
-        }
-    }
-
-    fn instances_with(
-        result: Result<ScriptValue, ScriptError>,
-    ) -> BTreeMap<u32, RuntimeScriptInstanceHandle> {
-        BTreeMap::from([(
-            7,
-            RuntimeScriptInstanceHandle::new(Box::new(ConditionScript { result })),
-        )])
-    }
-
-    #[test]
-    fn scripted_transition_requires_an_exact_true_boolean() {
-        assert!(evaluate_scripted_condition(
-            7,
-            &instances_with(Ok(ScriptValue::Bool(true)))
-        ));
-        assert!(!evaluate_scripted_condition(
-            7,
-            &instances_with(Ok(ScriptValue::Bool(false)))
-        ));
-        assert!(!evaluate_scripted_condition(
-            7,
-            &instances_with(Ok(ScriptValue::Number(1.0)))
-        ));
-        assert!(!evaluate_scripted_condition(
-            7,
-            &instances_with(Err(ScriptError::new("evaluate failed")))
-        ));
-        assert!(!evaluate_scripted_condition(7, &BTreeMap::new()));
-    }
 
     #[test]
     fn only_direct_inputs_are_stable_across_artboard_updates() {
@@ -1492,14 +1384,14 @@ mod scripted_tests {
             .can_change_during_artboard_update()
         );
         assert!(
-            RuntimeTransitionCondition::Focus {
-                target_local_id: 0,
-                op: TransitionConditionOp::Equal,
-            }
+            RuntimeTransitionCondition::Focus(RuntimeTransitionFocusCondition::new(
+                0,
+                TransitionConditionOp::Equal,
+            ))
             .can_change_during_artboard_update()
         );
         assert!(
-            RuntimeTransitionCondition::Scripted { global_id: 7 }
+            RuntimeTransitionCondition::Scripted(RuntimeScriptedTransitionCondition::new(7))
                 .can_change_during_artboard_update()
         );
     }

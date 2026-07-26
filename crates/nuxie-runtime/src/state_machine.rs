@@ -23,6 +23,7 @@ mod bindables;
 mod instance;
 mod listener_invocation;
 mod listener_types;
+mod scripted_transition_condition;
 mod state_machine_input;
 mod state_machine_input_instance;
 mod state_machine_listener;
@@ -32,6 +33,7 @@ mod transition_bool_condition;
 mod transition_condition;
 mod transition_condition_op;
 mod transition_duration_binding;
+mod transition_focus_condition;
 mod transition_input_condition;
 mod transition_number_condition;
 mod transition_trigger_condition;
@@ -58,6 +60,7 @@ pub(crate) use bindables::{
 pub use instance::StateMachineInstance;
 pub use listener_invocation::{ScriptListenerInvocation, ScriptPointerEventKind};
 pub(crate) use listener_types::RuntimeListenerType;
+use scripted_transition_condition::RuntimeScriptedTransitionCondition;
 use state_machine_input::runtime_state_machine_input;
 pub use state_machine_input::{RuntimeStateMachineInput, StateMachineInputKind};
 pub use state_machine_input_instance::StateMachineInputInstance;
@@ -74,6 +77,7 @@ use transition_duration_binding::runtime_transition_duration_bindings;
 pub(crate) use transition_duration_binding::{
     RuntimeTransitionDurationBinding, StateMachineTransitionDurationInstance,
 };
+use transition_focus_condition::RuntimeTransitionFocusCondition;
 use transition_input_condition::RuntimeTransitionInputCondition;
 use transition_number_condition::RuntimeTransitionNumberCondition;
 use transition_trigger_condition::RuntimeTransitionTriggerCondition;

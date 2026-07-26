@@ -509,7 +509,7 @@ impl RuntimeScheduledListenerActionExecutor for RuntimeStateMachineListenerActio
     }
 
     fn evaluate_scripted_condition(&self, global_id: u32) -> bool {
-        super::transition_condition::evaluate_scripted_condition(
+        super::scripted_transition_condition::evaluate_scripted_condition(
             global_id,
             self.scripted_instances_by_global,
         )

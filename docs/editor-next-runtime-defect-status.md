@@ -7,11 +7,11 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: `F-ED-11` / `LOC-009` publication and independent verification;
+- phase: `Q0` control-plane provenance reconciliation;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
-- investigation base: `08286481b4e7420768f625f901a944f313b84903`;
+- investigation base: `e72323c808b91d706ba3b745396beaca7accd69a`;
 - Editor's last consumed runtime:
-  `ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9`;
+  `e72323c808b91d706ba3b745396beaca7accd69a`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
 - closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`,
   and `LOC-004`;
@@ -25,69 +25,40 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
 
-The active FL executor owns FL-A and the complete reservation recorded in the
-atlas. F-ED may write only its new evidence/checker/fixture paths until that
-lease changes. The intended published FL-A tip is
-`c4d81801898563c23f1b4f68e0c9ef0df83b1d41`; its uncommitted owner work and
-`LOC-007` remain outside F-ED.
+The FL reservation in the atlas remains deliberately conservative during Q0.
+No runtime, renderer, Scene, state-machine, Editor product, or compiler file is
+authorized by this provenance-only slice.
 
-`F-ED-11A` localized `LOC-019` independently of `LOC-009`. The WebGPU
-device and valid draw succeed; a clean `GPUDevice.popErrorScope()` fulfills
-with JavaScript `null`, which wasm-bindgen 0.2.126's undefined-only
-`JsOption::into_option` path sends into vendored wgpu's `Error::from_js`.
-The narrow repair at the existing BrowserWebGpu vendor boundary is red/green
-in real Chrome, and `make browser-webgpu-only-check` is green with a
-deterministic 64-pixel clean-scope row plus a concrete validation-error row.
-That repair landed in runtime PR #51 at exact merge
-`ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9`; unchanged Editor `P14-C06`
-consumption remains.
-
-`F-ED-11` has now qualified `LOC-009` as a separate structural
-mistranslation. Pinned C++ WebGPU selects authored target-0 whole-module WGSL
-plus mandatory target-16 `BindingMap`, preserves arbitrary logical and
-physical entry records in declaration order, and creates one shared shader
-module. Rust instead selected retired target-1 GLSL, discarded sidecars, split
-the stages, and cross-translated GLSL to WGSL. The repair at exact code
-checkpoint `22e4900243ee92a436afc1609f456525e8312352` ports the complete
-consumer lifecycle, including C++ last-wins descriptors, bare and named entry
-selection, retained Naga usage information, fail-closed target-16 visibility,
-and direct authored-WGSL submission. The old translator and dependency closure
-are deleted.
-
-The post-review executor battery is green: 414 runtime tests, 144 public
-`nuxie` tests, 721 pinned-C++ probes, ordinary and scripted 317/317 entries
-plus 647/647 segments with zero divergences, 1,468/1,468 renderer rows,
-required-WebGPU real-Chrome, C API, Apple, workspace, renderer-consumer,
-frame-loop, B-6, lint, format, and diff floors. The release-size SDK closure
-is 7,984,504 bytes without scripting and 8,885,736 bytes with scripting,
-both below the 9,437,184-byte ceiling. Independent
-re-review is clean with no P0/P1/P2 findings; merge and unchanged Editor
-`P14-C01` consumption remain.
+The immutable Editor checkpoint records the completed WebGPU-only consumption
+through runtime `e72323c8`: `P14-C01` is 4/4 green, `P14-C06` is 17/17 green,
+and RT-ED-003 direct presentation is consumed. Q0 does not use those product
+results to self-promote an atlas row; independent state promotion remains a
+separate step.
 
 ## Editor source snapshot
 
 The Editor executor committed and pushed the current reviewed source snapshot
-at `27ef7d471c3034aba4a4b839d2c8150d3bcb40c3`. It includes the intentional
-correction moving `P04-C12` off `RT-ED-004` and linking it to `LOC-018`, the
-WebGPU-only Editor support state, and the current product-child results. The
-three source artifacts are clean at that checkpoint.
+at `4da896beb5ec6815f6b01a2433875274a321d06c`. Its worktree and remote branch
+both resolve to that exact SHA, its runtime gitlink is
+`e72323c808b91d706ba3b745396beaca7accd69a`, and the three source artifacts
+are clean.
 
 The landed snapshot hashes are:
 
 - proposal:
-  `148d11f206edc41caad1f48cae0810b268456b2e220ba6253ac6d04ef450b9db`;
+  `0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983`;
 - runtime defects:
-  `a610201cc34c95bd5ff0838d95228af3983f38327ebbef87b253c3e49a357b9c`;
+  `01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67`;
 - parity ledger:
-  `d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c97`.
+  `a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04`.
 
 The earlier reviewed hashes remain in this file's Git history, but their formal
 dependency map is stale and must not be used for qualification. Any later
 artifact change makes the source-root check fail until a newly reviewed Editor
 checkpoint is recorded.
 
-Editor later consumed runtime
-`ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9`. Producer checkpoint
+The current checkpoint consumes runtime
+`e72323c808b91d706ba3b745396beaca7accd69a`. Producer checkpoint
 `f9d798dd3b1f9b2dfdbeb74dcdf4485aae4519f6` emits target-0 WGSL plus
 target-16 `BindingMap`; its exact one-UBO inner RSTB is SHA-256
 `546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d`.
@@ -158,22 +129,11 @@ fixture, executable probe, and behavioral assertions to use `d788e8ec`.
 
 ## Next queue
 
-1. publish and merge the independently reviewed executor-green `LOC-009`
-   repair, then have Editor consume the exact merge SHA and rerun unchanged
-   `P14-C01`;
-2. rerun unchanged Editor `P14-C06` against merged `LOC-019` runtime
-   `ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9`;
-3. obtain independent orchestrator verification for merged `F-ED-03` and have
-   Editor rerun unchanged `P09-C01`;
-4. qualify and close `F-ED-04` against its existing low-level runtime path
-   without touching reserved modules;
-5. requalify `F-ED-06`, `F-ED-07`, and `F-ED-08` under the
-   WebGPU-only support contract—no WebGL2 repair or fallback;
-6. keep `LOC-007` and every other reserved runtime-owner finding with the
-   active FL executor while file-disjoint evidence/API work proceeds;
-7. burn down the remaining queues in
-   `docs/editor-next-runtime-defect-goal.md` through Editor consumption and
-   the complete 27-child product matrix.
+1. finish Q0 by validating the immutable Editor checkpoint and the three
+   refreshed browser stimulus hashes with `run-check.sh`;
+2. independently review and merge the provenance-only Q0 diff;
+3. report the exact Q0 merge evidence and propose the next atlas defect;
+4. do not begin that defect until its scope is confirmed.
 
 No production defect repair is authorized by this status file alone. The goal,
 atlas classification, and live writer lease must all authorize the slice.

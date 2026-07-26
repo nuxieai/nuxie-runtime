@@ -159,7 +159,7 @@ stimulus_files = [
   { root = "repo", path = "crates/nuxie-render-api/src/lib.rs", sha256 = "5e263d8f641050fb631bcd28bd8b7a8863829de45eb27e9650a06510fdc0c2c0" },
   { root = "repo", path = "crates/nuxie-renderer/src/gpu_canvas.rs", sha256 = "5e7cb3218a82a835876d1ebbdf76528b39c37473fff372fbd661bebbf15c6543" },
   { root = "repo", path = "crates/nuxie/tests/imported_gpu_canvas.rs", sha256 = "4de28dd82a0ffbf48c3303248afcaf97dcba9140ed79d278327e1842a8bab64e" },
-  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "1ddb1368e5250c3941ae16f401471e26d1cf76877491936dc0d4cf1ae3a3ca46" },
+  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "34ea7f6b7a054651f175754a7af2c840d69c99e0728562859f129786c8a8bbdc" },
 ]
 
 [[fixture]]
@@ -225,9 +225,9 @@ kind = "browser-renderer"
 status = "implemented"
 driver = "make browser-webgpu-only-check"
 stimulus_files = [
-  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "1ddb1368e5250c3941ae16f401471e26d1cf76877491936dc0d4cf1ae3a3ca46" },
+  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "34ea7f6b7a054651f175754a7af2c840d69c99e0728562859f129786c8a8bbdc" },
   { root = "repo", path = "tools/browser-renderer-smoke/gpu-only.html", sha256 = "03c98e7c098f779e35b65d630f77035d0daff45f57daa3501943f082a36e7c9d" },
-  { root = "repo", path = "tools/browser-renderer-smoke/run-browser.cjs", sha256 = "60eb1059d55f426b768369849749ca8a27c9850eff87f356bd30555aec1ed7de" },
+  { root = "repo", path = "tools/browser-renderer-smoke/run-browser.cjs", sha256 = "2b675923970f56dd0c881e4adb6acd8327ebae6e1325521db848e0cc281dbc57" },
   { root = "repo", path = "vendor/wgpu-30.0.0/src/backend/webgpu.rs", sha256 = "b248630d054a1948e10413845a4b5913aa70b68d2ac52d4d51323aa3bd55491e" },
   { root = "repo", path = "vendor/wgpu-30.0.0/NUXIE_PATCH.md", sha256 = "e71602da453fc396b6c04975b9d70136348a7bf032f5de2b92e88aef2fb6de44" },
 ]

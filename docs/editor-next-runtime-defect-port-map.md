@@ -28,19 +28,19 @@ This map was prepared from these Editor Next handoff artifacts:
 
 | artifact | SHA-256 |
 |---|---|
-| `nuxie-editor-next-cutover-proposal.md` | `148d11f206edc41caad1f48cae0810b268456b2e220ba6253ac6d04ef450b9db` |
-| `nuxie-editor-next-runtime-defects.md` | `a610201cc34c95bd5ff0838d95228af3983f38327ebbef87b253c3e49a357b9c` |
-| `nuxie-editor-next-parity-ledger.json` | `d89e185411197c5d98c7e1a01cb414022de988a5ba4194670fcdefb9c39b7c97` |
+| `nuxie-editor-next-cutover-proposal.md` | `0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983` |
+| `nuxie-editor-next-runtime-defects.md` | `01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67` |
+| `nuxie-editor-next-parity-ledger.json` | `a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04` |
 
 The source copies live under:
 
 `/Users/levi/.codex/worktrees/7189/nuxie-dev/worktrees/editor-next-cutover-assembly/plans/`
 
 The immutable source checkpoint for those hashes is
-`27ef7d471c3034aba4a4b839d2c8150d3bcb40c3`.
+`4da896beb5ec6815f6b01a2433875274a321d06c`.
 
-The Editor artifacts last consumed runtime commit
-`13aedd6d92de0991eed8dc3fda085db2dff18d48`. That is not the same thing as
+The Editor artifacts at this immutable checkpoint consume runtime commit
+`e72323c808b91d706ba3b745396beaca7accd69a`. That is not the same thing as
 the runtime investigation HEAD or a future merged/consumed repair. Every atlas
 row must retain all of those SHAs separately.
 

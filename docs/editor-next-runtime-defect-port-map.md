@@ -361,7 +361,7 @@ fixture in `F-ED-00`.
 |---|---|---|
 | `RT-ED-001` | closed stale-oracle observation | focused current-pin `data_viz_demo` is exact; no further source work |
 | `RT-ED-002` | closed stale-oracle observation | focused current-pin `db_health_tracker` is exact; no further source work |
-| `RT-ED-003` | landed browser presentation/API repair, not runtime traversal; independent promotion pending | PR #55 splits ordinary WebGPU presentation from explicit readback at merge `e72323c8`, consumed by Editor checkpoint `7ca11e33` |
+| `RT-ED-003` | closed independently verified browser presentation repair | ordinary frames acquire one surface with no MAP_READ/ImageData, explicit capture alone reads back, Lost recovery is bounded, and merge `e72323c8` is consumed |
 | `RT-ED-004` | historical WebGL2 capability evidence; current WebGPU parity remains unqualified | preserve the old evidence; any current claim requires a direct current-pin typed rounded-clip WebGPU oracle, with no WebGL2 implementation or fork |
 | `RT-ED-005` | landed high-level generic number/color authoring repair; independent promotion pending | PR #49 merge `08286481` is consumed by Editor; remaining P09-C01 layout/TextStyle execution is deferred post-port verification |
 | `RT-ED-006` | retracted | retain tombstone only; no source work |
@@ -813,8 +813,11 @@ Clean Editor checkpoint
 `4da896beb5ec6815f6b01a2433875274a321d06c` consumes the merge. `P19-C03` is
 complete; `P04-C01` records the same runtime repair but remains Partial only on
 separate Editor-owned work. Neither downstream state gates RT-ED-003 repair
-closure or handoff. The atlas row remains reported pending independent
-orchestrator promotion.
+closure or handoff. Independent promotion confirms ordinary surface
+acquisition=1/MAP_READ=0/putImageData=0, explicit readback surface
+acquisition=0/MAP_READ=1, Lost recovery acquisitions=2/surfaces=2, persistent
+Lost typed and bounded, renderer 418 pass/40 ignored, and the native corpus
+1468 exact/837 byte-exact/0 divergent. The atlas row is closed.
 
 ### `F-ED-07` — Historical rounded WebGL2 clip evidence
 

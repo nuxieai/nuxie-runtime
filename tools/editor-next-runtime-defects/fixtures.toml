@@ -29,7 +29,7 @@ stimulus_files = [
 id = "fed.rt_ed_003.browser_present_readback"
 defect_id = "RT-ED-003"
 kind = "browser-renderer"
-status = "registered"
+status = "qualified"
 driver = "make browser-webgpu-only-check && cargo test -p nuxie-renderer --lib"
 stimulus_files = [
   { root = "repo", path = "crates/nuxie-renderer/src/browser.rs", sha256 = "4714f889fc32bc43cdd540fc74700703a08cbbdfbd94a7fb28ba68f379ece95a" },

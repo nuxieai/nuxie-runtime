@@ -258,13 +258,13 @@ reason = "Transferred observation has no linked Editor product child."
 id = "RT-ED-003"
 title = "Browser presentation requires a full CPU RGBA readback"
 source_class = "active-runtime-dependency"
-state = "reported"
+state = "closed"
 owner_class = "renderer"
-classification = "unqualified"
+classification = "verification-gap"
 ticket = "F-ED-06"
 fixture_id = "fed.rt_ed_003.browser_present_readback"
-preliminary_disposition = "Resolved WebGPU presentation adapter defect outside runtime traversal: PR #55 separates ordinary direct presentation from explicit RGBA readback; the row remains reported pending independent promotion."
-reproduction_sha256 = "971813001f3bde9cc86954dc1a0369b5858b1958d286e77d53eebc6f6c4433fe"
+preliminary_disposition = "Closed after independent promotion of the landed WebGPU presentation adapter repair: ordinary frames present directly, explicit capture alone reads back, and Lost recovery remains bounded and typed."
+reproduction_sha256 = "c7d0c36f0bc812a514305720305afcca67bc6cf2392960ce9cb93908337b9350"
 rust_stimulus = "BrowserFactory constructs one required-WebGPU canvas presentation domain; BrowserFrame::present acquires and directly presents the current surface texture without CPU readback, while BrowserFrame::finish_with_readback alone maps and returns exact RGBA. The lifecycle fixtures cover resize/frame leases, bounded Outdated reconfiguration, bounded Lost recreation on the retained device/canvas, persistent typed failure, frame release, and disposal."
 cpp_stimulus = "not-applicable: pinned C++ d788e8ec6e8b598526607d6a1e8818e8b637b60c has no browser canvas adapter, BrowserFactory, BrowserFrame, or WebGPU surface-acquisition API. Its ordinary render-versus-explicit-snapshot separation is conceptual evidence only; this additive Nuxie browser adapter is governed by the WebGPU presentation contract and unchanged renderer pixels."
 source_files = ["crates/nuxie-renderer/src/browser.rs","crates/nuxie-renderer/src/browser_surface_lifecycle.rs","crates/nuxie-renderer/src/present_pipeline.rs","crates/nuxie-renderer/src/surface.rs","tools/browser-renderer-smoke/src/lib.rs","tools/browser-renderer-smoke/run-browser.cjs","tools/check-browser-webgpu-only.sh","apps/nuxie-dashboard/tests/e2e/project-editor/device-frame-bezel-drag.spec.ts","apps/nuxie-dashboard/tests/e2e/editor-next-browser-proof/browser-proof.spec.ts","scripts/audit-editor-readback-boundary.mjs"]
@@ -272,7 +272,7 @@ source_members = ["BrowserFactory::new","BrowserFactory::resize","BrowserFactory
 lifecycle_phases = ["required-WebGPU factory/device/canvas-surface construction","premultiplied-alpha surface configuration","frame begin and active-frame lease retention","ordinary direct surface acquisition and GPU presentation without MAP_READ","explicit finish_with_readback GPU-to-CPU RGBA mapping","idle resize reconfiguration and in-flight resize rejection","Outdated reconfigure-and-retry exactly once","Lost recreate-and-retry exactly once on the retained device and canvas","persistent second acquisition failure returned as a typed bounded error","frame lease release and factory disposal"]
 rust_owner = "crates/nuxie-renderer/src/browser.rs owns BrowserFactory/BrowserFrame and the BrowserPresentation surface; browser_surface_lifecycle.rs owns bounded acquisition recovery; present_pipeline.rs and surface.rs own the shared GPU-only presentation blit and alpha contract; browser smoke and Editor proof files own executable boundary evidence."
 displaced_mechanism = "PR #55 removed the browser wrapper contract that made every ordinary finish allocate/map a full RGBA result and present through CPU ImageData. Ordinary frames now present directly; only explicit finish_with_readback retains the readback path."
-dependencies = ["F-ED-00B","F-ED-06"]
+dependencies = []
 target_tests = ["make browser-webgpu-only-check","cargo test -p nuxie-renderer --lib","pnpm --dir apps/nuxie-dashboard run editor-next:product-host:browser-proof","node scripts/audit-editor-readback-boundary.mjs","PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor device-frame-bezel-drag.spec.ts --workers=1"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
 owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#RT-ED-003"
@@ -304,25 +304,59 @@ surface = "ProductHost browser canvas plus explicit readback texture; native App
 reference_executable = "ProductHost browser proof and renderer-replay-ffi-dawn static reference corpus"
 reference_stamp_sha256 = "9077e7a86823453b7820e0bfb0fa13f7235a0d6f5e9df99d74d4353a5f4e05b5"
 command = "pnpm --dir apps/nuxie-dashboard run editor-next:product-host:browser-proof; node scripts/audit-editor-readback-boundary.mjs; PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor device-frame-bezel-drag.spec.ts --workers=1"
-evidence = "At committed Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c consuming e72323c808b91d706ba3b745396beaca7accd69a, each ordinary frame records getCurrentTexture=1, mapAsyncRead=0, and putImageData=0; explicit readback records getCurrentTexture=0 and mapAsyncRead=1 while preserving exact RGBA output. The readback audit reports zero prohibited matches and the unchanged normal-timeout device-frame drag gate passes 1/1."
+evidence = "At committed Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c consuming e72323c808b91d706ba3b745396beaca7accd69a, each ordinary frame records getCurrentTexture=1, mapAsyncRead=0, and putImageData=0; explicit readback records getCurrentTexture=0 and mapAsyncRead=1. Lost recovery records acquisitions=2 and surfaces=2; persistent Lost remains typed and bounded. Renderer tests report 418 pass/40 ignored, and the native corpus reports 1468 exact, 837 byte-exact, and 0 divergent."
 [defect.executor_verification]
 status = "pass"
 command = "PR #55 local closeout at head a1c56b5a80c88db4f6cee6550795b6e242394c46"
 evidence = "The corrected head passed the full Browser WebGPU smoke matrix, adversarial same-present lifecycle checks, renderer unit tests (418 passed, 0 failed, 40 ignored), host and wasm Clippy, format, and the exact fuzz-smoke gate. Its tree rebase-merged as e72323c808b91d706ba3b745396beaca7accd69a."
 [defect.orchestrator_verification]
-status = "pending"
-reason = "RT-ED-003 has exact merged and consumed evidence but remains reported until independent orchestrator verification and promotion."
+status = "pass"
+actor = "independent-orchestrator"
+command = "make browser-webgpu-only-check; cargo test -p nuxie-renderer --lib; make renderer-golden"
+evidence = "Independent promotion confirms ordinary surface acquisition=1/MAP_READ=0/putImageData=0, explicit readback surface acquisition=0/MAP_READ=1, Lost recovery acquisitions=2/surfaces=2, persistent Lost typed and bounded, renderer 418 pass/40 ignored, and corpus 1468 exact/837 byte-exact/0 divergent."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:RT-ED-003"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "The pre-repair browser wrapper forced ordinary presentation through full RGBA MAP_READ and ImageData."
+[[defect.history]]
+state = "qualified"
+actor = "f-ed-executor"
+evidence = "The additive BrowserWebGpu adapter is governed by direct-presentation, explicit-readback, and bounded surface-recovery contracts."
+[[defect.history]]
+state = "mapped"
+actor = "f-ed-executor"
+evidence = "Mapped to BrowserFactory/BrowserFrame, BrowserPresentation, browser_surface_lifecycle, present_pipeline, and surface without runtime traversal ownership."
+[[defect.history]]
+state = "executor-green"
+actor = "f-ed-executor"
+evidence = "PR #55 final head a1c56b5a rebase-merged as e72323c8 with browser, lifecycle, renderer, lint, fuzz, and pixel floors green."
+[[defect.history]]
+state = "orchestrator-verified"
+actor = "independent-orchestrator"
+evidence = "Direct presentation/readback counters, bounded Lost recovery, renderer tests, and the native pixel corpus were independently verified."
+[[defect.history]]
+state = "handoff-ready"
+actor = "independent-orchestrator"
+evidence = "Exact repair merge e72323c8 and downstream handoff evidence are complete."
+[[defect.history]]
+state = "editor-consumed"
+actor = "editor-cutover"
+evidence = "Editor checkpoint 4da896be consumes runtime e72323c8 and P19-C03 is complete."
+[[defect.history]]
+state = "closed"
+actor = "independent-orchestrator"
+evidence = "The landed browser presentation repair is independently verified and consumed; no production work remains."
 [defect.cpp_result]
 status = "not-applicable"
 reason = "Pinned C++ has no browser canvas adapter or WebGPU surface-acquisition API. The direct-presentation versus explicit-readback repair is additive Nuxie browser infrastructure and is refereed by the WebGPU contract plus unchanged native renderer pixels, not claimed as a C++ runtime-file port."
 [defect.rust_result]
 status = "pass"
 command = "PR #55 WebGPU browser and renderer lifecycle gates at a1c56b5a80c88db4f6cee6550795b6e242394c46"
-evidence = "Ordinary frames present directly to the WebGPU surface; explicit capture alone enters the MAP_READ path. Lost and outdated surface recovery is bounded, premultiplied alpha is retained, and persistent failure remains typed."
+evidence = "Ordinary frames record surface acquisition=1/MAP_READ=0/putImageData=0; explicit capture records surface acquisition=0/MAP_READ=1. Lost recovery records acquisitions=2/surfaces=2, persistent Lost stays typed and bounded, renderer tests report 418 pass/40 ignored, and the corpus reports 1468 exact/837 byte-exact/0 divergent."
 [defect.editor_result]
 status = "pass"
 command = "pnpm --dir apps/nuxie-dashboard run editor-next:product-host:browser-proof && node scripts/audit-editor-readback-boundary.mjs && PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor device-frame-bezel-drag.spec.ts --workers=1"

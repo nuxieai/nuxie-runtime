@@ -14,9 +14,9 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - Editor's last consumed runtime:
   `e72323c808b91d706ba3b745396beaca7accd69a`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
-- closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`,
-  `LOC-004`, `LOC-006`, and `LOC-014`;
-- open rows: 18;
+- closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`,
+  `LOC-003`, `LOC-004`, `LOC-006`, and `LOC-014`;
+- open rows: 17;
 - formal/structured product children in the landed Editor snapshot: 9;
 - candidate-linked product children: 15;
 - union: 23, with only `P09-C01` overlapping;
@@ -61,7 +61,7 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   d788 produces 0.200000003 at `advance(0)` and 0.5 after another 0.5 seconds.
   Non-main `dd3be99c` appears to implement the seam but is not an ancestor of
   fe0/main; the uncommitted Scene patch has no landing claim;
-- defects closed since the preceding Q0 report: 2;
+- defects closed since the preceding Q0 report: 3;
 - serialized evidence-only closures: `LOC-006`, `LOC-014`, `LOC-011`,
   `RT-ED-003`, then `LOC-019`;
 - parked repair lane: resume `LOC-009` diagnosis only in a different reliable
@@ -272,10 +272,13 @@ browser proof records `getCurrentTexture=1`, `mapAsyncRead=0`, and
 `putImageData=0` for every measured ordinary ProductHost presentation, while
 explicit capture records `getCurrentTexture=0` and `mapAsyncRead=1`. The
 product-host proof, static readback audit, and unchanged normal-timeout
-device-frame drag gate are green, including the focused drag result 1/1. The
-atlas row remains `reported` until independent orchestrator verification and
-promotion; `P19-C03` consumption is downstream evidence, not a prerequisite
-for closing the verified landed repair.
+device-frame drag gate are green, including the focused drag result 1/1.
+Independent promotion confirms ordinary surface acquisition=1/MAP_READ=0/
+putImageData=0, explicit readback surface acquisition=0/MAP_READ=1, Lost
+recovery acquisitions=2/surfaces=2, persistent Lost typed and bounded,
+renderer 418 pass/40 ignored, and corpus 1468 exact/837 byte-exact/0
+divergent. The atlas row is closed; `P19-C03` consumption remains downstream
+evidence rather than a repair prerequisite.
 
 `F-ED-03` / `RT-ED-005` is classified as an API-surface gap, not a
 low-level runtime defect. PR #49's final head

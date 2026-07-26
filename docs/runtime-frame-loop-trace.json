@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "b4f956dbd2134680fdf446e512952da0450d3f4310365494d474b30f52beb716",
+    "cpp_binary_sha256": "9ed13f9576c40ee4cf55411297534dcfb91662bbe4ac46255d0948472b927d9e",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "acf04bd569227235a16e146254633af8553ea33347c19d27bac269e9b9ca43c5",
-    "rust_coverage_sha256": "689f744a10d7b01bf58f3fcde7b950c0764275dce1706212fcbe441103a6829f",
-    "rust_mechanism_coverage_sha256": "bc9254acbe9207e6edf401e4628dd1ae414a238c443824c666375699cc992e85",
-    "rust_steady_coverage_sha256": "897d06df9431e73b49975af5f688aecec3870daf3361bde233ccce196e27ec34"
+    "rust_binary_sha256": "3abc6fbfb1218752a02385fb8e42684abbc43b0765c95255eb98888cb4bfc89e",
+    "rust_coverage_sha256": "1e6c1e5cf14daa7ced67cc14f9897141582c80906a7fa52294d68c662884ce7f",
+    "rust_mechanism_coverage_sha256": "1dc48c47169ec84aad746fb74ccd1499ff029e1fc25b9d078af482f3948cb539",
+    "rust_steady_coverage_sha256": "222e76b487dcabd6b91b7756100df6ef28747a3caca0f43c420daf29ba7f3f2e"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -6351,22 +6351,32 @@
           "name": "nuxie_runtime::state_machine::state_transition::transition_duration_value"
         }
       ],
-      "crates/nuxie-runtime/src/state_machine/transition_conditions.rs": [
+      "crates/nuxie-runtime/src/state_machine/transition_bool_condition.rs": [
+        {
+          "count": 5,
+          "name": "<nuxie_runtime::state_machine::transition_bool_condition::RuntimeTransitionBoolCondition>::evaluate"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/transition_condition.rs": [
         {
           "count": 2,
-          "name": "<nuxie_runtime::state_machine::transition_conditions::RuntimeTransitionCondition>::evaluate"
+          "name": "<nuxie_runtime::state_machine::transition_condition::RuntimeTransitionCondition>::evaluate"
         },
         {
           "count": 5,
-          "name": "<nuxie_runtime::state_machine::transition_conditions::RuntimeTransitionCondition>::evaluate_direct_input"
-        },
-        {
-          "count": 5,
-          "name": "<nuxie_runtime::state_machine::transition_conditions::RuntimeTransitionCondition>::evaluate_direct_input::{closure#0}"
-        },
+          "name": "<nuxie_runtime::state_machine::transition_condition::RuntimeTransitionCondition>::evaluate_direct_input"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/transition_condition_op.rs": [
         {
           "count": 2,
-          "name": "<nuxie_runtime::state_machine::transition_conditions::TransitionConditionOp>::compare_bool"
+          "name": "<nuxie_runtime::state_machine::transition_condition_op::TransitionConditionOp>::compare_bool"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/transition_input_condition.rs": [
+        {
+          "count": 5,
+          "name": "<nuxie_runtime::state_machine::transition_input_condition::RuntimeTransitionInputCondition>::input_index"
         }
       ],
       "crates/nuxie-runtime/src/text.rs": [
@@ -7198,16 +7208,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 7168,
+    "file_count": 7174,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "f2f73085c067e36f3395e0f0a89b9e72f85dde725b23a1b417e4699751054970"
+    "sha256": "181ce40d57d88d9d5ced537ab88382cf93dd3d55e18a44e13f976f21f5dfed06"
   },
-  "rust_ref": "a057f9a635c90a8b2484c7f878fe359d7a242102",
+  "rust_ref": "e75c6269ee16c5141399ecb029f19cefd1b385ec",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7168,
+      "file_count": 7174,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "f2f73085c067e36f3395e0f0a89b9e72f85dde725b23a1b417e4699751054970"
+      "sha256": "181ce40d57d88d9d5ced537ab88382cf93dd3d55e18a44e13f976f21f5dfed06"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -7231,8 +7241,8 @@
       "state-machine": 7
     },
     "dynamic_cpp_functions": 461,
-    "dynamic_rust_files": 20,
-    "dynamic_rust_functions": 1203,
+    "dynamic_rust_files": 23,
+    "dynamic_rust_functions": 1204,
     "static_cpp_files": 341
   },
   "steady_allocation_counts": {

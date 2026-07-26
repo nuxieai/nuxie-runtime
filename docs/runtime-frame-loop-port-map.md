@@ -46,7 +46,7 @@ of the total proof without reopening faithful draw-owner code.
 | FL-B | KeyFrame, KeyedProperty, KeyedObject, LinearAnimation, AnimationReset, blend animations | authored timing, targets, and reset values live on their C++-corresponding owner |
 | FL-C | StateMachineInstance, layers, transitions, conditions, actions, listeners, inputs | definitions and instance collections are retained once; advance performs no rediscovery |
 | FL-D | Event, DataBind, DataContext, ViewModel, Artboard and nested settlement | dirty batches and next-frame event semantics flow through the owning Artboard/SMI |
-| FL-E | live Artboard draw and the existing 41-owner draw ledger | update-owned state is read live through `Renderer`; no scene replay/materialization |
+| FL-E | live Artboard draw, TextInput editing/selection dispatch, and the existing 41-owner draw ledger | update-owned state is read live through `Renderer`; no scene replay/materialization |
 
 The order is binding: FL-A → FL-B → FL-C → FL-D → FL-E. A later wave may
 start only when all of its dependency rows are closed and its floor run is

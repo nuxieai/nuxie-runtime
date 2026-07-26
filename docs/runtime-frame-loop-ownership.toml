@@ -236,6 +236,7 @@ include = [
 exclude = [
   "src/animation/blend_state*.cpp",
   "src/animation/animation_state*.cpp",
+  "src/animation/text_input_listener_group.cpp",
 ]
 rust_modules = [
   "crates/nuxie-runtime/src/animation.rs",
@@ -298,6 +299,7 @@ include = [
   "src/shapes/**/*.cpp",
   "src/text/*.cpp",
   "src/text/**/*.cpp",
+  "src/animation/text_input_listener_group.cpp",
   "src/layout/*.cpp",
   "src/layout/**/*.cpp",
   "src/draw_rules.cpp",
@@ -980,8 +982,8 @@ status = "pending"
 
 [[file]]
 upstream = "src/animation/text_input_listener_group.cpp"
-source_set = "state-machine"
-wave = "FL-C"
+source_set = "live-draw-boundary"
+wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
 dynamically_reached = false
 status = "pending"

@@ -1007,12 +1007,12 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** finish FL-C1's four occurrence-owned listener groups after
-the input and typed-listener definitions on provisional runtime base
-`95eb04b7cfb847f24ba77872bd8a0ee43da1af41`. FL-B rows remain pending
-reacceptance and are not promoted by continuing FL-C.
-The listener-invocation owner now has a direct Rust file, but its non-pointer
-variants remain part of the same canonical listener-group next slice.
+**Canonical NEXT:** FL-C2 transition/condition definition ownership after the
+completed 12-file FL-C1 input/listener-definition translation on provisional
+runtime base `95eb04b7cfb847f24ba77872bd8a0ee43da1af41`. FL-B and FL-C1 rows
+remain pending reacceptance/acceptance and are not promoted by continuing
+FL-C. Listener groups remain in scope beside their actual FL-C4 invocation
+and FL-E TextInput dependencies.
 
 ## Next queue (top = next; orchestrator maintains)
 
@@ -1026,7 +1026,7 @@ variants remain part of the same canonical listener-group next slice.
    through FL-B4 are translated on a provisional tip and remain pending
    reacceptance. Coordinator direction authorizes FL-C to proceed without
    falsely promoting FL-B. Execute FL-C1 through FL-C5 from the frozen
-   corrected 50-file/eight-member spec
+   corrected 49-file/eight-member spec
    `docs/runtime-frame-loop-fl-c-spec.md`, followed
    by dependency-ordered Artboard/DataBind and live-draw owner waves. Measure
    the whole corpus only after a complete wave. The sorted slow-scene list is

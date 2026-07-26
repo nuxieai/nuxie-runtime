@@ -1,7 +1,7 @@
 use super::RuntimeScheduledListenerAction;
 use super::listener_types::{
     RuntimeGamepadInputEvent, RuntimeListenerInputTypeGamepad, RuntimeListenerInputTypeKeyboard,
-    RuntimeListenerInputTypeSemantic, RuntimeListenerType,
+    RuntimeListenerInputTypeSemantic, RuntimeListenerInputTypeViewModel, RuntimeListenerType,
 };
 use super::state_machine_listener_single::{
     runtime_listener_single_event_local_indices, runtime_listener_single_type,
@@ -19,6 +19,7 @@ pub(crate) struct RuntimeStateMachineListener {
     pub(crate) event_local_indices: Vec<usize>,
     pub(crate) view_model_index: Option<usize>,
     pub(crate) view_model_property_path: Option<Vec<usize>>,
+    pub(crate) view_model_input_types: Vec<RuntimeListenerInputTypeViewModel>,
     pub(crate) gamepad_input_types: Vec<RuntimeListenerInputTypeGamepad>,
     pub(crate) keyboard_input_types: Vec<RuntimeListenerInputTypeKeyboard>,
     pub(crate) semantic_input_types: Vec<RuntimeListenerInputTypeSemantic>,
@@ -153,7 +154,7 @@ pub(super) fn runtime_state_machine_listener(
     };
     let event_local_indices = runtime_listener_event_local_indices(listener);
     let (view_model_index, view_model_property_path) =
-        runtime_listener_view_model_property_path(listener)
+        runtime_listener_single_view_model_property_path(listener)
             .map(|(view_model_index, property_path)| (Some(view_model_index), Some(property_path)))
             .unwrap_or((None, None));
 
@@ -163,6 +164,7 @@ pub(super) fn runtime_state_machine_listener(
         event_local_indices,
         view_model_index,
         view_model_property_path,
+        view_model_input_types: runtime_listener_input_type_viewmodels(listener),
         gamepad_input_types: runtime_listener_input_type_gamepads(listener),
         keyboard_input_types: runtime_listener_input_type_keyboards(listener),
         semantic_input_types: runtime_listener_input_type_semantics(listener),
@@ -223,32 +225,19 @@ fn runtime_listener_input_type_semantics(
         .collect()
 }
 
-fn runtime_listener_view_model_property_path(
+fn runtime_listener_input_type_viewmodels(
     listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
-) -> Option<(usize, Vec<usize>)> {
+) -> Vec<RuntimeListenerInputTypeViewModel> {
     if listener.object.type_name == "StateMachineListenerSingle" {
-        return runtime_listener_single_view_model_property_path(listener);
+        return Vec::new();
     }
 
-    let encoded = listener
+    listener
         .listener_input_types
         .iter()
-        .find(|input_type| {
-            input_type
-                .uint_property("listenerTypeValue")
-                .and_then(RuntimeListenerType::from_value)
-                == Some(RuntimeListenerType::ViewModel)
-        })
-        .and_then(|input_type| input_type.id_list_property("viewModelPathIds"))?;
-    let (view_model_index, property_path) = encoded.split_first()?;
-    let view_model_index = usize::try_from(*view_model_index).ok()?;
-    let property_path = property_path
-        .iter()
-        .copied()
-        .map(usize::try_from)
-        .collect::<Result<Vec<_>, _>>()
-        .ok()?;
-    (!property_path.is_empty()).then_some((view_model_index, property_path))
+        .filter(|input_type| input_type.type_name == "ListenerInputTypeViewModel")
+        .map(|input_type| RuntimeListenerInputTypeViewModel::from_imported(input_type))
+        .collect()
 }
 
 fn runtime_listener_types(
@@ -511,6 +500,82 @@ mod tests {
         );
         assert!(listener.semantic_constraints_met(2));
         assert!(!listener.semantic_constraints_met(1));
+    }
+
+    #[test]
+    fn imported_listener_retains_every_view_model_input_in_authored_order() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+            record("StateMachine", Vec::new()),
+            record(
+                "StateMachineListener",
+                vec![property("StateMachineListener", "targetId", 0)],
+            ),
+            record(
+                "ListenerInputTypeViewModel",
+                vec![
+                    property(
+                        "ListenerInputTypeViewModel",
+                        "listenerTypeValue",
+                        RuntimeListenerType::ViewModel as u64,
+                    ),
+                    bytes_property("ListenerInputTypeViewModel", "viewModelPathIds", vec![0, 0]),
+                ],
+            ),
+            record(
+                "ListenerInputTypeViewModel",
+                vec![
+                    property(
+                        "ListenerInputTypeViewModel",
+                        "listenerTypeValue",
+                        RuntimeListenerType::ViewModel as u64,
+                    ),
+                    bytes_property("ListenerInputTypeViewModel", "viewModelPathIds", vec![0, 1]),
+                ],
+            ),
+            record(
+                "ListenerInputTypeViewModel",
+                vec![property(
+                    "ListenerInputTypeViewModel",
+                    "listenerTypeValue",
+                    RuntimeListenerType::ViewModel as u64,
+                )],
+            ),
+        ])
+        .expect("view-model listener authoring records import");
+        let graph = GraphFile::from_runtime_file(&file).expect("view-model listener graph builds");
+        let authored = file.artboard_state_machine_graphs(0);
+        let listener = runtime_state_machine_listener(
+            &file,
+            graph.artboards.first().expect("artboard graph"),
+            &[],
+            &authored[0].listeners[0],
+        )
+        .expect("view-model listener is retained");
+
+        assert!(listener.has_listener(RuntimeListenerType::ViewModel));
+        assert_eq!(listener.view_model_input_types.len(), 3);
+        assert_eq!(listener.view_model_input_types[0].global_id, 4);
+        assert_eq!(
+            listener.view_model_input_types[0].source_path(),
+            Some((0, [0].as_slice()))
+        );
+        assert_eq!(listener.view_model_input_types[1].global_id, 5);
+        assert_eq!(
+            listener.view_model_input_types[1].source_path(),
+            Some((0, [1].as_slice()))
+        );
+        assert_eq!(listener.view_model_input_types[2].global_id, 6);
+        assert_eq!(listener.view_model_input_types[2].source_path(), None);
+    }
+
+    fn bytes_property(type_name: &str, name: &str, value: Vec<u8>) -> AuthoringProperty {
+        AuthoringProperty {
+            key: property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value: AuthoringValue::Bytes(value),
+        }
     }
 
     const KEY_PHASE_DOWN_FOR_TEST: u64 = 1;

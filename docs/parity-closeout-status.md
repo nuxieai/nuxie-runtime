@@ -1007,9 +1007,10 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** FL-C1 inputs/listener-definition ownership on provisional
-runtime base `95eb04b7cfb847f24ba77872bd8a0ee43da1af41`. FL-B rows remain pending
-reacceptance and are not promoted by starting FL-C.
+**Canonical NEXT:** finish FL-C1's four occurrence-owned listener groups after
+the input and typed-listener definitions on provisional runtime base
+`95eb04b7cfb847f24ba77872bd8a0ee43da1af41`. FL-B rows remain pending
+reacceptance and are not promoted by continuing FL-C.
 
 ## Next queue (top = next; orchestrator maintains)
 

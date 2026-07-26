@@ -57,6 +57,19 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   C++ sources, so the executable source set now includes `src/inputs/*.cpp`
   and the lane contains 16 files. This is scope completion, not a new feature
   choice; all three rows remain pending.
+- FL-C1 now has direct Rust files for all four typed listener-input
+  definitions and the three concrete input records. Keyboard, gamepad, and
+  semantic constraints match their C++ branch order and wildcard rules.
+  ViewModel listeners no longer discard every authored path after the first:
+  one occurrence retains the authored listener-definition arena, owns one
+  property binding per typed ViewModel input in order, and routes every
+  mutation to the same parent listener queue entry
+  (`listener_input_type_viewmodel.cpp`;
+  `state_machine_instance.cpp:1324-1489,3021-3025`). Focused definition,
+  import, and occurrence/FIFO tests plus the full 507 / 507 runtime floor are
+  green. The exact next owners are the four fresh listener groups; they must
+  live in matching Rust files and must not be appended to
+  `state_machine/instance.rs`.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
   defined post-advance C++ result. No `Option<bool>` API break or

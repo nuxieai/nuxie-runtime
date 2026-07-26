@@ -696,13 +696,13 @@ note = "Direct filename correspondence and C++ constraint semantics established 
 upstream = "src/animation/listener_types/listener_input_type_viewmodel.cpp"
 status = "pending"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/animation.rs"
+rust_module = "crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type_viewmodel.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0057"
 b6_verdict = "DIVERGENT"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Consolidated Rust port for animation."
+note = "Direct filename correspondence established in FL-C1. Every authored ViewModel input path is retained in order; one occurrence owns all property bindings and reports their shared parent listener. Full listener-lane verification remains pending."
 
 [[file]]
 upstream = "src/animation/listener_viewmodel_change.cpp"

@@ -33,10 +33,10 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - active production-repair lane: `LOC-009` is a confirmed physical
   shader-module error-scope defect requiring a new production landing; it is
   `regression-reopened`, with PR #54 / `7f1450dc` retained only as historical
-  evidence, and is active but waiting on internal Lua WebAssembly resume task
-  `019f9f34-a75f-7a11-a580-e9f54e610d93` and branch
-  `levi/fix-wasm-lua-coroutine-resume`, and remains outside the shared tracking
-  merge line;
+  evidence, and is frozen outside the shared tracking merge line while
+  replacement clean-worktree task
+  `019f9f59-1ac6-7e32-b973-5deb6b457c05` diagnoses the canonical browser Lua
+  crash;
 - deferred/parked production lane: malformed embedded-font outline crash and
   its existing PR #60 writer at head
   `61d5d018aa036882d17cea1065a78d7f2e057547`; do not finish, rebase, or land it
@@ -47,17 +47,19 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - serialized evidence-only closures: `LOC-006`, `LOC-014`, `LOC-011`,
   `RT-ED-003`, then `LOC-019`;
 - waiting repair lane: resume the `LOC-009` production repair only after the
-  internal Lua WebAssembly resume dependency lands; do not close it without a
-  new production landing;
+  replacement task verifies origin/main `fe0a0a07` and a reviewed replacement
+  lands; do not close or consume the row without that new production SHA;
 - current `LOC-009` proof: a temporary uncommitted real-GPU probe on exact
   `fe0a0a07` / tree `4512e0d7` returns `Ok` while Metal reports an uncaught
   max-bind-groups shader-module validation error; the 2,129-byte local log has
   SHA-256
   `93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611`;
 - current `LOC-009` browser dependency: the canonical path crashes at
-  `luaG_indexerror` / `luaD_throw`; cause remains under investigation in the
-  focused Lua WebAssembly task using short durable checkpoints after repeated
-  system errors; the row is frozen and has consumed nothing in this cycle;
+  `luaG_indexerror` / `luaD_throw`; this is the sole authoritative browser
+  observation, and cause remains under investigation in replacement task
+  `019f9f59-1ac6-7e32-b973-5deb6b457c05`, which starts read-only with minimal
+  instrumentation in a clean worktree and must not copy the prior dirty
+  harness; the row is frozen and has consumed nothing in this cycle;
 - blocked/overlapping lanes: `LOC-002` and `LOC-007` need d788 requalification
   and their FL collision boundary; `LOC-005` needs the direct d788
   shared-instance differential.
@@ -281,10 +283,9 @@ exact local canonical floors; no queued hosted Apple lane is relabeled green.
 2. serialize the remaining evidence-only closures in binding order:
    `LOC-014`, `LOC-011`, `RT-ED-003`, then `LOC-019`;
 3. keep `LOC-009` outside the shared tracking merge line; resume its production
-   repair only after internal Lua WebAssembly resume task
-   `019f9f34-a75f-7a11-a580-e9f54e610d93` on
-   `levi/fix-wasm-lua-coroutine-resume` lands, and do not close it without a
-   new production landing;
+   repair only after clean-worktree diagnosis task
+   `019f9f59-1ac6-7e32-b973-5deb6b457c05` verifies origin/main `fe0a0a07`; do
+   not close or consume it without a reviewed new production landing;
 4. leave `RT-ED-007` with Runtime Fix and do not create a duplicate writer;
 5. keep PR #60 and the malformed embedded-font outline crash deferred/parked,
    then refill other disjoint qualification lanes from the reconciled

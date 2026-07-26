@@ -154,16 +154,18 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   PR #54's `7f1450dc` landing remains immutable history, but independent
   real-GPU verification found an unresolved physical shader-module
   error-scope regression. The row is not promotable or complete and requires a
-  new production landing after internal Lua WebAssembly repair task
-  `019f9f34-a75f-7a11-a580-e9f54e610d93` on
-  `levi/fix-wasm-lua-coroutine-resume`. The current evidence is a temporary,
-  uncommitted real-GPU probe at exact `fe0a0a07` / tree `4512e0d7`; its
+  a new production landing after replacement clean-worktree task
+  `019f9f59-1ac6-7e32-b973-5deb6b457c05` (“Diagnose browser Lua crash”).
+  That task must verify origin/main `fe0a0a07`, start read-only with minimal
+  instrumentation, and must not copy the prior dirty harness. The current
+  evidence is a temporary, uncommitted real-GPU probe at exact `fe0a0a07` /
+  tree `4512e0d7`; its
   2,129-byte local log has SHA-256
   `93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611`.
-  The canonical browser path still crashes at `luaG_indexerror` /
-  `luaD_throw`; its cause remains under investigation in that focused
-  dependency task using short durable checkpoints after repeated system
-  errors. LOC-009 remains frozen and its reopened cycle has consumed nothing.
+  The sole authoritative browser observation is the canonical Chrome abort at
+  `luaG_indexerror` / `luaD_throw`; its cause remains under investigation.
+  LOC-009 remains frozen, its reopened cycle has consumed nothing, and it may
+  consume only a reviewed landed replacement SHA.
 - Open formal implementation blocker assigned to Runtime Fix: `RT-ED-007`.
   Defects Fix preserves its diagnosis and tests but has no Scene-authoring
   writer; it records independent verification after the Runtime Fix landing.
@@ -314,12 +316,12 @@ Current work is:
 
 - independently promote the landing-provenance records for `RT-ED-003` and
   `LOC-019`; their production repairs and Editor consumption are complete;
-- keep `LOC-009` outside the serialized tracking merge line while its new
-  production repair waits on internal Lua WebAssembly repair task
-  `019f9f34-a75f-7a11-a580-e9f54e610d93` and branch
-  `levi/fix-wasm-lua-coroutine-resume`; preserve PR #54 at `7f1450dc` as
-  historical evidence, but do not promote or close the row without a new
-  production landing;
+- keep `LOC-009` outside the serialized tracking merge line and frozen while
+  replacement task `019f9f59-1ac6-7e32-b973-5deb6b457c05` diagnoses the
+  canonical Chrome abort from verified origin/main `fe0a0a07` in a clean
+  worktree; preserve PR #54 at `7f1450dc` as historical evidence, but do not
+  promote, close, or consume the row without a reviewed new production
+  landing;
 - retain `RT-ED-004` / `F-ED-07` only as historical WebGL2 evidence. It has no
   linked product scenario and authorizes no implementation. A current
   rounded-clip claim exists only if an explicitly scheduled identical-input

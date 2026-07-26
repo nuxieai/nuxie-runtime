@@ -173,9 +173,8 @@ landing-provenance promotion. PR #54's `LOC-009` consumer repair at
 `7f1450dc` remains historical evidence, but independent real-GPU verification
 reopened that row on an unresolved physical shader-module error-scope
 regression. `LOC-009` is not promotable or complete and requires a new
-production landing after internal Lua WebAssembly repair task
-`019f9f34-a75f-7a11-a580-e9f54e610d93` on
-`levi/fix-wasm-lua-coroutine-resume`.
+production landing after replacement clean-worktree diagnosis task
+`019f9f59-1ac6-7e32-b973-5deb6b457c05` (“Diagnose browser Lua crash”).
 Before such a fix lands, the F-ED orchestrator must obtain a fresh handshake
 from the FL executor and rerun the unchanged 1,468-row pixel referee. The
 renderer backend is outside the FL port boundary, but FL uses its pixels as a
@@ -220,9 +219,8 @@ The safe next queue is therefore:
 2. serialize the evidence-only closures in binding order: `LOC-006`,
    `LOC-014`, `LOC-011`, `RT-ED-003`, then `LOC-019`;
 3. keep `LOC-009` outside that shared tracking line while its new production
-   repair waits on internal Lua WebAssembly repair task
-   `019f9f34-a75f-7a11-a580-e9f54e610d93` and branch
-   `levi/fix-wasm-lua-coroutine-resume`;
+   repair waits on replacement clean-worktree diagnosis task
+   `019f9f59-1ac6-7e32-b973-5deb6b457c05`;
 4. fan out read-only direct qualifications; treat `RT-ED-004` only as
    historical WebGL2 evidence unless an explicit WebGPU-only requalification
    is scheduled;
@@ -372,7 +370,7 @@ fixture in `F-ED-00`.
 | `LOC-006` | closed no-repair stale characterization | exact committed provenance plus the independent no-hover rerun prove the alleged retained-pixel defect was gesture contamination; the legal reproduced/stale-oracle/closed path is complete |
 | `LOC-007` | committed Editor evidence plus historical C++ source identifies a missing dirt chain | requalify d788 ParametricPath width/height through Path, Shape, and PathComposer, then track the sole FL-E owner landing |
 | `LOC-008` | candidate public API-surface gap | establish the C++ ownership contract, then expose the exact runtime path only if runtime owns it |
-| `LOC-009` | historical structural WebGPU consumer repair with a confirmed real-GPU shader-module validation regression | preserve PR #54 / `7f1450dc` as history; new production repair is active but waits on Lua WebAssembly task `019f9f34-a75f-7a11-a580-e9f54e610d93` / `levi/fix-wasm-lua-coroutine-resume` |
+| `LOC-009` | historical structural WebGPU consumer repair with a confirmed real-GPU shader-module validation regression | preserve PR #54 / `7f1450dc` as history; keep the row frozen while clean-worktree task `019f9f59-1ac6-7e32-b973-5deb6b457c05` diagnoses the canonical Chrome abort |
 | `LOC-011` | real product symptom, owner unproven | inspect authored text, live VM value, post-bind target, shaped runs, then pixels |
 | `LOC-012` | current renderer differential | compare the supported Rust WebGPU result with pinned C++ only after text/feather rows are separated |
 | `LOC-013` | text/font-pipeline candidate, exact stage unproven | same font bytes, axes, glyph IDs, advances, and outlines through C++ and Rust |
@@ -968,9 +966,8 @@ awaiting-merge/awaiting-rerun language and remain historical evidence.
 Independent later real-GPU verification found an unresolved physical
 shader-module error-scope regression, so the row is now
 `regression-reopened`, not promotable or complete. A new production landing is
-required after internal Lua WebAssembly repair task
-`019f9f34-a75f-7a11-a580-e9f54e610d93` on
-`levi/fix-wasm-lua-coroutine-resume`.
+required after replacement task `019f9f59-1ac6-7e32-b973-5deb6b457c05`
+completes its clean-worktree diagnosis.
 
 The current negative proof is local/non-hosted at unfixed main
 `fe0a0a07db302ce2f0282a2d919ea249e83144e5` (tree `4512e0d7`) on Apple M5
@@ -983,12 +980,14 @@ error. Its 2,129-byte raw log has SHA-256
 PR #54's positive-path 7/7 and browser results remain valid historical evidence
 but never exercised a device-rejected physical module.
 
-The canonical browser path separately remains a valid crash at
-`luaG_indexerror` / `luaD_throw`. Its cause is under investigation in the
-focused Lua WebAssembly dependency task, which now uses short durable
-diagnostic checkpoints after repeated system errors. LOC-009 is frozen outside
-the shared tracking line and its reopened cycle has consumed no runtime or
-superproject landing.
+The sole authoritative browser observation is the canonical Chrome abort at
+`luaG_indexerror` / `luaD_throw`. Its cause is under investigation in
+replacement task `019f9f59-1ac6-7e32-b973-5deb6b457c05`, which must verify
+origin/main `fe0a0a07`, start read-only with minimal instrumentation in a clean
+worktree, and must not copy the prior dirty harness. LOC-009 is frozen outside
+the shared tracking line, its reopened cycle has consumed no runtime or
+superproject landing, and it may consume only a reviewed landed replacement
+SHA.
 
 The two rows share a real-Chrome smoke harness but not a defect mechanism:
 `LOC-019` owns nullable WebIDL error-scope decoding, while `LOC-009` owns RSTB
@@ -1123,9 +1122,10 @@ Qualification fan-out is broader than implementation fan-out.
 One orchestrator owns the atlas/status. Landing-provenance reviewers handle
 `RT-ED-003`, `RT-ED-005`, and `LOC-019`; no implementation scout or writer is
 assigned to those completed repairs. `LOC-009` stays outside the shared
-tracking line and receives a new production writer only after the dedicated
-Lua WebAssembly dependency lands. The orchestrator may dispatch three
-read-only scouts for the remaining open rows:
+tracking line and receives a new production writer only after replacement
+clean-worktree diagnosis task `019f9f59-1ac6-7e32-b973-5deb6b457c05` and a
+fresh coordinator assignment. The orchestrator may dispatch three read-only
+scouts for the remaining open rows:
 
 1. Scene/ViewModel/DataBind/StateMachine:
    `LOC-001/002/005`, `RT-ED-007`, and `LOC-007`;
@@ -1150,7 +1150,7 @@ ownership before activation.
 | candidate lane | order if closure overlaps | expected area to prove |
 |---|---|---|
 | Scene/API | Runtime Fix exclusively owns open blocker `F-ED-04`; Defects Fix may independently verify its landing before qualified candidate work `F-ED-01/02`; landed `F-ED-03` has no writer | `scene.rs`, schema/export/import helpers, and any runtime handle seam |
-| browser | qualified open `F-ED-10`; landed `F-ED-06` and the `LOC-019` half of `F-ED-11` have no writer; reopened `LOC-009` receives a new writer only after its Lua WebAssembly dependency lands; no-repair `F-ED-08` and historical-only `F-ED-07` have no writer | `browser.rs`, WebGPU GPU-canvas/scripting seams, and resource owners; no `webgl2.rs` writer |
+| browser | qualified open `F-ED-10`; landed `F-ED-06` and the `LOC-019` half of `F-ED-11` have no writer; reopened `LOC-009` receives a new writer only after clean-worktree task `019f9f59-1ac6-7e32-b973-5deb6b457c05` and a fresh coordinator assignment; no-repair `F-ED-08` and historical-only `F-ED-07` have no writer | `browser.rs`, WebGPU GPU-canvas/scripting seams, and resource owners; no `webgl2.rs` writer |
 | runtime dirt | qualified `F-ED-05` | waits for the exact FL-E Path/Shape owner lock |
 | text-derived | qualified `F-ED-09` rows split by discovered owner | Scene/import/binding, `text.rs`, font parser/shaper, or renderer |
 | renderer feather | qualified `F-ED-10` | exact renderer/backend owner closure |

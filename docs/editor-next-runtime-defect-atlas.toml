@@ -1276,28 +1276,28 @@ evidence = "The sole authoritative browser observation is the canonical Chrome a
 [[defect]]
 id = "LOC-011"
 title = "Explicit empty projection text renders an authoring placeholder"
-source_class = "candidate"
-state = "reported"
-owner_class = "runtime"
-classification = "unqualified"
+source_class = "qualified-editor-owned"
+state = "handoff-ready"
+owner_class = "editor"
+classification = "editor-integration-defect"
 ticket = "F-ED-09"
 fixture_id = "fed.loc_011.empty_text_pipeline"
-preliminary_disposition = "Product symptom is real; import/bind/shaping/draw owner is unproved."
-reproduction_sha256 = "e70f95fd02649cf22c835cef6ee57f134cfa589fb3dd4bd60a7aaa97ffdb0b53"
-rust_stimulus = "pending: F-ED-09 must minimize the direct Rust stimulus for LOC-011"
-cpp_stimulus = "pending: F-ED-09 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-011"
-source_files = ["pending: F-ED-09 source-file correspondence"]
-source_members = ["pending: F-ED-09 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-09 lifecycle qualification"]
-rust_owner = "pending: F-ED-09 exact Rust owner"
-displaced_mechanism = "pending: F-ED-09 displaced-mechanism inventory"
-dependencies = ["F-ED-00B","F-ED-09"]
-target_tests = ["cpp_probe/registry.cpp"]
+preliminary_disposition = "The product symptom remains real, but one identical explicit-empty source-first file stays empty through encode, import, bind, shaping, and draw in pinned C++ and Rust. The literal authoring placeholder must therefore enter in the Editor-produced artifact or an Editor overlay outside the runtime chain."
+reproduction_sha256 = "8113f38d8767d087a81a840046dddfa3b5540fcd1c816c0bed4b949274f80a0b"
+rust_stimulus = "LOC011_EVIDENCE_RIV=/tmp/loc011-empty-text.riv cargo test -q -p nuxie --test loc011_empty_text_evidence -- --nocapture"
+cpp_stimulus = "Pinned d788e8ec6e8b598526607d6a1e8818e8b637b60c rive_cpp_probe runs the exact Rust-emitted /tmp/loc011-empty-text.riv before and after runtime default-ViewModel source-first binding, with LLDB stopped at rive::Text::buildRenderStyles."
+source_files = ["src/text/text.cpp","src/text/text_value_run.cpp","crates/nuxie-runtime/src/text.rs","crates/nuxie/tests/loc011_empty_text_evidence.rs"]
+source_members = ["Text::makeStyled","Text::update","Text::buildRenderStyles","StaticTextSlice::resolved_runs","StaticTextSlice::render_data","empty_source_first_text_stays_empty_through_encode_import_bind_shape_and_draw"]
+lifecycle_phases = ["authored TextValueRun and ViewModel empty strings","binary encode and import","source-first ViewModel binding","resolved text","styled and shaped runs","draw-command emission"]
+rust_owner = "not-applicable: Rust preserves the same explicit-empty contract as pinned C++ through the complete qualified runtime chain"
+displaced_mechanism = "not-applicable: no runtime mechanism is displaced; the visible placeholder must be authored or overlaid by the Editor outside the qualified runtime chain"
+dependencies = ["F-ED-09"]
+target_tests = ["crates/nuxie/tests/loc011_empty_text_evidence.rs"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
-owning_ledger = "pending: F-ED-09 owning-ledger link"
-adaptation_rule = "pending: F-ED-09 rule citation"
-decision_row = "pending: F-ED-09 decision-row disposition"
-touch = []
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml:LOC-011"
+adaptation_rule = "No runtime port is authorized when one identical authored file is exact through pinned C++ and Rust; route the first unqualified artifact/overlay boundary to its producing owner."
+decision_row = "Editor/artifact handoff: capture the original product artifact's TextValueRun.text plus any authoring overlay and repair the first boundary that introduces the literal placeholder."
+touch = ["crates/nuxie/tests/loc011_empty_text_evidence.rs","docs/editor-next-runtime-defect-atlas.toml","docs/editor-next-runtime-defect-goal.md","docs/editor-next-runtime-defect-port-map.md","tools/editor-next-runtime-defects/fixtures.toml","tools/editor-next-runtime-defects/cpp_probe/registry.cpp"]
 dont_touch = ["@active-fl-lease"]
 formal_children = []
 candidate_children = ["P08-C06"]
@@ -1307,34 +1307,49 @@ proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
 runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
 parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
-original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
+original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
-consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
-consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+investigation_head_sha = "fe0a0a07db302ce2f0282a2d919ea249e83144e5"
+merged_repair_sha = { status = "pending", reason = "No runtime repair exists or is authorized for this Editor-owned handoff." }
+consumed_runtime_sha = { status = "pending", reason = "The Editor artifact/overlay owner has not yet consumed this qualification." }
+consumed_superproject_sha = { status = "pending", reason = "The Editor artifact/overlay owner has not yet landed or consumed a repair." }
 [defect.renderer_provenance]
 status = "not-applicable"
 reason = "This row does not qualify renderer output."
 [defect.executor_verification]
-status = "pending"
-reason = "F-ED-09 executor fixture has not run."
+status = "pass"
+command = "LOC011_EVIDENCE_RIV=/tmp/loc011-empty-text.riv cargo test -q -p nuxie --test loc011_empty_text_evidence -- --nocapture; pinned d788 rive_cpp_probe pre/post source-first bind; LLDB breakpoint rive::Text::buildRenderStyles"
+evidence = "The 2,522-byte identical .riv has SHA-256 fca0d9bf264f7341447ac6969584a5cbaf9f5cbca68cca7f2cdb028c4f26cc7b. Rust passes 1/1 with encoded/imported/resolved empty text, no synthesized character, and no glyph drawPath. Pinned C++ retains empty ViewModel and TextValueRun values before and after bind; LLDB reports zero styled bytes/runs, shapes, lines, and draw commands; pre/post probe JSON SHA-256 values are ac70844b4072d73611b78395c463d2b686907ef27b74ffc6e51e0814825952b5 and 6625c5a8a8667b8d55c8bdb8acdbe21c9e0b59398f1ef93ca3a8aebc262cd16f."
 [defect.orchestrator_verification]
-status = "pending"
-reason = "F-ED-09 has no executor-green result to verify."
+status = "not-applicable"
+reason = "This qualification promotes no runtime implementation or correspondence ledger; it hands the unqualified Editor artifact/overlay boundary to its producing owner."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:LOC-011"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "One exact explicit-empty source-first .riv exercised encode, import, bind, shaping, and draw at runtime main fe0a0a07 and pinned C++ d788e8ec."
+[[defect.history]]
+state = "qualified"
+actor = "f-ed-executor"
+evidence = "Pinned C++ and Rust both retain empty text and emit no glyph draw, placing the first possible placeholder introduction outside the runtime chain."
+[[defect.history]]
+state = "handoff-ready"
+actor = "f-ed-executor"
+evidence = "Route the original product artifact and authoring overlay capture to the Editor owner; no runtime repair is authorized."
 [defect.cpp_result]
-status = "pending"
-reason = "Authored text through shaped runs and pixels has not been compared at the pin."
+status = "pass"
+command = "rive_cpp_probe --file /tmp/loc011-empty-text.riv --property-values --no-advance; rive_cpp_probe --file /tmp/loc011-empty-text.riv --property-values --runtime-bind-default-view-model-artboard-context --runtime-update-artboard-data-binds --runtime-advance-artboard-after-bind; LLDB breakpoint rive::Text::buildRenderStyles"
+evidence = "Pinned C++ d788e8ec imports the identical file with ViewModel string and TextValueRun property 268 both empty before and after flags-10 source-first binding. The Text drawable has an empty shapePaintCommands list; LLDB reports zero styled bytes/runs, shape entries, lines, and draw commands."
 [defect.rust_result]
-status = "pending"
-reason = "The first stage that introduces the placeholder is not yet proved."
+status = "pass"
+command = "LOC011_EVIDENCE_RIV=/tmp/loc011-empty-text.riv cargo test -q -p nuxie --test loc011_empty_text_evidence -- --nocapture"
+evidence = "The focused test passes 1/1: authored and binary-decoded TextValueRun text are empty, the imported ViewModel source is empty, resolved semantic text is empty, only caret offset zero exists, and the canonical recording contains no glyph drawPath."
 [defect.editor_result]
-status = "pending"
-reason = "P08-C06 shares measurement and empty-text candidates."
+status = "not-applicable"
+reason = "The exact original Editor artifact and overlay were not preserved in this runtime repository. Their capture is the handed-off next step and is required to split authored-byte production from authoring-overlay ownership."
 
 [[defect]]
 id = "LOC-012"

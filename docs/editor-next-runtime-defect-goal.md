@@ -187,7 +187,11 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   text measurement, and ordinary layout/TextStyle execution. These records
   make no direct implementation request or schedule. Escalate only an actual
   simultaneous file-writer collision or a safety/data-loss issue.
-- Open runtime/FL candidates: `LOC-002`, `LOC-011`, `LOC-013`.
+- Open runtime/FL candidates: `LOC-002`, `LOC-013`.
+- Qualified non-runtime Editor/artifact handoff: `LOC-011`; one identical
+  explicit-empty source-first file is empty through encode, import, bind,
+  shaping, and draw in pinned C++ and Rust, so the original artifact/overlay
+  producer owns the next capture.
 - Closed no-repair stale characterization: `LOC-006`; exact committed
   provenance and an independent exact-checkpoint rerun prove the prior
   renderer symptom was caused by the later hover/clear gesture.
@@ -399,7 +403,7 @@ not request or schedule an implementation from this program.
 
 ### Q4 — Absorb runtime-owner defects through FL
 
-For `LOC-002` when runtime-owned, `LOC-011`, and `LOC-013`:
+For `LOC-002` when runtime-owned and `LOC-013`:
 
 1. minimize the current failure;
 2. build the pinned C++ direct probe;
@@ -414,10 +418,12 @@ No F-ED worktree patches reserved runtime files.
 
 ### Q5 — Close remaining renderer, text, and record candidates
 
-- `F-ED-09`: after the relevant text-measurement port wave, rerun `LOC-008`
-  as deferred post-port verification; split `LOC-011` and `LOC-013` at the
-  first differing authored-value, bind, shaping, measurement, outline, or pixel
-  stage; do not assume one owner.
+- `F-ED-09`: `LOC-011` is qualified as a non-runtime Editor/artifact handoff
+  because one identical explicit-empty file remains empty through the complete
+  pinned-C++/Rust runtime chain. After the relevant text-measurement port wave,
+  rerun `LOC-008` as deferred post-port verification; split remaining
+  `LOC-013` at the first differing authored-value, bind, shaping, outline, or
+  pixel stage.
 - `F-ED-10`: requalify `LOC-012` and `LOC-014` on WebGPU. Port only a proven
   pinned-C++ owner/resource lifecycle; never tune feather constants or
   tolerances.

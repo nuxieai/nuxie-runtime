@@ -8,14 +8,13 @@ namespace
 constexpr std::string_view kPinnedRiveRef =
     "d788e8ec6e8b598526607d6a1e8818e8b637b60c";
 
-constexpr std::array<std::string_view, 8> kRegisteredFixtures = {
+constexpr std::array<std::string_view, 7> kRegisteredFixtures = {
     "fed.rt_ed_007.nested_transition_duration",
     "fed.loc_001.extended_view_model_owner",
     "fed.loc_002.current_source_relation",
     "fed.loc_005.shared_view_model_owner",
     "fed.loc_007.parametric_path_dirt",
     "fed.loc_008.text_measurement_facade",
-    "fed.loc_011.empty_text_pipeline",
     "fed.loc_013.variable_font_pipeline",
 };
 

@@ -30,7 +30,19 @@ id = "fed.rt_ed_003.browser_present_readback"
 defect_id = "RT-ED-003"
 kind = "browser-renderer"
 status = "registered"
-driver = "pending:F-ED-06"
+driver = "make browser-webgpu-only-check && cargo test -p nuxie-renderer --lib"
+stimulus_files = [
+  { root = "repo", path = "crates/nuxie-renderer/src/browser.rs", sha256 = "4714f889fc32bc43cdd540fc74700703a08cbbdfbd94a7fb28ba68f379ece95a" },
+  { root = "repo", path = "crates/nuxie-renderer/src/browser_surface_lifecycle.rs", sha256 = "26265edef4913eaf47a488c8df2b600dccb0843d677b9cdce3fa9a760f8ff733" },
+  { root = "repo", path = "crates/nuxie-renderer/src/present_pipeline.rs", sha256 = "bb8e19f42d27554bef0152b859f5383215fb1997776691fd2f540507726369f3" },
+  { root = "repo", path = "crates/nuxie-renderer/src/surface.rs", sha256 = "156706e1dddf0c0e9eacd32679bc8c1c9bfd9db42f40138b9195176c19de7c5f" },
+  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "34ea7f6b7a054651f175754a7af2c840d69c99e0728562859f129786c8a8bbdc" },
+  { root = "repo", path = "tools/browser-renderer-smoke/run-browser.cjs", sha256 = "2b675923970f56dd0c881e4adb6acd8327ebae6e1325521db848e0cc281dbc57" },
+  { root = "repo", path = "tools/check-browser-webgpu-only.sh", sha256 = "59a33387275b3dc871aebb94f27fdcb5dca5e603e20f61d7459e1f739df8c9f3" },
+  { root = "editor", path = "apps/nuxie-dashboard/tests/e2e/project-editor/device-frame-bezel-drag.spec.ts", sha256 = "ee55288587a89d2c18806590cce8eeef91333cb62ca993e8fbef550f25e02f50" },
+  { root = "editor", path = "apps/nuxie-dashboard/tests/e2e/editor-next-browser-proof/browser-proof.spec.ts", sha256 = "6081e73435d749b47702e2a36622affa7c0aced1fe16462258d18b75826fbdaa" },
+  { root = "editor", path = "scripts/audit-editor-readback-boundary.mjs", sha256 = "80fad6147c2200a5674e1c0f65fed341a162112f9f162eae2b7fb3db162708a3" },
+]
 
 [[fixture]]
 id = "fed.rt_ed_004.webgl2_rounded_clip_402x874_r57"
@@ -119,11 +131,15 @@ status = "registered"
 driver = "cpp_probe/registry.cpp"
 
 [[fixture]]
-id = "fed.loc_006.webgl2_stale_pixels"
+id = "fed.loc_006.webgpu_conditional_visibility"
 defect_id = "LOC-006"
-kind = "historical"
-status = "historical"
-driver = "evidence-only:webgpu-only-product-decision"
+kind = "editor-product"
+status = "registered"
+driver = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor projection-corpus-product-route.spec.ts"
+stimulus_files = [
+  { root = "editor", path = "apps/nuxie-dashboard/tests/e2e/project-editor/projection-corpus-product-route.spec.ts", sha256 = "ada6142006946cf6dd378edee5c942cdb28268f69a7d7edf44ca566c9bc9b8e4" },
+  { root = "editor", path = "tools/nuxie-editor-next/crates/editor/fixtures/e7/projection-corpus.json", sha256 = "07f2cee557117044a1346d18906e1e8329b3cd486ef6b75b636483935e0e3067" },
+]
 
 [[fixture]]
 id = "fed.loc_007.parametric_path_dirt"

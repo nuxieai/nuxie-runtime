@@ -1,14 +1,16 @@
 # Goal: Unblock Editor Next Production by Closing Runtime Defects
 
 This is the operating protocol for the Editor Next runtime-defect program.
-The objective is not merely to reduce a bug count. It is to make Editor Next
-production-ready by proving, repairing, consuming, and closing every runtime,
-API, renderer, browser, artifact, and integration defect recorded by the
-cutover.
+Its formal objective is to own the complete queue of runtime, API, renderer,
+browser, and artifact defects reported by Editor Fix; qualify each against
+pinned C++; faithfully repair every confirmed Rust defect either directly or
+through its sole active Runtime Fix owner; independently verify and land each
+repair; maintain exact status; and return immutable landing evidence for
+downstream consumption.
 
-The program is complete only when the Editor has consumed the exact landed
-runtime repairs and its unchanged linked product gates pass. A green direct
-runtime test does not by itself unblock production.
+Editor may merge before this queue is empty. Editor consumption is a tracked
+downstream state, not a prerequisite for closing a landed repair or completing
+this program.
 
 ## Source-of-truth order
 
@@ -26,10 +28,12 @@ Read these files at the start of every goal turn:
 6. `docs/runtime-frame-loop-status.md` and
    `docs/runtime-frame-loop-ownership.toml` — active FL writer lease.
 
-If they disagree, the atlas wins for a defect row, the FL ownership ledger
-wins for a runtime writer lease, and this goal wins over historical WebGL2
-implementation language in the port map. Update the stale lower-precedence
-file in the same evidence or planning PR.
+If they disagree, the atlas wins for a defect row, the status file wins for
+scheduling, this goal defines completion, and the FL ownership ledger plus
+coordinator task `019f9c97-edcf-76d3-a786-11f443da22d3` wins for writer
+collisions. This goal also wins over historical WebGL2 implementation language
+in the port map. Update the stale lower-precedence file in the same evidence
+or planning PR.
 
 The immutable Editor source checkpoint is
 `4da896beb5ec6815f6b01a2433875274a321d06c` on
@@ -49,6 +53,56 @@ decision landed in PR #47 at
 above consumes current runtime
 `e72323c808b91d706ba3b745396beaca7accd69a`.
 
+## Defect inbox protocol
+
+The committed Editor repository is the mailbox. Do not depend on Editor Fix
+sending messages or ask it for ongoing status.
+
+- canonical branch:
+  `origin/levi/editor-next-cutover-assembly`, switching to the final merged
+  Editor branch when cutover lands;
+- inbox:
+  `plans/nuxie-editor-next-runtime-defects.md`;
+- linkage:
+  `plans/nuxie-editor-next-parity-ledger.json`;
+- checkpoint identity: Editor commit SHA plus the SHA-256 of both files.
+
+Intake runs only at an explicit scheduling boundary:
+
+1. finish or integrate the current control-plane/scheduled batch;
+2. fetch the canonical Editor branch;
+3. compare its latest committed checkpoint with the last consumed checkpoint
+   in the atlas/status;
+4. import only new or changed `LOC-*` records, preserving Editor provenance;
+5. validate stable IDs, commands, SHAs, evidence, and ledger links;
+6. leave incomplete records `intake-needs-evidence` without starting chatty
+   clarification;
+7. commit the consumed checkpoint and imported rows atomically; and
+8. rebuild the dependency/file-ownership DAG before scheduling new work.
+
+For schema-v2 intake, each complete new or changed record supplies its
+Editor SHA, runtime SHA, exact command, and result/evidence as four
+column-zero, top-level Markdown bullets. Indented or container-nested text
+never satisfies those provenance fields.
+
+New inbox rows do not preempt active repairs. They enter the next intake batch
+after active lanes reach a merge or block boundary. Escalate only a safety or
+data-loss report, or a concrete shared-file collision, through the
+coordinator. Once Editor merges, switch the canonical branch and retain the
+final assembly checkpoint as immutable provenance. Route dependency and
+landing handoffs through the coordinator; do not task or poll Editor Fix
+directly.
+
+`newest_available_*` means the newest commit observed at the last explicit
+intake boundary, not a live poll during an active repair. The checker
+materializes both recorded commits, verifies their ancestry on the canonical
+local branch, hashes both inbox files, binds every atlas ID to its committed
+defect section, validates formal/candidate ledger links, and derives the exact
+new-or-changed `LOC-*` count. It never fetches by itself. Before a program
+completion check, the scheduler must fetch once; completion additionally
+requires the recorded newest checkpoint to equal the canonical branch tip and
+the derived unconsumed count to be zero.
+
 ## Session-start ritual
 
 Every goal turn, without exception:
@@ -60,36 +114,79 @@ Every goal turn, without exception:
 3. Run `tools/editor-next-runtime-defects/run-check.sh` against the immutable
    Editor checkpoint. Never use a hash override or `--test-mode` for
    production evidence.
-4. Read the current FL status and reservation. Obtain a fresh handoff after
-   every FL landing before assigning any runtime writer.
+4. Read the current FL status and reservation, then reconcile the atlas with
+   the dependency/file-ownership DAG before assigning any writer. Obtain a
+   fresh handoff after every FL landing.
 5. Fetch `origin/main`, inspect active worktrees, and start production work
    from a clean isolated worktree. Do not include quarantined or unrelated
    edits.
-6. Restate one sentence: the top unblocked slice, its defect IDs, exact owner
-   boundary, reserved files, targeted Editor children, and current gate
-   ratchets.
-7. Work only that slice through qualification, implementation if authorized,
-   independent review, merge, Editor consumption, and status update—or record
-   the precise external handoff blocking its next transition.
+6. Report atlas counts by state, intake count, runnable lanes,
+   blocked/overlapping lanes, active PRs/executors, and the exact next
+   scheduling decision. Include the last consumed Editor checkpoint, newest
+   known checkpoint, unconsumed inbox count, imported atlas count, defects
+   closed since the last report, and exact landing SHAs.
+7. Fill available lanes with independent read-only qualifications or
+   file-disjoint writers. Each lane owns exactly one defect or tightly coupled
+   C++ owner family; shared or FL-owned files serialize through the
+   coordinator.
+8. After every landing, update the atlas/status/checker, notify the
+   coordinator, unblock dependents, and refill available lanes before
+   starting unrelated work.
 
 ## Current scoreboard
 
 The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 
 - Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`, `LOC-004`.
-- Open formal blockers: `RT-ED-003`, `RT-ED-004`, `RT-ED-005`,
-  `RT-ED-007`.
+- Landing-provenance and independent-promotion only: `RT-ED-003`,
+  `RT-ED-005`, `LOC-009`, and `LOC-019`. Their repairs are merged and
+  consumed; no production implementation remains in those lanes.
+- Open formal implementation blocker: `RT-ED-007`.
+- Historical WebGL2 evidence only, with no linked product child:
+  `RT-ED-004`.
 - Open Scene/API candidates: `LOC-001`, `LOC-005`, `LOC-008`.
 - Open runtime/FL candidates: `LOC-002`, `LOC-007`, `LOC-011`, `LOC-013`.
-- Open browser/renderer candidates: `LOC-006`, `LOC-009`, `LOC-012`,
-  `LOC-014`, `LOC-019`.
+- Open browser/renderer qualification candidates: `LOC-006`, `LOC-012`,
+  and `LOC-014`.
 - Open artifact/Editor candidates: `LOC-015`, `LOC-016`, `LOC-017`,
   `LOC-018`.
 
-There are eight children with formal runtime dependencies, 20
-candidate-linked children, and 27 unique affected children. The goal burns
-all 20 open rows to a terminal, evidence-backed state and gets the complete
-27-child product matrix green or explicitly user-excepted.
+There are four children with formal runtime dependencies, 20
+candidate-linked children, and 23 unique affected children. The goal burns
+all accepted rows to a terminal, evidence-backed disposition. The linked
+product matrix remains valuable downstream consumption evidence, but Editor
+consumption is not a completion gate for this program.
+
+## Per-defect completion
+
+A confirmed Rust repair is complete when:
+
+1. the exact Editor reproducer and its Editor/runtime SHAs are preserved;
+2. pinned-C++ expected behavior is established;
+3. the Rust failure is classified and mapped to its C++ owner and exact Rust
+   touch set;
+4. the faithful repair is independently verified and merged;
+5. the exact landing SHA, tests, gates, reviews, and PR are recorded; and
+6. the coordinator receives the immutable handoff for optional
+   current-or-later Editor consumption.
+
+Editor consumption may advance a downstream state, but it is not required to
+close the repair. A row may also close through proven Editor ownership, a
+stale oracle, retraction, artifact correction, or explicit user decision.
+Assignment to an active Runtime Fix owner is an allowed implementation
+dependency, not permission for a duplicate writer; the row remains tracked
+until that owner lands and the repair is independently verified, or the row
+otherwise reaches a non-repair evidence-backed disposition.
+
+## Parallel work model
+
+After Q0, the dependency/file-ownership DAG is the scheduler. Multiple lanes
+run when touch sets are disjoint. Read-only qualification may run beside any
+production lane. Every lane records its defect ID, C++ sources, Rust touch
+set, reproducer, gates, executor, and merge boundary. A shared file or
+FL-owned file serializes through the coordinator; overlap is routed with the
+defect ID, C++ owner, Rust files, proposed executor, and dependency rather
+than being dropped.
 
 ## Binding decisions
 
@@ -117,8 +214,8 @@ Consequences for the defect program:
 - historical WebGL2 rows and fixtures remain immutable evidence until their
   state transitions are recorded;
 - `RT-ED-004`, `LOC-006`, and any WebGL2 portion of `LOC-012` or `LOC-014`
-  close only after the Editor consumes the WebGPU-only runtime and the
-  corresponding supported WebGPU product child is rerun;
+  require an evidence-backed WebGPU disposition; downstream Editor reruns are
+  tracked when available but do not gate a landed runtime repair;
 - a surviving WebGPU failure is requalified against its real WebGPU/runtime
   owner. Retirement of WebGL2 is not evidence that the product scenario
   works;
@@ -141,14 +238,15 @@ qualification whose first divergence enters a reserved owner.
 
 Each qualified defect or inseparable C++ owner family lands as its own PR.
 PRs are non-draft and merge as soon as their required direct, repository-floor,
-and review prerequisites pass. Product consumption follows the exact merge SHA
-and gates final defect closure. Do not leave a train of stacked drafts. Do not
-combine unrelated defects to amortize gates.
+and review prerequisites pass. The coordinator receives the exact merge SHA
+for optional current-or-later Editor consumption. Do not leave a train of
+stacked drafts. Do not combine unrelated defects to amortize gates.
 
 ## Execution queue
 
-Always pick the first unblocked item. A blocked owner does not stop
-file-disjoint qualification or implementation.
+Reconcile the atlas and ownership DAG, then fill available lanes in dependency
+order. A blocked owner does not stop file-disjoint qualification or
+implementation.
 
 ### Q0 — Keep the control plane truthful
 
@@ -163,7 +261,7 @@ file-disjoint qualification or implementation.
 Exit: every row has a valid current fixture registration and the live queue
 contains no stale snapshot, backend, owner, or dependency claim.
 
-### Q1 — Consume the WebGPU-only runtime and requalify browser blockers
+### Q1 — Promote landed WebGPU repairs and qualify surviving browser rows
 
 The WebGPU runtime consumption and API-migration prerequisite is complete in
 the immutable Editor checkpoint recorded above. Q1 remains open for the
@@ -171,41 +269,42 @@ explicit requalification and independent-promotion work below. The original
 WebGPU-only handoff was
 `95027109c89f651835c76646ebf4d8734f032f07`; the consumed runtime has since
 advanced to `e72323c808b91d706ba3b745396beaca7accd69a`.
-Editor removes its two `BrowserBackendPreference::WebGpu` arguments, uses
-`BrowserFactory::new(canvas, width, height)`, rebuilds, and reruns the unchanged
-WebGPU normal/proof/product gates.
+Editor already removed the backend-preference arguments, consumes
+`BrowserFactory::new(canvas, width, height)`, and has green required-WebGPU
+normal/proof/product evidence at the immutable checkpoint. Do not repeat that
+migration.
 
-Requalify:
+Current work is:
 
-- `RT-ED-003` / `F-ED-06`: ordinary presentation must not require CPU RGBA
-  readback; explicit capture remains deterministic;
-- `RT-ED-004` / `F-ED-07`: rerun its linked product scenarios on supported
-  WebGPU, then retire the WebGL2-specific defect or map a surviving WebGPU
-  failure;
-- `LOC-006` / `F-ED-08`: same rule for stale conditional pixels;
-- `LOC-019` and `LOC-009` / `F-ED-11`: required-WebGPU setup, unsupported
-  state, GPU-canvas records, resources, and execution are qualified
-  independently.
+- independently promote the landing-provenance records for `RT-ED-003`,
+  `LOC-009`, and `LOC-019`; their production repairs and Editor consumption
+  are complete;
+- retain `RT-ED-004` / `F-ED-07` only as historical WebGL2 evidence. It has no
+  linked product scenario and authorizes no implementation. A current
+  rounded-clip claim exists only if an explicitly scheduled identical-input
+  pinned-C++ versus WebGPU proof creates one;
+- qualify `LOC-006` / `F-ED-08` with its registered required-WebGPU
+  projection-corpus fixture and an identical pinned-C++ input; and
+- qualify the remaining open renderer rows in Q5 without reopening the landed
+  `F-ED-06` or `F-ED-11` implementations.
 
 Runtime-side WebGPU work must keep `make browser-webgpu-only-check` green and
 must not reintroduce any prohibited WebGL2 surface.
 
-### Q2 — Close the two formal Scene authoring gaps
+### Q2 — Promote RT-ED-005 and implement RT-ED-007
 
-`F-ED-03` (`RT-ED-005`) and `F-ED-04` (`RT-ED-007`) are independent,
-Scene-owned slices when their exact `TOUCH` sets remain outside FL
-reservations.
+`F-ED-03` (`RT-ED-005`) is merged and consumed. Its generic number/color
+property-key authoring, direction semantics, record round trips, runtime
+behavior, and executor floors are landing provenance awaiting independent
+promotion only. Do not reopen that Scene implementation. `P09-C01` remains
+separately dependent on the FL-E layout/TextStyle owner family.
 
-- Generic number/color property binding must emit the exact property-key
-  records and retain C++ direction semantics. It must prove every concrete
-  Editor style target and its real setter/dirt closure, not merely generic
-  dispatch.
-- Nested transition duration must accept and validate the complete nested
-  `ViewModelNumberSource` path and reuse the existing low-level resolver.
-
-Each receives direct record round-trip tests, runtime behavior tests, its
-linked Editor child (`P09-C01` or `P19-C09`), independent review, and a
-separate merged SHA.
+`F-ED-04` (`RT-ED-007`) remains the one open formal Scene authoring
+implementation in this phase. Its exact `TOUCH` set must remain outside FL
+reservations. Nested transition duration must accept and validate the complete
+nested `ViewModelNumberSource` path, reuse the existing low-level resolver, and
+receive direct record round-trip tests, runtime behavior tests, linked
+`P19-C09`, independent review, and its own merged SHA.
 
 ### Q3 — Qualify and close Scene ownership candidates
 
@@ -227,10 +326,11 @@ For `LOC-002` when runtime-owned, `LOC-007`, `LOC-011`, and `LOC-013`:
 1. minimize the current failure;
 2. build the pinned C++ direct probe;
 3. identify the exact first differing owner/member/lifecycle;
-4. update the atlas and send the closure to the active FL owner;
+4. update the atlas and route the concrete overlap to the coordinator for
+   assignment to the active FL owner;
 5. let that sole writer port the complete family;
 6. independently rerun the direct fixture and full floors on the merged SHA;
-7. send the exact SHA to Editor for the linked product rerun.
+7. send the exact SHA and linked product command to the coordinator.
 
 No F-ED worktree patches reserved runtime files.
 
@@ -255,14 +355,15 @@ For `LOC-015`, `LOC-016`, and `LOC-017`:
 2. stop at the user release checkpoint with version, channel, checksum, and
    full local evidence;
 3. after approval, publish and update `nuxie-ios`;
-4. have Editor consume the SDK and rerun the corrected native corpus;
+4. send the immutable SDK identity to the coordinator for optional
+   current-or-later Editor consumption and native-corpus rerun;
 5. promote only a surviving current failure to a source owner.
 
 Old ABI 1.5 evidence never authorizes runtime source changes.
 
-### Q7 — Product closeout
+### Q7 — Downstream handoff
 
-For every merged repair, send Editor:
+For every merged repair, send the coordinator an Editor-ready handoff with:
 
 - exact merged runtime SHA;
 - public API signature changes;
@@ -270,10 +371,10 @@ For every merged repair, send Editor:
 - linked child commands and expected removed signature;
 - remaining known failures, if any.
 
-Editor consumes that exact SHA, reruns every linked focused child and affected
-aggregate gate, and publishes a clean immutable assembly checkpoint. Update
-the atlas with consumed runtime and superproject SHAs. Finish with the complete
-27-child matrix and all production aggregate gates.
+Editor may consume that exact SHA now or later. When it does, record its
+runtime and superproject SHAs and linked product results as downstream
+evidence. Do not hold a verified merged runtime repair open solely because
+Editor has not yet consumed it.
 
 ## Per-slice method
 
@@ -297,8 +398,10 @@ Every slice follows this sequence:
 10. Run all targeted and applicable global gates.
 11. Rebase on current `origin/main`, rerun affected gates, push with an
     explicit refspec, open a non-draft PR, and merge when green.
-12. Obtain independent orchestrator verification, then Editor consumption.
-    The implementer never self-promotes a row to closed.
+12. Obtain independent orchestrator verification, record the exact merge SHA
+    and gates, and send the immutable handoff to the coordinator. The
+    implementer never self-promotes a row to closed; optional Editor
+    consumption is recorded separately.
 
 ## Gate battery
 
@@ -356,24 +459,25 @@ Stop for user direction before:
 
 Mark this formal goal complete only when all of the following are true:
 
-- all 25 defect IDs have a terminal, evidence-backed disposition and no
-  candidate remains `reported`, `reproduced`, `unqualified`, `mapped`,
-  `executor-green`, or merely `handoff-ready`;
-- every proven C++/Rust mismatch is repaired through its complete owner
-  family with independent verification;
+- every accepted Editor-reported row has a terminal, evidence-backed
+  disposition;
+- every confirmed Rust parity defect is faithfully repaired and merged, or is
+  explicitly assigned to a sole active Runtime Fix owner whose tracked landing
+  is independently verified before the row closes, with no duplicate writer;
+- every landed repair records immutable C++ evidence, tests, applicable
+  repository floors, independent reviews, PR, and exact landing SHA;
 - every API gap emits and round-trips the exact underlying record;
 - every historical WebGL2 row is retired or requalified on WebGPU without a
   hidden fallback;
-- every artifact row is replaced, retired, promoted to a current owner, or
-  covered by an explicit user decision;
-- the Editor consumes the exact merged runtime/SDK SHAs;
-- all 27 linked product children and affected aggregate production gates pass
-  or have explicit user-approved exceptions;
-- the runtime, renderer, browser, Apple, C API, probe, golden, lint, format,
-  structural, and size floors are green;
-- all correspondence rows are independently verified;
-- no displaced compensation, temporary diagnostic, stale source hash, stale
-  owner lease, or unpublished required artifact remains;
-- the Editor assembly records a clean immutable production-ready checkpoint.
+- every artifact row is corrected, retired, transferred to its proven owner,
+  or covered by an explicit user decision;
+- the atlas, checker, status, and dependency/file-ownership DAG are mutually
+  consistent and green;
+- no duplicate writer, unowned overlap, displaced compensation, temporary
+  diagnostic, stale source hash, or stale owner lease remains; and
+- the intake queue is empty at the program checkpoint. Later Editor reports
+  begin a new intake cycle.
 
-Until then, every turn resumes from the first unblocked queue item above.
+Editor merge and Editor consumption are not blockers for this completion
+contract. Until the contract is satisfied, each turn reconciles the atlas and
+ownership DAG, integrates completed lanes, and refills the next disjoint work.

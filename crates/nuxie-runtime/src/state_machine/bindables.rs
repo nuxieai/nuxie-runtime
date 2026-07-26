@@ -771,6 +771,8 @@ pub(crate) fn runtime_bindable_numbers<'a>(
                 file,
                 data_bind_index,
                 data_bind,
+                "BindablePropertyNumber",
+                "propertyValue",
                 target.double_property("propertyValue").unwrap_or(0.0),
                 converter_cache,
             )
@@ -788,11 +790,13 @@ fn runtime_bindable_number_unresolved_view_model_source<'a>(
     file: &'a RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    target_type_name: &str,
+    target_property_name: &str,
     target_value: f32,
     converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
-    if property_key_for_name("BindablePropertyNumber", "propertyValue") != Some(property_key) {
+    if property_key_for_name(target_type_name, target_property_name) != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
@@ -855,24 +859,48 @@ fn runtime_bindable_number_default_view_model_source<'a>(
     )
 }
 
+/// Retain a state-machine-scoped numeric source even when the authored
+/// default instance cannot resolve its complete path yet.
+///
+/// Pinned C++ clones and retains every state-machine DataBind before a live
+/// context exists, then resolves each DataBindContext from
+/// `StateMachineInstance::internalDataContext`
+/// (`state_machine_instance.cpp:1742-1766,2901-2905`;
+/// `data_bind_container.cpp:25-33`). Falling back to the unresolved source
+/// preserves that same per-instance owner and defers only path resolution.
 pub(crate) fn runtime_number_default_view_model_source_for_instance(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
     target_type_name: &str,
     target_property_name: &str,
-    default_instance: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
+    target_value: f32,
 ) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
     let mut converter_cache = RuntimeDataBindGraphConverterBuildCache::default();
-    runtime_number_default_view_model_source_for_instance_with_cache(
-        file,
-        data_bind_index,
-        data_bind,
-        target_type_name,
-        target_property_name,
-        default_instance,
-        &mut converter_cache,
-    )
+    default_instance
+        .and_then(|default_instance| {
+            runtime_number_default_view_model_source_for_instance_with_cache(
+                file,
+                data_bind_index,
+                data_bind,
+                target_type_name,
+                target_property_name,
+                default_instance,
+                &mut converter_cache,
+            )
+        })
+        .or_else(|| {
+            runtime_bindable_number_unresolved_view_model_source(
+                file,
+                data_bind_index,
+                data_bind,
+                target_type_name,
+                target_property_name,
+                target_value,
+                &mut converter_cache,
+            )
+        })
 }
 
 fn runtime_number_default_view_model_source_for_instance_with_cache<'a>(
@@ -2059,6 +2087,8 @@ mod tests {
             &file,
             3,
             data_bind,
+            "BindablePropertyNumber",
+            "propertyValue",
             7.0,
             &mut converter_cache,
         )
@@ -2113,6 +2143,8 @@ mod tests {
             &file,
             3,
             data_bind,
+            "BindablePropertyNumber",
+            "propertyValue",
             7.0,
             &mut converter_cache,
         )

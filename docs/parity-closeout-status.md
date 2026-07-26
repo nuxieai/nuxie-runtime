@@ -1007,12 +1007,12 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** FL-C2 transition/condition definition ownership after the
-completed 12-file FL-C1 input/listener-definition translation on provisional
-runtime base `95eb04b7cfb847f24ba77872bd8a0ee43da1af41`. FL-B and FL-C1 rows
-remain pending reacceptance/acceptance and are not promoted by continuing
-FL-C. Listener groups remain in scope beside their actual FL-C4 invocation
-and FL-E TextInput dependencies.
+**Canonical NEXT:** finish the pinned-C++ RT-ED-007 unresolved nested
+transition-duration binding correction in the active StateMachineInstance
+owner, then resume FL-C2 transition/condition definition ownership. FL-B and
+FL-C1 rows remain pending reacceptance/acceptance and are not promoted by
+continuing FL-C. Listener groups remain in scope beside their actual FL-C4
+invocation and FL-E TextInput dependencies.
 
 ## Next queue (top = next; orchestrator maintains)
 

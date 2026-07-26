@@ -8462,9 +8462,13 @@ fn compare_state_machine_children(
         .zip(&rust_children.inputs)
         .enumerate()
     {
-        let cpp_input = cpp_input
-            .as_ref()
-            .unwrap_or_else(|| panic!("{label} input {input_index} is null in C++"));
+        let (Some(cpp_input), Some(rust_input)) = (cpp_input.as_ref(), rust_input.as_ref()) else {
+            assert!(
+                cpp_input.is_none() && rust_input.is_none(),
+                "{label} input {input_index} null occurrence mismatch"
+            );
+            continue;
+        };
         assert_eq!(
             cpp_input.index, input_index,
             "{label} input {input_index} C++ index mismatch"
@@ -17555,8 +17559,13 @@ fn compare_corpus_state_machine_children(
         .zip(&rust_children.inputs)
         .enumerate()
     {
-        let Some(cpp_input) = cpp_input.as_ref() else {
-            return Err(format!("{label} input {input_index} is null in C++"));
+        let (Some(cpp_input), Some(rust_input)) = (cpp_input.as_ref(), rust_input.as_ref()) else {
+            if cpp_input.is_none() && rust_input.is_none() {
+                continue;
+            }
+            return Err(format!(
+                "{label} input {input_index} null occurrence mismatch"
+            ));
         };
         if cpp_input.index != input_index {
             return Err(format!(

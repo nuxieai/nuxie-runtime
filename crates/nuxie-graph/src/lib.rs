@@ -1450,6 +1450,7 @@ fn state_machines(file: &RuntimeFile, artboard_index: usize) -> Vec<StateMachine
             inputs: state_machine
                 .inputs
                 .into_iter()
+                .flatten()
                 .map(|input| StateMachineInputNode {
                     global_id: input.id,
                     type_name: input.type_name,

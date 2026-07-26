@@ -392,6 +392,56 @@ def check(
     except OSError as error:
         raise CheckFailure(f"cannot read porting rules {porting_path}: {error}") from error
 
+    active_family = ledger.get("active_owner_family", {})
+    if not isinstance(active_family, dict):
+        errors.append("active_owner_family must be a TOML table")
+    else:
+        family_id = str(active_family.get("id", ""))
+        checklist_relative = str(active_family.get("checklist", ""))
+        checklist_path = repo_root / checklist_relative
+        if not family_id:
+            errors.append("active_owner_family has no id")
+        if not checklist_relative:
+            errors.append(f"active owner family {family_id!r} has no checklist")
+            checklist = ""
+        else:
+            try:
+                checklist = checklist_path.read_text(encoding="utf-8")
+            except OSError as error:
+                errors.append(
+                    f"cannot read active owner-family checklist "
+                    f"{checklist_relative}: {error}"
+                )
+                checklist = ""
+        family_cpp_files = [
+            str(value) for value in active_family.get("cpp_files", [])
+        ]
+        if not family_cpp_files:
+            errors.append(f"active owner family {family_id!r} has no C++ files")
+        for cpp_file in family_cpp_files:
+            if not (rive_runtime_dir / cpp_file).is_file():
+                errors.append(
+                    f"active owner family {family_id!r} cites missing C++ "
+                    f"file {cpp_file}"
+                )
+            if checklist and f"`{cpp_file}`" not in checklist:
+                errors.append(
+                    f"active owner-family checklist omits C++ file {cpp_file}"
+                )
+        adversarial = [
+            str(value) for value in active_family.get("required_adversarial", [])
+        ]
+        if not adversarial:
+            errors.append(
+                f"active owner family {family_id!r} has no adversarial checklist"
+            )
+        for item in adversarial:
+            if checklist and f"- [x] {item}:" not in checklist:
+                errors.append(
+                    f"active owner-family checklist omits completed "
+                    f"adversarial row {item!r}"
+                )
+
     decisions = list(gaps.get("decision", []))
     decision_ids = {str(row.get("id", "")) for row in decisions}
     duplicates = duplicate_values(str(row.get("id", "")) for row in decisions)

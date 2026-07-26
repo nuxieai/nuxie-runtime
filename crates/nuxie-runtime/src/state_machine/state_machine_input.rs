@@ -79,17 +79,17 @@ pub(super) enum StateMachineInputDefaultValue {
 /// through that retained definition (`state_machine_input_instance.cpp:14-16`).
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeStateMachineInputHandle {
-    inputs: Arc<Vec<RuntimeStateMachineInput>>,
+    inputs: Arc<Vec<Option<RuntimeStateMachineInput>>>,
     index: usize,
 }
 
 impl RuntimeStateMachineInputHandle {
-    pub(super) fn new(inputs: Arc<Vec<RuntimeStateMachineInput>>, index: usize) -> Self {
+    pub(super) fn new(inputs: Arc<Vec<Option<RuntimeStateMachineInput>>>, index: usize) -> Self {
         debug_assert!(index < inputs.len());
         Self { inputs, index }
     }
 
-    pub(super) fn definition(&self) -> &RuntimeStateMachineInput {
-        &self.inputs[self.index]
+    pub(super) fn definition(&self) -> Option<&RuntimeStateMachineInput> {
+        self.inputs[self.index].as_ref()
     }
 }

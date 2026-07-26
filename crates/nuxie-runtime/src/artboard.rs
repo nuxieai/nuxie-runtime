@@ -11236,11 +11236,11 @@ mod tests {
 
     fn direct_input_blend_state_machine(global_id: u32) -> RuntimeStateMachine {
         let mut state_machine = empty_state_machine(global_id);
-        state_machine.inputs = Arc::new(vec![RuntimeStateMachineInput::new_number(
+        state_machine.inputs = Arc::new(vec![Some(RuntimeStateMachineInput::new_number(
             1,
             Some("blend".to_owned()),
             0.0,
-        )]);
+        ))]);
         state_machine.layers = Arc::new(vec![RuntimeStateMachineLayer {
             global_id: 2,
             name: None,
@@ -11290,9 +11290,20 @@ mod tests {
     fn nested_host_input_write_schedules_outer_state_probe() {
         let mut definition = empty_state_machine(11);
         definition.inputs = Arc::new(vec![
-            RuntimeStateMachineInput::new_bool(1, Some("enabled".to_owned()), false),
-            RuntimeStateMachineInput::new_number(2, Some("amount".to_owned()), 0.0),
-            RuntimeStateMachineInput::new_trigger(3, Some("fire".to_owned())),
+            Some(RuntimeStateMachineInput::new_bool(
+                1,
+                Some("enabled".to_owned()),
+                false,
+            )),
+            Some(RuntimeStateMachineInput::new_number(
+                2,
+                Some("amount".to_owned()),
+                0.0,
+            )),
+            Some(RuntimeStateMachineInput::new_trigger(
+                3,
+                Some("fire".to_owned()),
+            )),
         ]);
         let mut nested = synthetic_nested_artboard_instance(22);
         let bool_state_machine = StateMachineInstance::new(0, &definition, &nested.child);

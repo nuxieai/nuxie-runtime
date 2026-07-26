@@ -5306,19 +5306,25 @@ impl RuntimeFile {
             let Some(object) = object.as_ref() else {
                 if self.import_status(file_index) == Some(RuntimeImportStatus::NullObject)
                     && let Some(state_machine_index) = current_state_machine
-                    && let Some(layer_index) = current_layer
                 {
-                    state_machines[state_machine_index].layers[layer_index]
-                        .states
-                        .push(RuntimeLayerState {
-                            object: None,
-                            animation: None,
-                            blend_animations: Vec::new(),
-                            fire_actions: Vec::new(),
-                            listener_actions: Vec::new(),
-                            transitions: Vec::new(),
-                        });
-                    state_machines[state_machine_index].layers[layer_index].state_count += 1;
+                    if let Some(layer_index) = current_layer {
+                        state_machines[state_machine_index].layers[layer_index]
+                            .states
+                            .push(RuntimeLayerState {
+                                object: None,
+                                animation: None,
+                                blend_animations: Vec::new(),
+                                fire_actions: Vec::new(),
+                                listener_actions: Vec::new(),
+                                transitions: Vec::new(),
+                            });
+                        state_machines[state_machine_index].layers[layer_index].state_count += 1;
+                    } else {
+                        // `StateMachineImporter::readNullObject` appends a null
+                        // input occurrence. Keep the slot so every later
+                        // `inputId` retains its C++ index.
+                        state_machines[state_machine_index].inputs.push(None);
+                    }
                 }
                 continue;
             };
@@ -5575,7 +5581,9 @@ impl RuntimeFile {
             }
 
             if definition.is_a("StateMachineInput") {
-                state_machines[state_machine_index].inputs.push(object);
+                state_machines[state_machine_index]
+                    .inputs
+                    .push(Some(object));
                 current_layer = None;
                 current_listener = None;
                 continue;
@@ -8241,7 +8249,7 @@ pub struct RuntimeLinearAnimation<'a> {
 pub struct RuntimeStateMachine<'a> {
     pub object: &'a RuntimeObject,
     pub layers: Vec<RuntimeStateMachineLayer<'a>>,
-    pub inputs: Vec<&'a RuntimeObject>,
+    pub inputs: Vec<Option<&'a RuntimeObject>>,
     pub listeners: Vec<RuntimeStateMachineListener<'a>>,
     pub data_binds: Vec<&'a RuntimeObject>,
     pub scripted_objects: Vec<RuntimeScriptedObject<'a>>,

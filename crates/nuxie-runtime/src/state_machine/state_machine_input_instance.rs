@@ -12,19 +12,22 @@ pub struct StateMachineInputInstance {
 }
 
 impl StateMachineInputInstance {
-    pub(crate) fn new(index: usize, inputs: Arc<Vec<RuntimeStateMachineInput>>) -> Self {
+    pub(crate) fn new(index: usize, inputs: Arc<Vec<Option<RuntimeStateMachineInput>>>) -> Self {
         let definition = RuntimeStateMachineInputHandle::new(inputs, index);
-        let value = match definition.definition().value {
-            StateMachineInputDefaultValue::Bool(value) => {
-                StateMachineInputInstanceValue::Bool(value)
+        let value = match definition.definition().map(|definition| &definition.value) {
+            Some(StateMachineInputDefaultValue::Bool(value)) => {
+                StateMachineInputInstanceValue::Bool(*value)
             }
-            StateMachineInputDefaultValue::Number(value) => {
-                StateMachineInputInstanceValue::Number(value)
+            Some(StateMachineInputDefaultValue::Number(value)) => {
+                StateMachineInputInstanceValue::Number(*value)
             }
-            StateMachineInputDefaultValue::Trigger => StateMachineInputInstanceValue::Trigger {
-                fired: false,
-                used_layers: Vec::new(),
-            },
+            Some(StateMachineInputDefaultValue::Trigger) => {
+                StateMachineInputInstanceValue::Trigger {
+                    fired: false,
+                    used_layers: Vec::new(),
+                }
+            }
+            None => StateMachineInputInstanceValue::Null,
         };
         Self {
             index,
@@ -38,15 +41,26 @@ impl StateMachineInputInstance {
     }
 
     pub fn global_id(&self) -> u32 {
-        self.definition.definition().global_id
+        self.definition
+            .definition()
+            .map_or(0, |definition| definition.global_id)
     }
 
     pub fn name(&self) -> Option<&str> {
-        self.definition.definition().name.as_deref()
+        self.definition
+            .definition()
+            .and_then(|definition| definition.name.as_deref())
     }
 
     pub fn kind(&self) -> StateMachineInputKind {
-        self.definition.definition().kind
+        self.definition
+            .definition()
+            .expect("null C++ input occurrences are not exposed as SMIInput")
+            .kind
+    }
+
+    pub(crate) fn is_null(&self) -> bool {
+        self.definition.definition().is_none()
     }
 
     pub fn bool_value(&self) -> Option<bool> {
@@ -154,6 +168,7 @@ impl StateMachineInputInstance {
 
 #[derive(Debug, Clone)]
 enum StateMachineInputInstanceValue {
+    Null,
     Bool(bool),
     Number(f32),
     Trigger {
@@ -168,11 +183,11 @@ mod tests {
 
     #[test]
     fn input_occurrence_retains_the_authored_definition_arena() {
-        let definitions = Arc::new(vec![RuntimeStateMachineInput::new_number(
+        let definitions = Arc::new(vec![Some(RuntimeStateMachineInput::new_number(
             42,
             Some("speed".to_owned()),
             3.5,
-        )]);
+        ))]);
         let instance = StateMachineInputInstance::new(0, Arc::clone(&definitions));
 
         assert_eq!(Arc::strong_count(&definitions), 2);

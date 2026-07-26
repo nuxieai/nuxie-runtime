@@ -3,16 +3,14 @@
 //! Mirrors pinned C++ `src/animation/transition_viewmodel_condition.cpp`.
 
 use super::{
-    RuntimeScheduledListenerActionExecutor, RuntimeScriptedTransitionCondition,
-    RuntimeTransitionBoolCondition, RuntimeTransitionFocusCondition,
-    RuntimeTransitionNumberCondition, RuntimeTransitionPropertyArtboardComparator,
+    RuntimeScheduledListenerActionExecutor, RuntimeTransitionPropertyArtboardComparator,
     RuntimeTransitionPropertyComponentComparator, RuntimeTransitionPropertyViewModelComparator,
-    RuntimeTransitionTriggerCondition, StateMachineBindableIntegerInstance,
-    StateMachineBindableNumberInstance, StateMachineInputInstance, TransitionConditionOp,
-    TransitionEvaluationContext, bindable_artboard_value, bindable_asset_value,
-    bindable_boolean_value, bindable_color_value, bindable_enum_value, bindable_integer_value,
-    bindable_number_value, bindable_string_value, bindable_trigger_value,
-    bindable_view_model_value, compare_view_model_integer_pair, runtime_transition_comparators,
+    StateMachineBindableIntegerInstance, StateMachineBindableNumberInstance,
+    StateMachineInputInstance, TransitionConditionOp, TransitionEvaluationContext,
+    bindable_artboard_value, bindable_asset_value, bindable_boolean_value, bindable_color_value,
+    bindable_enum_value, bindable_integer_value, bindable_number_value, bindable_string_value,
+    bindable_trigger_value, bindable_view_model_value, compare_view_model_integer_pair,
+    runtime_transition_comparators,
 };
 use crate::ArtboardInstance;
 use crate::components::TransformProperty;
@@ -28,12 +26,10 @@ use nuxie_schema::{
     CoreRegistryFieldKind, core_registry_field_kind_by_property_key, object_supports_property,
 };
 #[derive(Debug, Clone)]
-pub(super) enum RuntimeTransitionCondition {
-    Focus(RuntimeTransitionFocusCondition),
-    Scripted(RuntimeScriptedTransitionCondition),
-    Bool(RuntimeTransitionBoolCondition),
-    Number(RuntimeTransitionNumberCondition),
-    Trigger(RuntimeTransitionTriggerCondition),
+pub(super) enum RuntimeTransitionViewModelCondition {
+    /// Mirrors pinned C++ `ConditionComparisonNone`: the authored condition
+    /// occurrence remains owned by its transition but can never allow it.
+    NoComparison,
     ViewModelNumber {
         bindable_global_id: u32,
         op: TransitionConditionOp,
@@ -248,42 +244,13 @@ pub(super) enum RuntimeTransitionCondition {
     },
 }
 
-impl RuntimeTransitionCondition {
-    pub(super) fn is_direct_input(&self) -> bool {
-        matches!(self, Self::Bool(_) | Self::Number(_) | Self::Trigger(_))
-    }
-
-    pub(super) fn can_change_during_artboard_update(&self) -> bool {
-        // Ordinary state-machine inputs are fully consumed by the bounded
-        // transition loop inside `StateMachineLayerInstance::advance`.
-        // Artboard component/update passes cannot mutate them. Every other
-        // condition family can observe component, focus, script, or bound
-        // view-model work performed after that loop and therefore still needs
-        // C++'s post-update transition probe.
-        !matches!(self, Self::Bool(_) | Self::Number(_) | Self::Trigger(_))
-    }
-
+impl RuntimeTransitionViewModelCondition {
     pub(super) fn from_object(
         file: &RuntimeFile,
         graph: &ArtboardGraph,
         object: &RuntimeObject,
     ) -> Option<Self> {
         match object.type_name {
-            "TransitionFocusCondition" => {
-                RuntimeTransitionFocusCondition::from_object(file, object).map(Self::Focus)
-            }
-            "ScriptedTransitionCondition" => Some(Self::Scripted(
-                RuntimeScriptedTransitionCondition::from_object(object),
-            )),
-            "TransitionBoolCondition" => {
-                RuntimeTransitionBoolCondition::from_object(object).map(Self::Bool)
-            }
-            "TransitionNumberCondition" => {
-                RuntimeTransitionNumberCondition::from_object(object).map(Self::Number)
-            }
-            "TransitionTriggerCondition" => {
-                RuntimeTransitionTriggerCondition::from_object(object).map(Self::Trigger)
-            }
             "TransitionViewModelCondition" | "TransitionArtboardCondition" => {
                 let comparators = runtime_transition_comparators(file, object)?;
                 let left = comparators.left?;
@@ -1036,7 +1003,7 @@ impl RuntimeTransitionCondition {
         &self,
         context: &TransitionEvaluationContext<'_>,
         artboard: &ArtboardInstance,
-        inputs: &[StateMachineInputInstance],
+        _inputs: &[StateMachineInputInstance],
         executor: &dyn RuntimeScheduledListenerActionExecutor,
     ) -> bool {
         let &TransitionEvaluationContext {
@@ -1051,15 +1018,11 @@ impl RuntimeTransitionCondition {
             bindable_view_models,
             bindable_booleans,
             data_context_present,
-            layer_index,
             view_model_trigger_layer_id,
+            ..
         } = context;
         match self {
-            Self::Focus(condition) => condition.evaluate(executor),
-            Self::Scripted(condition) => condition.evaluate(executor),
-            Self::Bool(condition) => condition.evaluate(inputs),
-            Self::Number(condition) => condition.evaluate(inputs),
-            Self::Trigger(condition) => condition.evaluate(inputs, layer_index),
+            Self::NoComparison => false,
             Self::ViewModelNumber {
                 bindable_global_id,
                 op,
@@ -1495,19 +1458,6 @@ impl RuntimeTransitionCondition {
         }
     }
 
-    pub(super) fn evaluate_direct_input(
-        &self,
-        inputs: &[StateMachineInputInstance],
-        layer_index: usize,
-    ) -> Option<bool> {
-        match self {
-            Self::Bool(condition) => Some(condition.evaluate(inputs)),
-            Self::Number(condition) => Some(condition.evaluate(inputs)),
-            Self::Trigger(condition) => Some(condition.evaluate(inputs, layer_index)),
-            _ => None,
-        }
-    }
-
     fn left_view_model_bindable_global_id(&self) -> Option<u32> {
         match self {
             Self::ViewModelNumber {
@@ -1624,53 +1574,15 @@ impl RuntimeTransitionCondition {
     pub(super) fn use_input(
         &self,
         executor: &dyn RuntimeScheduledListenerActionExecutor,
-        inputs: &mut [StateMachineInputInstance],
-        layer_index: usize,
+        _inputs: &mut [StateMachineInputInstance],
+        _layer_index: usize,
         view_model_trigger_layer_id: u64,
     ) {
-        if let Self::Trigger(condition) = self {
-            condition.use_input(inputs, layer_index);
-        }
         if let Some(bindable_global_id) = self.left_view_model_bindable_global_id() {
             if let Some(source) = executor.retained_view_model_source(bindable_global_id) {
                 source.use_in_layer(view_model_trigger_layer_id);
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_direct_inputs_are_stable_across_artboard_updates() {
-        assert!(
-            !RuntimeTransitionCondition::Number(RuntimeTransitionNumberCondition::new(
-                0,
-                TransitionConditionOp::Equal,
-                1.0,
-            ))
-            .can_change_during_artboard_update()
-        );
-        assert!(
-            !RuntimeTransitionCondition::Bool(RuntimeTransitionBoolCondition::new(
-                0,
-                TransitionConditionOp::Equal,
-            ))
-            .can_change_during_artboard_update()
-        );
-        assert!(
-            RuntimeTransitionCondition::Focus(RuntimeTransitionFocusCondition::new(
-                0,
-                TransitionConditionOp::Equal,
-            ))
-            .can_change_during_artboard_update()
-        );
-        assert!(
-            RuntimeTransitionCondition::Scripted(RuntimeScriptedTransitionCondition::new(7))
-                .can_change_during_artboard_update()
-        );
     }
 }
 

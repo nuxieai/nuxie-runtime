@@ -2618,7 +2618,7 @@ fn runtime_state_machine_graphs_match_cpp_child_grouping() {
         state_machines[0]
             .inputs
             .iter()
-            .map(|input| input.id)
+            .filter_map(|input| input.map(|input| input.id))
             .collect::<Vec<_>>(),
         vec![7, 8]
     );
@@ -2665,7 +2665,7 @@ fn runtime_state_machine_graphs_match_cpp_child_grouping() {
         state_machines[1]
             .inputs
             .iter()
-            .map(|input| input.id)
+            .filter_map(|input| input.map(|input| input.id))
             .collect::<Vec<_>>(),
         vec![18]
     );
@@ -7275,6 +7275,13 @@ fn runtime_import_status_counts_state_machine_null_input_placeholders() {
             RuntimeImportStatus::Imported,
         ],
         "C++ StateMachineImporter::readNullObject inserts a null input placeholder, so later input ids keep their serialized indexes"
+    );
+    let state_machine = &file.artboard_state_machine_graphs(0)[0];
+    assert_eq!(state_machine.inputs.len(), 2);
+    assert!(state_machine.inputs[0].is_none());
+    assert_eq!(
+        state_machine.inputs[1].map(|input| input.type_name),
+        Some("StateMachineBool")
     );
 }
 

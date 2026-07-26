@@ -3,7 +3,6 @@ use super::{
     runtime_number_default_view_model_source_for_instance,
 };
 use nuxie_binary::{RuntimeFile, RuntimeObject};
-use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeTransitionDurationBinding {
@@ -45,7 +44,7 @@ pub(super) fn runtime_transition_duration_bindings(
     // (`state_machine_instance.cpp:1742-1766,2901-2905`;
     // `data_bind_container.cpp:25-33`). A missing authored default therefore
     // cannot erase this definition.
-    let mut bindings = BTreeMap::<u32, RuntimeTransitionDurationBinding>::new();
+    let mut bindings = Vec::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
         let Some(target) =
             state_machine_transition_target_for_data_bind(file, state_machine, data_bind)
@@ -66,15 +65,12 @@ pub(super) fn runtime_transition_duration_bindings(
         ) else {
             continue;
         };
-        bindings.insert(
-            target.id,
-            RuntimeTransitionDurationBinding {
-                transition_global_id: target.id,
-                source,
-            },
-        );
+        bindings.push(RuntimeTransitionDurationBinding {
+            transition_global_id: target.id,
+            source,
+        });
     }
-    bindings.into_values().collect()
+    bindings
 }
 
 fn state_machine_transition_target_for_data_bind<'a>(

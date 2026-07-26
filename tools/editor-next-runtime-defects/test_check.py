@@ -58,10 +58,10 @@ CHILDREN = {
     "RT-ED-005": (["P09-C01"], [], []),
     "RT-ED-007": (["P19-C09"], [], []),
     "LOC-001": ([], ["P13-C07"], []),
-    "LOC-002": ([], ["P04-C11", "P09-C01", "P09-C03", "P09-C06"], []),
-    "LOC-005": ([], ["P09-C05"], []),
+    "LOC-002": (["P04-C11", "P09-C03", "P09-C06"], ["P09-C01"], []),
+    "LOC-005": (["P09-C05"], [], []),
     "LOC-006": ([], ["P09-C04"], []),
-    "LOC-007": ([], ["P11-C12"], []),
+    "LOC-007": (["P11-C12"], [], []),
     "LOC-008": ([], ["P08-C06"], []),
     "LOC-009": ([], ["P14-C01"], []),
     "LOC-011": ([], ["P08-C06"], []),
@@ -446,8 +446,8 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
                 corrections_file = "docs/corrections.toml"
                 fixtures_file = "docs/fixtures.toml"
                 expected_defects = 25
-                expected_formal_children = 4
-                expected_candidate_children = 20
+                expected_formal_children = 9
+                expected_candidate_children = 15
                 expected_union_children = 23
                 expected_overlap_children = ["P09-C01"]
                 reserved_ids = ["LOC-010"]
@@ -804,7 +804,7 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
             result.stderr,
         )
 
-    def test_exact_new_or_changed_loc_count_is_accepted(self) -> None:
+    def test_exact_new_or_changed_record_count_is_accepted(self) -> None:
         newest = self.copy_source()
         path = newest / DEFECTS_NAME
         path.write_text(
@@ -818,7 +818,7 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("unconsumed=1", result.stdout)
 
-    def test_exact_new_or_changed_loc_count_cannot_be_misstated(self) -> None:
+    def test_exact_new_or_changed_record_count_cannot_be_misstated(self) -> None:
         newest = self.copy_source()
         path = newest / DEFECTS_NAME
         path.write_text(
@@ -831,11 +831,11 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
         result = self.run_check(newest_source=newest)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "exact new/changed LOC record count is 1",
+            "exact new/changed canonical record count is 1",
             result.stderr,
         )
 
-    def test_newest_inbox_rejects_rt_ed_record_changes(self) -> None:
+    def test_newest_inbox_accepts_rt_ed_record_changes(self) -> None:
         newest = self.copy_source()
         path = newest / DEFECTS_NAME
         path.write_text(
@@ -846,12 +846,8 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
         )
         self.set_newest_checkpoint(newest, unconsumed=1)
         result = self.run_check(newest_source=newest)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn(
-            "newest Editor inbox changes RT-ED records; only LOC intake "
-            "is accepted: RT-ED-001",
-            result.stderr,
-        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("unconsumed=1", result.stdout)
 
     def test_newest_inbox_rejects_record_deletion(self) -> None:
         newest = self.copy_source()
@@ -864,6 +860,26 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
             "newest Editor inbox deletes consumed records: LOC-019",
+            result.stderr,
+        )
+
+    def test_newest_inbox_rejects_rt_ed_record_deletion(self) -> None:
+        newest = self.copy_source()
+        path = newest / DEFECTS_NAME
+        content = path.read_text()
+        errors: list[str] = []
+        section = CHECKER.parse_defect_sections_text(
+            content,
+            "test source",
+            errors,
+        )["RT-ED-007"]
+        self.assertEqual(errors, [])
+        path.write_text(content.replace(section, "", 1))
+        self.set_newest_checkpoint(newest, unconsumed=0)
+        result = self.run_check(newest_source=newest)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "newest Editor inbox deletes consumed records: RT-ED-007",
             result.stderr,
         )
 
@@ -891,7 +907,7 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
                 result = self.run_check(newest_source=newest)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(
-                    f"newest Editor inbox has invalid future LOC ids: "
+                    f"newest Editor inbox has invalid future defect ids: "
                     f"{defect_id}",
                     result.stderr,
                 )
@@ -1130,25 +1146,62 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
         self.assertEqual(errors, [])
 
         changed_runtime = old_source.replace(
-            "Stable runtime evidence.",
-            "Changed RT-ED evidence.",
+            textwrap.dedent(
+                """
+                ### RT-ED-001 — Stable runtime record
+
+                Stable runtime evidence.
+                """
+            ).lstrip(),
+            textwrap.dedent(
+                f"""
+                ### RT-ED-001 — Changed complete runtime record
+
+                - Editor SHA: `{prior_ref}`
+                - Runtime SHA: `{'a' * 40}`
+                - Exact command: `cargo test -p nuxie rt_ed_001`
+                - Result: deterministic failure.
+                """
+            ).lstrip(),
         )
         runtime_sections = CHECKER.parse_defect_sections_text(
             changed_runtime,
             "current",
             [],
         )
+        runtime_rows = rows + [{"id": "RT-ED-001", "state": "reported"}]
         errors = []
         CHECKER.validate_consumed_intake_delta(
             prior_atlas,
-            rows,
+            runtime_rows,
             runtime_sections,
             editor,
             errors,
         )
-        self.assertIn(
-            "consumed Editor inbox changes RT-ED records after the prior "
-            "v2 checkpoint: RT-ED-001",
+        self.assertEqual(errors, [])
+
+        incomplete_runtime = old_source.replace(
+            "Stable runtime evidence.",
+            "Changed RT-ED evidence without canonical provenance.",
+        )
+        runtime_sections = CHECKER.parse_defect_sections_text(
+            incomplete_runtime,
+            "current",
+            [],
+        )
+        errors = []
+        CHECKER.validate_consumed_intake_delta(
+            prior_atlas,
+            runtime_rows,
+            runtime_sections,
+            editor,
+            errors,
+        )
+        self.assertTrue(
+            any(
+                "RT-ED-001 committed inbox source record lacks" in error
+                for error in errors
+            ),
             errors,
         )
 
@@ -1176,6 +1229,206 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
                 for error in errors
             ),
             errors,
+        )
+
+    def test_current_inbox_template_preserves_the_same_evidence_contract(
+        self,
+    ) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### RT-ED-008 — Current template
+
+            - Exact Editor/runtime checkpoint: assembly
+              `{'b' * 40}` with runtime pin `{'a' * 40}`.
+            - Unchanged runtime reproducer:
+              `cargo test -p nuxie rt_ed_008 -- --exact`.
+            - Current classification: **confirmed runtime defect**.
+            """
+        ).lstrip()
+        errors: list[str] = []
+        CHECKER.validate_future_source_record(
+            "RT-ED-008",
+            "reported",
+            section,
+            errors,
+        )
+        self.assertEqual(errors, [])
+
+    def test_combined_checkpoint_needs_distinct_editor_and_runtime_shas(
+        self,
+    ) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### RT-ED-008 — Incomplete combined checkpoint
+
+            - Exact Editor/runtime checkpoint: `{'b' * 40}`.
+            - Unchanged runtime reproducer: `cargo test rt_ed_008`.
+            - Current classification: confirmed runtime defect.
+            """
+        ).lstrip()
+        errors: list[str] = []
+        CHECKER.validate_future_source_record(
+            "RT-ED-008",
+            "reported",
+            section,
+            errors,
+        )
+        self.assertTrue(errors)
+        self.assertIn("full Runtime SHA", errors[0])
+
+    def test_unrelated_continuation_sha_does_not_supply_runtime_role(
+        self,
+    ) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### RT-ED-008 — Unrelated SHA
+
+            - Exact Editor checkpoint: `{'b' * 40}`.
+              Unrelated artifact: `{'a' * 40}`.
+            - Unchanged runtime reproducer: `cargo test rt_ed_008`.
+            - Current classification: confirmed runtime defect.
+            """
+        ).lstrip()
+        errors: list[str] = []
+        CHECKER.validate_future_source_record(
+            "RT-ED-008",
+            "reported",
+            section,
+            errors,
+        )
+        self.assertTrue(errors)
+        self.assertIn("full Runtime SHA", errors[0])
+
+    def test_runtime_pin_cannot_supply_both_provenance_roles(self) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### RT-ED-008 — One provenance role
+
+            - Exact Editor provenance: runtime pin `{'a' * 40}`.
+            - Unchanged runtime reproducer: `cargo test rt_ed_008`.
+            - Current classification: confirmed runtime defect.
+            """
+        ).lstrip()
+        errors: list[str] = []
+        CHECKER.validate_future_source_record(
+            "RT-ED-008",
+            "reported",
+            section,
+            errors,
+        )
+        self.assertTrue(errors)
+        self.assertIn("full Editor SHA", errors[0])
+
+        separated_marker = textwrap.dedent(
+            f"""
+            ### RT-ED-008 — Marker is not enough
+
+            - Exact Editor provenance: assembly base notes;
+              pinned C++ reference `{'c' * 40}`.
+            - Runtime pin: `{'a' * 40}`.
+            - Unchanged runtime reproducer: `cargo test rt_ed_008`.
+            - Current classification: confirmed runtime defect.
+            """
+        ).lstrip()
+        errors = []
+        CHECKER.validate_future_source_record(
+            "RT-ED-008",
+            "reported",
+            separated_marker,
+            errors,
+        )
+        self.assertTrue(errors)
+        self.assertIn("full Editor SHA", errors[0])
+
+        cplusplus_laundering = textwrap.dedent(
+            f"""
+            ### RT-ED-008 — C++ is not Editor provenance
+
+            - Exact Editor provenance: runtime pin `{'a' * 40}`;
+              pinned C++ reference `{'c' * 40}`.
+            - Runtime pin: `{'a' * 40}`.
+            - Unchanged runtime reproducer: `cargo test rt_ed_008`.
+            - Current classification: confirmed runtime defect.
+            """
+        ).lstrip()
+        errors = []
+        CHECKER.validate_future_source_record(
+            "RT-ED-008",
+            "reported",
+            cplusplus_laundering,
+            errors,
+        )
+        self.assertTrue(errors)
+        self.assertIn("full Editor SHA", errors[0])
+
+    def test_fixture_code_span_does_not_supply_command_role(self) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### RT-ED-008 — No command
+
+            - Editor SHA: `{'b' * 40}`
+            - Runtime SHA: `{'a' * 40}`
+            - Minimal unchanged fixture: `fixtures/rt_ed_008.riv`.
+            - Current classification: confirmed runtime defect.
+            """
+        ).lstrip()
+        errors: list[str] = []
+        CHECKER.validate_future_source_record(
+            "RT-ED-008",
+            "reported",
+            section,
+            errors,
+        )
+        self.assertTrue(errors)
+        self.assertIn("command bullet", errors[0])
+
+    def test_unlisted_labels_do_not_launder_command_or_evidence(self) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### RT-ED-008 — Misleading labels
+
+            - Editor SHA: `{'b' * 40}`
+            - Runtime SHA: `{'a' * 40}`
+            - Not a command: `cargo test rt_ed_008`.
+            - Unevidenced assertion: deterministic failure.
+            """
+        ).lstrip()
+        errors: list[str] = []
+        CHECKER.validate_future_source_record(
+            "RT-ED-008",
+            "reported",
+            section,
+            errors,
+        )
+        self.assertTrue(errors)
+        self.assertIn("command bullet", errors[0])
+        self.assertIn("classification bullet", errors[0])
+
+    def test_record_comparison_ignores_only_canonical_defect_anchors(
+        self,
+    ) -> None:
+        section = "### LOC-001 — Record\n\nEvidence.\n"
+        anchored = section + '\n<a id="loc-002"></a>\n'
+        self.assertEqual(
+            CHECKER.normalized_source_record(section),
+            CHECKER.normalized_source_record(anchored),
+        )
+        self.assertNotEqual(
+            CHECKER.normalized_source_record(section),
+            CHECKER.normalized_source_record(
+                section + "\n<a id=\"unrelated\"></a>\n"
+            ),
+        )
+        fenced = (
+            section
+            + "\n```html\n"
+            + '<a id="loc-002"></a>\n'
+            + "```\n"
+        )
+        changed_fenced = fenced.replace("loc-002", "loc-003")
+        self.assertNotEqual(
+            CHECKER.normalized_source_record(fenced),
+            CHECKER.normalized_source_record(changed_fenced),
         )
 
     def test_markdown_parser_ignores_defect_headings_inside_fences(self) -> None:
@@ -1834,16 +2087,88 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
             result.stderr,
         )
 
-    def test_new_runtime_id_is_rejected_by_the_loc_only_inbox_contract(
-        self,
-    ) -> None:
+    def test_atlas_only_runtime_id_is_rejected_without_inbox_record(self) -> None:
         self.append_defect("RT-ED-008")
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "atlas has unexpected defect ids: RT-ED-008",
+            "atlas has no exact consumed Editor inbox heading for: RT-ED-008",
             result.stderr,
         )
+
+    def test_complete_consumed_future_runtime_record_is_accepted(self) -> None:
+        self.append_consumed_defect("RT-ED-008")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("defects=26", result.stdout)
+
+    def test_arbitrary_tracking_record_type_is_rejected(self) -> None:
+        headings = (
+            "### BUG-1 — Not a canonical runtime defect\n",
+            "### BUG_1 — Not a canonical runtime defect\n",
+            "### BUG-1 —\n",
+            "### BUG-1 - Not a canonical runtime defect\n",
+            "### [BUG-1] — Not a canonical runtime defect\n",
+            "### [LOC-020] — Alias is not canonical\n",
+            "### [BUG-1](https://example.invalid) — Linked fake\n",
+            "### <code>BUG-1</code> — HTML-wrapped fake\n",
+            "### [BUG name] — Noncanonical record prefix\n",
+            "BUG-1 — Not a canonical runtime defect\n"
+            "========================================\n",
+            "BUG_1 — Not a canonical runtime defect\n"
+            "========================================\n",
+            "[BUG-1] — Not a canonical runtime defect\n"
+            "==========================================\n",
+        )
+        for heading in headings:
+            with self.subTest(heading=heading):
+                newest = self.copy_source()
+                path = newest / DEFECTS_NAME
+                path.write_text(
+                    path.read_text()
+                    + "\n"
+                    + heading
+                    + "\n- Editor SHA: `"
+                    + "b" * 40
+                    + "`\n- Runtime SHA: `"
+                    + "a" * 40
+                    + "`\n- Command: `cargo test bug_001`\n"
+                    + "- Result: deterministic failure.\n"
+                )
+                self.set_newest_checkpoint(newest, unconsumed=0)
+                result = self.run_check(newest_source=newest)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    "noncanonical defect-like heading",
+                    result.stderr,
+                )
+                shutil.rmtree(newest)
+
+    def test_consumed_inbox_rejects_wrapped_arbitrary_ids(self) -> None:
+        headings = (
+            "### __BUG-1__\n",
+            "### <code>BUG-1</code>\n",
+            "### [BUG-1][ref]\n",
+            "### BUG-1—Title\n",
+        )
+        original_source = (self.source / DEFECTS_NAME).read_text()
+        original_atlas = self.atlas.read_text()
+        for heading in headings:
+            with self.subTest(heading=heading):
+                (self.source / DEFECTS_NAME).write_text(
+                    original_source
+                    + "\n"
+                    + heading
+                    + "\nArbitrary record body.\n"
+                )
+                self.atlas.write_text(original_atlas)
+                self.refresh_source_bindings()
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    "noncanonical defect-like heading",
+                    result.stderr,
+                )
 
     def test_loc_zero_and_reserved_loc_ten_are_rejected(self) -> None:
         for defect_id in ("LOC-000", "LOC-010"):
@@ -1878,6 +2203,26 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
             "runtimeDependencies",
             result.stderr,
         )
+
+    def test_runtime_defects_are_structured_ledger_links(self) -> None:
+        path = self.source / LEDGER_NAME
+        ledger = json.loads(path.read_text())
+        child = next(
+            child
+            for child in ledger["rows"][0]["children"]
+            if child["id"] == "P04-C01"
+        )
+        child["runtimeDependencies"] = []
+        child["runtimeDefects"] = [
+            {
+                "id": "RT-ED-003",
+                "classification": "confirmed-runtime-defect",
+            }
+        ]
+        path.write_text(json.dumps(ledger, indent=2) + "\n")
+        self.refresh_source_bindings()
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_candidate_child_assertion_must_name_exact_loc_id(self) -> None:
         path = self.source / LEDGER_NAME

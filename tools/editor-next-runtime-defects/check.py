@@ -38,15 +38,15 @@ EXPECTED_CHILDREN = {
     "RT-ED-007": ({"P19-C09"}, set(), set()),
     "LOC-001": (set(), {"P13-C07"}, set()),
     "LOC-002": (
-        set(),
-        {"P04-C11", "P09-C01", "P09-C03", "P09-C06"},
+        {"P04-C11", "P09-C03", "P09-C06"},
+        {"P09-C01"},
         set(),
     ),
     "LOC-003": (set(), set(), set()),
     "LOC-004": (set(), set(), set()),
-    "LOC-005": (set(), {"P09-C05"}, set()),
+    "LOC-005": ({"P09-C05"}, set(), set()),
     "LOC-006": (set(), {"P09-C04"}, set()),
-    "LOC-007": (set(), {"P11-C12"}, set()),
+    "LOC-007": ({"P11-C12"}, set(), set()),
     "LOC-008": (set(), {"P08-C06"}, set()),
     "LOC-009": (set(), {"P14-C01"}, set()),
     "LOC-011": (set(), {"P08-C06"}, set()),
@@ -178,6 +178,7 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 CHILD_RE = re.compile(r"^P\d{2}-C\d{2}$")
 LOCAL_ID_RE = re.compile(r"^LOC-\d{3}$")
+RUNTIME_ID_RE = re.compile(r"^RT-ED-\d{3}$")
 DEFECT_HEADING_RE = re.compile(
     r"^### (?P<id>(?:RT-ED|LOC)-\d{3}) — (?P<title>\S(?:.*\S)?)$"
 )
@@ -188,6 +189,25 @@ DEFECT_LIKE_HEADING_RE = re.compile(
     r"^[ \t]*#{1,}[ \t]*[`*]*(?:RT[-_ ]?ED|LOC)"
     r"(?=[-_\s\d`*]|$)",
     re.IGNORECASE,
+)
+ID_SHAPED_TOKEN_PATTERN = (
+    r"[`*\[]*[A-Z][A-Z0-9_.:/_-]*\d[A-Z0-9_.:/_-]*"
+    r"[`*\]]*(?:\([^)\r\n]*\))?"
+)
+ARBITRARY_TRACKING_HEADING_RE = re.compile(
+    rf"^[ \t]*#{{1,}}[ \t]*{ID_SHAPED_TOKEN_PATTERN}(?=[ \t]|$)",
+    re.IGNORECASE,
+)
+ARBITRARY_TRACKING_TEXT_RE = re.compile(
+    rf"^[ \t]*{ID_SHAPED_TOKEN_PATTERN}(?=[ \t]|$)",
+    re.IGNORECASE,
+)
+RECORD_SEPARATOR_HEADING_RE = re.compile(
+    r"^[ \t]*#{1,3}(?!#)[ \t]*\S.*"
+    r"(?:[ \t]+—(?:[ \t]|$)|[ \t]+-[ \t]+)"
+)
+RECORD_SEPARATOR_TEXT_RE = re.compile(
+    r"^[ \t]*\S.*(?:[ \t]+—(?:[ \t]|$)|[ \t]+-[ \t]+)"
 )
 DEFECT_LIKE_TEXT_RE = re.compile(
     r"^[ \t]*[`*]*(?:RT[-_ ]?ED|LOC)(?=[-_\s\d`*]|$)",
@@ -267,6 +287,87 @@ EVIDENCE_BULLET_RE = re.compile(
     r"(?:\*\*)?[ \t]*:[ \t]*\S.*$",
     re.IGNORECASE,
 )
+DEFECT_ANCHOR_RE = re.compile(
+    r'^<a[ \t]+id="(?:rt-ed|loc)-\d{3}"[ \t]*></a>[ \t]*$',
+    re.IGNORECASE,
+)
+FULL_SHA_RE = re.compile(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])")
+RUNTIME_PIN_SHA_RE = re.compile(
+    r"\bruntime[ \t]+pin\b[^0-9a-f]*`?"
+    r"(?P<sha>[0-9a-f]{40})(?![0-9a-f])",
+    re.IGNORECASE,
+)
+EDITOR_PROVENANCE_SHA_RE = re.compile(
+    r"\b(?:assembly[ \t]+(?:base|checkpoint)|"
+    r"editor[ \t]+(?:base|checkpoint|sha)|"
+    r"qualification[ \t]+code[ \t]+checkpoint)"
+    r"[ \t:;,=-]*`?(?P<sha>[0-9a-f]{40})(?![0-9a-f])",
+    re.IGNORECASE,
+)
+COMMAND_EVIDENCE_LABELS = {
+    "command",
+    "editor integration command",
+    "exact command",
+    "exact product command",
+    "failed unchanged direct-runtime reproducer",
+    "focused compiler command",
+    "focused consumer command",
+    "focused editor/product command",
+    "focused journey comparison command",
+    "focused product command",
+    "focused product commands",
+    "focused product reproduction",
+    "focused reproduction",
+    "focused workspace comparison command",
+    "historical focused commands",
+    "historical focused reproduction",
+    "independent editor-corpus command",
+    "minimal diagnostic command",
+    "minimal unchanged reproducer",
+    "passed editor integration command",
+    "passed editor-integration command",
+    "supporting legacy-editor lifecycle command",
+    "unchanged assembled command",
+    "unchanged failed producthost reproducer",
+    "unchanged runtime reproducer",
+    "unchanged runtime reproducer command",
+}
+RESULT_EVIDENCE_LABELS = {
+    "actual behavior",
+    "actual behavior and impact",
+    "actual editor next observation",
+    "api-seam evidence",
+    "c++ oracle evidence",
+    "classification",
+    "committed evidence manifest",
+    "corrected sdk evidence",
+    "current classification",
+    "current result",
+    "evidence",
+    "evidence manifest",
+    "exact native deficiency",
+    "exact product failure",
+    "exact runtime deficiency",
+    "exact typed runtime deficiency",
+    "failure",
+    "first significant observation",
+    "focused post-fix journey result",
+    "frozen journey evidence",
+    "historical observations",
+    "historical result",
+    "immutable editor evidence",
+    "immutable evidence",
+    "immutable source evidence",
+    "incorrect observation",
+    "observation",
+    "original observation",
+    "previous current-product result",
+    "product and direct lifecycle observations",
+    "result",
+    "sdk evidence",
+    "shipped artifact and sdk evidence",
+    "workspace classification",
+}
 DEFECT_MENTION_RE = re.compile(
     r"(?<![A-Z0-9-])(?P<id>(?:RT-ED|LOC)-\d{3})(?![A-Z0-9-])"
 )
@@ -1188,11 +1289,24 @@ def parse_defect_sections_text(
             if raw_line == visible
             else None
         )
-        if DEFECT_LIKE_HEADING_RE.match(visible) and canonical is None:
+        numbered_top_level_heading = (
+            heading is not None
+            and len(heading.group("marks")) <= 3
+            and any(
+                character.isdigit()
+                for character in (heading.group("title") or "")
+            )
+        )
+        if (
+            DEFECT_LIKE_HEADING_RE.match(visible)
+            or ARBITRARY_TRACKING_HEADING_RE.match(visible)
+            or RECORD_SEPARATOR_HEADING_RE.match(visible)
+            or numbered_top_level_heading
+        ) and canonical is None:
             errors.append(
                 f"{label} runtime-defect inbox has noncanonical "
                 f"defect-like heading {raw_line!r}; expected "
-                "'### LOC-020 — Title' form"
+                "'### LOC-020 — Title' or '### RT-ED-008 — Title' form"
             )
         if heading is not None and len(heading.group("marks")) <= 3:
             boundaries_by_offset[offset] = (
@@ -1215,11 +1329,16 @@ def parse_defect_sections_text(
             or SETEXT_INELIGIBLE_RE.match(previous_visible) is not None
         ):
             continue
-        if DEFECT_LIKE_TEXT_RE.match(previous_visible):
+        if (
+            DEFECT_LIKE_TEXT_RE.match(previous_visible)
+            or ARBITRARY_TRACKING_TEXT_RE.match(previous_visible)
+            or RECORD_SEPARATOR_TEXT_RE.match(previous_visible)
+            or any(character.isdigit() for character in previous_visible)
+        ):
             errors.append(
                 f"{label} runtime-defect inbox has noncanonical "
                 f"defect-like heading {previous_raw!r}; expected "
-                "'### LOC-020 — Title' form"
+                "'### LOC-020 — Title' or '### RT-ED-008 — Title' form"
             )
         level = 1 if setext.group("marker").startswith("=") else 2
         boundaries_by_offset[previous_offset] = (
@@ -1274,21 +1393,122 @@ def validate_future_source_record(
         visible
         for _, _, visible in markdown_visible_lines(section)
     ]
+    bullet_blocks: list[tuple[str, str]] = []
+    current_block: list[str] = []
+
+    def append_current_block() -> None:
+        if not current_block:
+            return
+        first = re.sub(r"^[-*+][ \t]+", "", current_block[0])
+        if ":" not in first:
+            return
+        raw_label, first_value = first.split(":", 1)
+        label = raw_label.strip().strip("*").strip()
+        body = " ".join(
+            [first_value.strip(), *(line.strip() for line in current_block[1:])]
+        ).strip()
+        bullet_blocks.append((label.casefold(), body))
+
+    for line in lines:
+        if re.match(r"^[-*+][ \t]+", line):
+            append_current_block()
+            current_block = [line]
+        elif current_block and (not line or line[0].isspace()):
+            current_block.append(line)
+        else:
+            append_current_block()
+            current_block = []
+    append_current_block()
+
+    editor_only_labels = {
+        "editor sha",
+        "exact editor checkpoint",
+        "exact editor provenance",
+        "exact editor base and branch",
+        "editor intake checkpoint",
+    }
+    runtime_only_labels = {
+        "runtime sha",
+        "runtime pin",
+        "exact runtime pin",
+        "exact runtime and c++ reference pins",
+    }
+    combined_labels = {"exact editor/runtime checkpoint"}
+
+    def editor_labeled_body_has_sha(label: str, body: str) -> bool:
+        shas = set(FULL_SHA_RE.findall(body))
+        if not shas:
+            return False
+        if label == "exact editor provenance":
+            return EDITOR_PROVENANCE_SHA_RE.search(body) is not None
+        return True
+
+    def has_editor_sha() -> bool:
+        return any(
+            (
+                label in editor_only_labels
+                and editor_labeled_body_has_sha(label, block)
+            )
+            or (
+                label in combined_labels
+                and len(set(FULL_SHA_RE.findall(block))) >= 2
+            )
+            for label, block in bullet_blocks
+        )
+
+    def has_runtime_sha() -> bool:
+        return any(
+            (
+                label in runtime_only_labels
+                and FULL_SHA_RE.search(block) is not None
+            )
+            or (
+                label in combined_labels
+                and len(set(FULL_SHA_RE.findall(block))) >= 2
+            )
+            for label, block in bullet_blocks
+        )
+
+    def has_command() -> bool:
+        return any(
+            label in COMMAND_EVIDENCE_LABELS
+            and any(code.strip() for code in re.findall(r"`([^`\r\n]+)`", body))
+            for label, body in bullet_blocks
+        )
+
+    def block_has_evidence() -> bool:
+        return any(
+            label in RESULT_EVIDENCE_LABELS and bool(body)
+            for label, body in bullet_blocks
+        )
+
     missing: list[str] = []
-    if not any(EDITOR_SHA_BULLET_RE.fullmatch(line) for line in lines):
+    if not (
+        any(EDITOR_SHA_BULLET_RE.fullmatch(line) for line in lines)
+        or has_editor_sha()
+    ):
         missing.append("a separately labeled full Editor SHA")
-    if not any(RUNTIME_SHA_BULLET_RE.fullmatch(line) for line in lines):
+    if not (
+        any(RUNTIME_SHA_BULLET_RE.fullmatch(line) for line in lines)
+        or has_runtime_sha()
+    ):
         missing.append("a separately labeled full Runtime SHA")
     command_matches = (
         COMMAND_BULLET_RE.fullmatch(line)
         for line in lines
     )
-    if not any(
-        match is not None and bool(match.group("code").strip())
-        for match in command_matches
+    if not (
+        any(
+            match is not None and bool(match.group("code").strip())
+            for match in command_matches
+        )
+        or has_command()
     ):
         missing.append("a labeled command bullet with nonempty inline code")
-    if not any(EVIDENCE_BULLET_RE.fullmatch(line) for line in lines):
+    if not (
+        any(EVIDENCE_BULLET_RE.fullmatch(line) for line in lines)
+        or block_has_evidence()
+    ):
         missing.append(
             "a labeled result/evidence/observation/failure/deficiency/"
             "classification bullet"
@@ -1298,6 +1518,23 @@ def validate_future_source_record(
             f"{defect_id} committed inbox source record lacks "
             f"{', '.join(missing)}; state must be intake-needs-evidence"
         )
+
+
+def normalized_source_record(section: str) -> str:
+    """Remove canonical heading anchors that carry no defect evidence."""
+    visible_lines = markdown_visible_lines(section)
+    normalized_parts: list[str] = []
+    for index, (offset, raw, visible) in enumerate(visible_lines):
+        end = (
+            visible_lines[index + 1][0]
+            if index + 1 < len(visible_lines)
+            else len(section)
+        )
+        if raw == visible and DEFECT_ANCHOR_RE.fullmatch(visible) is not None:
+            continue
+        normalized_parts.append(section[offset:end])
+    normalized = "".join(normalized_parts)
+    return normalized.rstrip() + "\n"
 
 
 def parse_ledger_children(
@@ -1342,35 +1579,35 @@ def parse_ledger_children(
                 errors.append(f"parity ledger child {child_id} has no assertion")
                 assertion = ""
             assertions[child_id] = assertion
-            dependencies = child.get("runtimeDependencies", [])
-            if not isinstance(dependencies, list):
-                errors.append(
-                    f"parity ledger child {child_id} runtimeDependencies "
-                    "must be a list"
-                )
-                continue
             dependency_ids: list[str] = []
-            for dependency in dependencies:
-                if not isinstance(dependency, dict):
+            for field in ("runtimeDependencies", "runtimeDefects"):
+                dependencies = child.get(field, [])
+                if not isinstance(dependencies, list):
                     errors.append(
-                        f"parity ledger child {child_id} has a non-object "
-                        "runtime dependency"
+                        f"parity ledger child {child_id} {field} must be a list"
                     )
                     continue
-                dependency_id = str(dependency.get("id", ""))
-                if not dependency_id:
-                    errors.append(
-                        f"parity ledger child {child_id} has an empty "
-                        "runtime dependency id"
-                    )
-                    continue
-                dependency_ids.append(dependency_id)
-                formal[dependency_id].add(child_id)
+                for dependency in dependencies:
+                    if not isinstance(dependency, dict):
+                        errors.append(
+                            f"parity ledger child {child_id} has a non-object "
+                            f"entry in {field}"
+                        )
+                        continue
+                    dependency_id = str(dependency.get("id", ""))
+                    if not dependency_id:
+                        errors.append(
+                            f"parity ledger child {child_id} has an empty "
+                            f"id in {field}"
+                        )
+                        continue
+                    dependency_ids.append(dependency_id)
+                    formal[dependency_id].add(child_id)
             duplicates = duplicate_values(dependency_ids)
             if duplicates:
                 errors.append(
-                    f"parity ledger child {child_id} repeats runtime "
-                    f"dependencies: {', '.join(duplicates)}"
+                    f"parity ledger child {child_id} repeats structured "
+                    f"runtime links: {', '.join(duplicates)}"
                 )
     return dict(formal), assertions
 
@@ -1405,7 +1642,13 @@ def validate_source_record_contract(
             )
     for row in rows:
         defect_id = str(row.get("id", ""))
-        if defect_id not in BASELINE_IDS and LOCAL_ID_RE.fullmatch(defect_id):
+        if (
+            defect_id not in BASELINE_IDS
+            and (
+                LOCAL_ID_RE.fullmatch(defect_id)
+                or RUNTIME_ID_RE.fullmatch(defect_id)
+            )
+        ):
             section = consumed_sections.get(defect_id)
             if section is not None:
                 validate_future_source_record(
@@ -1427,7 +1670,8 @@ def validate_source_record_contract(
             ) or "none"
             errors.append(
                 f"{defect_id} formal_children do not match parity-ledger "
-                f"runtimeDependencies; missing: {missing_children}; "
+                "runtimeDependencies/runtimeDefects; "
+                f"missing: {missing_children}; "
                 f"extra: {extra_children}"
             )
         for child_id in row.get("candidate_children", []):
@@ -1500,19 +1744,30 @@ def validate_newest_inbox(
     )
     consumed_ids = set(consumed_sections)
     newest_ids = set(newest_sections)
-    invalid_local_ids = sorted(
+    invalid_future_ids = sorted(
         defect_id
         for defect_id in newest_ids - BASELINE_IDS
-        if defect_id.startswith("LOC-")
-        and (
-            LOCAL_ID_RE.fullmatch(defect_id) is None
-            or int(defect_id.removeprefix("LOC-")) < 20
+        if (
+            (
+                defect_id.startswith("LOC-")
+                and (
+                    LOCAL_ID_RE.fullmatch(defect_id) is None
+                    or int(defect_id.removeprefix("LOC-")) < 20
+                )
+            )
+            or (
+                defect_id.startswith("RT-ED-")
+                and (
+                    RUNTIME_ID_RE.fullmatch(defect_id) is None
+                    or int(defect_id.removeprefix("RT-ED-")) < 8
+                )
+            )
         )
     )
-    if invalid_local_ids:
+    if invalid_future_ids:
         errors.append(
-            "newest Editor inbox has invalid future LOC ids: "
-            + ", ".join(invalid_local_ids)
+            "newest Editor inbox has invalid future defect ids: "
+            + ", ".join(invalid_future_ids)
         )
     deleted = sorted(consumed_ids - newest_ids)
     if deleted:
@@ -1520,37 +1775,18 @@ def validate_newest_inbox(
             "newest Editor inbox deletes consumed records: "
             + ", ".join(deleted)
         )
-    consumed_runtime = {
-        defect_id: section
-        for defect_id, section in consumed_sections.items()
-        if defect_id.startswith("RT-ED-")
-    }
-    newest_runtime = {
-        defect_id: section
-        for defect_id, section in newest_sections.items()
-        if defect_id.startswith("RT-ED-")
-    }
-    changed_runtime = sorted(
-        defect_id
-        for defect_id in set(consumed_runtime) | set(newest_runtime)
-        if consumed_runtime.get(defect_id) != newest_runtime.get(defect_id)
-    )
-    if changed_runtime:
-        errors.append(
-            "newest Editor inbox changes RT-ED records; only LOC intake is "
-            "accepted: " + ", ".join(changed_runtime)
-        )
-    changed_locals = {
+    changed_records = {
         defect_id
         for defect_id, section in newest_sections.items()
-        if defect_id.startswith("LOC-")
-        and consumed_sections.get(defect_id) != section
+        if normalized_source_record(consumed_sections.get(defect_id, ""))
+        != normalized_source_record(section)
     }
     expected_unconsumed = inbox.get("unconsumed_records")
-    if expected_unconsumed != len(changed_locals):
+    if expected_unconsumed != len(changed_records):
         errors.append(
             f"inbox unconsumed_records is {expected_unconsumed}; exact "
-            f"new/changed LOC record count is {len(changed_locals)}"
+            "new/changed canonical record count is "
+            f"{len(changed_records)}"
         )
 
 
@@ -1699,29 +1935,18 @@ def validate_consumed_intake_delta(
         "prior v2 consumed",
         errors,
     )
-    changed_runtime = sorted(
-        defect_id
-        for defect_id in set(prior_sections) | set(current_sections)
-        if defect_id.startswith("RT-ED-")
-        and prior_sections.get(defect_id) != current_sections.get(defect_id)
-    )
-    if changed_runtime:
-        errors.append(
-            "consumed Editor inbox changes RT-ED records after the prior "
-            "v2 checkpoint: " + ", ".join(changed_runtime)
-        )
     rows_by_id = {
         str(row.get("id", "")): row
         for row in current_rows
         if isinstance(row, dict)
     }
-    changed_locals = sorted(
+    changed_records = sorted(
         defect_id
         for defect_id, section in current_sections.items()
-        if defect_id.startswith("LOC-")
-        and prior_sections.get(defect_id) != section
+        if normalized_source_record(prior_sections.get(defect_id, ""))
+        != normalized_source_record(section)
     )
-    for defect_id in changed_locals:
+    for defect_id in changed_records:
         row = rows_by_id.get(defect_id)
         if row is None:
             continue
@@ -3196,12 +3421,18 @@ def check(
     missing = sorted(BASELINE_IDS - actual_ids)
     extra: list[str] = []
     for defect_id in actual_ids - BASELINE_IDS:
-        match = LOCAL_ID_RE.fullmatch(defect_id)
-        if (
-            match is None
-            or defect_id in reserved_ids
-            or int(defect_id.removeprefix("LOC-")) < 20
-        ):
+        local_match = LOCAL_ID_RE.fullmatch(defect_id)
+        runtime_match = RUNTIME_ID_RE.fullmatch(defect_id)
+        valid_future_local = (
+            local_match is not None
+            and defect_id not in reserved_ids
+            and int(defect_id.removeprefix("LOC-")) >= 20
+        )
+        valid_future_runtime = (
+            runtime_match is not None
+            and int(defect_id.removeprefix("RT-ED-")) >= 8
+        )
+        if not (valid_future_local or valid_future_runtime):
             extra.append(defect_id)
     extra.sort()
     if missing:

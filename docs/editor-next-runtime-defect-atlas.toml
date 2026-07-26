@@ -4,12 +4,12 @@ upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 editor_consumed_runtime_ref = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_base_ref = "e72323c808b91d706ba3b745396beaca7accd69a"
 source_snapshot_status = "landed"
-source_snapshot_ref = "4da896beb5ec6815f6b01a2433875274a321d06c"
+source_snapshot_ref = "7ca11e331a57cb3ea574848f8e93eb108878c40b"
 corrections_file = "docs/editor-next-runtime-defect-corrections.toml"
 fixtures_file = "tools/editor-next-runtime-defects/fixtures.toml"
 expected_defects = 25
-expected_formal_children = 4
-expected_candidate_children = 20
+expected_formal_children = 9
+expected_candidate_children = 15
 expected_union_children = 23
 expected_overlap_children = ["P09-C01"]
 reserved_ids = ["LOC-010"]
@@ -28,18 +28,18 @@ editor_merge_blocks_program = false
 parallel_execution = true
 runtime_fix_assignment_requires_tracked_dependency = true
 terminal_state = "closed"
-intake_cycle = 1
+intake_cycle = 2
 
 [inbox]
 canonical_branch = "origin/levi/editor-next-cutover-assembly"
 runtime_defects_path = "plans/nuxie-editor-next-runtime-defects.md"
 parity_ledger_path = "plans/nuxie-editor-next-parity-ledger.json"
-last_consumed_editor_ref = "4da896beb5ec6815f6b01a2433875274a321d06c"
-last_consumed_runtime_defects_sha256 = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-last_consumed_parity_ledger_sha256 = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
-newest_available_editor_ref = "4da896beb5ec6815f6b01a2433875274a321d06c"
-newest_available_runtime_defects_sha256 = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-newest_available_parity_ledger_sha256 = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+last_consumed_editor_ref = "7ca11e331a57cb3ea574848f8e93eb108878c40b"
+last_consumed_runtime_defects_sha256 = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+last_consumed_parity_ledger_sha256 = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
+newest_available_editor_ref = "7ca11e331a57cb3ea574848f8e93eb108878c40b"
+newest_available_runtime_defects_sha256 = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+newest_available_parity_ledger_sha256 = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 unconsumed_records = 0
 imported_atlas_count = 25
 
@@ -86,17 +86,17 @@ shared_ledgers = [
 [[artifact]]
 id = "cutover-proposal"
 path = "nuxie-editor-next-cutover-proposal.md"
-sha256 = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+sha256 = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
 
 [[artifact]]
 id = "runtime-defects"
 path = "nuxie-editor-next-runtime-defects.md"
-sha256 = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+sha256 = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
 
 [[artifact]]
 id = "parity-ledger"
 path = "nuxie-editor-next-parity-ledger.json"
-sha256 = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+sha256 = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 
 [[defect]]
 id = "RT-ED-001"
@@ -128,9 +128,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = "a5a606e7e78764e5d5f4e1421c1a5fe61df0ca22"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -206,9 +206,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = "a5a606e7e78764e5d5f4e1421c1a5fe61df0ca22"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -284,9 +284,9 @@ formal_children = ["P04-C01", "P19-C03"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -358,9 +358,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-07 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -421,9 +421,9 @@ formal_children = ["P09-C01"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -488,9 +488,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -542,14 +542,14 @@ owner_class = "api"
 classification = "unqualified"
 ticket = "F-ED-04"
 fixture_id = "fed.rt_ed_007.nested_transition_duration"
-preliminary_disposition = "High-level Scene generalization gap; low-level nested resolution exists."
+preliminary_disposition = "The canonical Editor fixture now reaches the exact typed Scene seam and fails because transition-duration authoring accepts only a direct root ViewModelNumberId. The source record classifies this as a confirmed runtime/API defect; current-pin d788 qualification remains required before implementation resumes."
 reproduction_sha256 = "d2bddc7d08da8f34f5b2c960aa1af1b4e7582bd2b184fb6bcd88eb18917dc856"
-rust_stimulus = "pending: F-ED-04 must minimize the direct Rust stimulus for RT-ED-007"
-cpp_stimulus = "pending: F-ED-04 must minimize the pinned-C++ stimulus or prove no equivalent for RT-ED-007"
-source_files = ["pending: F-ED-04 source-file correspondence"]
-source_members = ["pending: F-ED-04 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-04 lifecycle qualification"]
-rust_owner = "pending: F-ED-04 exact Rust owner"
+rust_stimulus = "CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'runtime-viewmodel-contract' --workers=1 at Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b and runtime e72323c808b91d706ba3b745396beaca7accd69a"
+cpp_stimulus = "tests/unit_tests/runtime/state_machine_test.cpp:719-747 and assets/transition_duration_bind_nested.riv at pinned d788e8ec6e8b598526607d6a1e8818e8b637b60c; executable normalized record/behavior differential remains pending"
+source_files = ["tests/unit_tests/runtime/state_machine_test.cpp","tests/unit_tests/assets/transition_duration_bind_nested.riv","crates/nuxie/src/scene.rs"]
+source_members = ["SceneTx::bind_transition_duration","ViewModelNumberSource","MachineRecordSpec::TransitionDurationBind"]
+lifecycle_phases = ["author nested source","export transition duration bind","import","resolve source path","advance transition"]
+rust_owner = "crates/nuxie/src/scene.rs typed transition-duration authoring; no runtime/state-machine writer is authorized by intake"
 displaced_mechanism = "pending: F-ED-04 displaced-mechanism inventory"
 dependencies = ["F-ED-00B","F-ED-04"]
 target_tests = ["cpp_probe/registry.cpp"]
@@ -563,12 +563,12 @@ formal_children = ["P19-C09"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-04 must recover the original localization Rust SHA" }
-editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
 merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
@@ -593,8 +593,9 @@ reason = "Nested source-path record shape has not been normalized at the current
 status = "pending"
 reason = "Existing resolver and missing typed Scene interface need separate evidence."
 [defect.editor_result]
-status = "pending"
-reason = "P19-C09 has not been rerun from the investigation base."
+status = "fail"
+command = "CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'runtime-viewmodel-contract' --workers=1"
+evidence = "At committed Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b, the Editor integration proof passes and the unchanged WebGPU runtime reproducer fails at animation.viewmodel.unsupported_path; plans/artifacts/editor-next-p19-c09/provenance.json preserves exact hashes."
 
 [[defect]]
 id = "LOC-001"
@@ -626,9 +627,9 @@ formal_children = []
 candidate_children = ["P13-C07"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-01 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -668,14 +669,14 @@ owner_class = "runtime"
 classification = "unqualified"
 ticket = "F-ED-02"
 fixture_id = "fed.loc_002.current_source_relation"
-preliminary_disposition = "Derived-relation rebind gap; may collapse into the stable owner slice."
+preliminary_disposition = "Committed Editor evidence isolates Scene::edit artboard rematerialization resetting nested selected-product state after an unrelated edit. The source classifies a confirmed runtime defect, but its C++ citations remain on historical f4bb and must be requalified at d788 before repair."
 reproduction_sha256 = "ba7014eb700b6f97b3f1e05d2ab7062b9e83f64f767566864efa720ecdee4f6b"
-rust_stimulus = "pending: F-ED-02 must minimize the direct Rust stimulus for LOC-002"
-cpp_stimulus = "pending: F-ED-02 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-002"
-source_files = ["pending: F-ED-02 source-file correspondence"]
-source_members = ["pending: F-ED-02 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-02 lifecycle qualification"]
-rust_owner = "pending: F-ED-02 exact Rust owner"
+rust_stimulus = "CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p editor --lib scene_projection::mounted_scene::tests::runtime_scene_edit_preserves_nested_selected_product_value --offline -- --ignored --exact"
+cpp_stimulus = "historical f4bb source audit of ViewModelInstanceStringRuntime, ViewModelInstance, Artboard component dirt, and DataContext bind/unbind; exact d788 identical-input probe remains pending"
+source_files = ["src/viewmodel/runtime/viewmodel_instance_string_runtime.cpp","src/viewmodel/viewmodel_instance.cpp","src/artboard.cpp","crates/nuxie/src/scene.rs"]
+source_members = ["Scene::edit","capture_view_model_carry","instantiate_runtime_mount_with_carry","ViewModelInstanceStringRuntime::value","ViewModelInstance::propertyValue"]
+lifecycle_phases = ["write nested selected-product value","unrelated Scene edit","artboard rematerialization","ViewModel carry","relation evaluation"]
+rust_owner = "reported first divergence in crates/nuxie/src/scene.rs rematerialization; final owner and writer await d788 qualification plus FL collision check"
 displaced_mechanism = "pending: F-ED-02 displaced-mechanism inventory"
 dependencies = ["F-ED-00B","F-ED-02"]
 target_tests = ["cpp_probe/registry.cpp"]
@@ -685,16 +686,16 @@ adaptation_rule = "pending: F-ED-02 rule citation"
 decision_row = "pending: F-ED-02 decision-row disposition"
 touch = []
 dont_touch = ["@active-fl-lease"]
-formal_children = []
-candidate_children = ["P04-C11", "P09-C01", "P09-C03", "P09-C06"]
+formal_children = ["P04-C11", "P09-C03", "P09-C06"]
+candidate_children = ["P09-C01"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-02 must recover the original localization Rust SHA" }
-editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
 merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
@@ -719,8 +720,9 @@ reason = "Immediate current-source evaluation has not been probed at the pin."
 status = "pending"
 reason = "Retained and fresh direct relation fixtures need normalized records."
 [defect.editor_result]
-status = "pending"
-reason = "Four affected product children await the direct owner verdict."
+status = "fail"
+command = "CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p editor --lib scene_projection::mounted_scene::tests::runtime_scene_edit_preserves_nested_selected_product_value --offline -- --ignored --exact"
+evidence = "The direct Scene reproducer at committed checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b resets nested paywall/selectedProductId from basic to pro; P04-C11, P09-C03, and P09-C06 carry structured runtimeDefects links, while P09-C01 remains a candidate link."
 
 [[defect]]
 id = "LOC-003"
@@ -752,9 +754,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -829,9 +831,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -894,14 +896,14 @@ owner_class = "api"
 classification = "unqualified"
 ticket = "F-ED-01"
 fixture_id = "fed.loc_005.shared_view_model_owner"
-preliminary_disposition = "Same suspected stable Scene ViewModel owner family as LOC-001."
+preliminary_disposition = "Committed Editor evidence proves one authored ViewModel instance is materialized as independent live cells for two source artboards. The row remains a candidate until the identical application-owned-instance differential runs on pinned d788."
 reproduction_sha256 = "bf2a9e0cac589e69224fb4bd1e810e05da61573f251b3ab613e4c1c4dac55b5c"
-rust_stimulus = "pending: F-ED-01 must minimize the direct Rust stimulus for LOC-005"
-cpp_stimulus = "pending: F-ED-01 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-005"
-source_files = ["pending: F-ED-01 source-file correspondence"]
-source_members = ["pending: F-ED-01 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-01 lifecycle qualification"]
-rust_owner = "pending: F-ED-01 exact Rust owner"
+rust_stimulus = "CARGO_HOME=/private/tmp/nuxie-editor-cargo-home CARGO_TARGET_DIR=/private/tmp/nuxie-editor-authoring-metadata-red bash tools/nuxie-editor-next/scripts/cargo.sh --offline test -p browser-host --test product_host shared_runtime_boolean_reaches_recreated_presentations_without_host_replay -- --exact"
+cpp_stimulus = "pending: bind one application-owned ViewModelInstance to two pinned-C++ artboards and compare cross-source mutation visibility with the exact Rust Scene stimulus"
+source_files = ["crates/nuxie/src/scene.rs","crates/nuxie-runtime/src/artboard.rs"]
+source_members = ["Scene authored ViewModel instance materialization","ArtboardInstance::bind_view_model"]
+lifecycle_phases = ["author shared default instance","instantiate two source artboards","write through first source","recreate second presentation","read second source"]
+rust_owner = "candidate Scene facade ownership gap; no production owner is assigned before the d788 differential"
 displaced_mechanism = "pending: F-ED-01 displaced-mechanism inventory"
 dependencies = ["F-ED-00B","F-ED-01"]
 target_tests = ["cpp_probe/registry.cpp"]
@@ -911,16 +913,16 @@ adaptation_rule = "pending: F-ED-01 rule citation"
 decision_row = "pending: F-ED-01 decision-row disposition"
 touch = []
 dont_touch = ["@active-fl-lease"]
-formal_children = []
-candidate_children = ["P09-C05"]
+formal_children = ["P09-C05"]
+candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-01 must recover the original localization Rust SHA" }
-editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
 merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
@@ -945,8 +947,9 @@ reason = "One application-owned C++ instance bound to two artboards has not been
 status = "pending"
 reason = "Direct Scene and low-level shared-instance cases need one normalized fixture."
 [defect.editor_result]
-status = "pending"
-reason = "P09-C05 awaits the identical direct owner proof."
+status = "fail"
+command = "CARGO_HOME=/private/tmp/nuxie-editor-cargo-home CARGO_TARGET_DIR=/private/tmp/nuxie-editor-authoring-metadata-red bash tools/nuxie-editor-next/scripts/cargo.sh --offline test -p browser-host --test product_host shared_runtime_boolean_reaches_recreated_presentations_without_host_replay -- --exact"
+evidence = "At committed Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b, the typed Scene stream exports one shared default identity but the recreated source does not observe the other source's write; plans/artifacts/editor-next-p09-c05/provenance.json preserves the exact run."
 
 [[defect]]
 id = "LOC-006"
@@ -957,14 +960,14 @@ owner_class = "renderer"
 classification = "unqualified"
 ticket = "F-ED-08"
 fixture_id = "fed.loc_006.webgpu_conditional_visibility"
-preliminary_disposition = "Current required-WebGPU conditional-visibility candidate distinct from the historical RT-ED-004 backend observation."
-reproduction_sha256 = "860b0ed269da38febed8415518024638ebec637016d5a08c021925eb7674c6c3"
-rust_stimulus = "pending: F-ED-08 must minimize the direct Rust stimulus for LOC-006"
-cpp_stimulus = "pending: F-ED-08 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-006"
-source_files = ["pending: F-ED-08 source-file correspondence"]
-source_members = ["pending: F-ED-08 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-08 lifecycle qualification"]
-rust_owner = "pending: F-ED-08 exact Rust owner"
+preliminary_disposition = "The committed no-hover diagnostic closes the reported symptom as gesture-contaminated stale characterization with no runtime or renderer repair. Atlas state remains reported until independent promotion records the legal reproduced -> stale-oracle -> closed path."
+reproduction_sha256 = "2ca77de7d6d6c67aa0be2156d6aba1337261ab69ce652f75285eee431674e734"
+rust_stimulus = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'"
+cpp_stimulus = "not-applicable after independent promotion: the corrected no-hover browser fixture falsifies the alleged runtime/renderer failure before a C++ differential is needed"
+source_files = ["apps/nuxie-dashboard/tests/e2e/project-editor/projection-corpus-product-route.spec.ts","plans/artifacts/editor-next-p09-c04/provenance.json"]
+source_members = ["direct false ViewModel write","five no-hover frame captures","later hoverAt plus clearHover gesture"]
+lifecycle_phases = ["visible frame","typed false write","five no-hover frames","compositor capture","later hover and clear"]
+rust_owner = "not-applicable after independent promotion: no runtime or renderer defect remains"
 displaced_mechanism = "pending: F-ED-08 displaced-mechanism inventory"
 dependencies = ["F-ED-00B","F-ED-08"]
 target_tests = ["pending:F-ED-08"]
@@ -978,12 +981,12 @@ formal_children = []
 candidate_children = ["P09-C04"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-08 must recover the original localization Rust SHA" }
-editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
 merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
@@ -1008,8 +1011,9 @@ reason = "Identical draw/hit/pixel fixture has not been run through the pinned r
 status = "pending"
 reason = "Direct required-WebGPU logical membership and pixel stages need normalization against the identical pinned-C++ stimulus."
 [defect.editor_result]
-status = "pending"
-reason = "P09-C04 awaits direct backend localization."
+status = "pass"
+command = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'"
+evidence = "At Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b and runtime e72323c8, five no-hover frames remain at draw count 30 with no red compositor residue or device/surface error; only the later hover/clear gesture restores 34. The committed provenance manifest records the exact artifact hashes."
 
 [[defect]]
 id = "LOC-007"
@@ -1020,14 +1024,14 @@ owner_class = "runtime"
 classification = "unqualified"
 ticket = "F-ED-05"
 fixture_id = "fed.loc_007.parametric_path_dirt"
-preliminary_disposition = "High-confidence missing ParametricPath setter dirt callback."
+preliminary_disposition = "Committed Editor evidence isolates unchanged retained/fresh path geometry after authored width/height values change. Historical f4bb citations point to ParametricPath -> Path -> Shape -> PathComposer dirt; exact d788 qualification and FL-E ownership remain prerequisites."
 reproduction_sha256 = "77407599452bf4bcf1b1b13dc47907489d99ab5c7a5638f95cd4eab254659abc"
-rust_stimulus = "pending: F-ED-05 must minimize the direct Rust stimulus for LOC-007"
-cpp_stimulus = "pending: F-ED-05 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-007"
-source_files = ["pending: F-ED-05 source-file correspondence"]
-source_members = ["pending: F-ED-05 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-05 lifecycle qualification"]
-rust_owner = "pending: F-ED-05 exact Rust owner"
+rust_stimulus = "CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p browser-host --test product_host command_authored_resize_ --offline -- --nocapture"
+cpp_stimulus = "historical f4bb source audit of src/shapes/parametric_path.cpp:35-64, path.cpp:327-366, shape.cpp:99-107, and path_composer.cpp:40-64; exact d788 direct probe remains pending"
+source_files = ["src/shapes/parametric_path.cpp","src/shapes/path.cpp","src/shapes/shape.cpp","src/shapes/path_composer.cpp","crates/nuxie-runtime/src/artboard.rs","crates/nuxie-runtime/src/draw.rs"]
+source_members = ["ParametricPath::widthChanged","ParametricPath::heightChanged","Path::markPathDirty","Shape::pathChanged","PathComposer::update","path_geometry_commands_frame"]
+lifecycle_phases = ["bound width/height mutation","path dirt","shape notification","path composition","retained draw"]
+rust_owner = "FL-E/FL-G07 complete ParametricPath/Path/Shape dirt owner family; Defects Fix remains qualification and landing tracker only"
 displaced_mechanism = "pending: F-ED-05 displaced-mechanism inventory"
 dependencies = ["F-ED-00B","F-ED-05"]
 target_tests = ["cpp_probe/registry.cpp"]
@@ -1037,16 +1041,16 @@ adaptation_rule = "pending: F-ED-05 rule citation"
 decision_row = "pending: F-ED-05 decision-row disposition"
 touch = []
 dont_touch = ["@active-fl-lease"]
-formal_children = []
-candidate_children = ["P11-C12"]
+formal_children = ["P11-C12"]
+candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-05 must recover the original localization Rust SHA" }
-editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
+editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
 merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
@@ -1071,8 +1075,9 @@ reason = "Width/height/origin callback and PathComposer closure have not been pr
 status = "pending"
 reason = "Retained geometry samples must be rerun without a resource-reset compensation."
 [defect.editor_result]
-status = "pending"
-reason = "P11-C12 awaits the direct dirt verdict."
+status = "fail"
+command = "CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p browser-host --test product_host command_authored_resize_ --offline -- --nocapture"
+evidence = "At committed checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b, Editor integration passes but three retained/fresh presentation probes remain static; plans/artifacts/editor-next-p11-c12/provenance.json preserves exact logs and hashes."
 
 [[defect]]
 id = "LOC-008"
@@ -1104,9 +1109,9 @@ formal_children = []
 candidate_children = ["P08-C06"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1167,9 +1172,9 @@ formal_children = []
 candidate_children = ["P14-C01"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = "ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -1258,9 +1263,9 @@ formal_children = []
 candidate_children = ["P08-C06"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1321,9 +1326,9 @@ formal_children = []
 candidate_children = ["P19-C08"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-10 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1384,9 +1389,9 @@ formal_children = []
 candidate_children = ["P08-C08"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1447,9 +1452,9 @@ formal_children = []
 candidate_children = ["P08-C09"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-10 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1510,9 +1515,9 @@ formal_children = []
 candidate_children = ["P18-C01", "P18-C04", "P18-C05", "P18-C07"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1573,9 +1578,9 @@ formal_children = []
 candidate_children = ["P18-C01", "P18-C04"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1636,9 +1641,9 @@ formal_children = []
 candidate_children = ["P18-C07"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1699,9 +1704,9 @@ formal_children = []
 candidate_children = ["P04-C12", "P07-C04"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-13 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1762,9 +1767,9 @@ formal_children = []
 candidate_children = ["P14-C06"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
-runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
-parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
+proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
+runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
+parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
 original_localization_rust_sha = "95027109c89f651835c76646ebf4d8734f032f07"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"

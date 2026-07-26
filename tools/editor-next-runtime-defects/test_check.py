@@ -2939,6 +2939,91 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
             errors,
         )
 
+    def test_reopened_cycle_rejects_historical_consumption_as_current(self) -> None:
+        errors: list[str] = []
+        history = [
+            {"state": "executor-green"},
+            {"state": "regression-reopened"},
+        ]
+        CHECKER.validate_history_verifications(
+            "LOC-020",
+            history,
+            {"status": "pending"},
+            {"status": "pending"},
+            errors,
+            {
+                "status": "pass",
+                "command": "old command",
+                "evidence": "old evidence",
+            },
+            {
+                "merged_repair_sha": {
+                    "status": "pending",
+                    "reason": "No current landing.",
+                },
+                "consumed_runtime_sha": "2" * 40,
+                "consumed_superproject_sha": "3" * 40,
+            },
+            {
+                "merged_repair_sha": "1" * 40,
+                "consumed_runtime_sha": "2" * 40,
+                "consumed_superproject_sha": "3" * 40,
+            },
+        )
+        for field in ("consumed_runtime_sha", "consumed_superproject_sha"):
+            self.assertIn(
+                "LOC-020 regression-reopened current repair cycle cannot "
+                f"reuse historical {field}",
+                errors,
+            )
+            self.assertIn(
+                "LOC-020 regression-reopened current repair cycle cannot "
+                f"record {field} before a fresh editor-consumed event",
+                errors,
+            )
+
+    def test_reopened_cycle_rejects_early_new_consumption(self) -> None:
+        errors: list[str] = []
+        history = [
+            {"state": "executor-green"},
+            {"state": "regression-reopened"},
+            {"state": "qualified"},
+            {"state": "mapped"},
+            {"state": "executor-green"},
+        ]
+        CHECKER.validate_history_verifications(
+            "LOC-020",
+            history,
+            {
+                "status": "pass",
+                "command": "new command",
+                "evidence": "new evidence",
+            },
+            {"status": "pending"},
+            errors,
+            {
+                "status": "pass",
+                "command": "old command",
+                "evidence": "old evidence",
+            },
+            {
+                "merged_repair_sha": "4" * 40,
+                "consumed_runtime_sha": "5" * 40,
+                "consumed_superproject_sha": "6" * 40,
+            },
+            {
+                "merged_repair_sha": "1" * 40,
+                "consumed_runtime_sha": "2" * 40,
+                "consumed_superproject_sha": "3" * 40,
+            },
+        )
+        for field in ("consumed_runtime_sha", "consumed_superproject_sha"):
+            self.assertIn(
+                "LOC-020 regression-reopened current repair cycle cannot "
+                f"record {field} before a fresh editor-consumed event",
+                errors,
+            )
+
     def test_reopened_cycle_rejects_copied_executor_evidence(self) -> None:
         errors: list[str] = []
         history = [

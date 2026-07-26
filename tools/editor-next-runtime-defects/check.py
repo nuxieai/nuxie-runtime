@@ -2982,6 +2982,33 @@ def validate_history_verifications(
                 f"{defect_id} current repair cycle cannot reach executor-green "
                 "without a new merged_repair_sha"
             )
+        fresh_editor_consumed = "editor-consumed" in current_cycle_states
+        for field in ("consumed_runtime_sha", "consumed_superproject_sha"):
+            current_consumption = (
+                revisions.get(field) if isinstance(revisions, dict) else None
+            )
+            historical_consumption = (
+                historical_revisions.get(field)
+                if isinstance(historical_revisions, dict)
+                else None
+            )
+            current_consumption_is_sha = (
+                isinstance(current_consumption, str)
+                and SHA_RE.fullmatch(current_consumption) is not None
+            )
+            if (
+                current_consumption_is_sha
+                and current_consumption == historical_consumption
+            ):
+                errors.append(
+                    f"{defect_id} regression-reopened current repair cycle "
+                    f"cannot reuse historical {field}"
+                )
+            if current_consumption_is_sha and not fresh_editor_consumed:
+                errors.append(
+                    f"{defect_id} regression-reopened current repair cycle "
+                    f"cannot record {field} before a fresh editor-consumed event"
+                )
         if fresh_executor_green:
             if executor_status != "pass":
                 errors.append(

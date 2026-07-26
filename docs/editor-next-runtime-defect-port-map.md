@@ -731,10 +731,10 @@ Runtime Fix owns the complete production change across the exported
 `crates/nuxie-runtime/src/state_machine/bindables.rs` owner path. Defects Fix
 must not author or duplicate that Scene/runtime change.
 
-Defects Fix preserves acceptance evidence for direct root and nested cases,
-invalid-path diagnostics, round-trip record identity, linked `P19-C09`, and
-the unchanged set → fire → `advance(0)` runtime-duration check, then
-independently verifies those results after Runtime Fix lands.
+Defects Fix's only post-landing action is to run the unchanged set → fire →
+`advance(0)` runtime-duration verification and record that independent result.
+All authoring, invalid-path, round-trip, and linked-product executor coverage
+belongs to Runtime Fix.
 
 ### `F-ED-05` — ParametricPath dirt callbacks
 
@@ -975,9 +975,10 @@ required after internal Lua WebAssembly repair task
 The current negative proof is local/non-hosted at unfixed main
 `fe0a0a07db302ce2f0282a2d919ea249e83144e5` (tree `4512e0d7`) on Apple M5
 Max/Metal. The temporary, uncommitted `loc009_real_gpu_fail_closed_probe`
-records `max_bind_groups=4`, authors group 4 binding 0, expects `Err`/no
-shader, but receives `Ok` plus an uncaught `Device::create_shader_module`
-validation error. Its 2,129-byte raw log has SHA-256
+in source checkout `/private/tmp/loc009-base-repro.AiNb0d` records
+`max_bind_groups=4`, authors group 4 binding 0, expects `Err`/no shader, but
+receives `Ok` plus an uncaught `Device::create_shader_module` validation
+error. Its 2,129-byte raw log has SHA-256
 `93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611`.
 PR #54's positive-path 7/7 and browser results remain valid historical evidence
 but never exercised a device-rejected physical module.
@@ -1149,7 +1150,7 @@ ownership before activation.
 | candidate lane | order if closure overlaps | expected area to prove |
 |---|---|---|
 | Scene/API | Runtime Fix exclusively owns open blocker `F-ED-04`; Defects Fix may independently verify its landing before qualified candidate work `F-ED-01/02`; landed `F-ED-03` has no writer | `scene.rs`, schema/export/import helpers, and any runtime handle seam |
-| browser | qualified open `F-ED-10`; landed `F-ED-06/11` and no-repair `F-ED-08` have no writer, while `F-ED-07` remains historical-evidence only | `browser.rs`, WebGPU GPU-canvas/scripting seams, and resource owners; no `webgl2.rs` writer |
+| browser | qualified open `F-ED-10`; landed `F-ED-06` and the `LOC-019` half of `F-ED-11` have no writer; reopened `LOC-009` receives a new writer only after its Lua WebAssembly dependency lands; no-repair `F-ED-08` and historical-only `F-ED-07` have no writer | `browser.rs`, WebGPU GPU-canvas/scripting seams, and resource owners; no `webgl2.rs` writer |
 | runtime dirt | qualified `F-ED-05` | waits for the exact FL-E Path/Shape owner lock |
 | text-derived | qualified `F-ED-09` rows split by discovered owner | Scene/import/binding, `text.rs`, font parser/shaper, or renderer |
 | renderer feather | qualified `F-ED-10` | exact renderer/backend owner closure |

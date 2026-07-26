@@ -28,22 +28,22 @@ This map was prepared from these Editor Next handoff artifacts:
 
 | artifact | SHA-256 |
 |---|---|
-| `nuxie-editor-next-cutover-proposal.md` | `804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24` |
-| `nuxie-editor-next-runtime-defects.md` | `5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de` |
-| `nuxie-editor-next-parity-ledger.json` | `68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab` |
+| `nuxie-editor-next-cutover-proposal.md` | `0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983` |
+| `nuxie-editor-next-runtime-defects.md` | `01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67` |
+| `nuxie-editor-next-parity-ledger.json` | `a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04` |
 
 The source copies live under:
 
 `/Users/levi/.codex/worktrees/7189/nuxie-dev/worktrees/editor-next-cutover-assembly/plans/`
 
 The immutable source checkpoint for those hashes is
-`d5bbbb31178b8b29c40747fdd21a829348ede624`.
+`4da896beb5ec6815f6b01a2433875274a321d06c`.
 
 The Editor artifacts consume runtime commit
 `e72323c808b91d706ba3b745396beaca7accd69a`, which is also the current runtime
 investigation base. LOC-009's distinct corrective merge remains
 `7f1450dc22ca7370eac9dc9f422351c2dfcc07ee`; clean Editor checkpoint
-`d5bbbb31178b8b29c40747fdd21a829348ede624` consumed that repair through
+`4da896beb5ec6815f6b01a2433875274a321d06c` consumed that repair through
 `e72323c8`. Every atlas row retains localization, investigation, merged, and
 consumed SHAs separately.
 
@@ -862,9 +862,10 @@ SHA-256
 `546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d`.
 Independent re-review is clean with no P0/P1/P2 findings. Independent
 orchestration accepted the exact repair and source provenance. Clean Editor
-checkpoint `d5bbbb31178b8b29c40747fdd21a829348ede624` consumes runtime
-`e72323c808b91d706ba3b745396beaca7accd69a`, and unchanged `P14-C01` passes
-4/4. LOC-009 is closed; its `P14-C01` mapping remains as product traceability.
+checkpoint `4da896beb5ec6815f6b01a2433875274a321d06c` consumes runtime
+`e72323c808b91d706ba3b745396beaca7accd69a` and records the unchanged
+`P14-C01` 4/4 result executed at predecessor d5bbbb with that same runtime.
+LOC-009 is closed; its `P14-C01` mapping remains as product traceability.
 
 The two rows share a real-Chrome smoke harness but not a defect mechanism:
 `LOC-019` owns nullable WebIDL error-scope decoding, while `LOC-009` owns RSTB

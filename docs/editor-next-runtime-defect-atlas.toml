@@ -4,7 +4,7 @@ upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 editor_consumed_runtime_ref = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_base_ref = "e72323c808b91d706ba3b745396beaca7accd69a"
 source_snapshot_status = "landed"
-source_snapshot_ref = "d5bbbb31178b8b29c40747fdd21a829348ede624"
+source_snapshot_ref = "4da896beb5ec6815f6b01a2433875274a321d06c"
 corrections_file = "docs/editor-next-runtime-defect-corrections.toml"
 fixtures_file = "tools/editor-next-runtime-defects/fixtures.toml"
 expected_defects = 25
@@ -57,17 +57,17 @@ shared_ledgers = [
 [[artifact]]
 id = "cutover-proposal"
 path = "nuxie-editor-next-cutover-proposal.md"
-sha256 = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
+sha256 = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
 
 [[artifact]]
 id = "runtime-defects"
 path = "nuxie-editor-next-runtime-defects.md"
-sha256 = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
+sha256 = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
 
 [[artifact]]
 id = "parity-ledger"
 path = "nuxie-editor-next-parity-ledger.json"
-sha256 = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+sha256 = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 
 [[defect]]
 id = "RT-ED-001"
@@ -99,9 +99,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = "a5a606e7e78764e5d5f4e1421c1a5fe61df0ca22"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -177,9 +177,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = "a5a606e7e78764e5d5f4e1421c1a5fe61df0ca22"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -255,9 +255,9 @@ formal_children = ["P04-C01", "P19-C03"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-06 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -318,9 +318,9 @@ formal_children = ["P04-C01", "P05-C01", "P10-C01", "P12-C01", "P15-C01"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-07 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -381,9 +381,9 @@ formal_children = ["P09-C01"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -447,9 +447,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -522,9 +522,9 @@ formal_children = ["P19-C09"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-04 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -585,9 +585,9 @@ formal_children = []
 candidate_children = ["P13-C07"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-01 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -648,9 +648,9 @@ formal_children = []
 candidate_children = ["P04-C11", "P09-C01", "P09-C03", "P09-C06"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-02 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -711,9 +711,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -788,9 +788,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -874,9 +874,9 @@ formal_children = []
 candidate_children = ["P09-C05"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-01 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -937,9 +937,9 @@ formal_children = []
 candidate_children = ["P09-C04"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-08 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1000,9 +1000,9 @@ formal_children = []
 candidate_children = ["P11-C12"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-05 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1063,9 +1063,9 @@ formal_children = []
 candidate_children = ["P08-C06"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1126,16 +1126,16 @@ formal_children = []
 candidate_children = ["P14-C01"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = "ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_head_sha = "7d67c1af5e0484447feeb5b3094bcd430aa6db0c"
 merged_repair_sha = "7f1450dc22ca7370eac9dc9f422351c2dfcc07ee"
 consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
-consumed_superproject_sha = "d5bbbb31178b8b29c40747fdd21a829348ede624"
+consumed_superproject_sha = "4da896beb5ec6815f6b01a2433875274a321d06c"
 [defect.renderer_provenance]
 status = "complete"
 backend = "BrowserWebGpu WebGPU for the required-browser fixture; rust-wgpu over Metal for native retained-image and pixel qualification"
@@ -1154,8 +1154,8 @@ evidence = "PR #52 merged the target-0/16 consumer at 88fdc5a6 but left eager, n
 [defect.orchestrator_verification]
 status = "pass"
 actor = "independent-orchestrator"
-command = "independent LOC-009 evidence audit against clean Editor checkpoint d5bbbb31178b8b29c40747fdd21a829348ede624 consuming runtime e72323c808b91d706ba3b745396beaca7accd69a"
-evidence = "The independent audit rechecked the merged repair provenance, the clean immutable Editor source hashes, exact runtime consumption, and the unchanged P14-C01 result. The repair remains 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee; Editor checkpoint d5bbbb31178b8b29c40747fdd21a829348ede624 consumes e72323c808b91d706ba3b745396beaca7accd69a and passes all four unchanged P14-C01 cases."
+command = "independent LOC-009 evidence audit of superseding Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c, its e72323c808b91d706ba3b745396beaca7accd69a runtime gitlink, and the retained unchanged d5bbbb P14-C01 evidence"
+evidence = "The independent audit rechecked the merged repair provenance, the clean immutable Editor source hashes, exact runtime consumption, and the unchanged P14-C01 result. The repair remains 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee. Checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c descends from d5bbbb31178b8b29c40747fdd21a829348ede624, retains runtime e72323c808b91d706ba3b745396beaca7accd69a, and records the final LOC-009 qualification; the unchanged P14-C01 command executed at d5bbbb and passed all four cases."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
@@ -1179,7 +1179,7 @@ evidence = "PR #52 at 88fdc5a6 was an incomplete target-0/16 consumer landing. C
 [[defect.history]]
 state = "orchestrator-verified"
 actor = "independent-orchestrator"
-evidence = "Independent review accepted the exact merged repair, retained its unweakened repository-floor evidence, and verified the clean d5bbbb Editor provenance."
+evidence = "Independent review accepted the exact merged repair, retained its unweakened repository-floor evidence, and verified the clean superseding 4da896 Editor provenance plus the unchanged retained d5bbbb product evidence."
 [[defect.history]]
 state = "handoff-ready"
 actor = "f-ed-orchestrator"
@@ -1187,7 +1187,7 @@ evidence = "The exact LOC-009 repair at 7f1450dc was handed to Editor as part of
 [[defect.history]]
 state = "editor-consumed"
 actor = "editor-cutover"
-evidence = "Clean immutable Editor checkpoint d5bbbb31178b8b29c40747fdd21a829348ede624 consumes runtime e72323c808b91d706ba3b745396beaca7accd69a; unchanged P14-C01 passes 4/4."
+evidence = "The unchanged P14-C01 command passed 4/4 at clean checkpoint d5bbbb31178b8b29c40747fdd21a829348ede624 consuming runtime e72323c808b91d706ba3b745396beaca7accd69a; superseding checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c retains that runtime and records the final consumed result."
 [[defect.history]]
 state = "closed"
 actor = "f-ed-orchestrator"
@@ -1203,7 +1203,7 @@ evidence = "The exact inner RSTB hash is 546517d0dc9fbdaf9585f3daa6e440628e62292
 [defect.editor_result]
 status = "pass"
 command = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH GPU_CANVAS_GPU=1 PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor editor-next-cutover.spec.ts gpu-canvas-preview.spec.ts"
-evidence = "At clean immutable Editor checkpoint d5bbbb31178b8b29c40747fdd21a829348ede624 consuming runtime e72323c808b91d706ba3b745396beaca7accd69a, the unchanged P14-C01 command exits 0 with 4 passed in 1.6 minutes. Retained console /private/tmp/nuxie-editor-retained-evidence/p14-c01-e723.log has SHA-256 c2324d04cf1baa6ac024ae3b4f0607ca3a4ad64ecace7ac67e612707480527f0; complete Playwright report/results archive /private/tmp/nuxie-editor-retained-evidence/p14-c01-e723.tar.gz has SHA-256 515f53c5710c8069bf60f4c64c64568c219ee3cfb242fbe8e59846b1c0f96bd3."
+evidence = "At clean immutable Editor checkpoint d5bbbb31178b8b29c40747fdd21a829348ede624 consuming runtime e72323c808b91d706ba3b745396beaca7accd69a, the unchanged P14-C01 command exited 0 with 4 passed in 1.6 minutes. Superseding checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c descends from d5bbbb, retains the same runtime, and records that final LOC-009 result without claiming a new execution. Retained console /private/tmp/nuxie-editor-retained-evidence/p14-c01-e723.log has SHA-256 c2324d04cf1baa6ac024ae3b4f0607ca3a4ad64ecace7ac67e612707480527f0; complete Playwright report/results archive /private/tmp/nuxie-editor-retained-evidence/p14-c01-e723.tar.gz has SHA-256 515f53c5710c8069bf60f4c64c64568c219ee3cfb242fbe8e59846b1c0f96bd3."
 
 [[defect]]
 id = "LOC-011"
@@ -1235,9 +1235,9 @@ formal_children = []
 candidate_children = ["P08-C06"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1298,9 +1298,9 @@ formal_children = []
 candidate_children = ["P19-C08"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-10 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1361,9 +1361,9 @@ formal_children = []
 candidate_children = ["P08-C08"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1424,9 +1424,9 @@ formal_children = []
 candidate_children = ["P08-C09"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-10 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1487,9 +1487,9 @@ formal_children = []
 candidate_children = ["P18-C01", "P18-C04", "P18-C05", "P18-C07"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1550,9 +1550,9 @@ formal_children = []
 candidate_children = ["P18-C01", "P18-C04"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1613,9 +1613,9 @@ formal_children = []
 candidate_children = ["P18-C07"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1676,9 +1676,9 @@ formal_children = []
 candidate_children = ["P04-C12", "P07-C04"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-13 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1739,9 +1739,9 @@ formal_children = []
 candidate_children = ["P14-C06"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24"
-runtime_defects = "5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de"
-parity_ledger = "68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab"
+proposal = "0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983"
+runtime_defects = "01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67"
+parity_ledger = "a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04"
 [defect.revisions]
 original_localization_rust_sha = "95027109c89f651835c76646ebf4d8734f032f07"
 editor_last_consumed_runtime_sha = "95027109c89f651835c76646ebf4d8734f032f07"

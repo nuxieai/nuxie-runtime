@@ -32,15 +32,15 @@ implementation language in the port map. Update the stale lower-precedence
 file in the same evidence or planning PR.
 
 The immutable Editor source checkpoint is
-`d5bbbb31178b8b29c40747fdd21a829348ede624` on
+`4da896beb5ec6815f6b01a2433875274a321d06c` on
 `origin/levi/editor-next-cutover-assembly`:
 
 - proposal SHA-256:
-  `804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24`;
+  `0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983`;
 - runtime-defects SHA-256:
-  `5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de`;
+  `01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67`;
 - parity-ledger SHA-256:
-  `68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab`.
+  `a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04`.
 
 The pinned C++ runtime is
 `d788e8ec6e8b598526607d6a1e8818e8b637b60c`. The WebGPU-only runtime
@@ -166,10 +166,11 @@ contains no stale snapshot, backend, owner, or dependency claim.
 
 Current investigation base:
 `e72323c808b91d706ba3b745396beaca7accd69a`. Clean Editor checkpoint
-`d5bbbb31178b8b29c40747fdd21a829348ede624` consumes that exact runtime.
-`LOC-009` is independently verified and closed after its unchanged `P14-C01`
-product command passed 4/4; the other browser rows retain their independent
-states and evidence requirements.
+`4da896beb5ec6815f6b01a2433875274a321d06c` consumes that exact runtime and
+records the final LOC-009 qualification. The unchanged `P14-C01` product
+command passed 4/4 at predecessor checkpoint d5bbbb with the same runtime;
+`LOC-009` is independently verified and closed. The other browser rows retain
+their independent states and evidence requirements.
 
 Requalify:
 

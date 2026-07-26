@@ -79,12 +79,13 @@ infrastructure-queued, not green. Their exact-head local Apple, C ABI/header,
 XCFramework, and release floors passed.
 
 Independent orchestration then verified the exact merged LOC-009 repair and
-its unchanged floors. Clean immutable Editor checkpoint
-`d5bbbb31178b8b29c40747fdd21a829348ede624` consumes runtime
-`e72323c808b91d706ba3b745396beaca7accd69a`; the unchanged `P14-C01` command
-passes 4/4 in 1.6 minutes. LOC-009 is therefore closed. The retained console
-is `/private/tmp/nuxie-editor-retained-evidence/p14-c01-e723.log`; its SHA-256
-is
+its unchanged floors. The unchanged `P14-C01` command executed at clean
+checkpoint `d5bbbb31178b8b29c40747fdd21a829348ede624` against runtime
+`e72323c808b91d706ba3b745396beaca7accd69a` and passed 4/4 in 1.6 minutes.
+Superseding checkpoint `4da896beb5ec6815f6b01a2433875274a321d06c`
+descends from d5bbbb, retains that runtime, and records the final LOC-009
+qualification. LOC-009 is therefore closed. The retained console is
+`/private/tmp/nuxie-editor-retained-evidence/p14-c01-e723.log`; its SHA-256 is
 `c2324d04cf1baa6ac024ae3b4f0607ca3a4ad64ecace7ac67e612707480527f0`,
 and the complete Playwright report/results archive is
 `/private/tmp/nuxie-editor-retained-evidence/p14-c01-e723.tar.gz`; its SHA-256
@@ -93,22 +94,23 @@ is
 
 ## Editor source snapshot
 
-The Editor executor committed and pushed immutable source/dependency snapshot
-`d5bbbb31178b8b29c40747fdd21a829348ede624`. It pins runtime `e72323c8` and
+The Editor executor committed and pushed superseding immutable
+source/dependency snapshot
+`4da896beb5ec6815f6b01a2433875274a321d06c`. It pins runtime `e72323c8`,
 includes the intentional correction moving `P04-C12` off `RT-ED-004` and
-linking it to `LOC-018`, plus the WebGPU-only support state. The three source
-artifacts are clean at that checkpoint, but their embedded P14 status is not
-the later closure result; the retained log and archive above provide the
-external unchanged-product evidence for LOC-009.
+linking it to `LOC-018`, and records the final browser/LOC-009 qualification.
+The three source artifacts are clean at that checkpoint. The retained log and
+archive above remain the original unchanged product execution from d5bbbb,
+carried forward without claiming a rerun.
 
 The landed snapshot hashes are:
 
 - proposal:
-  `804161a06d88cf6cdabd12d90581e2a71109d6d490a1056bae8bbe02a3468a24`;
+  `0d19ae37038b145e2f67c08bfcaad49122be963f3cdc146fbad625f1600a0983`;
 - runtime defects:
-  `5e2e0306bf9bb2ec3bdf54dc316e48ef0eea16391bf6e72c489960094c96c2de`;
+  `01fe2cadfeddf7d42338d026c012d47ce88bedc28146608b0fa33cbf97f96d67`;
 - parity ledger:
-  `68e4b28a536473298b42331b1bec2132fc4dadccc46f5902b4f33ab306a35aab`.
+  `a0664bf40813b2ba332d63c3deddfeeb49e15f0b7ec10fdd45e0f2cc78b37b04`.
 
 The earlier reviewed hashes remain in this file's Git history, but their formal
 dependency map is stale and must not be used for qualification. Any later

@@ -223,7 +223,8 @@ exact internal tests, but they do not replace or waive any required floor. The
 accepted correction is merged at
 `7f1450dc22ca7370eac9dc9f422351c2dfcc07ee`. Independent orchestration
 verified that repair, and clean Editor checkpoint
-`d5bbbb31178b8b29c40747fdd21a829348ede624` consumed it through runtime
-`e72323c808b91d706ba3b745396beaca7accd69a`; unchanged `P14-C01` passed 4/4.
+`4da896beb5ec6815f6b01a2433875274a321d06c` consumed it through runtime
+`e72323c808b91d706ba3b745396beaca7accd69a` and records the unchanged
+`P14-C01` 4/4 result executed at predecessor d5bbbb with that same runtime.
 LOC-009 is closed. Any follow-up requires a new reviewed PR and the same
 unweakened floors.

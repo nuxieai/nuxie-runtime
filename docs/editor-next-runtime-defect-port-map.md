@@ -153,25 +153,25 @@ The following work can proceed without waiting for an FL landing:
 | all direct C++/Rust/Editor qualifications | inspect, build, probe, and record evidence in new F-ED-owned files | qualification grants no production-runtime edit |
 | `F-ED-03` / `RT-ED-005` | independently verify and promote the exact PR #49 landing provenance | the production authoring repair is complete; do not reopen it or conflate the separate FL-E layout/TextStyle dependency |
 | `F-ED-04` / `RT-ED-007` | preserve the unchanged red acceptance and independently rerun it after the relevant state-machine port wave | deferred post-port verification; no direct Runtime Fix request, schedule, or active writer lease |
-| `F-ED-06` / `RT-ED-003` | independently verify and promote the exact PR #55 landing provenance | the production browser-presentation repair is complete; do not reopen it or mix it with historical `F-ED-07` |
+| `F-ED-06` / `RT-ED-003` | preserve the independently closed PR #55 landing provenance | the production browser-presentation repair and promotion are complete; do not reopen it or mix it with historical `F-ED-07` |
 | `F-ED-12` | locally build and qualify the existing ABI 1.6 artifact | no header/C-API source change without a fresh scope review; no external publication before the user checkpoint |
 | `F-ED-13` | normalize and compare records and repair an Editor/lowering-only first divergence | identical records are required before any renderer attribution; no runtime edit |
 
 `F-ED-04` records only the proven state-machine/bindables seam for deferred
 post-port verification; it makes no direct Runtime Fix request or schedule,
 and the qualified-correct uncommitted Scene producer has no landing claim.
-`F-ED-03` and `F-ED-06` are merged landing-provenance rows awaiting
-independent promotion only. `F-ED-00A` must still prove any new closure. If an
+`F-ED-03` remains a merged landing-provenance row awaiting independent
+promotion; `F-ED-06` is independently closed. `F-ED-00A` must still prove any
+new closure. If an
 open lane needs a reserved file or changes the frame-loop/advance contract, it
 immediately moves to the deferred set.
 
 ### Work that may be prepared but needs a landing handshake
 
 `F-ED-08` is independently closed as a no-repair stale characterization.
-`F-ED-10` may perform qualification now, and a resulting fix may be developed only when its
-exact production closure is renderer/backend-only. `F-ED-11`
-production is complete for `LOC-019`, which needs only independent
-landing-provenance promotion. PR #54's `LOC-009` consumer repair at
+`F-ED-10` may qualify the surviving `LOC-012` row now, and a resulting fix may
+be developed only when its exact production closure is renderer/backend-only.
+`F-ED-11` and `LOC-019` are independently closed. PR #54's `LOC-009` consumer repair at
 `7f1450dc` remains historical evidence, but independent real-GPU verification
 reopened that row on an unresolved physical shader-module error-scope
 regression. `LOC-009` is not promotable or complete and requires a new
@@ -218,10 +218,10 @@ before this table is revised.
 
 The safe next queue is therefore:
 
-1. retain checkpoint-7ca reconciliation PR #63 control-plane integrity at
-   exact runtime main `fe0a0a07db302ce2f0282a2d919ea249e83144e5`;
-2. serialize the evidence-only closures in binding order: `LOC-006`,
-   `LOC-014`, `LOC-011`, `RT-ED-003`, then `LOC-019`;
+1. retain stale-visibility closure PR #64 control-plane integrity at exact
+   runtime main `789a921489adfb79e7e414ee368a029bfd53e333`;
+2. merge the one ordered evidence batch for `LOC-014`, `LOC-011`,
+   `RT-ED-003`, and `LOC-019`;
 3. keep `LOC-009` outside that shared tracking line, parked, and frozen while
    diagnosis waits for a different reliable execution/model environment;
 4. fan out read-only direct qualifications; treat `RT-ED-004` only as
@@ -383,7 +383,7 @@ fixture in `F-ED-00`.
 | `LOC-016` | source implementation already present; publication gap | publish ABI 1.6 typed animation selection and integrate it |
 | `LOC-017` | invalid old native capture | rerun ABI 1.6 with typed player/time and production host composition |
 | `LOC-018` | evidence/localization gap | prove normalized record and object-order identity before renderer attribution |
-| `LOC-019` | landed and consumed BrowserWebGpu nullable-error translation repair; independent promotion pending | PR #51 merge `ef9dcedd` is in consumed runtime `e72323c8`; unchanged P14-C06 passes 17/17 on required WebGPU |
+| `LOC-019` | closed independently verified BrowserWebGpu nullable-error repair | real Chrome clean-null and concrete-error paths, the full WebGPU matrix, and corpus 1468 exact/837 byte-exact/0 divergent verify merge `ef9dcedd` in consumed runtime `e72323c8` |
 
 There is no `LOC-010` in the source artifacts. `F-ED-00` records an explicit
 tombstone in a separate `reserved_ids` table so future automation does not
@@ -498,8 +498,9 @@ explicit readback records `getCurrentTexture=0` and `mapAsyncRead=1`.
 This mirrors C++'s ordinary-present versus explicit-snapshot lifecycle
 conceptually, but the browser API is additive Nuxie infrastructure rather than
 a C++ runtime file port. The product-host proof and unchanged normal-timeout
-device-frame drag gate pass; the atlas row remains reported only until
-independent orchestrator promotion.
+device-frame drag gate pass. Independent direct-presentation, readback,
+loss-recovery, renderer, and corpus evidence has promoted and closed the atlas
+row.
 
 ### Historical backend evidence and current WebGPU oracles — `RT-ED-004`, `LOC-014`
 
@@ -507,18 +508,19 @@ The retired backend's nonrectangular clip allocated full-frame content and
 mask images, then composited with `DestinationIn`; its feather path used a
 locally designed Gaussian image plan. Those dated observations remain
 renderer-backend provenance, never a writer, fork, fallback, or repeatable
-qualification target. `LOC-014` is current only insofar as the same typed
-input remains a candidate on required WebGPU. `LOC-006` is separately closed
-in the committed inbox as gesture-contaminated stale characterization and has
-no renderer writer. Any current `LOC-014` claim must
-be qualified as follows:
+qualification target. `LOC-014` is independently closed as a stale oracle:
+the same typed 180-by-124 Feather scene, dimensions, pixel density, background,
+resources, and bounds produced zero differing pixels in pinned C++ and Rust
+WebGPU. Its qualifying comparison:
 
-1. prove the exact current-pin C++ reference behavior on the same typed input;
-2. compare the supported Rust WebGPU path with the same normalized stimulus
-   and stamp the exact backend/reference provenance;
-3. if there is no corresponding C++ capability, stop for an additive-backend
-   decision instead of claiming a parity port; never use historical WebGL2 as
-   a production repair target.
+1. proved the exact current-pin C++ reference behavior on the same typed input;
+2. compared the supported Rust WebGPU path with the same normalized stimulus
+   and stamped the exact backend/reference provenance;
+3. found no divergence authorizing a parity port, production repair, tuned
+   feather constant, or relaxed tolerance.
+
+`LOC-006` is separately closed in the committed inbox as gesture-contaminated
+stale characterization and has no renderer writer.
 
 ## Artifact corrections required before implementation
 
@@ -911,31 +913,32 @@ or lifecycle overlap.
 
 ### `F-ED-10` — Feather translation: pinned C++ versus supported WebGPU
 
-Qualification targets: `LOC-014`, `LOC-012`.
+Qualification target: `LOC-012`. `LOC-014` is already independently closed as
+the stale-oracle result recorded above and is not a current qualification or
+writer target.
 
-Run the exact feather scenes through pinned C++ and the supported Rust WebGPU
-path only. Compare normalized records, Feather/ShapePaint ownership, LUT and
-composition resources, and final pixels. If the current WebGPU path is the
-first divergence, classify the complete surrounding owner/resource lifecycle.
-A faithful owner permits an exact-site repair; a missing/divergent lifecycle
-requires the complete C++-corresponding Feather/ShapePaint/renderer ownership
-and LUT/composition translation. Do not tune sigma, offsets, or tolerances
-against screenshots.
+Run the exact `LOC-012` scene through pinned C++ and the supported Rust WebGPU
+path only. Compare normalized records, relevant owner/resource lifecycles, and
+final pixels. If the current WebGPU path is the first divergence, classify the
+complete surrounding owner/resource lifecycle. A faithful owner permits an
+exact-site repair; a missing/divergent lifecycle requires the complete
+C++-corresponding ownership and translation. Do not tune sigma, offsets, or
+tolerances against screenshots.
 
 The proof covers creation, resize, nested feather/composite ordering, repeated
 frames, allocation/setup failure, context loss/reset, and teardown.
 
-`LOC-012` may be qualified in parallel. Its final attribution must account for
-the `F-ED-09` text result and this feather result; neither is assumed to be a
-semantic prerequisite. Historical retired-backend counts are dated provenance
-only and do not participate in the current oracle.
+`LOC-012` final attribution must account for the `F-ED-09` text result and the
+closed `LOC-014` feather result; neither is assumed to be a semantic
+prerequisite. Historical retired-backend counts are dated provenance only and
+do not participate in the current oracle.
 
 ### `F-ED-11` — WebGPU setup and GPU-canvas qualification
 
-Qualification targets: `LOC-019`, `LOC-009`. `LOC-019` is independently
-localized and repaired. `LOC-009` preserves its independently localized
-consumer repair as history, but a later independent real-GPU regression
-reopened the row; neither row is an Editor workaround or a WebGL2 fallback.
+`LOC-019` is independently localized, repaired, verified, consumed, and
+closed. `LOC-009` preserves its independently localized consumer repair as
+history, but a later independent real-GPU regression reopened that separate
+row; neither row is an Editor workaround or a WebGL2 fallback.
 
 `LOC-019` is no longer an adapter-selection or fallback hypothesis. At runtime
 `95027109`, real Chrome creates the WebGPU device and executes a valid draw.
@@ -954,9 +957,11 @@ PR #51 final head
 rebase merge `ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9` has the same tree. Clean
 Editor checkpoint `4da896beb5ec6815f6b01a2433875274a321d06c` consumes it through runtime
 `e72323c808b91d706ba3b745396beaca7accd69a`. The unchanged required-WebGPU
-P14-C06 matrix passes 17/17. The atlas row remains executor-green pending
-independent orchestrator verification; the recorded executor evidence is
-local and does not relabel queued hosted Apple work as green.
+P14-C06 matrix passes 17/17. Independent promotion verifies real Chrome
+clean-null output at 64 pixels/32 red without a device error, invalid WGSL
+preserving a concrete validation error, the full WebGPU matrix green, and the
+native corpus 1468 exact/837 byte-exact/0 divergent. The atlas row is closed;
+no queued hosted Apple work is relabeled green.
 
 `LOC-009` was a separate structural consumer mistranslation. The exact
 compiler-produced one-UBO RSTB reached Rust before any device call with only
@@ -1160,8 +1165,9 @@ Qualification fan-out is broader than implementation fan-out.
 ### Qualification wave
 
 One orchestrator owns the atlas/status. Landing-provenance reviewers handle
-`RT-ED-003`, `RT-ED-005`, and `LOC-019`; no implementation scout or writer is
-assigned to those completed repairs. `LOC-009` stays outside the shared
+the surviving `RT-ED-005` promotion; `RT-ED-003` and `LOC-019` are already
+independently closed, with no implementation scout or writer assigned.
+`LOC-009` stays outside the shared
 tracking line, parked and frozen until diagnosis resumes in a different
 reliable execution/model environment and a fresh coordinator assignment
 follows. The orchestrator may dispatch three read-only
@@ -1171,9 +1177,11 @@ scouts for the remaining open rows:
    `LOC-001/002/005`, `RT-ED-007`, and `LOC-007`;
 2. browser/renderer:
    historical-only `RT-ED-004` when explicitly requested, plus
-   `LOC-012/014`; closed `LOC-006` is historical no-repair evidence only;
+   `LOC-012`; closed `LOC-006` and `LOC-014` are historical no-repair evidence
+   only;
 3. text/records:
-   `LOC-008/011/013/018`.
+   `LOC-008/013/018`; `LOC-011` is an Editor-owned handoff, not a remaining
+   qualification scout.
 
 The orchestrator handles `RT-ED-001/002`, closed/retracted/tombstone rows, and
 the ABI 1.6 artifact lane.

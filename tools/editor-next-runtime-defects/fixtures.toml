@@ -249,7 +249,7 @@ driver = "pending:F-ED-13"
 id = "fed.loc_019.webgpu_clean_error_scope"
 defect_id = "LOC-019"
 kind = "browser-renderer"
-status = "implemented"
+status = "qualified"
 driver = "make browser-webgpu-only-check"
 stimulus_files = [
   { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "34ea7f6b7a054651f175754a7af2c840d69c99e0728562859f129786c8a8bbdc" },

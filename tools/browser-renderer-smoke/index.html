@@ -10,9 +10,13 @@
     <pre id="status">running</pre>
     <script type="module">
       import init, {
+        assert_direct_presentation,
         assert_direct_gpu_canvas_image,
+        assert_explicit_readback,
         assert_imported_gpu_canvas,
+        assert_persistent_surface_acquisition_failure,
         assert_resize,
+        assert_surface_acquisition_retry,
         assert_webgpu_gpu_canvas_rejects_invalid_interface,
         assert_webgpu_uniform_limit_rejection,
         run_backend,
@@ -27,6 +31,174 @@
       const forceNoAdapter = search.has("force-webgpu-no-adapter");
       const forceDeviceFailure = search.has("force-webgpu-device-failure");
       let compatibilityProbe = null;
+
+      function installPresentationCallCounters() {
+        const counters = {
+          getCurrentTexture: 0,
+          mapAsync: 0,
+          putImageData: 0,
+        };
+        const restore = [];
+        const wrap = (prototype, name, counter) => {
+          if (!prototype) {
+            throw new Error(`browser lacks ${name} prototype required by presentation proof`);
+          }
+          const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+          if (!descriptor || typeof descriptor.value !== "function") {
+            throw new Error(`browser lacks callable ${name} required by presentation proof`);
+          }
+          Object.defineProperty(prototype, name, {
+            ...descriptor,
+            value(...args) {
+              counters[counter] += 1;
+              return descriptor.value.apply(this, args);
+            },
+          });
+          restore.push(() => Object.defineProperty(prototype, name, descriptor));
+        };
+        wrap(
+          globalThis.GPUCanvasContext?.prototype,
+          "getCurrentTexture",
+          "getCurrentTexture",
+        );
+        wrap(globalThis.GPUBuffer?.prototype, "mapAsync", "mapAsync");
+        wrap(
+          globalThis.CanvasRenderingContext2D?.prototype,
+          "putImageData",
+          "putImageData",
+        );
+        return {
+          counters,
+          restore() {
+            for (const restoreMethod of restore.reverse()) restoreMethod();
+          },
+        };
+      }
+
+      function readBitmapPixels(bitmap, width, height, background = null) {
+        const readbackCanvas = document.createElement("canvas");
+        readbackCanvas.width = width;
+        readbackCanvas.height = height;
+        const context = readbackCanvas.getContext("2d", {
+          willReadFrequently: true,
+        });
+        if (!context) {
+          throw new Error("browser lacks Canvas2D for presentation pixel oracle");
+        }
+        if (background) {
+          context.fillStyle = background;
+          context.fillRect(0, 0, width, height);
+        }
+        context.drawImage(bitmap, 0, 0);
+        return context.getImageData(0, 0, width, height).data;
+      }
+
+      function assertExactPixels(pixels, expected, label, tolerance = 0) {
+        for (let offset = 0; offset < pixels.length; offset += 4) {
+          const actual = Array.from(pixels.slice(offset, offset + 4));
+          if (
+            actual.some(
+              (channel, index) =>
+                Math.abs(channel - expected[index]) > tolerance,
+            )
+          ) {
+            throw new Error(
+              `${label} pixel ${offset / 4} was [${actual.join(",")}]`,
+            );
+          }
+        }
+      }
+
+      async function assertPremultipliedPresentationPixels(canvas) {
+        const bitmap = await createImageBitmap(canvas);
+        try {
+          assertExactPixels(
+            readBitmapPixels(bitmap, canvas.width, canvas.height),
+            [0xff, 0x00, 0x00, 0x80],
+            "transparent direct WebGPU presentation",
+          );
+          assertExactPixels(
+            readBitmapPixels(
+              bitmap,
+              canvas.width,
+              canvas.height,
+              "rgb(0 0 255)",
+            ),
+            [0x80, 0x00, 0x7f, 0xff],
+            "premultiplied WebGPU presentation over blue",
+            1,
+          );
+        } finally {
+          bitmap.close();
+        }
+      }
+
+      async function assertOpaquePresentationPixels(canvas, expected, label) {
+        const bitmap = await createImageBitmap(canvas);
+        try {
+          assertExactPixels(
+            readBitmapPixels(bitmap, canvas.width, canvas.height),
+            expected,
+            label,
+          );
+        } finally {
+          bitmap.close();
+        }
+      }
+
+      function installSurfaceAcquisitionLoss(canvas, persistent = false) {
+        const prototype = globalThis.GPUCanvasContext?.prototype;
+        if (!prototype) {
+          throw new Error("browser lacks GPUCanvasContext required by loss proof");
+        }
+        const descriptor = Object.getOwnPropertyDescriptor(
+          prototype,
+          "getCurrentTexture",
+        );
+        if (!descriptor || typeof descriptor.value !== "function") {
+          throw new Error(
+            "browser lacks callable getCurrentTexture required by loss proof",
+          );
+        }
+        const getContext = canvas.getContext;
+        let acquisitions = 0;
+        let surfaces = 0;
+        Object.defineProperty(canvas, "getContext", {
+          configurable: true,
+          value(type, ...args) {
+            if (type === "webgpu") {
+              surfaces += 1;
+            }
+            return getContext.call(this, type, ...args);
+          },
+        });
+        Object.defineProperty(prototype, "getCurrentTexture", {
+          ...descriptor,
+          value(...args) {
+            acquisitions += 1;
+            if (persistent || acquisitions === 1) {
+              throw new Error(
+                persistent
+                  ? "injected persistent surface acquisition loss"
+                  : "injected one-shot surface acquisition loss",
+              );
+            }
+            return descriptor.value.apply(this, args);
+          },
+        });
+        return {
+          get acquisitions() {
+            return acquisitions;
+          },
+          get surfaces() {
+            return surfaces;
+          },
+          restore() {
+            Object.defineProperty(prototype, "getCurrentTexture", descriptor);
+            delete canvas.getContext;
+          },
+        };
+      }
 
       try {
         if (forceNoSsbo && !forceCompatibility) {
@@ -290,6 +462,49 @@
           }
 
           const results = [await run_backend(document.createElement("canvas"))];
+          const presentationCalls = installPresentationCallCounters();
+          try {
+            const directCanvas = document.createElement("canvas");
+            const directPresentation = await assert_direct_presentation(
+              directCanvas,
+            );
+            await assertPremultipliedPresentationPixels(directCanvas);
+            if (
+              presentationCalls.counters.getCurrentTexture !== 1 ||
+              presentationCalls.counters.mapAsync !== 0 ||
+              presentationCalls.counters.putImageData !== 0
+            ) {
+              throw new Error(
+                "ordinary direct presentation called " +
+                  `getCurrentTexture=${presentationCalls.counters.getCurrentTexture} ` +
+                  `mapAsync=${presentationCalls.counters.mapAsync} ` +
+                  `putImageData=${presentationCalls.counters.putImageData}`,
+              );
+            }
+            results.push(
+              `${directPresentation} exact-rgba=true composite=over-blue surface=1 mapAsync=0 putImageData=0`,
+            );
+            const explicitReadback = await assert_explicit_readback(
+              document.createElement("canvas"),
+            );
+            if (
+              presentationCalls.counters.getCurrentTexture !== 1 ||
+              presentationCalls.counters.mapAsync !== 1 ||
+              presentationCalls.counters.putImageData !== 0
+            ) {
+              throw new Error(
+                "explicit readback called " +
+                  `getCurrentTexture=${presentationCalls.counters.getCurrentTexture} ` +
+                  `mapAsync=${presentationCalls.counters.mapAsync} ` +
+                  `putImageData=${presentationCalls.counters.putImageData}`,
+              );
+            }
+            results.push(
+              `${explicitReadback} surface=0 mapAsync=1 putImageData=0`,
+            );
+          } finally {
+            presentationCalls.restore();
+          }
           if (forceCompatibility) {
             const expectedVertexStorageLimit = Number.isFinite(
               compatibilityProbe.advertisedVertexStorageLimit,
@@ -313,7 +528,60 @@
                 : `compatibility=selected order=core,compatibility requested-vertex-storage-limit=${compatibilityProbe.requestedVertexStorageLimit} rendered`,
             );
           } else {
-            results.push(await assert_resize(document.createElement("canvas")));
+            const resizeCanvas = document.createElement("canvas");
+            const resizeResult = await assert_resize(resizeCanvas);
+            await assertOpaquePresentationPixels(
+              resizeCanvas,
+              [0x65, 0x43, 0x21, 0xff],
+              "resized direct WebGPU presentation",
+            );
+            results.push(resizeResult);
+
+            const retryCanvas = document.createElement("canvas");
+            const acquisitionLoss =
+              installSurfaceAcquisitionLoss(retryCanvas);
+            try {
+              const retryResult = await assert_surface_acquisition_retry(
+                retryCanvas,
+              );
+              if (
+                acquisitionLoss.acquisitions !== 2 ||
+                acquisitionLoss.surfaces !== 2
+              ) {
+                throw new Error(
+                  `surface acquisition recovery observed ${acquisitionLoss.acquisitions} acquisitions and ${acquisitionLoss.surfaces} surfaces`,
+                );
+              }
+              await assertPremultipliedPresentationPixels(retryCanvas);
+              results.push(`${retryResult} acquisitions=2 surfaces=2`);
+            } finally {
+              acquisitionLoss.restore();
+            }
+
+            const persistentLossCanvas = document.createElement("canvas");
+            const persistentAcquisitionLoss = installSurfaceAcquisitionLoss(
+              persistentLossCanvas,
+              true,
+            );
+            try {
+              const persistentResult =
+                await assert_persistent_surface_acquisition_failure(
+                  persistentLossCanvas,
+                );
+              if (
+                persistentAcquisitionLoss.acquisitions !== 2 ||
+                persistentAcquisitionLoss.surfaces !== 2
+              ) {
+                throw new Error(
+                  `persistent surface acquisition failure observed ${persistentAcquisitionLoss.acquisitions} acquisitions and ${persistentAcquisitionLoss.surfaces} surfaces`,
+                );
+              }
+              results.push(
+                `${persistentResult} acquisitions=2 surfaces=2`,
+              );
+            } finally {
+              persistentAcquisitionLoss.restore();
+            }
             results.push(await assert_direct_gpu_canvas_image(document.createElement("canvas")));
             results.push(await assert_imported_gpu_canvas(document.createElement("canvas")));
             results.push(await assert_webgpu_gpu_canvas_rejects_invalid_interface(document.createElement("canvas")));

@@ -4,7 +4,11 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-B4 blend definition/occurrence ownership translation.
+- Phase: FL-B complete-wave verification. FL-B1 through FL-B4 are translated;
+  the focused C++ probes, runtime and probe-armed workspace floors,
+  ordinary/scripted differential gates, renderer pixel referee, C API, Apple
+  product/release checks, trace/checker, lint, format, and diff checks are
+  green. Committed-tree size and the canonical performance checkpoint remain.
   FL-B1 through FL-B3 are locally gated, and
   FL-A was independently
   accepted and promoted at
@@ -18,8 +22,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   owners plus all six FL-A Component rows); 28 later-wave rows remain.
 - Open mechanism gaps: 7 / 9. FL-G02 is closed; FL-G06 remained closed.
 - Current dependency wave: FL-B. Its frozen 45-file/eight-member mini-map is
-  `docs/runtime-frame-loop-fl-b-spec.md`; FL-B1 through FL-B3 are implemented
-  and locally gated, and
+  `docs/runtime-frame-loop-fl-b-spec.md`; FL-B1 through FL-B4 are implemented,
+  FL-B4 is in whole-wave verification, and
   every FL-B row remains pending until whole-wave independent verification.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
@@ -112,6 +116,46 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `db_health_tracker`; all 26 checker/capture/summarizer controls. Source
   trace and structural checks were refreshed on the candidate. All FL-B rows
   and FL-G01 remain pending/open until whole-wave independent acceptance.
+
+## FL-B4 blend definition/occurrence evidence
+
+- Pinned ownership translated from `BlendState`,
+  `BlendStateInstance<K,T>`, `BlendAnimation`, `AnimationStateInstance`,
+  `BlendState1DInstance`, and `BlendStateDirectInstance`: each BlendState owns
+  one ordered definition vector, and each embedded occurrence retains one
+  stable handle to the corresponding definition plus its
+  `LinearAnimationInstance` and mix.
+- One-dimensional occurrences no longer copy authored threshold values or
+  their state source. Direct occurrences no longer copy their source. Advance
+  reads those properties through the owning state definition, and transition
+  exit-animation lookup compares definition identity rather than treating
+  occurrence payload as an independent descriptor.
+- Invalid animation IDs retain their BlendAnimation/AnimationState definition
+  and resolve to one shared empty animation, matching pinned C++ instead of
+  compacting ordered children or erasing an otherwise-valid state. The empty
+  definition uses the exact generated C++ defaults and has no keyed objects.
+- Storage adaptation: pinned C++ uses process-global static empty animations.
+  Rust's complete animation definition type can retain single-threaded
+  scripting handles and therefore cannot safely be a `Sync` static. One
+  immutable empty definition is owned by each Artboard arena and shared by all
+  of its unresolved occurrences and clones. There is no cross-Artboard
+  observable empty-animation identity; behavior and owner sharing are exact
+  under FLR-1/FLR-2.
+- Focused evidence proves ordered valid+empty occurrence retention, definition
+  handles, shared-empty resolution, retained from/to identity, live threshold
+  and direct-source reads, and AnimationState's required no-op occurrence.
+  Pinned debug C++ probes are green for all nine `blend_state_*` cases plus
+  direct-transition, animation-state, and mutable-bind-source cases (12 / 12).
+  Current local floors: runtime 490 / 490; probe-armed workspace runtime
+  490 / 490, facade 171 / 171, and C++ probe 726 / 726; ordinary and scripted
+  golden each 317 / 317 entries and 647 / 647 segments with zero divergences;
+  source-bound trace 103 / 338 C++ files, 18 Rust modules, and 18 landmarks;
+  structural checker and its negative controls 27 / 27; renderer pixel referee
+  1,468 / 1,468 with zero divergences and zero gated failures; C API smoke
+  green; Apple release/product floor 66 / 66 plus artifact validation 15 / 15;
+  lint, format, and diff checks green. Committed-tree size and the canonical
+  whole-wave performance checkpoint remain to be recorded after the candidate
+  commit.
 
 ## FL-0 evidence
 
@@ -537,9 +581,9 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Commit the locally gated FL-B3 reset factory lifecycle slice.
-2. Execute FL-B4 blend ownership, deleting each displaced Rust owner path in
-   the same lane.
-3. Run the complete unchanged floor and one canonical whole-corpus FL-B
-   checkpoint. Performance remains verification evidence, never the source of
-   a work slice.
+1. Finish FL-B complete-wave verification and refresh the source-bound trace
+   and structural ratchets.
+2. Commit and publish the exact FL-B candidate without promoting pending rows.
+3. Run independent acceptance; only the orchestrator verdict may promote the
+   FL-B rows and close FL-G01. Performance remains verification evidence,
+   never the source of a work slice.

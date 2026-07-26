@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "24e1211aea529504b9fe76f42ef15a981069941a8b246345b8ec4ce51f3ef6a4",
+    "cpp_binary_sha256": "69f35e8969c2f01d675efcdacb2c6df97ba224b10050a26e7808e3794954ef97",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "8a77435113dbc4304cc46c8df4bde37c0486d18a22875d185cc7b4dbb5b9af7c",
-    "rust_coverage_sha256": "196883f4a927f10e3f5eb5e0e08cd59f598e1ceb1b5ab496f46c4d5495168b15",
-    "rust_mechanism_coverage_sha256": "9d17223780cc7b01d88b2e384e75522139c3ceb687a138d194dcb4073d7fc606",
-    "rust_steady_coverage_sha256": "4b9d831ce42b7442b4ea56b193064727a3b3e2b719d4a0048ffd3f0e3edd7b9d"
+    "rust_binary_sha256": "78365f22074b764db4007aa3491b9efbfc2535007d3604cf4236ec0de2cd8599",
+    "rust_coverage_sha256": "151eb603972b16ab16c6c917ce96be35b018e6a6edaea315d8342b217df63dd1",
+    "rust_mechanism_coverage_sha256": "65a732393ecca283385141d2b92bd7a1ceda901c55e8ecdca0b7f868dea5b780",
+    "rust_steady_coverage_sha256": "64b7a52d78216a8c0506d6b10cdecad5ed510248e32ce9dd66f81963aa81e2fb"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -2130,7 +2130,7 @@
         },
         {
           "count": 31,
-          "name": "<nuxie_runtime::animation::LinearAnimationInstance>::animation_index"
+          "name": "<nuxie_runtime::animation::LinearAnimationInstance>::animation_handle"
         },
         {
           "count": 33,
@@ -2281,12 +2281,16 @@
           "name": "<nuxie_runtime::animation::RuntimeLinearAnimation>::start_time_with_speed"
         },
         {
-          "count": 64,
+          "count": 33,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::definition_index"
+        },
+        {
+          "count": 2,
           "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::index"
         },
         {
-          "count": 27,
-          "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::new"
+          "count": 58,
+          "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::resolve"
         },
         {
           "count": 4,
@@ -2667,8 +2671,16 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::layout_epoch"
         },
         {
-          "count": 65,
+          "count": 7,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::linear_animation"
+        },
+        {
+          "count": 27,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::linear_animation_definition"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::linear_animation_instance_definition"
         },
         {
           "count": 14,
@@ -6008,6 +6020,10 @@
         },
         {
           "count": 5,
+          "name": "<nuxie_runtime::state_machine::BlendState1DInstance>::animation_index::{closure#0}"
+        },
+        {
+          "count": 5,
           "name": "<nuxie_runtime::state_machine::BlendState1DInstance>::apply"
         },
         {
@@ -6019,6 +6035,10 @@
           "name": "<nuxie_runtime::state_machine::BlendState1DInstance>::new::{closure#0}"
         },
         {
+          "count": 2,
+          "name": "<nuxie_runtime::state_machine::BlendState1DInstance>::new::{closure#1}"
+        },
+        {
           "count": 5,
           "name": "<nuxie_runtime::state_machine::BlendState1DInstance>::update_mix_values"
         },
@@ -6027,7 +6047,15 @@
           "name": "<nuxie_runtime::state_machine::BlendState1DInstance>::update_mix_values::{closure#0}"
         },
         {
-          "count": 1,
+          "count": 5,
+          "name": "<nuxie_runtime::state_machine::BlendState1DInstance>::update_mix_values::{closure#2}"
+        },
+        {
+          "count": 5,
+          "name": "<nuxie_runtime::state_machine::BlendState1DInstance>::update_mix_values::{closure#5}"
+        },
+        {
+          "count": 2,
           "name": "<nuxie_runtime::state_machine::BlendStateDirectInstance>::advance"
         },
         {
@@ -6039,11 +6067,11 @@
           "name": "<nuxie_runtime::state_machine::BlendStateDirectInstance>::advance_with_events"
         },
         {
-          "count": 2,
+          "count": 3,
           "name": "<nuxie_runtime::state_machine::BlendStateDirectInstance>::apply"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "<nuxie_runtime::state_machine::BlendStateDirectInstance>::new"
         },
         {
@@ -6051,8 +6079,16 @@
           "name": "<nuxie_runtime::state_machine::BlendStateDirectInstance>::new::{closure#0}"
         },
         {
-          "count": 2,
+          "count": 3,
           "name": "<nuxie_runtime::state_machine::BlendStateDirectInstance>::update_mix_values"
+        },
+        {
+          "count": 24,
+          "name": "<nuxie_runtime::state_machine::RuntimeBlendAnimationHandle>::index"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::state_machine::RuntimeBlendAnimationHandle>::new"
         },
         {
           "count": 52,
@@ -6135,8 +6171,16 @@
           "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance_current_animation"
         },
         {
-          "count": 1,
+          "count": 31,
           "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance_current_animation::{closure#0}"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance_current_animation::{closure#1}"
+        },
+        {
+          "count": 1,
+          "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance_current_animation::{closure#2}"
         },
         {
           "count": 31,
@@ -6167,7 +6211,7 @@
           "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::current_transition_animation"
         },
         {
-          "count": 233,
+          "count": 234,
           "name": "<nuxie_runtime::state_machine::StateMachineLayerInstance>::has_transition_source"
         },
         {
@@ -7152,14 +7196,14 @@
   "rust_candidate_source": {
     "file_count": 7150,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "53d8de9510c98428193dc91e56a8f62f8fb7a380e881bc0f877f53da369ca444"
+    "sha256": "5d28fe9d9e0f64c39b4013c430bf7f1cb11bc1bd3007be5c4b66ac2477765203"
   },
-  "rust_ref": "db149fd005f2ad96096861d1c110e15d8a88182b",
+  "rust_ref": "e8cfdc63bd87914b0c75a7b5307d4f343ef7dac0",
   "rust_runner_provenance": {
     "candidate_source": {
       "file_count": 7150,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "53d8de9510c98428193dc91e56a8f62f8fb7a380e881bc0f877f53da369ca444"
+      "sha256": "5d28fe9d9e0f64c39b4013c430bf7f1cb11bc1bd3007be5c4b66ac2477765203"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -7184,7 +7228,7 @@
     },
     "dynamic_cpp_functions": 461,
     "dynamic_rust_files": 18,
-    "dynamic_rust_functions": 1192,
+    "dynamic_rust_functions": 1203,
     "static_cpp_files": 338
   },
   "steady_allocation_counts": {

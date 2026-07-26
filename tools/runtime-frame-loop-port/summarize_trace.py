@@ -25,7 +25,8 @@ LANDMARKS = {
     "state_machine_layer_advance": {
         "cpp": "rive::StateMachineLayerInstance::advance(float, bool)",
         "rust": (
-            "<nuxie_runtime::state_machine::StateMachineLayerInstance>::advance"
+            "<nuxie_runtime::state_machine::state_machine_layer_instance::"
+            "StateMachineLayerInstance>::advance"
         ),
     },
     "linear_animation_advance": {
@@ -130,8 +131,8 @@ LANDMARKS = {
             "rive::StateInstance*)"
         ),
         "rust": (
-            "<nuxie_runtime::state_machine::StateMachineLayerInstance>"
-            "::try_change_state"
+            "<nuxie_runtime::state_machine::state_machine_layer_instance::"
+            "StateMachineLayerInstance>::try_change_state"
         ),
     },
     "draw_order_sort": {

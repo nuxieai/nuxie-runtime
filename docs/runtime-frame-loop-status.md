@@ -61,6 +61,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `e72323c808b91d706ba3b745396beaca7accd69a` was consumed without overlap at
   FL-B boundary merge `b5d5bc8afeaa0369cbc248b85366111649cb9010`.
   No FL-B or FL-C acceptance request is active.
+- Active production branch: `levi/fl-c`. The former `levi/fl-b` branch name
+  described the provisional stack base, not the active wave, and is no longer
+  used for FL-C publication. There is no PR.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - File closure: 64 / 341. The 52 `component-update-graph` rows and all 12
   FL-C2 transition/condition rows are `faithful`; the 277 later-wave rows
@@ -75,14 +78,26 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 - Current dependency wave: FL-C. FL-B's frozen 45-file/eight-member mini-map
   remains implemented but pending reacceptance. FL-C consumes that
   implementation provisionally under the coordinator override. FL-C2 is
-  independently closed. The complete five-file layer/state family (FL-C3) has
-  been walked end to end and its pre-production checklist is
-  `docs/runtime-frame-loop-fl-c3-closure.md`. That walk corrected the old
-  retention wording: C++ retains an ordered state-definition collection, but
-  a layer occurrence dynamically owns only `any`, `current`, and
-  transition-source state occurrences. The exact next action is the coherent
-  five-file translation against that checklist, not a partial test-driven
-  slice.
+  independently closed. The complete five-file layer/state family (FL-C3) is
+  translated at semantic commit
+  `93a902558ad9860e1ecaeeef8e710223841e2dca` against
+  `docs/runtime-frame-loop-fl-c3-closure.md`. C++'s ordered state-definition
+  collection and the occurrence-owned `any`, `current`, and transition-source
+  triad now have direct Rust owners; interruption/reset/advance/nested
+  lifecycles and all eight structural negative controls are closed. The exact
+  next action is to publish one immutable proof packet and obtain one
+  independent whole-family verdict. No FL-C3 row is promoted before that
+  verdict, and no FL-C4 production edit begins before it.
+- FL-C3's once-per-candidate non-performance floor is green on exact semantic
+  commit `93a902558ad9860e1ecaeeef8e710223841e2dca`: runtime 514 / 514;
+  probe-armed workspace and pinned-C++ probes 742 / 742; ordinary and scripted
+  golden each 317 / 317 entries and 647 / 647 segments with zero divergences;
+  same-runner pixels 1,468 / 1,468 with 1,370 byte-exact and zero divergences;
+  C API, native Apple, lint, format, and diff checks; committed-tree size
+  8,034,424 bytes without scripting and 8,935,528 bytes with scripting, both
+  below 9 MiB; and the full Apple XCFramework build/package/ABI/header/C/Swift
+  floor with checksum
+  `a12debbaf9a81590bf7d79056018f3929c109c8c371dee3cf62352afa66935c5`.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
   mutable occurrence. Each occurrence retains a handle into the one authored
@@ -408,6 +423,11 @@ debug C++ configuration and its provenance stamp.
 
 ## Baseline performance
 
+- User direction on 2026-07-26 supersedes family- and wave-level timing:
+  run no further performance tests until every mapped FL-A-through-FL-E code
+  row is ported and the complete correctness/structure floor is green. The
+  historical checkpoints below remain context only. They are not current
+  candidate gates and may not select implementation work.
 - FL-C2 corrected-family checkpoint on exact semantic commit
   `a40b17cd1964d46e5453b7d5278dc158ebb7b64b`:
   `docs/evidence/perf-hot-loop-fl-c2-a40b17cd.json`, tracked with SHA-256

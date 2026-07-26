@@ -11184,6 +11184,7 @@ mod tests {
             event_local_indices: Vec::new(),
             view_model_index: None,
             view_model_property_path: None,
+            keyboard_input_types: Vec::new(),
             hit_paths: Vec::new(),
             listener_actions: Vec::new(),
         };

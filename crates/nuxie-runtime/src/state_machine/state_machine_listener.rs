@@ -1,5 +1,5 @@
 use super::RuntimeScheduledListenerAction;
-use super::listener_types::RuntimeListenerType;
+use super::listener_types::{RuntimeListenerInputTypeKeyboard, RuntimeListenerType};
 use super::state_machine_listener_single::{
     runtime_listener_single_event_local_indices, runtime_listener_single_type,
     runtime_listener_single_view_model_property_path,
@@ -16,6 +16,7 @@ pub(crate) struct RuntimeStateMachineListener {
     pub(crate) event_local_indices: Vec<usize>,
     pub(crate) view_model_index: Option<usize>,
     pub(crate) view_model_property_path: Option<Vec<usize>>,
+    pub(crate) keyboard_input_types: Vec<RuntimeListenerInputTypeKeyboard>,
     pub(crate) hit_paths: Vec<RuntimeListenerHitPath>,
     pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
 }
@@ -36,6 +37,22 @@ impl RuntimeStateMachineListener {
         self.hit_paths
             .iter()
             .any(|path| path.hit_test(artboard, x, y))
+    }
+
+    pub(crate) fn keyboard_constraints_met(
+        &self,
+        key: u32,
+        modifiers: u32,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        RuntimeListenerInputTypeKeyboard::constraints_met(
+            &self.keyboard_input_types,
+            key,
+            modifiers,
+            is_pressed,
+            is_repeat,
+        )
     }
 }
 
@@ -97,7 +114,9 @@ pub(super) fn runtime_state_machine_listener(
             listener_type.is_pointer_hit()
                 || matches!(
                     listener_type,
-                    RuntimeListenerType::Event | RuntimeListenerType::ViewModel
+                    RuntimeListenerType::Event
+                        | RuntimeListenerType::ViewModel
+                        | RuntimeListenerType::Keyboard
                 )
         })
         .collect::<Vec<_>>();
@@ -129,6 +148,7 @@ pub(super) fn runtime_state_machine_listener(
         event_local_indices,
         view_model_index,
         view_model_property_path,
+        keyboard_input_types: runtime_listener_input_type_keyboards(listener),
         hit_paths,
         listener_actions: listener
             .actions
@@ -142,6 +162,20 @@ pub(super) fn runtime_state_machine_listener(
             })
             .collect(),
     })
+}
+
+fn runtime_listener_input_type_keyboards(
+    listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
+) -> Vec<RuntimeListenerInputTypeKeyboard> {
+    listener
+        .listener_input_types
+        .iter()
+        .zip(&listener.listener_input_type_inputs)
+        .filter(|(input_type, _)| input_type.type_name == "ListenerInputTypeKeyboard")
+        .map(|(input_type, inputs)| {
+            RuntimeListenerInputTypeKeyboard::from_imported(input_type, inputs)
+        })
+        .collect()
 }
 
 fn runtime_listener_view_model_property_path(
@@ -265,4 +299,97 @@ fn artboard_double_property(
     property_key_for_name(type_name, property_name)
         .and_then(|key| artboard.double_property(local_id, key))
         .unwrap_or(default)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+    use nuxie_graph::GraphFile;
+
+    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: nuxie_schema::definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn property(type_name: &str, name: &str, value: u64) -> AuthoringProperty {
+        AuthoringProperty {
+            key: property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value: AuthoringValue::Uint(value),
+        }
+    }
+
+    #[test]
+    fn imported_listener_retains_keyboard_owner_and_constraints() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+            record("StateMachine", Vec::new()),
+            record(
+                "StateMachineListener",
+                vec![property("StateMachineListener", "targetId", 0)],
+            ),
+            record(
+                "ListenerInputTypeKeyboard",
+                vec![property(
+                    "ListenerInputTypeKeyboard",
+                    "listenerTypeValue",
+                    RuntimeListenerType::Keyboard as u64,
+                )],
+            ),
+            record(
+                "KeyboardInput",
+                vec![
+                    property("KeyboardInput", "keyType", 65),
+                    property("KeyboardInput", "keyPhase", KEY_PHASE_DOWN_FOR_TEST),
+                    property("KeyboardInput", "modifiers", 2),
+                ],
+            ),
+            record(
+                "KeyboardInput",
+                vec![
+                    property("KeyboardInput", "keyType", 66),
+                    property("KeyboardInput", "keyPhase", KEY_PHASE_UP_FOR_TEST),
+                ],
+            ),
+        ])
+        .expect("keyboard listener authoring records import");
+        let graph = GraphFile::from_runtime_file(&file).expect("keyboard listener graph builds");
+        let authored = file.artboard_state_machine_graphs(0);
+        let listener = runtime_state_machine_listener(
+            &file,
+            graph.artboards.first().expect("artboard graph"),
+            &[],
+            &authored[0].listeners[0],
+        )
+        .expect("keyboard listener is retained");
+
+        assert!(listener.has_listener(RuntimeListenerType::Keyboard));
+        assert_eq!(listener.keyboard_input_types.len(), 1);
+        assert_eq!(listener.keyboard_input_types[0].global_id, 4);
+        assert_eq!(
+            listener.keyboard_input_types[0]
+                .keyboard_input(0)
+                .map(|input| input.global_id),
+            Some(5)
+        );
+        assert_eq!(
+            listener.keyboard_input_types[0]
+                .keyboard_input(1)
+                .map(|input| input.global_id),
+            Some(6)
+        );
+        assert!(listener.keyboard_constraints_met(65, 2, true, false));
+        assert!(listener.keyboard_constraints_met(66, 0, false, false));
+        assert!(!listener.keyboard_constraints_met(65, 0, true, false));
+    }
+
+    const KEY_PHASE_DOWN_FOR_TEST: u64 = 1;
+    const KEY_PHASE_UP_FOR_TEST: u64 = 4;
 }

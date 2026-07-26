@@ -181,8 +181,13 @@ stimulus_files = [
 id = "fed.loc_011.empty_text_pipeline"
 defect_id = "LOC-011"
 kind = "three-layer"
-status = "registered"
-driver = "cpp_probe/registry.cpp"
+status = "qualified"
+driver = "crates/nuxie/tests/loc011_empty_text_evidence.rs"
+stimulus_files = [
+  { root = "repo", path = "crates/nuxie/tests/fixtures/roboto-a.ttf.base64", sha256 = "045780850c217975c6787de3cf5680be65c47476aab24ed61d539a8c3c9e42af" },
+  { root = "rive", path = "src/text/text.cpp", sha256 = "a9de620f197156e3e73bba2d1bc2916c5baa389dad8403037dcf73cffdc0b85c" },
+  { root = "rive", path = "src/text/text_value_run.cpp", sha256 = "e7f5b7bceb087820681a302e232431d7acb364bf9da2567b423f5923ca13210f" },
+]
 
 [[fixture]]
 id = "fed.loc_012.backend_raster_decomposition"

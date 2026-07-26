@@ -375,7 +375,7 @@ fixture in `F-ED-00`.
 | `LOC-007` | committed Editor evidence plus d788 source identifies a missing dirt chain | deferred post-port verification after the formal path/dirt wave; rerun the unchanged four-test product command and classify resolved/still open |
 | `LOC-008` | exact intrinsic-width/multiline-height product failure | deferred post-port verification after the formal text-measurement wave; rerun unchanged P08-C06 and classify resolved/still open |
 | `LOC-009` | historical structural WebGPU consumer repair with a confirmed real-GPU shader-module validation regression | preserve PR #54 / `7f1450dc` as history; keep the row parked and frozen until diagnosis resumes in a different reliable execution/model environment |
-| `LOC-011` | real product symptom, owner unproven | inspect authored text, live VM value, post-bind target, shaped runs, then pixels |
+| `LOC-011` | qualified non-runtime Editor/artifact handoff | identical explicit-empty source-first bytes stay empty through import, bind, shaping, and draw in pinned C++ and Rust; capture the original Editor artifact and authoring overlay |
 | `LOC-012` | current renderer differential | compare the supported Rust WebGPU result with pinned C++ only after text/feather rows are separated |
 | `LOC-013` | text/font-pipeline candidate, exact stage unproven | same font bytes, axes, glyph IDs, advances, and outlines through C++ and Rust |
 | `LOC-014` | closed stale-oracle observation | exact 180x124 clockwise Feather replay matches pinned C++ and Rust in bounds, atlas plan, and every pixel; do not tune constants |
@@ -870,17 +870,20 @@ fallback, test target, or serialization edge.
 
 ### `F-ED-09` — Text semantics, variable fonts, and measurement
 
-Qualification targets: `LOC-011`, `LOC-013`; `LOC-008` is deferred post-port
-verification.
+Qualification target: remaining `LOC-013`; `LOC-008` is deferred post-port
+verification, and `LOC-011` is qualified as a non-runtime Editor/artifact
+handoff.
 
 This is a shared evidence cluster, not a predeclared single writer. The rows
 may localize to different owner families: Scene/import/binding initialization,
 font instance/shaping/outline/raster, and a public measurement facade.
 `F-ED-00` must produce exact file/member closures before writer assignment.
 
-1. Empty text: compare authored record, instantiated ViewModel string,
-   post-bind target, shaped runs, draw paths, and pixels. Source inspection
-   does not support the claim that the renderer itself synthesizes `"Text"`.
+1. Empty text: completed for `LOC-011`. The exact authored record,
+   instantiated ViewModel string, post-bind target, shaped runs, and draw
+   commands remain empty in pinned C++ and Rust. The original Editor artifact
+   or authoring overlay is therefore the first unqualified boundary and owns
+   the next capture; no runtime repair is authorized.
 2. Variable font: use identical font bytes, axis tags/values, glyph IDs,
    advances, and outlines. The first differing stage localizes the row; then
    the governing classification decides between an exact-site repair, a

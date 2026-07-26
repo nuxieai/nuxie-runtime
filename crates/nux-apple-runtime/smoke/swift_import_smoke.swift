@@ -1,17 +1,20 @@
 import NuxieRuntime
 
-func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
-    _ = nux_runtime_abi_major()
-    _ = nux_runtime_abi_minor()
-    _ = nux_runtime_require_abi(1, 5)
-    _ = nux_runtime_require_abi(1, 6)
+func typecheckNuxieRuntimeModule(
+    bytes: UnsafePointer<UInt8>,
+    count: UInt64,
+    expectedRuntimeVersion: UnsafePointer<UInt8>,
+    expectedRuntimeVersionCount: UInt64,
+    expectedSourceRevision: UnsafePointer<UInt8>,
+    expectedSourceRevisionCount: UInt64
+) {
     _ = NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT
     _ = NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE
     _ = NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION
     _ = NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION
 
     let byteView = NuxByteView(data: bytes, len: count)
-    _ = NuxFlowImportRequest(
+    var importRequest = NuxFlowImportRequest(
         struct_size: UInt32(MemoryLayout<NuxFlowImportRequest>.size),
         artifact_bytes: byteView,
         expected_flow_id: NuxByteView(data: nil, len: 0),
@@ -64,11 +67,9 @@ func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
     )
     _ = NuxFlowConfiguredSessionDescriptor(
         struct_size: UInt32(MemoryLayout<NuxFlowConfiguredSessionDescriptor>.size),
-        required_abi_major: 1,
-        minimum_abi_minor: 6,
+        player_kind: UInt32(NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT),
         artboard_name: NuxByteView(data: nil, len: 0),
-        player_name: NuxByteView(data: nil, len: 0),
-        player_kind: UInt32(NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT)
+        player_name: NuxByteView(data: nil, len: 0)
     )
     _ = NuxFlowValueNode(
         struct_size: UInt32(MemoryLayout<NuxFlowValueNode>.size),
@@ -133,8 +134,6 @@ func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
     )
     _ = NuxFlowSessionOperation(
         struct_size: UInt32(MemoryLayout<NuxFlowSessionOperation>.size),
-        required_abi_major: 1,
-        minimum_abi_minor: 5,
         kind: UInt32(NUX_FLOW_SESSION_OPERATION_KIND_QUERY),
         state_batch: nil,
         pointer_batch: nil,
@@ -183,9 +182,26 @@ func typecheckNuxieRuntimeModule(bytes: UnsafePointer<UInt8>, count: UInt64) {
         name: NuxByteView(data: nil, len: 0)
     )
     var metalDevice: UnsafeMutableRawPointer?
+    var binding: OpaquePointer?
+    var context: OpaquePointer?
     var result: OpaquePointer?
     var sessionResult: OpaquePointer?
     var authenticatedKeyID = NuxByteView(data: nil, len: 0)
+    let bindingStatus = nux_runtime_bind(
+        expectedRuntimeVersion,
+        expectedRuntimeVersionCount,
+        expectedSourceRevision,
+        expectedSourceRevisionCount,
+        &binding
+    )
+    if bindingStatus == NUX_STATUS_OK {
+        _ = nux_flow_runtime_context_create_bound(
+            binding,
+            &importRequest,
+            &context,
+            &result
+        )
+    }
     _ = nux_apple_surface_copy_metal_device(nil, &metalDevice, &result)
     _ = nux_operation_result_script_authorization(result)
     _ = nux_operation_result_authenticated_key_id(result, &authenticatedKeyID)

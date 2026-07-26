@@ -35,12 +35,6 @@
 
 #define NUX_FLOW_MAX_VALUE_EDGE_COUNT 16384
 
-#define NUX_FLOW_SESSION_ABI_MINOR 6
-
-#define NUX_RUNTIME_ABI_MAJOR 1
-
-#define NUX_RUNTIME_ABI_MINOR 6
-
 /**
  * Opaque C handle. It retains the logical render session across detach.
  */
@@ -57,12 +51,18 @@ typedef struct NuxFlowRenderSession NuxFlowRenderSession;
 typedef struct NuxFlowRuntimeContext NuxFlowRuntimeContext;
 
 /**
- * Opaque owned ABI 1.5 result. Every borrowed view returned by an accessor
+ * Opaque owned session result. Every borrowed view returned by an accessor
  * remains valid until this handle is freed.
  */
 typedef struct NuxFlowSessionResult NuxFlowSessionResult;
 
 typedef struct NuxOperationResult NuxOperationResult;
+
+/**
+ * Opaque process-static proof that the client and linked runtime have the
+ * same exact runtime version and source revision.
+ */
+typedef struct NuxRuntimeBinding NuxRuntimeBinding;
 
 /**
  * Stable-width C status code. Named constants are exported separately so
@@ -125,19 +125,15 @@ typedef struct NuxFlowSessionDescriptor {
 typedef uint32_t NuxFlowPlayerSelectorKind;
 
 /**
- * Configured-session descriptor. ABI 1.5 callers provide the 40-byte prefix:
- * a null `player_name` uses the authored fallback policy and a nonempty name
- * explicitly selects a state machine. ABI 1.6 callers provide the full
- * structure and use `player_kind` to select the default scene, a named state
- * machine, or a named linear animation without cross-kind fallback.
+ * Configured-session descriptor for the bound runtime. `player_kind` selects
+ * the default scene, a named state machine, or a named linear animation
+ * without cross-kind fallback.
  */
 typedef struct NuxFlowConfiguredSessionDescriptor {
   uint32_t struct_size;
-  uint16_t required_abi_major;
-  uint16_t minimum_abi_minor;
+  NuxFlowPlayerSelectorKind player_kind;
   struct NuxByteView artboard_name;
   struct NuxByteView player_name;
-  NuxFlowPlayerSelectorKind player_kind;
 } NuxFlowConfiguredSessionDescriptor;
 
 /**
@@ -299,8 +295,8 @@ typedef struct NuxFlowPointerBatch {
 /**
  * One app-clock advance. The first delta after create/resume is zero. A live
  * Apple drawable and completion pair are borrowed only for the synchronous
- * perform call and follow the same exactly-once completion contract as ABI
- * 1.1's frame operation.
+ * perform call and follow the frame operation's exactly-once completion
+ * contract.
  */
 typedef struct NuxFlowAdvanceOperation {
   uint32_t struct_size;
@@ -353,15 +349,11 @@ typedef struct NuxFlowTextRunBatch {
 } NuxFlowTextRunBatch;
 
 /**
- * ABI 1.5+ tagged generic operation. `required_abi_major` must be 1 and
- * `minimum_abi_minor` must name a supported configured-session ABI (currently
- * 5 or 6). Exactly the pointer selected by `kind` must be non-null and the
- * other payload pointers must be null.
+ * Tagged generic operation for the bound runtime. Exactly the pointer
+ * selected by `kind` must be non-null and the other payload pointers null.
  */
 typedef struct NuxFlowSessionOperation {
   uint32_t struct_size;
-  uint16_t required_abi_major;
-  uint16_t minimum_abi_minor;
   NuxFlowSessionOperationKind kind;
   const struct NuxFlowStateBatch *state_batch;
   const struct NuxFlowPointerBatch *pointer_batch;
@@ -413,8 +405,8 @@ typedef struct NuxFlowExternalAsset {
 } NuxFlowExternalAsset;
 
 /**
- * Full ABI 1.1 artifact-import contract. `struct_size` must cover this entire
- * published layout; the artifact manifest and acquisition identities are
+ * Complete artifact-import request. `struct_size` must equal this published
+ * layout's exact size; the artifact manifest and acquisition identities are
  * required for every import.
  */
 typedef struct NuxFlowImportRequest {
@@ -468,8 +460,8 @@ typedef struct NuxFlowCreatedInstanceView {
 typedef uint32_t NuxDiagnosticSeverity;
 
 /**
- * Frozen ABI-major-1 diagnostic output layout. Callers initialize
- * `struct_size` to the exact published size before invoking an accessor.
+ * Structured diagnostic output layout. Callers initialize `struct_size` to
+ * the exact published size before invoking an accessor.
  */
 typedef struct NuxDiagnosticView {
   uint32_t struct_size;
@@ -540,7 +532,7 @@ typedef uint32_t NuxFlowOutputKind;
 
 /**
  * Borrowed exact-order output owned by a session result. `payload_root_index`
- * is `UINT32_MAX` when the item has no typed arena payload. ABI 1.5 host
+ * is `UINT32_MAX` when the item has no typed arena payload. Host
  * commands always use an object node as their typed payload root and leave the
  * opaque `payload` byte view empty.
  */
@@ -860,8 +852,6 @@ typedef uint32_t NuxScriptAuthorization;
 
 #define NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY 1
 
-#define NUX_STATUS_ABI_MISMATCH (NuxStatus)6
-
 #define NUX_STATUS_IMPORT_ERROR (NuxStatus)2
 
 #define NUX_STATUS_INVALID_ARGUMENT (NuxStatus)5
@@ -873,6 +863,8 @@ typedef uint32_t NuxScriptAuthorization;
 #define NUX_STATUS_OK (NuxStatus)0
 
 #define NUX_STATUS_RUNTIME_ERROR (NuxStatus)4
+
+#define NUX_STATUS_RUNTIME_IDENTITY_MISMATCH (NuxStatus)6
 
 #define NUX_STATUS_SURFACE_ERROR (NuxStatus)7
 
@@ -996,7 +988,7 @@ NuxStatus nux_flow_render_session_attach_apple_surface(const struct NuxFlowRende
 
 /**
  * Creates an independent logical screen session from a context through the
- * legacy ABI 1.1 surface. Cycle-zero host outputs produced while scripts are
+ * legacy unconfigured surface. Cycle-zero host outputs produced while scripts are
  * initialized are intentionally not returned by this entry point; use
  * `nux_flow_render_session_create_configured` when those outputs are needed.
  *
@@ -1012,10 +1004,9 @@ NuxStatus nux_flow_render_session_create(const struct NuxFlowRuntimeContext *con
                                          struct NuxOperationResult **out_result);
 
 /**
- * Creates one independent screen session using the versioned ABI 1.5+
- * player-selection contract and ABI 1.5 bootstrap-result contract. Creation
- * never performs an observable
- * advance. Authenticated script initialization may return ordered cycle-zero
+ * Creates one independent screen session using the current typed
+ * player-selection and bootstrap-result contract. Creation never performs an
+ * observable advance. Authenticated script initialization may return ordered cycle-zero
  * host-work outputs. The returned result owns those outputs, player metadata,
  * bounds, catalog, and bootstrap value views until explicitly freed.
  *
@@ -1041,7 +1032,7 @@ NuxStatus nux_flow_render_session_create_configured(const struct NuxFlowRuntimeC
 void nux_flow_render_session_free(struct NuxFlowRenderSession *session);
 
 /**
- * Performs one fully copied ABI 1.5+ operation on the session's pinned worker.
+ * Performs one fully copied operation on the session's pinned worker.
  * Rust never calls Swift reentrantly; ordered outputs are returned in the owned
  * result. State batches are atomic and pointer batches preserve immediate
  * subcycles inside their returned `cycle` values.
@@ -1057,8 +1048,8 @@ NuxStatus nux_flow_render_session_perform(const struct NuxFlowRenderSession *ses
 
 /**
  * Imports one verified visual artifact into a retained runtime context.
- * The request must provide the full ABI 1.1 import layout; the former ABI 1.0
- * artifact-only prefix is rejected.
+ * The request must use the exact current layout; the former artifact-only
+ * prefix is rejected.
  *
  * # Safety
  *
@@ -1066,9 +1057,10 @@ NuxStatus nux_flow_render_session_perform(const struct NuxFlowRenderSession *ses
  * `request.artifact_bytes` must be readable for its declared length. Output
  * pointers must address writable handle storage.
  */
-NuxStatus nux_flow_runtime_context_create(const struct NuxFlowImportRequest *request,
-                                          struct NuxFlowRuntimeContext **out_context,
-                                          struct NuxOperationResult **out_result);
+NuxStatus nux_flow_runtime_context_create_bound(const struct NuxRuntimeBinding *binding,
+                                                const struct NuxFlowImportRequest *request,
+                                                struct NuxFlowRuntimeContext **out_context,
+                                                struct NuxOperationResult **out_result);
 
 /**
  * Releases one runtime-context handle. Null is a no-op.
@@ -1106,7 +1098,7 @@ uint64_t nux_flow_session_result_created_instance_count(const struct NuxFlowSess
  *
  * # Safety
  *
- * `result` must be live. `out_diagnostic` must have ABI 1.1's exact frozen
+ * `result` must be live. `out_diagnostic` must have the exact published
  * diagnostic-view size; returned byte views expire when `result` is freed.
  */
 NuxStatus nux_flow_session_result_diagnostic_at(const struct NuxFlowSessionResult *result,
@@ -1163,7 +1155,7 @@ NuxStatus nux_flow_session_result_event_property_at(const struct NuxFlowSessionR
 uint64_t nux_flow_session_result_event_property_count(const struct NuxFlowSessionResult *result);
 
 /**
- * Releases one ABI 1.5 session result. Null is a no-op.
+ * Releases one session result. Null is a no-op.
  *
  * # Safety
  *
@@ -1353,7 +1345,7 @@ NuxStatus nux_flow_session_result_schema_property_at(const struct NuxFlowSession
 uint64_t nux_flow_session_result_schema_property_count(const struct NuxFlowSessionResult *result);
 
 /**
- * Returns an ABI 1.5 session result's status, or `NULL_ARGUMENT` for null.
+ * Returns a session result's status, or `NULL_ARGUMENT` for null.
  *
  * # Safety
  *
@@ -1478,7 +1470,7 @@ NuxStatus nux_operation_result_diagnostic(const struct NuxOperationResult *resul
  * # Safety
  *
  * `result` must be live and `out_diagnostic` writable with `struct_size`
- * initialized to the exact ABI-major-1 layout size. Returned views expire when
+ * initialized to the exact published layout size. Returned views expire when
  * `result` is released.
  */
 NuxStatus nux_operation_result_diagnostic_at(const struct NuxOperationResult *result,
@@ -1531,9 +1523,20 @@ NuxStatus nux_operation_result_status(const struct NuxOperationResult *result);
  */
 NuxSurfaceDisposition nux_operation_result_surface_disposition(const struct NuxOperationResult *result);
 
-uint16_t nux_runtime_abi_major(void);
-
-uint16_t nux_runtime_abi_minor(void);
+/**
+ * Binds a client compiled for one exact runtime version and source revision
+ * to this linked runtime. The returned proof is process-static.
+ *
+ * # Safety
+ *
+ * Non-null identity pointers must be readable for their declared lengths.
+ * `out_binding` must point to writable, properly aligned pointer storage.
+ */
+NuxStatus nux_runtime_bind(const uint8_t *expected_runtime_version,
+                           uint64_t expected_runtime_version_len,
+                           const uint8_t *expected_source_revision,
+                           uint64_t expected_source_revision_len,
+                           const struct NuxRuntimeBinding **out_binding);
 
 /**
  * Writes a process-static UTF-8 JSON view to `out_provenance`.
@@ -1544,12 +1547,6 @@ uint16_t nux_runtime_abi_minor(void);
  * [`NuxByteView`].
  */
 NuxStatus nux_runtime_build_provenance(struct NuxByteView *out_provenance);
-
-/**
- * Checks whether this runtime supports the requested full import contract.
- * ABI 1.0's manifest-free import prefix is intentionally unsupported.
- */
-NuxStatus nux_runtime_require_abi(uint16_t required_major, uint16_t minimum_minor);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -12,7 +12,7 @@ commands, a public Rust API, and a C ABI for embedded SDK integrations.
 
 - `nuxie`: public Rust API
 - `nuxie-renderer`: default pure-Rust renderer with native and browser backends
-- `nux-apple-runtime`: versioned Apple product ABI and packaged XCFramework
+- `nux-apple-runtime`: exact-runtime-identity Apple C boundary and packaged XCFramework
 - `nux-capi`: C SDK surface and `nux_capi.h`
 - `nuxie-runtime`: artboard, animation, state-machine, and draw runtime
 - `nuxie-binary`: `.riv` importer

@@ -218,21 +218,21 @@ stimulus_files = [
 ]
 
 [[fixture]]
-id = "fed.loc_015.apple_abi_1_6_draw"
+id = "fed.loc_015.apple_runtime_exact_identity_draw"
 defect_id = "LOC-015"
 kind = "artifact"
 status = "registered"
 driver = "pending:F-ED-12"
 
 [[fixture]]
-id = "fed.loc_016.apple_abi_1_6_animation_selector"
+id = "fed.loc_016.apple_runtime_exact_identity_animation_selector"
 defect_id = "LOC-016"
 kind = "artifact"
 status = "registered"
 driver = "pending:F-ED-12"
 
 [[fixture]]
-id = "fed.loc_017.apple_abi_1_6_native_corpus"
+id = "fed.loc_017.apple_runtime_exact_identity_native_corpus"
 defect_id = "LOC-017"
 kind = "artifact"
 status = "registered"

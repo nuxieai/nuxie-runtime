@@ -37,7 +37,7 @@ resolution = "The Editor owner must record the consumed runtime and superproject
 id = "COR-06"
 status = "open"
 description = "P18 alternates between an eight-entry and nine-entry native corpus."
-resolution = "F-ED-12 records the exact ABI 1.6 corpus inventory before publication."
+resolution = "F-ED-12 records the exact runtime-0.2.0 corpus inventory before publication."
 
 [[correction]]
 id = "COR-07"
@@ -66,8 +66,8 @@ resolution = "Preserve 42 product cases and label the three auxiliary checks sep
 [[correction]]
 id = "COR-11"
 status = "versioned"
-description = "LOC-015, LOC-016, and LOC-017 are based on published ABI 1.5 evidence."
-resolution = "Keep the rows artifact-owned until ABI 1.6 is built, published with user approval, and consumed."
+description = "LOC-015, LOC-016, and LOC-017 are based on the legacy published apple-runtime-v0.1.0 artifact."
+resolution = "Keep the rows artifact-owned until the exact-runtime-identity 0.2.0 artifact is built, published with user approval, and consumed."
 
 [[correction]]
 id = "COR-12"

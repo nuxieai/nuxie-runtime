@@ -3,54 +3,52 @@
 #include <stddef.h>
 #include <stdint.h>
 
-_Static_assert(NUX_RUNTIME_ABI_MAJOR == 1, "unexpected runtime ABI major");
-_Static_assert(NUX_RUNTIME_ABI_MINOR == 6, "unexpected runtime ABI minor");
-_Static_assert(NUX_FLOW_SESSION_ABI_MINOR == 6,
-               "unexpected flow-session ABI minor");
 _Static_assert(NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY == 1,
-               "script authorization values are part of the ABI");
+               "script authorization values are part of the contract");
 _Static_assert(NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED == 2,
-               "script authorization values are part of the ABI");
+               "script authorization values are part of the contract");
 _Static_assert(NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE == 1,
-               "external asset kinds are part of the ABI");
+               "external asset kinds are part of the contract");
 _Static_assert(NUX_DIAGNOSTIC_SEVERITY_FATAL == 2,
-               "diagnostic severities are part of the ABI");
+               "diagnostic severities are part of the contract");
 _Static_assert(NUX_SURFACE_DISPOSITION_PRESENTED == 1,
-               "surface disposition values are part of the ABI");
+               "surface disposition values are part of the contract");
 _Static_assert(NUX_SURFACE_DISPOSITION_FATAL == 9,
-               "surface disposition values are part of the ABI");
+               "surface disposition values are part of the contract");
 _Static_assert(NUX_FLOW_QUERY_KIND_PLAYER_INPUTS == 4,
-               "player-input query kind is part of the ABI");
+               "player-input query kind is part of the contract");
 _Static_assert(NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL == 9,
-               "player-input mutation kinds are part of the ABI");
+               "player-input mutation kinds are part of the contract");
 _Static_assert(NUX_FLOW_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER == 11,
-               "player-input mutation kinds are part of the ABI");
+               "player-input mutation kinds are part of the contract");
 _Static_assert(NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL == 12,
-               "view-model replacement kind is part of the ABI");
+               "view-model replacement kind is part of the contract");
 _Static_assert(NUX_FLOW_SESSION_OPERATION_KIND_TEXT_RUN_BATCH == 5,
-               "text-run operation kind is part of the ABI");
+               "text-run operation kind is part of the contract");
 _Static_assert(NUX_FLOW_OUTPUT_KIND_HOST_COMMAND == 5,
-               "host-command output kind is part of the ABI");
+               "host-command output kind is part of the contract");
 _Static_assert(NUX_FLOW_VALUE_KIND_LIST_INDEX == 10,
-               "list-index value kind is part of the ABI");
+               "list-index value kind is part of the contract");
 _Static_assert(NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX == 12,
-               "list-index schema kind is part of the ABI");
+               "list-index schema kind is part of the contract");
 _Static_assert(NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE == 1,
-               "player-selection branches are part of the ABI");
+               "player-selection branches are part of the contract");
 _Static_assert(NUX_FLOW_PLAYER_SELECTION_STATIC == 5,
-               "player-selection branches are part of the ABI");
+               "player-selection branches are part of the contract");
 _Static_assert(NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION == 6,
-               "player-selection branches are part of the ABI");
+               "player-selection branches are part of the contract");
 _Static_assert(NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT == 0,
-               "player-selector kinds are part of the ABI");
+               "player-selector kinds are part of the contract");
 _Static_assert(NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE == 1,
-               "player-selector kinds are part of the ABI");
+               "player-selector kinds are part of the contract");
 _Static_assert(NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION == 2,
-               "player-selector kinds are part of the ABI");
+               "player-selector kinds are part of the contract");
+_Static_assert(NUX_STATUS_RUNTIME_IDENTITY_MISMATCH == 6,
+               "runtime identity mismatch has a stable status");
 _Static_assert(sizeof(NuxStatus) == sizeof(uint32_t),
-               "NuxStatus must remain a 32-bit ABI value");
+               "NuxStatus must remain a 32-bit contract value");
 _Static_assert(sizeof(NuxSurfaceDisposition) == sizeof(uint32_t),
-               "NuxSurfaceDisposition must remain a 32-bit ABI value");
+               "NuxSurfaceDisposition must remain a 32-bit contract value");
 _Static_assert(sizeof(struct NuxByteView) == 16,
                "unexpected NuxByteView layout");
 _Static_assert(offsetof(struct NuxByteView, len) == 8,
@@ -94,19 +92,17 @@ _Static_assert(offsetof(struct NuxFrameOperation, completion_context) == 24,
 _Static_assert(offsetof(struct NuxFrameOperation, completion_callback) == 32,
                "unexpected NuxFrameOperation.completion_callback offset");
 
-/* ABI 1.6 retains the exact 40-byte ABI 1.5 configured-session prefix and
- * appends a typed player selector. */
-_Static_assert(sizeof(struct NuxFlowConfiguredSessionDescriptor) == 48,
+_Static_assert(sizeof(struct NuxFlowConfiguredSessionDescriptor) == 40,
                "unexpected NuxFlowConfiguredSessionDescriptor layout");
+_Static_assert(offsetof(struct NuxFlowConfiguredSessionDescriptor,
+                        player_kind) == 4,
+               "unexpected configured player-kind offset");
 _Static_assert(offsetof(struct NuxFlowConfiguredSessionDescriptor,
                         artboard_name) == 8,
                "unexpected configured artboard-name offset");
 _Static_assert(offsetof(struct NuxFlowConfiguredSessionDescriptor,
                         player_name) == 24,
                "unexpected configured player-name offset");
-_Static_assert(offsetof(struct NuxFlowConfiguredSessionDescriptor,
-                        player_kind) == 40,
-               "unexpected configured player-kind offset");
 _Static_assert(sizeof(struct NuxFlowValueNode) == 88,
                "unexpected NuxFlowValueNode layout");
 _Static_assert(offsetof(struct NuxFlowValueNode, instance_id) == 40,
@@ -155,11 +151,13 @@ _Static_assert(sizeof(struct NuxFlowQuery) == 8,
                "unexpected NuxFlowQuery layout");
 _Static_assert(sizeof(struct NuxFlowQueryBatch) == 24,
                "unexpected NuxFlowQueryBatch layout");
-_Static_assert(sizeof(struct NuxFlowSessionOperation) == 56,
+_Static_assert(sizeof(struct NuxFlowSessionOperation) == 48,
                "unexpected NuxFlowSessionOperation layout");
-_Static_assert(offsetof(struct NuxFlowSessionOperation, state_batch) == 16,
+_Static_assert(offsetof(struct NuxFlowSessionOperation, kind) == 4,
+               "unexpected NuxFlowSessionOperation.kind offset");
+_Static_assert(offsetof(struct NuxFlowSessionOperation, state_batch) == 8,
                "unexpected NuxFlowSessionOperation.state_batch offset");
-_Static_assert(offsetof(struct NuxFlowSessionOperation, text_run_batch) == 48,
+_Static_assert(offsetof(struct NuxFlowSessionOperation, text_run_batch) == 40,
                "unexpected NuxFlowSessionOperation.text_run_batch offset");
 _Static_assert(sizeof(struct NuxFlowPlayerMetadataView) == 64,
                "unexpected NuxFlowPlayerMetadataView layout");
@@ -208,13 +206,17 @@ _Static_assert(offsetof(struct NuxFlowOutputView, open_url_target) == 144,
 
 static void typecheck_product_api(void)
 {
-    uint16_t (*abi_major)(void) = nux_runtime_abi_major;
-    NuxStatus (*require_abi)(uint16_t, uint16_t) =
-        nux_runtime_require_abi;
-    NuxStatus (*create_context)(const struct NuxFlowImportRequest*,
+    NuxStatus (*bind_runtime)(const uint8_t*,
+                              uint64_t,
+                              const uint8_t*,
+                              uint64_t,
+                              const struct NuxRuntimeBinding**) =
+        nux_runtime_bind;
+    NuxStatus (*create_context)(const struct NuxRuntimeBinding*,
+                                const struct NuxFlowImportRequest*,
                                 struct NuxFlowRuntimeContext**,
                                 struct NuxOperationResult**) =
-        nux_flow_runtime_context_create;
+        nux_flow_runtime_context_create_bound;
     NuxStatus (*create_session)(const struct NuxFlowRuntimeContext*,
                                 const struct NuxFlowSessionDescriptor*,
                                 struct NuxFlowRenderSession**,
@@ -288,8 +290,7 @@ static void typecheck_product_api(void)
                                struct NuxDiagnosticView*) =
         nux_operation_result_diagnostic_at;
 
-    (void)abi_major;
-    (void)require_abi;
+    (void)bind_runtime;
     (void)create_context;
     (void)create_session;
     (void)create_configured_session;
@@ -314,8 +315,34 @@ static void typecheck_product_api(void)
     (void)diagnostic_at;
 }
 
+static NuxStatus bind_and_create_context(
+    const uint8_t* expected_runtime_version,
+    uint64_t expected_runtime_version_len,
+    const uint8_t* expected_source_revision,
+    uint64_t expected_source_revision_len,
+    const struct NuxFlowImportRequest* request,
+    struct NuxFlowRuntimeContext** out_context,
+    struct NuxOperationResult** out_result)
+{
+    const struct NuxRuntimeBinding* binding = NULL;
+    NuxStatus status =
+        nux_runtime_bind(expected_runtime_version,
+                         expected_runtime_version_len,
+                         expected_source_revision,
+                         expected_source_revision_len,
+                         &binding);
+    if (status != NUX_STATUS_OK) {
+        return status;
+    }
+    return nux_flow_runtime_context_create_bound(binding,
+                                           request,
+                                           out_context,
+                                           out_result);
+}
+
 int main(void)
 {
     typecheck_product_api();
+    (void)bind_and_create_context;
     return 0;
 }

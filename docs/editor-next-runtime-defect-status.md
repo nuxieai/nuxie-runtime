@@ -7,8 +7,8 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: post-Q0 intake reconciliation, immediately followed by the
-  malformed-font crash repair;
+- phase: serialized evidence-only closure and active validation of the landed
+  authored-shader repair;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - investigation base: `e72323c808b91d706ba3b745396beaca7accd69a`;
 - Editor's last consumed runtime:
@@ -25,21 +25,27 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   directly qualified.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
-- latest control-plane landing: Q0 PR #61 rebase-merged at exact runtime main
-  `2e24cd7f23a35fc96a71c5edb5da77d1a8634e08`;
-- active control-plane lane: consume Editor checkpoint `7ca11e33`, accept
-  canonical `LOC-*` and `RT-ED-*` changes under one fail-closed contract, and
-  bind both structured ledger link forms;
-- active production lane: malformed embedded-font outline crash, sole existing
-  writer PR #60 at pre-rebase head
-  `61d5d018aa036882d17cea1065a78d7f2e057547`;
+- latest control-plane landing: checkpoint-7ca reconciliation PR #63
+  rebase-merged at exact runtime main
+  `fe0a0a07db302ce2f0282a2d919ea249e83144e5`;
+- active control-plane lane: serialize the five evidence-only closures with
+  `LOC-006` first while the `LOC-009` validation lane remains active;
+- active production-repair validation lane: `LOC-009` awaitable authored-shader
+  validation of the already-landed repair;
+- deferred/parked production lane: malformed embedded-font outline crash and
+  its existing PR #60 writer at head
+  `61d5d018aa036882d17cea1065a78d7f2e057547`; do not finish, rebase, or land it
+  from this queue;
+- assigned production lane: `RT-ED-007` belongs to Runtime Fix; Defects Fix
+  must not create a duplicate writer;
 - defects closed since the preceding Q0 report: 1;
-- runnable repair lanes: finish and rebase PR #60 with the exact 833,949-byte
-  reproducer, focused font-validation module, d788 evidence, reviews, and
-  canonical floors;
-- blocked/overlapping lanes: `LOC-002`, `LOC-007`, and `RT-ED-007` need d788
-  requalification and their FL collision boundary; `LOC-005` needs the direct
-  d788 shared-instance differential.
+- serialized evidence-only closures: `LOC-006` first, then `RT-ED-003`,
+  `RT-ED-005`, `LOC-009`, and `LOC-019`;
+- runnable repair lane: complete the awaitable authored-shader validation for
+  `LOC-009` without reopening its landed production implementation;
+- blocked/overlapping lanes: `LOC-002` and `LOC-007` need d788 requalification
+  and their FL collision boundary; `LOC-005` needs the direct d788
+  shared-instance differential.
 
 Defects Fix owns intake, triage, pinned-C++ qualification, faithful repair
 orchestration, independent verification, PR/landing tracking, and immutable
@@ -256,17 +262,15 @@ exact local canonical floors; no queued hosted Apple lane is relabeled green.
 
 ## Next queue
 
-1. independently review and merge this focused checkpoint-7ca intake/checker
-   reconciliation;
-2. record the inherited malformed-font crash as `RT-FUZZ-001`, rebase the sole
-   existing PR #60 writer onto current main, and preserve the exact 833,949-byte
-   reproducer;
-3. split the touched font-validation seam into the focused Rust module that
-   corresponds to the C++ font owner, update its source mapping, and prove the
-   empty-outline behavior against pinned d788;
-4. run the focused/full floors and two-axis review, merge PR #60, and update
-   the atlas/status with the exact landing SHA;
-5. refill disjoint qualification lanes from the reconciled ownership DAG.
+1. independently review and merge the focused `LOC-006` evidence-only closure;
+2. serialize the remaining evidence-only closures in order: `RT-ED-003`,
+   `RT-ED-005`, then complete the awaitable authored-shader validation and
+   close `LOC-009` without reopening its landed implementation, then
+   `LOC-019`;
+3. leave `RT-ED-007` with Runtime Fix and do not create a duplicate writer;
+4. keep PR #60 and the malformed embedded-font outline crash deferred/parked,
+   then refill other disjoint qualification lanes from the reconciled
+   ownership DAG.
 
 No production defect repair is authorized by this status file alone. The goal,
 atlas classification, and live writer lease must all authorize the slice.

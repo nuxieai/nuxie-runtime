@@ -147,10 +147,10 @@ Every goal turn, without exception:
 
 The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 
-- Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-006`, `LOC-003`, `LOC-004`,
-  `LOC-006`.
-- Landing-provenance and independent-promotion only: `RT-ED-003`,
-  `RT-ED-005`, and `LOC-019`. Their repairs are merged and consumed; no
+- Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`, `LOC-003`,
+  `LOC-004`, `LOC-006`, and `LOC-014`.
+- Landing-provenance and independent-promotion only: `RT-ED-005` and
+  `LOC-019`. Their repairs are merged and consumed; no
   production implementation remains in those lanes.
 - Regression reopened after historical executor-green evidence: `LOC-009`.
   PR #54's `7f1450dc` landing remains immutable history, but independent

@@ -70,6 +70,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   green. The exact next owners are the four fresh listener groups; they must
   live in matching Rust files and must not be appended to
   `state_machine/instance.rs`.
+- The later invocation owner required by those groups has been split
+  behavior-preservingly from giant `scripting.rs` into the direct
+  `state_machine/listener_invocation.rs` correspondence. Its existing
+  pointer/reported-event/none behavior is unchanged and green under runtime
+  507 / 507 plus all three scripting invocation tests. Keyboard, text,
+  gamepad, focus, ViewModel, and semantic variants remain pending semantic
+  translation; the row is not promoted by the file move.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
   defined post-advance C++ result. No `Option<bool>` API break or

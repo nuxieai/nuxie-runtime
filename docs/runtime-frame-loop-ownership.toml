@@ -718,7 +718,7 @@ status = "pending"
 upstream = "src/animation/listener_invocation.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_invocation.rs"]
 dynamically_reached = false
 status = "pending"
 

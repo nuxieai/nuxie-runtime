@@ -1011,6 +1011,8 @@ historical unless it agrees with these sources.
 the input and typed-listener definitions on provisional runtime base
 `95eb04b7cfb847f24ba77872bd8a0ee43da1af41`. FL-B rows remain pending
 reacceptance and are not promoted by continuing FL-C.
+The listener-invocation owner now has a direct Rust file, but its non-pointer
+variants remain part of the same canonical listener-group next slice.
 
 ## Next queue (top = next; orchestrator maintains)
 

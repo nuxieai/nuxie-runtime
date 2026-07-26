@@ -612,13 +612,13 @@ note = "F13: shared nested listener-input lifecycle remains incomplete; second-p
 upstream = "src/animation/listener_invocation.cpp"
 status = "pending"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/animation.rs"
+rust_module = "crates/nuxie-runtime/src/state_machine/listener_invocation.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0050"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "F5/F13: non-pointer listener invocation families remain incomplete; second-pass disposition recorded."
+note = "Direct filename correspondence established before FL-C1 listener groups. Existing pointer/reported-event/none behavior moved without semantic change; non-pointer invocation families remain pending under FL-C4."
 
 [[file]]
 upstream = "src/animation/listener_number_change.cpp"

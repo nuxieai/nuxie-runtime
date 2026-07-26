@@ -536,27 +536,27 @@ reason = "The retracted observation has no product child."
 [[defect]]
 id = "RT-ED-007"
 title = "Nested ViewModel number cannot bind transition duration"
-source_class = "active-runtime-dependency"
+source_class = "candidate"
 state = "reported"
-owner_class = "api"
-classification = "unqualified"
+owner_class = "runtime"
+classification = "structural-mistranslation"
 ticket = "F-ED-04"
 fixture_id = "fed.rt_ed_007.nested_transition_duration"
-preliminary_disposition = "The canonical Editor fixture now reaches the exact typed Scene seam and fails because transition-duration authoring accepts only a direct root ViewModelNumberId. The diagnosis and test remain Defects Fix evidence, but the production repair is assigned exclusively to Runtime Fix. Defects Fix has no Scene-authoring writer authorization and records independent verification only after the Runtime Fix landing."
+preliminary_disposition = "The complete five-part seam report confirms a runtime defect. Exact producer bytes contain DataBindContext propertyKey 158 and complete sourcePath [0,0,0]; pinned d788 resolves the same occurrence and animates, while fe0 runtime_transition_duration_bindings uses a default-instance-only helper and drops the unresolved nested reference. Record this as deferred post-port verification for the relevant state-machine wave, with no direct repair request or schedule. The uncommitted Scene API patch emitted correct bytes but has no landing claim."
 reproduction_sha256 = "d2bddc7d08da8f34f5b2c960aa1af1b4e7582bd2b184fb6bcd88eb18917dc856"
-rust_stimulus = "CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'runtime-viewmodel-contract' --workers=1 at Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b and runtime e72323c808b91d706ba3b745396beaca7accd69a"
-cpp_stimulus = "tests/unit_tests/runtime/state_machine_test.cpp:719-747 and assets/transition_duration_bind_nested.riv at pinned d788e8ec6e8b598526607d6a1e8818e8b637b60c; executable normalized record/behavior differential remains pending"
-source_files = ["tests/unit_tests/runtime/state_machine_test.cpp","tests/unit_tests/assets/transition_duration_bind_nested.riv","crates/nuxie/src/scene.rs","crates/nuxie-runtime/src/state_machine.rs","crates/nuxie-runtime/src/state_machine/bindables.rs"]
-source_members = ["SceneTx::bind_transition_duration","ViewModelNumberSource","MachineRecordSpec::TransitionDurationBind","runtime_transition_duration_bindings","RuntimeTransitionDurationBinding","StateMachineTransitionDurationInstance","RuntimeBindableNumber","RuntimeBindableNumberDefaultViewModelSource"]
-lifecycle_phases = ["author nested source through the exported Scene seam","export transition duration bind","import runtime state-machine binding","resolve the nested bindable number source","set source value","fire transition","advance(0) and observe duration"]
-rust_owner = "Runtime Fix owns the complete production path across crates/nuxie/src/scene.rs, crates/nuxie-runtime/src/state_machine.rs, and crates/nuxie-runtime/src/state_machine/bindables.rs. Defects Fix keeps the Scene candidate quarantined and owns only unchanged set -> fire -> advance(0) verification after the Runtime Fix landing."
-displaced_mechanism = "pending: F-ED-04 displaced-mechanism inventory"
+rust_stimulus = "Import exact 323-byte /private/tmp/rted007-scene-e723-dirty.riv (SHA-256 b8e1696a3166959ab7afbca6d7e8ba4abaf99c9e04a15f144327699ce54ebe70) on exact fe0; inspect default_view_model_number_source_value_for_data_bind(0) before/after bind, set, and advance, then run unchanged set -> fire -> advance(0)"
+cpp_stimulus = "Import the same exact 323-byte artifact at pinned d788e8ec6e8b598526607d6a1e8818e8b637b60c with equivalent owned-occurrence setup; advance(0), then advance another 0.5s"
+source_files = ["tests/unit_tests/runtime/state_machine_test.cpp","tests/unit_tests/assets/transition_duration_bind_nested.riv","crates/nuxie-runtime/src/state_machine.rs","crates/nuxie-runtime/src/state_machine/bindables.rs"]
+source_members = ["runtime_transition_duration_bindings","default_view_model_number_source_value_for_data_bind","StateMachineTransitionDurationInstance","RuntimeBindableNumber","RuntimeBindableNumberDefaultViewModelSource"]
+lifecycle_phases = ["export exact transition-duration target and nested source path","import runtime state-machine binding","resolve the nested default ViewModel number occurrence","set source value","fire transition","advance(0) and observe duration"]
+rust_owner = "deferred post-port verification at the narrow crates/nuxie-runtime/src/state_machine.rs and crates/nuxie-runtime/src/state_machine/bindables.rs first-divergence seam, or a focused transition_duration_binding module extracted from them; this row makes no direct implementation request or schedule. Defects Fix reruns only the unchanged set -> fire -> advance(0) acceptance after the relevant state-machine port wave lands. crates/nuxie/src/scene.rs has no writer lease in this defect."
+displaced_mechanism = "runtime_transition_duration_bindings calls the default-instance-only helper and drops/continues when the nested default reference is unresolved; instance.rs, data_bind_graph.rs, and live path resolution are downstream and not implicated."
 dependencies = ["F-ED-00B","F-ED-04"]
-target_tests = ["Runtime Fix executor-owned cpp_probe/registry.cpp coverage","Defects Fix-only unchanged Rust set -> fire -> advance(0) verification after Runtime Fix landing"]
+target_tests = ["post-port retained unresolved transition-duration path coverage","Defects Fix unchanged set -> fire -> advance(0) acceptance after the relevant state-machine port wave lands"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
-owning_ledger = "pending: F-ED-04 owning-ledger link"
-adaptation_rule = "pending: F-ED-04 rule citation"
-decision_row = "pending: F-ED-04 decision-row disposition"
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#RT-ED-007"
+adaptation_rule = "PORTING.md prime directive: preserve the complete nested source occurrence through import and transition-duration binding; do not replace the qualified Scene-emitted path or broaden the repair beyond the first divergent runtime seam."
+decision_row = "Identical exact bytes animate at pinned d788 but not fe0, and the first divergence is runtime_transition_duration_bindings dropping an unresolved nested default reference: defer unchanged acceptance verification until the relevant state-machine port wave lands; make no direct repair request or schedule."
 touch = []
 dont_touch = ["@active-fl-lease"]
 formal_children = ["P19-C09"]
@@ -567,10 +567,10 @@ proposal = "39b17ac5632156f6b762372c28ac661b0a47974d4f2e56ab7d81e32376415401"
 runtime_defects = "9e81f237ed568b873304a5853a05026d06e360f8475bcb6dec4da9d04bf7390c"
 parity_ledger = "04f205269cb833adad7aa15a0e7c18be149c337f0e97bdffce171723eed69e25"
 [defect.revisions]
-original_localization_rust_sha = { status = "pending", reason = "F-ED-04 must recover the original localization Rust SHA" }
+original_localization_rust_sha = { status = "pending", reason = "No committed SHA contains bind_transition_duration_source. The exact recovered producer is e72323c808b91d706ba3b745396beaca7accd69a plus a dirty scene.rs patch with SHA-256 16492cda16a2f91da7d612c9348c6cca572b294d0d25b782c42ab686904ef57a." }
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
-investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
-merged_repair_sha = { status = "pending", reason = "Runtime Fix has not landed the assigned repair yet." }
+investigation_head_sha = "fe0a0a07db302ce2f0282a2d919ea249e83144e5"
+merged_repair_sha = { status = "pending", reason = "The relevant state-machine port wave has not landed; this row makes no direct repair request or schedule." }
 consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
 consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
 [defect.renderer_provenance]
@@ -578,24 +578,26 @@ status = "not-applicable"
 reason = "This row does not qualify renderer output."
 [defect.executor_verification]
 status = "pending"
-reason = "Runtime Fix has not supplied a landed repair and current-cycle executor result."
+reason = "Fresh executor verification is deferred until the relevant state-machine port wave lands."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "Defects Fix independent verification waits for the Runtime Fix landing and fresh executor evidence."
+reason = "Defects Fix independent verification waits for the relevant state-machine port wave, then reruns unchanged set -> fire -> advance(0)."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:RT-ED-007"
 [defect.cpp_result]
-status = "pending"
-reason = "Nested source-path record shape has not been normalized at the current pin."
+status = "pass"
+command = "pinned d788 equivalent owned-occurrence import and advance of /private/tmp/rted007-scene-e723-dirty.riv"
+evidence = "The exact 323-byte artifact has SHA-256 b8e1696a3166959ab7afbca6d7e8ba4abaf99c9e04a15f144327699ce54ebe70; its normalized 31-record dump has SHA-256 aa199f8e58050272016865f24fd0792375ddddc0c48da83b236db282ef30fcf4. Record 26 is DataBindContext(propertyKey=158, flags=0, sourcePath=[0,0,0]) under transition 25. Pinned d788 with the same bytes produces opacity 0.200000003 at advance(0), then 0.5 after another 0.5s."
 [defect.rust_result]
-status = "pending"
-reason = "Existing resolver and missing typed Scene interface need separate evidence."
+status = "fail"
+command = "CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'runtime-viewmodel-contract' --workers=1"
+evidence = "Exact fe0 import recognizes target 25 but resolves no default nested source: default_view_model_number_source_value_for_data_bind(0) remains None before and after bind, set, and advance. Unchanged set -> fire -> advance(0) produces opacity 0.8 immediately instead of 0.2. The first divergence is runtime_transition_duration_bindings calling the default-instance-only helper and dropping the unresolved nested reference. Non-main commit dd3be99c appears to implement this seam but is not an ancestor of fe0/main."
 [defect.editor_result]
 status = "fail"
 command = "CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'runtime-viewmodel-contract' --workers=1"
-evidence = "At committed Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b, the Editor integration proof passes and the unchanged WebGPU runtime reproducer fails at animation.viewmodel.unsupported_path; plans/artifacts/editor-next-p19-c09/provenance.json preserves exact hashes."
+evidence = "At committed Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b, the unchanged live set -> fire -> advance(0) acceptance remains red. The recovered uncommitted Scene producer patch emits qualified-correct bytes but has no landing claim."
 
 [[defect]]
 id = "LOC-001"
@@ -961,8 +963,8 @@ classification = "stale-oracle"
 ticket = "F-ED-08"
 fixture_id = "fed.loc_006.webgpu_conditional_visibility"
 preliminary_disposition = "Closed as gesture-contaminated stale characterization. Five exact post-write frames captured before any hover remain clean; the old 34-draw/red-pixel observation returns only after the later hoverAt plus clearHover gesture. No runtime, renderer, browser, or Editor production repair is required."
-reproduction_sha256 = "2ca77de7d6d6c67aa0be2156d6aba1337261ab69ce652f75285eee431674e734"
-rust_stimulus = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'"
+reproduction_sha256 = "924f41ddef22e823ce9c94fcde3cac0ff9d15afbee3745e06307de2c5d636088"
+rust_stimulus = "At exact Editor 7ca11e331a57cb3ea574848f8e93eb108878c40b, verify committed plans/artifacts/editor-next-p09-c04/loc006-nohover-diagnostic-source.ts.txt SHA-256 7ade2d0c3b8753e6ccf386776f27d59822115af5426ee3ef05aedb0f5f590e2a, materialize it temporarily as apps/nuxie-dashboard/tests/e2e/project-editor/loc006-nohover-diagnostic.spec.ts, run the exact no-hover grep command, and remove the temporary test via the recorded trap/cleanup command."
 cpp_stimulus = "not-applicable: the corrected no-hover browser fixture falsifies the alleged runtime/renderer failure before a C++ differential is needed"
 source_files = ["apps/nuxie-dashboard/tests/e2e/project-editor/projection-corpus-product-route.spec.ts","plans/artifacts/editor-next-p09-c04/loc006-nohover-diagnostic-source.ts.txt","plans/artifacts/editor-next-p09-c04/provenance.json"]
 source_members = ["direct false ViewModel write","five no-hover frame captures","later hoverAt plus clearHover gesture"]
@@ -996,7 +998,7 @@ status = "not-applicable"
 reason = "The Editor-owned no-hover bracket disproves the reported renderer symptom before renderer qualification; it promotes no renderer work."
 [defect.executor_verification]
 status = "pass"
-command = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'"
+command = "loc006_source_path=plans/artifacts/editor-next-p09-c04/loc006-nohover-diagnostic-source.ts.txt; loc006_test_path=apps/nuxie-dashboard/tests/e2e/project-editor/loc006-nohover-diagnostic.spec.ts; test ! -e \"$loc006_test_path\" && test \"$(shasum -a 256 \"$loc006_source_path\" | cut -d ' ' -f 1)\" = \"7ade2d0c3b8753e6ccf386776f27d59822115af5426ee3ef05aedb0f5f590e2a\" && trap 'rm -f \"$loc006_test_path\"' EXIT HUP INT TERM && cp \"$loc006_source_path\" \"$loc006_test_path\" && PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'; loc006_exit=$?; rm -f \"$loc006_test_path\"; trap - EXIT HUP INT TERM; test \"$loc006_exit\" -eq 0"
 evidence = "Fresh exact-checkpoint Chromium rerun passed 1/1 in 32.4s. Log is 70,947 bytes with SHA-256 1a9b91fcb8a64296a4c464ad1848be839e9bc91da8d9dfdef337707a0a09f328."
 [defect.orchestrator_verification]
 status = "not-applicable"
@@ -1022,11 +1024,11 @@ status = "not-applicable"
 reason = "The corrected Editor browser fixture falsifies the alleged runtime/renderer failure before a pinned-C++ differential is needed."
 [defect.rust_result]
 status = "pass"
-command = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'"
+command = "loc006_source_path=plans/artifacts/editor-next-p09-c04/loc006-nohover-diagnostic-source.ts.txt; loc006_test_path=apps/nuxie-dashboard/tests/e2e/project-editor/loc006-nohover-diagnostic.spec.ts; test ! -e \"$loc006_test_path\" && test \"$(shasum -a 256 \"$loc006_source_path\" | cut -d ' ' -f 1)\" = \"7ade2d0c3b8753e6ccf386776f27d59822115af5426ee3ef05aedb0f5f590e2a\" && trap 'rm -f \"$loc006_test_path\"' EXIT HUP INT TERM && cp \"$loc006_source_path\" \"$loc006_test_path\" && PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'; loc006_exit=$?; rm -f \"$loc006_test_path\"; trap - EXIT HUP INT TERM; test \"$loc006_exit\" -eq 0"
 evidence = "Fresh 1/1 pass at Editor 7ca11e331a57cb3ea574848f8e93eb108878c40b and runtime e72323c808b91d706ba3b745396beaca7accd69a independently confirms the exact committed five-frame bracket."
 [defect.editor_result]
 status = "pass"
-command = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'"
+command = "loc006_source_path=plans/artifacts/editor-next-p09-c04/loc006-nohover-diagnostic-source.ts.txt; loc006_test_path=apps/nuxie-dashboard/tests/e2e/project-editor/loc006-nohover-diagnostic.spec.ts; test ! -e \"$loc006_test_path\" && test \"$(shasum -a 256 \"$loc006_source_path\" | cut -d ' ' -f 1)\" = \"7ade2d0c3b8753e6ccf386776f27d59822115af5426ee3ef05aedb0f5f590e2a\" && trap 'rm -f \"$loc006_test_path\"' EXIT HUP INT TERM && cp \"$loc006_source_path\" \"$loc006_test_path\" && PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'; loc006_exit=$?; rm -f \"$loc006_test_path\"; trap - EXIT HUP INT TERM; test \"$loc006_exit\" -eq 0"
 evidence = "At Editor checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b and runtime e72323c8, post-write-no-hover-1 through -4 and post-capture-no-hover-5 remain at draw count 30 with identical timing-stripped frame hashes, no red compositor residue, zero probe errors, and no rejected maps, device loss, or uncaptured errors. Only the later hover/clear gesture restores 34. The committed machine report is 171,784 bytes with SHA-256 f78b93d7575c3543e57de49bd73dce5783648b4c5a258328cfdd1f5eeb2652b5."
 
 [[defect]]
@@ -1038,17 +1040,17 @@ owner_class = "runtime"
 classification = "unqualified"
 ticket = "F-ED-05"
 fixture_id = "fed.loc_007.parametric_path_dirt"
-preliminary_disposition = "Committed Editor evidence isolates unchanged retained/fresh path geometry after authored width/height values change. Historical f4bb citations point to ParametricPath -> Path -> Shape -> PathComposer dirt; exact d788 qualification and FL-E ownership remain prerequisites."
+preliminary_disposition = "Deferred post-port verification. The unchanged four-test Editor command isolates static retained/fresh geometry after authored width/height values change. Pinned d788 requires ParametricPath width/height callbacks to propagate Path -> Shape -> PathComposer dirt and rebuild geometry. This row makes no implementation request, schedule, or active writer lease; Defects Fix reruns it after the corresponding formal path/dirt port wave."
 reproduction_sha256 = "77407599452bf4bcf1b1b13dc47907489d99ab5c7a5638f95cd4eab254659abc"
 rust_stimulus = "CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p browser-host --test product_host command_authored_resize_ --offline -- --nocapture"
-cpp_stimulus = "historical f4bb source audit of src/shapes/parametric_path.cpp:35-64, path.cpp:327-366, shape.cpp:99-107, and path_composer.cpp:40-64; exact d788 direct probe remains pending"
+cpp_stimulus = "Pinned d788 source expectation: src/shapes/parametric_path.cpp widthChanged/heightChanged call markPathDirty; Path::markPathDirty adds Path dirt and calls Shape::pathChanged; Shape dirties PathComposer; PathComposer::update rebuilds the composed path."
 source_files = ["src/shapes/parametric_path.cpp","src/shapes/path.cpp","src/shapes/shape.cpp","src/shapes/path_composer.cpp","crates/nuxie-runtime/src/artboard.rs","crates/nuxie-runtime/src/draw.rs"]
 source_members = ["ParametricPath::widthChanged","ParametricPath::heightChanged","Path::markPathDirty","Shape::pathChanged","PathComposer::update","path_geometry_commands_frame"]
 lifecycle_phases = ["bound width/height mutation","path dirt","shape notification","path composition","retained draw"]
-rust_owner = "FL-E/FL-G07 complete ParametricPath/Path/Shape dirt owner family; Defects Fix remains qualification and landing tracker only"
+rust_owner = "deferred post-port verification after the corresponding formal path/dirt wave; no implementation request, schedule, or active writer lease"
 displaced_mechanism = "pending: F-ED-05 displaced-mechanism inventory"
 dependencies = ["F-ED-00B","F-ED-05"]
-target_tests = ["cpp_probe/registry.cpp"]
+target_tests = ["CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p browser-host --test product_host command_authored_resize_ --offline -- --nocapture"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
 owning_ledger = "pending: F-ED-05 owning-ledger link"
 adaptation_rule = "pending: F-ED-05 rule citation"
@@ -1074,17 +1076,18 @@ status = "not-applicable"
 reason = "This row does not qualify renderer output."
 [defect.executor_verification]
 status = "pending"
-reason = "F-ED-05 executor fixture has not run."
+reason = "Executor rerun is deferred until the corresponding formal path/dirt port wave lands."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "F-ED-05 has no executor-green result to verify."
+reason = "Defects Fix reruns the unchanged four-test acceptance after the corresponding formal path/dirt port wave lands and classifies resolved/still open."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:LOC-007"
 [defect.cpp_result]
-status = "pending"
-reason = "Width/height/origin callback and PathComposer closure have not been probed."
+status = "pass"
+command = "git -C /Users/levi/dev/oss/rive-runtime show d788e8ec6e8b598526607d6a1e8818e8b637b60c:src/shapes/parametric_path.cpp; git show the same pin for src/shapes/path.cpp, src/shapes/shape.cpp, and src/shapes/path_composer.cpp"
+evidence = "Pinned d788 widthChanged/heightChanged call markPathDirty; Path adds Path dirt and calls Shape::pathChanged; Shape dirties PathComposer and invalidates stroke effects; PathComposer::update rebuilds the composed path. The expected frames therefore progress from 96x44 to 160x68 instead of retaining one static geometry hash."
 [defect.rust_result]
 status = "pending"
 reason = "Retained geometry samples must be rerun without a resource-reset compensation."
@@ -1102,17 +1105,17 @@ owner_class = "api"
 classification = "unqualified"
 ticket = "F-ED-09"
 fixture_id = "fed.loc_008.text_measurement_facade"
-preliminary_disposition = "Possible read-only typed facade over existing runtime shaping."
+preliminary_disposition = "Deferred post-port verification of intrinsic text measurement. Preserve the unchanged P08-C06 command and pinned-C++ shaper expectation; make no implementation request, schedule, or active writer lease. After the formal text-measurement port wave lands, Defects Fix reruns and classifies resolved/still open."
 reproduction_sha256 = "5ca6af05d8ea339c9d2d8d0dc8c37fcc4116c05e544ac720ef564d5c383315e1"
-rust_stimulus = "pending: F-ED-09 must minimize the direct Rust stimulus for LOC-008"
-cpp_stimulus = "pending: F-ED-09 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-008"
+rust_stimulus = "CARGO_HOME=/private/tmp/nuxie-editor-cargo-home rustup run stable cargo test --manifest-path tools/rive-compiler/scene-shared/Cargo.toml -p nuxie-scene-compiler --lib document_lowering::tests::lowers_list_alias_projection_value_to_a_name_resolved_text_run_binding --offline -- --exact && PAGE_PARITY_ASSERT=1 pnpm --dir apps/nuxie-dashboard run test:visual:page --grep 'Real-Data Paywall / Paywall'"
+cpp_stimulus = "Pinned-C++ expected behavior: the same shaper that renders text supplies exact intrinsic width and multiline height; the 354-wide subtitle occupies 47.59375 over two lines and ordinary intrinsic labels do not retain the 180-pixel fallback width."
 source_files = ["pending: F-ED-09 source-file correspondence"]
 source_members = ["pending: F-ED-09 state-bearing member correspondence"]
 lifecycle_phases = ["pending: F-ED-09 lifecycle qualification"]
-rust_owner = "pending: F-ED-09 exact Rust owner"
+rust_owner = "deferred post-port verification after the formal text-measurement wave; no implementation request, schedule, or active writer lease"
 displaced_mechanism = "pending: F-ED-09 displaced-mechanism inventory"
 dependencies = ["F-ED-00B","F-ED-09"]
-target_tests = ["cpp_probe/registry.cpp"]
+target_tests = ["unchanged P08-C06 real-data paywall compiler plus visual command"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
 owning_ledger = "pending: F-ED-09 owning-ledger link"
 adaptation_rule = "pending: F-ED-09 rule citation"
@@ -1138,10 +1141,10 @@ status = "not-applicable"
 reason = "This row does not qualify renderer output."
 [defect.executor_verification]
 status = "pending"
-reason = "F-ED-09 executor fixture has not run."
+reason = "Executor rerun is deferred until the formal text-measurement port wave lands."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "F-ED-09 has no executor-green result to verify."
+reason = "Defects Fix reruns unchanged P08-C06 after the formal text-measurement port wave lands and classifies resolved/still open."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
@@ -1153,8 +1156,9 @@ reason = "Exact runtime text measurement ownership has not been mapped."
 status = "pending"
 reason = "Existing shaping/measurement path and missing public interface need separate evidence."
 [defect.editor_result]
-status = "pending"
-reason = "P08-C06 shares text symptoms with LOC-011 and awaits stage localization."
+status = "fail"
+command = "CARGO_HOME=/private/tmp/nuxie-editor-cargo-home rustup run stable cargo test --manifest-path tools/rive-compiler/scene-shared/Cargo.toml -p nuxie-scene-compiler --lib document_lowering::tests::lowers_list_alias_projection_value_to_a_name_resolved_text_run_binding --offline -- --exact && PAGE_PARITY_ASSERT=1 pnpm --dir apps/nuxie-dashboard run test:visual:page --grep 'Real-Data Paywall / Paywall'"
+evidence = "At the committed Editor checkpoint, the DOM subtitle is 354x47.59375 over two lines while Editor Next allocates 354x23.799995, and ordinary intrinsic labels retain 180-pixel fallback widths. The merged-runtime page remains red by 189,493 pixels (10.7131%)."
 
 [[defect]]
 id = "LOC-009"
@@ -1165,8 +1169,8 @@ owner_class = "renderer"
 classification = "structural-mistranslation"
 ticket = "F-ED-11"
 fixture_id = "fed.loc_009.gpu_canvas_records"
-preliminary_disposition = "PR #54's exact WebGPU RSTB consumer and ownership correction is retained as historical evidence, but independent real-GPU verification found an unresolved physical shader-module error-scope regression. The canonical Chrome path also still aborts at luaG_indexerror/luaD_throw; its cause remains under investigation in replacement task 019f9f59-1ac6-7e32-b973-5deb6b457c05 (Diagnose browser Lua crash), which starts from verified origin/main fe0 in a clean worktree with read-only/minimal instrumentation and must not copy the prior dirty harness. LOC-009 is frozen, not promotable or complete, and its reopened cycle has consumed nothing. It may consume only a reviewed landed replacement SHA that preserves the prior file-owned ShaderAsset, target-0 whole-module WGSL plus mandatory target-16 BindingMap selection, fresh occurrence identity, exact explicit/omitted stage behavior, nil-and-continue failure semantics, and deletion of the invented target-1 GLSL cross-translation path."
-reproduction_sha256 = "1ba36c10117b17066ca0217fb17ce33b83d1b8c9246923ea0d83eb0599569eb1"
+preliminary_disposition = "PR #54's exact WebGPU RSTB consumer and ownership correction is retained as historical evidence, but independent real-GPU verification found an unresolved physical shader-module error-scope regression. The canonical Chrome path also still aborts at luaG_indexerror/luaD_throw; its cause remains under investigation. Replacement task 019f9f59-1ac6-7e32-b973-5deb6b457c05 ended without authoritative output, so diagnosis is parked pending a different reliable execution/model environment. LOC-009 is frozen, not promotable or complete, and its reopened cycle has consumed nothing. It may consume only a reviewed landed replacement SHA that preserves the prior file-owned ShaderAsset, target-0 whole-module WGSL plus mandatory target-16 BindingMap selection, fresh occurrence identity, exact explicit/omitted stage behavior, nil-and-continue failure semantics, and deletion of the invented target-1 GLSL cross-translation path."
+reproduction_sha256 = "f9616a0d2f083b2bb7010c4c5b6e80aa0ecac570b3a7c835ec8b78f63024d1b1"
 historical_reproduction_sha256 = "7a2f4bbe72b607875db643c6507b6dc6681ac03ac1fc9f5b23eeb049b5e3f1cf"
 current_real_gpu_log_sha256 = "93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611"
 rust_stimulus = "At unfixed origin/main fe0a0a07db302ce2f0282a2d919ea249e83144e5 (tree 4512e0d750e2850e7d92c53c3d1eadb5cdedd5c3), working directory /private/tmp/loc009-base-repro.AiNb0d and temporary local probe command CARGO_TARGET_DIR=/Users/levi/.codex/worktrees/2085/nuxie-runtime/target cargo test -p nuxie-renderer loc009_real_gpu_fail_closed_probe -- --nocapture construct an 8x8 WgpuFactory, read max_bind_groups, author fragment WGSL plus target-16 BindingMap at group=limit, call make_imported_gpu_canvas_shader, poll, and require Err/no shader. The probe is temporary and not committed; its raw local log is /private/tmp/loc009-fe0-real-gpu.log, 2,129 bytes, SHA-256 93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611."
@@ -1217,13 +1221,13 @@ evidence = "Historical PR #54 qualification preserved the focused decoder, sidec
 [defect.historical_executor_verification]
 status = "pass"
 command = "final PR #54 closeout at head 1fc9ac4f5926b7a0799211cd66cbf9231a6843fd"
-evidence = "Historical result only: the final corrective PR #54 head passed the local canonical Apple, C-ABI, ABI/header, XCFramework, and release floors. Hosted parity, Phase R pixels, and every hosted non-Apple canonical check completed green on that landing candidate. The four hosted Apple jobs remained queued because no self-hosted runner was assigned; they were recorded as infrastructure state, not claimed green or waived code failures. PR #54 then rebase-merged the same repair at 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee. Independent later real-GPU verification found a physical shader-module error-scope regression, so this executor-green history cannot be promoted."
+evidence = "The final corrective PR #54 head passed the local canonical Apple, C-ABI, ABI/header, XCFramework, and release floors. Hosted parity, Phase R pixels, and every hosted non-Apple canonical check completed green on that landing candidate. The four hosted Apple jobs remained queued because no self-hosted runner was assigned; they were recorded as infrastructure state, not claimed green or waived code failures. PR #54 then rebase-merged the same repair at 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee."
 [defect.executor_verification]
 status = "pending"
 reason = "The current repair cycle has no executor result. A fresh executor-green event is required after regression-reopened -> qualified -> mapped and a new production landing."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "Independent real-GPU verification found an unresolved physical shader-module error-scope regression after the historical PR #54 executor result. LOC-009 is frozen, not promotable or complete, and may consume only a reviewed landed replacement SHA after clean-worktree diagnosis task 019f9f59-1ac6-7e32-b973-5deb6b457c05."
+reason = "Independent real-GPU verification found an unresolved physical shader-module error-scope regression after the historical PR #54 executor result. LOC-009 is parked and frozen, not promotable or complete, and may consume only a reviewed landed replacement SHA after diagnosis resumes in a different reliable execution/model environment; replacement task 019f9f59-1ac6-7e32-b973-5deb6b457c05 ended without authoritative output."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
@@ -1247,7 +1251,7 @@ evidence = "The exact post-review code checkpoint 22e490 preserves C++ last-wins
 [[defect.history]]
 state = "regression-reopened"
 actor = "independent-orchestrator"
-evidence = "Independent real-GPU verification found an unresolved physical shader-module error-scope regression after PR #54. The historical 7f1450dc repair remains evidence, but LOC-009 is frozen, not promotable or complete, and may consume only a reviewed landed replacement SHA after clean-worktree diagnosis task 019f9f59-1ac6-7e32-b973-5deb6b457c05."
+evidence = "Independent real-GPU verification found an unresolved physical shader-module error-scope regression after PR #54. The historical 7f1450dc repair remains evidence, but LOC-009 is parked and frozen, not promotable or complete, and may consume only a reviewed landed replacement SHA after diagnosis resumes in a different reliable execution/model environment. Replacement task 019f9f59-1ac6-7e32-b973-5deb6b457c05 ended without authoritative output."
 [defect.cpp_result]
 status = "pass"
 command = "git -C /Users/levi/dev/oss/rive-runtime diff f4bb3025e263ad1a646ef6971358577a0aa6bfa2..d788e8ec6e8b598526607d6a1e8818e8b637b60c -- src/assets/shader_asset.cpp src/lua/renderer/lua_gpu.cpp renderer/include/rive/renderer/ore/ore_context_wgpu.hpp renderer/include/rive/renderer/ore/ore_rstb_entry_container.hpp renderer/src/ore/ore_binding_map.cpp; pinned source and unchanged unit-fixture audit"
@@ -1255,7 +1259,7 @@ evidence = "At both historical f4bb and current d788, ContextWGPU::shaderTarget 
 [defect.historical_rust_result]
 status = "pass"
 command = "cargo test -p nuxie-scripting; cargo test -p nuxie-renderer --lib; cargo test -p nuxie --features scripting --test imported_gpu_canvas; cargo check -p nux-capi --features size-report-roots; rustup run stable cargo check -p browser-renderer-smoke --target wasm32-unknown-unknown"
-evidence = "Historical PR #54 result only: the exact inner RSTB hash is 546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d; 9 focused decoder rows, 2 focused scripting selection rows, the complete scripting suite, 409 renderer rows, 3 imported scripting rows with real Metal pixels, C API public-root compilation, and wasm32 WebGPU compilation passed. Source ratchets proved the target-1 GLSL translator, wgpu GLSL feature, and pp-rs/unicode-xid closure absent."
+evidence = "The exact inner RSTB hash is 546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d; 9 focused decoder rows, 2 focused scripting selection rows, the complete scripting suite, 409 renderer rows, 3 imported scripting rows with real Metal pixels, C API public-root compilation, and wasm32 WebGPU compilation pass. Source ratchets prove the target-1 GLSL translator, wgpu GLSL feature, and pp-rs/unicode-xid closure are absent."
 [defect.rust_result]
 status = "fail"
 command = "working directory /private/tmp/loc009-base-repro.AiNb0d; CARGO_TARGET_DIR=/Users/levi/.codex/worktrees/2085/nuxie-runtime/target cargo test -p nuxie-renderer loc009_real_gpu_fail_closed_probe -- --nocapture"
@@ -1263,11 +1267,11 @@ evidence = "Local/non-hosted Apple M5 Max Metal at exact fe0a0a07 (tree 4512e0d7
 [defect.historical_editor_result]
 status = "pass"
 command = "GPU_CANVAS_GPU=1 PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor editor-next-cutover.spec.ts gpu-canvas-preview.spec.ts"
-evidence = "Historical result only: at clean Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c consuming runtime e72323c808b91d706ba3b745396beaca7accd69a, the unchanged P14-C01 ordinary required-WebGPU command passed 4/4 in 1.6 minutes, exit 0. Retained console SHA-256 c2324d04cf1baa6ac024ae3b4f0607ca3a4ad64ecace7ac67e612707480527f0; retained complete report/results archive SHA-256 515f53c5710c8069bf60f4c64c64568c219ee3cfb242fbe8e59846b1c0f96bd3. PR #54 merged the corrective runtime repair at 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee. Independent later real-GPU verification found an unresolved physical shader-module error-scope regression; this historical pass does not authorize promotion or closure."
+evidence = "At clean Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c consuming runtime e72323c808b91d706ba3b745396beaca7accd69a, the unchanged P14-C01 ordinary required-WebGPU command passed 4/4 in 1.6 minutes, exit 0. Retained console SHA-256 c2324d04cf1baa6ac024ae3b4f0607ca3a4ad64ecace7ac67e612707480527f0; retained complete report/results archive SHA-256 515f53c5710c8069bf60f4c64c64568c219ee3cfb242fbe8e59846b1c0f96bd3. PR #54 merged the corrective runtime repair at 7f1450dc22ca7370eac9dc9f422351c2dfcc07ee; this row remains executor-green only until independent orchestrator verification and promotion."
 [defect.editor_result]
 status = "fail"
-command = "canonical Chrome LOC-009 reproduction tracked by replacement clean-worktree task 019f9f59-1ac6-7e32-b973-5deb6b457c05 (Diagnose browser Lua crash)"
-evidence = "The sole authoritative browser observation is the canonical Chrome abort at luaG_indexerror/luaD_throw. Cause remains under investigation. The replacement task must verify origin/main fe0, begin read-only with minimal instrumentation, and must not copy the prior dirty harness. LOC-009 is frozen, its reopened cycle has consumed no runtime or superproject landing, and it may consume only a reviewed landed replacement SHA."
+command = "canonical Chrome LOC-009 reproduction; diagnosis parked pending a different reliable execution/model environment"
+evidence = "The sole authoritative browser observation is the canonical Chrome abort at luaG_indexerror/luaD_throw. Cause remains under investigation. Replacement clean-worktree task 019f9f59-1ac6-7e32-b973-5deb6b457c05 ended without authoritative output. LOC-009 is parked and frozen, its reopened cycle has consumed no runtime or superproject landing, and it may consume only a reviewed landed replacement SHA after diagnosis resumes in a reliable environment."
 
 [[defect]]
 id = "LOC-011"

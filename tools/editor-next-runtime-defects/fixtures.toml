@@ -135,10 +135,9 @@ id = "fed.loc_006.webgpu_conditional_visibility"
 defect_id = "LOC-006"
 kind = "editor-product"
 status = "registered"
-driver = "PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor projection-corpus-product-route.spec.ts"
+driver = '''loc006_source_path=plans/artifacts/editor-next-p09-c04/loc006-nohover-diagnostic-source.ts.txt; loc006_test_path=apps/nuxie-dashboard/tests/e2e/project-editor/loc006-nohover-diagnostic.spec.ts; test ! -e "$loc006_test_path" && test "$(shasum -a 256 "$loc006_source_path" | cut -d ' ' -f 1)" = "7ade2d0c3b8753e6ccf386776f27d59822115af5426ee3ef05aedb0f5f590e2a" && trap 'rm -f "$loc006_test_path"' EXIT HUP INT TERM && cp "$loc006_source_path" "$loc006_test_path" && PATH=/private/tmp/nuxie-node24-shell/bin:$PATH PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor loc006-nohover-diagnostic.spec.ts --grep 'DEBUG-LOC006-NOHOVER-BRACKET'; loc006_exit=$?; rm -f "$loc006_test_path"; trap - EXIT HUP INT TERM; test "$loc006_exit" -eq 0'''
 stimulus_files = [
-  { root = "editor", path = "apps/nuxie-dashboard/tests/e2e/project-editor/projection-corpus-product-route.spec.ts", sha256 = "feb64ecc7d27fe1bd1612f8cf17583407871f1ca0a0cc175e304023f88b09b02" },
-  { root = "editor", path = "tools/nuxie-editor-next/crates/editor/fixtures/e7/projection-corpus.json", sha256 = "07f2cee557117044a1346d18906e1e8329b3cd486ef6b75b636483935e0e3067" },
+  { root = "editor", path = "plans/artifacts/editor-next-p09-c04/loc006-nohover-diagnostic-source.ts.txt", sha256 = "7ade2d0c3b8753e6ccf386776f27d59822115af5426ee3ef05aedb0f5f590e2a" },
 ]
 
 [[fixture]]
@@ -159,8 +158,8 @@ driver = "cpp_probe/registry.cpp"
 id = "fed.loc_009.gpu_canvas_records"
 defect_id = "LOC-009"
 kind = "browser-renderer"
-status = "qualified"
-driver = "temporary-local-only:not committed; exact fe0a0a07 loc009_real_gpu_fail_closed_probe reaches physical shader-module creation and exposes uncaught max_bind_groups validation while Rust returns Ok; log sha256 93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611; PR #54 positive-path passes remain historical"
+status = "registered"
+driver = "evidence-only:temporary-local-only; no committed executable negative-path fixture; exact fe0a0a07 loc009_real_gpu_fail_closed_probe reaches physical shader-module creation and exposes uncaught max_bind_groups validation while Rust returns Ok; log sha256 93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611; PR #54 positive-path passes remain historical"
 stimulus_files = [
   { root = "rive", path = "src/assets/shader_asset.cpp", sha256 = "fadff3f2fbb73574e47080a032b34f35046890de09d3fd7b38e42a7b27071437" },
   { root = "rive", path = "src/lua/renderer/lua_gpu.cpp", sha256 = "2b36c01d2fa21f4886cf1063f6ea4a1396eee8fe45c491baf7326778743d035c" },

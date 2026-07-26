@@ -413,6 +413,11 @@ IMMUTABLE_REVISION_KEYS = {
     "consumed_runtime_sha",
     "consumed_superproject_sha",
 }
+REOPEN_RESET_REVISION_KEYS = {
+    "merged_repair_sha",
+    "consumed_runtime_sha",
+    "consumed_superproject_sha",
+}
 LANDED_REPAIR_PROVENANCE = {
     "RT-ED-003": {
         "merged_repair_sha": "e72323c808b91d706ba3b745396beaca7accd69a",
@@ -1870,6 +1875,11 @@ def validate_prior_id_ratchet(
         prior_revisions = prior_row.get("revisions")
         current_revisions = current_row.get("revisions")
         historical_revisions = current_row.get("historical_revisions")
+        reopened_from_prior = (
+            len(current_history) > len(prior_history)
+            and current_history[len(prior_history)].get("state")
+            == "regression-reopened"
+        )
         if not isinstance(prior_revisions, dict) or not isinstance(
             current_revisions, dict
         ):
@@ -1882,9 +1892,8 @@ def validate_prior_id_ratchet(
                 and current_revisions.get(field) != prior_revision
             ):
                 preserved_by_reopen = (
-                    len(current_history) > len(prior_history)
-                    and current_history[len(prior_history)].get("state")
-                    == "regression-reopened"
+                    reopened_from_prior
+                    and field in REOPEN_RESET_REVISION_KEYS
                     and isinstance(historical_revisions, dict)
                     and historical_revisions.get(field) == prior_revision
                 )
@@ -1893,6 +1902,19 @@ def validate_prior_id_ratchet(
                         f"{defect_id} immutable revision {field} changed "
                         f"from {prior_revision!r} to "
                         f"{current_revisions.get(field)!r}"
+                    )
+        if reopened_from_prior:
+            historical_copy_fields = {
+                "historical_executor_verification": "executor_verification",
+                "historical_rust_result": "rust_result",
+                "historical_editor_result": "editor_result",
+                "historical_reproduction_sha256": "reproduction_sha256",
+            }
+            for historical_field, prior_field in historical_copy_fields.items():
+                if current_row.get(historical_field) != prior_row.get(prior_field):
+                    errors.append(
+                        f"{defect_id} {historical_field} must exactly preserve "
+                        f"origin/main {prior_field}"
                     )
     return prior
 
@@ -2650,8 +2672,8 @@ def validate_fixtures(
             errors.append(f"fixture {fixture_id} has no driver")
         if driver == "cpp_probe/registry.cpp":
             expected_cpp_probe_ids.add(fixture_id)
-        if status in {"implemented", "qualified"} and (
-            driver.startswith("pending:") or driver.startswith("evidence-only:")
+        if status in {"implemented", "qualified"} and driver.startswith(
+            ("pending:", "evidence-only:", "temporary-local-only:")
         ):
             errors.append(
                 f"fixture {fixture_id} is {status} but uses non-executable "

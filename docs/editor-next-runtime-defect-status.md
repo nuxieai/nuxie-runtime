@@ -7,8 +7,8 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: serialized evidence-only closure and an active-but-waiting
-  authored-shader production repair;
+- phase: serialized evidence-only closure, parked authored-shader diagnosis,
+  and deferred post-port verification;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - investigation base: `e72323c808b91d706ba3b745396beaca7accd69a`;
 - Editor's last consumed runtime:
@@ -33,22 +33,41 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - active production-repair lane: `LOC-009` is a confirmed physical
   shader-module error-scope defect requiring a new production landing; it is
   `regression-reopened`, with PR #54 / `7f1450dc` retained only as historical
-  evidence, and is frozen outside the shared tracking merge line while
-  replacement clean-worktree task
-  `019f9f59-1ac6-7e32-b973-5deb6b457c05` diagnoses the canonical browser Lua
-  crash;
+  evidence, and is parked and frozen outside the shared tracking merge line
+  until diagnosis can resume in a different reliable execution/model
+  environment; replacement task
+  `019f9f59-1ac6-7e32-b973-5deb6b457c05` ended without authoritative output;
 - deferred/parked production lane: malformed embedded-font outline crash and
   its existing PR #60 writer at head
   `61d5d018aa036882d17cea1065a78d7f2e057547`; do not finish, rebase, or land it
   from this queue;
-- assigned production lane: `RT-ED-007` belongs to Runtime Fix; Defects Fix
-  must not create a duplicate writer;
+- deferred post-port verification: the completed `RT-ED-007` seam report
+  proves correct Scene-emitted property 158 / source path `[0,0,0]` bytes and
+  localizes the first divergence to
+  `runtime_transition_duration_bindings` in the narrow `state_machine.rs` /
+  `state_machine/bindables.rs` seam. This record makes no direct Runtime Fix
+  request, schedule, or active writer lease; after the relevant state-machine
+  port wave lands, Defects Fix reruns the unchanged set → fire → `advance(0)`
+  acceptance and classifies it resolved or still open;
+- current `RT-ED-007` proof: no committed SHA contains
+  `bind_transition_duration_source`; the recovered e723 producer plus dirty
+  `scene.rs` patch SHA-256
+  `16492cda16a2f91da7d612c9348c6cca572b294d0d25b782c42ab686904ef57a`
+  emitted exact 323-byte artifact SHA-256
+  `b8e1696a3166959ab7afbca6d7e8ba4abaf99c9e04a15f144327699ce54ebe70`
+  and normalized-dump SHA-256
+  `aa199f8e58050272016865f24fd0792375ddddc0c48da83b236db282ef30fcf4`;
+  fe0 drops the nested default and produces instant opacity 0.8, while pinned
+  d788 produces 0.200000003 at `advance(0)` and 0.5 after another 0.5 seconds.
+  Non-main `dd3be99c` appears to implement the seam but is not an ancestor of
+  fe0/main; the uncommitted Scene patch has no landing claim;
 - defects closed since the preceding Q0 report: 1;
 - serialized evidence-only closures: `LOC-006`, `LOC-014`, `LOC-011`,
   `RT-ED-003`, then `LOC-019`;
-- waiting repair lane: resume the `LOC-009` production repair only after the
-  replacement task verifies origin/main `fe0a0a07` and a reviewed replacement
-  lands; do not close or consume the row without that new production SHA;
+- parked repair lane: resume `LOC-009` diagnosis only in a different reliable
+  execution/model environment, then assign any production repair after a
+  fresh coordinator review; do not close or consume the row without a reviewed
+  new production SHA;
 - current `LOC-009` proof: a temporary uncommitted real-GPU probe on exact
   `fe0a0a07` / tree `4512e0d7` returns `Ok` while Metal reports an uncaught
   max-bind-groups shader-module validation error; the 2,129-byte local log has
@@ -56,21 +75,52 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   `93ecaae76c5bfd6252e5fb919087215a1c60a397dd5cfb9a8bc8bf64929b5611`;
 - current `LOC-009` browser dependency: the canonical path crashes at
   `luaG_indexerror` / `luaD_throw`; this is the sole authoritative browser
-  observation, and cause remains under investigation in replacement task
-  `019f9f59-1ac6-7e32-b973-5deb6b457c05`, which starts read-only with minimal
-  instrumentation in a clean worktree and must not copy the prior dirty
-  harness; the row is frozen and has consumed nothing in this cycle;
-- blocked/overlapping lanes: `LOC-002` and `LOC-007` need d788 requalification
-  and their FL collision boundary; `LOC-005` needs the direct d788
+  observation, and cause remains under investigation. Replacement task
+  `019f9f59-1ac6-7e32-b973-5deb6b457c05` ended without authoritative output;
+  the row is parked and frozen and has consumed nothing in this cycle;
+- deferred post-port verification list (none is an active implementation
+  assignment, request, schedule, or writer lease):
+  - `LOC-007` retains
+    `CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p browser-host --test product_host command_authored_resize_ --offline -- --nocapture`.
+    Pinned d788 expects width/height callbacks to propagate
+    `ParametricPath -> Path -> Shape -> PathComposer` dirt and progress
+    geometry from 96×44 to 160×68 rather than retain one static hash.
+  - `LOC-008` retains
+    `CARGO_HOME=/private/tmp/nuxie-editor-cargo-home rustup run stable cargo test --manifest-path tools/rive-compiler/scene-shared/Cargo.toml -p nuxie-scene-compiler --lib document_lowering::tests::lowers_list_alias_projection_value_to_a_name_resolved_text_run_binding --offline -- --exact && PAGE_PARITY_ASSERT=1 pnpm --dir apps/nuxie-dashboard run test:visual:page --grep 'Real-Data Paywall / Paywall'`.
+    The pinned-C++ shaper expectation is exact intrinsic width and multiline
+    height: the 354-wide subtitle occupies 47.59375 over two lines, and
+    intrinsic labels do not retain the 180-pixel fallback.
+  - RT-ED-005's remaining ordinary layout/TextStyle execution retains the
+    exact `P09-C01` command:
+    `CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home rustup run stable cargo test --manifest-path tools/rive-compiler/scene-shared/Cargo.toml -p nuxie-scene-compiler canonical_projection_corpus_lowers_to_typed_native_sources --offline && CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p editor canonical_projection_corpus_shares_retained_cold_hot_and_exact_riv_records --offline && CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p browser-host --test product_host runtime_retains_selected_product_relation_across_structural_remount --offline -- --exact && CI=1 corepack pnpm --dir apps/nuxie-dashboard exec vitest run tests/unit/ai-tools/projection-corpus-fixpoint.test.ts tests/unit/ai-tools/view-html-parser.test.ts && CI=1 corepack pnpm --dir packages/view-compiler exec vitest run src/views/react-projection-corpus-boundary.test.ts && CI=1 corepack pnpm --dir packages/build-templates/bun_react_shadcn_ts exec vitest run tests/unit/view/screen-renderer.test.tsx && PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor projection-corpus-product-route.spec.ts`.
+    Pinned C++ expects property-key-driven
+    LayoutComponentStyle/TextStyle changes to dirty and reflow the same
+    retained layout. This is separate from the already landed generic
+    number/color authoring primitive.
+  - `RT-ED-007` retains exact artifact SHA-256
+    `b8e1696a3166959ab7afbca6d7e8ba4abaf99c9e04a15f144327699ce54ebe70`
+    and unchanged
+    `CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'runtime-viewmodel-contract' --workers=1`.
+    Pinned d788 produces opacity 0.200000003 at `advance(0)` and 0.5 after
+    another 0.5s; fe0 keeps source=`None` and produces instant opacity 0.8.
+  After each corresponding formal port wave lands, Defects Fix independently
+  reruns the unchanged acceptance and classifies it resolved or still open;
+- post-port verification escalates only for an actual simultaneous file-writer
+  collision or a safety/data-loss issue, never merely because a formal port
+  wave is in progress;
+- open qualification/overlap lanes: `LOC-002` still needs its d788
+  requalification and FL collision boundary; `LOC-005` needs the direct d788
   shared-instance differential.
 
 Defects Fix owns intake, triage, pinned-C++ qualification, faithful repair
 orchestration, independent verification, PR/landing tracking, and immutable
 downstream handoff evidence for the complete Editor-reported queue. Editor may
 merge before the queue is empty, and Editor consumption is not required to
-close a verified landed repair. A Runtime Fix assignment prevents duplicate
-writers but does not close its row until that owner's landing is independently
-verified.
+close a verified landed repair. A genuinely non-port repair may be delegated
+to a sole external owner, while a port-covered finding remains a tracked
+formal-port-wave dependency with no implementation request, schedule,
+assignment, or writer lease. Neither closes until the relevant landing or port
+wave passes the unchanged independent acceptance.
 
 The FL reservation in the atlas remains deliberately conservative after Q0.
 No runtime, renderer, Scene, state-machine, Editor product, or compiler file is
@@ -247,8 +297,9 @@ through exact re-import and reverse propagation. Clean Editor checkpoint
 `e72323c808b91d706ba3b745396beaca7accd69a`, including the generic
 number/color paint primitive for existing `Stroke` and `SolidColor` targets.
 The row remains `reported` until independent orchestrator verification and
-promotion are recorded. `P09-C01` remains separately Partial on FL-E's
-ordinary layout-container/style and TextStyle dirt/reflow surface; that
+promotion are recorded. `P09-C01`'s ordinary layout-container/style and
+TextStyle dirt/reflow acceptance is deferred post-port verification after the
+relevant formal layout/text wave, not an assigned implementation lane; that
 downstream result is not required to close the verified landed RT-ED-005
 repair.
 Its executor battery was green:
@@ -282,11 +333,15 @@ exact local canonical floors; no queued hosted Apple lane is relabeled green.
 1. independently review and merge the focused `LOC-006` evidence-only closure;
 2. serialize the remaining evidence-only closures in binding order:
    `LOC-014`, `LOC-011`, `RT-ED-003`, then `LOC-019`;
-3. keep `LOC-009` outside the shared tracking merge line; resume its production
-   repair only after clean-worktree diagnosis task
-   `019f9f59-1ac6-7e32-b973-5deb6b457c05` verifies origin/main `fe0a0a07`; do
-   not close or consume it without a reviewed new production landing;
-4. leave `RT-ED-007` with Runtime Fix and do not create a duplicate writer;
+3. keep `LOC-009` outside the shared tracking merge line, parked, and frozen
+   until diagnosis resumes in a different reliable execution/model
+   environment; do not close or consume it without a reviewed new production
+   landing;
+4. retain `RT-ED-007`, `LOC-007`, `LOC-008`, and RT-ED-005's remaining
+   layout/TextStyle execution as deferred post-port verification only; after
+   each relevant formal port wave lands, rerun the unchanged acceptance and
+   classify it resolved or still open, with no direct Runtime Fix request,
+   schedule, or active writer lease;
 5. keep PR #60 and the malformed embedded-font outline crash deferred/parked,
    then refill other disjoint qualification lanes from the reconciled
    ownership DAG.

@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "a58c266cb571d78425adc1750f6e729427e5c938bb26d9dc284856cce18f2765",
+    "cpp_binary_sha256": "d6238591125116e8ab6b16484ac3ff646e2457259db5d2088e5fa76ddc8c26b9",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "8b008222a779ef335de9d57031608aec9eae9e20b35c6e01efc6eb8876f4eca2",
-    "rust_coverage_sha256": "ae2310987196a28c98cffcc768e5df1538e4fe33bac70e54dee6da92f79ffa59",
-    "rust_mechanism_coverage_sha256": "983594c95e59ca52065356c64f6142088e2f82101e654526ae6dc859b76bcb17",
-    "rust_steady_coverage_sha256": "c02087c40a044ba648fa2b55040dc31546cfc0ef16f4d22b88e2aa68d704a570"
+    "rust_binary_sha256": "839ce7ee77d85fa2c92a726f01f45f597309e60bbc3fc22418149a36680a6202",
+    "rust_coverage_sha256": "69f7695fde5dd4bffb6001dc22d6cd0501eff3b4d3c264a601aa449a981e6de8",
+    "rust_mechanism_coverage_sha256": "5c20b33069ed048912a0d8a4dc05bc6586695fc49e6e04d848787e72eb4fa2da",
+    "rust_steady_coverage_sha256": "cd4e7784391a276199b97dd6784ddc3cf156890222732b0722a5427fcda8351f"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -7198,14 +7198,14 @@
   "rust_candidate_source": {
     "file_count": 7155,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "3098bc022ea018589db5588700f9bb1f2db2e817c8ca219ba74b3a676d1ff4fb"
+    "sha256": "b8370b35f614415dcba8f3d6baacbec0655904b834300317fd2005df83da6952"
   },
-  "rust_ref": "b09f8e321f29c8a0213520c224739240df9a8393",
+  "rust_ref": "d69b65b69a87a66a7f9cd551b53a2c37ae02728f",
   "rust_runner_provenance": {
     "candidate_source": {
       "file_count": 7155,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "3098bc022ea018589db5588700f9bb1f2db2e817c8ca219ba74b3a676d1ff4fb"
+      "sha256": "b8370b35f614415dcba8f3d6baacbec0655904b834300317fd2005df83da6952"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [

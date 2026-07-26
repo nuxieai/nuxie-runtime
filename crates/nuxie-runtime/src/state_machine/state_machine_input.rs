@@ -1,11 +1,12 @@
 use nuxie_binary::RuntimeObject;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct RuntimeStateMachineInput {
     pub global_id: u32,
     pub name: Option<String>,
     pub kind: StateMachineInputKind,
-    pub(super) value: StateMachineInputValue,
+    pub(super) value: StateMachineInputDefaultValue,
 }
 
 impl RuntimeStateMachineInput {
@@ -14,7 +15,7 @@ impl RuntimeStateMachineInput {
             global_id,
             name,
             kind: StateMachineInputKind::Bool,
-            value: StateMachineInputValue::Bool(value),
+            value: StateMachineInputDefaultValue::Bool(value),
         }
     }
 
@@ -23,7 +24,7 @@ impl RuntimeStateMachineInput {
             global_id,
             name,
             kind: StateMachineInputKind::Number,
-            value: StateMachineInputValue::Number(value),
+            value: StateMachineInputDefaultValue::Number(value),
         }
     }
 
@@ -32,10 +33,7 @@ impl RuntimeStateMachineInput {
             global_id,
             name,
             kind: StateMachineInputKind::Trigger,
-            value: StateMachineInputValue::Trigger {
-                fired: false,
-                used_layers: Vec::new(),
-            },
+            value: StateMachineInputDefaultValue::Trigger,
         }
     }
 }
@@ -68,11 +66,30 @@ pub enum StateMachineInputKind {
 }
 
 #[derive(Debug, Clone)]
-pub(super) enum StateMachineInputValue {
+pub(super) enum StateMachineInputDefaultValue {
     Bool(bool),
     Number(f32),
-    Trigger {
-        fired: bool,
-        used_layers: Vec<usize>,
-    },
+    Trigger,
+}
+
+/// Stable reference to one authored input in the StateMachine-owned arena.
+///
+/// Pinned C++ stores `const StateMachineInput* m_input` on every `SMIInput`
+/// (`state_machine_input_instance.hpp:35,40-42`) and reads the name/type
+/// through that retained definition (`state_machine_input_instance.cpp:14-16`).
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeStateMachineInputHandle {
+    inputs: Arc<Vec<RuntimeStateMachineInput>>,
+    index: usize,
+}
+
+impl RuntimeStateMachineInputHandle {
+    pub(super) fn new(inputs: Arc<Vec<RuntimeStateMachineInput>>, index: usize) -> Self {
+        debug_assert!(index < inputs.len());
+        Self { inputs, index }
+    }
+
+    pub(super) fn definition(&self) -> &RuntimeStateMachineInput {
+        &self.inputs[self.index]
+    }
 }

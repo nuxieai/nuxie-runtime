@@ -1000,8 +1000,8 @@ upstream-sync-map registry).
    source shaping found the existing owner-family module seams sufficient.
    FL-A Component ownership is independently accepted and promoted. FL-B1's
    KeyFrame/keyed-definition owner and FL-B2 LinearAnimation
-   definition/occurrence owner are translated and locally gated within the
-   frozen 45-file/eight-member spec
+   definition/occurrence owner and FL-B3 AnimationReset factory lifecycle are
+   translated and locally gated within the frozen 45-file/eight-member spec
    `docs/runtime-frame-loop-fl-b-spec.md`, followed by dependency-ordered
    state-machine, Artboard/DataBind, and live-draw owner waves. Measure the
    whole corpus only after a complete wave. The sorted slow-scene list is no

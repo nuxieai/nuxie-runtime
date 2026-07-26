@@ -15,9 +15,9 @@ use crate::{
 };
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use nuxie_graph::{ArtboardGraph, ParametricPathNode};
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 mod bindables;
 mod instance;
@@ -1650,7 +1650,11 @@ impl BlendState1DInstance {
                 .iter()
                 .map(|animation| animation.animation_index)
                 .collect::<Vec<_>>();
-            AnimationReset::from_animation_indices(artboard, &animation_indices, true)
+            Some(AnimationResetFactory::from_animation_indices(
+                artboard,
+                &animation_indices,
+                true,
+            ))
         } else {
             None
         };
@@ -2587,10 +2591,30 @@ pub(crate) struct StateMachineLayerAdvance {
 
 #[derive(Debug, Clone)]
 struct AnimationReset {
+    // `StateMachineInstance::clone` is a Rust snapshot API with no C++
+    // occurrence-copy counterpart. Share this immutable reset lease so a
+    // snapshot never clones factory state; the final Arc owner returns the
+    // cleared storage to the C++-shaped global pool.
+    storage: Arc<AnimationResetStorage>,
+}
+
+#[derive(Debug)]
+struct AnimationResetStorage {
     entries: Vec<AnimationResetEntry>,
 }
 
-#[derive(Debug, Clone)]
+impl Drop for AnimationResetStorage {
+    fn drop(&mut self) {
+        let mut entries = std::mem::take(&mut self.entries);
+        entries.clear();
+        animation_reset_pool()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(entries);
+    }
+}
+
+#[derive(Debug)]
 enum AnimationResetEntry {
     Double {
         local_id: usize,
@@ -2607,14 +2631,43 @@ enum AnimationResetEntry {
     },
 }
 
-impl AnimationReset {
+#[derive(Debug)]
+struct AnimationResetObjectData {
+    local_id: usize,
+    property_keys: BTreeSet<u16>,
+    entries: Vec<AnimationResetEntry>,
+}
+
+impl AnimationResetObjectData {
+    fn new(local_id: usize) -> Self {
+        Self {
+            local_id,
+            property_keys: BTreeSet::new(),
+            entries: Vec::new(),
+        }
+    }
+}
+
+struct AnimationResetFactory;
+
+fn animation_reset_pool() -> &'static Mutex<Vec<Vec<AnimationResetEntry>>> {
+    static POOL: OnceLock<Mutex<Vec<Vec<AnimationResetEntry>>>> = OnceLock::new();
+    POOL.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+impl AnimationResetFactory {
     fn from_animation_indices(
         artboard: &ArtboardInstance,
         animation_indices: &[usize],
         use_first_as_baseline: bool,
-    ) -> Option<Self> {
-        let mut entries = Vec::new();
-        let mut seen = Vec::new();
+    ) -> AnimationReset {
+        let mut entries = animation_reset_pool()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .pop()
+            .unwrap_or_default();
+        debug_assert!(entries.is_empty());
+        let mut objects = Vec::<AnimationResetObjectData>::new();
 
         for (animation_order, animation_index) in animation_indices.iter().enumerate() {
             let Some(animation) = artboard.linear_animation(*animation_index) else {
@@ -2622,14 +2675,20 @@ impl AnimationReset {
             };
             let use_baseline = use_first_as_baseline && animation_order == 0;
             for keyed_object in animation.keyed_objects.iter() {
+                let object_index = objects
+                    .iter()
+                    .position(|object| object.local_id == keyed_object.target_local_id)
+                    .unwrap_or_else(|| {
+                        objects.push(AnimationResetObjectData::new(keyed_object.target_local_id));
+                        objects.len() - 1
+                    });
+                let object = &mut objects[object_index];
                 for keyed_property in &keyed_object.keyed_properties {
-                    let key = (keyed_object.target_local_id, keyed_property.property_key);
                     match &keyed_property.target {
                         RuntimeKeyedPropertyTarget::Double { transform_property } => {
-                            if seen.contains(&key) {
+                            if !object.property_keys.insert(keyed_property.property_key) {
                                 continue;
                             }
-                            seen.push(key);
                             let value = if use_baseline {
                                 keyed_property.first_double_value()
                             } else {
@@ -2641,7 +2700,7 @@ impl AnimationReset {
                                 )
                             };
                             if let Some(value) = value {
-                                entries.push(AnimationResetEntry::Double {
+                                object.entries.push(AnimationResetEntry::Double {
                                     local_id: keyed_object.target_local_id,
                                     property_key: keyed_property.property_key,
                                     transform_property: *transform_property,
@@ -2653,10 +2712,9 @@ impl AnimationReset {
                             solid_color_property,
                             data_bind_observed,
                         } => {
-                            if seen.contains(&key) {
+                            if !object.property_keys.insert(keyed_property.property_key) {
                                 continue;
                             }
-                            seen.push(key);
                             let value = if use_baseline {
                                 keyed_property.first_color_value()
                             } else if *solid_color_property {
@@ -2668,7 +2726,7 @@ impl AnimationReset {
                                 )
                             };
                             if let Some(value) = value {
-                                entries.push(AnimationResetEntry::Color {
+                                object.entries.push(AnimationResetEntry::Color {
                                     local_id: keyed_object.target_local_id,
                                     property_key: keyed_property.property_key,
                                     solid_color_property: *solid_color_property,
@@ -2686,16 +2744,19 @@ impl AnimationReset {
             }
         }
 
-        if entries.is_empty() {
-            None
-        } else {
-            Some(Self { entries })
+        for object in objects {
+            entries.extend(object.entries);
+        }
+        AnimationReset {
+            storage: Arc::new(AnimationResetStorage { entries }),
         }
     }
+}
 
+impl AnimationReset {
     fn apply(&self, artboard: &mut ArtboardInstance) -> bool {
         let mut changed = false;
-        for entry in &self.entries {
+        for entry in &self.storage.entries {
             match entry {
                 AnimationResetEntry::Double {
                     local_id,
@@ -3250,8 +3311,11 @@ impl StateMachineLayerInstance {
         if let Some(animation) = self.current_animation.as_ref() {
             reset_animation_indices.push(animation.animation_index());
         }
-        let transition_animation_reset =
-            AnimationReset::from_animation_indices(artboard, &reset_animation_indices, false);
+        let transition_animation_reset = Some(AnimationResetFactory::from_animation_indices(
+            artboard,
+            &reset_animation_indices,
+            false,
+        ));
 
         if let Some(source_state_index) = previous_state_index {
             self.transition_source_state_index = Some(source_state_index);
@@ -3974,5 +4038,92 @@ mod tests {
         let ordinary = StateMachineReportedEvent::from_runtime_event(8, ordinary);
         assert_eq!(ordinary.url(), None);
         assert_eq!(ordinary.target(), None);
+    }
+
+    #[test]
+    fn animation_reset_retains_first_seen_owner_order_and_shares_one_pool_lease() {
+        let file = read_runtime_file(
+            &std::fs::read(rive_runtime_fixture("animation_reset_cases.riv"))
+                .expect("read animation-reset fixture"),
+        )
+        .expect("import animation-reset fixture");
+        let graph = GraphFile::from_runtime_file(&file).expect("build animation-reset graph");
+        let mut artboard = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            graph.artboards.first().expect("fixture artboard"),
+            &graph.artboards,
+        )
+        .expect("instantiate animation-reset artboard");
+        let animation_indices = (0..artboard.linear_animations().len()).collect::<Vec<_>>();
+
+        let reset =
+            AnimationResetFactory::from_animation_indices(&artboard, &animation_indices, false);
+        let cloned = reset.clone();
+        assert!(
+            Arc::ptr_eq(&reset.storage, &cloned.storage),
+            "Rust snapshot clones must share one factory-owned reset lease"
+        );
+
+        let actual = reset
+            .storage
+            .entries
+            .iter()
+            .map(|entry| match entry {
+                AnimationResetEntry::Double {
+                    local_id,
+                    property_key,
+                    ..
+                }
+                | AnimationResetEntry::Color {
+                    local_id,
+                    property_key,
+                    ..
+                } => (*local_id, *property_key),
+            })
+            .collect::<Vec<_>>();
+        let mut expected_objects = Vec::<(usize, BTreeSet<u16>, Vec<u16>)>::new();
+        for animation in artboard.linear_animations() {
+            for keyed_object in animation.keyed_objects.iter() {
+                let object_index = expected_objects
+                    .iter()
+                    .position(|(local_id, _, _)| *local_id == keyed_object.target_local_id)
+                    .unwrap_or_else(|| {
+                        expected_objects.push((
+                            keyed_object.target_local_id,
+                            BTreeSet::new(),
+                            Vec::new(),
+                        ));
+                        expected_objects.len() - 1
+                    });
+                let (_, seen, properties) = &mut expected_objects[object_index];
+                for keyed_property in &keyed_object.keyed_properties {
+                    if matches!(
+                        &keyed_property.target,
+                        RuntimeKeyedPropertyTarget::Double { .. }
+                            | RuntimeKeyedPropertyTarget::Color { .. }
+                    ) && seen.insert(keyed_property.property_key)
+                    {
+                        properties.push(keyed_property.property_key);
+                    }
+                }
+            }
+        }
+        let expected = expected_objects
+            .into_iter()
+            .flat_map(|(local_id, _, properties)| {
+                properties
+                    .into_iter()
+                    .map(move |property_key| (local_id, property_key))
+            })
+            .collect::<Vec<_>>();
+        assert!(!actual.is_empty());
+        assert_eq!(actual, expected);
+
+        reset.apply(&mut artboard);
+        let empty = AnimationResetFactory::from_animation_indices(&artboard, &[], false);
+        assert!(
+            empty.storage.entries.is_empty(),
+            "the factory must return an owned empty reset, not null"
+        );
     }
 }

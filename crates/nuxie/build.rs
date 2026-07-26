@@ -1,7 +1,8 @@
 use std::{env, fmt::Write as _, fs, path::PathBuf};
 
 use nuxie_schema::{
-    Definition, FieldKind, Property, definition_by_name, property_by_key_in_hierarchy,
+    Definition, FieldKind, Property, StoredFieldInitializer, definition_by_name,
+    property_by_key_in_hierarchy,
 };
 
 #[derive(Clone, Copy)]
@@ -67,6 +68,91 @@ const OBJECTS: &[ObjectSpec] = &[
             },
         ],
         is_node: false,
+    },
+    ObjectSpec {
+        rust_name: "LayoutComponent",
+        schema_name: "LayoutComponent",
+        fields: &[
+            NAME,
+            FieldSpec {
+                rust_name: "x",
+                schema_name: "x",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "y",
+                schema_name: "y",
+                declared_owner: "Node",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "opacity",
+                schema_name: "opacity",
+                declared_owner: "WorldTransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "rotation",
+                schema_name: "rotation",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_x",
+                schema_name: "scaleX",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "scale_y",
+                schema_name: "scaleY",
+                declared_owner: "TransformComponent",
+                kind: FieldKind::Double,
+                inherited: true,
+            },
+            FieldSpec {
+                rust_name: "clip",
+                schema_name: "clip",
+                declared_owner: "LayoutComponent",
+                kind: FieldKind::Bool,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "width",
+                schema_name: "width",
+                declared_owner: "LayoutComponent",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "height",
+                schema_name: "height",
+                declared_owner: "LayoutComponent",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "fractional_width",
+                schema_name: "fractionalWidth",
+                declared_owner: "LayoutComponent",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+            FieldSpec {
+                rust_name: "fractional_height",
+                schema_name: "fractionalHeight",
+                declared_owner: "LayoutComponent",
+                kind: FieldKind::Double,
+                inherited: false,
+            },
+        ],
+        is_node: true,
     },
     ObjectSpec {
         rust_name: "Shape",
@@ -1053,8 +1139,28 @@ fn render_scene_schema() -> String {
     let file_asset_contents = concrete_definition("FileAssetContents");
     let mesh = concrete_definition("Mesh");
     let mesh_vertex = concrete_definition("MeshVertex");
-    let layout_component = concrete_definition("LayoutComponent");
     let layout_component_style = concrete_definition("LayoutComponentStyle");
+    let layout_clip = resolve_named_property(
+        "LayoutComponent",
+        "clip",
+        "LayoutComponent",
+        FieldKind::Bool,
+        false,
+    );
+    let layout_fractional_width = resolve_named_property(
+        "LayoutComponent",
+        "fractionalWidth",
+        "LayoutComponent",
+        FieldKind::Double,
+        false,
+    );
+    let layout_fractional_height = resolve_named_property(
+        "LayoutComponent",
+        "fractionalHeight",
+        "LayoutComponent",
+        FieldKind::Double,
+        false,
+    );
     let layout_padding_left =
         property_by_key_in_hierarchy(layout_component_style.type_key.int, 512)
             .expect("paddingLeft key")
@@ -1072,6 +1178,9 @@ fn render_scene_schema() -> String {
             .1;
     let linear_animation = concrete_definition("LinearAnimation");
     let cubic_ease_interpolator = concrete_definition("CubicEaseInterpolator");
+    let cubic_value_interpolator = concrete_definition("CubicValueInterpolator");
+    let elastic_interpolator = concrete_definition("ElasticInterpolator");
+    let scripted_interpolator = concrete_definition("ScriptedInterpolator");
     let keyed_object = concrete_definition("KeyedObject");
     let keyed_property = concrete_definition("KeyedProperty");
     let key_frame_double = concrete_definition("KeyFrameDouble");
@@ -1201,6 +1310,9 @@ fn render_scene_schema() -> String {
     for (name, definition) in [
         ("LINEAR_ANIMATION", linear_animation),
         ("CUBIC_EASE_INTERPOLATOR", cubic_ease_interpolator),
+        ("CUBIC_VALUE_INTERPOLATOR", cubic_value_interpolator),
+        ("ELASTIC_INTERPOLATOR", elastic_interpolator),
+        ("SCRIPTED_INTERPOLATOR", scripted_interpolator),
         ("KEYED_OBJECT", keyed_object),
         ("KEYED_PROPERTY", keyed_property),
         ("KEY_FRAME_DOUBLE", key_frame_double),
@@ -1295,7 +1407,6 @@ fn render_scene_schema() -> String {
         ),
         ("DATA_ENUM_CUSTOM", data_enum_custom),
         ("DATA_ENUM_VALUE", data_enum_value),
-        ("LAYOUT_COMPONENT", layout_component),
         ("LAYOUT_COMPONENT_STYLE", layout_component_style),
         ("ARTBOARD_LIST_MAP_RULE", artboard_list_map_rule),
         (
@@ -1896,6 +2007,34 @@ fn render_scene_schema() -> String {
         "CubicInterpolator",
         FieldKind::Double,
         true,
+    );
+    let elastic_easing = resolve_named_property(
+        "ElasticInterpolator",
+        "easingValue",
+        "ElasticInterpolator",
+        FieldKind::Uint,
+        false,
+    );
+    let elastic_amplitude = resolve_named_property(
+        "ElasticInterpolator",
+        "amplitude",
+        "ElasticInterpolator",
+        FieldKind::Double,
+        false,
+    );
+    let elastic_period = resolve_named_property(
+        "ElasticInterpolator",
+        "period",
+        "ElasticInterpolator",
+        FieldKind::Double,
+        false,
+    );
+    let scripted_interpolator_script_asset_id = resolve_named_property(
+        "ScriptedInterpolator",
+        "scriptAssetId",
+        "ScriptedInterpolator",
+        FieldKind::Uint,
+        false,
     );
     let key_frame_double_value = resolve_named_property(
         "KeyFrameDouble",
@@ -2630,6 +2769,9 @@ fn render_scene_schema() -> String {
         ("PARENT_ID", parent_id),
         ("LAYOUT_WIDTH", artboard_width),
         ("LAYOUT_HEIGHT", artboard_height),
+        ("LAYOUT_CLIP", layout_clip),
+        ("LAYOUT_FRACTIONAL_WIDTH", layout_fractional_width),
+        ("LAYOUT_FRACTIONAL_HEIGHT", layout_fractional_height),
         ("LAYOUT_COMPONENT_STYLE_ID", layout_component_style_id),
         ("LAYOUT_GAP_HORIZONTAL", layout_gap_horizontal),
         ("LAYOUT_GAP_VERTICAL", layout_gap_vertical),
@@ -2750,6 +2892,13 @@ fn render_scene_schema() -> String {
         ("CUBIC_EASE_Y1", cubic_ease_y1),
         ("CUBIC_EASE_X2", cubic_ease_x2),
         ("CUBIC_EASE_Y2", cubic_ease_y2),
+        ("ELASTIC_EASING", elastic_easing),
+        ("ELASTIC_AMPLITUDE", elastic_amplitude),
+        ("ELASTIC_PERIOD", elastic_period),
+        (
+            "SCRIPTED_INTERPOLATOR_SCRIPT_ASSET_ID",
+            scripted_interpolator_script_asset_id,
+        ),
         ("STATE_MACHINE_COMPONENT_NAME", state_machine_component_name),
         ("STATE_ANIMATION_ID", state_animation_id),
         ("STATE_SPEED", state_speed),
@@ -3165,6 +3314,81 @@ fn render_scene_schema() -> String {
              }\n\
          }\n\n",
     );
+    output.push_str(
+        "macro_rules! scene_layout_enum {\n\
+             ($name:ident { $($variant:ident = $value:literal),+ $(,)? }) => {\n\
+                 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+                 pub enum $name { $($variant),+ }\n\
+                 impl $name {\n\
+                     const fn wire_value(self) -> u32 {\n\
+                         match self { $(Self::$variant => $value),+ }\n\
+                     }\n\
+                 }\n\
+             };\n\
+         }\n\n\
+         scene_layout_enum!(SceneLayoutAnimationStyle { None = 0, Inherit = 1, Custom = 2 });\n\
+         scene_layout_enum!(SceneLayoutInterpolation { Hold = 0, Linear = 1, Cubic = 2, Elastic = 3 });\n\
+         scene_layout_enum!(SceneLayoutDisplay { Flex = 0, None = 1 });\n\
+         scene_layout_enum!(SceneLayoutPosition { Static = 0, Relative = 1, Absolute = 2 });\n\
+         scene_layout_enum!(SceneLayoutFlexDirection { Column = 0, ColumnReverse = 1, Row = 2, RowReverse = 3 });\n\
+         scene_layout_enum!(SceneLayoutDirection { Inherit = 0, LeftToRight = 1, RightToLeft = 2 });\n\
+         scene_layout_enum!(SceneLayoutAlign { Auto = 0, FlexStart = 1, Center = 2, FlexEnd = 3, Stretch = 4, Baseline = 5, SpaceBetween = 6, SpaceAround = 7 });\n\
+         scene_layout_enum!(SceneLayoutJustify { FlexStart = 0, Center = 1, FlexEnd = 2, SpaceBetween = 3, SpaceAround = 4, SpaceEvenly = 5 });\n\
+         scene_layout_enum!(SceneLayoutWrap { NoWrap = 0, Wrap = 1, WrapReverse = 2 });\n\
+         scene_layout_enum!(SceneLayoutOverflow { Visible = 0, Hidden = 1, Scroll = 2 });\n\
+         scene_layout_enum!(SceneLayoutUnit { Undefined = 0, Point = 1, Percent = 2, Auto = 3 });\n\
+         scene_layout_enum!(SceneLayoutAlignment { TopLeft = 0, TopCenter = 1, TopRight = 2, CenterLeft = 3, Center = 4, CenterRight = 5, BottomLeft = 6, BottomCenter = 7, BottomRight = 8, SpaceBetweenStart = 9, SpaceBetweenCenter = 10, SpaceBetweenEnd = 11 });\n\
+         scene_layout_enum!(SceneLayoutScale { Fixed = 0, Fill = 1, Hug = 2 });\n\n\
+         scene_layout_enum!(SceneLayoutElasticEasing { EaseIn = 0, EaseOut = 1, EaseInOut = 2 });\n\n\
+         #[derive(Debug, Clone, PartialEq)]\n\
+         pub enum SceneLayoutInterpolator {\n\
+             CubicEase(SceneLayoutCubicInterpolator),\n\
+             CubicValue(SceneLayoutCubicInterpolator),\n\
+             Elastic(SceneLayoutElasticInterpolator),\n\
+             Scripted(SceneLayoutScriptedInterpolator),\n\
+         }\n\n\
+         #[derive(Debug, Clone, PartialEq)]\n\
+         pub struct SceneLayoutCubicInterpolator {\n\
+             pub x1: f32,\n\
+             pub y1: f32,\n\
+             pub x2: f32,\n\
+             pub y2: f32,\n\
+             /// Fields that must remain explicitly present even when equal to their C++ defaults.\n\
+             pub present: BTreeSet<SceneLayoutCubicInterpolatorField>,\n\
+         }\n\n\
+         impl Default for SceneLayoutCubicInterpolator {\n\
+             fn default() -> Self {\n\
+                 Self { x1: 0.42, y1: 0.0, x2: 0.58, y2: 1.0, present: BTreeSet::new() }\n\
+             }\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum SceneLayoutCubicInterpolatorField { X1, Y1, X2, Y2 }\n\n\
+         #[derive(Debug, Clone, PartialEq)]\n\
+         pub struct SceneLayoutElasticInterpolator {\n\
+             pub easing: SceneLayoutElasticEasing,\n\
+             pub amplitude: f32,\n\
+             pub period: f32,\n\
+             /// Fields that must remain explicitly present even when equal to their C++ defaults.\n\
+             pub present: BTreeSet<SceneLayoutElasticInterpolatorField>,\n\
+         }\n\n\
+         impl Default for SceneLayoutElasticInterpolator {\n\
+             fn default() -> Self {\n\
+                 Self { easing: SceneLayoutElasticEasing::EaseOut, amplitude: 1.0, period: 1.0, present: BTreeSet::new() }\n\
+             }\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum SceneLayoutElasticInterpolatorField { Easing, Amplitude, Period }\n\n\
+         #[derive(Debug, Clone, PartialEq, Default)]\n\
+         pub struct SceneLayoutScriptedInterpolator {\n\
+             /// Semantic script identity; lowering resolves it through the canonical FileAsset table.\n\
+             pub script: Option<ScriptAssetId>,\n\
+             /// Fields that must remain explicitly present even when equal to their C++ defaults.\n\
+             pub present: BTreeSet<SceneLayoutScriptedInterpolatorField>,\n\
+         }\n\n\
+         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum SceneLayoutScriptedInterpolatorField { ScriptAssetId }\n\n",
+    );
+
     for object in OBJECTS {
         if object.rust_name == "ClippingShape" {
             output.push_str(
@@ -3194,6 +3418,9 @@ fn render_scene_schema() -> String {
         if object.rust_name == "Rectangle" {
             output.push_str("    pub corner_radii: Option<RectangleCornerRadii>,\n");
         }
+        if object.rust_name == "LayoutComponent" {
+            output.push_str("    pub style: LayoutComponentStyleSpec,\n");
+        }
         if object.rust_name == "Image" {
             output.push_str("    pub crop: Option<ImageCropRect>,\n");
         }
@@ -3220,6 +3447,7 @@ fn render_scene_schema() -> String {
         }
         output.push_str("}\n\n");
     }
+    render_layout_component_style_vocabulary(&mut output, layout_component_style);
     output.push_str(
         "impl RectangleSpec {\n\
              pub fn new(name: impl Into<String>, width: f32, height: f32) -> Self {\n\
@@ -3493,6 +3721,400 @@ fn render_scene_schema() -> String {
     }
     output.push_str("}\n");
     output
+}
+
+fn render_layout_component_style_vocabulary(output: &mut String, definition: &Definition) {
+    for property in definition.properties {
+        assert!(
+            property.stores_data
+                && property.deserializes
+                && property.stores_field
+                && !property.encoded
+                && property.bitmask_passthrough.is_none()
+                && property.cpp_generates_value_setter_body()
+                && property.cpp_setter_uses_stored_field(),
+            "LayoutComponentStyle.{} is no longer a directly authored stored field",
+            property.name
+        );
+        assert!(
+            matches!(
+                property.runtime_type,
+                FieldKind::Bool | FieldKind::Double | FieldKind::Uint
+            ),
+            "LayoutComponentStyle.{} acquired an unsupported value kind",
+            property.name
+        );
+    }
+    assert_eq!(
+        definition.properties.len(),
+        75,
+        "the complete pinned LayoutComponentStyleBase domain changed"
+    );
+
+    output.push_str(
+        "#[derive(Debug, Clone, PartialEq)]\n\
+         pub struct LayoutComponentStyleSpec {\n\
+             /// Optional authored Component name; defaults to `<layout name> Style`.\n\
+             pub name: Option<String>,\n",
+    );
+    for property in definition.properties {
+        writeln!(
+            output,
+            "    pub {}: {},",
+            layout_style_field_name(property.name),
+            layout_style_rust_type(property)
+        )
+        .expect("write generated layout style field");
+    }
+    output.push_str(
+        "    /// Fields that must remain explicitly present even when equal to their C++ defaults.\n\
+         pub present: BTreeSet<LayoutComponentStyleField>,\n",
+    );
+    output.push_str(
+        "}\n\n\
+         impl Default for LayoutComponentStyleSpec {\n\
+             fn default() -> Self {\n\
+                 Self {\n\
+                     name: None,\n",
+    );
+    for property in definition.properties {
+        writeln!(
+            output,
+            "            {}: {},",
+            layout_style_field_name(property.name),
+            layout_style_default_expr(property)
+        )
+        .expect("write generated layout style default");
+    }
+    output.push_str("            present: BTreeSet::new(),\n        }\n    }\n}\n\n");
+
+    output.push_str(
+        "#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
+         pub enum LayoutComponentStyleField {\n",
+    );
+    for property in definition.properties {
+        writeln!(output, "    {},", layout_style_variant_name(property.name))
+            .expect("write generated layout style field identity");
+    }
+    output.push_str("}\n\n");
+
+    output.push_str(
+        "impl LayoutComponentStyleSpec {\n\
+             fn first_non_finite_property(&self) -> Option<&'static str> {\n",
+    );
+    for property in definition.properties {
+        if property.runtime_type == FieldKind::Double {
+            let field = layout_style_field_name(property.name);
+            writeln!(
+                output,
+                "        if !self.{field}.is_finite() {{ return Some({:?}); }}",
+                property.name
+            )
+            .expect("write generated layout style validation");
+        }
+    }
+    output.push_str(
+        "        if let Some(interpolator) = self.interpolator.as_ref()\n\
+             && let Some(property) = interpolator.first_non_finite_property()\n\
+         {\n\
+             return Some(property);\n\
+         }\n\
+         None\n\
+     }\n\n\
+     fn exported_properties(\n\
+         &self,\n\
+         interpolator_local_id: Option<u32>,\n\
+     ) -> Vec<LayoutComponentStyleProperty> {\n\
+         let mut properties = Vec::new();\n",
+    );
+    for property in definition.properties {
+        let field = layout_style_field_name(property.name);
+        let variant = layout_style_variant_name(property.name);
+        if property.name == "interpolatorId" {
+            writeln!(
+                output,
+                "        if self.interpolator.is_some() {{ properties.push(LayoutComponentStyleProperty::{variant}(interpolator_local_id.expect(\"planned style interpolator local id\"))); }} else if self.present.contains(&LayoutComponentStyleField::{variant}) {{ properties.push(LayoutComponentStyleProperty::{variant}(u32::MAX)); }}"
+            )
+            .expect("write generated layout style property");
+        } else {
+            let changed = layout_style_changed_expr(property);
+            writeln!(
+                output,
+                "        if {changed} || self.present.contains(&LayoutComponentStyleField::{variant}) {{ properties.push(LayoutComponentStyleProperty::{variant}(self.{field})); }}"
+            )
+            .expect("write generated layout style property");
+        }
+    }
+    output.push_str("        properties\n    }\n}\n\n");
+
+    output.push_str(
+        "impl SceneLayoutInterpolator {\n\
+             fn first_non_finite_property(&self) -> Option<&'static str> {\n\
+                 match self {\n\
+                     Self::CubicEase(spec) | Self::CubicValue(spec) => {\n\
+                         if !spec.x1.is_finite() { return Some(\"interpolator.x1\"); }\n\
+                         if !spec.y1.is_finite() { return Some(\"interpolator.y1\"); }\n\
+                         if !spec.x2.is_finite() { return Some(\"interpolator.x2\"); }\n\
+                         if !spec.y2.is_finite() { return Some(\"interpolator.y2\"); }\n\
+                     }\n\
+                     Self::Elastic(spec) => {\n\
+                         if !spec.amplitude.is_finite() { return Some(\"interpolator.amplitude\"); }\n\
+                         if !spec.period.is_finite() { return Some(\"interpolator.period\"); }\n\
+                     }\n\
+                     Self::Scripted(_) => {}\n\
+                 }\n\
+                 None\n\
+             }\n\
+         }\n\n",
+    );
+
+    output.push_str(
+        "#[derive(Debug, Clone, Copy, PartialEq)]\npub enum LayoutComponentStyleProperty {\n",
+    );
+    for property in definition.properties {
+        let rust_type = if property.name == "interpolatorId" {
+            "u32".to_owned()
+        } else {
+            layout_style_rust_type(property)
+        };
+        writeln!(
+            output,
+            "    {}({rust_type}),",
+            layout_style_variant_name(property.name)
+        )
+        .expect("write generated layout style property variant");
+    }
+    output.push_str("}\n\nimpl LayoutComponentStyleProperty {\n    fn schema_key(&self) -> u16 {\n        match self {\n");
+    for property in definition.properties {
+        writeln!(
+            output,
+            "            Self::{}(_) => {},",
+            layout_style_variant_name(property.name),
+            property.key.int
+        )
+        .expect("write generated layout style key");
+    }
+    output.push_str(
+        "        }\n\
+     }\n\n\
+     fn into_authoring_property(self) -> AuthoringProperty {\n\
+         let key = self.schema_key();\n\
+         let value = match self {\n",
+    );
+    for property in definition.properties {
+        let variant = layout_style_variant_name(property.name);
+        let conversion = match property.runtime_type {
+            FieldKind::Double => "AuthoringValue::Double(value)",
+            FieldKind::Bool => "AuthoringValue::Bool(value)",
+            FieldKind::Uint if property.name == "interpolatorId" => {
+                "AuthoringValue::Uint(u64::from(value))"
+            }
+            FieldKind::Uint => "AuthoringValue::Uint(u64::from(value.wire_value()))",
+            _ => unreachable!("validated LayoutComponentStyle field kind"),
+        };
+        writeln!(
+            output,
+            "            Self::{variant}(value) => {conversion},"
+        )
+        .expect("write generated layout style authoring value");
+    }
+    output.push_str(
+        "        };\n\
+         AuthoringProperty { key, value }\n\
+     }\n\
+ }\n\n",
+    );
+}
+
+fn layout_style_field_name(schema_name: &str) -> String {
+    match schema_name {
+        "animationStyleType" => "animation_style".to_owned(),
+        "interpolationType" => "interpolation".to_owned(),
+        "interpolatorId" => "interpolator".to_owned(),
+        "layoutAlignmentType" => "layout_alignment".to_owned(),
+        "layoutWidthScaleType" => "layout_width_scale".to_owned(),
+        "layoutHeightScaleType" => "layout_height_scale".to_owned(),
+        _ => {
+            let snake = camel_to_snake(schema_name);
+            snake
+                .strip_suffix("_value")
+                .map(str::to_owned)
+                .unwrap_or(snake)
+        }
+    }
+}
+
+fn layout_style_variant_name(schema_name: &str) -> String {
+    let field = if schema_name == "interpolatorId" {
+        "interpolator_id".to_owned()
+    } else {
+        layout_style_field_name(schema_name)
+    };
+    field
+        .split('_')
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect()
+}
+
+fn camel_to_snake(name: &str) -> String {
+    let mut result = String::new();
+    let mut previous_was_lower_or_digit = false;
+    for character in name.chars() {
+        if character.is_ascii_uppercase() {
+            if previous_was_lower_or_digit {
+                result.push('_');
+            }
+            result.push(character.to_ascii_lowercase());
+            previous_was_lower_or_digit = false;
+        } else {
+            result.push(character);
+            previous_was_lower_or_digit =
+                character.is_ascii_lowercase() || character.is_ascii_digit();
+        }
+    }
+    result
+}
+
+fn layout_style_rust_type(property: &Property) -> String {
+    match property.runtime_type {
+        FieldKind::Double => "f32",
+        FieldKind::Bool => "bool",
+        FieldKind::Uint => match property.name {
+            "animationStyleType" => "SceneLayoutAnimationStyle",
+            "interpolationType" => "SceneLayoutInterpolation",
+            "interpolatorId" => "Option<SceneLayoutInterpolator>",
+            "displayValue" => "SceneLayoutDisplay",
+            "positionTypeValue" => "SceneLayoutPosition",
+            "flexDirectionValue" => "SceneLayoutFlexDirection",
+            "directionValue" => "SceneLayoutDirection",
+            "alignContentValue" | "alignItemsValue" | "alignSelfValue" => "SceneLayoutAlign",
+            "justifyContentValue" => "SceneLayoutJustify",
+            "flexWrapValue" => "SceneLayoutWrap",
+            "overflowValue" => "SceneLayoutOverflow",
+            name if name.ends_with("UnitsValue") => "SceneLayoutUnit",
+            "layoutAlignmentType" => "SceneLayoutAlignment",
+            "layoutWidthScaleType" | "layoutHeightScaleType" => "SceneLayoutScale",
+            name => panic!("unmapped typed LayoutComponentStyle uint field {name}"),
+        },
+        _ => panic!(
+            "unsupported LayoutComponentStyle field kind for {}",
+            property.name
+        ),
+    }
+    .to_owned()
+}
+
+fn layout_style_default_expr(property: &Property) -> String {
+    let initializer = property.stored_field_initializer().unwrap_or_else(|| {
+        panic!(
+            "LayoutComponentStyle.{} has no stored default",
+            property.name
+        )
+    });
+    match initializer {
+        StoredFieldInitializer::Double(value) => format!("{value:?}"),
+        StoredFieldInitializer::Bool(value) => value.to_string(),
+        StoredFieldInitializer::Uint(_) if property.name == "interpolatorId" => "None".to_owned(),
+        StoredFieldInitializer::Uint(value) => {
+            let variant = layout_style_enum_variant(property.name, value);
+            format!("{}::{variant}", layout_style_rust_type(property))
+        }
+        _ => panic!(
+            "unsupported LayoutComponentStyle default kind for {}",
+            property.name
+        ),
+    }
+}
+
+fn layout_style_changed_expr(property: &Property) -> String {
+    let field = layout_style_field_name(property.name);
+    match property.stored_field_initializer().unwrap_or_else(|| {
+        panic!(
+            "LayoutComponentStyle.{} has no stored default",
+            property.name
+        )
+    }) {
+        StoredFieldInitializer::Bool(false) => format!("self.{field}"),
+        StoredFieldInitializer::Bool(true) => format!("!self.{field}"),
+        _ => format!("self.{field} != {}", layout_style_default_expr(property)),
+    }
+}
+
+fn layout_style_enum_variant(property_name: &str, value: u64) -> &'static str {
+    match property_name {
+        "animationStyleType" => ["None", "Inherit", "Custom"].get(value as usize).copied(),
+        "interpolationType" => ["Hold", "Linear", "Cubic", "Elastic"]
+            .get(value as usize)
+            .copied(),
+        "displayValue" => ["Flex", "None"].get(value as usize).copied(),
+        "positionTypeValue" => ["Static", "Relative", "Absolute"]
+            .get(value as usize)
+            .copied(),
+        "flexDirectionValue" => ["Column", "ColumnReverse", "Row", "RowReverse"]
+            .get(value as usize)
+            .copied(),
+        "directionValue" => ["Inherit", "LeftToRight", "RightToLeft"]
+            .get(value as usize)
+            .copied(),
+        "alignContentValue" | "alignItemsValue" | "alignSelfValue" => [
+            "Auto",
+            "FlexStart",
+            "Center",
+            "FlexEnd",
+            "Stretch",
+            "Baseline",
+            "SpaceBetween",
+            "SpaceAround",
+        ]
+        .get(value as usize)
+        .copied(),
+        "justifyContentValue" => [
+            "FlexStart",
+            "Center",
+            "FlexEnd",
+            "SpaceBetween",
+            "SpaceAround",
+            "SpaceEvenly",
+        ]
+        .get(value as usize)
+        .copied(),
+        "flexWrapValue" => ["NoWrap", "Wrap", "WrapReverse"]
+            .get(value as usize)
+            .copied(),
+        "overflowValue" => ["Visible", "Hidden", "Scroll"].get(value as usize).copied(),
+        name if name.ends_with("UnitsValue") => ["Undefined", "Point", "Percent", "Auto"]
+            .get(value as usize)
+            .copied(),
+        "layoutAlignmentType" => [
+            "TopLeft",
+            "TopCenter",
+            "TopRight",
+            "CenterLeft",
+            "Center",
+            "CenterRight",
+            "BottomLeft",
+            "BottomCenter",
+            "BottomRight",
+            "SpaceBetweenStart",
+            "SpaceBetweenCenter",
+            "SpaceBetweenEnd",
+        ]
+        .get(value as usize)
+        .copied(),
+        "layoutWidthScaleType" | "layoutHeightScaleType" => {
+            ["Fixed", "Fill", "Hug"].get(value as usize).copied()
+        }
+        _ => None,
+    }
+    .unwrap_or_else(|| {
+        panic!("unsupported default {value} for LayoutComponentStyle.{property_name}")
+    })
 }
 
 fn concrete_definition(name: &str) -> &'static Definition {

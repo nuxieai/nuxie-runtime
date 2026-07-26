@@ -9,14 +9,22 @@ use nuxie::{
     ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, ExportedRecord, Factory,
     FeatherSpec, FillRule, FillSpec, FireEventOccurs, FontAssetId, FontAssetSpec, GradientStopSpec,
     ImageAssetId, ImageAssetSpec, ImageDecodeError, ImageSpec, KeyInterpolation,
-    LinearAnimationSpec, LinearGradientSpec, MachineId, MachineInputId, MachineLayerSpec,
-    MachineListenerSpec, MachineListenerType, MachineSpec, MachineStateFlags, MachineTransitionId,
-    MachineTransitionSpec, NestedArtboardSpec, NodeKind, NodeSpec, NumberComparator,
-    NumberInputSpec, ObjectId, Parent, PointsPathSpec, PropValueKind, RawPath, RecordingFactory,
-    RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene, SceneClippingFillRule,
-    SceneEvent, SceneEventStringProperty, SceneFeatherSpace, SceneStrokeCap, SceneStrokeJoin,
-    SceneTextAlign, SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
+    LayoutComponentSpec, LayoutComponentStyleField, LayoutComponentStyleProperty,
+    LayoutComponentStyleSpec, LinearAnimationSpec, LinearGradientSpec, MachineId, MachineInputId,
+    MachineLayerSpec, MachineListenerSpec, MachineListenerType, MachineSpec, MachineStateFlags,
+    MachineTransitionId, MachineTransitionSpec, NestedArtboardSpec, NodeKind, NodeSpec,
+    NumberComparator, NumberInputSpec, ObjectId, Parent, PointsPathSpec, PropValueKind, RawPath,
+    RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene,
+    SceneClippingFillRule, SceneEvent, SceneEventStringProperty, SceneFeatherSpace,
+    SceneLayoutAlign, SceneLayoutAlignment, SceneLayoutAnimationStyle,
+    SceneLayoutCubicInterpolator, SceneLayoutCubicInterpolatorField, SceneLayoutDirection,
+    SceneLayoutDisplay, SceneLayoutElasticEasing, SceneLayoutElasticInterpolator,
+    SceneLayoutElasticInterpolatorField, SceneLayoutFlexDirection, SceneLayoutInterpolation,
+    SceneLayoutInterpolator, SceneLayoutJustify, SceneLayoutOverflow, SceneLayoutPosition,
+    SceneLayoutScale, SceneLayoutScriptedInterpolator, SceneLayoutScriptedInterpolatorField,
+    SceneLayoutUnit, SceneLayoutWrap, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign,
+    SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
     ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
     StructureEpoch, TextSpec, TextStylePaintSpec, TextValueRunSpec, TriggerInputSpec, Vec2D,
     ViewModelBooleanSpec, ViewModelChildSpec, ViewModelColorSource, ViewModelColorSpec,
@@ -25,6 +33,715 @@ use nuxie::{
     ViewModelNumberSource, ViewModelNumberSpec, ViewModelScope, ViewModelSpec, ViewModelStringId,
     ViewModelStringSpec, ViewModelTriggerSpec, VisibilityCondition, props,
 };
+
+#[test]
+fn ordinary_layout_component_authors_one_stable_style_child_and_link() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((layout, style), _) = scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Canvas".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let layout = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Panel".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 80.0,
+                height: 60.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        let style = tx
+            .layout_component_style(layout)
+            .expect("ordinary layouts retain one authored style child");
+        Ok((layout, style))
+    })?;
+
+    assert_ne!(layout, style.object_id());
+    let records = scene.export_records().into_records();
+    assert_eq!(
+        records.iter().map(|record| record.kind).collect::<Vec<_>>(),
+        [
+            ExportedObjectKind::Backboard,
+            ExportedObjectKind::Artboard,
+            ExportedObjectKind::LayoutComponent,
+            ExportedObjectKind::LayoutComponentStyle,
+        ]
+    );
+    assert!(
+        records[2]
+            .properties
+            .contains(&ExportedProperty::LayoutComponentStyleId(2))
+    );
+    assert!(
+        records[3]
+            .properties
+            .contains(&ExportedProperty::ParentId(1))
+    );
+    Ok(())
+}
+
+#[test]
+fn nested_layout_styles_use_forward_owner_links_after_the_visual_phase() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Retained standalone order".into(),
+            width: 393.0,
+            height: 852.0,
+        })?;
+        let root = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Root".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 0.0,
+                height: 0.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(root),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Intervening root child".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        let content = tx.create(
+            Parent::Object(root),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Content".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 0.0,
+                height: 0.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        for index in 0..9 {
+            tx.create(
+                Parent::Object(content),
+                NodeSpec::Shape(ShapeSpec {
+                    name: format!("Content child {index}"),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+        }
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Later artboard sibling".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        Ok(())
+    })?;
+
+    let records = scene.export_records().into_records();
+    let artboard_records = &records[1..];
+    assert_eq!(artboard_records[0].kind, ExportedObjectKind::Artboard);
+    assert!(
+        artboard_records[1]
+            .properties
+            .contains(&ExportedProperty::LayoutComponentStyleId(14))
+    );
+    assert_eq!(artboard_records[2].kind, ExportedObjectKind::Shape);
+    assert!(
+        artboard_records[3]
+            .properties
+            .contains(&ExportedProperty::ParentId(1))
+    );
+    assert!(
+        artboard_records[3]
+            .properties
+            .contains(&ExportedProperty::LayoutComponentStyleId(15))
+    );
+    assert_eq!(artboard_records[13].kind, ExportedObjectKind::Shape);
+    assert_eq!(
+        artboard_records[14].kind,
+        ExportedObjectKind::LayoutComponentStyle
+    );
+    assert!(
+        artboard_records[14]
+            .properties
+            .contains(&ExportedProperty::ParentId(1))
+    );
+    assert_eq!(
+        artboard_records[15].kind,
+        ExportedObjectKind::LayoutComponentStyle
+    );
+    assert!(
+        artboard_records[15]
+            .properties
+            .contains(&ExportedProperty::ParentId(3))
+    );
+    Ok(())
+}
+
+#[test]
+fn ordinary_layout_component_authors_the_complete_typed_cpp_style_domain() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Complete layout".into(),
+            width: 320.0,
+            height: 240.0,
+        })?;
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Card".into(),
+                x: 3.0,
+                y: 4.0,
+                opacity: 0.8,
+                rotation: 0.1,
+                scale_x: 1.2,
+                scale_y: 0.9,
+                clip: true,
+                width: 120.0,
+                height: 80.0,
+                fractional_width: 0.5,
+                fractional_height: 0.75,
+                style: LayoutComponentStyleSpec {
+                    name: Some("Card Style".into()),
+                    gap_horizontal: 1.0,
+                    gap_vertical: 2.0,
+                    max_width: 3.0,
+                    max_height: 4.0,
+                    min_width: 5.0,
+                    min_height: 6.0,
+                    border_left: 7.0,
+                    border_right: 8.0,
+                    border_top: 9.0,
+                    border_bottom: 10.0,
+                    margin_left: 11.0,
+                    margin_right: 12.0,
+                    margin_top: 13.0,
+                    margin_bottom: 14.0,
+                    padding_left: 15.0,
+                    padding_right: 16.0,
+                    padding_top: 17.0,
+                    padding_bottom: 18.0,
+                    position_left: 19.0,
+                    position_right: 20.0,
+                    position_top: 21.0,
+                    position_bottom: 22.0,
+                    flex: 23.0,
+                    flex_grow: 24.0,
+                    flex_shrink: 25.0,
+                    flex_basis: 26.0,
+                    aspect_ratio: 27.0,
+                    animation_style: SceneLayoutAnimationStyle::Custom,
+                    interpolation: SceneLayoutInterpolation::Cubic,
+                    interpolator: Some(SceneLayoutInterpolator::CubicEase(
+                        SceneLayoutCubicInterpolator {
+                            x1: 0.1,
+                            y1: 0.2,
+                            x2: 0.8,
+                            y2: 0.9,
+                            ..SceneLayoutCubicInterpolator::default()
+                        },
+                    )),
+                    interpolation_time: 28.0,
+                    display: SceneLayoutDisplay::None,
+                    position_type: SceneLayoutPosition::Absolute,
+                    flex_direction: SceneLayoutFlexDirection::ColumnReverse,
+                    direction: SceneLayoutDirection::LeftToRight,
+                    align_content: SceneLayoutAlign::Center,
+                    align_items: SceneLayoutAlign::Stretch,
+                    align_self: SceneLayoutAlign::FlexEnd,
+                    justify_content: SceneLayoutJustify::SpaceEvenly,
+                    flex_wrap: SceneLayoutWrap::WrapReverse,
+                    overflow: SceneLayoutOverflow::Scroll,
+                    intrinsically_sized: true,
+                    width_units: SceneLayoutUnit::Percent,
+                    height_units: SceneLayoutUnit::Auto,
+                    border_left_units: SceneLayoutUnit::Point,
+                    border_right_units: SceneLayoutUnit::Percent,
+                    border_top_units: SceneLayoutUnit::Auto,
+                    border_bottom_units: SceneLayoutUnit::Point,
+                    margin_left_units: SceneLayoutUnit::Percent,
+                    margin_right_units: SceneLayoutUnit::Auto,
+                    margin_top_units: SceneLayoutUnit::Point,
+                    margin_bottom_units: SceneLayoutUnit::Percent,
+                    padding_left_units: SceneLayoutUnit::Auto,
+                    padding_right_units: SceneLayoutUnit::Point,
+                    padding_top_units: SceneLayoutUnit::Percent,
+                    padding_bottom_units: SceneLayoutUnit::Auto,
+                    position_left_units: SceneLayoutUnit::Point,
+                    position_right_units: SceneLayoutUnit::Percent,
+                    position_top_units: SceneLayoutUnit::Auto,
+                    position_bottom_units: SceneLayoutUnit::Point,
+                    gap_horizontal_units: SceneLayoutUnit::Percent,
+                    gap_vertical_units: SceneLayoutUnit::Auto,
+                    min_width_units: SceneLayoutUnit::Point,
+                    min_height_units: SceneLayoutUnit::Percent,
+                    max_width_units: SceneLayoutUnit::Auto,
+                    max_height_units: SceneLayoutUnit::Point,
+                    layout_alignment: SceneLayoutAlignment::Center,
+                    link_corner_radius: false,
+                    corner_radius_tl: 29.0,
+                    corner_radius_tr: 30.0,
+                    corner_radius_bl: 31.0,
+                    corner_radius_br: 32.0,
+                    layout_width_scale: SceneLayoutScale::Fill,
+                    layout_height_scale: SceneLayoutScale::Hug,
+                    flex_basis_units: SceneLayoutUnit::Point,
+                    present: Default::default(),
+                },
+            }),
+        )?;
+        Ok(())
+    })?;
+
+    let exported = scene.export_records();
+    assert_eq!(
+        exported
+            .records()
+            .iter()
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+        vec![
+            ExportedObjectKind::Backboard,
+            ExportedObjectKind::Artboard,
+            ExportedObjectKind::LayoutComponent,
+            ExportedObjectKind::LayoutComponentStyle,
+            ExportedObjectKind::CubicEaseInterpolator,
+        ]
+    );
+    let layout = &exported.records()[2];
+    assert!(
+        layout
+            .properties
+            .contains(&ExportedProperty::LayoutClip(true))
+    );
+    assert!(
+        layout
+            .properties
+            .contains(&ExportedProperty::LayoutFractionalWidth(0.5))
+    );
+    assert!(
+        layout
+            .properties
+            .contains(&ExportedProperty::LayoutFractionalHeight(0.75))
+    );
+    let style = &exported.records()[3];
+    assert_eq!(
+        style.properties.len(),
+        77,
+        "Name, parent, and all 75 LayoutComponentStyleBase properties must be authored"
+    );
+    Ok(())
+}
+
+#[test]
+fn ten_artboards_author_sixty_layouts_then_sixty_owned_styles_in_stable_order() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        for artboard_index in 0..10 {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: format!("Artboard {artboard_index}"),
+                width: 393.0,
+                height: 852.0,
+            })?;
+            let mut parent = Parent::Artboard(artboard);
+            for layout_index in 0..6 {
+                let layout = tx.create(
+                    parent,
+                    NodeSpec::LayoutComponent(LayoutComponentSpec {
+                        name: format!("Layout {layout_index}"),
+                        x: 0.0,
+                        y: 0.0,
+                        opacity: 1.0,
+                        rotation: 0.0,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                        clip: false,
+                        width: 0.0,
+                        height: 0.0,
+                        fractional_width: 1.0,
+                        fractional_height: 1.0,
+                        style: LayoutComponentStyleSpec::default(),
+                    }),
+                )?;
+                parent = Parent::Object(layout);
+            }
+            tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Trailing sibling".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+        }
+        Ok(())
+    })?;
+
+    let exported = scene.export_records();
+    assert_eq!(
+        exported
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::LayoutComponent)
+            .count(),
+        60
+    );
+    assert_eq!(
+        exported
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::LayoutComponentStyle)
+            .count(),
+        60
+    );
+    for artboard_records in exported.records()[1..].chunks_exact(14) {
+        assert_eq!(artboard_records[0].kind, ExportedObjectKind::Artboard);
+        assert!(
+            artboard_records[1..7]
+                .iter()
+                .all(|record| record.kind == ExportedObjectKind::LayoutComponent)
+        );
+        assert!(
+            artboard_records[8..14]
+                .iter()
+                .all(|record| record.kind == ExportedObjectKind::LayoutComponentStyle)
+        );
+        assert_eq!(artboard_records[7].kind, ExportedObjectKind::Shape);
+        for index in 0..6 {
+            assert!(artboard_records[index + 1].properties.contains(
+                &ExportedProperty::LayoutComponentStyleId(u32::try_from(index + 8)?)
+            ));
+            assert!(
+                artboard_records[index + 8]
+                    .properties
+                    .contains(&ExportedProperty::ParentId(u32::try_from(index + 1)?))
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn layout_style_preserves_explicit_presence_at_cpp_defaults_without_raw_keys() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Presence".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let mut style = LayoutComponentStyleSpec::default();
+        style.present.extend([
+            LayoutComponentStyleField::PositionType,
+            LayoutComponentStyleField::FlexBasis,
+            LayoutComponentStyleField::InterpolatorId,
+        ]);
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Explicit defaults".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 0.0,
+                height: 0.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style,
+            }),
+        )?;
+        Ok(())
+    })?;
+
+    let exported = scene.export_records();
+    let style = exported
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::LayoutComponentStyle)
+        .expect("typed layout style");
+    for property in [
+        LayoutComponentStyleProperty::PositionType(SceneLayoutPosition::Relative),
+        LayoutComponentStyleProperty::FlexBasis(0.0),
+        LayoutComponentStyleProperty::InterpolatorId(u32::MAX),
+    ] {
+        assert!(
+            style
+                .properties
+                .contains(&ExportedProperty::LayoutComponentStyle(property))
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn layout_style_authors_non_cubic_elastic_interpolator() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Elastic".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Elastic layout".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 100.0,
+                height: 100.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec {
+                    interpolator: Some(SceneLayoutInterpolator::Elastic(
+                        SceneLayoutElasticInterpolator {
+                            easing: SceneLayoutElasticEasing::EaseInOut,
+                            amplitude: 1.5,
+                            present: std::collections::BTreeSet::from([
+                                SceneLayoutElasticInterpolatorField::Period,
+                            ]),
+                            ..SceneLayoutElasticInterpolator::default()
+                        },
+                    )),
+                    ..LayoutComponentStyleSpec::default()
+                },
+            }),
+        )?;
+        Ok(())
+    })?;
+
+    let exported = scene.export_records();
+    assert!(exported.records().iter().any(|record| {
+        record.kind == ExportedObjectKind::ElasticInterpolator
+            && record.properties.contains(&ExportedProperty::ElasticEasing(
+                SceneLayoutElasticEasing::EaseInOut,
+            ))
+            && record
+                .properties
+                .contains(&ExportedProperty::ElasticAmplitude(1.5))
+            && record
+                .properties
+                .contains(&ExportedProperty::ElasticPeriod(1.0))
+    }));
+    Ok(())
+}
+
+#[test]
+fn layout_style_authors_cubic_value_and_semantic_scripted_interpolators() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        tx.create_script_asset(ScriptAssetSpec {
+            name: "preceding-script".into(),
+            bytes: Vec::new(),
+            is_module: true,
+        })?;
+        let target_script = tx.create_script_asset(ScriptAssetSpec {
+            name: "target-script".into(),
+            bytes: Vec::new(),
+            is_module: true,
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Interpolator family".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        let mut cubic = SceneLayoutCubicInterpolator::default();
+        cubic.x1 = -0.25;
+        cubic.x2 = 1.25;
+        cubic.present.extend([
+            SceneLayoutCubicInterpolatorField::Y1,
+            SceneLayoutCubicInterpolatorField::Y2,
+        ]);
+        for (name, interpolator) in [
+            ("Cubic value", SceneLayoutInterpolator::CubicValue(cubic)),
+            (
+                "Scripted",
+                SceneLayoutInterpolator::Scripted(SceneLayoutScriptedInterpolator {
+                    script: Some(target_script),
+                    ..SceneLayoutScriptedInterpolator::default()
+                }),
+            ),
+            (
+                "Explicit missing script",
+                SceneLayoutInterpolator::Scripted(SceneLayoutScriptedInterpolator {
+                    present: std::collections::BTreeSet::from([
+                        SceneLayoutScriptedInterpolatorField::ScriptAssetId,
+                    ]),
+                    ..SceneLayoutScriptedInterpolator::default()
+                }),
+            ),
+        ] {
+            tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::LayoutComponent(LayoutComponentSpec {
+                    name: name.into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    clip: false,
+                    width: 100.0,
+                    height: 100.0,
+                    fractional_width: 1.0,
+                    fractional_height: 1.0,
+                    style: LayoutComponentStyleSpec {
+                        interpolator: Some(interpolator),
+                        ..LayoutComponentStyleSpec::default()
+                    },
+                }),
+            )?;
+        }
+        Ok(())
+    })?;
+
+    let exported = scene.export_records();
+    let cubic = exported
+        .records()
+        .iter()
+        .find(|record| record.kind == ExportedObjectKind::CubicValueInterpolator)
+        .expect("typed CubicValueInterpolator");
+    for property in [
+        ExportedProperty::CubicEaseX1(-0.25),
+        ExportedProperty::CubicEaseY1(0.0),
+        ExportedProperty::CubicEaseX2(1.25),
+        ExportedProperty::CubicEaseY2(1.0),
+    ] {
+        assert!(
+            cubic.properties.contains(&property),
+            "explicit C++ default must remain authored: {property:?}"
+        );
+    }
+    let scripted = exported
+        .records()
+        .iter()
+        .filter(|record| record.kind == ExportedObjectKind::ScriptedInterpolator)
+        .collect::<Vec<_>>();
+    assert_eq!(scripted.len(), 2);
+    assert!(
+        scripted[0]
+            .properties
+            .contains(&ExportedProperty::ScriptedInterpolatorScriptAssetId(1))
+    );
+    assert!(
+        scripted[1]
+            .properties
+            .contains(&ExportedProperty::ScriptedInterpolatorScriptAssetId(
+                u32::MAX,
+            ))
+    );
+    Ok(())
+}
+
+#[test]
+fn layout_style_rejects_scripted_interpolator_asset_from_another_scene() -> Result<()> {
+    let mut source = Scene::new();
+    let (foreign_script, _) = source.edit(|tx| {
+        tx.create_script_asset(ScriptAssetSpec {
+            name: "foreign".into(),
+            bytes: Vec::new(),
+            is_module: true,
+        })
+    })?;
+    let mut target = Scene::new();
+    let records_before = target.export_records();
+    let error = target
+        .edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Target".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::LayoutComponent(LayoutComponentSpec {
+                    name: "Foreign scripted interpolation".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    clip: false,
+                    width: 100.0,
+                    height: 100.0,
+                    fractional_width: 1.0,
+                    fractional_height: 1.0,
+                    style: LayoutComponentStyleSpec {
+                        interpolator: Some(SceneLayoutInterpolator::Scripted(
+                            SceneLayoutScriptedInterpolator {
+                                script: Some(foreign_script),
+                                ..SceneLayoutScriptedInterpolator::default()
+                            },
+                        )),
+                        ..LayoutComponentStyleSpec::default()
+                    },
+                }),
+            )?;
+            Ok(())
+        })
+        .expect_err("script identity is meaningful only in its owning Scene");
+
+    assert_eq!(error.kind(), EditErrorKind::CommitRejected);
+    assert_eq!(error.diagnostic().reason, EditReason::UnknownScriptAsset);
+    assert_eq!(target.export_records(), records_before);
+    Ok(())
+}
 
 #[allow(clippy::arithmetic_side_effects)]
 fn fixture_font_bytes() -> Vec<u8> {

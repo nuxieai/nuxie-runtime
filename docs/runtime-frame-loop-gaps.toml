@@ -9,7 +9,7 @@ decision = []
 [[gap]]
 id = "FL-G01"
 status = "open"
-mechanism = "FL-B1/FL-B2 now mirror the C++ KeyFrame and LinearAnimation owners: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, one type-safe target enum binds CoreRegistry's single property dispatch, the Artboard owns one immutable definition arena, and every occurrence retains only a typed definition handle plus C++-shaped mutable state. The former read-time fps calculation, six parallel frame vectors, property-family booleans, import-time source snapshots, per-occurrence descriptor clones, Option loop override, and local zero guards are deleted. The gap remains open only until the complete FL-B owner family is independently verified."
+mechanism = "FL-B1/FL-B2/FL-B3 now mirror the C++ KeyFrame, LinearAnimation, and AnimationReset owners: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, one type-safe target enum binds CoreRegistry's single property dispatch, the Artboard owns one immutable definition arena, every animation occurrence retains only a typed definition handle plus C++-shaped mutable state, and each reset occurrence leases one pooled first-seen object/property stream that is cleared and returned on final release. Rust-only StateMachineInstance snapshot clones share that immutable lease instead of cloning factory state. The former read-time fps calculation, six parallel frame vectors, property-family booleans, import-time source snapshots, per-occurrence descriptor clones, Option loop override, local zero guards, flat reset clones, global pair scans, and empty-reset elision are deleted. The gap remains open only until the complete FL-B owner family is independently verified."
 citations = [
   "cpp:src/animation/keyframe.cpp:10",
   "cpp:src/importers/keyed_property_importer.cpp:13-17",
@@ -17,6 +17,8 @@ citations = [
   "cpp:src/animation/linear_animation.cpp:27-150",
   "cpp:src/animation/linear_animation_instance.cpp:17-79",
   "cpp:src/animation/linear_animation_instance.cpp:187-435",
+  "cpp:src/animation/animation_reset.cpp:8-70",
+  "cpp:src/animation/animation_reset_factory.cpp:10-235",
   "rust:crates/nuxie-runtime/src/animation.rs:329-331",
   "rust:crates/nuxie-runtime/src/animation.rs:1022-1064",
   "rust:crates/nuxie-runtime/src/animation.rs:1338-1421",
@@ -24,7 +26,7 @@ citations = [
   "rust:crates/nuxie-runtime/src/artboard.rs:390",
   "rust:crates/nuxie-runtime/src/artboard.rs:4119-4196",
 ]
-closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty/LinearAnimation owners without any displaced sidecar or definition clone."
+closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty/LinearAnimation/AnimationReset owners without any displaced sidecar, definition clone, or reset clone."
 
 [[gap]]
 id = "FL-G02"
@@ -250,6 +252,24 @@ max_occurrences = 0
 id = "linear_animation_definition_vec_owner"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\blinear_animations\\s*:\\s*Vec\\s*<\\s*RuntimeLinearAnimation\\s*>"
+max_occurrences = 0
+
+[[ratchet]]
+id = "animation_reset_flat_entries_owner"
+globs = ["crates/nuxie-runtime/src/state_machine.rs"]
+pattern = "struct\\s+AnimationReset\\s*\\{\\s*entries\\s*:\\s*Vec"
+max_occurrences = 0
+
+[[ratchet]]
+id = "animation_reset_global_seen_scan"
+globs = ["crates/nuxie-runtime/src/state_machine.rs"]
+pattern = "let\\s+mut\\s+seen\\s*=\\s*Vec"
+max_occurrences = 0
+
+[[ratchet]]
+id = "animation_reset_empty_owner_elision"
+globs = ["crates/nuxie-runtime/src/state_machine.rs"]
+pattern = "if\\s+entries\\.is_empty\\(\\)\\s*\\{\\s*None"
 max_occurrences = 0
 
 [[ratchet]]

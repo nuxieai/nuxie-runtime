@@ -4,8 +4,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-B2 LinearAnimation definition/occurrence ownership translated
-  and locally gated. FL-B1 is locally gated, and
+- Phase: FL-B4 blend definition/occurrence ownership translation.
+  FL-B1 through FL-B3 are locally gated, and
   FL-A was independently
   accepted and promoted at
   `f86d5ba0146697abc996310c62fa45e1f053144b`; exact main
@@ -18,9 +18,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   owners plus all six FL-A Component rows); 28 later-wave rows remain.
 - Open mechanism gaps: 7 / 9. FL-G02 is closed; FL-G06 remained closed.
 - Current dependency wave: FL-B. Its frozen 45-file/eight-member mini-map is
-  `docs/runtime-frame-loop-fl-b-spec.md`; FL-B1 and FL-B2 are implemented
-  while every FL-B row remains pending until whole-wave independent
-  verification.
+  `docs/runtime-frame-loop-fl-b-spec.md`; FL-B1 through FL-B3 are implemented
+  and locally gated, and
+  every FL-B row remains pending until whole-wave independent verification.
 - The pre-advance `LinearAnimationInstance::m_didLoop` decision is resolved:
   safe Rust retains `false` as the FLR-3 binding adaptation and matches every
   defined post-advance C++ result. No `Option<bool>` API break or
@@ -84,6 +84,34 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   files, 18 Rust modules, and 18 landmarks; structural checker 338 files,
   75 members, 9 gaps, with all four FL-B2 zero-ratchets green. Rows and
   FL-G01 remain pending/open until whole-wave independent acceptance.
+
+## FL-B3 AnimationReset factory-lifecycle evidence
+
+- Pinned ownership translated from `animation_reset.cpp` and
+  `animation_reset_factory.cpp`: each reset retains first-seen object order,
+  each object retains first-seen double/color property order in an owner-local
+  set, and an optional first-animation baseline reads the exact first
+  KeyFrame occurrence.
+- Reset construction always returns an owned lease, including an empty reset.
+  The final lease owner clears and returns its entry allocation to one global
+  synchronized pool. This matches C++ factory acquire/release instead of
+  relying on drop-only disposal.
+- Rust's public `StateMachineInstance::clone` snapshot extension shares the
+  immutable reset lease. It neither clones reset entries nor creates a second
+  factory resource; the final snapshot owner performs the release.
+- The typed Rust replay retains color values in the integer representation
+  consumed by the generated setter; the exact golden oracle rejected an
+  additional Rust-side float round trip. The former flat cloneable entry
+  owner, global `(object, property)` membership vector, and empty-entry `None`
+  elision are deleted.
+- Focused first-seen order, supported-family filtering, shared-lease, replay,
+  and owned-empty-reset coverage is green. Full local floors: runtime
+  489 / 489; public facade 171 / 171; probe-armed workspace including C++
+  probe 726 / 726; ordinary and scripted golden each 317 / 317 entries and
+  647 / 647 segments with zero divergences, including `data_viz_demo` and
+  `db_health_tracker`; all 26 checker/capture/summarizer controls. Source
+  trace and structural checks were refreshed on the candidate. All FL-B rows
+  and FL-G01 remain pending/open until whole-wave independent acceptance.
 
 ## FL-0 evidence
 
@@ -509,10 +537,9 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Commit the locally gated FL-B2 LinearAnimation definition/occurrence
-   owner slice.
-2. Execute FL-B3 reset factory lifecycle and FL-B4 blend ownership, deleting
-   each displaced Rust owner path in the same lane.
+1. Commit the locally gated FL-B3 reset factory lifecycle slice.
+2. Execute FL-B4 blend ownership, deleting each displaced Rust owner path in
+   the same lane.
 3. Run the complete unchanged floor and one canonical whole-corpus FL-B
    checkpoint. Performance remains verification evidence, never the source of
    a work slice.

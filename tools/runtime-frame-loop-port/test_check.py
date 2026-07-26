@@ -460,6 +460,51 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     result.stderr,
                 )
 
+    def test_fl_b3_negative_ratchets_reject_displaced_reset_shapes(self) -> None:
+        cases = [
+            (
+                "animation_reset_flat_entries_owner",
+                r"struct\s+AnimationReset\s*\{\s*entries\s*:\s*Vec",
+                "struct AnimationReset { entries: Vec<Entry> }\n",
+            ),
+            (
+                "animation_reset_global_seen_scan",
+                r"let\s+mut\s+seen\s*=\s*Vec",
+                "fn build() { let mut seen = Vec::new(); }\n",
+            ),
+            (
+                "animation_reset_empty_owner_elision",
+                r"if\s+entries\.is_empty\(\)\s*\{\s*None",
+                "fn build(entries: Vec<u8>) { if entries.is_empty() { None } }\n",
+            ),
+        ]
+        base_gaps = self.gaps.read_text()
+        source = self.repo / "crates/runtime/src/animation.rs"
+
+        for ratchet_id, pattern, forbidden_source in cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.gaps.write_text(
+                    base_gaps.replace(
+                        "ratchet = []",
+                        textwrap.dedent(
+                        f"""
+                        [[ratchet]]
+                        id = "{ratchet_id}"
+                        globs = ["crates/runtime/src/animation.rs"]
+                        pattern = {json.dumps(pattern)}
+                        max_occurrences = 0
+                        """
+                        ).strip(),
+                    )
+                )
+                source.write_text(forbidden_source)
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    f"ratchet {ratchet_id} increased to 1 > 0",
+                    result.stderr,
+                )
+
     def test_mechanism_input_hash_is_fail_closed(self) -> None:
         fixture = self.upstream / "tests/assets/scroll.riv"
         fixture.parent.mkdir(parents=True)

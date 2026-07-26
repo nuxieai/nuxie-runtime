@@ -15,7 +15,7 @@ nuxie-render-api = { path = "../nuxie-render-api" }
 nuxie-schema = { path = "../nuxie-schema" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-skrifa = "0.44"
+skrifa = "0.45.1"
 taffy = "0.12.1"
 unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
 unicode-script = "0.5.8"

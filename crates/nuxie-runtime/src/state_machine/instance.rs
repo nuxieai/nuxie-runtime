@@ -747,9 +747,22 @@ struct RuntimePointerPosition {
 
 #[derive(Debug)]
 struct RuntimeViewModelListenerInstance {
-    view_model_index: usize,
-    property_path: Vec<usize>,
-    actions: Vec<RuntimeScheduledListenerAction>,
+    /// Stable authored listener-definition arena plus index, matching C++'s
+    /// retained `const StateMachineListener*`.
+    listener_definitions: Arc<Vec<RuntimeStateMachineListener>>,
+    listener_index: usize,
+    property_bindings: Vec<RuntimeViewModelListenerPropertyBinding>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RuntimeViewModelListenerSource {
+    Single,
+    Input(usize),
+}
+
+#[derive(Debug)]
+struct RuntimeViewModelListenerPropertyBinding {
+    source: RuntimeViewModelListenerSource,
     /// The retained scalar cell this listener's condition currently reads,
     /// with this listener's dirt sink
     /// registered as a dependent (C++ `ListenerViewModelPropertyBinding`,
@@ -759,21 +772,64 @@ struct RuntimeViewModelListenerInstance {
 }
 
 impl RuntimeViewModelListenerInstance {
+    fn new(
+        listener_definitions: Arc<Vec<RuntimeStateMachineListener>>,
+        listener_index: usize,
+    ) -> Option<Self> {
+        let listener = listener_definitions.get(listener_index)?;
+        if !listener.has_listener(RuntimeListenerType::ViewModel) {
+            return None;
+        }
+        let property_bindings =
+            if listener.view_model_index.is_some() && listener.view_model_property_path.is_some() {
+                vec![RuntimeViewModelListenerPropertyBinding {
+                    source: RuntimeViewModelListenerSource::Single,
+                    cell_binding: None,
+                }]
+            } else {
+                (0..listener.view_model_input_types.len())
+                    .map(|input_index| RuntimeViewModelListenerPropertyBinding {
+                        source: RuntimeViewModelListenerSource::Input(input_index),
+                        cell_binding: None,
+                    })
+                    .collect()
+            };
+        Some(Self {
+            listener_definitions,
+            listener_index,
+            property_bindings,
+        })
+    }
+
+    fn listener(&self) -> &RuntimeStateMachineListener {
+        &self.listener_definitions[self.listener_index]
+    }
+
+    fn actions(&self) -> &[RuntimeScheduledListenerAction] {
+        &self.listener().listener_actions
+    }
+
     /// A cloned machine re-registers a FRESH reporting sink on the same
     /// retained cell and the clone's own queue. Pending reports stay with the
     /// original machine, matching C++ instance-local listener vectors.
     fn clone_for_queue(&self, queue: &RuntimeCellNotificationQueue, listener_index: usize) -> Self {
         Self {
-            view_model_index: self.view_model_index,
-            property_path: self.property_path.clone(),
-            actions: self.actions.clone(),
-            cell_binding: self.cell_binding.as_ref().map(|binding| {
-                RuntimeViewModelListenerCellBinding::new(
-                    binding.cell.clone(),
-                    queue,
-                    listener_index,
-                )
-            }),
+            listener_definitions: Arc::clone(&self.listener_definitions),
+            listener_index: self.listener_index,
+            property_bindings: self
+                .property_bindings
+                .iter()
+                .map(|binding| RuntimeViewModelListenerPropertyBinding {
+                    source: binding.source,
+                    cell_binding: binding.cell_binding.as_ref().map(|cell_binding| {
+                        RuntimeViewModelListenerCellBinding::new(
+                            cell_binding.cell.clone(),
+                            queue,
+                            listener_index,
+                        )
+                    }),
+                })
+                .collect(),
         }
     }
 }
@@ -807,12 +863,12 @@ impl std::fmt::Debug for RuntimeViewModelListenerCellBinding {
 }
 
 fn relink_view_model_listener_cell(
-    listener: &mut RuntimeViewModelListenerInstance,
+    binding: &mut RuntimeViewModelListenerPropertyBinding,
     cell: Option<RuntimeViewModelCell>,
     queue: &RuntimeCellNotificationQueue,
     listener_index: usize,
 ) {
-    let same_cell = listener
+    let same_cell = binding
         .cell_binding
         .as_ref()
         .zip(cell.as_ref())
@@ -820,7 +876,7 @@ fn relink_view_model_listener_cell(
     if same_cell {
         return;
     }
-    listener.cell_binding =
+    binding.cell_binding =
         cell.map(|cell| RuntimeViewModelListenerCellBinding::new(cell, queue, listener_index));
 }
 
@@ -957,17 +1013,13 @@ impl StateMachineInstance {
         if key_frame_data_bind_graphs.iter().all(Option::is_none) {
             key_frame_data_bind_graphs.clear();
         }
-        let view_model_listeners = state_machine
-            .listeners
-            .iter()
-            .filter(|listener| listener.has_listener(RuntimeListenerType::ViewModel))
-            .filter_map(|listener| {
-                Some(RuntimeViewModelListenerInstance {
-                    view_model_index: listener.view_model_index?,
-                    property_path: listener.view_model_property_path.clone()?,
-                    actions: listener.listener_actions.clone(),
-                    cell_binding: None,
-                })
+        let listener_definitions = Arc::clone(&state_machine.listeners);
+        let view_model_listeners = (0..listener_definitions.len())
+            .filter_map(|listener_index| {
+                RuntimeViewModelListenerInstance::new(
+                    Arc::clone(&listener_definitions),
+                    listener_index,
+                )
             })
             .collect();
         Self {
@@ -2520,16 +2572,16 @@ impl StateMachineInstance {
                 };
                 let action_changed = if let Some(context) = owned_context.as_deref_mut() {
                     self.perform_listener_actions(
-                        &listener.actions,
+                        listener.actions(),
                         Some(context),
                         &ScriptListenerInvocation::None,
                         &mut NoopScriptHost,
                     )
                 } else if let Some(data_context) = data_context.as_ref() {
-                    self.perform_listener_actions_for_data_context(data_context, &listener.actions)
+                    self.perform_listener_actions_for_data_context(data_context, listener.actions())
                 } else {
                     self.perform_listener_actions(
-                        &listener.actions,
+                        listener.actions(),
                         None,
                         &ScriptListenerInvocation::None,
                         &mut NoopScriptHost,
@@ -5130,19 +5182,33 @@ impl StateMachineInstance {
         context_chain: &[&[usize]],
     ) {
         for (listener_index, listener) in self.view_model_listeners.iter_mut().enumerate() {
-            let cell = context_chain.iter().find_map(|context_path| {
-                context.cell_by_scoped_property_path(
-                    context_path,
-                    listener.view_model_index,
-                    &listener.property_path,
-                )
-            });
-            relink_view_model_listener_cell(
-                listener,
-                cell,
-                &self.reported_listener_view_models,
-                listener_index,
-            );
+            let definition = &listener.listener_definitions[listener.listener_index];
+            for binding in &mut listener.property_bindings {
+                let source = match binding.source {
+                    RuntimeViewModelListenerSource::Single => definition
+                        .view_model_index
+                        .zip(definition.view_model_property_path.as_deref()),
+                    RuntimeViewModelListenerSource::Input(input_index) => definition
+                        .view_model_input_types
+                        .get(input_index)
+                        .and_then(|input| input.source_path()),
+                };
+                let cell = source.and_then(|(view_model_index, property_path)| {
+                    context_chain.iter().find_map(|context_path| {
+                        context.cell_by_scoped_property_path(
+                            context_path,
+                            view_model_index,
+                            property_path,
+                        )
+                    })
+                });
+                relink_view_model_listener_cell(
+                    binding,
+                    cell,
+                    &self.reported_listener_view_models,
+                    listener_index,
+                );
+            }
         }
     }
 
@@ -5151,31 +5217,46 @@ impl StateMachineInstance {
         data_context: &RuntimeOwnedDataContext,
     ) {
         for (listener_index, listener) in self.view_model_listeners.iter_mut().enumerate() {
-            let mut source_path = Vec::with_capacity(listener.property_path.len() + 1);
-            let Ok(view_model_index) = u32::try_from(listener.view_model_index) else {
-                listener.cell_binding = None;
-                continue;
-            };
-            source_path.push(view_model_index);
-            source_path.extend(
-                listener
-                    .property_path
-                    .iter()
-                    .filter_map(|property_index| u32::try_from(*property_index).ok()),
-            );
-            // C++ `DataContext::getViewModelProperty` returns the retained
-            // `ViewModelInstanceValue`; the listener registers itself as a
-            // dependent and does not snapshot or dispatch the initial value
-            // (`state_machine_instance.cpp:1331-1372,1401-1407`).
-            let cell = data_context.resolved_property_path(&source_path).and_then(
-                |(context, property_path)| context.borrow().cell_by_property_path(&property_path),
-            );
-            relink_view_model_listener_cell(
-                listener,
-                cell,
-                &self.reported_listener_view_models,
-                listener_index,
-            );
+            let definition = &listener.listener_definitions[listener.listener_index];
+            for binding in &mut listener.property_bindings {
+                let source = match binding.source {
+                    RuntimeViewModelListenerSource::Single => definition
+                        .view_model_index
+                        .zip(definition.view_model_property_path.as_deref()),
+                    RuntimeViewModelListenerSource::Input(input_index) => definition
+                        .view_model_input_types
+                        .get(input_index)
+                        .and_then(|input| input.source_path()),
+                };
+                let cell = source.and_then(|(view_model_index, property_path)| {
+                    let mut source_path = Vec::with_capacity(property_path.len() + 1);
+                    source_path.push(u32::try_from(view_model_index).ok()?);
+                    source_path.extend(
+                        property_path
+                            .iter()
+                            .copied()
+                            .map(u32::try_from)
+                            .collect::<Result<Vec<_>, _>>()
+                            .ok()?,
+                    );
+                    // C++ `DataContext::getViewModelProperty` returns the
+                    // retained `ViewModelInstanceValue`; every authored
+                    // ListenerInputTypeViewModel registers its own binding
+                    // against the same parent ListenerViewModel
+                    // (`state_machine_instance.cpp:1349-1372,1401-1407`).
+                    data_context.resolved_property_path(&source_path).and_then(
+                        |(context, property_path)| {
+                            context.borrow().cell_by_property_path(&property_path)
+                        },
+                    )
+                });
+                relink_view_model_listener_cell(
+                    binding,
+                    cell,
+                    &self.reported_listener_view_models,
+                    listener_index,
+                );
+            }
         }
     }
 
@@ -5655,7 +5736,9 @@ impl StateMachineInstance {
         // compatibility rebinds instead relink in place when identity is
         // unchanged.
         for listener in &mut self.view_model_listeners {
-            listener.cell_binding = None;
+            for binding in &mut listener.property_bindings {
+                binding.cell_binding = None;
+            }
         }
     }
 
@@ -5794,6 +5877,8 @@ impl StateMachineInstance {
     ) -> Option<RuntimeViewModelCell> {
         self.view_model_listeners
             .get(index)?
+            .property_bindings
+            .first()?
             .cell_binding
             .as_ref()
             .map(|binding| binding.cell.clone())
@@ -6126,6 +6211,126 @@ fn runtime_owned_font_asset_value_for_state_machine_source(
         .map(|property_index| usize::try_from(*property_index).ok())
         .collect::<Option<Vec<_>>>()?;
     context.font_asset_value_by_property_path(&property_path)
+}
+
+#[cfg(test)]
+mod view_model_listener_tests {
+    use super::*;
+    use crate::properties::property_key_for_name;
+    use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
+    use nuxie_graph::GraphFile;
+
+    #[test]
+    fn one_listener_occurrence_binds_every_authored_view_model_source() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+            record("StateMachine", Vec::new()),
+            record(
+                "StateMachineListener",
+                vec![uint_property("StateMachineListener", "targetId", 0)],
+            ),
+            record(
+                "ListenerInputTypeViewModel",
+                vec![
+                    uint_property(
+                        "ListenerInputTypeViewModel",
+                        "listenerTypeValue",
+                        RuntimeListenerType::ViewModel as u64,
+                    ),
+                    bytes_property("ListenerInputTypeViewModel", "viewModelPathIds", vec![0, 0]),
+                ],
+            ),
+            record(
+                "ListenerInputTypeViewModel",
+                vec![
+                    uint_property(
+                        "ListenerInputTypeViewModel",
+                        "listenerTypeValue",
+                        RuntimeListenerType::ViewModel as u64,
+                    ),
+                    bytes_property("ListenerInputTypeViewModel", "viewModelPathIds", vec![0, 1]),
+                ],
+            ),
+        ])
+        .expect("view-model listener records import");
+        let graph = GraphFile::from_runtime_file(&file).expect("listener graph builds");
+        let authored = file.artboard_state_machine_graphs(0);
+        let definition = runtime_state_machine_listener(
+            &file,
+            graph.artboards.first().expect("artboard graph"),
+            &[],
+            &authored[0].listeners[0],
+        )
+        .expect("listener definition");
+        let definitions = Arc::new(vec![definition]);
+        let mut occurrence = RuntimeViewModelListenerInstance::new(Arc::clone(&definitions), 0)
+            .expect("view-model listener occurrence");
+
+        assert!(std::ptr::eq(occurrence.listener(), &definitions[0]));
+        assert_eq!(occurrence.property_bindings.len(), 2);
+        assert!(matches!(
+            occurrence.property_bindings[0].source,
+            RuntimeViewModelListenerSource::Input(0)
+        ));
+        assert!(matches!(
+            occurrence.property_bindings[1].source,
+            RuntimeViewModelListenerSource::Input(1)
+        ));
+
+        let queue = RuntimeCellNotificationQueue::default();
+        let first = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(0.0));
+        let second = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(0.0));
+        relink_view_model_listener_cell(
+            &mut occurrence.property_bindings[0],
+            Some(first.clone()),
+            &queue,
+            0,
+        );
+        relink_view_model_listener_cell(
+            &mut occurrence.property_bindings[1],
+            Some(second.clone()),
+            &queue,
+            0,
+        );
+
+        assert!(first.set_value(RuntimeViewModelCellValue::Number(1.0)));
+        assert!(second.set_value(RuntimeViewModelCellValue::Number(2.0)));
+        let mut reporting = Vec::new();
+        queue.swap_into(&mut reporting);
+
+        // C++ has one ListenerViewModel parent and one property binding per
+        // authored input. Either binding reports that same parent, preserving
+        // mutation/FIFO order (`state_machine_instance.cpp:1324-1375,
+        // 1377-1382,1454-1489,3021-3025`).
+        assert_eq!(reporting, [0, 0]);
+    }
+
+    fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: nuxie_schema::definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn uint_property(type_name: &str, name: &str, value: u64) -> AuthoringProperty {
+        AuthoringProperty {
+            key: property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value: AuthoringValue::Uint(value),
+        }
+    }
+
+    fn bytes_property(type_name: &str, name: &str, value: Vec<u8>) -> AuthoringProperty {
+        AuthoringProperty {
+            key: property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value: AuthoringValue::Bytes(value),
+        }
+    }
 }
 
 #[cfg(test)]

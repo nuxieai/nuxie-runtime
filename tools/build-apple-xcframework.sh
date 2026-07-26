@@ -31,6 +31,11 @@ rust_sysroot="$("${rust_compiler}" --print sysroot)"
 rust_llvm_nm="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-nm"
 rust_llvm_objcopy="${rust_sysroot}/lib/rustlib/${rust_host}/bin/llvm-objcopy"
 runtime_revision="${NUX_RUNTIME_SOURCE_REVISION:-}"
+runtime_version="$(
+    sed -n 's/^version = "\([^"]*\)"/\1/p' \
+        "${repo_root}/crates/nux-apple-runtime/Cargo.toml" |
+        head -1
+)"
 xcode_version="$(xcodebuild -version | sed -n 's/^Xcode //p')"
 xcode_build="$(xcodebuild -version | sed -n 's/^Build version //p')"
 iphoneos_sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
@@ -65,6 +70,10 @@ if [[ -z "${luaur_version}" ]]; then
     echo "cannot determine the pinned luaur-vm version from Cargo.lock" >&2
     exit 10
 fi
+if [[ -z "${runtime_version}" ]]; then
+    echo "cannot determine the Apple runtime version from Cargo.toml" >&2
+    exit 11
+fi
 
 for rust_llvm_tool in "${rust_llvm_nm}" "${rust_llvm_objcopy}"; do
     if [[ ! -x "${rust_llvm_tool}" ]]; then
@@ -93,26 +102,60 @@ if [[ -n "${NUX_APPLE_XCODE_BUILD:-}" && "${xcode_build}" != "${NUX_APPLE_XCODE_
     exit 7
 fi
 
-if git -C "${repo_root}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    if [[ -z "${runtime_revision}" ]]; then
-        runtime_revision="$(git -C "${repo_root}" rev-parse --verify HEAD)"
-    fi
-    if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=all)" ]]; then
-        if [[ "${NUX_APPLE_ALLOW_DIRTY:-0}" != "1" ]]; then
-            echo "refusing to package a dirty runtime tree" >&2
-            echo "commit the runtime or set NUX_APPLE_ALLOW_DIRTY=1 for a local prototype" >&2
-            exit 4
-        fi
-        runtime_revision="${runtime_revision}-dirty"
-    fi
-elif [[ -z "${runtime_revision}" ]]; then
-    echo "NUX_RUNTIME_SOURCE_REVISION is required outside a Git worktree" >&2
+if ! git -C "${repo_root}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "refusing to package unverifiable source outside a Git worktree" >&2
     exit 8
 fi
-if [[ ! "${runtime_revision}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
-    echo "runtime source revision is not metadata-safe: ${runtime_revision}" >&2
+git_revision="$(git -C "${repo_root}" rev-parse --verify HEAD)"
+if [[ -z "${runtime_revision}" ]]; then
+    runtime_revision="${git_revision}"
+elif [[ "${runtime_revision}" != "${git_revision}" ]]; then
+    echo "requested runtime source revision does not match the checked-out commit" >&2
+    echo "requested: ${runtime_revision}" >&2
+    echo "checkout:  ${git_revision}" >&2
+    exit 12
+fi
+if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=all)" ]]; then
+    if [[ "${NUX_APPLE_ALLOW_DIRTY:-0}" != "1" ]]; then
+        echo "refusing to package a dirty runtime tree" >&2
+        echo "commit the runtime or set NUX_APPLE_ALLOW_DIRTY=1 for a local prototype" >&2
+        exit 4
+    fi
+    if ! git -C "${repo_root}" diff --quiet --no-ext-diff HEAD -- ||
+        [[ -n "$(
+            git -C "${repo_root}" ls-files \
+                --others \
+                --exclude-standard \
+                -- \
+                crates \
+                vendor
+        )" ]]; then
+        dirty_fingerprint="$(
+            {
+                printf '%s\0' "${git_revision}"
+                git -C "${repo_root}" diff --binary --no-ext-diff HEAD --
+                git -C "${repo_root}" ls-files \
+                    --others \
+                    --exclude-standard \
+                    -z \
+                    -- \
+                    crates \
+                    vendor |
+                    while IFS= read -r -d '' untracked_path; do
+                        printf '%s\0' "${untracked_path}"
+                        cat "${repo_root}/${untracked_path}"
+                        printf '\0'
+                    done
+            } | shasum -a 256 | awk '{ print $1 }'
+        )"
+        runtime_revision="${git_revision}-dirty.${dirty_fingerprint}"
+    fi
+fi
+if [[ ! "${runtime_revision}" =~ ^[0-9a-f]{40}(-dirty\.[0-9a-f]{64})?$ ]]; then
+    echo "runtime source revision is not an exact clean or diagnostic-dirty identity: ${runtime_revision}" >&2
     exit 5
 fi
+runtime_identity="${runtime_version}@${runtime_revision}"
 
 # Keep Cargo's target directory as an incremental build cache, but recreate every
 # directory that is copied into the published artifact. Without this boundary,
@@ -191,6 +234,7 @@ lipo -create \
 cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.h" "${headers_dir}/"
 cp "${repo_root}/crates/nux-apple-runtime/include/nux_runtime.generated.h" "${headers_dir}/"
 cp "${repo_root}/crates/nux-apple-runtime/include/module.modulemap" "${headers_dir}/"
+contract_fingerprint="$(shasum -a 256 "${headers_dir}/nux_runtime.generated.h" | awk '{ print $1 }')"
 
 phase "Create the XCFramework"
 xcodebuild -create-xcframework \
@@ -211,12 +255,12 @@ checksum="$(swift package compute-checksum "${archive_path}")"
 report_disk
 
 phase "Write artifact provenance"
-printf '{\n  "schemaVersion": 1,\n  "abiMajor": %s,\n  "abiMinor": %s,\n  "runtimeVersion": "%s",\n  "luaurVersion": "%s",\n  "sourceRevision": "%s",\n  "buildProfile": "%s",\n  "rustToolchain": "%s",\n  "xcodeVersion": "%s",\n  "xcodeBuild": "%s",\n  "iphoneOSSDKVersion": "%s",\n  "iphoneOSSDKBuild": "%s",\n  "iphoneSimulatorSDKVersion": "%s",\n  "iphoneSimulatorSDKBuild": "%s",\n  "minimumIOSVersion": "%s",\n  "thirdPartyNoticesPath": "NuxieRuntime.xcframework/THIRD_PARTY_NOTICES.md",\n  "swiftPackageChecksum": "%s"\n}\n' \
-    "$(sed -n 's/^#define NUX_RUNTIME_ABI_MAJOR //p' "${headers_dir}/nux_runtime.generated.h")" \
-    "$(sed -n 's/^#define NUX_RUNTIME_ABI_MINOR //p' "${headers_dir}/nux_runtime.generated.h")" \
-    "$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${repo_root}/crates/nux-apple-runtime/Cargo.toml" | head -1)" \
-    "${luaur_version}" \
+printf '{\n  "schemaVersion": 2,\n  "runtimeVersion": "%s",\n  "sourceRevision": "%s",\n  "runtimeIdentity": "%s",\n  "contractFingerprint": "%s",\n  "luaurVersion": "%s",\n  "buildProfile": "%s",\n  "rustToolchain": "%s",\n  "xcodeVersion": "%s",\n  "xcodeBuild": "%s",\n  "iphoneOSSDKVersion": "%s",\n  "iphoneOSSDKBuild": "%s",\n  "iphoneSimulatorSDKVersion": "%s",\n  "iphoneSimulatorSDKBuild": "%s",\n  "minimumIOSVersion": "%s",\n  "thirdPartyNoticesPath": "NuxieRuntime.xcframework/THIRD_PARTY_NOTICES.md",\n  "swiftPackageChecksum": "%s"\n}\n' \
+    "${runtime_version}" \
     "${runtime_revision}" \
+    "${runtime_identity}" \
+    "${contract_fingerprint}" \
+    "${luaur_version}" \
     "${profile}" \
     "${rust_toolchain}" \
     "${xcode_version}" \

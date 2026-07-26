@@ -39,6 +39,7 @@ if ! python3 -m json.tool "${metadata_path}" >/dev/null; then
     sed -n '1,200p' "${metadata_path}" >&2
     exit 1
 fi
+python3 "${repo_root}/tools/apple_runtime_contract.py" metadata "${metadata_path}"
 
 rust_toolchain="$(metadata_scalar rustToolchain string)"
 rust_compiler="$(rustup which --toolchain "${rust_toolchain}" rustc)"
@@ -84,7 +85,7 @@ cmp "${repo_root}/THIRD_PARTY_NOTICES.md" "${verification_temp_dir}/${third_part
 device_library="$(find "${xcframework_path}" -path '*ios-arm64/libnux_apple_runtime.a' -print -quit)"
 simulator_library="$(find "${xcframework_path}" -path '*ios-arm64_x86_64-simulator/libnux_apple_runtime.a' -print -quit)"
 
-phase "validate architectures and exported ABI"
+phase "validate architectures and exported runtime contract"
 if [[ -z "${device_library}" ]]; then
     echo "device Apple runtime library is missing from ${xcframework_path}" >&2
     exit 1
@@ -133,42 +134,30 @@ done
 headers_dir="$(dirname "${device_library}")/Headers"
 simulator_headers_dir="$(dirname "${simulator_library}")/Headers"
 require_file "${headers_dir}/nux_runtime.generated.h"
-header_abi_major="$(sed -n 's/^#define NUX_RUNTIME_ABI_MAJOR //p' "${headers_dir}/nux_runtime.generated.h")"
-header_abi_minor="$(sed -n 's/^#define NUX_RUNTIME_ABI_MINOR //p' "${headers_dir}/nux_runtime.generated.h")"
-header_flow_session_abi_minor="$(sed -n 's/^#define NUX_FLOW_SESSION_ABI_MINOR //p' "${headers_dir}/nux_runtime.generated.h")"
-if [[ -z "${header_abi_major}" || -z "${header_abi_minor}" || -z "${header_flow_session_abi_minor}" ]]; then
-    echo "generated runtime header is missing an ABI version define" >&2
-    exit 1
-fi
 
-required_symbols=(
-    _nux_runtime_abi_major
-    _nux_runtime_abi_minor
-    _nux_runtime_require_abi
-    _nux_runtime_build_provenance
-    _nux_flow_runtime_context_create
-    _nux_flow_render_session_create
-    _nux_flow_render_session_attach_apple_surface
-    _nux_apple_surface_reattach
-    _nux_flow_render_session_advance
-    _nux_operation_result_script_authorization
-    _nux_operation_result_authenticated_key_id
-    _nux_operation_result_diagnostic_count
-    _nux_operation_result_diagnostic_at
-    _rust_eh_personality
-)
-for library in "${device_library}" "${simulator_library}"; do
-    phase "validate exported ABI in $(basename "${library}")"
+symbol_libraries=("${device_library}")
+for simulator_arch in arm64 x86_64; do
+    symbol_libraries+=(
+        "${verification_temp_dir}/libnux_apple_runtime-${simulator_arch}.a"
+    )
+done
+
+for library in "${symbol_libraries[@]}"; do
+    phase "validate complete public symbol manifest in ${library##*/}"
     if ! symbols="$("${rust_llvm_nm}" -gjU "${library}")"; then
         echo "cannot inspect exported symbols in ${library}" >&2
         exit 1
     fi
-    for required_symbol in "${required_symbols[@]}"; do
-        if ! grep -Fxq "${required_symbol}" <<< "${symbols}"; then
-            echo "required symbol ${required_symbol} is missing from ${library}" >&2
-            exit 1
-        fi
-    done
+    symbols_path="${verification_temp_dir}/${library##*/}.symbols"
+    printf '%s\n' "${symbols}" > "${symbols_path}"
+    python3 "${repo_root}/tools/apple_runtime_contract.py" \
+        symbols \
+        "${headers_dir}/nux_runtime.generated.h" \
+        "${symbols_path}"
+    if ! grep -Fxq "_rust_eh_personality" <<< "${symbols}"; then
+        echo "required panic-unwind symbol _rust_eh_personality is missing from ${library}" >&2
+        exit 1
+    fi
 done
 
 phase "validate toolchain and embedded provenance"
@@ -176,6 +165,8 @@ source_revision="$(metadata_scalar sourceRevision string)"
 build_profile="$(metadata_scalar buildProfile string)"
 minimum_ios_version="$(metadata_scalar minimumIOSVersion string)"
 runtime_version="$(metadata_scalar runtimeVersion string)"
+runtime_identity="$(metadata_scalar runtimeIdentity string)"
+contract_fingerprint="$(metadata_scalar contractFingerprint string)"
 luaur_version="$(metadata_scalar luaurVersion string)"
 xcode_version="$(metadata_scalar xcodeVersion string)"
 xcode_build="$(metadata_scalar xcodeBuild string)"
@@ -183,7 +174,29 @@ iphoneos_sdk_version="$(metadata_scalar iphoneOSSDKVersion string)"
 iphoneos_sdk_build="$(metadata_scalar iphoneOSSDKBuild string)"
 iphonesimulator_sdk_version="$(metadata_scalar iphoneSimulatorSDKVersion string)"
 iphonesimulator_sdk_build="$(metadata_scalar iphoneSimulatorSDKBuild string)"
-test "$(metadata_scalar schemaVersion integer)" = "1"
+test "$(metadata_scalar schemaVersion integer)" = "2"
+if [[ ! "${source_revision}" =~ ^[0-9a-f]{40}(-dirty\.[0-9a-f]{64})?$ ]]; then
+    echo "artifact source revision is not an exact clean or diagnostic-dirty identity: ${source_revision}" >&2
+    exit 1
+fi
+expected_runtime_version="$(
+    sed -n 's/^version = "\([^"]*\)"/\1/p' \
+        "${repo_root}/crates/nux-apple-runtime/Cargo.toml" |
+        head -1
+)"
+test -n "${expected_runtime_version}"
+test "${runtime_version}" = "${expected_runtime_version}"
+test "${runtime_identity}" = "${runtime_version}@${source_revision}"
+expected_contract_fingerprint="$(
+    shasum -a 256 "${headers_dir}/nux_runtime.generated.h" |
+        awk '{ print $1 }'
+)"
+test -n "${expected_contract_fingerprint}"
+test "${contract_fingerprint}" = "${expected_contract_fingerprint}"
+if grep -Eq '"(abiMajor|abiMinor|runtimeAbiMajor|runtimeAbiMinor|flowSessionAbiMinor)"[[:space:]]*:' "${metadata_path}"; then
+    echo "artifact metadata contains a removed client-facing ABI field" >&2
+    exit 1
+fi
 expected_luaur_version="$(
     awk '
         $0 == "name = \"luaur-vm\"" { found = 1; next }
@@ -207,21 +220,25 @@ test "$(xcrun --sdk iphonesimulator --show-sdk-version)" = "${iphonesimulator_sd
 test "$(xcrun --sdk iphonesimulator --show-sdk-build-version)" = "${iphonesimulator_sdk_build}"
 for target_and_library in \
     "aarch64-apple-ios:${device_library}" \
-    "aarch64-apple-ios-sim:${simulator_library}" \
-    "x86_64-apple-ios:${simulator_library}"; do
+    "aarch64-apple-ios-sim:${verification_temp_dir}/libnux_apple_runtime-arm64.a" \
+    "x86_64-apple-ios:${verification_temp_dir}/libnux_apple_runtime-x86_64.a"; do
     target="${target_and_library%%:*}"
     library="${target_and_library#*:}"
     provenance="$(strings "${library}" | grep -F "\"target\":\"${target}\"" | head -1)"
     test -n "${provenance}"
     grep -Fq "\"sourceRevision\":\"${source_revision}\"" <<< "${provenance}"
     grep -Fq "\"runtimeVersion\":\"${runtime_version}\"" <<< "${provenance}"
+    grep -Fq "\"runtimeIdentity\":\"${runtime_identity}\"" <<< "${provenance}"
+    grep -Fq "\"contractFingerprint\":\"${contract_fingerprint}\"" <<< "${provenance}"
+    grep -Fq '"schemaVersion":2' <<< "${provenance}"
     grep -Fq "\"profile\":\"${build_profile}\"" <<< "${provenance}"
     grep -Fq "\"rustc\":\"rustc ${rust_toolchain}" <<< "${provenance}"
     grep -Fq '"features":"apple-product"' <<< "${provenance}"
     grep -Fq "\"luaurVersion\":\"${luaur_version}\"" <<< "${provenance}"
-    grep -Fq "\"runtimeAbiMajor\":${header_abi_major}" <<< "${provenance}"
-    grep -Fq "\"runtimeAbiMinor\":${header_abi_minor}" <<< "${provenance}"
-    grep -Fq "\"flowSessionAbiMinor\":${header_flow_session_abi_minor}" <<< "${provenance}"
+    if grep -Eq '"(abiMajor|abiMinor|runtimeAbiMajor|runtimeAbiMinor|flowSessionAbiMinor)"[[:space:]]*:' <<< "${provenance}"; then
+        echo "embedded provenance contains a removed client-facing ABI field for ${target}" >&2
+        exit 1
+    fi
 done
 
 expected_public_headers="$(printf '%s\n' \
@@ -252,8 +269,6 @@ verify_public_header_allowlist "${simulator_headers_dir}"
 for public_header in module.modulemap nux_runtime.generated.h nux_runtime.h; do
     cmp "${headers_dir}/${public_header}" "${simulator_headers_dir}/${public_header}"
 done
-test "$(metadata_scalar abiMajor integer)" = "${header_abi_major}"
-test "$(metadata_scalar abiMinor integer)" = "${header_abi_minor}"
 
 phase "compile the C header smoke test"
 clang -std=c11 -Wall -Wextra -Werror \
@@ -293,7 +308,7 @@ link_swift_smoke() {
     test "$(lipo -archs "${output}")" = "${expected_arch}"
     local linked_symbols
     linked_symbols="$(nm -gjU "${output}")"
-    grep -Fxq '_nux_runtime_abi_major' <<< "${linked_symbols}"
+    grep -Fxq '_nux_runtime_bind' <<< "${linked_symbols}"
     ! otool -L "${output}" | grep -Eiq 'rive|nuxie_runtime'
     local linked_minos
     linked_minos="$(otool -l "${output}" | awk '$1 == "minos" { print $2 }' | sort -u)"

@@ -157,7 +157,7 @@ The following work can proceed without waiting for an FL landing:
 | `F-ED-03` / `RT-ED-005` | independently verify and promote the exact PR #49 landing provenance | the production authoring repair is complete; do not reopen it or conflate the separate FL-E layout/TextStyle dependency |
 | `F-ED-04` / `RT-ED-007` | preserve the unchanged red acceptance and independently rerun it after the relevant state-machine port wave | deferred post-port verification; no direct Runtime Fix request, schedule, or active writer lease |
 | `F-ED-06` / `RT-ED-003` | preserve the independently closed PR #55 landing provenance | the production browser-presentation repair and promotion are complete; do not reopen it or mix it with historical `F-ED-07` |
-| `F-ED-12` | locally build and qualify the existing ABI 1.6 artifact | no header/C-API source change without a fresh scope review; no external publication before the user checkpoint |
+| `F-ED-12` | locally build and qualify the exact-runtime-identity `0.2.0` artifact | no further header/C-API source change without a fresh scope review; no external publication before the user checkpoint |
 | `F-ED-13` | normalize and compare records and repair an Editor/lowering-only first divergence | identical records are required before any renderer attribution; no runtime edit |
 
 `F-ED-04` records only the proven state-machine/bindables seam for deferred
@@ -237,7 +237,8 @@ The safe next queue is therefore:
    Scene writer, or active runtime lease; activate a qualified
    renderer-only `F-ED-10` closure only if it survives the atlas and
    coordinator lease checks;
-6. perform record normalization and local ABI 1.6 qualification;
+6. perform record normalization and local exact-runtime-identity `0.2.0`
+   artifact qualification;
 7. keep every runtime-owner result as evidence until the corresponding FL
    executor releases or absorbs its owner family;
 8. re-handshake after the Runtime Fix stable-Apple repair, after the `FL-B`
@@ -384,9 +385,9 @@ fixture in `F-ED-00`.
 | `LOC-012` | current renderer differential | compare the supported Rust WebGPU result with pinned C++ only after text/feather rows are separated |
 | `LOC-013` | text/font-pipeline candidate, exact stage unproven | same font bytes, axes, glyph IDs, advances, and outlines through C++ and Rust |
 | `LOC-014` | closed stale-oracle observation | exact 180x124 clockwise Feather replay matches pinned C++ and Rust in bounds, atlas plan, and every pixel; do not tune constants |
-| `LOC-015` | stale ABI 1.5 artifact evidence | publish ABI 1.6, pin URL/checksum, rerun |
-| `LOC-016` | source implementation already present; publication gap | publish ABI 1.6 typed animation selection and integrate it |
-| `LOC-017` | invalid old native capture | rerun ABI 1.6 with typed player/time and production host composition |
+| `LOC-015` | stale legacy `apple-runtime-v0.1.0` artifact evidence | publish the exact-runtime-identity `0.2.0` artifact, pin runtime identity/URL/checksum, rerun |
+| `LOC-016` | source implementation already present; publication gap | publish the `0.2.0` artifact with typed animation selection and integrate its exact runtime identity |
+| `LOC-017` | invalid old native capture | rerun `0.2.0` with typed player/time and production host composition |
 | `LOC-018` | additive Scene authoring repair landed, changed intake still needs evidence | PR #66 / `d7cef0a8` supplies exact typed 409/420 hierarchy/fixpoint, but the row cannot promote until the committed inbox separately labels full Editor and Runtime SHAs; remaining ten product records stay Editor-owned and runtime execution/pixels stay post-port |
 | `LOC-019` | closed independently verified BrowserWebGpu nullable-error repair | real Chrome clean-null and concrete-error paths, the full WebGPU matrix, and corpus 1468 exact/837 byte-exact/0 divergent verify merge `ef9dcedd` in consumed runtime `e72323c8` |
 
@@ -550,8 +551,8 @@ stale characterization and has no renderer writer.
 9. `linkedRerun` is used inconsistently, especially for `P15-C01`.
 10. The “42-case” GPU matrix reports 45 results because three auxiliary tests
     are included; the label must say so.
-11. `LOC-015/016/017` must remain outside source-port fan-out until ABI 1.6 is
-    published and consumed.
+11. `LOC-015/016/017` must remain outside source-port fan-out until the
+    exact-runtime-identity `0.2.0` artifact is published and consumed.
 12. The absent `LOC-010` needs a tombstone.
 
 No executor may “pick the likely count” or silently normalize one of these.
@@ -1040,22 +1041,25 @@ The two rows share a real-Chrome smoke harness but not a defect mechanism:
 `LOC-019` owns nullable WebIDL error-scope decoding, while `LOC-009` owns RSTB
 and authored-WGSL consumption.
 
-### `F-ED-12` — Apple ABI 1.6 publication and requalification
+### `F-ED-12` — Apple runtime 0.2.0 exact-identity publication and requalification
 
 Targets: `LOC-015`, `LOC-016`, `LOC-017`.
 
 This is a three-owner relay, not one runtime slice:
 
-1. the runtime repository builds and locally qualifies ABI 1.6 from an exact
-   source SHA, producing the proposed version/channel/checksum;
+1. the runtime repository builds and locally qualifies the exact-identity
+   `0.2.0` artifact from an exact source SHA, producing the proposed
+   runtime identity, channel, and checksum;
 2. **user release checkpoint:** confirm the exact immutable artifact,
    version, and publication channel before the external publish;
-3. `nuxie-ios` updates the URL, checksum, ABI floor, and typed selector;
+3. `nuxie-ios` updates the URL, checksum, exact expected runtime identity, and
+   typed selector, with no second client compatibility version;
 4. `nuxie-dev` consumes that SDK result and reruns the corrected native corpus
    with typed player selection, timestamp, and production host composition.
 
 Only a failure that survives this rerun may return to a runtime owner lane.
-No runtime source edit is authorized by ABI 1.5 evidence.
+No runtime source edit is authorized by the legacy
+`apple-runtime-v0.1.0` evidence.
 
 ### `F-ED-13` — Legacy/Rust record normalization
 
@@ -1135,8 +1139,9 @@ the atlas. A shared file is not proof of a semantic dependency.
   runtime-owner production translation.
 - `LOC-012` can be qualified immediately, but final attribution accounts for
   both the text and feather differential results.
-- ABI 1.6 local qualification precedes the user publication checkpoint; SDK
-  consumption precedes the corrected native product rerun.
+- exact-runtime-identity `0.2.0` local qualification precedes the user
+  publication checkpoint; SDK consumption precedes the corrected native
+  product rerun.
 - `F-ED-14` waits for every directly affected branch, not just the four
   current `RT-ED-*` blockers.
 
@@ -1188,7 +1193,7 @@ scouts for the remaining open rows:
    qualification scout.
 
 The orchestrator handles `RT-ED-001/002`, closed/retracted/tombstone rows, and
-the ABI 1.6 artifact lane.
+the exact-runtime-identity `0.2.0` artifact lane.
 Scouts return direct fixtures, current-pin source closures, and classifications
 only. They do not edit production code.
 

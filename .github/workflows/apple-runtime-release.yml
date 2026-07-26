@@ -106,7 +106,7 @@ jobs:
       - name: Fetch pinned test assets
         run: make fixtures
 
-      - name: Test the product ABI and header
+      - name: Test the exact runtime contract and header
         run: make apple-runtime-check
 
       - name: Reclaim product-check build output before packaging
@@ -177,17 +177,20 @@ jobs:
           test -f "${packaged_header}"
           cmp -s "${generated_header}" "${packaged_header}"
 
-          expected_abi_major="$(sed -n 's/^#define NUX_RUNTIME_ABI_MAJOR //p' "${packaged_header}")"
-          expected_abi_minor="$(sed -n 's/^#define NUX_RUNTIME_ABI_MINOR //p' "${packaged_header}")"
-          test -n "${expected_abi_major}"
-          test -n "${expected_abi_minor}"
+          expected_runtime_identity="${NUX_RUNTIME_VERSION}@${NUX_RUNTIME_SOURCE_REVISION}"
+          expected_contract_fingerprint="$(shasum -a 256 "${packaged_header}" | awk '{ print $1 }')"
+          test -n "${expected_contract_fingerprint}"
 
-          test "$(metadata_scalar schemaVersion integer)" = "1"
+          test "$(metadata_scalar schemaVersion integer)" = "2"
           test "$(metadata_scalar runtimeVersion string)" = "${NUX_RUNTIME_VERSION}"
           test "$(metadata_scalar luaurVersion string)" = "0.1.8"
           test "$(metadata_scalar sourceRevision string)" = "${NUX_RUNTIME_SOURCE_REVISION}"
-          test "$(metadata_scalar abiMajor integer)" = "${expected_abi_major}"
-          test "$(metadata_scalar abiMinor integer)" = "${expected_abi_minor}"
+          test "$(metadata_scalar runtimeIdentity string)" = "${expected_runtime_identity}"
+          test "$(metadata_scalar contractFingerprint string)" = "${expected_contract_fingerprint}"
+          if grep -Eq '"(abiMajor|abiMinor|runtimeAbiMajor|runtimeAbiMinor|flowSessionAbiMinor)"[[:space:]]*:' "${metadata}"; then
+            echo "release metadata contains a removed client-facing ABI field" >&2
+            exit 1
+          fi
           test "$(metadata_scalar buildProfile string)" = "${NUX_APPLE_PROFILE}"
           test "$(metadata_scalar rustToolchain string)" = "${NUX_APPLE_RUST_TOOLCHAIN}"
           test "$(metadata_scalar xcodeVersion string)" = "${NUX_APPLE_XCODE_VERSION}"

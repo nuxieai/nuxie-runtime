@@ -2,9 +2,9 @@
 
 #[cfg(feature = "apple-product")]
 mod artifact;
-mod session_v12;
+mod session;
 
-pub use session_v12::*;
+pub use session::*;
 
 #[cfg(all(feature = "apple-product", panic = "abort"))]
 compile_error!(
@@ -38,10 +38,6 @@ use std::{
     thread::{self, JoinHandle, ThreadId},
 };
 
-pub const NUX_RUNTIME_ABI_MAJOR: u16 = 1;
-pub const NUX_RUNTIME_ABI_MINOR: u16 = 6;
-const MINIMUM_SUPPORTED_ABI_MINOR: u16 = 1;
-
 const MAX_ARTIFACT_BYTE_LENGTH: usize = 67_108_864;
 const MAX_MANIFEST_BYTE_LENGTH: usize = 4_194_304;
 const MAX_SIGNATURE_BYTE_LENGTH: usize = 65_536;
@@ -53,7 +49,12 @@ const MAX_ASSET_SOURCE_KEY_BYTE_LENGTH: usize = MAX_MANIFEST_BYTE_LENGTH;
 const PANIC_DIAGNOSTIC: &str = "runtime panicked; the affected flow session is terminated";
 const RESULT_LIMIT_DIAGNOSTIC_CODE: &[u8] = b"nux_runtime.result_limit_exceeded";
 const SCRIPT_RESOURCE_DIAGNOSTIC_CODE: &[u8] = b"nux_runtime.script_resource_exceeded";
+const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
+const SOURCE_REVISION: &str = env!("NUX_RUNTIME_SOURCE_REVISION");
 const BUILD_PROVENANCE: &str = env!("NUX_RUNTIME_BUILD_PROVENANCE");
+const MAX_RUNTIME_IDENTITY_PART_BYTE_LENGTH: usize = 4_096;
+
+static RUNTIME_BINDING_TOKEN: u8 = 0;
 
 fn ffi_guard<R>(fallback: R, body: impl FnOnce() -> R) -> R {
     match panic::catch_unwind(AssertUnwindSafe(body)) {
@@ -91,7 +92,7 @@ pub const NUX_STATUS_IMPORT_ERROR: NuxStatus = 2 as NuxStatus;
 pub const NUX_STATUS_NOT_FOUND: NuxStatus = 3 as NuxStatus;
 pub const NUX_STATUS_RUNTIME_ERROR: NuxStatus = 4 as NuxStatus;
 pub const NUX_STATUS_INVALID_ARGUMENT: NuxStatus = 5 as NuxStatus;
-pub const NUX_STATUS_ABI_MISMATCH: NuxStatus = 6 as NuxStatus;
+pub const NUX_STATUS_RUNTIME_IDENTITY_MISMATCH: NuxStatus = 6 as NuxStatus;
 pub const NUX_STATUS_SURFACE_ERROR: NuxStatus = 7 as NuxStatus;
 
 /// Stable-width script authorization result set during artifact import.
@@ -141,7 +142,7 @@ trait NuxStatusConstants {
     const NotFound: NuxStatus = NUX_STATUS_NOT_FOUND;
     const RuntimeError: NuxStatus = NUX_STATUS_RUNTIME_ERROR;
     const InvalidArgument: NuxStatus = NUX_STATUS_INVALID_ARGUMENT;
-    const AbiMismatch: NuxStatus = NUX_STATUS_ABI_MISMATCH;
+    const RuntimeIdentityMismatch: NuxStatus = NUX_STATUS_RUNTIME_IDENTITY_MISMATCH;
     const SurfaceError: NuxStatus = NUX_STATUS_SURFACE_ERROR;
 }
 
@@ -232,8 +233,8 @@ pub struct NuxFlowExternalAsset {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-/// Full ABI 1.1 artifact-import contract. `struct_size` must cover this entire
-/// published layout; the artifact manifest and acquisition identities are
+/// Complete artifact-import request. `struct_size` must equal this published
+/// layout's exact size; the artifact manifest and acquisition identities are
 /// required for every import.
 pub struct NuxFlowImportRequest {
     pub struct_size: u32,
@@ -259,8 +260,8 @@ pub struct NuxFlowImportRequest {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-/// Frozen ABI-major-1 diagnostic output layout. Callers initialize
-/// `struct_size` to the exact published size before invoking an accessor.
+/// Structured diagnostic output layout. Callers initialize `struct_size` to
+/// the exact published size before invoking an accessor.
 pub struct NuxDiagnosticView {
     pub struct_size: u32,
     pub severity: NuxDiagnosticSeverity,
@@ -360,6 +361,12 @@ impl Drop for PendingFrameCompletion {
 
 /// Opaque C handle. Its storage is private and retained by child handles.
 pub struct NuxFlowRuntimeContext {
+    _private: [u8; 0],
+}
+
+/// Opaque process-static proof that the client and linked runtime have the
+/// same exact runtime version and source revision.
+pub struct NuxRuntimeBinding {
     _private: [u8; 0],
 }
 
@@ -1335,34 +1342,82 @@ fn diagnostic_code_for_status(status: NuxStatus) -> &'static [u8] {
         NUX_STATUS_NOT_FOUND => b"nux_runtime.not_found",
         NUX_STATUS_RUNTIME_ERROR => b"nux_runtime.runtime_error",
         NUX_STATUS_INVALID_ARGUMENT => b"nux_runtime.invalid_argument",
-        NUX_STATUS_ABI_MISMATCH => b"nux_runtime.abi_mismatch",
+        NUX_STATUS_RUNTIME_IDENTITY_MISMATCH => b"nux_runtime.runtime_identity_mismatch",
         NUX_STATUS_SURFACE_ERROR => b"nux_runtime.surface_error",
         _ => b"nux_runtime.unknown",
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn nux_runtime_abi_major() -> u16 {
-    ffi_guard(0, || NUX_RUNTIME_ABI_MAJOR)
+fn runtime_binding() -> *const NuxRuntimeBinding {
+    ptr::from_ref(&RUNTIME_BINDING_TOKEN).cast()
+}
+
+unsafe fn runtime_identity_part_matches(
+    data: *const u8,
+    len: u64,
+    expected: &[u8],
+) -> Result<bool, NuxStatus> {
+    let len = usize::try_from(len).map_err(|_| NuxStatus::InvalidArgument)?;
+    if len == 0 || len > MAX_RUNTIME_IDENTITY_PART_BYTE_LENGTH || len > isize::MAX as usize {
+        return Err(NuxStatus::InvalidArgument);
+    }
+    if data.is_null() {
+        return Err(NuxStatus::InvalidArgument);
+    }
+    let bytes = unsafe { slice::from_raw_parts(data, len) };
+    std::str::from_utf8(bytes).map_err(|_| NuxStatus::InvalidArgument)?;
+    Ok(bytes == expected)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nux_runtime_abi_minor() -> u16 {
-    ffi_guard(0, || NUX_RUNTIME_ABI_MINOR)
-}
-
-#[unsafe(no_mangle)]
-/// Checks whether this runtime supports the requested full import contract.
-/// ABI 1.0's manifest-free import prefix is intentionally unsupported.
-pub extern "C" fn nux_runtime_require_abi(required_major: u16, minimum_minor: u16) -> NuxStatus {
+/// Binds a client compiled for one exact runtime version and source revision
+/// to this linked runtime. The returned proof is process-static.
+///
+/// # Safety
+///
+/// Non-null identity pointers must be readable for their declared lengths.
+/// `out_binding` must point to writable, properly aligned pointer storage.
+pub unsafe extern "C" fn nux_runtime_bind(
+    expected_runtime_version: *const u8,
+    expected_runtime_version_len: u64,
+    expected_source_revision: *const u8,
+    expected_source_revision_len: u64,
+    out_binding: *mut *const NuxRuntimeBinding,
+) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
-        if required_major == NUX_RUNTIME_ABI_MAJOR
-            && (MINIMUM_SUPPORTED_ABI_MINOR..=NUX_RUNTIME_ABI_MINOR).contains(&minimum_minor)
-        {
-            NuxStatus::Ok
-        } else {
-            NuxStatus::AbiMismatch
+        if out_binding.is_null() {
+            return NuxStatus::NullArgument;
         }
+        unsafe {
+            *out_binding = ptr::null();
+        }
+        let runtime_version_matches = match unsafe {
+            runtime_identity_part_matches(
+                expected_runtime_version,
+                expected_runtime_version_len,
+                RUNTIME_VERSION.as_bytes(),
+            )
+        } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        let source_revision_matches = match unsafe {
+            runtime_identity_part_matches(
+                expected_source_revision,
+                expected_source_revision_len,
+                SOURCE_REVISION.as_bytes(),
+            )
+        } {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        if !runtime_version_matches || !source_revision_matches {
+            return NuxStatus::RuntimeIdentityMismatch;
+        }
+        unsafe {
+            *out_binding = runtime_binding();
+        }
+        NuxStatus::Ok
     })
 }
 
@@ -1390,15 +1445,16 @@ pub unsafe extern "C" fn nux_runtime_build_provenance(
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
 /// Imports one verified visual artifact into a retained runtime context.
-/// The request must provide the full ABI 1.1 import layout; the former ABI 1.0
-/// artifact-only prefix is rejected.
+/// The request must use the exact current layout; the former artifact-only
+/// prefix is rejected.
 ///
 /// # Safety
 ///
 /// Non-null pointers must be properly aligned and valid for this call.
 /// `request.artifact_bytes` must be readable for its declared length. Output
 /// pointers must address writable handle storage.
-pub unsafe extern "C" fn nux_flow_runtime_context_create(
+pub unsafe extern "C" fn nux_flow_runtime_context_create_bound(
+    binding: *const NuxRuntimeBinding,
     request: *const NuxFlowImportRequest,
     out_context: *mut *mut NuxFlowRuntimeContext,
     out_result: *mut *mut NuxOperationResult,
@@ -1409,7 +1465,21 @@ pub unsafe extern "C" fn nux_flow_runtime_context_create(
         || {
             reset_out_handle(out_context);
             reset_out_handle(out_result);
-            if request.is_null() || out_context.is_null() {
+            if out_context.is_null() {
+                return NuxStatus::NullArgument;
+            }
+            if binding.is_null() {
+                return NuxStatus::NullArgument;
+            }
+            if binding != runtime_binding() {
+                return write_import_failure(
+                    out_result,
+                    NuxStatus::RuntimeIdentityMismatch,
+                    "nux_runtime.runtime_identity_mismatch",
+                    "runtime binding does not match the linked runtime",
+                );
+            }
+            if request.is_null() {
                 return NuxStatus::NullArgument;
             }
             let input = match unsafe { copy_runtime_import_input(request) } {
@@ -1468,7 +1538,7 @@ pub unsafe extern "C" fn nux_flow_runtime_context_free(context: *mut NuxFlowRunt
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
 /// Creates an independent logical screen session from a context through the
-/// legacy ABI 1.1 surface. Cycle-zero host outputs produced while scripts are
+/// legacy unconfigured surface. Cycle-zero host outputs produced while scripts are
 /// initialized are intentionally not returned by this entry point; use
 /// `nux_flow_render_session_create_configured` when those outputs are needed.
 ///
@@ -1494,11 +1564,11 @@ pub unsafe extern "C" fn nux_flow_render_session_create(
             }
             let context = unsafe { &*context.cast::<FlowRuntimeContextHandle>() };
             let struct_size = unsafe { read_struct_size(descriptor) };
-            if struct_size < size_u32::<NuxFlowSessionDescriptor>() {
+            if struct_size != size_u32::<NuxFlowSessionDescriptor>() {
                 return write_failure(
                     out_result,
                     NuxStatus::InvalidArgument,
-                    "flow session descriptor is smaller than this ABI requires",
+                    "flow session descriptor has the wrong exact size",
                 );
             }
             let descriptor = unsafe { *descriptor };
@@ -1584,11 +1654,11 @@ pub unsafe extern "C" fn nux_flow_render_session_attach_apple_surface(
             }
             let session = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
             let struct_size = unsafe { read_struct_size(descriptor) };
-            if struct_size < size_u32::<NuxAppleSurfaceDescriptor>() {
+            if struct_size != size_u32::<NuxAppleSurfaceDescriptor>() {
                 return write_failure(
                     out_result,
                     NuxStatus::InvalidArgument,
-                    "Apple surface descriptor is smaller than this ABI requires",
+                    "Apple surface descriptor has the wrong exact size",
                 );
             }
             let descriptor = unsafe { *descriptor };
@@ -1789,11 +1859,11 @@ pub unsafe extern "C" fn nux_apple_surface_reattach(
             }
             let surface = unsafe { &*surface.cast::<AppleSurfaceHandle>() };
             let struct_size = unsafe { read_struct_size(descriptor) };
-            if struct_size < size_u32::<NuxAppleSurfaceDescriptor>() {
+            if struct_size != size_u32::<NuxAppleSurfaceDescriptor>() {
                 return write_failure(
                     out_result,
                     NuxStatus::InvalidArgument,
-                    "Apple surface descriptor is smaller than this ABI requires",
+                    "Apple surface descriptor has the wrong exact size",
                 );
             }
             let descriptor = unsafe { *descriptor };
@@ -1862,7 +1932,7 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                 return NuxStatus::NullArgument;
             }
             let struct_size = unsafe { read_struct_size(operation) };
-            if struct_size < size_u32::<NuxFrameOperation>() {
+            if struct_size != size_u32::<NuxFrameOperation>() {
                 return write_failure(
                     out_result,
                     NuxStatus::InvalidArgument,
@@ -2154,7 +2224,7 @@ pub unsafe extern "C" fn nux_operation_result_diagnostic_count(
 /// # Safety
 ///
 /// `result` must be live and `out_diagnostic` writable with `struct_size`
-/// initialized to the exact ABI-major-1 layout size. Returned views expire when
+/// initialized to the exact published layout size. Returned views expire when
 /// `result` is released.
 pub unsafe extern "C" fn nux_operation_result_diagnostic_at(
     result: *const NuxOperationResult,
@@ -2302,7 +2372,7 @@ unsafe fn copy_runtime_import_input(
     request: *const NuxFlowImportRequest,
 ) -> Result<FlowArtifactImportInput, NuxStatus> {
     let struct_size = unsafe { read_struct_size(request) };
-    if struct_size < size_u32::<NuxFlowImportRequest>() {
+    if struct_size != size_u32::<NuxFlowImportRequest>() {
         return Err(NuxStatus::InvalidArgument);
     }
 
@@ -2322,7 +2392,7 @@ unsafe fn copy_runtime_import_input(
         None
     } else {
         let struct_size = unsafe { read_struct_size(request.selected_key) };
-        if struct_size < size_u32::<NuxFlowAuthorizationKey>() {
+        if struct_size != size_u32::<NuxFlowAuthorizationKey>() {
             return Err(NuxStatus::InvalidArgument);
         }
         let selected_key = unsafe { request.selected_key.read() };
@@ -2363,7 +2433,7 @@ unsafe fn copy_runtime_import_input(
     for asset in external_asset_views {
         // Array elements have no separate stride parameter. Accepting a larger
         // element declaration would make the second element start ambiguous,
-        // so this ABI revision requires the exact published element size.
+        // so the runtime requires the exact published element size.
         if asset.struct_size != size_u32::<NuxFlowExternalAsset>() {
             return Err(NuxStatus::InvalidArgument);
         }
@@ -2610,7 +2680,7 @@ mod tests {
 
     #[cfg(feature = "apple-product")]
     #[repr(C)]
-    struct AbiOneZeroImportPrefix {
+    struct LegacyImportPrefix {
         struct_size: u32,
         artifact_bytes: NuxByteView,
     }
@@ -2901,16 +2971,196 @@ mod tests {
     }
 
     #[test]
-    fn abi_compatibility_requires_the_full_import_contract() {
-        assert_eq!(nux_runtime_require_abi(1, 0), NuxStatus::AbiMismatch);
-        assert_eq!(nux_runtime_require_abi(1, 1), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(2, 0), NuxStatus::AbiMismatch);
-        assert_eq!(nux_runtime_require_abi(1, 2), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(1, 3), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(1, 4), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(1, 5), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(1, 6), NuxStatus::Ok);
-        assert_eq!(nux_runtime_require_abi(1, 7), NuxStatus::AbiMismatch);
+    fn exact_runtime_identity_returns_an_opaque_binding() {
+        let mut binding = ptr::null();
+
+        assert_eq!(
+            unsafe {
+                nux_runtime_bind(
+                    RUNTIME_VERSION.as_ptr(),
+                    RUNTIME_VERSION.len() as u64,
+                    SOURCE_REVISION.as_ptr(),
+                    SOURCE_REVISION.len() as u64,
+                    &mut binding,
+                )
+            },
+            NuxStatus::Ok
+        );
+        assert!(!binding.is_null());
+    }
+
+    #[test]
+    fn different_runtime_version_returns_identity_mismatch_and_no_binding() {
+        let different_version = b"0.0.0";
+        let mut binding = runtime_binding();
+
+        assert_eq!(
+            unsafe {
+                nux_runtime_bind(
+                    different_version.as_ptr(),
+                    different_version.len() as u64,
+                    SOURCE_REVISION.as_ptr(),
+                    SOURCE_REVISION.len() as u64,
+                    &mut binding,
+                )
+            },
+            NuxStatus::RuntimeIdentityMismatch
+        );
+        assert!(binding.is_null());
+    }
+
+    #[test]
+    fn different_source_revision_returns_identity_mismatch_and_no_binding() {
+        let different_revision = b"0000000000000000000000000000000000000000";
+        let mut binding = runtime_binding();
+
+        assert_eq!(
+            unsafe {
+                nux_runtime_bind(
+                    RUNTIME_VERSION.as_ptr(),
+                    RUNTIME_VERSION.len() as u64,
+                    different_revision.as_ptr(),
+                    different_revision.len() as u64,
+                    &mut binding,
+                )
+            },
+            NuxStatus::RuntimeIdentityMismatch
+        );
+        assert!(binding.is_null());
+    }
+
+    #[test]
+    fn empty_runtime_identity_parts_are_invalid_and_return_no_binding() {
+        for (version, revision) in [
+            (b"".as_slice(), SOURCE_REVISION.as_bytes()),
+            (RUNTIME_VERSION.as_bytes(), b"".as_slice()),
+        ] {
+            let mut binding = runtime_binding();
+            assert_eq!(
+                unsafe {
+                    nux_runtime_bind(
+                        version.as_ptr(),
+                        version.len() as u64,
+                        revision.as_ptr(),
+                        revision.len() as u64,
+                        &mut binding,
+                    )
+                },
+                NuxStatus::InvalidArgument
+            );
+            assert!(binding.is_null());
+        }
+    }
+
+    #[test]
+    fn invalid_runtime_identity_pointer_and_length_pairs_fail_before_reading() {
+        for (version, version_len) in [
+            (ptr::null(), 1),
+            (
+                ptr::dangling(),
+                MAX_RUNTIME_IDENTITY_PART_BYTE_LENGTH as u64 + 1,
+            ),
+        ] {
+            let mut binding = runtime_binding();
+            assert_eq!(
+                unsafe {
+                    nux_runtime_bind(
+                        version,
+                        version_len,
+                        SOURCE_REVISION.as_ptr(),
+                        SOURCE_REVISION.len() as u64,
+                        &mut binding,
+                    )
+                },
+                NuxStatus::InvalidArgument
+            );
+            assert!(binding.is_null());
+        }
+    }
+
+    #[test]
+    fn runtime_bind_requires_writable_output_storage() {
+        assert_eq!(
+            unsafe {
+                nux_runtime_bind(
+                    RUNTIME_VERSION.as_ptr(),
+                    RUNTIME_VERSION.len() as u64,
+                    SOURCE_REVISION.as_ptr(),
+                    SOURCE_REVISION.len() as u64,
+                    ptr::null_mut(),
+                )
+            },
+            NuxStatus::NullArgument
+        );
+    }
+
+    #[test]
+    fn malformed_runtime_identity_view_is_invalid_and_returns_no_binding() {
+        let malformed_version = [0xff];
+        let mut binding = runtime_binding();
+
+        assert_eq!(
+            unsafe {
+                nux_runtime_bind(
+                    malformed_version.as_ptr(),
+                    malformed_version.len() as u64,
+                    SOURCE_REVISION.as_ptr(),
+                    SOURCE_REVISION.len() as u64,
+                    &mut binding,
+                )
+            },
+            NuxStatus::InvalidArgument
+        );
+        assert!(binding.is_null());
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn context_creation_rejects_a_foreign_binding_before_reading_the_request() {
+        let foreign_binding = ptr::dangling::<NuxRuntimeBinding>();
+        let unreadable_request = ptr::dangling::<NuxFlowImportRequest>();
+        let mut context = ptr::null_mut();
+        let mut result = ptr::null_mut();
+
+        assert_eq!(
+            unsafe {
+                nux_flow_runtime_context_create_bound(
+                    foreign_binding,
+                    unreadable_request,
+                    &mut context,
+                    &mut result,
+                )
+            },
+            NuxStatus::RuntimeIdentityMismatch
+        );
+        assert!(context.is_null());
+        assert_eq!(
+            unsafe { nux_operation_result_status(result) },
+            NuxStatus::RuntimeIdentityMismatch
+        );
+        unsafe { nux_operation_result_free(result) };
+    }
+
+    #[cfg(feature = "apple-product")]
+    #[test]
+    fn context_creation_requires_a_non_null_runtime_binding() {
+        let unreadable_request = ptr::dangling::<NuxFlowImportRequest>();
+        let mut context = ptr::null_mut();
+        let mut result = ptr::null_mut();
+
+        assert_eq!(
+            unsafe {
+                nux_flow_runtime_context_create_bound(
+                    ptr::null(),
+                    unreadable_request,
+                    &mut context,
+                    &mut result,
+                )
+            },
+            NuxStatus::NullArgument
+        );
+        assert!(context.is_null());
+        assert!(result.is_null());
     }
 
     #[cfg(feature = "apple-product")]
@@ -2993,7 +3243,14 @@ mod tests {
         let mut result = ptr::null_mut();
 
         assert_eq!(
-            unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+            unsafe {
+                nux_flow_runtime_context_create_bound(
+                    runtime_binding(),
+                    &request,
+                    &mut context,
+                    &mut result,
+                )
+            },
             NuxStatus::Ok
         );
         assert!(!context.is_null());
@@ -3029,7 +3286,8 @@ mod tests {
         result = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_flow_runtime_context_create(
+                nux_flow_runtime_context_create_bound(
+                    runtime_binding(),
                     &malformed_signature_request,
                     &mut context,
                     &mut result,
@@ -3173,7 +3431,14 @@ mod tests {
         let mut result = ptr::null_mut();
 
         assert_eq!(
-            unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+            unsafe {
+                nux_flow_runtime_context_create_bound(
+                    runtime_binding(),
+                    &request,
+                    &mut context,
+                    &mut result,
+                )
+            },
             NuxStatus::Ok
         );
         assert!(!context.is_null());
@@ -3196,7 +3461,14 @@ mod tests {
             let mut result = ptr::null_mut();
 
             assert_eq!(
-                unsafe { nux_flow_runtime_context_create(request, &mut context, &mut result) },
+                unsafe {
+                    nux_flow_runtime_context_create_bound(
+                        runtime_binding(),
+                        request,
+                        &mut context,
+                        &mut result,
+                    )
+                },
                 NuxStatus::ImportError
             );
             assert!(context.is_null());
@@ -3222,7 +3494,14 @@ mod tests {
             let mut result = ptr::null_mut();
 
             assert_eq!(
-                unsafe { nux_flow_runtime_context_create(request, &mut context, &mut result) },
+                unsafe {
+                    nux_flow_runtime_context_create_bound(
+                        runtime_binding(),
+                        request,
+                        &mut context,
+                        &mut result,
+                    )
+                },
                 NuxStatus::Ok
             );
             assert!(!context.is_null());
@@ -3262,7 +3541,14 @@ mod tests {
             let mut result = ptr::null_mut();
 
             assert_eq!(
-                unsafe { nux_flow_runtime_context_create(request, &mut context, &mut result) },
+                unsafe {
+                    nux_flow_runtime_context_create_bound(
+                        runtime_binding(),
+                        request,
+                        &mut context,
+                        &mut result,
+                    )
+                },
                 NuxStatus::ImportError
             );
             assert!(context.is_null());
@@ -3288,7 +3574,14 @@ mod tests {
             let mut result = ptr::null_mut();
 
             assert_eq!(
-                unsafe { nux_flow_runtime_context_create(request, &mut context, &mut result) },
+                unsafe {
+                    nux_flow_runtime_context_create_bound(
+                        runtime_binding(),
+                        request,
+                        &mut context,
+                        &mut result,
+                    )
+                },
                 NuxStatus::Ok
             );
             assert!(!context.is_null());
@@ -3322,7 +3615,14 @@ mod tests {
             let mut result = ptr::null_mut();
 
             assert_eq!(
-                unsafe { nux_flow_runtime_context_create(request, &mut context, &mut result) },
+                unsafe {
+                    nux_flow_runtime_context_create_bound(
+                        runtime_binding(),
+                        request,
+                        &mut context,
+                        &mut result,
+                    )
+                },
                 NuxStatus::ImportError
             );
             assert!(context.is_null());
@@ -3391,7 +3691,14 @@ mod tests {
         let mut result = ptr::null_mut();
 
         assert_eq!(
-            unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+            unsafe {
+                nux_flow_runtime_context_create_bound(
+                    runtime_binding(),
+                    &request,
+                    &mut context,
+                    &mut result,
+                )
+            },
             NuxStatus::Ok
         );
         assert_eq!(
@@ -3461,7 +3768,14 @@ mod tests {
         let mut result = ptr::null_mut();
 
         assert_eq!(
-            unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+            unsafe {
+                nux_flow_runtime_context_create_bound(
+                    runtime_binding(),
+                    &request,
+                    &mut context,
+                    &mut result,
+                )
+            },
             NuxStatus::ImportError
         );
         assert!(context.is_null());
@@ -3488,12 +3802,11 @@ mod tests {
         let bytes = unsafe { slice::from_raw_parts(view.data, view.len as usize) };
         let json = std::str::from_utf8(bytes).expect("build provenance must be UTF-8");
         for field in [
-            "\"schemaVersion\":1",
+            "\"schemaVersion\":2",
             "\"runtimeVersion\"",
-            "\"runtimeAbiMajor\":1",
-            "\"runtimeAbiMinor\":6",
-            "\"flowSessionAbiMinor\":6",
             "\"sourceRevision\"",
+            "\"runtimeIdentity\"",
+            "\"contractFingerprint\"",
             "\"target\"",
             "\"profile\"",
             "\"rustc\"",
@@ -3501,6 +3814,23 @@ mod tests {
         ] {
             assert!(json.contains(field), "missing {field} in {json}");
         }
+        for removed_field in [
+            "\"abiMajor\"",
+            "\"abiMinor\"",
+            "\"runtimeAbiMajor\"",
+            "\"runtimeAbiMinor\"",
+            "\"flowSessionAbiMinor\"",
+        ] {
+            assert!(
+                !json.contains(removed_field),
+                "client-facing ABI metadata leaked through {removed_field} in {json}"
+            );
+        }
+        let expected_identity = format!("{RUNTIME_VERSION}@{SOURCE_REVISION}");
+        assert!(
+            json.contains(&format!("\"runtimeIdentity\":\"{expected_identity}\"")),
+            "missing exact runtime identity in {json}"
+        );
         let luaur_field = if cfg!(feature = "apple-product") {
             "\"luaurVersion\":\"0.1.8\""
         } else {
@@ -3645,7 +3975,14 @@ mod tests {
         let mut context = ptr::null_mut();
         let mut result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_runtime_context_create(storage.as_ptr(), &mut context, &mut result) },
+            unsafe {
+                nux_flow_runtime_context_create_bound(
+                    runtime_binding(),
+                    storage.as_ptr(),
+                    &mut context,
+                    &mut result,
+                )
+            },
             NuxStatus::InvalidArgument
         );
         assert!(context.is_null());
@@ -3655,10 +3992,10 @@ mod tests {
 
     #[cfg(feature = "apple-product")]
     #[test]
-    fn abi_one_zero_import_prefix_is_rejected() {
+    fn legacy_import_prefix_is_rejected() {
         let artifact_bytes = product_fixture_bytes();
-        let request = AbiOneZeroImportPrefix {
-            struct_size: size_u32::<AbiOneZeroImportPrefix>(),
+        let request = LegacyImportPrefix {
+            struct_size: size_u32::<LegacyImportPrefix>(),
             artifact_bytes: NuxByteView {
                 data: artifact_bytes.as_ptr(),
                 len: artifact_bytes.len() as u64,
@@ -3669,8 +4006,9 @@ mod tests {
 
         assert_eq!(
             unsafe {
-                nux_flow_runtime_context_create(
-                    (&request as *const AbiOneZeroImportPrefix).cast(),
+                nux_flow_runtime_context_create_bound(
+                    runtime_binding(),
+                    (&request as *const LegacyImportPrefix).cast(),
                     &mut context,
                     &mut result,
                 )
@@ -3689,7 +4027,7 @@ mod tests {
     fn current_and_truncated_import_requests_cannot_bypass_manifest_validation() {
         let artifact_bytes = product_fixture_bytes();
         for struct_size in [
-            size_u32::<AbiOneZeroImportPrefix>() + 1,
+            size_u32::<LegacyImportPrefix>() + 1,
             size_u32::<NuxFlowImportRequest>(),
         ] {
             let mut request = current_import_request_without_manifest(&artifact_bytes);
@@ -3698,9 +4036,16 @@ mod tests {
             let mut result = ptr::null_mut();
 
             assert_eq!(
-                unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+                unsafe {
+                    nux_flow_runtime_context_create_bound(
+                        runtime_binding(),
+                        &request,
+                        &mut context,
+                        &mut result,
+                    )
+                },
                 NuxStatus::InvalidArgument,
-                "request size {struct_size} must not bypass the ABI 1.1 manifest contract"
+                "request size {struct_size} must not bypass the exact manifest contract"
             );
             assert!(context.is_null());
             assert!(!result.is_null());
@@ -3765,7 +4110,14 @@ mod tests {
         let mut result = ptr::null_mut();
 
         assert_eq!(
-            unsafe { nux_flow_runtime_context_create(&request, &mut context, &mut result) },
+            unsafe {
+                nux_flow_runtime_context_create_bound(
+                    runtime_binding(),
+                    &request,
+                    &mut context,
+                    &mut result,
+                )
+            },
             NuxStatus::InvalidArgument
         );
         assert!(context.is_null());
@@ -3823,7 +4175,7 @@ mod tests {
             }
         }
         assert_eq!(
-            checked, 24,
+            checked, 22,
             "update the firewall audit for every new export"
         );
     }
@@ -4320,7 +4672,12 @@ mod tests {
             let mut result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_runtime_context_create(&request.request, &mut context, &mut result)
+                    nux_flow_runtime_context_create_bound(
+                        runtime_binding(),
+                        &request.request,
+                        &mut context,
+                        &mut result,
+                    )
                 },
                 NuxStatus::Ok
             );
@@ -4557,7 +4914,14 @@ mod tests {
         let mut context = ptr::null_mut();
         let mut result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_runtime_context_create(&request.request, &mut context, &mut result) },
+            unsafe {
+                nux_flow_runtime_context_create_bound(
+                    runtime_binding(),
+                    &request.request,
+                    &mut context,
+                    &mut result,
+                )
+            },
             NuxStatus::Ok
         );
         assert!(!context.is_null());

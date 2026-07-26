@@ -95,7 +95,7 @@ jobs:
         run: make capi-smoke
 
   apple-runtime-check:
-    name: Apple runtime ABI and header
+    name: Apple runtime exact identity and header
     runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
     env:
       DEVELOPER_DIR: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '/Applications/Xcode_15.4.app/Contents/Developer' || '/Applications/Xcode.app/Contents/Developer' }}
@@ -121,7 +121,7 @@ jobs:
       - name: Fetch pinned test assets
         run: make fixtures
 
-      - name: Test the product ABI and header
+      - name: Test the exact runtime contract and header
         run: make apple-runtime-check
 
       - name: Capture Apple runtime check diagnostics
@@ -240,7 +240,7 @@ jobs:
           APPLE_RUNTIME_CHECK_RESULT: ${{ needs.apple-runtime-check.result }}
           APPLE_RUNTIME_XCFRAMEWORK_RESULT: ${{ needs.apple-runtime-xcframework.result }}
         run: |
-          echo "ABI and header: ${APPLE_RUNTIME_CHECK_RESULT}"
+          echo "Exact runtime contract and header: ${APPLE_RUNTIME_CHECK_RESULT}"
           echo "XCFramework: ${APPLE_RUNTIME_XCFRAMEWORK_RESULT}"
           if [[ "${APPLE_RUNTIME_CHECK_RESULT}" != "success" || "${APPLE_RUNTIME_XCFRAMEWORK_RESULT}" != "success" ]]; then
             exit 1

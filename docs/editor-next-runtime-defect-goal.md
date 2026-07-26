@@ -461,15 +461,18 @@ Each discovered owner family becomes its own PR and product handoff.
 
 For `LOC-015`, `LOC-016`, and `LOC-017`:
 
-1. build and locally qualify ABI 1.6 from an exact runtime SHA;
+1. build and locally qualify the exact-runtime-identity `0.2.0` artifact from
+   an exact runtime SHA;
 2. stop at the user release checkpoint with version, channel, checksum, and
    full local evidence;
-3. after approval, publish and update `nuxie-ios`;
+3. after approval, publish and update `nuxie-ios` to pin that exact runtime
+   version, source revision, URL, and checksum without an ABI-version floor;
 4. send the immutable SDK identity to the coordinator for optional
    current-or-later Editor consumption and native-corpus rerun;
 5. promote only a surviving current failure to a source owner.
 
-Old ABI 1.5 evidence never authorizes runtime source changes.
+Evidence from the legacy `apple-runtime-v0.1.0` artifact never authorizes
+runtime source changes.
 
 ### Q7 — Downstream handoff
 

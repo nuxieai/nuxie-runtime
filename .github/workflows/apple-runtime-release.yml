@@ -1,15 +1,25 @@
 name: Apple runtime release
 
+# The nuxie-macos runner group must separately allow this workflow at both the
+# exact release tag ref and refs/heads/main. GitHub evaluates that policy before
+# any job step can preflight it. The apple-runtime-release environment must
+# separately allow tag pattern apple-runtime-v* and branch main.
 on:
   push:
     tags:
       - "apple-runtime-v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing exact apple-runtime-v<crate-version> tag to publish
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: apple-runtime-release-${{ github.ref }}
+  group: apple-runtime-release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -20,11 +30,12 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
       GH_TOKEN: ${{ github.token }}
-      NUX_APPLE_XCODE_VERSION: "26.2"
-      NUX_APPLE_XCODE_BUILD: "17C52"
+      NUX_APPLE_XCODE_VERSION: "26.6"
+      NUX_APPLE_XCODE_BUILD: "17F113"
       NUX_APPLE_RUST_TOOLCHAIN: "1.94.1"
       NUX_APPLE_DEPLOYMENT_TARGET: "15.0"
       NUX_APPLE_PROFILE: "release-apple"
+      NUX_RUNTIME_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
       RUSTUP_TOOLCHAIN: "1.94.1"
     defaults:
       run:
@@ -36,12 +47,34 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - name: Validate the release tag and source revision
         run: |
           set -euo pipefail
 
-          test "${GITHUB_REF_TYPE}" = "tag"
+          release_tag="${NUX_RUNTIME_RELEASE_TAG}"
+          case "${GITHUB_EVENT_NAME}" in
+            push)
+              test "${GITHUB_REF_TYPE}" = "tag"
+              if [[ "${GITHUB_REF_NAME}" != "${release_tag}" ]]; then
+                echo "normalized release tag ${release_tag} does not match pushed tag ${GITHUB_REF_NAME}" >&2
+                exit 1
+              fi
+              ;;
+            workflow_dispatch)
+              test -n "${release_tag}"
+              if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+                echo "manual Apple runtime releases must use the reviewed workflow from refs/heads/main" >&2
+                exit 1
+              fi
+              ;;
+            *)
+              echo "unsupported Apple runtime release trigger: ${GITHUB_EVENT_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
           runtime_version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/nux-apple-runtime/Cargo.toml | head -1)"
           test -n "${runtime_version}"
           if [[ ! "${runtime_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
@@ -49,13 +82,13 @@ jobs:
             exit 1
           fi
           expected_tag="apple-runtime-v${runtime_version}"
-          if [[ "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
-            echo "release tag ${GITHUB_REF_NAME} does not match crate version ${runtime_version}; expected ${expected_tag}" >&2
+          if [[ "${release_tag}" != "${expected_tag}" ]]; then
+            echo "release tag ${release_tag} does not match crate version ${runtime_version}; expected ${expected_tag}" >&2
             exit 1
           fi
 
           source_revision="$(git rev-parse --verify HEAD)"
-          tagged_revision="$(git rev-list -n 1 "refs/tags/${GITHUB_REF_NAME}")"
+          tagged_revision="$(git rev-list -n 1 "refs/tags/${release_tag}")"
           test "${source_revision}" = "${tagged_revision}"
           if [[ ! "${source_revision}" =~ ^[0-9a-f]{40}$ ]]; then
             echo "tag does not resolve to a full Git commit SHA: ${source_revision}" >&2
@@ -69,7 +102,7 @@ jobs:
 
           {
             echo "NUX_RUNTIME_VERSION=${runtime_version}"
-            echo "NUX_RUNTIME_RELEASE_TAG=${expected_tag}"
+            echo "NUX_RUNTIME_RELEASE_TAG=${release_tag}"
             echo "NUX_RUNTIME_SOURCE_REVISION=${source_revision}"
           } >> "${GITHUB_ENV}"
 
@@ -102,6 +135,11 @@ jobs:
 
           rustup toolchain install "${NUX_APPLE_RUST_TOOLCHAIN}" --profile minimal --component clippy --component llvm-tools --no-self-update
           rustup target add --toolchain "${NUX_APPLE_RUST_TOOLCHAIN}" aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          toolchain_bin="$(dirname "$(rustup which --toolchain 1.94.1 cargo)")"
+          echo "${toolchain_bin}" >> "${GITHUB_PATH}"
+          export PATH="${toolchain_bin}:${PATH}"
+          test "$(cargo --version | awk '{ print $2 }')" = "1.94.1"
+          test "$(rustc --version | awk '{ print $2 }')" = "1.94.1"
 
       - name: Fetch pinned test assets
         run: make fixtures
@@ -130,7 +168,8 @@ jobs:
           diagnostics="${RUNNER_TEMP}/apple-runtime-release-diagnostics.txt"
           {
             echo "phase=apple-runtime-release-package"
-            echo "commit=${GITHUB_SHA}"
+            echo "workflow_revision=${GITHUB_SHA}"
+            echo "source_revision=${NUX_RUNTIME_SOURCE_REVISION}"
             df -h .
             du -sh target 2>/dev/null || true
             du -sh target/apple-runtime/* 2>/dev/null | sort -h || true

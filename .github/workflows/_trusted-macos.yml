@@ -99,8 +99,8 @@ jobs:
     runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
     env:
       DEVELOPER_DIR: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '/Applications/Xcode_15.4.app/Contents/Developer' || '/Applications/Xcode.app/Contents/Developer' }}
-      NUX_APPLE_XCODE_VERSION: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15.4' || '26.2' }}
-      NUX_APPLE_XCODE_BUILD: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15F31d' || '17C52' }}
+      NUX_APPLE_XCODE_VERSION: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15.4' || '26.6' }}
+      NUX_APPLE_XCODE_BUILD: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15F31d' || '17F113' }}
       RUSTUP_TOOLCHAIN: "1.94.1"
     defaults:
       run:
@@ -116,7 +116,15 @@ jobs:
           test "$(xcodebuild -version | sed -n 's/^Build version //p')" = "${NUX_APPLE_XCODE_BUILD}"
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.94.1 --profile minimal --component clippy --no-self-update
+        run: |
+          set -euo pipefail
+
+          rustup toolchain install 1.94.1 --profile minimal --component clippy --no-self-update
+          toolchain_bin="$(dirname "$(rustup which --toolchain 1.94.1 cargo)")"
+          echo "${toolchain_bin}" >> "${GITHUB_PATH}"
+          export PATH="${toolchain_bin}:${PATH}"
+          test "$(cargo --version | awk '{ print $2 }')" = "1.94.1"
+          test "$(rustc --version | awk '{ print $2 }')" = "1.94.1"
 
       - name: Fetch pinned test assets
         run: make fixtures
@@ -152,8 +160,8 @@ jobs:
     runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
     env:
       DEVELOPER_DIR: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '/Applications/Xcode_15.4.app/Contents/Developer' || '/Applications/Xcode.app/Contents/Developer' }}
-      NUX_APPLE_XCODE_VERSION: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15.4' || '26.2' }}
-      NUX_APPLE_XCODE_BUILD: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15F31d' || '17C52' }}
+      NUX_APPLE_XCODE_VERSION: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15.4' || '26.6' }}
+      NUX_APPLE_XCODE_BUILD: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15F31d' || '17F113' }}
       RUSTUP_TOOLCHAIN: "1.94.1"
     defaults:
       run:
@@ -170,8 +178,15 @@ jobs:
 
       - name: Install pinned Rust toolchain and Apple targets
         run: |
+          set -euo pipefail
+
           rustup toolchain install 1.94.1 --profile minimal --component llvm-tools --no-self-update
           rustup target add --toolchain 1.94.1 aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          toolchain_bin="$(dirname "$(rustup which --toolchain 1.94.1 cargo)")"
+          echo "${toolchain_bin}" >> "${GITHUB_PATH}"
+          export PATH="${toolchain_bin}:${PATH}"
+          test "$(cargo --version | awk '{ print $2 }')" = "1.94.1"
+          test "$(rustc --version | awk '{ print $2 }')" = "1.94.1"
 
       - name: Report packaging runner capacity
         run: |

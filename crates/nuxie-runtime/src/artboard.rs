@@ -43,6 +43,7 @@ use crate::artboard_data_bind::{
 use crate::bones::bone;
 use crate::bones::root_bone;
 use crate::bones::skin;
+use crate::bones::tendon;
 #[cfg(test)]
 use crate::components::TransformComponents;
 use crate::components::{
@@ -127,26 +128,6 @@ pub(crate) use nested_artboard_layout::{
     runtime_layout_overrides as runtime_nested_artboard_layout_overrides,
 };
 use nested_artboard_layout::{RuntimeNestedLayoutBoundsFrame, RuntimeNestedLayoutDataTransferKey};
-
-fn generated_mat2d(
-    objects: &InstanceObjectArena,
-    local_id: usize,
-    type_name: &'static str,
-) -> Mat2D {
-    let value = |name, default| {
-        property_key_for_name(type_name, name)
-            .and_then(|key| objects.double_property(local_id, key))
-            .unwrap_or(default)
-    };
-    Mat2D([
-        value("xx", 1.0),
-        value("xy", 0.0),
-        value("yx", 0.0),
-        value("yy", 1.0),
-        value("tx", 0.0),
-        value("ty", 0.0),
-    ])
-}
 
 /// Rejection from attaching host-supplied bytes to one external `FontAsset`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1291,33 +1272,7 @@ impl ArtboardInstance {
                     // (`skin.cpp:13-39`; `artboard.cpp:204-245,264-288`).
                 }
                 "Tendon" => {
-                    let bone_id_key = property_key_for_name("Tendon", "boneId")
-                        .context("Tendon.boneId is missing from the runtime schema")?;
-                    let bone_local = objects
-                        .uint_property(component.local_id, bone_id_key)
-                        .and_then(|bone| usize::try_from(bone).ok())
-                        .context("Tendon boneId does not resolve to an object slot")?;
-                    let bone = objects
-                        .component_handle(bone_local)
-                        .context("Tendon boneId does not resolve to a Component occurrence")?;
-                    if objects
-                        .component(bone)
-                        .and_then(|bone| bone.concrete.bone.as_ref())
-                        .is_none()
-                    {
-                        anyhow::bail!("Tendon boneId does not resolve to a Bone");
-                    }
-                    let inverse_bind =
-                        generated_mat2d(objects, component.local_id, "Tendon").invert_or_identity();
-                    let tendon = objects
-                        .component_mut(handle)
-                        .expect("Tendon handle was validated")
-                        .concrete
-                        .tendon
-                        .as_mut()
-                        .expect("Tendon occurrence owns Tendon state");
-                    tendon.inverse_bind = inverse_bind;
-                    tendon.bone = Some(bone);
+                    tendon::on_added_dirty(objects, handle, component.local_id)?;
                 }
                 type_name
                     if definition_by_name(type_name)
@@ -1408,17 +1363,7 @@ impl ArtboardInstance {
             if bone_kind == Some(false) {
                 bone::on_added_clean(objects, handle)?;
             } else if component.type_name == "Tendon" {
-                let parent = objects
-                    .component(handle)
-                    .and_then(|component| component.parent)
-                    .context("Tendon is missing its parent Component")?;
-                let Some(skin) = objects
-                    .component_mut(parent)
-                    .and_then(|parent| parent.concrete.skin.as_mut())
-                else {
-                    anyhow::bail!("Tendon parent is not a Skin");
-                };
-                skin.tendons.push(handle);
+                tendon::on_added_clean(objects, handle)?;
             }
 
             if component.type_name == "IKConstraint" {

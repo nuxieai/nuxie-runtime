@@ -5,6 +5,7 @@ pub use crate::artboard::transform_component::{TransformProperty, TransformRunti
 use crate::artboard::{RuntimeComponentListItemInstance, RuntimeComponentListLogicalItem};
 use crate::bones::bone::RuntimeBoneState;
 use crate::bones::skin::RuntimeSkinState;
+use crate::bones::tendon::RuntimeTendonState;
 use crate::bones::weight::RuntimeWeightState;
 use crate::constraints::ik_constraint::RuntimeIkState;
 use crate::draw::RuntimePathMeasure;
@@ -182,21 +183,6 @@ pub struct RuntimeComponentCapabilities {
 pub(crate) enum RuntimeSkinnableKind {
     PointsPath,
     Mesh,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeTendonState {
-    pub(crate) inverse_bind: Mat2D,
-    pub(crate) bone: Option<ComponentHandle>,
-}
-
-impl Default for RuntimeTendonState {
-    fn default() -> Self {
-        Self {
-            inverse_bind: Mat2D::IDENTITY,
-            bone: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -1249,7 +1235,10 @@ impl RuntimeConcreteComponentState {
                 .skin
                 .as_ref()
                 .map(RuntimeSkinState::clone_for_occurrence),
-            tendon: self.tendon.as_ref().map(|_| RuntimeTendonState::default()),
+            tendon: self
+                .tendon
+                .as_ref()
+                .map(RuntimeTendonState::clone_for_occurrence),
             skinnable: self
                 .skinnable
                 .as_ref()

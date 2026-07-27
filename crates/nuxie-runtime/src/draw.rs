@@ -28,7 +28,10 @@ use taffy::prelude::{
 };
 use taffy::style::Direction as TaffyDirection;
 
-use crate::artboard::RuntimeLegacyImageLayoutScaleKey;
+use crate::artboard::{
+    RuntimeLegacyImageLayoutScaleKey, RuntimeNestedArtboardAxisOverride,
+    RuntimeNestedArtboardLayoutOverrides,
+};
 use crate::components::ComponentHandle;
 use crate::objects::InstanceObjectArena;
 use crate::properties::{
@@ -566,26 +569,6 @@ impl RuntimeLayoutStyleProperty {
                 cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusBL")
             }
         }
-    }
-}
-
-fn runtime_nested_artboard_layout_property_key_for_name(property_name: &str) -> Option<u16> {
-    match property_name {
-        "instanceWidthScaleType" => {
-            cached_runtime_property_key!("NestedArtboardLayout", "instanceWidthScaleType")
-        }
-        "instanceHeightScaleType" => {
-            cached_runtime_property_key!("NestedArtboardLayout", "instanceHeightScaleType")
-        }
-        "instanceWidthUnitsValue" => {
-            cached_runtime_property_key!("NestedArtboardLayout", "instanceWidthUnitsValue")
-        }
-        "instanceHeightUnitsValue" => {
-            cached_runtime_property_key!("NestedArtboardLayout", "instanceHeightUnitsValue")
-        }
-        "instanceWidth" => cached_runtime_property_key!("NestedArtboardLayout", "instanceWidth"),
-        "instanceHeight" => cached_runtime_property_key!("NestedArtboardLayout", "instanceHeight"),
-        _ => property_key_for_name("NestedArtboardLayout", property_name),
     }
 }
 
@@ -6049,6 +6032,25 @@ impl ArtboardInstance {
         Some(solved_bounds)
     }
 
+    /// Renderer-owned Taffy solve used by the nested-layout occurrence cache.
+    ///
+    /// The focused `NestedArtboardLayout` owner decides when its cached layout
+    /// frame is stale. The delegated engine traversal and materialization stay
+    /// here, at the renderer boundary.
+    pub(crate) fn compute_runtime_nested_artboard_layout_bounds(
+        &self,
+    ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
+        if !self.nested_artboard_locals.iter().any(|local_id| {
+            self.component(*local_id)
+                .is_some_and(|component| component.type_name == "NestedArtboardLayout")
+        }) {
+            return None;
+        }
+        let runtime = self.runtime_file()?;
+        let graph = self.runtime_graph()?;
+        self.runtime_taffy_layout_bounds(graph, Some(runtime))
+    }
+
     pub(crate) fn retain_runtime_layout_component_bounds(
         &self,
         local_id: usize,
@@ -10961,42 +10963,48 @@ impl TaffyRuntimeLayoutEngine {
         local: usize,
         parent_is_row: bool,
     ) -> Option<Style> {
-        // Ported from C++ `src/nested_artboard_layout.cpp` and
-        // `include/rive/layout/style_overrider.hpp`: the layout-backed host
-        // contributes the referenced artboard instance's layout node to its
-        // parent.
-        let width_scale = self.nested_artboard_layout_axis_scale(instance, local, true);
-        let height_scale = self.nested_artboard_layout_axis_scale(instance, local, false);
-        if !matches!(width_scale, 0 | 1 | 2) || !matches!(height_scale, 0 | 1 | 2) {
-            return None;
-        }
-
+        // Generated-property lookup and override inputs live beside pinned C++
+        // NestedArtboardLayout. Taffy materialization and measurement remain
+        // renderer-owned.
+        let overrides: RuntimeNestedArtboardLayoutOverrides =
+            crate::artboard::runtime_nested_artboard_layout_overrides(instance, local)?;
         let mut style = Style {
             display: TaffyDisplay::Flex,
             size: Size {
-                width: self.nested_artboard_layout_axis_dimension(instance, local, true)?,
-                height: self.nested_artboard_layout_axis_dimension(instance, local, false)?,
+                width: self.nested_artboard_layout_axis_dimension(
+                    instance,
+                    local,
+                    overrides.width,
+                    true,
+                )?,
+                height: self.nested_artboard_layout_axis_dimension(
+                    instance,
+                    local,
+                    overrides.height,
+                    false,
+                )?,
             },
             ..Default::default()
         };
 
-        let main_scale = if parent_is_row {
-            width_scale
+        let main_override = if parent_is_row {
+            overrides.width
         } else {
-            height_scale
+            overrides.height
         };
-        let cross_scale = if parent_is_row {
-            height_scale
+        let cross_override = if parent_is_row {
+            overrides.height
         } else {
-            width_scale
+            overrides.width
         };
-        match main_scale {
-            0 | 2 => {
+        match main_override {
+            RuntimeNestedArtboardAxisOverride::Fixed { .. }
+            | RuntimeNestedArtboardAxisOverride::Hug => {
                 style.flex_grow = 0.0;
                 style.flex_shrink = 0.0;
                 style.flex_basis = Dimension::auto();
             }
-            1 => {
+            RuntimeNestedArtboardAxisOverride::Fill => {
                 style.flex_grow = 1.0;
                 style.flex_shrink = 1.0;
                 // C++ contributes the referenced artboard's layout node, so
@@ -11007,12 +11015,11 @@ impl TaffyRuntimeLayoutEngine {
                     .map(Dimension::length)
                     .unwrap_or_else(Dimension::auto);
             }
-            _ => return None,
         }
-        style.align_self = match cross_scale {
-            1 => Some(AlignSelf::STRETCH),
-            0 | 2 => None,
-            _ => return None,
+        style.align_self = match cross_override {
+            RuntimeNestedArtboardAxisOverride::Fill => Some(AlignSelf::STRETCH),
+            RuntimeNestedArtboardAxisOverride::Fixed { .. }
+            | RuntimeNestedArtboardAxisOverride::Hug => None,
         };
         Some(style)
     }
@@ -11021,13 +11028,16 @@ impl TaffyRuntimeLayoutEngine {
         &self,
         instance: &ArtboardInstance,
         local: usize,
+        axis: RuntimeNestedArtboardAxisOverride,
         width_axis: bool,
     ) -> Option<Dimension> {
-        match self.nested_artboard_layout_axis_scale(instance, local, width_axis) {
-            0 => {
-                let value = self.nested_artboard_layout_axis_length(instance, local, width_axis);
-                let units = self.nested_artboard_layout_axis_units(instance, local, width_axis);
-                if value < 0.0 {
+        match axis {
+            RuntimeNestedArtboardAxisOverride::Fixed {
+                length,
+                units,
+                uses_intrinsic_size,
+            } => {
+                if uses_intrinsic_size {
                     Some(
                         self.nested_artboard_layout_axis_intrinsic_dimension(
                             instance, local, width_axis,
@@ -11035,14 +11045,13 @@ impl TaffyRuntimeLayoutEngine {
                         .unwrap_or_else(Dimension::auto),
                     )
                 } else {
-                    self.dimension_from_unit(value, units)
+                    self.dimension_from_unit(length, units)
                 }
             }
-            1 => Some(Dimension::auto()),
-            2 => self
+            RuntimeNestedArtboardAxisOverride::Fill => Some(Dimension::auto()),
+            RuntimeNestedArtboardAxisOverride::Hug => self
                 .nested_artboard_layout_axis_intrinsic_dimension(instance, local, width_axis)
                 .or_else(|| Some(Dimension::auto())),
-            _ => None,
         }
     }
 
@@ -11124,51 +11133,6 @@ impl TaffyRuntimeLayoutEngine {
                     bounds.height
                 }
             })
-    }
-
-    fn nested_artboard_layout_axis_scale(
-        &self,
-        instance: &ArtboardInstance,
-        local: usize,
-        width_axis: bool,
-    ) -> u64 {
-        runtime_nested_artboard_layout_property_key_for_name(if width_axis {
-            "instanceWidthScaleType"
-        } else {
-            "instanceHeightScaleType"
-        })
-        .and_then(|key| instance.uint_property(local, key))
-        .unwrap_or(0)
-    }
-
-    fn nested_artboard_layout_axis_units(
-        &self,
-        instance: &ArtboardInstance,
-        local: usize,
-        width_axis: bool,
-    ) -> u64 {
-        runtime_nested_artboard_layout_property_key_for_name(if width_axis {
-            "instanceWidthUnitsValue"
-        } else {
-            "instanceHeightUnitsValue"
-        })
-        .and_then(|key| instance.uint_property(local, key))
-        .unwrap_or(1)
-    }
-
-    fn nested_artboard_layout_axis_length(
-        &self,
-        instance: &ArtboardInstance,
-        local: usize,
-        width_axis: bool,
-    ) -> f32 {
-        runtime_nested_artboard_layout_property_key_for_name(if width_axis {
-            "instanceWidth"
-        } else {
-            "instanceHeight"
-        })
-        .and_then(|key| instance.double_property(local, key))
-        .unwrap_or(-1.0)
     }
 
     fn axis_dimension(

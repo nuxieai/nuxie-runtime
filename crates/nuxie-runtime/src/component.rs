@@ -1,3 +1,6 @@
+use anyhow::{Context, Result};
+use nuxie_graph::ComponentNode;
+
 use super::ArtboardInstance;
 use crate::components::{ComponentDirt, ComponentHandle, RuntimeComponent};
 use crate::objects::InstanceObjectArena;
@@ -31,6 +34,51 @@ impl<'a> RuntimeComponents<'a> {
 }
 
 impl ArtboardInstance {
+    /// Attach one authored Component to its retained parent occurrence.
+    ///
+    /// This is the concrete Rust owner for `Component::validate` and the base
+    /// portion of `Component::onAddedDirty`: every non-root Component must
+    /// resolve a ContainerComponent parent, and the link is retained exactly
+    /// once in authored order (`src/component.cpp:13-29`).
+    pub(super) fn attach_component_parent(
+        objects: &mut InstanceObjectArena,
+        component: &ComponentNode,
+        root: ComponentHandle,
+        parent_key: u16,
+    ) -> Result<ComponentHandle> {
+        let handle = objects
+            .component_handle(component.local_id)
+            .context("authored Component handle is missing")?;
+        if handle == root {
+            return Ok(handle);
+        }
+
+        let parent_local = objects
+            .uint_property(component.local_id, parent_key)
+            .and_then(|parent| usize::try_from(parent).ok())
+            .context("Component parentId does not resolve to an object slot")?;
+        let parent = objects
+            .component_handle(parent_local)
+            .context("Component parentId does not resolve to a Component occurrence")?;
+        let parent_type = objects
+            .component(parent)
+            .map(|component| component.type_name)
+            .unwrap_or("<missing>");
+        if !objects.is_container_component(parent) {
+            anyhow::bail!(
+                "Component {} local {} parent local {} type {} is not a ContainerComponent",
+                component.type_name,
+                component.local_id,
+                parent_local,
+                parent_type
+            );
+        }
+        if !objects.link_parent(handle, parent) {
+            anyhow::bail!("Component parent link could not be retained");
+        }
+        Ok(handle)
+    }
+
     pub(crate) fn component_mut(&mut self, local_id: usize) -> Option<&mut RuntimeComponent> {
         self.objects.component_for_local_mut(local_id)
     }

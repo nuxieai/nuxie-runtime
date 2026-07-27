@@ -1206,33 +1206,8 @@ impl ArtboardInstance {
         // phase to its embedded PathComposer immediately after its own base
         // Component, so parent/child and constraint insertion are observable.
         for component in &graph.components {
-            let handle = objects
-                .component_handle(component.local_id)
-                .context("authored Component handle is missing")?;
+            let handle = Self::attach_component_parent(objects, component, root, parent_key)?;
             if handle != root {
-                let parent_local = objects
-                    .uint_property(component.local_id, parent_key)
-                    .and_then(|parent| usize::try_from(parent).ok())
-                    .context("Component parentId does not resolve to an object slot")?;
-                let parent = objects
-                    .component_handle(parent_local)
-                    .context("Component parentId does not resolve to a Component occurrence")?;
-                let parent_type = objects
-                    .component(parent)
-                    .map(|component| component.type_name)
-                    .unwrap_or("<missing>");
-                if !objects.is_container_component(parent) {
-                    anyhow::bail!(
-                        "Component {} local {} parent local {} type {} is not a ContainerComponent",
-                        component.type_name,
-                        component.local_id,
-                        parent_local,
-                        parent_type
-                    );
-                }
-                if !objects.link_parent(handle, parent) {
-                    anyhow::bail!("Component parent link could not be retained");
-                }
                 if !crate::shapes::path_vertex::on_added_dirty(objects, handle) {
                     crate::shapes::mesh_vertex::on_added_dirty(objects, handle);
                 }

@@ -954,6 +954,34 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     "self.waiting_for_exit = waiting_for_exit; }\n"
                 ),
             ),
+            (
+                "state_machine_random_selected_wait_latch_not_cleared",
+                (
+                    r"if\s+state\.uses_random_transition_selection\(\)"
+                    r"(?:(?!\n\s*for\s*\()[\s\S]){0,5000}"
+                    r"self\.change_state\("
+                    r"[\s\S]{0,1200}\)\?;\s*return\s+Ok\(true\)"
+                ),
+                (
+                    "fn update(state: State) { "
+                    "if state.uses_random_transition_selection() { "
+                    "self.change_state()?; return Ok(true); } }\n"
+                ),
+            ),
+            (
+                "state_machine_entry_databinds_available_too_early",
+                (
+                    r"fn\s+initialize_layers_in_authored_order"
+                    r"[\s\S]{0,4200}data_bind_facilities_ready:\s*true"
+                    r"[\s\S]{0,1000}perform_initial_entry_actions"
+                ),
+                (
+                    "fn initialize_layers_in_authored_order() { "
+                    "let executor = RuntimeStateMachineListenerActionExecutor { "
+                    "data_bind_facilities_ready: true }; "
+                    "perform_initial_entry_actions(executor); }\n"
+                ),
+            ),
         ]
         base_gaps = self.gaps.read_text()
 

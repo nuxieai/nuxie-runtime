@@ -532,6 +532,18 @@ pattern = "fn\\s+find_random_transition[\\s\\S]{0,3600}self\\.waiting_for_exit\\
 max_occurrences = 0
 
 [[ratchet]]
+id = "state_machine_random_selected_wait_latch_not_cleared"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "if\\s+state\\.uses_random_transition_selection\\(\\)(?:(?!\\n\\s*for\\s*\\()[\\s\\S]){0,5000}self\\.change_state\\([\\s\\S]{0,1200}\\)\\?;\\s*return\\s+Ok\\(true\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_entry_databinds_available_too_early"
+globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+pattern = "fn\\s+initialize_layers_in_authored_order[\\s\\S]{0,4200}data_bind_facilities_ready:\\s*true[\\s\\S]{0,1000}perform_initial_entry_actions"
+max_occurrences = 0
+
+[[ratchet]]
 id = "follow_path_graph_composer_rediscovery"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "graph\\.path_composers\\.iter\\(\\)\\.find_map"

@@ -15178,6 +15178,48 @@ fn synthetic_state_machine_weighted_random_transition(
     })
 }
 
+fn synthetic_state_machine_weighted_random_wait_then_select(file_id: u64) -> Vec<u8> {
+    const LAYER_STATE_RANDOM: u64 = 1 << 0;
+    const ENABLE_EXIT_TIME: u64 = 1 << 2;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_animation_for_single_node(bytes, 1, 40.0, 50.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+            push_uint_property(bytes, "LayerState", "flags", LAYER_STATE_RANDOM);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "randomWeight", 1);
+            push_uint_property(bytes, "StateTransition", "flags", ENABLE_EXIT_TIME);
+            push_uint_property(bytes, "StateTransition", "exitTime", 1000);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 4);
+            push_uint_property(bytes, "StateTransition", "randomWeight", 1);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 2);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_nested_state_machines_without_child_instances(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
@@ -20917,38 +20959,50 @@ fn state_machine_scheduled_listener_fire_events_match_cpp_probe() {
 }
 
 #[test]
-fn state_machine_listener_writes_round_trip_through_the_retained_owned_handle() {
-    let label = "synthetic/runtime_state_machine_listener_retained_number_round_trip.riv";
+fn state_machine_entry_viewmodel_change_waits_for_cpp_databind_construction_boundary() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_entry_viewmodel_change_before_databinds_cpp.riv";
     let bytes = synthetic_state_machine_scheduled_listener_owned_number_change(9623);
-    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
-    let context = RuntimeOwnedViewModelHandle::new(
-        RuntimeOwnedViewModelInstance::new(&runtime, 0)
-            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
-    );
-    let script = script_view_model_from_owned(&runtime, &context)
-        .unwrap_or_else(|| panic!("missing script view-model wrapper for {label}"));
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
 
-    assert!(state_machine.bind_owned_view_model_handle(&context));
-    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
-    assert_eq!(
-        context.borrow().number_value_by_property_name("amount"),
-        Some(42.0),
-        "{label} listener write must update the retained host graph"
-    );
-    assert_eq!(
-        script.number("amount"),
-        Some(42.0),
-        "{label} listener write must be visible through the script alias"
-    );
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
 
-    assert!(state_machine.advance_data_context());
+    let cpp_state_machine = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("C++ state-machine report");
+    compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, label);
+    let cpp_binding = cpp_state_machine
+        .number_bindings
+        .iter()
+        .find(|binding| binding.data_bind_index == 0)
+        .expect("C++ number binding");
     assert_eq!(
-        context.borrow().number_value_by_property_name("amount"),
-        Some(42.0),
-        "{label} retained refresh must not overwrite the runtime-origin write"
+        cpp_binding.source_value, None,
+        "{label} C++ has no live source before a DataContext is attached"
+    );
+    assert_eq!(
+        state_machine.default_view_model_number_source_value_for_data_bind(0),
+        Some(0.0),
+        "{label} Rust's dormant source slot must remain at its authored default"
+    );
+    assert_eq!(
+        cpp_binding.target_value,
+        state_machine.bindable_number_value_for_data_bind(0),
+        "{label} entry callback cannot mutate the bindable occurrence before C++ constructs it"
     );
 }
 
@@ -77941,6 +77995,45 @@ fn state_machine_weighted_random_selection_and_u32_overflow_match_cpp_probe() {
             "{label} selected animation"
         );
     }
+}
+
+#[test]
+fn state_machine_weighted_random_wait_then_selected_transition_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_weighted_random_wait_then_select_cpp.riv";
+    let bytes = synthetic_state_machine_weighted_random_wait_then_select(8284);
+    let args = counted_runtime_random_probe_args(
+        &[0.0],
+        &[
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let _random_values = set_runtime_random_test_values(&[0.0]);
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+
+    let cpp_state_machine = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("C++ state-machine report");
+    compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, label);
+    assert_eq!(
+        state_machine
+            .current_animation(0)
+            .map(|animation| animation.animation_index()),
+        Some(2),
+        "{label} later selectable candidate"
+    );
 }
 
 #[test]

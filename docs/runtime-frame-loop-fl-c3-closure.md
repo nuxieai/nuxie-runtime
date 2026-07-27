@@ -329,7 +329,8 @@ and lazily requested target nodes available during layer initialization,
 defers the full topology until afterward, and adds live target-scope and
 traversal differentials plus the twenty-second structural ratchet. It is not
 blocked on further production or evidence work: the immutable replacement
-packet is published on `origin/levi/fl-c` and awaiting independent review.
+candidate `975962ccb22c3089620ab1f4a735e502e51d7ef1` passed independent
+production review and is promoted by the dedicated reconciliation commit.
 
 The self-excluding `docs/runtime-frame-loop-trace.json` records the exact
 candidate-source fingerprint and runner provenance. Fingerprinted closure
@@ -362,9 +363,9 @@ runner was rebuilt from the CI-provenance recipe; the unchanged 1,468-row
 comparison then passed. This was an environment prerequisite, not a product
 failure. No performance measurement was run.
 
-The replacement review packet is this checklist plus its direct C++ citations,
+The accepted review packet is this checklist plus its direct C++ citations,
 focused adversarial tests, 22 structural ratchets, exact pushed candidate SHA,
 and the fresh gate receipt above. All five layer/state family rows and
-`state_machine.layer` remain pending-verification until the independent
-verdict. The supporting `src/math/random.cpp` row remains pending after that
-verdict until its FL-D formula consumer is routed through the same provider.
+`state_machine.layer` are faithful and orchestrator-verified. The supporting
+`src/math/random.cpp` row remains pending until its FL-D formula consumer is
+routed through the same provider.

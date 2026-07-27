@@ -136,19 +136,19 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 63
+faithful = 68
 adapted = 0
 divergent-by-decision = 0
-pending = 278
+pending = 273
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
 # are the state-bearing frame-loop owners still requiring member-level proof.
 [expected_member_status_counts]
-faithful = 9
+faithful = 10
 adapted = 40
 divergent-by-decision = 0
-pending = 26
+pending = 25
 compensation = 0
 
 [[wave]]
@@ -698,7 +698,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/layer_state.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/linear_animation.cpp"
@@ -882,7 +882,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/nested_trigger.cpp"
@@ -930,7 +930,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/state_instance.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/state_machine.cpp"
@@ -989,7 +989,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/state_machine_layer.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/state_machine_listener.cpp"
@@ -1021,7 +1021,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/system_state_instance.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/text_input_listener_group.cpp"
@@ -3316,7 +3316,16 @@ wave = "FL-C"
 cpp_files = ["src/animation/state_machine_layer.cpp", "src/animation/state_instance.cpp"]
 rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"
 rust_anchor = "pub(crate) struct StateMachineLayerInstance"
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/animation/state_machine_instance.cpp:150-175", "rust:crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs:62-107"]
+retain = ["cpp:src/animation/state_machine_instance.cpp:686-710", "rust:crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs:30-53"]
+dirty = ["cpp:src/animation/state_machine_layer.cpp:31-75", "rust:crates/nuxie-runtime/src/state_machine/state_machine_layer.rs:69-132"]
+update = ["cpp:src/animation/state_machine_instance.cpp:177-259", "rust:crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs:165-237"]
+advance = ["cpp:src/animation/state_machine_instance.cpp:528-627", "rust:crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs:165-237"]
+draw = ["cpp:src/animation/state_machine_instance.cpp:632-663", "rust:crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs:880-927"]
+clone = ["cpp:src/animation/nested_state_machine.cpp:26-63", "rust:crates/nuxie-runtime/src/state_machine/nested_state_machine.rs:35-110"]
+drop = ["cpp:src/animation/state_machine_instance.cpp:143-148", "rust:crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs:30-53"]
 
 [[member]]
 id = "state_machine.transitions"

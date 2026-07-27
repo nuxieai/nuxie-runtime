@@ -1007,23 +1007,22 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** the immutable candidate for the complete five-file
-layer/state-occurrence family at semantic commit
-`78be55ef845eb8e841d9d9ef99ba8e5732120f68` against
-`docs/runtime-frame-loop-fl-c3-closure.md` (FL-C3) is published on
-`origin/levi/fl-c` and awaiting one independent whole-family verdict before
-any FL-C4 production edit. Candidate
+**Canonical NEXT:** read the complete 18-file pinned-C++ listener-action,
+event, and focus-dispatch family and commit its closure checklist before
+production changes (FL-C4). Exact FL-C3 candidate
+`975962ccb22c3089620ab1f4a735e502e51d7ef1` passed independent production
+review and is promoted by the dedicated reconciliation commit. Candidate
 `b8d1fd6f7222fcdf3f520896f1dc8e9423d69bb8` was rejected because it built
 the complete focus topology before initial layer callbacks. The replacement
 retains only the manager identity and lazily requested unattached target nodes
 during those callbacks, builds the topology afterward, and carries live
 target-scope/traversal differentials plus 22 structural ratchets. The complete
-C++ constructor availability table now covers inputs, reports, DataBinds,
+C++ constructor availability table covers inputs, reports, DataBinds,
 listeners, scripts, focus, and hit facilities rather than validating another
 single symptom. Its fresh non-performance battery and source-bound trace are
-green. Publication and the independent review request are complete; the sole
-next action is the binary whole-family verdict. No row is self-promoted.
-Active publication branch is `levi/fl-c`; there is no PR.
+green. The five FL-C3 file rows and `state_machine.layer` are now faithful;
+the supporting random-provider row remains pending for its FL-D formula
+consumer. Active publication branch is `levi/fl-c`; there is no PR.
 Exact FL-C2 candidate
 `7546f4f15b05e582c62aa52ecc93430a7048e143` passed independent Standards and
 Spec review with no findings; its 12 mapped frame-loop files, three importer

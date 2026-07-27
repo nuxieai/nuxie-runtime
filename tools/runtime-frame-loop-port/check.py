@@ -864,14 +864,12 @@ def check(
             for path in sorted(repo_root.glob(glob)):
                 if not path.is_file():
                     continue
-                for line_number, line in enumerate(
-                    path.read_text(encoding="utf-8", errors="replace").splitlines(),
-                    start=1,
-                ):
-                    found = list(pattern.finditer(line))
-                    count += len(found)
-                    if found:
-                        hits.append(f"{path.relative_to(repo_root)}:{line_number}")
+                source = path.read_text(encoding="utf-8", errors="replace")
+                found = list(pattern.finditer(source))
+                count += len(found)
+                for match in found:
+                    line_number = source.count("\n", 0, match.start()) + 1
+                    hits.append(f"{path.relative_to(repo_root)}:{line_number}")
         ratchet_results.append((ratchet_id, count, maximum))
         if count > maximum:
             errors.append(

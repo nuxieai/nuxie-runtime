@@ -18,7 +18,7 @@ pub(crate) struct RuntimeStateTransition {
     pub(crate) duration: u64,
     pub(crate) exit_time: u64,
     pub(crate) flags: u64,
-    pub(crate) random_weight: u64,
+    pub(crate) random_weight: u32,
     pub(super) conditions: Vec<RuntimeTransitionCondition>,
     pub(super) direct_input_conditions_only: bool,
     pub(crate) fire_actions: Vec<RuntimeStateMachineFireAction>,

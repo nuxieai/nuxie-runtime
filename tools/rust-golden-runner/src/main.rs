@@ -11,7 +11,8 @@ use nuxie_render_api::{
 };
 use nuxie_runtime::{
     ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelContext,
-    RuntimeOwnedViewModelInstance, StateMachineInstance, static_text_support_error,
+    RuntimeOwnedViewModelInstance, StateMachineInstance, set_runtime_deterministic_mode,
+    static_text_support_error,
 };
 #[cfg(feature = "scripting")]
 use nuxie_runtime::{
@@ -290,6 +291,11 @@ fn scripting_unsupported_feature(error: &anyhow::Error) -> Option<&'static str> 
 }
 
 fn run() -> Result<String> {
+    // Pinned C++'s golden runner enables `File::deterministicMode` before
+    // importing or constructing any runtime occurrence
+    // (`tools/golden-runner/main.cpp:973`). This selects the same fixed
+    // state-machine-layer random seed on the Rust side.
+    set_runtime_deterministic_mode(true);
     let options = Options::parse(env::args().skip(1).collect())?;
     validate_trace_options(&options)?;
     let input_events = options

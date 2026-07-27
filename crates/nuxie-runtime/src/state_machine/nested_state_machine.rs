@@ -10,7 +10,6 @@ use nuxie_graph::ArtboardGraph;
 #[derive(Debug, Clone)]
 struct RuntimeNestedInput {
     input_id: usize,
-    name: Option<String>,
     /// Retain the authored definition value so a public Artboard clone can
     /// rebuild a cold NestedStateMachine occurrence exactly like generated
     /// C++ clone + `initializeAnimation`. `value_applied` belongs only to this
@@ -26,6 +25,30 @@ enum RuntimeNestedInputValue {
     Trigger,
 }
 
+/// Read-only differential report for one imported nested-state-machine owner.
+///
+/// This narrow oracle surface exposes the ownership, authored input order,
+/// nullable child, and empty forwarding contract without exposing the mutable
+/// occurrence itself.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeNestedStateMachineReport {
+    pub local_id: usize,
+    pub animation_id: usize,
+    pub has_instance: bool,
+    pub input_ids: Vec<usize>,
+    pub input_names: Vec<String>,
+    pub empty_advance: bool,
+    pub empty_hit_test: bool,
+    pub empty_pointer_down: bool,
+    pub empty_pointer_move: bool,
+    pub empty_pointer_up: bool,
+    pub empty_pointer_exit: bool,
+    pub empty_drag_start: bool,
+    pub empty_drag_end: bool,
+    pub empty_try_change_state: bool,
+    pub empty_context_forwarding_completed: bool,
+}
+
 /// Mutable occurrence corresponding to pinned C++ `NestedStateMachine`.
 ///
 /// The child state machine is uniquely owned by this occurrence. Authored
@@ -34,7 +57,8 @@ enum RuntimeNestedInputValue {
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeNestedStateMachineInstance {
     local_id: usize,
-    state_machine: StateMachineInstance,
+    animation_id: usize,
+    state_machine: Option<StateMachineInstance>,
     nested_inputs: Vec<RuntimeNestedInput>,
 }
 
@@ -47,9 +71,8 @@ impl RuntimeNestedStateMachineInstance {
         let nested_inputs = nested_inputs
             .into_iter()
             .map(
-                |(input_id, name, bool_value, number_value)| RuntimeNestedInput {
+                |(input_id, _name, bool_value, number_value)| RuntimeNestedInput {
                     input_id,
-                    name,
                     authored_value: bool_value
                         .map(RuntimeNestedInputValue::Bool)
                         .or_else(|| number_value.map(RuntimeNestedInputValue::Number))
@@ -60,7 +83,8 @@ impl RuntimeNestedStateMachineInstance {
             .collect();
         let mut occurrence = Self {
             local_id,
-            state_machine,
+            animation_id: state_machine.state_machine_index(),
+            state_machine: Some(state_machine),
             nested_inputs,
         };
         occurrence.apply_authored_values();
@@ -73,12 +97,17 @@ impl RuntimeNestedStateMachineInstance {
         local_id: usize,
         object: &nuxie_binary::RuntimeObject,
         child: &mut ArtboardInstance,
-    ) -> Option<Self> {
-        let state_machine_index = usize::try_from(object.uint_property("animationId")?).ok()?;
-        let mut state_machine = child.state_machine_instance(state_machine_index)?;
-        state_machine.schedule_post_update_probe();
-        state_machine.bind_default_view_model_context();
-        state_machine.advance_data_context();
+    ) -> Self {
+        let animation_id = object
+            .uint_property("animationId")
+            .and_then(|value| usize::try_from(value).ok())
+            .unwrap_or(u32::MAX as usize);
+        let mut state_machine = child.state_machine_instance(animation_id);
+        if let Some(state_machine) = state_machine.as_mut() {
+            state_machine.schedule_post_update_probe();
+            state_machine.bind_default_view_model_context();
+            state_machine.advance_data_context();
+        }
 
         let nested_inputs = graph
             .local_objects
@@ -101,7 +130,6 @@ impl RuntimeNestedStateMachineInstance {
                 };
                 Some(RuntimeNestedInput {
                     input_id,
-                    name: object.string_property("name").map(ToOwned::to_owned),
                     authored_value: value,
                     value_applied: false,
                 })
@@ -110,48 +138,58 @@ impl RuntimeNestedStateMachineInstance {
 
         let mut occurrence = Self {
             local_id,
+            animation_id,
             state_machine,
             nested_inputs,
         };
         occurrence.apply_authored_values();
-        Some(occurrence)
+        occurrence
     }
 
-    pub(crate) fn cold_clone(&self, child: &mut ArtboardInstance) -> Option<Self> {
-        let state_machine_index = self.state_machine.state_machine_index();
-        let mut state_machine = child.state_machine_instance(state_machine_index)?;
-        state_machine.schedule_post_update_probe();
-        state_machine.bind_default_view_model_context();
-        state_machine.advance_data_context();
+    pub(crate) fn cold_clone(&self, child: &mut ArtboardInstance) -> Self {
+        let mut state_machine = child.state_machine_instance(self.animation_id);
+        if let Some(state_machine) = state_machine.as_mut() {
+            state_machine.schedule_post_update_probe();
+            state_machine.bind_default_view_model_context();
+            state_machine.advance_data_context();
+        }
         let nested_inputs = self
             .nested_inputs
             .iter()
             .map(|input| RuntimeNestedInput {
                 input_id: input.input_id,
-                name: input.name.clone(),
                 authored_value: input.authored_value,
                 value_applied: false,
             })
             .collect();
         let mut occurrence = Self {
             local_id: self.local_id,
+            animation_id: self.animation_id,
             state_machine,
             nested_inputs,
         };
         occurrence.apply_authored_values();
-        Some(occurrence)
+        occurrence
     }
 
     pub(crate) fn local_id(&self) -> usize {
         self.local_id
     }
 
-    pub(crate) fn state_machine(&self) -> &StateMachineInstance {
-        &self.state_machine
+    pub(crate) fn animation_id(&self) -> usize {
+        self.animation_id
     }
 
-    pub(crate) fn state_machine_mut(&mut self) -> &mut StateMachineInstance {
-        &mut self.state_machine
+    pub(crate) fn has_state_machine(&self) -> bool {
+        self.state_machine.is_some()
+    }
+
+    pub(crate) fn state_machine(&self) -> Option<&StateMachineInstance> {
+        self.state_machine.as_ref()
+    }
+
+    pub(crate) fn state_machine_mut(&mut self) -> Option<&mut StateMachineInstance> {
+        self.state_machine.as_mut()
     }
 
     pub(crate) fn install_external_focus(
@@ -159,8 +197,9 @@ impl RuntimeNestedStateMachineInstance {
         parent_focus: &RuntimeFocusTree,
         child_identity: u64,
     ) {
-        self.state_machine
-            .install_external_focus(parent_focus, child_identity);
+        if let Some(state_machine) = self.state_machine.as_mut() {
+            state_machine.install_external_focus(parent_focus, child_identity);
+        }
     }
 
     pub(crate) fn input_count(&self) -> usize {
@@ -174,8 +213,81 @@ impl RuntimeNestedStateMachineInstance {
     pub(crate) fn input_id_named(&self, name: &str) -> Option<usize> {
         self.nested_inputs
             .iter()
-            .find(|input| input.name.as_deref() == Some(name))
+            .find(|input| {
+                self.state_machine.as_ref().map_or_else(
+                    || name.is_empty(),
+                    |state_machine| {
+                        // `NestedInput::name()` returns an empty std::string
+                        // when the child input id is absent or its authored
+                        // name is empty (`nested_input.hpp:41-52`).
+                        state_machine
+                            .input(input.input_id)
+                            .and_then(|input| input.name())
+                            .unwrap_or_default()
+                            == name
+                    },
+                )
+            })
             .map(|input| input.input_id)
+    }
+
+    fn input_name_at(&self, index: usize) -> Option<String> {
+        let input = self.nested_inputs.get(index)?;
+        Some(
+            self.state_machine
+                .as_ref()
+                .map_or_else(String::new, |state_machine| {
+                    state_machine
+                        .input(input.input_id)
+                        .and_then(|input| input.name())
+                        .unwrap_or_default()
+                        .to_owned()
+                }),
+        )
+    }
+
+    pub(crate) fn empty_contract_report(
+        &self,
+        child: &ArtboardInstance,
+    ) -> RuntimeNestedStateMachineReport {
+        let mut child = child.clone();
+        let mut occurrence = self.cold_clone(&mut child);
+        let input_ids = (0..self.input_count())
+            .filter_map(|index| self.input_id_at(index))
+            .collect();
+        let input_names = (0..self.input_count())
+            .filter_map(|index| self.input_name_at(index))
+            .collect();
+        let empty_advance = occurrence.advance(&mut child, 0.0, None);
+        let empty_hit_test = occurrence.hit_test(&child, 0.0, 0.0);
+        let empty_pointer_down = !occurrence.pointer_down(&mut child, 0.0, 0.0, 1);
+        let empty_pointer_move = !occurrence.pointer_move(&mut child, 0.0, 0.0, 0.25, 1);
+        let empty_pointer_up = !occurrence.pointer_up(&mut child, 0.0, 0.0, 1);
+        let empty_pointer_exit = !occurrence.pointer_exit(&mut child, 0.0, 0.0, 1);
+        let empty_drag_start = !occurrence.drag_start(&mut child, 0.0, 0.0, 0.25, 1);
+        let empty_drag_end = !occurrence.drag_end(&mut child, 0.0, 0.0, 0.5, 1);
+        let empty_try_change_state = occurrence.try_change_state(&mut child);
+        let data_context = RuntimeOwnedDataContext::default();
+        let empty_context_forwarding_completed =
+            !occurrence.bind_owned_data_context(&data_context) && !occurrence.clear_data_context();
+
+        RuntimeNestedStateMachineReport {
+            local_id: self.local_id,
+            animation_id: self.animation_id,
+            has_instance: self.has_state_machine(),
+            input_ids,
+            input_names,
+            empty_advance,
+            empty_hit_test,
+            empty_pointer_down,
+            empty_pointer_move,
+            empty_pointer_up,
+            empty_pointer_exit,
+            empty_drag_start,
+            empty_drag_end,
+            empty_try_change_state,
+            empty_context_forwarding_completed,
+        }
     }
 
     fn apply_authored_values(&mut self) -> bool {
@@ -185,22 +297,23 @@ impl RuntimeNestedStateMachineInstance {
                 continue;
             }
             input.value_applied = true;
+            let Some(state_machine) = self.state_machine.as_mut() else {
+                continue;
+            };
             match input.authored_value {
                 RuntimeNestedInputValue::Bool(value)
-                    if self
-                        .state_machine
+                    if state_machine
                         .input(input.input_id)
                         .is_some_and(|input| input.kind() == StateMachineInputKind::Bool) =>
                 {
-                    changed |= self.state_machine.set_bool(input.input_id, value);
+                    changed |= state_machine.set_bool(input.input_id, value);
                 }
                 RuntimeNestedInputValue::Number(value)
-                    if self
-                        .state_machine
+                    if state_machine
                         .input(input.input_id)
                         .is_some_and(|input| input.kind() == StateMachineInputKind::Number) =>
                 {
-                    changed |= self.state_machine.set_number(input.input_id, value);
+                    changed |= state_machine.set_number(input.input_id, value);
                 }
                 // Pinned C++ deliberately does not apply NestedTrigger during
                 // `initializeAnimation`.
@@ -218,11 +331,13 @@ impl RuntimeNestedStateMachineInstance {
         elapsed_seconds: f32,
         mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
     ) -> bool {
-        let changed =
-            child.advance_state_machine_instance(&mut self.state_machine, elapsed_seconds);
+        let Some(state_machine) = self.state_machine.as_mut() else {
+            return false;
+        };
+        let changed = child.advance_state_machine_instance(state_machine, elapsed_seconds);
         if let Some(reported_events) = reported_events.as_mut() {
-            for index in 0..self.state_machine.reported_event_count() {
-                if let Some(event) = self.state_machine.reported_event(index) {
+            for index in 0..state_machine.reported_event_count() {
+                if let Some(event) = state_machine.reported_event(index) {
                     (**reported_events).push(event.clone());
                 }
             }
@@ -231,7 +346,9 @@ impl RuntimeNestedStateMachineInstance {
     }
 
     pub(crate) fn hit_test(&self, child: &ArtboardInstance, x: f32, y: f32) -> bool {
-        self.state_machine.hit_test(child, x, y)
+        self.state_machine
+            .as_ref()
+            .is_some_and(|state_machine| state_machine.hit_test(child, x, y))
     }
 
     pub(crate) fn pointer_down(
@@ -241,7 +358,9 @@ impl RuntimeNestedStateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        self.state_machine.pointer_down(child, x, y, pointer_id)
+        self.state_machine
+            .as_mut()
+            .is_some_and(|state_machine| state_machine.pointer_down(child, x, y, pointer_id))
     }
 
     pub(crate) fn pointer_move(
@@ -252,8 +371,9 @@ impl RuntimeNestedStateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        self.state_machine
-            .pointer_move(child, x, y, timestamp_seconds, pointer_id)
+        self.state_machine.as_mut().is_some_and(|state_machine| {
+            state_machine.pointer_move(child, x, y, timestamp_seconds, pointer_id)
+        })
     }
 
     pub(crate) fn pointer_up(
@@ -263,7 +383,9 @@ impl RuntimeNestedStateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        self.state_machine.pointer_up(child, x, y, pointer_id)
+        self.state_machine
+            .as_mut()
+            .is_some_and(|state_machine| state_machine.pointer_up(child, x, y, pointer_id))
     }
 
     pub(crate) fn pointer_exit(
@@ -273,7 +395,9 @@ impl RuntimeNestedStateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        self.state_machine.pointer_exit(child, x, y, pointer_id)
+        self.state_machine
+            .as_mut()
+            .is_some_and(|state_machine| state_machine.pointer_exit(child, x, y, pointer_id))
     }
 
     pub(crate) fn drag_start(
@@ -284,8 +408,9 @@ impl RuntimeNestedStateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        self.state_machine
-            .drag_start(child, x, y, timestamp_seconds, pointer_id)
+        self.state_machine.as_mut().is_some_and(|state_machine| {
+            state_machine.drag_start(child, x, y, timestamp_seconds, pointer_id)
+        })
     }
 
     pub(crate) fn drag_end(
@@ -296,18 +421,20 @@ impl RuntimeNestedStateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        self.state_machine
-            .drag_end(child, x, y, timestamp_seconds, pointer_id)
+        self.state_machine.as_mut().is_some_and(|state_machine| {
+            state_machine.drag_end(child, x, y, timestamp_seconds, pointer_id)
+        })
     }
 
     pub(crate) fn bind_owned_data_context(
         &mut self,
         data_context: &RuntimeOwnedDataContext,
     ) -> bool {
-        let changed = self
-            .state_machine
-            .bind_owned_view_model_data_context(data_context);
-        changed | self.state_machine.advance_data_context()
+        let Some(state_machine) = self.state_machine.as_mut() else {
+            return false;
+        };
+        let changed = state_machine.bind_owned_view_model_data_context(data_context);
+        changed | state_machine.advance_data_context()
     }
 
     pub(crate) fn bind_owned_view_model_context_chain(
@@ -316,22 +443,27 @@ impl RuntimeNestedStateMachineInstance {
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &[&[usize]],
     ) -> bool {
-        if !self
-            .state_machine
-            .bind_owned_view_model_context_chain(file, context, context_chain)
-        {
+        let Some(state_machine) = self.state_machine.as_mut() else {
+            return false;
+        };
+        if !state_machine.bind_owned_view_model_context_chain(file, context, context_chain) {
             return false;
         }
-        let _ = self.state_machine.advance_data_context();
+        let _ = state_machine.advance_data_context();
         true
     }
 
     pub(crate) fn clear_data_context(&mut self) -> bool {
-        let changed = self.state_machine.bind_empty_data_context();
-        changed | self.state_machine.advance_data_context()
+        let Some(state_machine) = self.state_machine.as_mut() else {
+            return false;
+        };
+        let changed = state_machine.bind_empty_data_context();
+        changed | state_machine.advance_data_context()
     }
 
     pub(crate) fn try_change_state(&mut self, child: &mut ArtboardInstance) -> bool {
-        child.try_change_state_machine_instance(&mut self.state_machine)
+        self.state_machine
+            .as_mut()
+            .is_some_and(|state_machine| child.try_change_state_machine_instance(state_machine))
     }
 }

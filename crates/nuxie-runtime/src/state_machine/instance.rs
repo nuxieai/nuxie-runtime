@@ -878,6 +878,16 @@ fn relink_view_model_listener_cell(
 }
 
 impl StateMachineInstance {
+    #[cfg(test)]
+    pub(crate) fn reset_layer_construction_number_snapshots() {
+        super::state_machine_layer_instance::reset_layer_construction_number_snapshots();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn layer_construction_number_snapshots() -> Vec<Vec<Option<f32>>> {
+        super::state_machine_layer_instance::layer_construction_number_snapshots()
+    }
+
     pub(crate) fn install_external_focus(
         &mut self,
         parent_focus: &RuntimeFocusTree,
@@ -1011,19 +1021,7 @@ impl StateMachineInstance {
         if key_frame_data_bind_graphs.iter().all(Option::is_none) {
             key_frame_data_bind_graphs.clear();
         }
-        let layers = state_machine
-            .layers
-            .iter()
-            .map(|layer| {
-                StateMachineLayerInstance::new(
-                    layer,
-                    artboard,
-                    &inputs,
-                    &bindable_numbers,
-                    &key_frame_data_bind_graphs,
-                )
-            })
-            .collect();
+        let layer_capacity = state_machine.layers.len();
         let listener_definitions = Arc::clone(&state_machine.listeners);
         let view_model_listeners = (0..listener_definitions.len())
             .filter_map(|listener_index| {
@@ -1061,7 +1059,7 @@ impl StateMachineInstance {
             bindable_booleans,
             default_view_model_triggers,
             transition_durations,
-            layers,
+            layers: Vec::with_capacity(layer_capacity),
             reported_events: Vec::new(),
             reported_event_listener_index: 0,
             host_reported_event_index: 0,
@@ -1090,11 +1088,11 @@ impl StateMachineInstance {
             script_error: None,
             view_model_listeners,
         };
-        instance.initialize_layer_entry_actions(artboard, state_machine);
+        instance.initialize_layers_in_authored_order(artboard, state_machine);
         instance
     }
 
-    fn initialize_layer_entry_actions(
+    fn initialize_layers_in_authored_order(
         &mut self,
         artboard: &mut ArtboardInstance,
         state_machine: &RuntimeStateMachine,
@@ -1107,12 +1105,23 @@ impl StateMachineInstance {
                         .instance(view_model_index, instance_index)
                 });
         let mut host = NoopScriptHost;
-        for (layer_index, layer) in state_machine
-            .layers
-            .iter()
-            .enumerate()
-            .take(self.layers.len())
-        {
+        for (layer_index, layer) in state_machine.layers.iter().enumerate() {
+            // Pinned C++ constructs one layer occurrence and immediately runs
+            // `init`/`changeState(entry)` before allocating the next layer
+            // (`state_machine_instance.cpp:1747-1752,150-175,378-409`).
+            // Entry actions may mutate shared state before the next authored
+            // layer is initialized. The concrete pinned constructors used by
+            // this family do not read state-machine inputs during
+            // `makeInstance`; the test-only construction snapshots below are
+            // therefore an ordering observer, not a claim that C++ has an
+            // input-consuming constructor.
+            self.layers.push(StateMachineLayerInstance::new(
+                layer,
+                artboard,
+                &self.inputs,
+                &self.bindable_numbers,
+                &self.key_frame_data_bind_graphs,
+            ));
             let result = {
                 let mut executor = RuntimeStateMachineListenerActionExecutor {
                     data_bind_graph: &mut self.data_bind_graph,
@@ -1148,8 +1157,12 @@ impl StateMachineInstance {
                 )
             };
             if let Err(error) = result {
-                self.script_error = Some(error);
-                break;
+                // Rust exposes the first script failure instead of swallowing
+                // it like C++, but the diagnostic cannot reorder or suppress
+                // the serial `StateMachineLayerInstance::init` loop. Retain
+                // the first error while still initializing every later layer
+                // (`state_machine_instance.cpp:1747-1752`).
+                self.script_error.get_or_insert(error);
             }
         }
     }

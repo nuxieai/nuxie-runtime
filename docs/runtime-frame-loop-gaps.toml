@@ -331,7 +331,7 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_per_advance_collection_rebuild"
 globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
-pattern = "let\\s+(?:mut\\s+)?(?:inputs|layers|transitions|conditions|listeners|actions)\\s*=\\s*[^;]*\\.collect"
+pattern = "fn\\s+advance[^\\{]*\\{(?:(?!\\n\\s*(?:pub(?:\\([^)]*\\))?\\s+)?fn\\s)[\\s\\S]){0,8000}?let\\s+(?:mut\\s+)?(?:inputs|layers|transitions|conditions|listeners|actions)\\s*=\\s*[^;]*\\.collect"
 max_occurrences = 0
 
 [[ratchet]]
@@ -404,8 +404,8 @@ max_occurrences = 0
 
 [[ratchet]]
 id = "state_machine_nested_owner_scan"
-globs = ["crates/nuxie-runtime/src/artboard.rs"]
-pattern = "nested_artboards[^;]{0,400}find_map[^;]{0,400}RuntimeNestedAnimationInstance::StateMachine"
+globs = ["crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
+pattern = "fn\\s+from_imported[\\s\\S]{0,3000}nested_artboards[^;]{0,400}find_map[^;]{0,400}RuntimeNestedAnimationInstance::StateMachine"
 max_occurrences = 0
 
 [[ratchet]]
@@ -424,6 +424,111 @@ max_occurrences = 0
 id = "nested_state_machine_public_clone_copies_live_occurrence"
 globs = ["crates/nuxie-runtime/src/artboard.rs"]
 pattern = "impl Clone for RuntimeNestedArtboardInstance[\\s\\S]{0,2400}animations:\\s*self\\.animations\\.clone\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_transition_random_constant"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "(?:(?:random_weight|random_value)\\s*=\\s*0(?:\\.0)?(?:_f(?:32|64))?|fn\\s+(?:random_transition_value|random_value)\\s*\\([^)]*\\)\\s*->\\s*f(?:32|64)\\s*\\{\\s*0(?:\\.0)?(?:_f(?:32|64))?\\s*\\})"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_transition_weight_widened_or_saturating"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "(?:total_weight|evaluated_random_weight)[^\\n]{0,120}(?:u64|saturating_add)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_transition_candidate_reorder"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "weighted_candidates\\.(?:sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_occurrence_owned_random_provider"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "random_provider\\s*:\\s*RuntimeRandomProvider"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_time_only_seed"
+globs = ["crates/nuxie-runtime/src/math/random.rs"]
+pattern = "fn\\s+initialize_layer\\(\\)[\\s\\S]{0,240}let\\s+seed\\s*=\\s*SystemTime"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_unconditional_libc"
+globs = [
+  "crates/nuxie-runtime/src/math/random.rs",
+  "crates/nuxie-runtime/src/math/random/wasm.rs",
+]
+pattern = "libc::(?:rand|srand|RAND_MAX)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_native_rust_wall_clock_api"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "(?:SystemTime|UNIX_EPOCH)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_linux_wrong_high_resolution_clock"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "LINUX_HIGH_RESOLUTION_CLOCK_ID[^\\n]{0,120}=\\s*libc::CLOCK_MONOTONIC"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_apple_wrong_high_resolution_clock"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "APPLE_HIGH_RESOLUTION_CLOCK_ID[^\\n]{0,120}=\\s*libc::(?:CLOCK_REALTIME|CLOCK_MONOTONIC)(?:[^_]|$)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_other_unix_wrong_high_resolution_clock"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "OTHER_UNIX_HIGH_RESOLUTION_CLOCK_ID[^\\n]{0,120}=\\s*libc::(?:CLOCK_REALTIME|CLOCK_MONOTONIC_RAW)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_windows_wrong_high_resolution_clock"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "(?:GetSystemTime|GetSystemTimePreciseAsFileTime|GetTickCount|timeGetTime)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_native_panic"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "(?:panic!|unwrap\\(|expect\\()"
+max_occurrences = 0
+
+[[ratchet]]
+id = "nested_state_machine_optional_owner_construction"
+globs = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
+pattern = "(?:fn\\s+(?:nested_state_machine_instance|from_imported)[\\s\\S]{0,360}->\\s*Option<(?:RuntimeNestedAnimationInstance|Self)>|let\\s+Some\\([^)]*\\)\\s*=\\s*nested_state_machine_instance)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "nested_state_machine_missing_input_name_drop"
+globs = ["crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
+pattern = "fn\\s+input_id_named[\\s\\S]{0,700}(?:\\.and_then\\(\\|input\\|\\s*input\\.name\\(\\)\\)[\\s\\S]{0,80}==\\s*Some\\(name\\)|input\\.name\\.as_deref\\(\\)\\s*==\\s*Some\\(name\\))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_all_layers_before_entry_actions"
+globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+pattern = "(?:let\\s+layers\\s*=\\s*state_machine[\\s\\S]{0,700}\\.collect\\(\\)|initialize_layer_entry_actions)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_layer_init_error_drops_later_layers"
+globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+pattern = "fn\\s+initialize_layers_in_authored_order[\\s\\S]{0,3200}(?:if\\s+let\\s+Err\\([^)]*\\)[\\s\\S]{0,120}\\bbreak\\s*;|if\\s+self\\.script_error\\.is_some\\(\\)\\s*\\{\\s*(?:continue|break)\\s*;)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_waiting_for_exit_overwrite"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "fn\\s+find_random_transition[\\s\\S]{0,3600}self\\.waiting_for_exit\\s*=\\s*(?:false|waiting_for_exit)"
 max_occurrences = 0
 
 [[ratchet]]

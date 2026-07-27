@@ -226,6 +226,16 @@ class ReleaseWorkflowSourcePolicyTests(unittest.TestCase):
             documentation_words,
         )
 
+    def test_release_traces_the_identity_gate_before_the_aggregate(self) -> None:
+        traced_gate = "bash -x tools/test-apple-runtime-build-identity.sh"
+        aggregate_gate = "make apple-runtime-check"
+        self.assertEqual(self.release_workflow.count(traced_gate), 1)
+        self.assertEqual(self.release_workflow.count(aggregate_gate), 1)
+        self.assertLess(
+            self.release_workflow.index(traced_gate),
+            self.release_workflow.index(aggregate_gate),
+        )
+
     def test_apple_jobs_force_the_exact_rustup_toolchain_onto_path(self) -> None:
         toolchain_bin = (
             'toolchain_bin="$(dirname "$(rustup which '

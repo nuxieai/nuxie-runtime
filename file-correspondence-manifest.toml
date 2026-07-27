@@ -514,15 +514,15 @@ note = "Consolidated Rust port for animation."
 
 [[file]]
 upstream = "src/animation/layer_state.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/state_machine/layer_state.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0042"
 b6_verdict = "ADAPTED"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Direct filename correspondence established in FL-C3; semantic fidelity remains pending independent whole-family verification."
+note = "Direct filename correspondence and complete semantic fidelity independently verified at FL-C3 candidate 975962ccb22c3089620ab1f4a735e502e51d7ef1."
 
 [[file]]
 upstream = "src/animation/linear_animation.cpp"
@@ -790,15 +790,15 @@ note = "Consolidated Rust port for animation."
 
 [[file]]
 upstream = "src/animation/nested_state_machine.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0065"
 b6_verdict = "ADAPTED"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Direct filename correspondence established in FL-C3; semantic fidelity remains pending independent whole-family verification."
+note = "Direct filename correspondence and complete semantic fidelity independently verified at FL-C3 candidate 975962ccb22c3089620ab1f4a735e502e51d7ef1."
 
 [[file]]
 upstream = "src/animation/nested_trigger.cpp"
@@ -862,15 +862,15 @@ note = "F5/F6: semantic listener runtime is absent."
 
 [[file]]
 upstream = "src/animation/state_instance.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/state_machine/state_instance.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0071"
 b6_verdict = "ADAPTED"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Direct filename correspondence established in FL-C3; semantic fidelity remains pending independent whole-family verification."
+note = "Direct filename correspondence and complete semantic fidelity independently verified at FL-C3 candidate 975962ccb22c3089620ab1f4a735e502e51d7ef1."
 
 [[file]]
 upstream = "src/animation/state_machine.cpp"
@@ -946,15 +946,15 @@ note = "Direct whole-instance owner is state_machine/instance.rs. The private C+
 
 [[file]]
 upstream = "src/animation/state_machine_layer.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/state_machine/state_machine_layer.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0078"
 b6_verdict = "ADAPTED"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Direct filename correspondence established in FL-C3. The private layer occurrence defined inside C++ state_machine_instance.cpp maps separately to state_machine/state_machine_layer_instance.rs; semantic fidelity remains pending independent whole-family verification."
+note = "Direct filename correspondence and complete semantic fidelity independently verified at FL-C3 candidate 975962ccb22c3089620ab1f4a735e502e51d7ef1. The private layer occurrence defined inside C++ state_machine_instance.cpp maps separately to state_machine/state_machine_layer_instance.rs."
 
 [[file]]
 upstream = "src/animation/state_machine_listener.cpp"
@@ -994,15 +994,15 @@ note = "Focused Rust owner now covers authored condition order, exit-time floati
 
 [[file]]
 upstream = "src/animation/system_state_instance.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/state_machine/system_state_instance.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0082"
 b6_verdict = "ADAPTED"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Direct filename correspondence established in FL-C3; semantic fidelity remains pending independent whole-family verification."
+note = "Direct filename correspondence and complete semantic fidelity independently verified at FL-C3 candidate 975962ccb22c3089620ab1f4a735e502e51d7ef1."
 
 [[file]]
 upstream = "src/animation/text_input_listener_group.cpp"

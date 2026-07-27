@@ -65,13 +65,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   described the provisional stack base, not the active wave, and is no longer
   used for FL-C publication. There is no PR.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
-- File closure: 63 / 341. The 51 `component-update-graph` rows and all 12
-  FL-C2 transition/condition rows are `faithful`; the 278 later-wave rows
-  remain pending. The file-correspondence manifest additionally promotes the
-  three accepted importer rows.
-- Member closure: 49 / 75 owner/member rows (41 imported runtime-drawing
-  owners, all six FL-A Component rows, and the two FL-C2 rows); 26 later-wave
-  rows remain.
+- File closure: 68 / 341. The 51 `component-update-graph` rows, all 12 FL-C2
+  transition/condition rows, and all five FL-C3 layer/state rows are
+  `faithful`; the 273 later-wave rows remain pending. The file-correspondence
+  manifest additionally retains the accepted importer rows.
+- Member closure: 50 / 75 owner/member rows (41 imported runtime-drawing
+  owners, all six FL-A Component rows, the two FL-C2 rows, and
+  `state_machine.layer`); 25 later-wave rows remain.
 - Open mechanism gaps: 7 / 10. FL-G02 and FL-G06 remain closed; FL-G10 records
   the user-approved D2 saturation choice for AnimationReset's otherwise
   undefined float-to-int edge.
@@ -105,10 +105,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `docs/runtime-frame-loop-trace.json` now records committed source
   `6674aee34c07d95707bc0e2f737540a3b5633cb4`, candidate-source fingerprint
   `0936a1cf2721beb9e702845c062d748872ebe4019a6f8307575cef4e8ad9dd33`,
-  and exact runner provenance. The immutable candidate is published on
-  `origin/levi/fl-c` and awaiting one independent whole-family verdict. No
-  FL-C3 row is promoted before that verdict, and no FL-C4 production edit
-  begins before it.
+  and exact runner provenance. The coordinator promoted exact candidate
+  `975962ccb22c3089620ab1f4a735e502e51d7ef1` after the independent production
+  review passed focus, random-wait, DataBind-order, RNG, nullable nested-owner,
+  and family-boundary fidelity. The five public file rows and
+  `state_machine.layer` are promoted only by the dedicated reconciliation
+  commit. The supporting `src/math/random.cpp` row remains pending for its
+  later FL-D formula consumer.
 - FL-C3's fresh once-per-candidate non-performance floor is green on the
   corrected source: runtime 521 / 521; public facade 146 / 146; probe-armed
   workspace and pinned-C++ probes 747 / 747; ordinary and scripted golden each
@@ -121,8 +124,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   checksum
   `ca1b605a66062dce9d1cff1d139fd4125fd30fe2323f661e84daa6223885d50d`.
   The source-bound trace reports 103 / 341 reached C++ files, 29 Rust modules,
-  and all 18 frame landmarks. The structural checker is run after this receipt
-  is committed so its fingerprint validates the immutable source. No
+  and all 18 frame landmarks. Structural checker 37 / 37 is green. No
   performance measurement was run.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
@@ -780,12 +782,10 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Freeze and publish the corrected complete five-file pinned-C++
-   layer/state-occurrence family against
-   `docs/runtime-frame-loop-fl-c3-closure.md`, run independent Standards and
-   Spec review on the exact immutable SHA, then request one whole-family
-   acceptance verdict. Do not promote a row or begin FL-C4 production before
-   that verdict.
+1. Read the complete 18-file pinned-C++ listener-action/event/focus-dispatch
+   family and commit its closure checklist before production changes (FL-C4).
+   Close `state_machine.actions` and `state_machine.events` only after one
+   complete-family implementation and independent verdict.
 2. Keep FL-B and FL-C1 rows pending until their independent acceptance.
    Performance remains verification evidence, never the source of a work
    slice.

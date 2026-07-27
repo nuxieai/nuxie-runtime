@@ -201,6 +201,31 @@ class ReleaseWorkflowSourcePolicyTests(unittest.TestCase):
         self.assertNotIn("'26.2'", self.trusted_macos_workflow)
         self.assertNotIn("'17C52'", self.trusted_macos_workflow)
 
+    def test_release_requires_the_single_qualified_runner_label(self) -> None:
+        documentation_words = " ".join(self.release_documentation.split())
+        runner_selectors = re.findall(
+            r"^\s+runs-on:\s*(.+)$",
+            self.release_workflow,
+            re.MULTILINE,
+        )
+        self.assertEqual(
+            runner_selectors,
+            [
+                "[self-hosted, macOS, ARM64, nuxie-signoff, "
+                "nuxie-release]"
+            ],
+        )
+        self.assertIn(
+            "custom `nuxie-release` label to exactly one signed macOS "
+            "release host",
+            documentation_words,
+        )
+        self.assertIn(
+            "runner-group workflow and runner-label policies before a job "
+            "starts",
+            documentation_words,
+        )
+
     def test_apple_jobs_force_the_exact_rustup_toolchain_onto_path(self) -> None:
         toolchain_bin = (
             'toolchain_bin="$(dirname "$(rustup which '
@@ -237,7 +262,8 @@ class ReleaseWorkflowSourcePolicyTests(unittest.TestCase):
             self.release_documentation,
         )
         self.assertIn(
-            "evaluates the runner-group workflow policy before a job starts",
+            "evaluates the runner-group workflow and runner-label policies "
+            "before a",
             self.release_documentation,
         )
         self.assertIn(

@@ -79,14 +79,18 @@ use, a repository administrator must:
    `NUXIE_RELEASE_ADMIN_TOKEN`.
 4. Protect the `apple-runtime-v*` tag pattern so only release maintainers can
    create matching tags.
-5. Configure the `nuxie-macos` runner group's selected-workflow policy with
+5. Assign the custom `nuxie-release` label to exactly one signed macOS release host.
+   Verify that host has the pinned Xcode version and build. Do not assign that
+   label to ordinary pull-request runners merely because they share the
+   `nuxie-signoff` label.
+6. Configure the `nuxie-macos` runner group's selected-workflow policy with
    both exact entries:
    - `nuxieai/nuxie-runtime/.github/workflows/apple-runtime-release.yml@refs/tags/apple-runtime-v0.2.0`
    - `nuxieai/nuxie-runtime/.github/workflows/apple-runtime-release.yml@refs/heads/main`
 
-GitHub evaluates the runner-group workflow policy before a job starts and the
-environment deployment-ref policy before release steps run, so the workflow
-cannot preflight or repair either external configuration.
+GitHub evaluates the runner-group workflow and runner-label policies before a
+job starts and the environment deployment-ref policy before release steps run,
+so the workflow cannot preflight or repair those external configurations.
 The exact tag entry permits the current tag-push release; the `main` entry
 permits the bounded `workflow_dispatch` retry without granting other branch
 refs. Each future tag-push release requires adding that new exact tag ref to

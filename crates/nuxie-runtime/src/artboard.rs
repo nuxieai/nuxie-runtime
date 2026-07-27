@@ -1452,42 +1452,7 @@ impl ArtboardInstance {
                 .and_then(|component| component.concrete.follow_path.as_ref())
                 .is_some()
             {
-                let target = objects
-                    .component(handle)
-                    .and_then(|component| component.concrete.constraint)
-                    .and_then(|constraint| constraint.target())
-                    .context("FollowPathConstraint is missing its retained target")?;
-                let source = objects
-                    .component(target)
-                    .and_then(|component| component.concrete.shape.as_ref())
-                    .and_then(|_| {
-                        objects
-                            .component_local_id(target)
-                            .and_then(|local| objects.path_composer_handle(local))
-                    })
-                    .or_else(|| {
-                        objects
-                            .component(target)
-                            .and_then(|component| component.concrete.path.as_ref())
-                            .and_then(|path| path.shape)
-                            .and_then(|shape| objects.component_local_id(shape))
-                            .and_then(|shape_local| objects.path_composer_handle(shape_local))
-                            .or_else(|| {
-                                objects
-                                    .component(target)
-                                    .and_then(|component| component.concrete.path.as_ref())
-                                    .map(|_| target)
-                            })
-                    });
-                if let Some(source) = source {
-                    objects.add_dependent(source, handle);
-                }
-                if let Some(parent) = objects
-                    .component(handle)
-                    .and_then(|component| component.parent)
-                {
-                    objects.add_dependent(handle, parent);
-                }
+                crate::constraints::follow_path_constraint::build_dependencies(objects, handle)?;
 
                 // ListFollowPath calls its FollowPath Super first and then
                 // registers itself once on the exact ConstrainableList owner
@@ -2003,27 +1968,10 @@ impl ArtboardInstance {
             {
                 continue;
             }
-            let Some(target) = self
-                .objects
-                .component(constraint)
-                .and_then(|component| component.concrete.constraint)
-                .and_then(|constraint| constraint.target())
-            else {
-                continue;
-            };
-            if let Some(shape) = self
-                .objects
-                .component_mut(target)
-                .and_then(|component| component.concrete.shape.as_mut())
-            {
-                shape.add_flags(crate::components::RuntimeShapeState::FOLLOW_PATH);
-            } else if let Some(path) = self
-                .objects
-                .component_mut(target)
-                .and_then(|component| component.concrete.path.as_mut())
-            {
-                path.add_flags(crate::components::RuntimePathState::FOLLOW_PATH);
-            }
+            crate::constraints::follow_path_constraint::mark_target_path_flags(
+                &mut self.objects,
+                constraint,
+            );
         }
 
         // `ClippingShape::onAddedClean` marks every source-subtree Shape as
@@ -6429,7 +6377,7 @@ impl ArtboardInstance {
             .and_then(|component| component.concrete.follow_path.as_ref())
             .is_some()
         {
-            crate::constraints::update_follow_path_constraint(self, component_handle);
+            crate::constraints::follow_path_constraint::update(self, component_handle);
         }
         if dirt.contains(ComponentDirt::TRANSFORM) {
             self.update_authored_transform_component(component_handle, local_id);
@@ -6710,15 +6658,12 @@ impl ArtboardInstance {
             .and_then(|handle| self.objects.component(handle))
             .and_then(|component| component.concrete.constraint)
             .map(|constraint| constraint.kind);
-        if crate::constraints::follow_path_orient_property_key() == property_key
-            && constraint_kind.is_some_and(|kind| {
-                matches!(
-                    kind,
-                    crate::components::RuntimeConstraintKind::FollowPath
-                        | crate::components::RuntimeConstraintKind::ListFollowPath
-                )
-            })
-        {
+        if constraint_kind.is_some_and(|kind| {
+            crate::constraints::follow_path_constraint::bool_change_marks_parent_dirty(
+                kind,
+                property_key,
+            )
+        }) {
             return self.mark_constraint_parent_transform_dirty(local_id);
         }
         if let Some(changed) = crate::constraints::ik_constraint::apply_bool_property_changed(
@@ -12297,7 +12242,7 @@ mod tests {
             false,
         );
 
-        assert!(crate::constraints::update_follow_path_constraint(
+        assert!(crate::constraints::follow_path_constraint::update(
             &mut instance,
             constraint_handle
         ));
@@ -12322,7 +12267,7 @@ mod tests {
             ],
             false,
         );
-        assert!(crate::constraints::update_follow_path_constraint(
+        assert!(crate::constraints::follow_path_constraint::update(
             &mut instance,
             constraint_handle
         ));
@@ -12355,7 +12300,7 @@ mod tests {
             .as_mut()
             .unwrap()
             .set_target(Some(node_target));
-        assert!(!crate::constraints::update_follow_path_constraint(
+        assert!(!crate::constraints::follow_path_constraint::update(
             &mut instance,
             constraint_handle
         ));

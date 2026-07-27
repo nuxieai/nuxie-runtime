@@ -7,18 +7,17 @@ use crate::bones::bone::RuntimeBoneState;
 use crate::bones::skin::RuntimeSkinState;
 use crate::bones::tendon::RuntimeTendonState;
 use crate::bones::weight::RuntimeWeightState;
+use crate::constraints::follow_path_constraint::RuntimeFollowPathState;
 use crate::constraints::ik_constraint::RuntimeIkState;
 use crate::constraints::targeted_constraint::{
     RuntimeTargetedConstraintState, state_for_type as targeted_constraint_state_for_type,
 };
-use crate::draw::RuntimePathMeasure;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::property_key_for_name;
 use crate::solo::RuntimeSoloState;
 use crate::view_model::RuntimeOwnedViewModelListHandle;
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::ComponentNode;
-use nuxie_render_api::RawPath;
 use nuxie_schema::definition_by_name;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
@@ -247,35 +246,6 @@ impl RuntimeConstraintKind {
     }
 }
 
-/// Runtime-only members owned by C++ `FollowPathConstraint`.
-///
-/// `raw_path` is the exact retained `RawPath` owner. Its allocations survive
-/// `rewind`/rebuild just as C++ `FollowPathConstraint::m_rawPath` does;
-/// `path_measure` is rebuilt from it only by the concrete constraint's
-/// dependency-ordered `update` (`follow_path_constraint.cpp:122-147`).
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeFollowPathState {
-    pub(crate) raw_path: RawPath,
-    pub(crate) path_measure: RuntimePathMeasure,
-    #[cfg(test)]
-    pub(crate) measure_rebuilds: usize,
-}
-
-impl RuntimeFollowPathState {
-    fn new() -> Self {
-        Self {
-            raw_path: RawPath::new(),
-            path_measure: RuntimePathMeasure::from_raw_path(&RawPath::new()),
-            #[cfg(test)]
-            measure_rebuilds: 0,
-        }
-    }
-
-    fn clone_for_occurrence(&self) -> Self {
-        Self::new()
-    }
-}
-
 /// Runtime-only fields owned by C++ `Path`.
 ///
 /// `shape` is the occurrence-local `m_Shape` pointer rebuilt by
@@ -337,12 +307,6 @@ impl RuntimeShapeState {
 
     pub(crate) fn is_flagged(&self, flags: u8) -> bool {
         self.flags.get() & flags != 0
-    }
-}
-
-impl Default for RuntimeFollowPathState {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

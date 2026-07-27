@@ -229,6 +229,32 @@ impl ArtboardInstance {
         true
     }
 
+    pub fn collapse_component(&mut self, local_id: usize, collapsed: bool) -> bool {
+        self.collapse_component_tree(local_id, collapsed)
+    }
+
+    pub(crate) fn collapse_component_tree(&mut self, local_id: usize, collapsed: bool) -> bool {
+        self.collapse_component_tree_with_ancestor(local_id, collapsed, false)
+    }
+
+    pub(crate) fn collapse_component_tree_with_ancestor(
+        &mut self,
+        local_id: usize,
+        collapsed: bool,
+        ancestor_changed: bool,
+    ) -> bool {
+        let mut visited = BTreeSet::new();
+        let Some(handle) = self.component_handle(local_id) else {
+            return false;
+        };
+        self.collapse_component_tree_with_ancestor_guarded(
+            handle,
+            collapsed,
+            ancestor_changed,
+            &mut visited,
+        )
+    }
+
     /// C++ `Component::hitTestPoint` walks to the concrete parent while
     /// preserving `skipOnUnclipped` and clearing the primary-hit marker
     /// (`src/component.cpp:97-105`).
@@ -249,3 +275,4 @@ impl ArtboardInstance {
         self.component_hit_test_point(parent, position, skip_on_unclipped, false)
     }
 }
+use std::collections::BTreeSet;

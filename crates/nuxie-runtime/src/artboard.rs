@@ -5726,10 +5726,6 @@ impl ArtboardInstance {
         self.dispatch_text_style_on_dirty(handle, local_id, accumulated);
     }
 
-    pub fn collapse_component(&mut self, local_id: usize, collapsed: bool) -> bool {
-        self.collapse_component_tree(local_id, collapsed)
-    }
-
     fn collapse_component_handle(&mut self, handle: ComponentHandle, collapsed: bool) -> bool {
         if !self.collapse_component_base(handle, collapsed) {
             return false;
@@ -5781,28 +5777,6 @@ impl ArtboardInstance {
         self.mark_layout_changed();
         self.apply_component_collapse_changed(local_id);
         true
-    }
-
-    pub(crate) fn collapse_component_tree(&mut self, local_id: usize, collapsed: bool) -> bool {
-        self.collapse_component_tree_with_ancestor(local_id, collapsed, false)
-    }
-
-    pub(crate) fn collapse_component_tree_with_ancestor(
-        &mut self,
-        local_id: usize,
-        collapsed: bool,
-        ancestor_changed: bool,
-    ) -> bool {
-        let mut visited = BTreeSet::new();
-        let Some(handle) = self.component_handle(local_id) else {
-            return false;
-        };
-        self.collapse_component_tree_with_ancestor_guarded(
-            handle,
-            collapsed,
-            ancestor_changed,
-            &mut visited,
-        )
     }
 
     /// Thin Rust virtual-dispatch adapter for the Component, Container,

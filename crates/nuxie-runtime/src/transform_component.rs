@@ -1,6 +1,8 @@
 use std::sync::OnceLock;
 
 use super::ArtboardInstance;
+use super::node;
+use crate::bones::root_bone;
 use crate::components::{ComponentDirt, ComponentHandle, Mat2D, RuntimeComponent};
 use crate::objects::InstanceObjectArena;
 use crate::properties::{cached_property_key_for_name, property_key_for_name};
@@ -36,10 +38,10 @@ impl TransformProperty {
 
     pub(crate) fn property_key_for_type(self, type_name: &str) -> Option<u16> {
         match self {
-            Self::X if type_name == "RootBone" => root_bone_x_property_key(),
-            Self::Y if type_name == "RootBone" => root_bone_y_property_key(),
-            Self::X => node_x_property_key(),
-            Self::Y => node_y_property_key(),
+            Self::X if type_name == "RootBone" => root_bone::x_property_key(),
+            Self::Y if type_name == "RootBone" => root_bone::y_property_key(),
+            Self::X => node::x_property_key(),
+            Self::Y => node::y_property_key(),
             Self::Rotation => transform_component_rotation_property_key(),
             Self::ScaleX => transform_component_scale_x_property_key(),
             Self::ScaleY => transform_component_scale_y_property_key(),
@@ -87,26 +89,6 @@ impl TransformPropertyKeys {
             TransformProperty::Opacity => self.opacity,
         }
     }
-}
-
-fn node_x_property_key() -> Option<u16> {
-    static KEY: OnceLock<Option<u16>> = OnceLock::new();
-    cached_property_key_for_name(&KEY, "Node", "x")
-}
-
-fn node_y_property_key() -> Option<u16> {
-    static KEY: OnceLock<Option<u16>> = OnceLock::new();
-    cached_property_key_for_name(&KEY, "Node", "y")
-}
-
-fn root_bone_x_property_key() -> Option<u16> {
-    static KEY: OnceLock<Option<u16>> = OnceLock::new();
-    cached_property_key_for_name(&KEY, "RootBone", "x")
-}
-
-fn root_bone_y_property_key() -> Option<u16> {
-    static KEY: OnceLock<Option<u16>> = OnceLock::new();
-    cached_property_key_for_name(&KEY, "RootBone", "y")
 }
 
 fn transform_component_rotation_property_key() -> Option<u16> {
@@ -207,7 +189,7 @@ impl RuntimeComponent {
 
 /// Direct `TransformComponent::onAddedClean`: resolve the retained typed
 /// parent once from this occurrence's already-linked Component parent.
-pub(super) fn retain_parent_transform_component(
+pub(crate) fn retain_parent_transform_component(
     objects: &mut InstanceObjectArena,
     handle: ComponentHandle,
 ) {
@@ -279,6 +261,10 @@ impl ArtboardInstance {
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
 
+        let position_callback_applied = root_bone::is_position_property(property)
+            && root_bone::apply_position_property_changed(self, local_id, property_key)
+            || node::is_position_property(property)
+                && node::apply_position_property_changed(self, local_id, property_key);
         match property {
             TransformProperty::Opacity => {
                 self.mark_world_transform_opacity_dirty(local_id);
@@ -288,10 +274,12 @@ impl ArtboardInstance {
             | TransformProperty::Rotation
             | TransformProperty::ScaleX
             | TransformProperty::ScaleY => {
-                let handle = self
-                    .component_handle(local_id)
-                    .expect("validated Transform has a Component handle");
-                self.mark_transform_dirty_handle(handle);
+                if !position_callback_applied {
+                    let handle = self
+                        .component_handle(local_id)
+                        .expect("validated Transform has a Component handle");
+                    self.mark_transform_dirty_handle(handle);
+                }
             }
         }
         true
@@ -320,27 +308,16 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn authored_transform(&self, local_id: usize) -> AuthoredTransform {
-        let component = self.component(local_id);
-        let (x, y) = if component
-            .and_then(|component| component.concrete.bone.as_ref())
-            .is_some_and(|bone| !bone.is_root)
-        {
-            let parent_length = self
-                .component_handle(local_id)
-                .and_then(|handle| self.objects.component(handle))
-                .and_then(|component| component.parent)
-                .and_then(|parent| self.objects.component_local_id(parent))
-                .and_then(|parent_local| self.bone_length(parent_local))
-                .unwrap_or(0.0);
-            (parent_length, 0.0)
-        } else {
-            (
-                self.transform_property(local_id, TransformProperty::X)
-                    .unwrap_or_else(|| TransformProperty::X.default_value()),
-                self.transform_property(local_id, TransformProperty::Y)
-                    .unwrap_or_else(|| TransformProperty::Y.default_value()),
-            )
-        };
+        let (x, y) = self
+            .runtime_bone_authored_translation(local_id)
+            .unwrap_or_else(|| {
+                (
+                    self.transform_property(local_id, TransformProperty::X)
+                        .unwrap_or_else(|| TransformProperty::X.default_value()),
+                    self.transform_property(local_id, TransformProperty::Y)
+                        .unwrap_or_else(|| TransformProperty::Y.default_value()),
+                )
+            });
 
         AuthoredTransform {
             x,

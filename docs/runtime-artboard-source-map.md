@@ -32,9 +32,10 @@ paths in both mechanical ledgers are updated here, but every existing
 faithfulness/verification status remains unchanged. The active listener/action
 family must integrate these moves at its frozen boundary, rebuild the
 provenance-bound trace runners, refresh the source fingerprint/trace evidence,
-and make the canonical structural check green before the combined tree can
-land. The staging branch does not rewrite semantic trace evidence for
-behavior-preserving file moves.
+repair every moved member's lifecycle citations, and make the canonical
+structural check green before the combined tree can land. The staging branch
+does not rewrite semantic trace evidence or claim that pre-move line citations
+remain valid for behavior-preserving file moves.
 
 ## Direct file map
 
@@ -44,7 +45,7 @@ behavior-preserving file moves.
 | `advancing_component.hpp`, `advancing_component.cpp` | `advancing_component.rs` | retained advancing entry and schedule builder | extracted |
 | `resetting_component.hpp`, `resetting_component.cpp` | `resetting_component.rs` | retained reset entry, schedule, and reset dispatch | extracted |
 | `event.hpp`, `event.cpp` | `event.rs` | event/custom-property projection | active live-event work |
-| `artboard_component_list.hpp`, `artboard_component_list.cpp` | `artboard_component_list.rs` | retained rows, context, sync/create, advance/reset | virtualized mounted-item methods extracted; active focus installation remains |
+| `artboard_component_list.hpp`, `artboard_component_list.cpp` | `artboard_component_list.rs` | retained rows, context, sync/create, advance/reset | partial: virtualized mounted-item methods extracted; retained row storage, context, create/sync, advance, reset, and active focus installation remain in `artboard.rs` |
 | `virtualizing_component.hpp`, `virtualizing_component.cpp` | `virtualizing_component.rs` | exact component-to-virtualizer adapter | extracted |
 | `nested_artboard.hpp`, `nested_artboard.cpp` | `nested_artboard.rs` | retained child occurrence, collection, replacement, context, advance | active nested/focus work |
 | `nested_artboard_layout.hpp`, `nested_artboard_layout.cpp` | `nested_artboard_layout.rs` | retained layout bounds/cache transfer and neutral Fixed/Fill/Hug override policy | partial: extracted; Taffy materialization remains renderer-owned, while exact `-1` and pinned height-via-width scale semantics remain for its semantic closure |
@@ -65,12 +66,14 @@ behavior-preserving file moves.
 | `solo.hpp`, `solo.cpp` | `solo.rs` | solo mapping, active child, and collapse propagation | extracted |
 | `weight.hpp`, `weight.cpp` | `bones/weight.rs` | retained weight state, `onAddedDirty`, and `Weight::deform` | extracted |
 | `cubic_weight.hpp` | `bones/cubic_weight.rs` | independent in/out retained translations | retained state extracted |
-| `vertex.hpp`, `vertex.cpp` | `shapes/vertex.rs` | weight attachment, render translation, base deformation dispatch | weight lookup/deformation shard extracted; property/render owner remains |
-| `cubic_vertex.hpp`, `cubic_vertex.cpp` | `shapes/cubic_vertex.rs` | in/out point cache and cubic deformation dispatch | weighted in/out deformation shard extracted; point cache/render owner remains |
+| `path_vertex.hpp`, `path_vertex.cpp` | `shapes/path_vertex.rs` | parent-owned Skin/Path geometry dirt bridge | partial: geometry dirt extracted; shape lookup and render-path construction remain in `draw.rs` |
+| `vertex.hpp`, `vertex.cpp` | `shapes/vertex.rs` | weight attachment, x/y callback, render translation, base deformation dispatch | partial: weight lookup/deformation and x/y callback extracted through `shapes/path_vertex.rs`; render translation remains in `draw.rs` |
+| `cubic_vertex.hpp`, `cubic_vertex.cpp` | `shapes/cubic_vertex.rs` | x/y super dispatch, in/out point cache, and cubic deformation dispatch | partial: x/y super dispatch and weighted in/out deformation extracted; Rust still computes points on demand, while point/render selection remains in `draw.rs` |
 | `transform_component.hpp`, `transform_component.cpp` | `transform_component.rs` | transform facade, dirtying, and concrete update | partial: initial owner shard extracted; generic property dispatch, dependency construction, and constraint orchestration remain |
-| `node.hpp`, `node.cpp` | `node.rs` | computed local transform | partial: computed-local owner extracted; generic property/dependency dispatch remains |
+| `node.hpp`, `node.cpp` | `node.rs` | x/y keys and callbacks plus computed local transform | partial: position callbacks and computed-local owner extracted; root-space accessors, layout dirt, and generic property/dependency dispatch remain |
 | `world_transform_component.hpp`, `world_transform_component.cpp` | `world_transform_component.rs` | world transform and render-opacity propagation | partial: update shard extracted; ordered Artboard update dispatch remains |
 | `bone.hpp`, `bone.cpp` | `bones/bone.rs` | bone relation, length, and callback | partial: state/onDirty/update shard extracted; `tipWorldTranslation` remains in `constraints.rs` |
+| `root_bone.hpp`, `root_bone.cpp` | `bones/root_bone.rs` | TransformComponent clean-phase bypass plus x/y keys and dirt callbacks | extracted |
 | `skin.hpp`, `skin.cpp` | `bones/skin.rs` | tendon/bone buffer ownership and dirty/update behavior | partial: state/onDirty/update shard extracted; `deform` remains in `draw.rs` and buffer allocation remains in relation construction |
 | `component.hpp`, `component.cpp` | `component.rs` | component facade, dirt base, and collapse base | one active type-name accessor |
 | `container_component.hpp`, `container_component.cpp` | `container_component.rs` | parent/child relation and guarded subtree recursion | queued |

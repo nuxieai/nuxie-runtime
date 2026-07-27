@@ -1190,10 +1190,7 @@ status = "faithful"
 upstream = "src/bones/root_bone.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = [
-  "crates/nuxie-runtime/src/bones/bone.rs",
-  "crates/nuxie-runtime/src/constraints.rs",
-]
+rust_modules = ["crates/nuxie-runtime/src/bones/root_bone.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2137,6 +2134,7 @@ source_set = "component-update-graph"
 wave = "FL-A"
 rust_modules = [
   "crates/nuxie-runtime/src/node.rs",
+  "crates/nuxie-runtime/src/transform_component.rs",
   "crates/nuxie-runtime/src/components.rs",
   "crates/nuxie-runtime/src/artboard.rs",
   "crates/nuxie-runtime/src/draw.rs",
@@ -2254,6 +2252,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = [
   "crates/nuxie-runtime/src/shapes/cubic_vertex.rs",
+  "crates/nuxie-runtime/src/shapes/path_vertex.rs",
   "crates/nuxie-runtime/src/draw.rs",
 ]
 dynamically_reached = true
@@ -2479,7 +2478,10 @@ status = "pending"
 upstream = "src/shapes/path_vertex.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/path_vertex.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -2569,6 +2571,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = [
   "crates/nuxie-runtime/src/shapes/vertex.rs",
+  "crates/nuxie-runtime/src/shapes/path_vertex.rs",
   "crates/nuxie-runtime/src/draw.rs",
 ]
 dynamically_reached = true
@@ -3240,13 +3243,13 @@ rust_file = "crates/nuxie-runtime/src/components.rs"
 rust_anchor = "pub(crate) struct TransformComponents"
 status = "faithful"
 [member.lifecycle]
-construct = ["cpp:src/transform_component.cpp:22-43", "rust:crates/nuxie-runtime/src/components.rs:1808-1827"]
-retain = ["cpp:src/transform_component.cpp:45-51", "rust:crates/nuxie-runtime/src/components.rs:1837-1856"]
-dirty = ["cpp:src/transform_component.cpp:54-61", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
-update = ["cpp:src/transform_component.cpp:63-113", "rust:crates/nuxie-runtime/src/artboard.rs:7890-8025"]
+construct = ["cpp:src/transform_component.cpp:22-43", "rust:crates/nuxie-runtime/src/components.rs:1549-1667", "rust:crates/nuxie-runtime/src/transform_component.rs:128-148"]
+retain = ["cpp:src/transform_component.cpp:45-51", "rust:crates/nuxie-runtime/src/transform_component.rs:190-215"]
+dirty = ["cpp:src/transform_component.cpp:54-61", "rust:crates/nuxie-runtime/src/transform_component.rs:425-437", "rust:crates/nuxie-runtime/src/world_transform_component.rs:18-29"]
+update = ["cpp:src/transform_component.cpp:63-113", "rust:crates/nuxie-runtime/src/transform_component.rs:155-188", "rust:crates/nuxie-runtime/src/artboard.rs:6939-7059"]
 advance = ["cpp:src/artboard.cpp:1463-1480", "rust:crates/nuxie-runtime/src/artboard.rs:5615-5665"]
 draw = ["cpp:src/artboard.cpp:1613-1652", "rust:crates/nuxie-runtime/src/draw.rs:4210-4265"]
-clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/components.rs:1920-1943"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/components.rs:1653-1668"]
 drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/objects.rs:135-153"]
 
 [[member]]

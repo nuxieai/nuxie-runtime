@@ -42,6 +42,7 @@ use crate::artboard_data_bind::{
     reunite_artboard_shared_data_bind_converter_states,
 };
 use crate::bones::bone;
+use crate::bones::root_bone;
 use crate::bones::skin;
 use crate::components::{
     ComponentDirt, ComponentHandle, Mat2D, RuntimeComponent, RuntimeConstrainableListState,
@@ -1381,7 +1382,15 @@ impl ArtboardInstance {
             let handle = objects
                 .component_handle(component.local_id)
                 .context("authored Component handle is missing")?;
-            transform_component::retain_parent_transform_component(objects, handle);
+            let bone_kind = objects
+                .component(handle)
+                .and_then(|component| component.concrete.bone.as_ref())
+                .map(|bone| bone.is_root);
+            if bone_kind == Some(true) {
+                root_bone::on_added_clean(objects, handle);
+            } else {
+                transform_component::retain_parent_transform_component(objects, handle);
+            }
 
             // `Path::onAddedClean` walks the live parent chain to its Shape,
             // stores that pointer, and registers itself on the Shape in
@@ -1440,11 +1449,7 @@ impl ArtboardInstance {
                 paths.push(handle);
             }
 
-            let is_non_root_bone = objects
-                .component(handle)
-                .and_then(|component| component.concrete.bone.as_ref())
-                .is_some_and(|bone| !bone.is_root);
-            if is_non_root_bone {
+            if bone_kind == Some(false) {
                 bone::on_added_clean(objects, handle)?;
             } else if component.type_name == "Tendon" {
                 let parent = objects
@@ -7590,29 +7595,30 @@ impl ArtboardInstance {
         if self.apply_bone_double_property_changed(local_id, property_key) {
             return true;
         }
-        if path_vertex_property_affects_geometry(type_name, property_key) {
-            // Direct port of the concrete Vertex callbacks through
-            // PathVertex::markGeometryDirty and Path::markPathDirty. The
-            // vertex never owns path dirt; its parent PointsPath does
-            // (`vertex.cpp:14-15`, `straight_vertex.cpp:5`,
-            // `cubic_{mirrored,asymmetric,detached}_vertex.cpp`,
-            // `path_vertex.cpp:21-30`, `path.cpp:327-334`).
-            if let Some(path_local) = self.component_parent_local(local_id)
-                && let Some(path) = self.component_handle(path_local)
-            {
-                if let Some(skin) = self
-                    .objects
-                    .component(path)
-                    .and_then(|component| component.concrete.skinnable.as_ref())
-                    .and_then(|skinnable| skinnable.skin)
-                {
-                    self.add_component_dirt(skin, ComponentDirt::SKIN, false);
-                }
-                self.add_component_dirt(path, ComponentDirt::PATH, false);
-            }
+        if crate::shapes::cubic_vertex::apply_position_property_changed(
+            self,
+            local_id,
+            type_name,
+            property_key,
+        ) || crate::shapes::vertex::apply_position_property_changed(
+            self,
+            local_id,
+            type_name,
+            property_key,
+        ) || crate::shapes::path_vertex::apply_derived_property_changed(
+            self,
+            local_id,
+            type_name,
+            property_key,
+        ) {
             return true;
         }
 
+        if root_bone::apply_position_property_changed(self, local_id, property_key)
+            || node::apply_position_property_changed(self, local_id, property_key)
+        {
+            return true;
+        }
         if let Some(property) = transform_property_for_key(property_key) {
             match property {
                 TransformProperty::Opacity => {
@@ -8940,36 +8946,6 @@ fn component_dirt_affects_path_epoch(dirt: ComponentDirt) -> bool {
             | ComponentDirt::LAYOUT_STYLE
             | ComponentDirt::N_SLICER))
         .is_empty()
-}
-
-fn path_vertex_property_affects_geometry(type_name: Option<&str>, property_key: u16) -> bool {
-    let Some(
-        type_name @ ("StraightVertex"
-        | "CubicMirroredVertex"
-        | "CubicAsymmetricVertex"
-        | "CubicDetachedVertex"),
-    ) = type_name
-    else {
-        return false;
-    };
-
-    let properties: &[&str] = match type_name {
-        "StraightVertex" => &["x", "y", "radius"],
-        "CubicMirroredVertex" => &["x", "y", "rotation", "distance"],
-        "CubicAsymmetricVertex" => &["x", "y", "rotation", "inDistance", "outDistance"],
-        "CubicDetachedVertex" => &[
-            "x",
-            "y",
-            "inRotation",
-            "inDistance",
-            "outRotation",
-            "outDistance",
-        ],
-        _ => unreachable!("path-vertex type was filtered above"),
-    };
-    properties
-        .iter()
-        .any(|name| property_key_for_name(type_name, name) == Some(property_key))
 }
 
 fn property_affects_effect_path_epoch(type_name: Option<&str>, property_key: u16) -> bool {
@@ -13638,6 +13614,40 @@ mod tests {
                 .dirt
                 .contains(ComponentDirt::WORLD_TRANSFORM)
         );
+    }
+
+    #[test]
+    fn root_bone_position_callback_uses_root_keys_and_transform_dirt() {
+        // RootBone owns distinct generated x/y keys and its callbacks directly
+        // invoke markTransformDirty (`src/bones/root_bone.cpp:14-15`).
+        let root = synthetic_component_for_type(0, "RootBone");
+        let mut instance = synthetic_instance(vec![root], vec![0]);
+        instance.clear_component_dirt(0);
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
+        let root_x = property_key_for_name("RootBone", "x").expect("RootBone.x");
+
+        assert!(instance.set_keyed_double_property(0, root_x, 12.0));
+        let dirt = instance.component(0).expect("RootBone").dirt;
+        assert!(dirt.contains(ComponentDirt::TRANSFORM));
+        assert!(dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+    }
+
+    #[test]
+    fn ordinary_bone_authored_translation_comes_from_parent_length() {
+        // Bone overrides x/y: x is the retained Bone parent's length and y is
+        // fixed zero (`src/bones/bone.cpp:28-30`).
+        let parent = synthetic_component_for_type(0, "RootBone");
+        let child = synthetic_component_for_type(1, "Bone");
+        let mut instance = synthetic_instance(vec![parent, child], vec![0, 1]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        assert!(
+            instance
+                .objects
+                .set_double_property_by_name(0, "length", 42.0)
+        );
+
+        let authored = instance.authored_transform(1);
+        assert_eq!((authored.x, authored.y), (42.0, 0.0));
     }
 
     #[test]

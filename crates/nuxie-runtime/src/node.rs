@@ -1,7 +1,41 @@
 use std::cell::Cell;
+use std::sync::OnceLock;
 
 use super::ArtboardInstance;
-use crate::components::Mat2D;
+use crate::components::{Mat2D, TransformProperty};
+use crate::properties::cached_property_key_for_name;
+
+pub(crate) fn x_property_key() -> Option<u16> {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "Node", "x")
+}
+
+pub(crate) fn y_property_key() -> Option<u16> {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "Node", "y")
+}
+
+/// Direct `Node::xChanged` / `Node::yChanged` dispatch inherited by concrete
+/// Node occurrences. RootBone owns distinct generated property keys and is
+/// routed through its focused owner instead.
+pub(crate) fn apply_position_property_changed(
+    artboard: &mut ArtboardInstance,
+    local_id: usize,
+    property_key: u16,
+) -> bool {
+    if ![x_property_key(), y_property_key()].contains(&Some(property_key)) {
+        return false;
+    }
+    let Some(handle) = artboard.component_handle(local_id) else {
+        return false;
+    };
+    artboard.mark_transform_dirty_handle(handle);
+    true
+}
+
+pub(crate) fn is_position_property(property: TransformProperty) -> bool {
+    matches!(property, TransformProperty::X | TransformProperty::Y)
+}
 
 /// Runtime-only state owned by the concrete C++ `Node` subobject.
 ///

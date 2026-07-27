@@ -7,6 +7,24 @@ use crate::bones::weight::deform_point_from_skin;
 use crate::components::Mat2D;
 use crate::properties::property_key_for_name;
 
+/// Direct `CubicVertex::xChanged` / `CubicVertex::yChanged`: Rust computes
+/// control points on demand, so the C++ cache-invalidating tail is structural
+/// rather than stored; the inherited Vertex callback still dirties geometry.
+pub(crate) fn apply_position_property_changed(
+    artboard: &mut ArtboardInstance,
+    local_id: usize,
+    type_name: Option<&str>,
+    property_key: u16,
+) -> bool {
+    if !matches!(
+        type_name,
+        Some("CubicMirroredVertex" | "CubicAsymmetricVertex" | "CubicDetachedVertex")
+    ) {
+        return false;
+    }
+    super::vertex::apply_position_property_changed(artboard, local_id, type_name, property_key)
+}
+
 pub(super) fn deform_weight(
     artboard: &ArtboardInstance,
     weight_local: usize,

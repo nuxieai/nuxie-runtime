@@ -5,6 +5,36 @@ use crate::ArtboardInstance;
 use crate::bones::weight::{RuntimeWeightState, deform_point_from_skin};
 use crate::properties::property_key_for_name;
 
+fn is_path_vertex(type_name: Option<&str>) -> bool {
+    matches!(
+        type_name,
+        Some(
+            "StraightVertex"
+                | "CubicMirroredVertex"
+                | "CubicAsymmetricVertex"
+                | "CubicDetachedVertex"
+        )
+    )
+}
+
+/// Direct `Vertex::xChanged` / `Vertex::yChanged` dispatch.
+pub(crate) fn apply_position_property_changed(
+    artboard: &mut ArtboardInstance,
+    local_id: usize,
+    type_name: Option<&str>,
+    property_key: u16,
+) -> bool {
+    if !is_path_vertex(type_name)
+        || !["x", "y"]
+            .iter()
+            .any(|name| property_key_for_name(type_name.unwrap(), name) == Some(property_key))
+    {
+        return false;
+    }
+    super::path_vertex::mark_geometry_dirty(artboard, local_id);
+    true
+}
+
 impl ArtboardInstance {
     pub(crate) fn runtime_vertex_weight_state(
         &self,

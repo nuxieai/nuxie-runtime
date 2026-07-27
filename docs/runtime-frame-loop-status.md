@@ -80,7 +80,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   implementation provisionally under the coordinator override. FL-C2 is
   independently closed. The complete five-file layer/state family (FL-C3) is
   translated at semantic commit
-  `57d08cfcdb8e870602544e30af9c53d6f7ac34b7` against
+  `78be55ef52ab77a0722074a5224581b4ab51fba1` against
   `docs/runtime-frame-loop-fl-c3-closure.md`. C++'s ordered state-definition
   collection and the occurrence-owned `any`, `current`, and transition-source
   triad now have direct Rust owners. The rejected candidate's three omissions
@@ -93,16 +93,24 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   waiting-for-exit latch after changing state, and initial entry callbacks
   cannot observe DataBind facilities that C++ constructs only after layer
   initialization. Live pinned-C++ differentials cover both cases.
-  Interruption/reset/advance/nested lifecycles and all 21 structural negative
+  Candidate `b8d1fd6f7222fcdf3f520896f1dc8e9423d69bb8` was independently
+  rejected because it still synchronized the complete focus topology before
+  those callbacks. The current correction retains an empty focus-manager
+  identity, lazily creates only an explicitly targeted unattached FocusNode,
+  and builds the complete topology after every layer initializes. Live
+  target-scope and traversal differentials match pinned C++, and the complete
+  constructor availability audit now covers every entry-action facility.
+  Interruption/reset/advance/nested lifecycles and all 22 structural negative
   controls are closed. The self-excluding
   `docs/runtime-frame-loop-trace.json` records the exact candidate-source
-  fingerprint and runner provenance; fingerprinted status prose deliberately
-  does not duplicate those self-referential values. The exact next action is
-  to freeze and publish one immutable proof packet, run independent Standards
-  and Spec review on that exact SHA, and request one independent whole-family
-  verdict. No FL-C3 row is promoted before that verdict, and no FL-C4
-  production edit begins before it.
-- FL-C3's once-per-candidate non-performance floor is green on the corrected
+  fingerprint and runner provenance, which must be refreshed for the current
+  source before publication. The exact next action is the fresh
+  once-per-candidate non-performance floor, trace refresh, immutable
+  publication, and one independent whole-family verdict. No FL-C3 row is
+  promoted before that verdict, and no FL-C4 production edit begins before it.
+- FL-C3's previous once-per-candidate non-performance floor was green on
+  rejected candidate `b8d1fd6f`; it is historical and must be rerun for
+  semantic commit `78be55ef52ab77a0722074a5224581b4ab51fba1`. The prior receipt was:
   semantic commit `57d08cfcdb8e870602544e30af9c53d6f7ac34b7`: runtime 521 / 521;
   probe-armed workspace and pinned-C++ probes 746 / 746; ordinary and scripted
   golden each 317 / 317 entries and 647 / 647 segments with zero divergences;

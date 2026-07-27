@@ -564,6 +564,11 @@ divergences. `gm-clippedcubic2`, `riv-circle_clips` frame 0, and
 `gm-cliprects` is zero-delta, and unchanged P04-C01 passes 21/21. That is a
 support-matrix resolution, not a WebGL2 repair or retraction.
 
+The historical clip and variable-font evidence package landed together in PR
+#78 at exact runtime main
+`98bf5de1f9dfc5d280d29d295dcdc4e418f74c9b`. That landing is
+control-plane/evidence-only and changes no production renderer or text path.
+
 `LOC-014` is independently closed as a stale oracle:
 the same typed 180-by-124 Feather scene, dimensions, pixel density, background,
 resources, and bounds produced zero differing pixels in pinned C++ and Rust

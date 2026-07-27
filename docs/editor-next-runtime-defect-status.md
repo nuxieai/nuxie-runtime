@@ -32,11 +32,13 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   `LOC-016`, `LOC-017`, and `LOC-019` directly qualified.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
-- latest control-plane landing: Editor inbox reconciliation PR #76
+- latest control-plane landing: historical clip/font evidence closeout PR #78
   rebase-merged at exact runtime main
-  `cb4e7748c5b4233375c388b433696ffd34a3c9de`; Apple artifact closeout PR
-  #75 remains its direct predecessor at
-  `f34e1fdec9c9dbd049576b9a6cbc6880ae51022b`;
+  `98bf5de1f9dfc5d280d29d295dcdc4e418f74c9b`; retained-owner/raster
+  disposition PR #77 is its direct predecessor at
+  `e494995cb941fc8fd74ea8a7395a6ba3402c1fa1`, and Editor inbox
+  reconciliation PR #76 landed immediately before that at
+  `cb4e7748c5b4233375c388b433696ffd34a3c9de`;
 - active control-plane lane: preserve the lower-runtime boundary that
   quarantined the Scene-only retained-ViewModel candidate and the
   supported-WebGPU stale-golden evidence without closing `LOC-012` before an

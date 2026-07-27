@@ -1452,30 +1452,20 @@ impl ArtboardInstance {
                 .and_then(|component| component.concrete.follow_path.as_ref())
                 .is_some()
             {
-                crate::constraints::follow_path_constraint::build_dependencies(objects, handle)?;
-
-                // ListFollowPath calls its FollowPath Super first and then
-                // registers itself once on the exact ConstrainableList owner
-                // (`list_follow_path_constraint.cpp:57-66`).
                 if objects
                     .component(handle)
                     .and_then(|component| component.concrete.constraint)
-                    .is_some_and(|state| {
-                        state.kind == crate::components::RuntimeConstraintKind::ListFollowPath
+                    .is_some_and(|constraint| {
+                        constraint.kind == crate::components::RuntimeConstraintKind::ListFollowPath
                     })
-                    && let Some(list) = objects
-                        .component(handle)
-                        .and_then(|component| component.parent)
-                    && let Some(constraints) = objects
-                        .component_mut(list)
-                        .and_then(|component| component.concrete.constrainable_list.as_mut())
-                        .map(|list| &mut list.constraints)
                 {
-                    assert!(
-                        !constraints.contains(&handle),
-                        "C++ ConstrainableList requires unique constraint registration"
-                    );
-                    constraints.push(handle);
+                    crate::constraints::list_follow_path_constraint::build_dependencies(
+                        objects, handle,
+                    )?;
+                } else {
+                    crate::constraints::follow_path_constraint::build_dependencies(
+                        objects, handle,
+                    )?;
                 }
             }
 

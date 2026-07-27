@@ -17,12 +17,8 @@ use nuxie_graph::ArtboardGraph;
 
 pub(crate) mod follow_path_constraint;
 pub(crate) mod ik_constraint;
+pub(crate) mod list_follow_path_constraint;
 pub(crate) mod targeted_constraint;
-
-use self::follow_path_constraint::{
-    FOLLOW_PATH_DISTANCE_PROPERTY_KEY, constrain_components as follow_path_constrain_components,
-    target_transform_at_distance as target_transform_for_follow_path_constraint_at_distance,
-};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeScrollProperty {
@@ -494,8 +490,6 @@ const RUNTIME_CONSTRAINT_PROPERTY_KEYS: RuntimeConstraintPropertyKeys =
         origin_y: 373,
     };
 const BONE_LENGTH_PROPERTY_KEY: u16 = 89;
-const LIST_FOLLOW_PATH_DISTANCE_END_PROPERTY_KEY: u16 = 888;
-const LIST_FOLLOW_PATH_DISTANCE_OFFSET_PROPERTY_KEY: u16 = 889;
 
 impl RuntimeScrollPhysicsState {
     fn enabled(&self) -> bool {
@@ -802,12 +796,7 @@ pub(crate) fn constraint_double_change_marks_parent_dirty(
     (keys.strength == property_key && kind != RuntimeConstraintKind::Ik)
         || (kind == RuntimeConstraintKind::Distance && keys.distance == property_key)
         || follow_path_constraint::double_change_marks_parent_dirty(kind, property_key)
-        || (kind == RuntimeConstraintKind::ListFollowPath
-            && matches!(
-                property_key,
-                LIST_FOLLOW_PATH_DISTANCE_END_PROPERTY_KEY
-                    | LIST_FOLLOW_PATH_DISTANCE_OFFSET_PROPERTY_KEY
-            ))
+        || list_follow_path_constraint::double_change_marks_parent_dirty(kind, property_key)
         || (kind == RuntimeConstraintKind::Transform
             && (keys.origin_x == property_key || keys.origin_y == property_key))
 }
@@ -2374,7 +2363,7 @@ pub(crate) fn constrain_component_list_item_transforms(
         else {
             continue;
         };
-        changed |= apply_list_follow_path_constraint_to_transforms(
+        changed |= list_follow_path_constraint::constrain_list(
             artboard,
             list_component_index,
             constraint,
@@ -3780,83 +3769,6 @@ fn apply_transform_constraint(
     write_world_transform(artboard, component_index, constrained)
 }
 
-fn apply_list_follow_path_constraint_to_transforms(
-    artboard: &ArtboardInstance,
-    list_component_index: ComponentHandle,
-    constraint: ComponentHandle,
-    item_transforms: &mut [Mat2D],
-) -> bool {
-    // Ported from C++ `src/constraints/list_follow_path_constraint.cpp`.
-    let constraint_local = artboard.component_at(constraint).local_id;
-    let target = artboard
-        .objects
-        .component(constraint)
-        .and_then(|component| component.concrete.constraint)
-        .and_then(|constraint| constraint.target());
-    let count = item_transforms.len();
-    let distance = retained_constraint_double(
-        artboard,
-        constraint_local,
-        FOLLOW_PATH_DISTANCE_PROPERTY_KEY,
-        0.0,
-    );
-    let distance_end = retained_constraint_double(
-        artboard,
-        constraint_local,
-        LIST_FOLLOW_PATH_DISTANCE_END_PROPERTY_KEY,
-        1.0,
-    );
-    let distance_offset = retained_constraint_double(
-        artboard,
-        constraint_local,
-        LIST_FOLLOW_PATH_DISTANCE_OFFSET_PROPERTY_KEY,
-        0.0,
-    );
-    let start_offset = distance_offset + distance;
-    let start_to_end_distance = distance_end - distance;
-    let offset_distance = if count <= 1 {
-        0.0
-    } else {
-        start_to_end_distance / (count as f32 - 1.0)
-    };
-    let list_transform = artboard
-        .component_at(list_component_index)
-        .transform
-        .world_transform;
-    let mut changed = false;
-
-    for (index, transform) in item_transforms.iter_mut().enumerate() {
-        let components = if let Some(target) =
-            target.filter(|target| !artboard.component_at(*target).is_collapsed())
-        {
-            let transform_b = target_transform_for_follow_path_constraint_at_distance(
-                artboard,
-                constraint,
-                target,
-                list_component_index,
-                start_offset + index as f32 * offset_distance,
-            );
-            follow_path_constrain_components(
-                artboard,
-                constraint_local,
-                target,
-                *transform,
-                transform_b,
-                list_transform,
-            )
-        } else {
-            TransformComponents::default()
-        };
-        let next = Mat2D::compose(components);
-        if *transform != next {
-            *transform = next;
-            changed = true;
-        }
-    }
-
-    changed
-}
-
 fn target_transform_for_transform_constraint(
     artboard: &ArtboardInstance,
     target_index: ComponentHandle,
@@ -4334,21 +4246,23 @@ mod tests {
     use crate::properties::property_key_for_name;
     use crate::{ArtboardInstance, TransformProperty};
 
-    use super::ik_constraint::{
-        IK_INVERT_DIRECTION_PROPERTY_KEY, IK_PARENT_BONE_COUNT_PROPERTY_KEY,
-    };
     use super::follow_path_constraint::{
         FOLLOW_PATH_DISTANCE_PROPERTY_KEY, FOLLOW_PATH_OFFSET_PROPERTY_KEY,
         FOLLOW_PATH_ORIENT_PROPERTY_KEY,
     };
+    use super::ik_constraint::{
+        IK_INVERT_DIRECTION_PROPERTY_KEY, IK_PARENT_BONE_COUNT_PROPERTY_KEY,
+    };
+    use super::list_follow_path_constraint::{
+        LIST_FOLLOW_PATH_DISTANCE_END_PROPERTY_KEY, LIST_FOLLOW_PATH_DISTANCE_OFFSET_PROPERTY_KEY,
+    };
     use super::targeted_constraint::TARGET_ID_PROPERTY_KEY;
     use super::{
-        BONE_LENGTH_PROPERTY_KEY,
-        LIST_FOLLOW_PATH_DISTANCE_END_PROPERTY_KEY, LIST_FOLLOW_PATH_DISTANCE_OFFSET_PROPERTY_KEY,
-        RUNTIME_CONSTRAINT_PROPERTY_KEYS, RuntimeDraggableProxyKind, RuntimeScrollAxis,
-        RuntimeScrollAxisIntent, RuntimeScrollConstraintState, RuntimeScrollLayoutMetrics,
-        RuntimeScrollProperty, RuntimeScrollSpace, TestVirtualizerPlacement, clamped_scroll_offset,
-        interpolated_rotation, interpolated_rotation_from_modded_base, runtime_draggable_proxies,
+        BONE_LENGTH_PROPERTY_KEY, RUNTIME_CONSTRAINT_PROPERTY_KEYS, RuntimeDraggableProxyKind,
+        RuntimeScrollAxis, RuntimeScrollAxisIntent, RuntimeScrollConstraintState,
+        RuntimeScrollLayoutMetrics, RuntimeScrollProperty, RuntimeScrollSpace,
+        TestVirtualizerPlacement, clamped_scroll_offset, interpolated_rotation,
+        interpolated_rotation_from_modded_base, runtime_draggable_proxies,
         runtime_draggable_proxy_drag, runtime_draggable_proxy_end, runtime_draggable_proxy_start,
         runtime_scroll_intent_axes, scroll_viewport_axis_size,
         test_virtualizer_placements_for_metrics, test_virtualizer_placements_for_providers,

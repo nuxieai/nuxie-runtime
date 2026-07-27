@@ -1015,12 +1015,12 @@ whole-family verdict before any FL-C4 production edit. The exact source walk,
 adversarial differentials, 19 structural ratchets, and once-per-candidate
 non-performance battery are closed, including the rejected candidate's
 weighted-random, nullable-nested-owner, and serial-layer-initialization gaps.
-The source-bound trace is refreshed at
-`2b5c0be3d7bd2e03ebc1c9e6f224ffac3909fa7e`; no partial
-layer/nested/reset/interruption slice is submitted and no row is self-promoted.
-The next action is independent Standards and Spec review on the exact frozen
-candidate, followed by one whole-family acceptance request. Active publication
-branch is `levi/fl-c`; there is no PR. Exact FL-C2 candidate
+The self-excluding trace file carries the exact candidate-source fingerprint
+and runner provenance; no partial layer/nested/reset/interruption slice is
+submitted and no row is self-promoted. The next action is independent
+Standards and Spec review on the exact frozen candidate, followed by one
+whole-family acceptance request. Active publication branch is `levi/fl-c`;
+there is no PR. Exact FL-C2 candidate
 `7546f4f15b05e582c62aa52ecc93430a7048e143` passed independent Standards and
 Spec review with no findings; its 12 mapped frame-loop files, three importer
 rows, and two member rows are promoted by the dedicated reconciliation

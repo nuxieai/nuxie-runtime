@@ -4,10 +4,11 @@ use crate::components::{ComponentDirt, ComponentHandle};
 use crate::properties::property_key_for_name;
 
 impl ArtboardInstance {
-    /// Direct C++ `LayoutComponentStyle::markLayoutNodeDirty` owner. The
-    /// concrete retained Component parent receives layout dirt; no Artboard
-    /// scan by matching style id is allowed
-    /// (`src/layout_component_style.cpp:208-221`).
+    /// C++ `LayoutComponentStyle::displayValueChanged -> displayChanged`
+    /// forwards to the concrete retained LayoutComponent parent, whose
+    /// `displayChanged` propagates collapse and dirties layout
+    /// (`src/layout/layout_component_style.cpp:232-237,302`;
+    /// `src/layout_component.cpp:1484-1492`).
     pub(super) fn propagate_layout_component_display_changed(
         &mut self,
         style_local_id: usize,

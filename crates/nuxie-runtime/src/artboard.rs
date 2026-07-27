@@ -6091,6 +6091,77 @@ impl ArtboardInstance {
         true
     }
 
+    pub(crate) fn collapse_component_tree(&mut self, local_id: usize, collapsed: bool) -> bool {
+        self.collapse_component_tree_with_ancestor(local_id, collapsed, false)
+    }
+
+    pub(crate) fn collapse_component_tree_with_ancestor(
+        &mut self,
+        local_id: usize,
+        collapsed: bool,
+        ancestor_changed: bool,
+    ) -> bool {
+        let mut visited = BTreeSet::new();
+        let Some(handle) = self.component_handle(local_id) else {
+            return false;
+        };
+        self.collapse_component_tree_with_ancestor_guarded(
+            handle,
+            collapsed,
+            ancestor_changed,
+            &mut visited,
+        )
+    }
+
+    /// Thin Rust virtual-dispatch adapter for the Component, Container,
+    /// LayoutComponent, and Solo collapse owners.
+    ///
+    /// This staging split intentionally preserves the pre-existing Rust
+    /// continuation after an unchanged base collapse. Pinned C++ returns
+    /// before owner-specific propagation; that semantic correction remains a
+    /// mapped layout/component closure rather than being hidden in a file move.
+    pub(super) fn collapse_component_tree_with_ancestor_guarded(
+        &mut self,
+        handle: ComponentHandle,
+        collapsed: bool,
+        ancestor_changed: bool,
+        visited: &mut BTreeSet<ComponentHandle>,
+    ) -> bool {
+        if !visited.insert(handle) {
+            return false;
+        }
+        let changed_here = self.collapse_component_handle(handle, collapsed);
+        let mut changed = changed_here;
+        if ancestor_changed && !collapsed {
+            changed |= self.add_component_dirt(handle, ComponentDirt::FILTHY, false);
+        }
+        let type_name = self
+            .objects
+            .component(handle)
+            .map(|component| component.type_name);
+        match type_name {
+            Some("Solo") => changed,
+            Some("Artboard" | "LayoutComponent") => {
+                changed
+                    | self.propagate_layout_component_display_collapse_with_ancestor_guarded(
+                        handle,
+                        ancestor_changed || changed_here,
+                        visited,
+                    )
+            }
+            _ => {
+                changed |= self.collapse_container_component_children_with_ancestor_guarded(
+                    handle,
+                    collapsed,
+                    ancestor_changed || changed_here,
+                    visited,
+                );
+                changed |= self.collapse_constrained_transform_dependents(handle);
+                changed
+            }
+        }
+    }
+
     pub fn update_components(&mut self) -> UpdateComponentsReport {
         let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
         self.update_components_with_hook_recording(

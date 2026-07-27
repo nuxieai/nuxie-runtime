@@ -2,10 +2,14 @@ use super::ArtboardInstance;
 use crate::components::ComponentHandle;
 
 impl ArtboardInstance {
-    /// Direct C++ `Drawable::hitTestPoint` owner. Ordinary
-    /// `Drawable::hittableComponent` returns `this`; proxy callers have
-    /// already supplied the proxy target at the public dispatch boundary
-    /// (`src/drawable.cpp:62-77`).
+    /// Behavior-preserving extraction of the existing Rust
+    /// `Drawable::hitTestPoint` adapter (`src/drawable.cpp:62-77`).
+    ///
+    /// Ordinary `Drawable::hittableComponent` returns `this`; proxy callers
+    /// have already supplied the proxy target at the public dispatch
+    /// boundary. Concrete C++ `isHidden` overrides for LayoutComponent and
+    /// ClippingShape remain a mapped semantic gap rather than being changed in
+    /// this structural move.
     pub(super) fn drawable_component_hit_test_point(
         &self,
         component: ComponentHandle,

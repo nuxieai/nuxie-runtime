@@ -5,9 +5,11 @@ use crate::components::{ComponentHandle, RuntimeComponent};
 use crate::properties::layout_component_style_display_value_property_key;
 
 impl ArtboardInstance {
-    /// Direct C++ `LayoutComponent::hitTestPoint` owner. Its local-bounds
-    /// check delegates to `Drawable::hitTestPoint` with
-    /// `skipOnUnclipped=true` (`src/layout_component.cpp:49-80`).
+    /// Behavior-preserving extraction of the existing Rust
+    /// `LayoutComponent::hitTestPoint` branch. Its local-bounds check delegates
+    /// to `Drawable::hitTestPoint` with `skipOnUnclipped=true`
+    /// (`src/layout_component.cpp:49-80`). The concrete virtual `isHidden`
+    /// correction remains mapped for the semantic layout closure.
     pub(super) fn layout_component_hit_test_point(
         &self,
         component: ComponentHandle,
@@ -54,10 +56,12 @@ impl ArtboardInstance {
         self.propagate_layout_component_display_collapse_with_ancestor(layout_local, false)
     }
 
-    /// Direct C++ `LayoutComponent::propagateCollapse` owner. The propagated
-    /// value folds in this occurrence's display:none state, then delegates
-    /// each retained child to `ContainerComponent::collapse`
-    /// (`src/layout_component.cpp:303-314`).
+    /// Behavior-preserving extraction of the child-propagation portion of C++
+    /// `LayoutComponent::propagateCollapse` (`src/layout_component.cpp:233-240`).
+    ///
+    /// Pinned C++ also updates attached Collapsables after the child loop. The
+    /// existing Rust adapter does not yet publish the effective display-hidden
+    /// state there; that remains an explicit semantic layout gap.
     fn propagate_layout_component_display_collapse_with_ancestor(
         &mut self,
         layout_local: usize,

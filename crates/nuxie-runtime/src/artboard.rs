@@ -7,10 +7,9 @@ use std::sync::{
 
 use anyhow::{Context, Result};
 use nuxie_binary::RuntimeFile;
-use nuxie_graph::{
-    AdvancingComponentKind, ArtboardGraph, DependencyNode, DependencyNodeKind,
-    ResettingComponentKind,
-};
+#[cfg(test)]
+use nuxie_graph::ResettingComponentKind;
+use nuxie_graph::{AdvancingComponentKind, ArtboardGraph, DependencyNode, DependencyNodeKind};
 use nuxie_render_api::Factory as RenderFactory;
 use nuxie_schema::definition_by_name;
 
@@ -62,7 +61,7 @@ use crate::draw::{
     runtime_apply_component_list_item_layout_bounds, runtime_component_list_item_base_transforms,
     runtime_component_list_item_layout_size,
 };
-use crate::objects::{ComponentAddress, InstanceObjectArena, InstanceSlot, ObjectHandle};
+use crate::objects::{ComponentAddress, InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
     joystick_flags_property_key, joystick_x_property_key, joystick_y_property_key,
@@ -88,6 +87,13 @@ use crate::{
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance,
 };
+
+#[path = "advancing_component.rs"]
+mod advancing_component;
+use advancing_component::{RuntimeAdvancingComponent, build_runtime_advancing_components};
+#[path = "resetting_component.rs"]
+mod resetting_component;
+use resetting_component::{RuntimeResettingComponent, build_runtime_resetting_components};
 
 fn generated_mat2d(
     objects: &InstanceObjectArena,
@@ -275,14 +281,6 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct RuntimeAdvancingComponent {
-    pub(crate) local_id: usize,
-    pub(crate) object: ObjectHandle,
-    pub(crate) component: Option<ComponentHandle>,
-    pub(crate) kind: AdvancingComponentKind,
-}
-
 enum RuntimeScriptAdvanceMode<'a> {
     Disabled,
     HostOnly,
@@ -328,13 +326,6 @@ impl RuntimeScriptUpdateMode<'_> {
             }
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct RuntimeResettingComponent {
-    pub(crate) local_id: usize,
-    pub(crate) component: ComponentHandle,
-    pub(crate) kind: ResettingComponentKind,
 }
 
 #[derive(Clone, Copy)]
@@ -1088,34 +1079,8 @@ impl ArtboardInstance {
         Vec<RuntimeResettingComponent>,
         Vec<ComponentHandle>,
     ) {
-        // The graph rows are a construction-only projection of the exact
-        // `m_Objects` visitation and C++ family switches. Advancing accepts
-        // Core (not Component), so ScriptedDataConverter deliberately carries
-        // no ComponentHandle (`advancing_component.cpp:17-44`;
-        // `artboard.cpp:330-395`).
-        let advancing = graph
-            .advancing_components
-            .iter()
-            .filter_map(|entry| {
-                Some(RuntimeAdvancingComponent {
-                    local_id: entry.local_id,
-                    object: objects.object_handle(entry.local_id)?,
-                    component: objects.component_handle(entry.local_id),
-                    kind: entry.kind,
-                })
-            })
-            .collect();
-        let resetting = graph
-            .resetting_components
-            .iter()
-            .filter_map(|entry| {
-                Some(RuntimeResettingComponent {
-                    local_id: entry.local_id,
-                    component: objects.component_handle(entry.local_id)?,
-                    kind: entry.kind,
-                })
-            })
-            .collect();
+        let advancing = build_runtime_advancing_components(objects, graph);
+        let resetting = build_runtime_resetting_components(objects, graph);
         let component_lists = objects
             .component_handles()
             .iter()
@@ -7538,42 +7503,6 @@ impl ArtboardInstance {
                 Err(error)
             }
             None => Ok(changed),
-        }
-    }
-
-    fn reset_retained_components(&mut self) {
-        if self.resetting_components.is_empty() {
-            return;
-        }
-        for index in 0..self.resetting_components.len() {
-            let entry = self.resetting_components[index];
-            match entry.kind {
-                ResettingComponentKind::NestedArtboard => {
-                    let Some(nested) = self.nested_artboards.get_mut(&entry.local_id) else {
-                        continue;
-                    };
-                    nested.child.reset_retained_components();
-                    if let Some(context) = nested.stateful_view_model_context.as_mut() {
-                        context.advanced_data_context();
-                    }
-                }
-                ResettingComponentKind::ArtboardComponentList => {
-                    let should_reset_instances =
-                        self.artboard_component_list_should_reset_instances(entry.local_id);
-                    let Some(list) = self.component_list_state_mut(entry.local_id) else {
-                        continue;
-                    };
-                    reset_component_list_instances(list, should_reset_instances);
-                }
-                ResettingComponentKind::CustomPropertyTrigger => {
-                    let Some(property_value_key) =
-                        property_key_for_name("CustomPropertyTrigger", "propertyValue")
-                    else {
-                        continue;
-                    };
-                    let _ = self.set_uint_property(entry.local_id, property_value_key, 0);
-                }
-            }
         }
     }
 

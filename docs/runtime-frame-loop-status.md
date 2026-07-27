@@ -103,8 +103,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   Interruption/reset/advance/nested lifecycles and all 22 structural negative
   controls are closed. The self-excluding
   `docs/runtime-frame-loop-trace.json` now records committed source
-  `6273b65a90aded079d0527f060e3e007f0ea0f1d`, candidate-source fingerprint
-  `8c27dc507c268491260b218e45c9d258a40a506f17d3053ded513ea3f90b8fc3`,
+  `6674aee34c07d95707bc0e2f737540a3b5633cb4`, candidate-source fingerprint
+  `0936a1cf2721beb9e702845c062d748872ebe4019a6f8307575cef4e8ad9dd33`,
   and exact runner provenance. The exact next action is the immutable evidence
   commit, explicit publication, and one independent whole-family verdict. No
   FL-C3 row is promoted before that verdict, and no FL-C4 production edit

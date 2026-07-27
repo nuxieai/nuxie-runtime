@@ -2,16 +2,15 @@ use crate::animation::RuntimeInterpolator;
 use crate::artboard::{RuntimeComponentListItemInstance, RuntimeComponentListLogicalItem};
 use crate::draw::RuntimePathMeasure;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
-use crate::properties::{
-    artboard_index_for_graph, cached_property_key_for_name, property_key_for_name,
-};
+use crate::properties::{cached_property_key_for_name, property_key_for_name};
+use crate::solo::RuntimeSoloState;
 use crate::view_model::RuntimeOwnedViewModelListHandle;
 use nuxie_binary::RuntimeFile;
-use nuxie_graph::{ArtboardGraph, ComponentNode};
+use nuxie_graph::ComponentNode;
 use nuxie_render_api::RawPath;
 use nuxie_schema::definition_by_name;
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use std::sync::OnceLock;
 
@@ -2197,166 +2196,6 @@ fn runtime_constrained_layout_ancestor(
         handle = parent;
     }
     None
-}
-
-/// Concrete, occurrence-owned members of C++ `Solo`.
-///
-/// `Solo` inherits its retained `children()` from `ContainerComponent`. The
-/// parallel ids below add only the imported Artboard object-table identity
-/// needed by generated `activeComponentId`; child identity itself remains
-/// solely in the embedded Component base (`src/solo.cpp:8-31,50-81`). There is
-/// deliberately no Artboard-side Solo registry or authored-id rediscovery.
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeSoloState {
-    pub(crate) active_component_property_key: Option<u16>,
-    pub(crate) cpp_local_ids: Vec<usize>,
-}
-
-impl RuntimeSoloState {
-    fn new() -> Self {
-        Self {
-            active_component_property_key: property_key_for_name("Solo", "activeComponentId"),
-            cpp_local_ids: Vec::new(),
-        }
-    }
-
-    fn clone_for_occurrence(&self) -> Self {
-        // Core/generated clone copies activeComponentId, while
-        // ContainerComponent::onAddedDirty rebuilds this occurrence's child
-        // pointers before Solo::onAddedClean propagates collapse
-        // (`src/solo.cpp:38-48`; `src/container_component.cpp:8-37`).
-        Self {
-            active_component_property_key: self.active_component_property_key,
-            cpp_local_ids: Vec::new(),
-        }
-    }
-}
-
-#[cfg(test)]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct SoloMappingWork {
-    pub(crate) analyses: usize,
-    pub(crate) batch_queries: usize,
-    pub(crate) visited_slots: usize,
-}
-
-#[cfg(test)]
-thread_local! {
-    static SOLO_MAPPING_WORK: Cell<SoloMappingWork> = const {
-        Cell::new(SoloMappingWork {
-            analyses: 0,
-            batch_queries: 0,
-            visited_slots: 0,
-        })
-    };
-}
-
-#[cfg(test)]
-pub(crate) fn reset_solo_mapping_work() {
-    SOLO_MAPPING_WORK.set(SoloMappingWork::default());
-}
-
-#[cfg(test)]
-pub(crate) fn solo_mapping_work() -> SoloMappingWork {
-    SOLO_MAPPING_WORK.get()
-}
-
-#[cfg(test)]
-fn record_solo_mapping_analysis() {
-    SOLO_MAPPING_WORK.with(|slot| {
-        let mut work = slot.get();
-        work.analyses += 1;
-        slot.set(work);
-    });
-}
-
-#[cfg(test)]
-fn record_solo_mapping_batch_query(visited_slots: usize) {
-    SOLO_MAPPING_WORK.with(|slot| {
-        let mut work = slot.get();
-        work.batch_queries += 1;
-        work.visited_slots += visited_slots;
-        slot.set(work);
-    });
-}
-
-pub(crate) fn retain_runtime_solos(
-    file: &RuntimeFile,
-    graph: &ArtboardGraph,
-    objects: &mut InstanceObjectArena,
-) {
-    let solo_handles = graph
-        .components
-        .iter()
-        .filter(|component| component.type_name == "Solo")
-        .filter_map(|component| objects.component_handle(component.local_id))
-        .collect::<Vec<_>>();
-    if solo_handles.is_empty() {
-        return;
-    }
-
-    let runtime_local_by_cpp_local = artboard_index_for_graph(file, graph)
-        .map(|artboard_index| runtime_local_by_cpp_artboard_local(file, graph, artboard_index))
-        .unwrap_or_default();
-    let cpp_local_by_runtime_local = runtime_local_by_cpp_local
-        .into_iter()
-        .map(|(cpp_local, runtime_local)| (runtime_local, cpp_local))
-        .collect::<BTreeMap<_, _>>();
-
-    for solo_handle in solo_handles {
-        let cpp_local_ids = objects
-            .component(solo_handle)
-            .map(|solo| solo.children.clone())
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|child| {
-                let child_component = objects.component(child)?;
-                cpp_local_by_runtime_local
-                    .get(&child_component.local_id)
-                    .copied()
-            })
-            .collect();
-        if let Some(solo) = objects
-            .component_mut(solo_handle)
-            .and_then(|component| component.concrete.solo.as_mut())
-        {
-            solo.cpp_local_ids = cpp_local_ids;
-        }
-    }
-}
-
-fn runtime_local_by_cpp_artboard_local(
-    file: &RuntimeFile,
-    graph: &ArtboardGraph,
-    artboard_index: usize,
-) -> BTreeMap<usize, usize> {
-    #[cfg(test)]
-    record_solo_mapping_analysis();
-
-    let runtime_local_by_global = graph
-        .local_objects
-        .iter()
-        .map(|local_object| (local_object.global_id, local_object.local_id))
-        .collect::<BTreeMap<_, _>>();
-    let slots = file
-        .artboard_local_object_slots(artboard_index)
-        .unwrap_or_default();
-
-    #[cfg(test)]
-    record_solo_mapping_batch_query(slots.len());
-
-    slots
-        .into_iter()
-        .enumerate()
-        .filter_map(|(cpp_local, object)| {
-            object.and_then(|object| {
-                runtime_local_by_global
-                    .get(&object.id)
-                    .copied()
-                    .map(|runtime_local| (cpp_local, runtime_local))
-            })
-        })
-        .collect()
 }
 
 #[cfg(test)]

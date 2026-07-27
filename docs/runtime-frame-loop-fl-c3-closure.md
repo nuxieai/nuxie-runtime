@@ -299,7 +299,7 @@ replacement candidate has the following gate receipt:
   with scripting, both below the 9 MiB limit;
 - Apple XCFramework build/package/ABI/header/C/Swift checks, checksum
   `22a0309091624bd584566f529a5d52bcc19aa9f7e3d2e7c475f8c8e7f7b361cd`;
-- structural checker 39 / 39 and all 21 injected negative controls.
+- structural checker 37 / 37 and all 21 injected negative controls.
 
 Ordinary and scripted golden were rerun serially after a discarded concurrent
 harness build replaced their shared executable. Native Apple was rerun with a

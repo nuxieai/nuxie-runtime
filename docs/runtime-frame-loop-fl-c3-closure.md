@@ -262,20 +262,32 @@ The first semantic translation was
 `dbc57130dc23e93690dd7a9a9f500c8be699728c` was independently rejected
 despite its green floor because it used a constant transition draw, dropped
 null-child NestedStateMachine owners, and constructed every layer before
-running entry callbacks. Those three rows above are reopened. The replacement
-candidate will supersede the following historical gate receipt:
+running entry callbacks. Corrected semantic commit
+`0efeb8c709e3202237fe42371dbb2f63e4de4505` closes all three findings and
+source-bound trace commit
+`2b5c0be3d7bd2e03ebc1c9e6f224ffac3909fa7e` records candidate-source SHA-256
+`ae067fb9bc8402bb852e0e52cc787895fe3e444b87a82d0eea028a481b622534`.
+The replacement candidate has the following gate receipt:
 
-- runtime 514 / 514;
-- probe-armed workspace and pinned-C++ probes 742 / 742;
+- runtime 521 / 521;
+- probe-armed workspace and pinned-C++ probes 745 / 745;
 - ordinary and scripted golden each 317 / 317 entries and 647 / 647 segments,
   zero divergences;
 - same-runner pixel corpus 1,468 / 1,468, 1,370 byte-exact, zero divergences;
-- C API, native Apple, lint, format, and diff checks;
-- committed-tree size 8,034,424 bytes without scripting and 8,935,528 bytes
+- C API, native Apple, browser build, lint, format, and diff checks;
+- committed-tree size 8,034,536 bytes without scripting and 8,935,640 bytes
   with scripting, both below the 9 MiB limit;
 - Apple XCFramework build/package/ABI/header/C/Swift checks, checksum
-  `a12debbaf9a81590bf7d79056018f3929c109c8c371dee3cf62352afa66935c5`;
-- structural checker and all eight injected negative controls.
+  `363d426a4687ce984a25d9356ed332830a3e038b63b747c32011e778d1547976`;
+- structural checker 37 / 37 and all 19 injected negative controls.
+
+Ordinary and scripted golden were rerun serially after a discarded concurrent
+harness build replaced their shared executable. Native Apple was rerun with a
+fully isolated stable toolchain after a discarded mixed-cache run. The
+XCFramework's first invocation correctly refused a checker-created untracked
+Python bytecode cache; the cache was removed and the clean-tree package run
+above passed. These are discarded environment/harness attempts, not product
+failures. No performance measurement was run.
 
 The review packet is this checklist plus its direct C++ citations, focused
 adversarial tests, structural ratchets, exact pushed candidate SHA, and the

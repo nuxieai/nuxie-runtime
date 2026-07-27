@@ -351,8 +351,8 @@ fresh gate receipt for corrected semantic commit
 - Apple XCFramework build/package/ABI/header/C/Swift checks, checksum
   `ca1b605a66062dce9d1cff1d139fd4125fd30fe2323f661e84daa6223885d50d`;
 - source-bound trace 103 / 341 reached C++ files, 29 Rust modules, and all 18
-  frame landmarks, with candidate-source fingerprint
-  `8c27dc507c268491260b218e45c9d258a40a506f17d3053ded513ea3f90b8fc3`;
+  frame landmarks with exact candidate-source and runner provenance recorded
+  in the self-excluding trace artifact;
 - structural checker 37 / 37 and all 22 injected negative controls, run after
   the receipt commit.
 

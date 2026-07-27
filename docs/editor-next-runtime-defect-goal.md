@@ -212,6 +212,10 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   C++ Dawn plus Rust wgpu produce identical 240×112 MSAA pixels. The retired
   WebGL2/old-baseline report creates no runtime owner or writer; `P08-C08`
   remains historical linkage only.
+- The durable evidence and control-plane closeout for both rows landed in PR
+  #78 at exact runtime main
+  `98bf5de1f9dfc5d280d29d295dcdc4e418f74c9b`; no production renderer,
+  browser, text, or runtime source changed in that landing.
 - Closed Editor-owned lowering defect: `LOC-011`; one identical explicit-empty
   source-first file is empty through encode, import, bind, shaping, and draw in
   pinned C++ and Rust, and reviewed Editor fix

@@ -420,7 +420,7 @@ evidence = "Hosted run 30217608092: Phase R job 89834412576 and Browser WebGPU j
 [defect.executor_verification]
 status = "pass"
 command = "make renderer-golden-same-runner && make browser-webgpu-only-check"
-evidence = "Supported WebGPU clip coverage is exact against pinned C++; Editor P04-C01 passes unchanged 21/21. The historical WebGL2 failure is preserved and was not rerun, repaired, or relabeled false."
+evidence = "Supported WebGPU clip coverage is exact against pinned C++; Editor P04-C01 passes unchanged 21/21. The historical WebGL2 failure is preserved and was not rerun, repaired, or relabeled false. Evidence/control-plane PR #78 rebase-merged at exact runtime main 98bf5de1f9dfc5d280d29d295dcdc4e418f74c9b; it changes no production renderer code."
 [defect.orchestrator_verification]
 status = "not-applicable"
 reason = "The user-approved support-matrix resolution lands no parity repair and promotes no renderer ownership row."
@@ -1601,7 +1601,7 @@ evidence = "InterVariable.ttf is 879708 bytes at sha256 4989b125924991b90d05b2d1
 [defect.executor_verification]
 status = "pass"
 command = "tools/editor-next-runtime-defects/check-loc-013-variable-font.sh"
-evidence = "The durable three-layer driver passed at runtime e494995cb941fc8fd74ea8a7395a6ba3402c1fa1 with exact pinned source, font, compiler, probe, archive, generated results, replay binaries, and zero-delta pixels."
+evidence = "The durable three-layer driver passed at runtime e494995cb941fc8fd74ea8a7395a6ba3402c1fa1 with exact pinned source, font, compiler, probe, archive, generated results, replay binaries, and zero-delta pixels. Evidence/control-plane PR #78 rebase-merged at exact runtime main 98bf5de1f9dfc5d280d29d295dcdc4e418f74c9b; it changes no production text or renderer code."
 [defect.orchestrator_verification]
 status = "not-applicable"
 reason = "Stale-oracle closure promotes no runtime or renderer ownership and lands no production repair."

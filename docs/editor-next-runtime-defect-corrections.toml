@@ -35,9 +35,9 @@ resolution = "The Editor owner must record the consumed runtime and superproject
 
 [[correction]]
 id = "COR-06"
-status = "open"
+status = "resolved"
 description = "P18 alternates between an eight-entry and nine-entry native corpus."
-resolution = "F-ED-12 records the exact runtime-0.2.0 corpus inventory before publication."
+resolution = "The exact runtime-0.2.0 qualification inventory is nine native screens, one signed GPU-canvas case, and 28 named operation/easing animations at start, quarter, and end."
 
 [[correction]]
 id = "COR-07"
@@ -65,9 +65,9 @@ resolution = "Preserve 42 product cases and label the three auxiliary checks sep
 
 [[correction]]
 id = "COR-11"
-status = "versioned"
+status = "resolved"
 description = "LOC-015, LOC-016, and LOC-017 are based on the legacy published apple-runtime-v0.1.0 artifact."
-resolution = "Keep the rows artifact-owned until the exact-runtime-identity 0.2.0 artifact is built, published with user approval, and consumed."
+resolution = "The rows qualify the local hash-addressed runtime-0.2.0 artifact at exact source b1f58004332a73564ffdd9f8585838209604c4d1; clients bind runtime version plus source revision, while public distribution is downstream and not a closure gate."
 
 [[correction]]
 id = "COR-12"

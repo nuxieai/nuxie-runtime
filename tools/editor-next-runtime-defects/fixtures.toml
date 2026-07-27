@@ -221,22 +221,42 @@ stimulus_files = [
 id = "fed.loc_015.apple_runtime_exact_identity_draw"
 defect_id = "LOC-015"
 kind = "artifact"
-status = "registered"
-driver = "pending:F-ED-12"
+status = "qualified"
+driver = "nuxie-ios@f9528fe4295de0a55d121fd7e5290374b22f03c5: make test-runtime-adapter && make test-editor-next-production-artifact && make test-editor-next-native-pixels && make test-editor-next-native-archive && make check-staged-runtime-xcframework"
+stimulus_files = [
+  { root = "repo", path = "crates/nux-apple-runtime/include/nux_runtime.generated.h", sha256 = "5c6277af4806f27262e7ce6cfe871e38b04daf9a8770286e41a8e22a3a13aee3" },
+  { root = "repo", path = "tools/build-apple-xcframework.sh", sha256 = "e62b009efa9b073f619410b28f817f303264ab85bc3f6810cf8340f462c7d2a6" },
+  { root = "repo", path = "tools/test-apple-runtime-build-identity.sh", sha256 = "4f856b90d891eae09ed8783ac0fe53b498cad9d39915cd97f5cc825819c7b558" },
+  { root = "repo", path = "tools/verify-apple-xcframework.sh", sha256 = "29be2348cc840e7500f9c1cd5584fb4311fc848e819fdba9dfbc03c14130dc38" },
+]
 
 [[fixture]]
 id = "fed.loc_016.apple_runtime_exact_identity_animation_selector"
 defect_id = "LOC-016"
 kind = "artifact"
-status = "registered"
-driver = "pending:F-ED-12"
+status = "qualified"
+driver = "nuxie-ios@f9528fe4295de0a55d121fd7e5290374b22f03c5: make test-runtime-adapter && make test-editor-next-production-artifact && make test-editor-next-native-pixels"
+stimulus_files = [
+  { root = "repo", path = "crates/nux-apple-runtime/include/nux_runtime.generated.h", sha256 = "5c6277af4806f27262e7ce6cfe871e38b04daf9a8770286e41a8e22a3a13aee3" },
+  { root = "repo", path = "crates/nux-apple-runtime/src/session.rs", sha256 = "7bee46f094dccef926bf97c5754bc261e9e11d8b3e26b195f6cdff5464ebc030" },
+  { root = "repo", path = "tools/build-apple-xcframework.sh", sha256 = "e62b009efa9b073f619410b28f817f303264ab85bc3f6810cf8340f462c7d2a6" },
+  { root = "repo", path = "tools/test-apple-runtime-build-identity.sh", sha256 = "4f856b90d891eae09ed8783ac0fe53b498cad9d39915cd97f5cc825819c7b558" },
+  { root = "repo", path = "tools/verify-apple-xcframework.sh", sha256 = "29be2348cc840e7500f9c1cd5584fb4311fc848e819fdba9dfbc03c14130dc38" },
+]
 
 [[fixture]]
 id = "fed.loc_017.apple_runtime_exact_identity_native_corpus"
 defect_id = "LOC-017"
 kind = "artifact"
-status = "registered"
-driver = "pending:F-ED-12"
+status = "qualified"
+driver = "nuxie-ios@f9528fe4295de0a55d121fd7e5290374b22f03c5: make test-editor-next-production-artifact && make test-editor-next-native-pixels; Editor correction PR #5080 at 233552c13929b09666a62ddff541eb8620d1882b"
+stimulus_files = [
+  { root = "repo", path = "crates/nux-apple-runtime/include/nux_runtime.generated.h", sha256 = "5c6277af4806f27262e7ce6cfe871e38b04daf9a8770286e41a8e22a3a13aee3" },
+  { root = "repo", path = "crates/nux-apple-runtime/src/session.rs", sha256 = "7bee46f094dccef926bf97c5754bc261e9e11d8b3e26b195f6cdff5464ebc030" },
+  { root = "repo", path = "tools/build-apple-xcframework.sh", sha256 = "e62b009efa9b073f619410b28f817f303264ab85bc3f6810cf8340f462c7d2a6" },
+  { root = "repo", path = "tools/test-apple-runtime-build-identity.sh", sha256 = "4f856b90d891eae09ed8783ac0fe53b498cad9d39915cd97f5cc825819c7b558" },
+  { root = "repo", path = "tools/verify-apple-xcframework.sh", sha256 = "29be2348cc840e7500f9c1cd5584fb4311fc848e819fdba9dfbc03c14130dc38" },
+]
 
 [[fixture]]
 id = "fed.loc_018.record_normalization"

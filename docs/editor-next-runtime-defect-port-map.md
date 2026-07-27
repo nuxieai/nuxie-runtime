@@ -80,7 +80,7 @@ only:
 - the additive high-level `nuxie::Scene` authoring facade;
 - browser presentation adapters in `nuxie-renderer`;
 - renderer-backend behavior only when an Editor blocker is proved there;
-- artifact publication and Editor integration evidence.
+- artifact qualification, distribution, and Editor integration evidence.
 
 Crossing one of those boundaries does not silently widen the C++ runtime port:
 
@@ -157,7 +157,7 @@ The following work can proceed without waiting for an FL landing:
 | `F-ED-03` / `RT-ED-005` | independently verify and promote the exact PR #49 landing provenance | the production authoring repair is complete; do not reopen it or conflate the separate FL-E layout/TextStyle dependency |
 | `F-ED-04` / `RT-ED-007` | preserve the unchanged red acceptance and independently rerun it after the relevant state-machine port wave | deferred post-port verification; no direct Runtime Fix request, schedule, or active writer lease |
 | `F-ED-06` / `RT-ED-003` | preserve the independently closed PR #55 landing provenance | the production browser-presentation repair and promotion are complete; do not reopen it or mix it with historical `F-ED-07` |
-| `F-ED-12` | locally build and qualify the exact-runtime-identity `0.2.0` artifact | no further header/C-API source change without a fresh scope review; no external publication before the user checkpoint |
+| `F-ED-12` | complete: exact-runtime-identity `0.2.0` artifact and native corpus are qualified | no source repair survived qualification; public distribution is downstream and requires no defect writer |
 | `F-ED-13` | normalize and compare records and repair an Editor/lowering-only first divergence | identical records are required before any renderer attribution; no runtime edit |
 
 `F-ED-04` records only the proven state-machine/bindables seam for deferred
@@ -237,8 +237,8 @@ The safe next queue is therefore:
    Scene writer, or active runtime lease; activate a qualified
    renderer-only `F-ED-10` closure only if it survives the atlas and
    coordinator lease checks;
-6. perform record normalization and local exact-runtime-identity `0.2.0`
-   artifact qualification;
+6. perform record normalization for the remaining evidence/localization rows;
+   the exact-runtime-identity `0.2.0` artifact qualification is complete;
 7. keep every runtime-owner result as evidence until the corresponding FL
    executor releases or absorbs its owner family;
 8. re-handshake after the Runtime Fix stable-Apple repair, after the `FL-B`
@@ -265,7 +265,7 @@ Then classify mechanically:
 | no like-for-like observation channel exists | V-row / verification gap | build the differential before source changes |
 | pinned C++ lacks it but newer C++ has it | upstream drift | use the Phase-S inventory and approval process |
 | neither pinned nor current C++ has it | additive product feature | stop for user classification; do not call it a parity port |
-| failure exists only in an old or malformed artifact | unqualified evidence | publish/correct the artifact and rerun before source work |
+| failure exists only in an old or malformed artifact | unqualified evidence | build or correct an exact-identity artifact and rerun before source work |
 
 This preserves the closeout rule: faithful code gets a source-corresponding
 repair; divergent code gets a complete owner-family replacement. A screenshot
@@ -308,8 +308,8 @@ stale-oracle | retracted → closed
   adapter, not any product or renderer behavior above it.
 - A qualified editor row is transferred to the Editor owner and cannot authorize
   runtime edits.
-- A qualified artifact row names the repository and release prerequisite; it is
-  not closed until the corrected artifact is green, a current failure is
+- A qualified artifact row names the repository and exact artifact identity;
+  it is not closed until that artifact is green, a current failure is
   promoted to another qualified class, or the user approves an exception.
 - `stale-oracle` and `retracted` retain their historical evidence and reason.
 - A V-row remains `reproduced` until the missing observation channel exists.
@@ -385,9 +385,9 @@ fixture in `F-ED-00`.
 | `LOC-012` | current renderer differential | compare the supported Rust WebGPU result with pinned C++ only after text/feather rows are separated |
 | `LOC-013` | text/font-pipeline candidate, exact stage unproven | same font bytes, axes, glyph IDs, advances, and outlines through C++ and Rust |
 | `LOC-014` | closed stale-oracle observation | exact 180x124 clockwise Feather replay matches pinned C++ and Rust in bounds, atlas plan, and every pixel; do not tune constants |
-| `LOC-015` | stale legacy `apple-runtime-v0.1.0` artifact evidence | publish the exact-runtime-identity `0.2.0` artifact, pin runtime identity/URL/checksum, rerun |
-| `LOC-016` | source implementation already present; publication gap | publish the `0.2.0` artifact with typed animation selection and integrate its exact runtime identity |
-| `LOC-017` | invalid old native capture | rerun `0.2.0` with typed player/time and production host composition |
+| `LOC-015` | closed stale-binary artifact qualification | exact `0.2.0@b1f58004` framework draws the production corpus; no runtime repair remains |
+| `LOC-016` | closed artifact verification gap | exact framework plus typed selection passes all 28 named operation/easing animations at start, quarter, and end |
+| `LOC-017` | closed invalid historical capture / Editor integration | corrected Editor producer plus typed player/time and production host composition pass the full Metal corpus |
 | `LOC-018` | additive Scene authoring repair landed, changed intake still needs evidence | PR #66 / `d7cef0a8` supplies exact typed 409/420 hierarchy/fixpoint, but the row cannot promote until the committed inbox separately labels full Editor and Runtime SHAs; remaining ten product records stay Editor-owned and runtime execution/pixels stay post-port |
 | `LOC-019` | closed independently verified BrowserWebGpu nullable-error repair | real Chrome clean-null and concrete-error paths, the full WebGPU matrix, and corpus 1468 exact/837 byte-exact/0 divergent verify merge `ef9dcedd` in consumed runtime `e72323c8` |
 
@@ -543,7 +543,8 @@ stale characterization and has no renderer writer.
 4. `RT-ED-005` cites `outline-visual-consistency.spec.ts`, but linked
    `P09-C01` does not clearly run that focused reproduction.
 5. P16 contains a stale current-runtime SHA.
-6. P18 alternates between an eight- and nine-entry native corpus.
+6. P18's exact inventory is now resolved as nine native screens, one signed
+   GPU-canvas case, and 28 named animations at start, quarter, and end.
 7. `LOC-012` reports both 5,790 and 5,616 exact pixel differences without a
    capture/mode label.
 8. `LOC-013` reports both 10,199 and 11,019 baseline differences without a
@@ -551,8 +552,9 @@ stale characterization and has no renderer writer.
 9. `linkedRerun` is used inconsistently, especially for `P15-C01`.
 10. The “42-case” GPU matrix reports 45 results because three auxiliary tests
     are included; the label must say so.
-11. `LOC-015/016/017` must remain outside source-port fan-out until the
-    exact-runtime-identity `0.2.0` artifact is published and consumed.
+11. `LOC-015/016/017` are closed by the locally qualified, hash-addressed
+    `0.2.0@b1f58004` artifact. Public distribution and iOS-main consumption
+    remain downstream and are not defect closure gates.
 12. The absent `LOC-010` needs a tombstone.
 
 No executor may “pick the likely count” or silently normalize one of these.
@@ -1041,25 +1043,26 @@ The two rows share a real-Chrome smoke harness but not a defect mechanism:
 `LOC-019` owns nullable WebIDL error-scope decoding, while `LOC-009` owns RSTB
 and authored-WGSL consumption.
 
-### `F-ED-12` — Apple runtime 0.2.0 exact-identity publication and requalification
+### `F-ED-12` — Apple runtime 0.2.0 exact-identity qualification (closed)
 
 Targets: `LOC-015`, `LOC-016`, `LOC-017`.
 
-This is a three-owner relay, not one runtime slice:
+The qualification is complete:
 
-1. the runtime repository builds and locally qualifies the exact-identity
-   `0.2.0` artifact from an exact source SHA, producing the proposed
-   runtime identity, channel, and checksum;
-2. **user release checkpoint:** confirm the exact immutable artifact,
-   version, and publication channel before the external publish;
-3. `nuxie-ios` updates the URL, checksum, exact expected runtime identity, and
-   typed selector, with no second client compatibility version;
-4. `nuxie-dev` consumes that SDK result and reruns the corrected native corpus
-   with typed player selection, timestamp, and production host composition.
+1. the runtime repository built exact identity
+   `0.2.0@b1f58004332a73564ffdd9f8585838209604c4d1`;
+2. Editor PR #5080 landed the corrected producer at
+   `233552c13929b09666a62ddff541eb8620d1882b`;
+3. qualification-only iOS commit
+   `f9528fe4295de0a55d121fd7e5290374b22f03c5` staged that exact framework,
+   preserved typed player/time selection, and ran the production host;
+4. run `5ef5769f-d521-4471-8b91-b9f83acdd065` passed all six sentinels,
+   nine native screens, signed GPU canvas, 28 named animations, behavior,
+   archive purity, and framework validation.
 
-Only a failure that survives this rerun may return to a runtime owner lane.
-No runtime source edit is authorized by the legacy
-`apple-runtime-v0.1.0` evidence.
+Clients bind runtime version plus exact source revision; there is no second
+client ABI version. No current failure survived to a runtime owner. Public
+URL/default SwiftPM distribution remains optional downstream work.
 
 ### `F-ED-13` — Legacy/Rust record normalization
 
@@ -1139,9 +1142,9 @@ the atlas. A shared file is not proof of a semantic dependency.
   runtime-owner production translation.
 - `LOC-012` can be qualified immediately, but final attribution accounts for
   both the text and feather differential results.
-- exact-runtime-identity `0.2.0` local qualification precedes the user
-  publication checkpoint; SDK consumption precedes the corrected native
-  product rerun.
+- exact-runtime-identity `0.2.0` local qualification and the corrected native
+  product rerun are complete; public distribution is not a defect-program
+  dependency.
 - `F-ED-14` waits for every directly affected branch, not just the four
   current `RT-ED-*` blockers.
 
@@ -1212,7 +1215,7 @@ ownership before activation.
 | runtime dirt | qualified `F-ED-05` | waits for the exact FL-E Path/Shape owner lock |
 | text-derived | qualified `F-ED-09` rows split by discovered owner | Scene/import/binding, `text.rs`, font parser/shaper, or renderer |
 | renderer feather | qualified `F-ED-10` | exact renderer/backend owner closure |
-| evidence/artifact | `F-ED-12/13` | no runtime source until qualification promotes a survivor |
+| evidence/artifact | closed `F-ED-12`; open `F-ED-13` | no F-ED-12 writer remains; F-ED-13 grants no runtime source edit until qualification promotes a survivor |
 
 Parallel read-only translations may inspect the same family. Parallel
 production writers may not share a Rust module or adjacent lifecycle boundary.
@@ -1319,8 +1322,8 @@ Stop and ask the user before:
 - changing the pinned C++ revision;
 - using a new adaptation without an existing AF/RF/FLR rule; adjudicate and
   land the rule first;
-- implementing from stale ABI evidence;
-- publishing an immutable ABI/SDK artifact before the explicit version,
+- implementing from stale artifact-identity evidence;
+- publishing an immutable Apple runtime artifact before the explicit version,
   checksum, and channel checkpoint;
 - choosing between two honest tactics after both fail;
 - making a source change without a current-pin C++ citation or an explicit

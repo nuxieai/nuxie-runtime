@@ -148,7 +148,8 @@ Every goal turn, without exception:
 The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 
 - Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`, `LOC-003`,
-  `LOC-004`, `LOC-006`, `LOC-014`, and `LOC-019`.
+  `LOC-004`, `LOC-006`, `LOC-014`, `LOC-015`, `LOC-016`, `LOC-017`, and
+  `LOC-019`.
 - Changed intake needs evidence: `RT-ED-005`. Its historical repair is merged,
   consumed, and executor-green, with no production implementation remaining,
   but the changed committed inbox record does not separately label one full
@@ -199,7 +200,13 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   provenance and an independent exact-checkpoint rerun prove the prior
   renderer symptom was caused by the later hover/clear gesture.
 - Open browser/renderer qualification candidate: `LOC-012`.
-- Open artifact/Editor candidates: `LOC-015`, `LOC-016`, and `LOC-017`.
+- Closed Apple artifact family: `LOC-015`, `LOC-016`, and `LOC-017`.
+  Exact runtime identity
+  `0.2.0@b1f58004332a73564ffdd9f8585838209604c4d1`, Editor correction
+  `233552c13929b09666a62ddff541eb8620d1882b`, and qualification-only iOS
+  consumer `f9528fe4295de0a55d121fd7e5290374b22f03c5` pass the full native
+  corpus. Clients bind runtime version plus source revision; no separately
+  negotiated ABI version or public-release prerequisite remains.
 - Changed intake needs evidence after its additive Scene repair landed:
   `LOC-018`.
 
@@ -457,22 +464,25 @@ No F-ED worktree patches reserved runtime files.
 
 Each discovered owner family becomes its own PR and product handoff.
 
-### Q6 — Requalify Apple artifacts
+### Q6 — Apple artifact qualification (complete)
 
-For `LOC-015`, `LOC-016`, and `LOC-017`:
+`LOC-015`, `LOC-016`, and `LOC-017` are closed:
 
-1. build and locally qualify the exact-runtime-identity `0.2.0` artifact from
-   an exact runtime SHA;
-2. stop at the user release checkpoint with version, channel, checksum, and
-   full local evidence;
-3. after approval, publish and update `nuxie-ios` to pin that exact runtime
-   version, source revision, URL, and checksum without an ABI-version floor;
-4. send the immutable SDK identity to the coordinator for optional
-   current-or-later Editor consumption and native-corpus rerun;
-5. promote only a surviving current failure to a source owner.
+1. the hash-addressed XCFramework was built from exact runtime source
+   `b1f58004332a73564ffdd9f8585838209604c4d1` with identity `0.2.0@b1f58004`;
+2. Editor correction `233552c13929b09666a62ddff541eb8620d1882b`
+   and qualification-only iOS consumer
+   `f9528fe4295de0a55d121fd7e5290374b22f03c5` exercised the exact artifact;
+3. run `5ef5769f-d521-4471-8b91-b9f83acdd065` passed all six sentinels,
+   nine native screens, signed GPU canvas, 28 named animations at
+   start/quarter/end, behavior checks, archive purity, and framework
+   validators; and
+4. clients bind the runtime version plus exact source revision. There is no
+   separately client-versioned ABI.
 
-Evidence from the legacy `apple-runtime-v0.1.0` artifact never authorizes
-runtime source changes.
+The legacy `apple-runtime-v0.1.0` evidence is superseded for qualification.
+Public URL/default SwiftPM distribution remains optional downstream work and
+does not hold these rows or the defect program open.
 
 ### Q7 — Downstream handoff
 
@@ -564,7 +574,7 @@ Stop for user direction before:
 - changing a budget, tolerance, resource ceiling, or gate;
 - touching an FL-reserved production file without a fresh writer handoff;
 - using a new translation adaptation before rulebook adjudication;
-- publishing an immutable ABI/SDK artifact;
+- publishing an immutable Apple runtime artifact;
 - changing a test expectation to fit Rust instead of pinned C++;
 - choosing a design change after two honest C++-faithful tactics fail.
 

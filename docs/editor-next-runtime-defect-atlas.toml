@@ -2,7 +2,7 @@ schema = "nuxie.editor-next.runtime-defect-atlas/v2"
 version = 2
 upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 editor_consumed_runtime_ref = "e72323c808b91d706ba3b745396beaca7accd69a"
-investigation_base_ref = "d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3"
+investigation_base_ref = "b1f58004332a73564ffdd9f8585838209604c4d1"
 source_snapshot_status = "landed"
 source_snapshot_ref = "c7e4f313e8cd9237186e83546566537a341e3cfa"
 corrections_file = "docs/editor-next-runtime-defect-corrections.toml"
@@ -1647,27 +1647,27 @@ reason = "Editor records are retained as historical provenance; pinned C++ is th
 [[defect]]
 id = "LOC-015"
 title = "Projection corpus becomes terminal on its first iOS Metal draw"
-source_class = "artifact-candidate"
-state = "reported"
+source_class = "qualified-artifact"
+state = "closed"
 owner_class = "artifact"
-classification = "unqualified"
+classification = "verification-gap"
 ticket = "F-ED-12"
 fixture_id = "fed.loc_015.apple_runtime_exact_identity_draw"
-preliminary_disposition = "Legacy apple-runtime-v0.1.0 evidence is stale; requalify with the exact-runtime-identity 0.2.0 artifact."
-reproduction_sha256 = "dbce37145786da7aa6715d8d257231e9b1a6672649ba8b1ddd2cc9ba39352783"
-rust_stimulus = "pending: F-ED-12 must minimize the direct Rust stimulus for LOC-015"
-cpp_stimulus = "pending: F-ED-12 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-015"
-source_files = ["pending: F-ED-12 source-file correspondence"]
-source_members = ["pending: F-ED-12 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-12 lifecycle qualification"]
-rust_owner = "pending: F-ED-12 exact Rust owner"
-displaced_mechanism = "pending: F-ED-12 displaced-mechanism inventory"
+preliminary_disposition = "Closed as a stale-binary artifact qualification. A locally staged XCFramework with exact runtime identity 0.2.0@b1f58004332a73564ffdd9f8585838209604c4d1 draws the production iOS corpus; the terminal first-draw observation belonged to the legacy apple-runtime-v0.1.0 binary."
+reproduction_sha256 = "66e834233cf35efd50c431a90ceca9c7ce6d56dd2031e5c07d928858fe2251df"
+rust_stimulus = "Build the Apple XCFramework at b1f58004332a73564ffdd9f8585838209604c4d1, stage it into nuxie-ios commit f9528fe4295de0a55d121fd7e5290374b22f03c5, then run make test-runtime-adapter, make test-editor-next-production-artifact, make test-editor-next-native-pixels, make test-editor-next-native-archive, and make check-staged-runtime-xcframework against Editor artifact correction 233552c13929b09666a62ddff541eb8620d1882b."
+cpp_stimulus = "At pinned d788e8ec6e8b598526607d6a1e8818e8b637b60c, import the exact ordinary-assets flow.riv and external icon, then inspect the image payload and opacity in the normalized stream."
+source_files = ["crates/nux-apple-runtime/src/lib.rs","crates/nux-apple-runtime/include/nux_runtime.generated.h","tools/build-apple-xcframework.sh","tools/test-apple-runtime-build-identity.sh","tools/verify-apple-xcframework.sh","nuxie-ios:Sources/Nuxie/Experiences/Runtime/NuxieRuntimeAdapter.swift","nuxie-ios:Tests/FlowRuntimeUITests/EditorNextNativeArtifactPixelTests.swift","docs/editor-next-runtime-defect-apple-artifact-evidence.md"]
+source_members = ["nux_runtime_bind","nux_flow_runtime_context_create_bound","NuxieRuntimeAdapter exact runtime binding","EditorNextNativeArtifactPixelTests","artifact-consumption run sentinels"]
+lifecycle_phases = ["build exact-source XCFramework","validate runtime identity and slices","stage hash-addressed framework","bind exact runtime version and source revision","load corrected production artifact","draw nine-screen Metal corpus","audit final native archive"]
+rust_owner = "The runtime build owns exact artifact identity; the qualification-only nuxie-ios adapter owns staging and typed consumption. No runtime source repair remains."
+displaced_mechanism = "The legacy apple-runtime-v0.1.0 public fallback and its terminal first-draw observation are not evidence about runtime 0.2.0 source."
 dependencies = ["F-ED-00B","F-ED-12"]
-target_tests = ["pending:F-ED-12"]
+target_tests = ["make test-runtime-adapter","make test-editor-next-production-artifact","make test-editor-next-native-pixels","make test-editor-next-native-archive","make check-staged-runtime-xcframework"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
-owning_ledger = "pending: F-ED-12 owning-ledger link"
-adaptation_rule = "pending: F-ED-12 rule citation"
-decision_row = "pending: F-ED-12 decision-row disposition"
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#LOC-015"
+adaptation_rule = "Artifact qualification only: bind clients to the exact runtime version plus source revision and reject mismatches; do not add a separately client-versioned ABI."
+decision_row = "User decision 2026-07-26: a local hash-addressed exact-source artifact is sufficient for LOC qualification; public URL/default SwiftPM publication is downstream and is not a closure gate."
 touch = []
 dont_touch = ["@active-fl-lease"]
 formal_children = []
@@ -1678,59 +1678,79 @@ proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
 runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
 parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
 [defect.revisions]
-original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
+original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
-consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
-consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+investigation_head_sha = "b1f58004332a73564ffdd9f8585838209604c4d1"
+merged_repair_sha = { status = "pending", reason = "No runtime repair was required; closure qualifies an exact-source artifact." }
+consumed_runtime_sha = { status = "pending", reason = "No iOS main or public SwiftPM consumption is claimed." }
+consumed_superproject_sha = { status = "pending", reason = "Editor correction 233552c1 is recorded as producer evidence, not as runtime-artifact consumption." }
 [defect.renderer_provenance]
 status = "not-applicable"
-reason = "This row does not qualify renderer output."
+reason = "This row qualifies the Apple artifact and consumer boundary. The native Metal matrix is recorded as artifact evidence and promotes no renderer ownership."
 [defect.executor_verification]
-status = "pending"
-reason = "F-ED-12 executor fixture has not run."
+status = "pass"
+command = "make test-runtime-adapter; make test-editor-next-production-artifact; make test-editor-next-native-pixels; make test-editor-next-native-archive; make check-staged-runtime-xcframework"
+evidence = "Artifact run 5ef5769f-d521-4471-8b91-b9f83acdd065 completed all 6/6 sentinels. Nine Metal screens, signed GPU canvas, archive purity, exact identity, and XCFramework validation passed; iOS unit tests report 863 passed, 0 failed, 2 skipped (865 total)."
 [defect.orchestrator_verification]
-status = "pending"
-reason = "F-ED-12 has no executor-green result to verify."
+status = "not-applicable"
+reason = "The legal artifact-owner path qualifies and hands off corrected artifact evidence directly; no runtime implementation or correspondence row is promoted."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:LOC-015"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "The legacy apple-runtime-v0.1.0 binary reproduces the stale terminal first-draw observation; the exact 0.2.0 source artifact provides the required current comparison."
+[[defect.history]]
+state = "qualified"
+actor = "f-ed-executor"
+evidence = "Exact artifact 0.2.0@b1f58004332a73564ffdd9f8585838209604c4d1 and the full staged iOS gate prove the current Metal draw path is green."
+[[defect.history]]
+state = "handoff-ready"
+actor = "f-ed-closeout"
+evidence = "Exact artifact hashes, iOS qualification commit f9528fe4, Editor correction 233552c1, run ID, and all six sentinel hashes are recorded for downstream distribution."
+[[defect.history]]
+state = "closed"
+actor = "f-ed-closeout"
+evidence = "The stale binary is superseded for qualification; public publication and iOS-main consumption remain downstream and are not closure gates."
 [defect.cpp_result]
-status = "not-applicable"
-reason = "The row is a published Apple artifact/ABI observation."
+status = "pass"
+command = "pinned d788 ordinary-assets import and normalized image/opacity probe"
+evidence = "Exact flow.riv SHA-256 5a6d88f9ad7ed3869e9d04da2624be3bcfe0994cd318e0a49967ed2e3a09609e and icon SHA-256 2086c499d5844a751792f3608d0f0dfb74e4a8e35b2c49a3513c15382352378c retain the icon payload and opacity 1. C++ and Rust whole-stream hashes differ, so no whole-stream identity claim is made."
 [defect.rust_result]
-status = "pending"
-reason = "The exact-runtime-identity 0.2.0 artifact has not been built and qualified by F-ED."
+status = "pass"
+command = "build and validate NuxieRuntime.xcframework at b1f58004332a73564ffdd9f8585838209604c4d1"
+evidence = "Runtime identity is 0.2.0@b1f58004332a73564ffdd9f8585838209604c4d1; zip SHA-256 478c0a5b95bf7f2e96ff8407d8467d137849f7d6d6c8601d3b073d18a1c61442; artifact.json SHA-256 890a3e0e738ee73705c60519ee8fb1a8be7521b1bc5897da9b0f2dea285bbba7; contract fingerprint 5c6277af4806f27262e7ce6cfe871e38b04daf9a8770286e41a8e22a3a13aee3. Identity/header/symbol/slice/checksum/Swift/C validators pass."
 [defect.editor_result]
-status = "pending"
-reason = "Native product rerun waits for approved publication and SDK consumption."
+status = "pass"
+command = "nuxie-ios f9528fe4 staged-artifact production, Metal, archive, and adapter gates against Editor correction 233552c1"
+evidence = "The qualification-only iOS branch stages the exact framework and completes the production corpus without a terminal draw. It is intentionally not merged to iOS main and no public artifact publication is claimed."
 
 [[defect]]
 id = "LOC-016"
-title = "Shipped iOS ABI exposes named linear animations only as fallback"
-source_class = "artifact-candidate"
-state = "reported"
+title = "Exact Apple runtime artifact must expose named linear animations"
+source_class = "qualified-artifact"
+state = "closed"
 owner_class = "artifact"
-classification = "unqualified"
+classification = "verification-gap"
 ticket = "F-ED-12"
 fixture_id = "fed.loc_016.apple_runtime_exact_identity_animation_selector"
-preliminary_disposition = "Source implementation exists; immutable artifact and SDK are stale."
-reproduction_sha256 = "dc65d8abf724c0d4c14289ac3bdae0f6f4d0845ddf2dd213f6398c9ce091ee16"
-rust_stimulus = "pending: F-ED-12 must minimize the direct Rust stimulus for LOC-016"
-cpp_stimulus = "pending: F-ED-12 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-016"
-source_files = ["pending: F-ED-12 source-file correspondence"]
-source_members = ["pending: F-ED-12 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-12 lifecycle qualification"]
-rust_owner = "pending: F-ED-12 exact Rust owner"
-displaced_mechanism = "pending: F-ED-12 displaced-mechanism inventory"
+preliminary_disposition = "Closed as an artifact verification gap. The source implementation already existed; the exact 0.2.0 framework and typed iOS selector now prove default, state-machine, and named linear-animation selection without a fallback or separately versioned client ABI."
+reproduction_sha256 = "764a90b910263c94bad0224dce5bf203890b070882ddaa301053140d585a3ed0"
+rust_stimulus = "Stage the 0.2.0@b1f58004332a73564ffdd9f8585838209604c4d1 XCFramework into nuxie-ios f9528fe4295de0a55d121fd7e5290374b22f03c5, exercise the typed player selector, and capture every named operation/easing animation at start, quarter, and end."
+cpp_stimulus = "At pinned d788e8ec6e8b598526607d6a1e8818e8b637b60c, resolve the authored named linear animation and advance its retained LinearAnimationInstance at exact timestamps."
+source_files = ["src/animation/linear_animation_instance.cpp","src/artboard.cpp","crates/nux-apple-runtime/src/session.rs","crates/nux-apple-runtime/include/nux_runtime.generated.h","nuxie-ios:Sources/Nuxie/Experiences/Runtime/FlowRuntimeSessionTypes.swift","nuxie-ios:Sources/Nuxie/Experiences/Runtime/NuxieRuntimeAdapter.swift","nuxie-ios:Tests/FlowRuntimeUITests/EditorNextNativeArtifactPixelTests.swift","docs/editor-next-runtime-defect-apple-artifact-evidence.md"]
+source_members = ["LinearAnimationInstance::advance","Artboard::animation","NuxFlowRuntimePlayerKindLinearAnimation","FlowRuntimePlayerSelector.linearAnimation","NuxieRuntimeAdapter configured session creation","EditorNextNativeArtifactPixelTests animation matrix"]
+lifecycle_phases = ["resolve exact runtime identity","select default/state-machine/linear-animation player","retain selected player index and kind","advance fixed timestamp","render start/quarter/end","decode exact selected-player result"]
+rust_owner = "The exact runtime artifact and typed nuxie-ios adapter own selection and result verification. The runtime animation source required no repair."
+displaced_mechanism = "The legacy artifact exposed the current source only through stale fallback behavior; exact typed selection replaces that evidence, not the runtime animation owner."
 dependencies = ["F-ED-00B","F-ED-12"]
-target_tests = ["pending:F-ED-12"]
+target_tests = ["make test-runtime-adapter","make test-editor-next-production-artifact","make test-editor-next-native-pixels","EditorNextNativeArtifactTests named-player selection","EditorNextNativeArtifactPixelTests 28 named animations"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
-owning_ledger = "pending: F-ED-12 owning-ledger link"
-adaptation_rule = "pending: F-ED-12 rule citation"
-decision_row = "pending: F-ED-12 decision-row disposition"
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#LOC-016"
+adaptation_rule = "Preserve one typed player selector through the Apple C boundary and bind it to the exact runtime version plus source revision; do not add a legacy fallback or separately negotiated ABI version."
+decision_row = "User decision 2026-07-26: the client knows the exact runtime identity it embeds; public publication is downstream and not required to close local artifact verification."
 touch = []
 dont_touch = ["@active-fl-lease"]
 formal_children = []
@@ -1741,59 +1761,79 @@ proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
 runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
 parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
 [defect.revisions]
-original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
+original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
-consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
-consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+investigation_head_sha = "b1f58004332a73564ffdd9f8585838209604c4d1"
+merged_repair_sha = { status = "pending", reason = "No runtime repair was required; closure qualifies the existing source through the exact artifact." }
+consumed_runtime_sha = { status = "pending", reason = "No iOS main or public SwiftPM consumption is claimed." }
+consumed_superproject_sha = { status = "pending", reason = "No Editor superproject runtime consumption is claimed by this local Apple qualification." }
 [defect.renderer_provenance]
 status = "not-applicable"
-reason = "This row does not qualify renderer output."
+reason = "The animation captures qualify the artifact and typed selector, not renderer ownership."
 [defect.executor_verification]
-status = "pending"
-reason = "F-ED-12 executor fixture has not run."
+status = "pass"
+command = "make test-runtime-adapter; make test-editor-next-production-artifact; make test-editor-next-native-pixels"
+evidence = "The exact staged artifact passes typed selector/result tests and all 28 named operation/easing animation cases at start, quarter, and end. The full iOS unit floor is 863 passed, 0 failed, 2 skipped (865 total)."
 [defect.orchestrator_verification]
-status = "pending"
-reason = "F-ED-12 has no executor-green result to verify."
+status = "not-applicable"
+reason = "Artifact-owner qualification follows the direct handoff path and promotes no runtime implementation ledger."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:LOC-016"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "The legacy artifact cannot prove the named linear-animation source already present in the runtime."
+[[defect.history]]
+state = "qualified"
+actor = "f-ed-executor"
+evidence = "Exact runtime artifact 0.2.0@b1f58004 plus typed iOS selection proves every named operation/easing animation at deterministic timestamps."
+[[defect.history]]
+state = "handoff-ready"
+actor = "f-ed-closeout"
+evidence = "The exact artifact identity, typed consumer commit f9528fe4, run ID, and animation corpus evidence are recorded for downstream distribution."
+[[defect.history]]
+state = "closed"
+actor = "f-ed-closeout"
+evidence = "The artifact verification gap is closed without an ABI-version negotiation layer or public-release prerequisite."
 [defect.cpp_result]
-status = "not-applicable"
-reason = "The row is an Apple artifact/publication observation."
+status = "pass"
+command = "pinned d788 authored named-animation source audit and exact-time advance"
+evidence = "Pinned C++ resolves the named animation on the artboard and advances one retained LinearAnimationInstance at the requested timestamps; no fallback player contract is required."
 [defect.rust_result]
-status = "pending"
-reason = "Runtime 0.2.0 typed animation selection needs exact-identity local artifact evidence."
+status = "pass"
+command = "nuxie-ios f9528fe4 typed-selector and fixed-time animation qualification against runtime 0.2.0@b1f58004"
+evidence = "Default, state-machine, and named linear-animation selectors remain typed through context creation and result decoding. Twenty-eight named operation/easing cases render at start, quarter, and end with the declared property/easing evidence."
 [defect.editor_result]
-status = "pending"
-reason = "SDK consumption waits for the user publication checkpoint."
+status = "pass"
+command = "Editor PR #5080 production animation artifact plus nuxie-ios f9528fe4 staged-artifact corpus"
+evidence = "Editor correction 233552c13929b09666a62ddff541eb8620d1882b supplies the exact named animation corpus consumed by the qualification-only iOS branch. No iOS-main or public SwiftPM consumption is claimed."
 
 [[defect]]
 id = "LOC-017"
 title = "Exact native Metal corpus pixels diverge from producer expectations"
-source_class = "artifact-candidate"
-state = "reported"
+source_class = "qualified-artifact"
+state = "closed"
 owner_class = "artifact"
-classification = "unqualified"
+classification = "editor-integration-defect"
 ticket = "F-ED-12"
 fixture_id = "fed.loc_017.apple_runtime_exact_identity_native_corpus"
-preliminary_disposition = "Old native capture is invalid until runtime 0.2.0 typed player/time and host composition."
-reproduction_sha256 = "3cff6eefe1c685d2a4b607513641eae1f303d2a055053f705920cb3f117af96e"
-rust_stimulus = "pending: F-ED-12 must minimize the direct Rust stimulus for LOC-017"
-cpp_stimulus = "pending: F-ED-12 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-017"
-source_files = ["pending: F-ED-12 source-file correspondence"]
-source_members = ["pending: F-ED-12 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-12 lifecycle qualification"]
-rust_owner = "pending: F-ED-12 exact Rust owner"
-displaced_mechanism = "pending: F-ED-12 displaced-mechanism inventory"
+preliminary_disposition = "Closed as invalid historical capture and Editor integration evidence. Editor correction 233552c13929b09666a62ddff541eb8620d1882b plus the typed player/time and production host composition in nuxie-ios f9528fe4295de0a55d121fd7e5290374b22f03c5 pass the full exact-runtime-identity Metal corpus."
+reproduction_sha256 = "1f14f64fe6e36534ca1200b77e31ed013b271a57bd99dd57b46f57a530d800b8"
+rust_stimulus = "Stage NuxieRuntime.xcframework 0.2.0@b1f58004332a73564ffdd9f8585838209604c4d1 into nuxie-ios f9528fe4295de0a55d121fd7e5290374b22f03c5, load Editor correction 233552c13929b09666a62ddff541eb8620d1882b, select the typed player and exact time, then capture the production host through make test-editor-next-production-artifact and make test-editor-next-native-pixels."
+cpp_stimulus = "At pinned d788e8ec6e8b598526607d6a1e8818e8b637b60c, import the same ordinary-assets payload and inspect the external-image bytes and opacity before comparing the corrected producer's declared projection behavior."
+source_files = ["crates/nux-apple-runtime/src/lib.rs","crates/nux-apple-runtime/src/session.rs","nuxie-ios:Sources/Nuxie/Experiences/Runtime/NuxieRuntimeAdapter.swift","nuxie-ios:Tests/FlowRuntimeUITests/EditorNextNativeArtifactPixelTests.swift","nuxie-dev:tools/nuxie-editor-next production-artifact producer","docs/editor-next-runtime-defect-apple-artifact-evidence.md"]
+source_members = ["NuxieRuntimeAdapter typed player/time selection","EditorNextNativeArtifactPixelTests production host composition","signed GPU canvas capture","nine-screen native corpus","Editor projection and external-image producer"]
+lifecycle_phases = ["build exact-source XCFramework","stage hash-addressed framework","load corrected Editor artifact","select typed player and exact time","compose production native host","capture signed GPU and nine-screen Metal corpus","validate behavior and archive purity"]
+rust_owner = "The local Apple artifact qualification owns the native capture; Editor PR #5080 owns the corrected producer. The runtime and renderer require no repair for this row."
+displaced_mechanism = "The historical capture combined the legacy artifact, an untyped player/time path, and non-production host composition. It is not a current runtime pixel oracle."
 dependencies = ["F-ED-00B","F-ED-12"]
-target_tests = ["pending:F-ED-12"]
+target_tests = ["make test-editor-next-production-artifact","make test-editor-next-native-pixels","make test-runtime-adapter","make test-editor-next-native-archive"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
-owning_ledger = "pending: F-ED-12 owning-ledger link"
-adaptation_rule = "pending: F-ED-12 rule citation"
-decision_row = "pending: F-ED-12 decision-row disposition"
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#LOC-017"
+adaptation_rule = "Compare exact runtime version plus source revision, typed player/time, and production host composition before attributing native pixels; do not preserve a separately versioned ABI or legacy capture oracle."
+decision_row = "User decision 2026-07-26: local hash-addressed exact-source qualification closes the artifact row; public distribution and default SwiftPM consumption remain downstream."
 touch = []
 dont_touch = ["@active-fl-lease"]
 formal_children = []
@@ -1804,34 +1844,54 @@ proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
 runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
 parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
 [defect.revisions]
-original_localization_rust_sha = { status = "pending", reason = "F-ED-12 must recover the original localization Rust SHA" }
+original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
-consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
-consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+investigation_head_sha = "b1f58004332a73564ffdd9f8585838209604c4d1"
+merged_repair_sha = { status = "pending", reason = "No runtime repair was required; Editor producer correction 233552c1 is recorded separately." }
+consumed_runtime_sha = { status = "pending", reason = "No iOS main or public SwiftPM consumption is claimed." }
+consumed_superproject_sha = { status = "pending", reason = "Editor correction 233552c1 is producer evidence, not runtime-artifact consumption." }
 [defect.renderer_provenance]
 status = "not-applicable"
-reason = "This row does not qualify renderer output."
+reason = "This row invalidates a historical integration capture. The native Metal matrix is artifact evidence and does not promote renderer ownership."
 [defect.executor_verification]
-status = "pending"
-reason = "F-ED-12 executor fixture has not run."
+status = "pass"
+command = "make test-editor-next-production-artifact; make test-editor-next-native-pixels; make test-runtime-adapter; make test-editor-next-native-archive"
+evidence = "Artifact run 5ef5769f-d521-4471-8b91-b9f83acdd065 completed all 6/6 sentinels. Nine screens, signed GPU canvas, typed player/time, 28 named animations, behavior assertions, archive purity, and exact framework identity passed."
 [defect.orchestrator_verification]
-status = "pending"
-reason = "F-ED-12 has no executor-green result to verify."
+status = "not-applicable"
+reason = "The legal artifact-owner path closes the invalid integration capture without a runtime implementation or renderer correspondence promotion."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:LOC-017"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "The legacy artifact and historical host path reproduce the old capture, establishing that it is not the exact 0.2.0 production composition."
+[[defect.history]]
+state = "qualified"
+actor = "f-ed-executor"
+evidence = "Editor correction 233552c1 plus exact artifact 0.2.0@b1f58004 and typed nuxie-ios host composition pass the full Metal matrix."
+[[defect.history]]
+state = "handoff-ready"
+actor = "f-ed-closeout"
+evidence = "Exact artifact, producer, consumer, run, sentinel, and corpus identities are recorded without claiming public distribution."
+[[defect.history]]
+state = "closed"
+actor = "f-ed-closeout"
+evidence = "The historical pixel capture is superseded by the corrected exact-identity production-host qualification; no runtime or renderer repair remains."
 [defect.cpp_result]
-status = "not-applicable"
-reason = "The row is a native artifact/host-composition observation."
+status = "pass"
+command = "pinned d788 ordinary-assets import and external-image payload/opacity probe"
+evidence = "The exact flow.riv and icon payload retain the same icon bytes and opacity 1 under pinned C++; projection behavior in the corrected Editor producer follows that pinned ownership model. No whole-stream identity claim is made."
 [defect.rust_result]
-status = "pending"
-reason = "The exact-runtime-identity 0.2.0 native corpus has not been captured with typed player/time."
+status = "pass"
+command = "nuxie-ios f9528fe4 exact-artifact production-host Metal qualification"
+evidence = "Runtime 0.2.0@b1f58004332a73564ffdd9f8585838209604c4d1 renders the signed GPU case and all nine native screens with typed player/time and zero terminal draw; artifact and archive validators pass."
 [defect.editor_result]
-status = "pending"
-reason = "Corrected product rerun waits for approved artifact publication."
+status = "pass"
+command = "Editor PR #5080 at 233552c13929b09666a62ddff541eb8620d1882b plus nuxie-ios f9528fe4 production corpus"
+evidence = "The corrected producer, exact external-image opacity, complete named-animation corpus, and pinned-C++ projection behavior pass in the production native host. The iOS branch remains qualification-only and no public publication is claimed."
 
 [[defect]]
 id = "LOC-018"

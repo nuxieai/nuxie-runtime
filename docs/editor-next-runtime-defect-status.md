@@ -8,25 +8,27 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 ## Current state
 
 - phase: one Scene-owned production repair, one landed additive Scene seam,
-  parked authored-shader
-  diagnosis, and deferred post-port verification;
+  a closed Apple artifact family, parked authored-shader diagnosis, and
+  deferred post-port verification;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
-- investigation base: `d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3`;
+- investigation base: `b1f58004332a73564ffdd9f8585838209604c4d1`;
 - Editor's last consumed runtime:
   `e72323c808b91d706ba3b745396beaca7accd69a`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
 - closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`,
-  `LOC-003`, `LOC-004`, `LOC-006`, `LOC-014`, and `LOC-019`;
-- open rows: 16;
-- state counts: 9 `closed`, 1 `handoff-ready`, 2
-  `intake-needs-evidence`, 3 `mapped`, 1 `regression-reopened`, and 9
+  `LOC-003`, `LOC-004`, `LOC-006`, `LOC-014`, `LOC-015`, `LOC-016`,
+  `LOC-017`, and `LOC-019`;
+- open rows: 13;
+- state counts: 12 `closed`, 1 `handoff-ready`, 2
+  `intake-needs-evidence`, 3 `mapped`, 1 `regression-reopened`, and 6
   `reported`;
 - formal/structured product children in the landed Editor snapshot: 10;
 - candidate-linked product children: 13;
 - union: 23, with no formal/candidate overlap;
 - correction rows: 12.
 - fixture rows: 25 total, with `RT-ED-001`, `RT-ED-002`, `RT-ED-003`,
-  `LOC-003`, `LOC-011`, `LOC-014`, and `LOC-019` directly qualified.
+  `LOC-003`, `LOC-011`, `LOC-014`, `LOC-015`, `LOC-016`, `LOC-017`, and
+  `LOC-019` directly qualified.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
 - latest control-plane landing: intake reconciliation PR #67 rebase-merged at
@@ -53,6 +55,16 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   with `LOC-002` and `LOC-005` retained as duplicate acceptance cases. The
   uncommitted `levi/loc-001-retained-viewmodel-instance` branch has no landing
   claim yet and must not edit lower-level runtime owners;
+- closed Apple artifact family: `LOC-015`, `LOC-016`, and `LOC-017` qualify
+  exact runtime identity
+  `0.2.0@b1f58004332a73564ffdd9f8585838209604c4d1`, Editor correction
+  `233552c13929b09666a62ddff541eb8620d1882b`, and qualification-only iOS
+  consumer `f9528fe4295de0a55d121fd7e5290374b22f03c5`. Artifact run
+  `5ef5769f-d521-4471-8b91-b9f83acdd065` passed all six sentinels, the
+  nine-screen Metal corpus, signed GPU canvas, 28 named animations at
+  start/quarter/end, behavior, archive, and framework validators. Clients
+  bind runtime version plus source revision; no separately versioned ABI,
+  public publication, or iOS-main consumption is claimed or required;
 - active production-repair lane: `LOC-009` is a confirmed physical
   shader-module error-scope defect requiring a new production landing; it is
   `regression-reopened`, with PR #54 / `7f1450dc` retained only as historical
@@ -84,9 +96,10 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   d788 produces 0.200000003 at `advance(0)` and 0.5 after another 0.5 seconds.
   Non-main `dd3be99c` appears to implement the seam but is not an ancestor of
   fe0/main; the uncommitted Scene patch has no landing claim;
-- defects closed since the preceding Q0 report: 4;
+- defects closed since the preceding Q0 report: 7;
 - completed evidence dispositions in binding order: `LOC-006` on main, then
-  batch rows `LOC-014`, `LOC-011`, `RT-ED-003`, and `LOC-019`;
+  batch rows `LOC-014`, `LOC-011`, `RT-ED-003`, and `LOC-019`, followed by
+  Apple artifact rows `LOC-015`, `LOC-016`, and `LOC-017`;
 - parked repair lane: resume `LOC-009` diagnosis only in a different reliable
   execution/model environment, then assign any production repair after a
   fresh coordinator review; do not close or consume the row without a reviewed

@@ -3,8 +3,8 @@ use nuxie_binary::{RuntimeFile, RuntimeFileAssetContents, RuntimeObject};
 use nuxie_graph::{
     ArtboardGraph, ClippingShapeNode, DashNode, DrawableOrderKind, DrawableOrderNode, FeatherNode,
     GradientStopNode, MeshGeometryNode, MeshVertexNode, NSlicerAxisNode, NSlicerDetailsNode,
-    ParametricPathNode, PathGeometryNode, PathVertexNode, ShapePaintContainerNode, ShapePaintKind,
-    ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode, StrokeEffectNode,
+    PathGeometryNode, PathVertexNode, ShapePaintContainerNode, ShapePaintKind, ShapePaintNode,
+    ShapePaintPathKind, ShapePaintStateNode, StrokeEffectNode,
 };
 use nuxie_image_codec::{decoded_rgba_len, preflight_encoded_image};
 use nuxie_render_api::{
@@ -7811,7 +7811,7 @@ impl ArtboardInstance {
             return runtime_path;
         };
         if let Some(parametric) = runtime_path.parametric.take() {
-            runtime_path.parametric = Some(parametric_path_with_control_size(
+            runtime_path.parametric = Some(crate::shapes::parametric_path::with_control_size(
                 parametric,
                 control_size.width,
                 control_size.height,
@@ -11404,9 +11404,11 @@ impl TaffyRuntimeLayoutEngine {
                 continue;
             };
             let runtime_path = runtime_path_geometry(instance, path);
-            let Some((width, height)) =
-                measure_parametric_path_layout(&runtime_path, max_width, max_height)
-            else {
+            let Some((width, height)) = crate::shapes::parametric_path::measure_layout(
+                &runtime_path,
+                max_width,
+                max_height,
+            ) else {
                 continue;
             };
             measured.width = measured.width.max(width);
@@ -22230,7 +22232,7 @@ enum RawPathVerb {
     Close,
 }
 
-fn path_commands_backwards(commands: &[RuntimePathCommand]) -> Vec<RuntimePathCommand> {
+pub(crate) fn path_commands_backwards(commands: &[RuntimePathCommand]) -> Vec<RuntimePathCommand> {
     let (verbs, points) = raw_path_parts(commands);
     if verbs.is_empty() {
         return Vec::new();
@@ -23766,12 +23768,12 @@ fn path_commands(
     weighted_context: Option<&WeightedPathContext<'_>>,
 ) -> Vec<RuntimePathCommand> {
     match path.type_name {
-        "Ellipse" => ellipse_path_commands(path, path_kind, transform),
+        "Ellipse" => crate::shapes::ellipse::path_commands(path, path_kind, transform),
         "PointsPath" => points_path_commands(path, path_kind, transform, weighted_context),
-        "Polygon" => polygon_path_commands(path, path_kind, transform),
-        "Rectangle" => rectangle_path_commands(path, path_kind, transform),
-        "Star" => star_path_commands(path, path_kind, transform),
-        "Triangle" => triangle_path_commands(path, path_kind, transform),
+        "Polygon" => crate::shapes::polygon::path_commands(path, path_kind, transform),
+        "Rectangle" => crate::shapes::rectangle::path_commands(path, path_kind, transform),
+        "Star" => crate::shapes::star::path_commands(path, path_kind, transform),
+        "Triangle" => crate::shapes::triangle::path_commands(path, path_kind, transform),
         _ => Vec::new(),
     }
 }
@@ -23821,7 +23823,7 @@ fn runtime_path_geometry(artboard: &ArtboardInstance, path: &PathGeometryNode) -
     );
     path.is_clockwise =
         crate::shapes::points_common_path::is_clockwise(artboard, path.local_id, path.is_clockwise);
-    path.parametric = runtime_parametric_path(artboard, &path);
+    path.parametric = crate::shapes::parametric_path::resolve(artboard, &path);
 
     if let Some(vertices) = runtime_retained_path_vertices(artboard, path.local_id) {
         path.vertices = vertices;
@@ -24021,359 +24023,6 @@ fn runtime_mesh_geometry(artboard: &ArtboardInstance, mesh: &MeshGeometryNode) -
     }
 }
 
-fn runtime_parametric_path(
-    artboard: &ArtboardInstance,
-    path: &PathGeometryNode,
-) -> Option<ParametricPathNode> {
-    match path.parametric.as_ref()? {
-        ParametricPathNode::Ellipse {
-            width,
-            height,
-            origin_x,
-            origin_y,
-        } => Some(ParametricPathNode::Ellipse {
-            width: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "width",
-                *width,
-            ),
-            height: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "height",
-                *height,
-            ),
-            origin_x: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "originX",
-                *origin_x,
-            ),
-            origin_y: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "originY",
-                *origin_y,
-            ),
-        }),
-        ParametricPathNode::Polygon {
-            width,
-            height,
-            origin_x,
-            origin_y,
-            points,
-            corner_radius,
-        } => Some(ParametricPathNode::Polygon {
-            width: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "width",
-                *width,
-            ),
-            height: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "height",
-                *height,
-            ),
-            origin_x: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "originX",
-                *origin_x,
-            ),
-            origin_y: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "originY",
-                *origin_y,
-            ),
-            points: runtime_path_uint_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "points",
-                *points as u64,
-            ) as u32,
-            corner_radius: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "cornerRadius",
-                *corner_radius,
-            ),
-        }),
-        ParametricPathNode::Star {
-            width,
-            height,
-            origin_x,
-            origin_y,
-            points,
-            corner_radius,
-            inner_radius,
-        } => Some(ParametricPathNode::Star {
-            width: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "width",
-                *width,
-            ),
-            height: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "height",
-                *height,
-            ),
-            origin_x: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "originX",
-                *origin_x,
-            ),
-            origin_y: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "originY",
-                *origin_y,
-            ),
-            points: runtime_path_uint_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "points",
-                *points as u64,
-            ) as u32,
-            corner_radius: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "cornerRadius",
-                *corner_radius,
-            ),
-            inner_radius: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "innerRadius",
-                *inner_radius,
-            ),
-        }),
-        ParametricPathNode::Rectangle {
-            width,
-            height,
-            origin_x,
-            origin_y,
-            link_corner_radius,
-            corner_radius_tl,
-            corner_radius_tr,
-            corner_radius_bl,
-            corner_radius_br,
-        } => Some(ParametricPathNode::Rectangle {
-            width: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "width",
-                *width,
-            ),
-            height: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "height",
-                *height,
-            ),
-            origin_x: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "originX",
-                *origin_x,
-            ),
-            origin_y: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "originY",
-                *origin_y,
-            ),
-            link_corner_radius: runtime_path_bool_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "linkCornerRadius",
-                *link_corner_radius,
-            ),
-            corner_radius_tl: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "cornerRadiusTL",
-                *corner_radius_tl,
-            ),
-            corner_radius_tr: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "cornerRadiusTR",
-                *corner_radius_tr,
-            ),
-            corner_radius_bl: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "cornerRadiusBL",
-                *corner_radius_bl,
-            ),
-            corner_radius_br: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "cornerRadiusBR",
-                *corner_radius_br,
-            ),
-        }),
-        ParametricPathNode::Triangle {
-            width,
-            height,
-            origin_x,
-            origin_y,
-        } => Some(ParametricPathNode::Triangle {
-            width: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "width",
-                *width,
-            ),
-            height: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "height",
-                *height,
-            ),
-            origin_x: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "originX",
-                *origin_x,
-            ),
-            origin_y: runtime_path_double_property(
-                artboard,
-                path.local_id,
-                path.type_name,
-                "originY",
-                *origin_y,
-            ),
-        }),
-    }
-}
-
-fn measure_parametric_path_layout(
-    path: &PathGeometryNode,
-    max_width: f32,
-    max_height: f32,
-) -> Option<(f32, f32)> {
-    let (width, height) = match path.parametric.as_ref()? {
-        ParametricPathNode::Ellipse { width, height, .. }
-        | ParametricPathNode::Polygon { width, height, .. }
-        | ParametricPathNode::Rectangle { width, height, .. }
-        | ParametricPathNode::Star { width, height, .. }
-        | ParametricPathNode::Triangle { width, height, .. } => (*width, *height),
-    };
-    Some((max_width.min(width), max_height.min(height)))
-}
-
-fn parametric_path_with_control_size(
-    parametric: ParametricPathNode,
-    width: f32,
-    height: f32,
-) -> ParametricPathNode {
-    match parametric {
-        ParametricPathNode::Ellipse {
-            origin_x, origin_y, ..
-        } => ParametricPathNode::Ellipse {
-            width,
-            height,
-            origin_x,
-            origin_y,
-        },
-        ParametricPathNode::Polygon {
-            origin_x,
-            origin_y,
-            points,
-            corner_radius,
-            ..
-        } => ParametricPathNode::Polygon {
-            width,
-            height,
-            origin_x,
-            origin_y,
-            points,
-            corner_radius,
-        },
-        ParametricPathNode::Star {
-            origin_x,
-            origin_y,
-            points,
-            corner_radius,
-            inner_radius,
-            ..
-        } => ParametricPathNode::Star {
-            width,
-            height,
-            origin_x,
-            origin_y,
-            points,
-            corner_radius,
-            inner_radius,
-        },
-        ParametricPathNode::Triangle {
-            origin_x, origin_y, ..
-        } => ParametricPathNode::Triangle {
-            width,
-            height,
-            origin_x,
-            origin_y,
-        },
-        ParametricPathNode::Rectangle {
-            origin_x,
-            origin_y,
-            link_corner_radius,
-            corner_radius_tl,
-            corner_radius_tr,
-            corner_radius_bl,
-            corner_radius_br,
-            ..
-        } => ParametricPathNode::Rectangle {
-            width,
-            height,
-            origin_x,
-            origin_y,
-            link_corner_radius,
-            corner_radius_tl,
-            corner_radius_tr,
-            corner_radius_bl,
-            corner_radius_br,
-        },
-    }
-}
-
 fn runtime_path_property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
     match (type_name, property_name) {
         ("Path", "pathFlags") => cached_runtime_property_key!("Path", "pathFlags"),
@@ -24491,46 +24140,6 @@ fn runtime_path_property_key_for_name(type_name: &str, property_name: &str) -> O
         ("CubicDetachedVertex", "outDistance") => {
             cached_runtime_property_key!("CubicDetachedVertex", "outDistance")
         }
-        ("Ellipse", "width") => cached_runtime_property_key!("Ellipse", "width"),
-        ("Ellipse", "height") => cached_runtime_property_key!("Ellipse", "height"),
-        ("Ellipse", "originX") => cached_runtime_property_key!("Ellipse", "originX"),
-        ("Ellipse", "originY") => cached_runtime_property_key!("Ellipse", "originY"),
-        ("Polygon", "width") => cached_runtime_property_key!("Polygon", "width"),
-        ("Polygon", "height") => cached_runtime_property_key!("Polygon", "height"),
-        ("Polygon", "originX") => cached_runtime_property_key!("Polygon", "originX"),
-        ("Polygon", "originY") => cached_runtime_property_key!("Polygon", "originY"),
-        ("Polygon", "points") => cached_runtime_property_key!("Polygon", "points"),
-        ("Polygon", "cornerRadius") => cached_runtime_property_key!("Polygon", "cornerRadius"),
-        ("Star", "width") => cached_runtime_property_key!("Star", "width"),
-        ("Star", "height") => cached_runtime_property_key!("Star", "height"),
-        ("Star", "originX") => cached_runtime_property_key!("Star", "originX"),
-        ("Star", "originY") => cached_runtime_property_key!("Star", "originY"),
-        ("Star", "points") => cached_runtime_property_key!("Star", "points"),
-        ("Star", "cornerRadius") => cached_runtime_property_key!("Star", "cornerRadius"),
-        ("Star", "innerRadius") => cached_runtime_property_key!("Star", "innerRadius"),
-        ("Rectangle", "width") => cached_runtime_property_key!("Rectangle", "width"),
-        ("Rectangle", "height") => cached_runtime_property_key!("Rectangle", "height"),
-        ("Rectangle", "originX") => cached_runtime_property_key!("Rectangle", "originX"),
-        ("Rectangle", "originY") => cached_runtime_property_key!("Rectangle", "originY"),
-        ("Rectangle", "linkCornerRadius") => {
-            cached_runtime_property_key!("Rectangle", "linkCornerRadius")
-        }
-        ("Rectangle", "cornerRadiusTL") => {
-            cached_runtime_property_key!("Rectangle", "cornerRadiusTL")
-        }
-        ("Rectangle", "cornerRadiusTR") => {
-            cached_runtime_property_key!("Rectangle", "cornerRadiusTR")
-        }
-        ("Rectangle", "cornerRadiusBL") => {
-            cached_runtime_property_key!("Rectangle", "cornerRadiusBL")
-        }
-        ("Rectangle", "cornerRadiusBR") => {
-            cached_runtime_property_key!("Rectangle", "cornerRadiusBR")
-        }
-        ("Triangle", "width") => cached_runtime_property_key!("Triangle", "width"),
-        ("Triangle", "height") => cached_runtime_property_key!("Triangle", "height"),
-        ("Triangle", "originX") => cached_runtime_property_key!("Triangle", "originX"),
-        ("Triangle", "originY") => cached_runtime_property_key!("Triangle", "originY"),
         _ => property_key_for_name(type_name, property_name),
     }
 }
@@ -24556,18 +24165,6 @@ fn runtime_path_bool_property(
 ) -> bool {
     runtime_path_property_key_for_name(type_name, property_name)
         .and_then(|key| artboard.bool_property(local_id, key))
-        .unwrap_or(default)
-}
-
-fn runtime_path_uint_property(
-    artboard: &ArtboardInstance,
-    local_id: usize,
-    type_name: &str,
-    property_name: &str,
-    default: u64,
-) -> u64 {
-    runtime_path_property_key_for_name(type_name, property_name)
-        .and_then(|key| artboard.uint_property(local_id, key))
         .unwrap_or(default)
 }
 
@@ -24871,236 +24468,7 @@ fn weighted_rounded_straight_vertex_points(
     Some((translation, out_point, in_point, out_after))
 }
 
-fn rectangle_path_commands(
-    path: &PathGeometryNode,
-    path_kind: ShapePaintPathKind,
-    transform: Mat2D,
-) -> Vec<RuntimePathCommand> {
-    let Some(ParametricPathNode::Rectangle {
-        width,
-        height,
-        origin_x,
-        origin_y,
-        link_corner_radius,
-        corner_radius_tl,
-        corner_radius_tr,
-        corner_radius_bl,
-        corner_radius_br,
-    }) = path.parametric.as_ref()
-    else {
-        return Vec::new();
-    };
-
-    let width = *width;
-    let height = *height;
-    let origin_x = *origin_x;
-    let origin_y = *origin_y;
-    let link_corner_radius = *link_corner_radius;
-    let left = -origin_x * width;
-    let top = -origin_y * height;
-    let right = left + width;
-    let bottom = top + height;
-    let top_left_radius = *corner_radius_tl;
-    let top_right_radius = if link_corner_radius {
-        top_left_radius
-    } else {
-        *corner_radius_tr
-    };
-    let bottom_right_radius = if link_corner_radius {
-        top_left_radius
-    } else {
-        *corner_radius_br
-    };
-    let bottom_left_radius = if link_corner_radius {
-        top_left_radius
-    } else {
-        *corner_radius_bl
-    };
-
-    let virtual_path = PathGeometryNode {
-        local_id: path.local_id,
-        global_id: path.global_id,
-        type_name: "PointsPath",
-        is_closed: true,
-        is_hole: path.is_hole,
-        is_clockwise: true,
-        parametric: None,
-        vertices: vec![
-            virtual_straight_vertex(left, top, top_left_radius),
-            virtual_straight_vertex(right, top, top_right_radius),
-            virtual_straight_vertex(right, bottom, bottom_right_radius),
-            virtual_straight_vertex(left, bottom, bottom_left_radius),
-        ],
-    };
-
-    points_path_commands(&virtual_path, path_kind, transform, None)
-}
-
-const CIRCLE_CONSTANT: f32 = 0.552_284_8;
-
-fn ellipse_path_commands(
-    path: &PathGeometryNode,
-    path_kind: ShapePaintPathKind,
-    transform: Mat2D,
-) -> Vec<RuntimePathCommand> {
-    let Some(ParametricPathNode::Ellipse {
-        width,
-        height,
-        origin_x,
-        origin_y,
-    }) = path.parametric.as_ref()
-    else {
-        return Vec::new();
-    };
-    let reverse_for_clockwise_fill = path_kind == ShapePaintPathKind::LocalClockwise
-        && path_needs_clockwise_reversal(path, transform);
-
-    let radius_x = *width / 2.0;
-    let radius_y = *height / 2.0;
-    let ox = -*origin_x * *width + radius_x;
-    let oy = -*origin_y * *height + radius_y;
-    let top = (ox, oy - radius_y);
-    let right = (ox + radius_x, oy);
-    let bottom = (ox, oy + radius_y);
-    let left = (ox - radius_x, oy);
-
-    let mut commands = Vec::new();
-    push_move(&mut commands, transform, top);
-    push_cubic(
-        &mut commands,
-        transform,
-        (ox + radius_x * CIRCLE_CONSTANT, oy - radius_y),
-        (ox + radius_x, oy - CIRCLE_CONSTANT * radius_y),
-        right,
-    );
-    push_cubic(
-        &mut commands,
-        transform,
-        (ox + radius_x, oy + CIRCLE_CONSTANT * radius_y),
-        (ox + radius_x * CIRCLE_CONSTANT, oy + radius_y),
-        bottom,
-    );
-    push_cubic(
-        &mut commands,
-        transform,
-        (ox - radius_x * CIRCLE_CONSTANT, oy + radius_y),
-        (ox - radius_x, oy + radius_y * CIRCLE_CONSTANT),
-        left,
-    );
-    push_cubic(
-        &mut commands,
-        transform,
-        (ox - radius_x, oy - radius_y * CIRCLE_CONSTANT),
-        (ox - radius_x * CIRCLE_CONSTANT, oy - radius_y),
-        top,
-    );
-    commands.push(RuntimePathCommand::Close);
-    if reverse_for_clockwise_fill {
-        path_commands_backwards(&commands)
-    } else {
-        commands
-    }
-}
-
-fn polygon_path_commands(
-    path: &PathGeometryNode,
-    path_kind: ShapePaintPathKind,
-    transform: Mat2D,
-) -> Vec<RuntimePathCommand> {
-    let Some(ParametricPathNode::Polygon {
-        width,
-        height,
-        origin_x,
-        origin_y,
-        points,
-        corner_radius,
-    }) = path.parametric.as_ref()
-    else {
-        return Vec::new();
-    };
-
-    let Ok(count) = usize::try_from(*points) else {
-        return Vec::new();
-    };
-    if count < 2 {
-        return Vec::new();
-    }
-
-    let half_width = *width / 2.0;
-    let half_height = *height / 2.0;
-    let ox = -*origin_x * *width + half_width;
-    let oy = -*origin_y * *height + half_height;
-    let mut angle = -std::f32::consts::FRAC_PI_2;
-    let inc = 2.0 * std::f32::consts::PI / *points as f32;
-    let mut vertices = Vec::with_capacity(count);
-    for _ in 0..count {
-        vertices.push(virtual_straight_vertex(
-            ox + angle.cos() * half_width,
-            oy + angle.sin() * half_height,
-            *corner_radius,
-        ));
-        angle += inc;
-    }
-
-    closed_straight_vertices_path_commands(path, path_kind, transform, vertices)
-}
-
-fn star_path_commands(
-    path: &PathGeometryNode,
-    path_kind: ShapePaintPathKind,
-    transform: Mat2D,
-) -> Vec<RuntimePathCommand> {
-    let Some(ParametricPathNode::Star {
-        width,
-        height,
-        origin_x,
-        origin_y,
-        points,
-        corner_radius,
-        inner_radius,
-    }) = path.parametric.as_ref()
-    else {
-        return Vec::new();
-    };
-
-    let Ok(point_count) = usize::try_from(*points) else {
-        return Vec::new();
-    };
-    let Some(count) = point_count.checked_mul(2) else {
-        return Vec::new();
-    };
-    if count < 2 {
-        return Vec::new();
-    }
-
-    let half_width = *width / 2.0;
-    let half_height = *height / 2.0;
-    let inner_half_width = *width * *inner_radius / 2.0;
-    let inner_half_height = *height * *inner_radius / 2.0;
-    let ox = -*origin_x * *width + half_width;
-    let oy = -*origin_y * *height + half_height;
-    let mut angle = -std::f32::consts::FRAC_PI_2;
-    let inc = 2.0 * std::f32::consts::PI / count as f32;
-    let mut vertices = Vec::with_capacity(count);
-    for _ in 0..point_count {
-        vertices.push(virtual_straight_vertex(
-            ox + angle.cos() * half_width,
-            oy + angle.sin() * half_height,
-            *corner_radius,
-        ));
-        angle += inc;
-        vertices.push(virtual_straight_vertex(
-            ox + angle.cos() * inner_half_width,
-            oy + angle.sin() * inner_half_height,
-            *corner_radius,
-        ));
-        angle += inc;
-    }
-
-    closed_straight_vertices_path_commands(path, path_kind, transform, vertices)
-}
-
-fn closed_straight_vertices_path_commands(
+pub(crate) fn closed_straight_vertices_path_commands(
     path: &PathGeometryNode,
     path_kind: ShapePaintPathKind,
     transform: Mat2D,
@@ -25120,33 +24488,11 @@ fn closed_straight_vertices_path_commands(
     points_path_commands(&virtual_path, path_kind, transform, None)
 }
 
-fn triangle_path_commands(
-    path: &PathGeometryNode,
-    path_kind: ShapePaintPathKind,
-    transform: Mat2D,
-) -> Vec<RuntimePathCommand> {
-    let Some(ParametricPathNode::Triangle {
-        width,
-        height,
-        origin_x,
-        origin_y,
-    }) = path.parametric.as_ref()
-    else {
-        return Vec::new();
-    };
-
-    let ox = -*origin_x * *width;
-    let oy = -*origin_y * *height;
-    let vertices = vec![
-        virtual_straight_vertex(ox + *width / 2.0, oy, 0.0),
-        virtual_straight_vertex(ox + *width, oy + *height, 0.0),
-        virtual_straight_vertex(ox, oy + *height, 0.0),
-    ];
-
-    closed_straight_vertices_path_commands(path, path_kind, transform, vertices)
-}
-
-fn virtual_straight_vertex(x: f32, y: f32, radius: f32) -> PathVertexNode {
+/// Shared graph-to-PointsPath adapter used by concrete parametric shapes and
+/// layout rectangles. Concrete C++ shapes retain real vertex members; the
+/// structural split preserves this staging synthetic representation until the
+/// semantic retained-vertex owner family lands.
+pub(crate) fn virtual_straight_vertex(x: f32, y: f32, radius: f32) -> PathVertexNode {
     PathVertexNode {
         local_id: 0,
         global_id: 0,
@@ -25871,7 +25217,7 @@ fn push_cubic(
     });
 }
 
-fn path_needs_clockwise_reversal(path: &PathGeometryNode, transform: Mat2D) -> bool {
+pub(crate) fn path_needs_clockwise_reversal(path: &PathGeometryNode, transform: Mat2D) -> bool {
     let designed_clockwise = if path.is_clockwise { 1.0 } else { -1.0 };
     let is_not_clockwise = transform.determinant() * designed_clockwise < 0.0;
     is_not_clockwise != path.is_hole

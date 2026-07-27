@@ -47,16 +47,16 @@ EXPECTED_CHILDREN = {
     "LOC-005": ({"P09-C05"}, set(), set()),
     "LOC-006": (set(), {"P09-C04"}, set()),
     "LOC-007": ({"P11-C12"}, set(), set()),
-    "LOC-008": (set(), {"P08-C06"}, set()),
+    "LOC-008": ({"P08-C06"}, set(), set()),
     "LOC-009": (set(), {"P14-C01"}, set()),
-    "LOC-011": (set(), {"P08-C06"}, set()),
+    "LOC-011": (set(), set(), set()),
     "LOC-012": (set(), {"P19-C08"}, set()),
     "LOC-013": (set(), {"P08-C08"}, set()),
     "LOC-014": (set(), {"P08-C09"}, set()),
     "LOC-015": (set(), {"P18-C01", "P18-C04", "P18-C05", "P18-C07"}, set()),
     "LOC-016": (set(), {"P18-C01", "P18-C04"}, set()),
     "LOC-017": (set(), {"P18-C07"}, set()),
-    "LOC-018": (set(), {"P04-C12", "P07-C04"}, set()),
+    "LOC-018": ({"P08-C06"}, set(), set()),
     "LOC-019": (set(), {"P14-C06"}, set()),
 }
 EXPECTED_LEASE = {
@@ -1396,6 +1396,8 @@ def validate_future_source_record(
     state: str,
     section: str,
     errors: list[str],
+    *,
+    owner_class: str = "",
 ) -> None:
     if state == "intake-needs-evidence":
         return
@@ -1404,12 +1406,17 @@ def validate_future_source_record(
         for _, _, visible in markdown_visible_lines(section)
     ]
     bullet_blocks: list[tuple[str, str]] = []
+    raw_bullet_blocks: list[str] = []
     current_block: list[str] = []
 
     def append_current_block() -> None:
         if not current_block:
             return
         first = re.sub(r"^[-*+][ \t]+", "", current_block[0])
+        raw_body = " ".join(
+            [first.strip(), *(line.strip() for line in current_block[1:])]
+        ).strip()
+        raw_bullet_blocks.append(raw_body)
         if ":" not in first:
             return
         raw_label, first_value = first.split(":", 1)
@@ -1444,6 +1451,10 @@ def validate_future_source_record(
         "exact runtime and c++ reference pins",
     }
     combined_labels = {"exact editor/runtime checkpoint"}
+    terminal_editor_owned = (
+        owner_class == "editor"
+        and state in {"editor-consumed", "closed"}
+    )
 
     def editor_labeled_body_has_sha(label: str, body: str) -> bool:
         shas = set(FULL_SHA_RE.findall(body))
@@ -1454,7 +1465,20 @@ def validate_future_source_record(
         return True
 
     def has_editor_sha() -> bool:
-        return any(
+        return (
+            terminal_editor_owned
+            and any(
+                re.fullmatch(
+                    r"Editor fix(?:[ \t]*:)?[ \t]+`[0-9a-f]{40}`"
+                    r"(?:[ \t].*)?",
+                    block,
+                    re.IGNORECASE,
+                )
+                is not None
+                and len(FULL_SHA_RE.findall(block)) == 1
+                for block in raw_bullet_blocks
+            )
+        ) or any(
             (
                 label in editor_only_labels
                 and editor_labeled_body_has_sha(label, block)
@@ -1471,6 +1495,19 @@ def validate_future_source_record(
             (
                 label in runtime_only_labels
                 and FULL_SHA_RE.search(block) is not None
+            )
+            or (
+                terminal_editor_owned
+                and label == "current checkpoint"
+                and len(FULL_SHA_RE.findall(block)) == 1
+                and re.search(
+                    r"\bruntime"
+                    r"(?:[ \t]+(?:commit|pin|sha|merge|merged))?"
+                    r"[ \t]*[:=]?[ \t]*`[0-9a-f]{40}`",
+                    block,
+                    re.IGNORECASE,
+                )
+                is not None
             )
             or (
                 label in combined_labels
@@ -1666,6 +1703,7 @@ def validate_source_record_contract(
                     str(row.get("state", "")),
                     section,
                     errors,
+                    owner_class=str(row.get("owner_class", "")),
                 )
         actual_formal = {
             str(value) for value in row.get("formal_children", [])
@@ -1991,6 +2029,7 @@ def validate_consumed_intake_delta(
             str(row.get("state", "")),
             current_sections[defect_id],
             errors,
+            owner_class=str(row.get("owner_class", "")),
         )
 
 

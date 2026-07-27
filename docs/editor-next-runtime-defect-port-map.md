@@ -28,16 +28,16 @@ This map was prepared from these Editor Next handoff artifacts:
 
 | artifact | SHA-256 |
 |---|---|
-| `nuxie-editor-next-cutover-proposal.md` | `4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e` |
-| `nuxie-editor-next-runtime-defects.md` | `6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a` |
-| `nuxie-editor-next-parity-ledger.json` | `3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1` |
+| `nuxie-editor-next-cutover-proposal.md` | `905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9` |
+| `nuxie-editor-next-runtime-defects.md` | `24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae` |
+| `nuxie-editor-next-parity-ledger.json` | `07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226` |
 
 The source copies live under:
 
 `/Users/levi/.codex/worktrees/7189/nuxie-dev/worktrees/editor-next-cutover-assembly/plans/`
 
 The immutable source checkpoint for those hashes is
-`c7e4f313e8cd9237186e83546566537a341e3cfa`.
+`233552c13929b09666a62ddff541eb8620d1882b`.
 
 The Editor artifacts at this immutable checkpoint consume runtime commit
 `e72323c808b91d706ba3b745396beaca7accd69a`. That is not the same thing as
@@ -47,11 +47,13 @@ row must retain all of those SHAs separately.
 There are 25 unique handoff IDs: seven `RT-ED-*` rows and eighteen `LOC-*`
 rows. `LOC-010` is a reserved tombstone, not a defect row.
 
-Ten unique parity children now carry eleven structured runtime links through
-either `runtimeDependencies` or `runtimeDefects`: two name `RT-ED-003`; one
+Eleven unique parity children now carry thirteen structured runtime links
+through either `runtimeDependencies` or `runtimeDefects`: two name
+`RT-ED-003`; one
 names `RT-ED-005`; one names `RT-ED-007`; one names `LOC-001`; four name
-`LOC-002`; one names `LOC-005`; and one names `LOC-007`. Thirteen additional
-candidate links remain, with 23 unique affected children and no
+`LOC-002`; one names `LOC-005`; one names `LOC-007`; one names `LOC-008`;
+and one names `LOC-018`. Ten additional candidate links remain, with 21
+unique affected children and no
 formal/candidate overlap. `P09-C01` is linked to both the consumed
 `RT-ED-005` dependency and the still-red `LOC-002` behavior, but both links
 are formal.
@@ -379,16 +381,16 @@ fixture in `F-ED-00`.
 | `LOC-005` | confirmed duplicate acceptance for LOC-001 | unchanged cross-artboard shared-boolean reproducer must pass the LOC-001 landing; no separate writer |
 | `LOC-006` | closed no-repair stale characterization | exact committed provenance plus the independent no-hover rerun prove the alleged retained-pixel defect was gesture contamination; the legal reproduced/stale-oracle/closed path is complete |
 | `LOC-007` | committed Editor evidence plus d788 source identifies a missing dirt chain | deferred post-port verification after the formal path/dirt wave; rerun the unchanged four-test product command and classify resolved/still open |
-| `LOC-008` | exact intrinsic-width/multiline-height product failure | deferred post-port verification after the formal text-measurement wave; rerun unchanged P08-C06 and classify resolved/still open |
+| `LOC-008` | changed intake needs evidence; exact intrinsic-width/multiline-height product failure | checkpoint `233552c1` records runtime `e72323c8` and 166,969 differing pixels after the empty-value fix, but lacks a separately labeled full Editor SHA; preserve deferred post-port verification and the unchanged P08-C06 command without authorizing a writer |
 | `LOC-009` | historical structural WebGPU consumer repair with a confirmed real-GPU shader-module validation regression | preserve PR #54 / `7f1450dc` as history; keep the row parked and frozen until diagnosis resumes in a different reliable execution/model environment |
-| `LOC-011` | qualified non-runtime Editor/artifact handoff | identical explicit-empty source-first bytes stay empty through import, bind, shaping, and draw in pinned C++ and Rust; capture the original Editor artifact and authoring overlay |
+| `LOC-011` | closed Editor-owned lowering defect | identical explicit-empty source-first bytes stay empty through import, bind, shaping, and draw in pinned C++ and Rust; Editor fix `fc1a7e40` repairs absent-versus-empty lowering and the browser reports both prices empty |
 | `LOC-012` | current renderer differential | compare the supported Rust WebGPU result with pinned C++ only after text/feather rows are separated |
 | `LOC-013` | text/font-pipeline candidate, exact stage unproven | same font bytes, axes, glyph IDs, advances, and outlines through C++ and Rust |
 | `LOC-014` | closed stale-oracle observation | exact 180x124 clockwise Feather replay matches pinned C++ and Rust in bounds, atlas plan, and every pixel; do not tune constants |
 | `LOC-015` | closed stale-binary artifact qualification | exact `0.2.0@b1f58004` framework draws the production corpus; no runtime repair remains |
 | `LOC-016` | closed artifact verification gap | exact framework plus typed selection passes all 28 named operation/easing animations at start, quarter, and end |
 | `LOC-017` | closed invalid historical capture / Editor integration | corrected Editor producer plus typed player/time and production host composition pass the full Metal corpus |
-| `LOC-018` | additive Scene authoring repair landed, changed intake still needs evidence | PR #66 / `d7cef0a8` supplies exact typed 409/420 hierarchy/fixpoint, but the row cannot promote until the committed inbox separately labels full Editor and Runtime SHAs; remaining ten product records stay Editor-owned and runtime execution/pixels stay post-port |
+| `LOC-018` | additive Scene authoring repair landed, changed intake still needs evidence | PR #66 / `d7cef0a8` supplies exact typed 409/420 hierarchy/fixpoint; checkpoint `233552c1` records producer `38f5170f`, runtime `e72323c8`, and Journey acceptance `a2dbcd2c`, but lacks a separately labeled full Editor assembly SHA. P08-C06 is its only formal child; runtime execution/pixels stay post-port |
 | `LOC-019` | closed independently verified BrowserWebGpu nullable-error repair | real Chrome clean-null and concrete-error paths, the full WebGPU matrix, and corpus 1468 exact/837 byte-exact/0 divergent verify merge `ef9dcedd` in consumed runtime `e72323c8` |
 
 There is no `LOC-010` in the source artifacts. `F-ED-00` records an explicit
@@ -445,7 +447,7 @@ records. PR #49 final head
 `f0bd914fbac1fd4cf82814216f2ddc88c3e32083` ports the typed authoring
 representation, validation, and exact export/import round trip; merge
 `08286481b4e7420768f625f901a944f313b84903` has the same tree. Clean Editor
-checkpoint `c7e4f313e8cd9237186e83546566537a341e3cfa` consumes it through runtime
+checkpoint `233552c13929b09666a62ddff541eb8620d1882b` consumes it through runtime
 `e72323c808b91d706ba3b745396beaca7accd69a`. The generic number/color paint
 consumer is therefore landed and consumed, and the linked `P09-C01` primitive
 is green. That child remains a nonblocking Known Runtime Defect only for the
@@ -740,7 +742,7 @@ Acceptance includes:
 Those authoring and execution checks are green on PR #49, whose final head
 `f0bd914fbac1fd4cf82814216f2ddc88c3e32083` and merge
 `08286481b4e7420768f625f901a944f313b84903` have the same tree. Editor
-checkpoint `c7e4f313e8cd9237186e83546566537a341e3cfa` consumes the repair through
+checkpoint `233552c13929b09666a62ddff541eb8620d1882b` consumes the repair through
 runtime `e72323c808b91d706ba3b745396beaca7accd69a`. The generic
 property-target portion of `P09-C01` is green; its only remaining nonblocking
 runtime defect is the separate `LOC-002` retained-owner behavior. Ordinary
@@ -880,9 +882,9 @@ fallback, test target, or serialization edge.
 
 ### `F-ED-09` — Text semantics, variable fonts, and measurement
 
-Qualification target: remaining `LOC-013`; `LOC-008` is deferred post-port
-verification, and `LOC-011` is qualified as a non-runtime Editor/artifact
-handoff.
+Qualification target: remaining `LOC-013`; `LOC-008` is intake-needs-evidence
+and deferred post-port verification, and `LOC-011` is closed by the
+Editor-owned lowering repair.
 
 This is a shared evidence cluster, not a predeclared single writer. The rows
 may localize to different owner families: Scene/import/binding initialization,
@@ -891,9 +893,10 @@ font instance/shaping/outline/raster, and a public measurement facade.
 
 1. Empty text: completed for `LOC-011`. The exact authored record,
    instantiated ViewModel string, post-bind target, shaped runs, and draw
-   commands remain empty in pinned C++ and Rust. The original Editor artifact
-   or authoring overlay is therefore the first unqualified boundary and owns
-   the next capture; no runtime repair is authorized.
+   commands remain empty in pinned C++ and Rust. Editor fix `fc1a7e40` repairs
+   the first unqualified absent-versus-empty lowering boundary, and the
+   unchanged browser page paints no placeholder glyphs; no runtime repair is
+   authorized.
 2. Variable font: use identical font bytes, axis tags/values, glyph IDs,
    advances, and outlines. The first differing stage localizes the row; then
    the governing classification decides between an exact-site repair, a
@@ -1084,8 +1087,8 @@ This is a two-owner handoff:
    reruns the product commands, and updates the Editor parity/defect artifacts
    with exact commands, hashes, and results.
 
-The landed artifact snapshot has ten unique children with eleven structured
-`runtimeDependencies` / `runtimeDefects` links, but that is not the complete
+The landed artifact snapshot has 11 unique structured children, but that is
+not the complete
 product rerun set. `LOC-001` now formally owns `P13-C07`; `LOC-002` formally
 owns `P04-C11`, `P09-C01`, `P09-C03`, and `P09-C06`; `P09-C01` also records
 the consumed `RT-ED-005` dependency. The remaining candidate matrix maps as
@@ -1094,23 +1097,21 @@ follows:
 | candidate | directly affected children in the artifact snapshot |
 |---|---|
 | `LOC-006` | `P09-C04` (historical source linkage retained after the stale characterization closed; it authorizes no writer) |
-| `LOC-008` | `P08-C06` |
 | `LOC-009` | `P14-C01` |
-| `LOC-011` | `P08-C06` |
 | `LOC-012` | `P19-C08` |
 | `LOC-013` | `P08-C08` |
 | `LOC-014` | `P08-C09` |
 | `LOC-015` | `P18-C01`, `P18-C04`, `P18-C05`, `P18-C07` |
 | `LOC-016` | `P18-C01`, `P18-C04` |
 | `LOC-017` | `P18-C07` |
-| `LOC-018` | `P04-C12`, `P07-C04` |
 | `LOC-019` | `P14-C06` |
 
-The candidate set contains 13 unique children. Unioning it with the ten formal
-children yields 23 unique directly affected child IDs with no
+The candidate set contains ten unique children. Unioning it with the 11 formal
+children yields 21 unique directly affected child IDs with no
 formal/candidate overlap. The current Editor checkpoint retains `RT-ED-004`
 only as historical WebGL2 evidence and removes all five of its former formal
-child links. It keeps `P04-C12` linked only to candidate `LOC-018`. Broad
+child links. Structured linkage now makes `P08-C06` a formal child of both
+`LOC-008` and `LOC-018`; closed `LOC-011` has no active child. Broad
 aggregate gates such as `P08-C01` and `P11-C01` rerun after their focused
 children. The executable atlas owns the complete
 defect → child → aggregate-command matrix.
@@ -1192,7 +1193,7 @@ scouts for the remaining open rows:
    `LOC-012`; closed `LOC-006` and `LOC-014` are historical no-repair evidence
    only;
 3. text/records:
-   `LOC-008/013/018`; `LOC-011` is an Editor-owned handoff, not a remaining
+   `LOC-008/013/018`; `LOC-011` is a closed Editor-owned repair, not a remaining
    qualification scout.
 
 The orchestrator handles `RT-ED-001/002`, closed/retracted/tombstone rows, and

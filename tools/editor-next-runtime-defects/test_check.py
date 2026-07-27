@@ -62,16 +62,16 @@ CHILDREN = {
     "LOC-005": (["P09-C05"], [], []),
     "LOC-006": ([], ["P09-C04"], []),
     "LOC-007": (["P11-C12"], [], []),
-    "LOC-008": ([], ["P08-C06"], []),
+    "LOC-008": (["P08-C06"], [], []),
     "LOC-009": ([], ["P14-C01"], []),
-    "LOC-011": ([], ["P08-C06"], []),
+    "LOC-011": ([], [], []),
     "LOC-012": ([], ["P19-C08"], []),
     "LOC-013": ([], ["P08-C08"], []),
     "LOC-014": ([], ["P08-C09"], []),
     "LOC-015": ([], ["P18-C01", "P18-C04", "P18-C05", "P18-C07"], []),
     "LOC-016": ([], ["P18-C01", "P18-C04"], []),
     "LOC-017": ([], ["P18-C07"], []),
-    "LOC-018": ([], ["P04-C12", "P07-C04"], []),
+    "LOC-018": (["P08-C06"], [], []),
     "LOC-019": ([], ["P14-C06"], []),
 }
 
@@ -446,9 +446,9 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
                 corrections_file = "docs/corrections.toml"
                 fixtures_file = "docs/fixtures.toml"
                 expected_defects = 25
-                expected_formal_children = 10
-                expected_candidate_children = 13
-                expected_union_children = 23
+                expected_formal_children = 11
+                expected_candidate_children = 10
+                expected_union_children = 21
                 expected_overlap_children = []
                 reserved_ids = ["LOC-010"]
 
@@ -1026,6 +1026,197 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
                 )
                 self.assertTrue(errors)
                 self.assertIn(expected, errors[0])
+
+    def test_terminal_editor_fix_and_runtime_checkpoint_are_exact_provenance(
+        self,
+    ) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### LOC-020 — Resolved Editor-owned defect
+
+            - Current checkpoint: merged runtime `{'a' * 40}` remains exact.
+            - Focused product command: `cargo test loc_020`.
+            - Editor fix `{'b' * 40}` preserves the intended value.
+            - Current classification: **resolved Editor-owned defect**.
+            """
+        ).lstrip()
+        errors: list[str] = []
+        CHECKER.validate_future_source_record(
+            "LOC-020",
+            "closed",
+            section,
+            errors,
+            owner_class="editor",
+        )
+        self.assertEqual(errors, [])
+
+    def test_open_row_cannot_launder_provenance_through_editor_fix(
+        self,
+    ) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### LOC-020 — Still open
+
+            - Current checkpoint: merged runtime `{'a' * 40}` remains red.
+            - Focused product command: `cargo test loc_020`.
+            - Editor fix `{'b' * 40}` changed an unrelated producer.
+            - Current classification: **candidate runtime handoff**.
+            """
+        ).lstrip()
+        errors: list[str] = []
+        CHECKER.validate_future_source_record(
+            "LOC-020",
+            "reported",
+            section,
+            errors,
+            owner_class="editor",
+        )
+        self.assertTrue(errors)
+        self.assertIn("a separately labeled full Editor SHA", errors[0])
+
+    def test_current_checkpoint_requires_explicit_runtime_role(
+        self,
+    ) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### LOC-020 — Missing runtime role
+
+            - Current checkpoint: Editor assembly `{'a' * 40}` is green.
+            - Focused product command: `cargo test loc_020`.
+            - Editor fix `{'b' * 40}` preserves the intended value.
+            - Current classification: **resolved Editor-owned defect**.
+            """
+        ).lstrip()
+        errors: list[str] = []
+        CHECKER.validate_future_source_record(
+            "LOC-020",
+            "closed",
+            section,
+            errors,
+            owner_class="editor",
+        )
+        self.assertTrue(errors)
+        self.assertIn("a separately labeled full Runtime SHA", errors[0])
+
+    def test_terminal_editor_labels_do_not_apply_to_other_owner_classes(
+        self,
+    ) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### LOC-020 — Closed non-Editor defect
+
+            - Current checkpoint: merged runtime `{'a' * 40}` remains exact.
+            - Focused product command: `cargo test loc_020`.
+            - Editor fix `{'b' * 40}` preserves the intended value.
+            - Current classification: **closed defect**.
+            """
+        ).lstrip()
+        for owner_class in ("runtime", "api"):
+            with self.subTest(owner_class=owner_class):
+                errors: list[str] = []
+                CHECKER.validate_future_source_record(
+                    "LOC-020",
+                    "closed",
+                    section,
+                    errors,
+                    owner_class=owner_class,
+                )
+                self.assertTrue(errors)
+                self.assertIn(
+                    "a separately labeled full Editor SHA",
+                    errors[0],
+                )
+                self.assertIn(
+                    "a separately labeled full Runtime SHA",
+                    errors[0],
+                )
+
+    def test_terminal_editor_special_blocks_reject_multiple_shas(self) -> None:
+        sections = {
+            "editor-fix": textwrap.dedent(
+                f"""
+                ### LOC-020 — Ambiguous Editor fix
+
+                - Current checkpoint: merged runtime `{'a' * 40}` remains exact.
+                - Focused product command: `cargo test loc_020`.
+                - Editor fix `{'b' * 40}` supersedes `{'c' * 40}`.
+                - Current classification: **resolved Editor-owned defect**.
+                """
+            ).lstrip(),
+            "current-checkpoint": textwrap.dedent(
+                f"""
+                ### LOC-020 — Ambiguous runtime checkpoint
+
+                - Current checkpoint: merged runtime `{'a' * 40}` supersedes
+                  `{'c' * 40}`.
+                - Focused product command: `cargo test loc_020`.
+                - Editor fix `{'b' * 40}` preserves the intended value.
+                - Current classification: **resolved Editor-owned defect**.
+                """
+            ).lstrip(),
+        }
+        expected = {
+            "editor-fix": "a separately labeled full Editor SHA",
+            "current-checkpoint": "a separately labeled full Runtime SHA",
+        }
+        for name, section in sections.items():
+            with self.subTest(name=name):
+                errors: list[str] = []
+                CHECKER.validate_future_source_record(
+                    "LOC-020",
+                    "closed",
+                    section,
+                    errors,
+                    owner_class="editor",
+                )
+                self.assertTrue(errors)
+                self.assertIn(expected[name], errors[0])
+
+    def test_editor_fix_colon_binds_sha_directly_to_repair_role(self) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### LOC-020 — Unrelated SHA under Editor-fix label
+
+            - Current checkpoint: merged runtime `{'a' * 40}` remains exact.
+            - Focused product command: `cargo test loc_020`.
+            - Editor fix: unrelated runtime checkpoint `{'b' * 40}` was not
+              the repair.
+            - Current classification: **resolved Editor-owned defect**.
+            """
+        ).lstrip()
+        errors: list[str] = []
+        CHECKER.validate_future_source_record(
+            "LOC-020",
+            "closed",
+            section,
+            errors,
+            owner_class="editor",
+        )
+        self.assertTrue(errors)
+        self.assertIn("a separately labeled full Editor SHA", errors[0])
+
+    def test_current_checkpoint_binds_runtime_role_to_its_sha(self) -> None:
+        section = textwrap.dedent(
+            f"""
+            ### LOC-020 — Unrelated runtime wording
+
+            - Current checkpoint: Editor assembly `{'a' * 40}` is green;
+              unrelated runtime behavior remains unchanged.
+            - Focused product command: `cargo test loc_020`.
+            - Editor fix `{'b' * 40}` preserves the intended value.
+            - Current classification: **resolved Editor-owned defect**.
+            """
+        ).lstrip()
+        errors: list[str] = []
+        CHECKER.validate_future_source_record(
+            "LOC-020",
+            "closed",
+            section,
+            errors,
+            owner_class="editor",
+        )
+        self.assertTrue(errors)
+        self.assertIn("a separately labeled full Runtime SHA", errors[0])
 
     def test_prior_v2_checkpoint_applies_evidence_to_changed_existing_loc(
         self,
@@ -2230,16 +2421,16 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
         child = next(
             child
             for child in ledger["rows"][0]["children"]
-            if child["id"] == "P04-C12"
+            if child["id"] == "P14-C01"
         )
-        child["assertion"] = child["assertion"].replace("LOC-018", "LOC eighteen")
+        child["assertion"] = child["assertion"].replace("LOC-009", "LOC nine")
         path.write_text(json.dumps(ledger, indent=2) + "\n")
         self.refresh_source_bindings()
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "LOC-018 candidate child P04-C12 assertion does not contain "
-            "the exact defect id LOC-018",
+            "LOC-009 candidate child P14-C01 assertion does not contain "
+            "the exact defect id LOC-009",
             result.stderr,
         )
 

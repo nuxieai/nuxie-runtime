@@ -38,15 +38,15 @@ in the port map. Update the stale lower-precedence file in the same evidence
 or planning PR.
 
 The immutable Editor source checkpoint is
-`c7e4f313e8cd9237186e83546566537a341e3cfa` on
+`233552c13929b09666a62ddff541eb8620d1882b` on
 `origin/levi/editor-next-cutover-assembly`:
 
 - proposal SHA-256:
-  `4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e`;
+  `905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9`;
 - runtime-defects SHA-256:
-  `6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a`;
+  `24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae`;
 - parity-ledger SHA-256:
-  `3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1`.
+  `07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226`.
 
 The pinned C++ runtime is
 `d788e8ec6e8b598526607d6a1e8818e8b637b60c`. The WebGPU-only runtime
@@ -93,6 +93,12 @@ enumerated `Exact Editor checkpoint/provenance/base`, `Runtime pin`,
 Editor/runtime checkpoint must contain two distinct full SHAs. An unrelated
 continuation SHA, fixture code span, indented bullet, or container-nested text
 cannot satisfy a missing role.
+Only a terminal Editor-owned row may use the source template's `Editor fix`
+bullet for the Editor role and `Current checkpoint` bullet for the runtime
+role. Each such special block must contain exactly one full SHA, and the role
+word must directly identify that SHA; the labels never complete a closed
+runtime/API row, accept a multi-SHA block, or infer runtime provenance from
+unrelated prose.
 
 New inbox rows do not preempt active repairs. They enter the next intake batch
 after active lanes reach a merge or block boundary. Escalate only a safety or
@@ -148,8 +154,8 @@ Every goal turn, without exception:
 The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 
 - Closed: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`, `LOC-003`,
-  `LOC-004`, `LOC-006`, `LOC-014`, `LOC-015`, `LOC-016`, `LOC-017`, and
-  `LOC-019`.
+  `LOC-004`, `LOC-006`, `LOC-011`, `LOC-014`, `LOC-015`, `LOC-016`,
+  `LOC-017`, and `LOC-019`.
 - Changed intake needs evidence: `RT-ED-005`. Its historical repair is merged,
   consumed, and executor-green, with no production implementation remaining,
   but the changed committed inbox record does not separately label one full
@@ -188,14 +194,18 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 - Mapped Scene/API owner family: `LOC-001`, with `LOC-002` and `LOC-005` as
   duplicate acceptance cases under the same retained-owner repair.
 - Deferred post-port verification: `LOC-007` path dirt, `LOC-008` intrinsic
-  text measurement, and ordinary layout/TextStyle execution. These records
-  make no direct implementation request or schedule. Escalate only an actual
-  simultaneous file-writer collision or a safety/data-loss issue.
+  text measurement, and ordinary layout/TextStyle execution. `LOC-008` is
+  additionally `intake-needs-evidence` because its changed source record lacks
+  a separately labeled full Editor SHA. These records make no direct
+  implementation request or schedule. Escalate only an actual simultaneous
+  file-writer collision or a safety/data-loss issue.
 - Open runtime/FL candidate: `LOC-013`.
-- Qualified non-runtime Editor/artifact handoff: `LOC-011`; one identical
-  explicit-empty source-first file is empty through encode, import, bind,
-  shaping, and draw in pinned C++ and Rust, so the original artifact/overlay
-  producer owns the next capture.
+- Closed Editor-owned lowering defect: `LOC-011`; one identical explicit-empty
+  source-first file is empty through encode, import, bind, shaping, and draw in
+  pinned C++ and Rust, and reviewed Editor fix
+  `fc1a7e406494ee970bd93e456d1f5cfae468bfd4`, landed tree-identically as
+  `3bc62bf82ac7d8518e89d093b46f92c727c5af7a`, repairs the actual
+  absent-versus-empty lowering boundary without a runtime change.
 - Closed no-repair stale characterization: `LOC-006`; exact committed
   provenance and an independent exact-checkpoint rerun prove the prior
   renderer symptom was caused by the later hover/clear gesture.
@@ -210,8 +220,8 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 - Changed intake needs evidence after its additive Scene repair landed:
   `LOC-018`.
 
-There are ten unique children with eleven structured runtime links, 13
-candidate-linked children, and 23 unique affected children. The goal burns
+There are 11 unique structured children, ten candidate-linked children, and
+21 unique affected children. The goal burns
 all accepted rows to a terminal, evidence-backed disposition. The linked
 product matrix remains valuable downstream consumption evidence, but Editor
 consumption is not a completion gate for this program.
@@ -395,7 +405,7 @@ claim remains only +60 type-409 plus +60 type-420 records (410 -> 530). The
 remaining ten records and product traversal/order are Editor-owned; runtime
 layout/dirt/text execution and pixels remain post-port verification. Its
 changed committed inbox record stays `intake-needs-evidence` because it does
-not separately label one full Editor SHA and one full Runtime SHA. The
+not separately label one full Editor assembly SHA. The
 implementation is landed, but the row cannot promote until that
 committed-evidence gap is resolved.
 
@@ -449,10 +459,10 @@ No F-ED worktree patches reserved runtime files.
 
 ### Q5 — Close remaining renderer, text, and record candidates
 
-- `F-ED-09`: `LOC-011` is qualified as a non-runtime Editor/artifact handoff
-  because one identical explicit-empty file remains empty through the complete
-  pinned-C++/Rust runtime chain. After the relevant text-measurement port wave,
-  rerun `LOC-008` as deferred post-port verification; split remaining
+- `F-ED-09`: `LOC-011` is closed by Editor fix `fc1a7e40` after one identical
+  explicit-empty file remained empty through the complete pinned-C++/Rust
+  runtime chain. After the relevant text-measurement port wave, rerun
+  `LOC-008` as deferred post-port verification; split remaining
   `LOC-013` at the first differing authored-value, bind, shaping, outline, or
   pixel stage.
 - `F-ED-10`: qualify `LOC-012` on WebGPU. `LOC-014` is independently closed as

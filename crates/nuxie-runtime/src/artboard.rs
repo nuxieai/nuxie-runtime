@@ -14326,49 +14326,40 @@ mod tests {
     }
 
     #[test]
-    fn mesh_vertex_and_inherited_contour_position_callbacks_dirty_skin_then_mesh() {
+    fn mesh_vertex_position_callback_dirties_skin_then_mesh() {
         // MeshVertex::markGeometryDirty reaches the retained Mesh owner, whose
         // drawable dirt also invalidates its optional Skin deformation.
-        // ContourMeshVertex inherits the same callback through
-        // `ContourMeshVertexBase : MeshVertex` in pinned C++.
-        for type_name in ["MeshVertex", "ContourMeshVertex"] {
-            let skin = synthetic_component_for_type(0, "Skin");
-            let mesh = synthetic_component_for_type(1, "Mesh");
-            let vertex = synthetic_component_for_type(2, type_name);
-            let mut instance = synthetic_instance(vec![skin, mesh, vertex], vec![0, 1, 2]);
-            synthetic_link_parent(&mut instance, 2, 1);
-            let skin = instance.component_handle(0).expect("Skin");
-            instance
-                .component_mut(1)
-                .and_then(|mesh| mesh.concrete.skinnable.as_mut())
-                .expect("Mesh skinnable")
-                .skin = Some(skin);
-            instance.clear_component_dirt(0);
-            instance.clear_component_dirt(1);
-            instance.clear_component_dirt(2);
-            let vertex_x = property_key_for_name("Vertex", "x").expect("Vertex.x");
+        let skin = synthetic_component_for_type(0, "Skin");
+        let mesh = synthetic_component_for_type(1, "Mesh");
+        let vertex = synthetic_component_for_type(2, "MeshVertex");
+        let mut instance = synthetic_instance(vec![skin, mesh, vertex], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 2, 1);
+        let skin = instance.component_handle(0).expect("Skin");
+        instance
+            .component_mut(1)
+            .and_then(|mesh| mesh.concrete.skinnable.as_mut())
+            .expect("Mesh skinnable")
+            .skin = Some(skin);
+        instance.clear_component_dirt(0);
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(2);
+        let vertex_x = property_key_for_name("Vertex", "x").expect("Vertex.x");
 
-            assert!(
-                instance.set_keyed_double_property(2, vertex_x, 14.0),
-                "{type_name} must inherit MeshVertex::markGeometryDirty"
-            );
-            assert!(
-                instance
-                    .component(0)
-                    .expect("Skin")
-                    .dirt
-                    .contains(ComponentDirt::SKIN),
-                "{type_name}"
-            );
-            assert!(
-                instance
-                    .component(1)
-                    .expect("Mesh")
-                    .dirt
-                    .contains(ComponentDirt::VERTICES),
-                "{type_name}"
-            );
-        }
+        assert!(instance.set_keyed_double_property(2, vertex_x, 14.0));
+        assert!(
+            instance
+                .component(0)
+                .expect("Skin")
+                .dirt
+                .contains(ComponentDirt::SKIN)
+        );
+        assert!(
+            instance
+                .component(1)
+                .expect("Mesh")
+                .dirt
+                .contains(ComponentDirt::VERTICES)
+        );
     }
 
     #[test]

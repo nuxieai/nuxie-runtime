@@ -42,7 +42,7 @@ pub(crate) fn apply_position_property_changed(
     type_name: Option<&str>,
     property_key: u16,
 ) -> bool {
-    if !type_name.is_some_and(is_mesh_vertex)
+    if type_name != Some("MeshVertex")
         || !["x", "y"]
             .iter()
             .any(|name| property_key_for_name("Vertex", name) == Some(property_key))

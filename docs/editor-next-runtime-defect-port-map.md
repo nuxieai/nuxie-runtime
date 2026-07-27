@@ -57,8 +57,10 @@ unique affected children and no
 formal/candidate overlap. `P09-C01` is linked to both the consumed
 `RT-ED-005` dependency and the still-red `LOC-002` behavior, but both links
 are formal.
-`RT-ED-004` is retained only as historical WebGL2 evidence and has no current
-structured child.
+Closed `RT-ED-004` is retained only as historical WebGL2 evidence and has no
+current structured child. Closed `LOC-013` retains `P08-C08` only as
+historical candidate linkage; its exact current font-to-pixel differential
+authorizes no runtime writer.
 
 ## Boundary
 
@@ -242,9 +244,9 @@ The safe next queue is therefore:
    active;
 3. keep `LOC-009` outside that shared tracking line, parked, and frozen while
    diagnosis waits for a different reliable execution/model environment;
-4. fan out read-only direct qualifications; treat `RT-ED-004` only as
-   historical WebGL2 evidence unless an explicit WebGPU-only requalification
-   is scheduled;
+4. retain the completed `RT-ED-004` support-matrix and `LOC-013`
+   variable-font no-repair closures; both have executable current-WebGPU
+   evidence and no writer;
 5. retain `F-ED-04` as deferred post-port verification of the narrow
    state-machine/bindables seam, with no direct Runtime Fix request, schedule,
    Scene writer, or active runtime lease; preserve `F-ED-10` as qualified
@@ -381,7 +383,7 @@ fixture in `F-ED-00`.
 | `RT-ED-001` | closed stale-oracle observation | focused current-pin `data_viz_demo` is exact; no further source work |
 | `RT-ED-002` | closed stale-oracle observation | focused current-pin `db_health_tracker` is exact; no further source work |
 | `RT-ED-003` | closed independently verified browser presentation repair | ordinary frames acquire one surface with no MAP_READ/ImageData, explicit capture alone reads back, Lost recovery is bounded, and merge `e72323c8` is consumed |
-| `RT-ED-004` | historical WebGL2 capability evidence; current WebGPU parity remains unqualified | preserve the old evidence; any current claim requires a direct current-pin typed rounded-clip WebGPU oracle, with no WebGL2 implementation or fork |
+| `RT-ED-004` | closed historical WebGL2 support-matrix observation | preserve the exact old 402×874/radius-57 failure as true evidence; supported WebGPU clips match pinned C++ across the same-runner corpus and browser smoke, P04-C01 is 21/21, and no WebGL2 repair/fork/writer exists |
 | `RT-ED-005` | changed intake needs evidence; historical landed generic number/color authoring repair remains preserved | PR #49 merge `08286481` is consumed by Editor and its P09-C01 primitive is green, but the changed inbox record omits separately labeled full Editor and Runtime SHAs; ordinary layout/TextStyle work is separate under P08-C01 / LOC-018 |
 | `RT-ED-006` | retracted | retain tombstone only; no source work |
 | `RT-ED-007` | confirmed runtime transition-duration binding defect | preserve the qualified-correct Scene bytes and unchanged red acceptance for deferred verification after the relevant state-machine port wave; no direct Runtime Fix request or schedule |
@@ -396,7 +398,7 @@ fixture in `F-ED-00`.
 | `LOC-009` | historical structural WebGPU consumer repair with a confirmed real-GPU shader-module validation regression | preserve PR #54 / `7f1450dc` as history; keep the row parked and frozen until diagnosis resumes in a different reliable execution/model environment |
 | `LOC-011` | closed Editor-owned lowering defect | identical explicit-empty source-first bytes stay empty through import, bind, shaping, and draw in pinned C++ and Rust; Editor fix `fc1a7e40` repairs absent-versus-empty lowering and the browser reports both prices empty |
 | `LOC-012` | open Editor-owned stale-golden evidence | the required-WebGPU visual/spacing gate is 2/2 after replacing only the obsolete expected image, but accepting that expected-image change requires an explicit user decision. Exact historical input is unavailable, so no C++/Rust parity, renderer repair, or closure is claimed; `P19-C08`, the registered fixture, and `COR-07` remain open |
-| `LOC-013` | text/font-pipeline candidate, exact stage unproven | same font bytes, axes, glyph IDs, advances, and outlines through C++ and Rust |
+| `LOC-013` | closed Editor-owned variable-font stale oracle | exact Inter bytes and four `wght` values match through 64 glyph IDs, 1,507 outline commands, typed import, 38-line streams/resources, and every 240×112 C++ Dawn/Rust wgpu MSAA pixel; retain P08-C08 as historical linkage only |
 | `LOC-014` | closed stale-oracle observation | exact 180x124 clockwise Feather replay matches pinned C++ and Rust in bounds, atlas plan, and every pixel; do not tune constants |
 | `LOC-015` | closed stale-binary artifact qualification | exact `0.2.0@b1f58004` framework draws the production corpus; no runtime repair remains |
 | `LOC-016` | closed artifact verification gap | exact framework plus typed selection passes all 28 named operation/easing animations at start, quarter, and end |
@@ -543,13 +545,26 @@ device-frame drag gate pass. Independent direct-presentation, readback,
 loss-recovery, renderer, and corpus evidence has promoted and closed the atlas
 row.
 
-### Historical backend evidence and current WebGPU oracles — `RT-ED-004`, `LOC-014`
+### Closed historical backend evidence and current WebGPU oracles — `RT-ED-004`, `LOC-014`
 
 The retired backend's nonrectangular clip allocated full-frame content and
 mask images, then composited with `DestinationIn`; its feather path used a
-locally designed Gaussian image plan. Those dated observations remain
-renderer-backend provenance, never a writer, fork, fallback, or repeatable
-qualification target. `LOC-014` is independently closed as a stale oracle:
+locally designed Gaussian image plan. Those dated observations remain true
+renderer-backend provenance, never a writer, fork, fallback, or live
+implementation target.
+
+`RT-ED-004` is closed through the user-selected support matrix. The original
+402×874/radius-57 four-cubic WebGL2 fixture, frame image, command, and exact
+`frame.surface.finish_failed` text remain preserved; runtime `95027109`
+removed the backend instead of repairing it. Current supported-WebGPU evidence
+at runtime `e494995c`, pinned C++ `d788e8ec`, and Dawn `211333b2` proves
+1,468/1,468 same-runner entries exact with 1,375 byte-exact and zero
+divergences. `gm-clippedcubic2`, `riv-circle_clips` frame 0, and
+`riv-clip_tests` frame 0 are zero-delta in both final modes, browser
+`gm-cliprects` is zero-delta, and unchanged P04-C01 passes 21/21. That is a
+support-matrix resolution, not a WebGL2 repair or retraction.
+
+`LOC-014` is independently closed as a stale oracle:
 the same typed 180-by-124 Feather scene, dimensions, pixel density, background,
 resources, and bounds produced zero differing pixels in pinned C++ and Rust
 WebGPU. Its qualifying comparison:
@@ -572,8 +587,10 @@ closures below supersede their original scheduling implications:
    fixture must be revalidated at `d788e8ec`.
 2. The defect document introduction calls the ledger confirmed, although most
    rows are candidates, one is editor-owned, and one is retracted.
-3. `RT-ED-004` lacks the direct current-pin C++ clip proof required by its
-   claimed classification.
+3. `RT-ED-004` originally lacked a direct current-pin C++ clip proof. Hosted
+   run `30217608092` now supplies the exact same-runner and browser WebGPU
+   evidence; the historical WebGL2 failure remains preserved under the
+   user-selected support-matrix closure.
 4. `RT-ED-005` cites `outline-visual-consistency.spec.ts`, but linked
    `P09-C01` does not clearly run that focused reproduction.
 5. P16 contains a stale current-runtime SHA.
@@ -585,8 +602,11 @@ closures below supersede their original scheduling implications:
    used even as optional characterization. Current supported-WebGPU evidence
    qualifies a stale golden but does not close the row or authorize changing
    the expected image without an explicit user decision.
-8. `LOC-013` reports both 10,199 and 11,019 baseline differences without a
-   capture/mode label.
+8. `LOC-013` historically reports both 10,199 and 11,019 baseline differences
+   without a capture/mode label. The durable current-input driver supersedes
+   those counts for runtime disposition: pinned C++ Dawn and Rust wgpu are
+   pixel-identical, while the conflicting retired-WebGL2 counts remain
+   historical Editor provenance.
 9. `linkedRerun` is used inconsistently, especially for `P15-C01`.
 10. The “42-case” GPU matrix reports 45 results because three auxiliary tests
     are included; the label must say so.
@@ -870,36 +890,33 @@ acquisition=0/MAP_READ=1, Lost recovery acquisitions=2/surfaces=2, persistent
 Lost typed and bounded, renderer 418 pass/40 ignored, and the native corpus
 1468 exact/837 byte-exact/0 divergent. The atlas row is closed.
 
-### `F-ED-07` — Historical rounded WebGL2 clip evidence
+### `F-ED-07` — Closed historical rounded WebGL2 support-matrix row
 
-Target: `RT-ED-004`.
+Closed row: `RT-ED-004`.
 
-This ticket owns no production WebGL2 implementation. Preserve the original
-402×874, radius-57 observation as historical evidence. WebGL2 is retired, so
-this row authorizes no backend restoration, dependency fork, fallback, or
-special-case repair.
+This ticket owns no production implementation. The original 402×874,
+radius-57 four-cubic WebGL2 observation remains true historical evidence,
+including the exact frame asset, command, and failure text. The user decided
+on 2026-07-24 to remove WebGL2/FemtoVG/fallback support and require WebGPU, so
+runtime `95027109` is the support-matrix resolution rather than a WebGL2
+repair.
 
-If a current disposition is scheduled, run the exact typed clip through
-pinned C++ and the supported Rust WebGPU path with the same transform, fill
-rule, surface size, and pixel oracle. Stamp the exact renderer revision, Dawn
-revision, feature flags, surface, mode, and reference executable.
+Current qualification is complete at runtime `e494995c`, pinned C++
+`d788e8ec`, Dawn `211333b2`, and Editor checkpoint `233552c1`:
 
-- If current WebGPU matches pinned C++, retain the WebGL2 observation as
-  historical backend evidence; no runtime repair exists.
-- If current WebGPU differs, map that new/current WebGPU parity defect to its
-  complete C++ owner lifecycle before assigning a writer.
-- If pinned C++ has no corresponding capability, stop for a user decision;
-  that is additive functionality, not an authorized parity port.
+- `make renderer-golden-same-runner` reports 1,468/1,468 exact, 1,375
+  byte-exact, and zero divergences;
+- `gm-clippedcubic2`, `riv-circle_clips` frame 0, and `riv-clip_tests` frame 0
+  have zero delta in both final modes;
+- `make browser-webgpu-only-check` reports zero differing `gm-cliprects`
+  pixels; and
+- unchanged Editor P04-C01 passes 21/21.
 
-Any current lifecycle proof covers construction, resize, nested clip
-allocation, composite order, repeated-frame reuse, allocation failure,
-device/surface loss and recovery, and teardown on WebGPU. Acceptance requires
-the focused current-pin clip differential and unchanged renderer floors, with
-no resource-budget or error-path weakening.
-
-The landed Editor checkpoint has no formal or candidate child for
-`RT-ED-004`. Historical product consumption therefore does not gate this
-evidence row or any independently landed browser repair.
+The row has no formal/candidate child, displaced live mechanism, or writer.
+Executor verification passes; independent orchestrator promotion is not
+applicable because no parity repair lands. No later work may restore WebGL2,
+fork FemtoVG, add a fallback or fixture special case, or describe the
+historical failure as false, retracted, or stale.
 
 ### `F-ED-08` — Closed conditional-visibility stale report
 
@@ -924,9 +941,9 @@ fallback, test target, or serialization edge.
 
 ### `F-ED-09` — Text semantics, variable fonts, and measurement
 
-Qualification target: remaining `LOC-013`; `LOC-008` is intake-needs-evidence
-and deferred post-port verification, and `LOC-011` is closed by the
-Editor-owned lowering repair.
+`LOC-013` variable-font qualification and `LOC-011` empty-text qualification
+are complete. `LOC-008` remains intake-needs-evidence and deferred post-port
+verification.
 
 This is a shared evidence cluster, not a predeclared single writer. The rows
 may localize to different owner families: Scene/import/binding initialization,
@@ -939,10 +956,14 @@ font instance/shaping/outline/raster, and a public measurement facade.
    the first unqualified absent-versus-empty lowering boundary, and the
    unchanged browser page paints no placeholder glyphs; no runtime repair is
    authorized.
-2. Variable font: use identical font bytes, axis tags/values, glyph IDs,
-   advances, and outlines. The first differing stage localizes the row; then
-   the governing classification decides between an exact-site repair, a
-   complete missing lifecycle port, or structural owner-family replacement.
+2. Variable font: completed for `LOC-013`. The exact 879,708-byte Inter font,
+   face 0, size 17, line height 22, and `wght` 400/500/600/700 match through
+   all 64 glyph IDs, 1,507 outline commands, four distinct weight outline
+   hashes, typed `.riv` import, 38-line renderer programs/resources, and every
+   240×112 MSAA pixel. The durable driver pins source/compiler/probe/archive/
+   generated-result/replay-binary provenance and closes the retired
+   WebGL2/old-baseline report as an Editor-owned stale oracle. No runtime
+   writer or repair exists; P08-C08 remains historical linkage.
 3. Measurement: preserve the unchanged P08-C06 command
    `CARGO_HOME=/private/tmp/nuxie-editor-cargo-home rustup run stable cargo
    test --manifest-path tools/rive-compiler/scene-shared/Cargo.toml -p
@@ -958,8 +979,7 @@ font instance/shaping/outline/raster, and a public measurement facade.
    item resolved or still open. Do not add a DOM/editor approximation.
 
 Every promoted owner family becomes a separate committed and floor-gated
-slice. Rows may share a writer only after exact closure proves a real module
-or lifecycle overlap.
+slice. Closed no-repair rows create no writer.
 
 ### `F-ED-10` — Qualified supported-WebGPU stale-golden evidence
 
@@ -1158,9 +1178,10 @@ follows:
 The candidate set contains ten unique children. Unioning it with the 11 formal
 children yields 21 unique directly affected child IDs with no
 formal/candidate overlap. The current Editor checkpoint retains `RT-ED-004`
-only as historical WebGL2 evidence and removes all five of its former formal
-child links. Structured linkage now makes `P08-C06` a formal child of both
-`LOC-008` and `LOC-018`; closed `LOC-011` has no active child, and open
+only as closed historical WebGL2 evidence and removes all five of its former
+formal child links. Closed `LOC-013` retains `P08-C08` only as historical
+candidate linkage. Structured linkage now makes `P08-C06` a formal child of
+both `LOC-008` and `LOC-018`; closed `LOC-011` has no active child, and open
 `LOC-012` retains `P19-C08` until the explicit stale-golden decision. Broad
 aggregate gates such as `P08-C01` and `P11-C01` rerun after their focused
 children. The executable atlas owns the complete
@@ -1210,7 +1231,10 @@ the atlas. A shared file is not proof of a semantic dependency.
   and `LOC-005` have no separate writer; the quarantined Scene candidate is
   diagnostic only and no repair landed.
 - `LOC-006` is a no-repair stale characterization, semantically distinct from
-  historical `RT-ED-004`; neither has a production writer.
+  closed historical support-matrix row `RT-ED-004`; neither has a production
+  writer.
+- `LOC-013` is a closed Editor-owned variable-font stale oracle; its historical
+  P08-C08 link does not create a text/runtime writer.
 - `LOC-009` is not blocked by `LOC-019`.
 - `RT-ED-005` is a landed API gap; `RT-ED-007` is a distinct confirmed runtime
   seam defect retained for deferred post-port verification. Neither record
@@ -1244,12 +1268,12 @@ scouts for the remaining open rows:
 1. Scene/ViewModel/DataBind/StateMachine:
    `LOC-001/002/005`, `RT-ED-007`, and `LOC-007`;
 2. browser/renderer:
-   historical-only `RT-ED-004` when explicitly requested; closed `LOC-006`
-   and `LOC-014` are historical/no-repair evidence, while `LOC-012` retains
-   qualified stale-golden evidence and awaits the explicit user decision;
+   closed `RT-ED-004`, `LOC-006`, and `LOC-014` are historical/no-repair
+   evidence, while `LOC-012` retains qualified stale-golden evidence and
+   awaits the explicit user decision;
 3. text/records:
-   `LOC-008/013/018`; `LOC-011` is a closed Editor-owned repair, not a remaining
-   qualification scout.
+   `LOC-008/018`; `LOC-011` and `LOC-013` are closed Editor-owned
+   dispositions, not remaining qualification scouts.
 
 The orchestrator handles `RT-ED-001/002`, closed/retracted/tombstone rows, and
 the exact-runtime-identity `0.2.0` artifact lane.
@@ -1269,7 +1293,7 @@ ownership before activation.
 | post-port runtime verification | after the corresponding formal waves land, Defects Fix reruns RT-ED-007, LOC-007, LOC-008, and LOC-018's remaining runtime layout/TextStyle acceptances | evidence-only; no direct Runtime Fix request, schedule, or active writer lease |
 | browser | landed `F-ED-06` and the `LOC-019` half of `F-ED-11` have no writer; reopened `LOC-009` is parked until diagnosis resumes in a different reliable execution/model environment and a fresh coordinator assignment follows; no-repair `F-ED-08/10` and historical-only `F-ED-07` have no writer | `browser.rs`, WebGPU GPU-canvas/scripting seams, and resource owners; no `webgl2.rs` writer |
 | runtime dirt | qualified `F-ED-05` | waits for the exact FL-E Path/Shape owner lock |
-| text-derived | qualified `F-ED-09` rows split by discovered owner | Scene/import/binding, `text.rs`, font parser/shaper, or renderer |
+| text-derived | deferred `LOC-008`; closed `LOC-011` and `LOC-013` create no writer | after the formal text-measurement wave, rerun LOC-008 only; preserve the empty-text and variable-font no-repair evidence |
 | renderer feather | open-decision `F-ED-10` | no writer; `LOC-012` is qualified Editor stale-golden evidence awaiting the explicit decision, and `LOC-014` is exact no-repair parity evidence |
 | evidence/artifact | closed `F-ED-12`; open `F-ED-13` | no F-ED-12 writer remains; F-ED-13 grants no runtime source edit until qualification promotes a survivor |
 

@@ -3131,6 +3131,27 @@ def validate_history_verifications(
         )
 
 
+def is_no_repair_path(row: dict[str, Any]) -> bool:
+    history = [
+        event for event in row.get("history", []) if isinstance(event, dict)
+    ]
+    history_states = {event.get("state") for event in history}
+    user_decided = any(
+        event.get("state") == "user-decided" and event.get("actor") == "user"
+        for event in history
+    )
+    return (
+        bool(history_states & {"stale-oracle", "retracted"})
+        or (
+            row.get("classification") == "verification-gap"
+            and user_decided
+        )
+        or row.get("classification")
+        in {"additive-product-feature", "editor-integration-defect"}
+        or row.get("owner_class") == "artifact"
+    )
+
+
 def validate_closure_schema(
     row: dict[str, Any],
     fixture_row: dict[str, Any] | None,
@@ -3186,16 +3207,7 @@ def validate_closure_schema(
             for history in row.get("history", [])
             if isinstance(history, dict)
         }
-        no_repair_path = (
-            any(
-                history.get("state") in {"stale-oracle", "retracted"}
-                for history in row.get("history", [])
-                if isinstance(history, dict)
-            )
-            or row.get("classification")
-            in {"additive-product-feature", "editor-integration-defect"}
-            or row.get("owner_class") == "artifact"
-        )
+        no_repair_path = is_no_repair_path(row)
         for field in REVISION_KEYS:
             validate_revision(
                 defect_id,

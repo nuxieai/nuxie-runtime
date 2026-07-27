@@ -366,26 +366,30 @@ evidence = "Committed Editor checkpoint 4da896beb5ec6815f6b01a2433875274a321d06c
 id = "RT-ED-004"
 title = "WebGL2 cannot execute the typed rounded content clip"
 source_class = "historical-webgl2-evidence"
-state = "reported"
+state = "closed"
 owner_class = "renderer"
-classification = "unqualified"
+classification = "verification-gap"
 ticket = "F-ED-07"
 fixture_id = "fed.rt_ed_004.webgl2_rounded_clip_402x874_r57"
-preliminary_disposition = "Historical WebGL2 capability evidence only: WebGL2 is retired and no implementation or dependency fork is authorized; any current clip claim must be requalified against pinned C++ on the supported WebGPU path."
-reproduction_sha256 = "5267a1f0d056131b477e8854de6c33744648c9831f8ea393b22bc0390e810870"
-rust_stimulus = "pending: F-ED-07 must minimize the direct Rust stimulus for RT-ED-004"
-cpp_stimulus = "pending: F-ED-07 must minimize the pinned-C++ stimulus or prove no equivalent for RT-ED-004"
-source_files = ["pending: F-ED-07 source-file correspondence"]
-source_members = ["pending: F-ED-07 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-07 lifecycle qualification"]
-rust_owner = "pending: F-ED-07 exact Rust owner"
-displaced_mechanism = "pending: F-ED-07 displaced-mechanism inventory"
-dependencies = ["F-ED-00B","F-ED-07"]
-target_tests = ["pending:F-ED-07"]
+preliminary_disposition = "Closed by the user-approved WebGPU-only support matrix, not by repairing WebGL2. The historical 402x874/radius-57 WebGL2 failure remains true and preserved; supported WebGPU clipping is exact against pinned C++ and the unchanged Editor P04-C01 corpus is 21/21."
+reproduction_sha256 = "f5e2f715c573aa9a64e5950c58c5b30af83ae785591de63886501fc4564824f7"
+historical_reproduction_sha256 = "5267a1f0d056131b477e8854de6c33744648c9831f8ea393b22bc0390e810870"
+historical_frame_image_sha256 = "7bf9ee8cd4b22f7a66aca5411330c33b3ab7a31f7c50ac686611c00f84b87345"
+historical_command = "PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor selection-strategies.spec.ts --grep 'generated-style ScrollView and Button nodes expose selectable visual targets'"
+historical_failure = "frame.surface.finish_failed: unsupported renderer feature: WebGL2 clip layer allocation or path construction"
+rust_stimulus = "At runtime e494995cb941fc8fd74ea8a7395a6ba3402c1fa1, run the same-runner renderer corpus in both final modes and the required-WebGPU browser clip smoke. The focused clip rows are gm-clippedcubic2, riv-circle_clips frame 0, and riv-clip_tests frame 0; browser gm-cliprects must also report zero differing pixels. Preserve the historical WebGL2 402x874/radius-57 four-cubic clip command and exact failure as evidence only."
+cpp_stimulus = "Pinned C++ d788e8ec6e8b598526607d6a1e8818e8b637b60c at Dawn 211333b2e3e429c3508f25c81c547f602adf448c supplies the same-runner clip reference for the exact hashed GM streams and Rive assets. The current proof covers the supported WebGPU path; it does not rerun or repair the retired WebGL2 backend."
+source_files = ["renderer/include/rive/renderer/rive_renderer.hpp","renderer/src/rive_renderer.cpp","renderer/src/render_context.cpp","tests/gm/cubicpaths.cpp","tests/gm/cliprects.cpp","tests/unit_tests/assets/circle_clips.riv","tests/unit_tests/assets/clip_tests.riv","crates/nuxie-renderer/src/lib.rs","fixtures/renderer/streams/gm/clippedcubic2.rive-stream","fixtures/renderer/streams/gm/cliprects.rive-stream","fixtures/renderer/streams/riv/circle_clips.rive-stream","fixtures/renderer/streams/riv/clip_tests.rive-stream","tools/browser-renderer-smoke/src/lib.rs","tools/browser-renderer-smoke/run-browser.cjs","apps/nuxie-dashboard/tests/e2e/project-editor/selection-strategies.spec.ts","apps/nuxie-dashboard/tests/e2e/project-editor/preview-interaction-alignment.spec.ts","apps/nuxie-dashboard/tests/e2e/project-editor/device-frame-bezel-drag.spec.ts","apps/nuxie-dashboard/tests/e2e/project-editor/scroll-view-wheel.spec.ts","apps/nuxie-web/public/device-frames/catalog/assets/iphone-17-pro-deep-blue-portrait.png"]
+source_members = ["RiveRenderer::RenderState::clipStackHeight","RiveRenderer::m_clipStack","RiveRenderer::clipPathImpl","RiveRenderer::clipAndPushDraw","RiveRenderer::applyClip","RenderContext::logicalFlush","RenderContext clip read/write bounds","Rust renderer logical clip stack and resident clip replay","browser required-WebGPU gm-cliprects capture","Editor P04-C01 required-WebGPU selection and pointer corpus"]
+lifecycle_phases = ["save renderer state","apply typed path clip","retain and reuse logical clip identity","draw clipped content","restore renderer state","finish supported WebGPU frame","compare both same-runner final modes","run required-WebGPU browser clip smoke","run unchanged 21-case Editor P04-C01 corpus"]
+rust_owner = "crates/nuxie-renderer/src/lib.rs owns the supported WebGPU logical clip stack, suffix replay, clip IDs, and physical execution; browser smoke and the unchanged Editor P04-C01 command own boundary evidence. The retired WebGL2 backend has no live owner or writer."
+displaced_mechanism = "No live mechanism is displaced. The former WebGL2 per-clip full-frame content/mask composition remains historical evidence and was removed from the supported product matrix rather than repaired."
+dependencies = []
+target_tests = ["make renderer-golden-same-runner","make browser-webgpu-only-check","PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor selection-strategies.spec.ts preview-interaction-alignment.spec.ts device-frame-bezel-drag.spec.ts scroll-view-wheel.spec.ts"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
-owning_ledger = "pending: F-ED-07 owning-ledger link"
-adaptation_rule = "pending: F-ED-07 rule citation"
-decision_row = "pending: F-ED-07 decision-row disposition"
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#RT-ED-004"
+adaptation_rule = "Support-matrix resolution only: preserve the exact historical WebGL2 failure, require current supported WebGPU clipping to match pinned C++, and do not restore WebGL2, fork FemtoVG, add a fallback, special-case the fixture, or weaken any clip/pixel gate."
+decision_row = "User decision 2026-07-24: remove WebGL2/FemtoVG/fallback support and require WebGPU. Runtime PR #47 at 95027109c89f651835c76646ebf4d8734f032f07 is the support-matrix landing, not a WebGL2 repair. Current supported WebGPU qualification is exact, so no live runtime defect or writer remains."
 touch = []
 dont_touch = ["@active-fl-lease"]
 formal_children = []
@@ -396,34 +400,58 @@ proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
 runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
 parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
-original_localization_rust_sha = { status = "pending", reason = "F-ED-07 must recover the original localization Rust SHA" }
-editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
-consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
-consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
+editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+investigation_head_sha = "e494995cb941fc8fd74ea8a7395a6ba3402c1fa1"
+merged_repair_sha = { status = "pending", reason = "No WebGL2 parity repair exists; 95027109 is the user-selected WebGPU-only support-matrix resolution." }
+consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+consumed_superproject_sha = "233552c13929b09666a62ddff541eb8620d1882b"
 [defect.renderer_provenance]
-status = "pending"
-reason = "Historical WebGL2 evidence is preserved without authorizing that backend; any current claim must stamp a WebGPU-only backend, mode, features, surface, Dawn revision, and reference executable."
+status = "complete"
+backend = "pinned C++ ffi-dawn and Rust wgpu over the same Apple Metal runner; required browser path WebGPU"
+dawn_revision = "211333b2e3e429c3508f25c81c547f602adf448c"
+mode = "same-runner clockwise-atomic and MSAA final modes; browser gm-cliprects required-WebGPU"
+feature_flags = "WebGPU only; no WebGL2, FemtoVG, fallback, or retired-backend execution"
+surface = "corpus-defined exact clip surfaces plus the historical 402x874/radius-57 frame retained only as provenance"
+reference_executable = "live C++ renderer reference sha256 39d002a201603329653e166c08cdac2b0eb5b0295ea2f3f0fbe8e0184b601601"
+reference_stamp_sha256 = "39d002a201603329653e166c08cdac2b0eb5b0295ea2f3f0fbe8e0184b601601"
+command = "make renderer-golden-same-runner && make browser-webgpu-only-check"
+evidence = "Hosted run 30217608092: Phase R job 89834412576 and Browser WebGPU job 89834412573. Same-runner corpus 1468/1468 exact, 1375 byte-exact, zero divergences; gm-clippedcubic2, riv-circle_clips frame 0, and riv-clip_tests frame 0 have zero delta in both final modes; browser gm-cliprects has zero differing pixels. Phase R log sha256 05451a987e839236eecd0f819b0e549a126af47aa7a6da08982cd6c794d5cff1; browser log sha256 a4b01a8de6cbed2cbdf176bf83d9d9a05f909f4f185019c2bcefb1f941af8f1a; artifact 8637157633 ZIP sha256 74a876228c087370fe44e620c249d1b6ef7ab7d50ee3b0e42f7d007425422790, inner JSON sha256 dfa4ef9a4d6171a06f045b93004bda6d379eec0c2418b9f1e80bb3deaf9e4bc8."
 [defect.executor_verification]
-status = "pending"
-reason = "F-ED-07 executor fixture has not run."
+status = "pass"
+command = "make renderer-golden-same-runner && make browser-webgpu-only-check"
+evidence = "Supported WebGPU clip coverage is exact against pinned C++; Editor P04-C01 passes unchanged 21/21. The historical WebGL2 failure is preserved and was not rerun, repaired, or relabeled false."
 [defect.orchestrator_verification]
-status = "pending"
-reason = "F-ED-07 has no executor-green result to verify."
+status = "not-applicable"
+reason = "The user-approved support-matrix resolution lands no parity repair and promotes no renderer ownership row."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:RT-ED-004"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "The original 402x874/radius-57 WebGL2 four-cubic fixture failed exactly with frame.surface.finish_failed: unsupported renderer feature: WebGL2 clip layer allocation or path construction."
+[[defect.history]]
+state = "user-decided"
+actor = "user"
+evidence = "On 2026-07-24 the user removed WebGL2/FemtoVG/fallback support and required WebGPU; 95027109 is the support-matrix landing, not a WebGL2 repair."
+[[defect.history]]
+state = "closed"
+actor = "f-ed-executor"
+evidence = "Supported WebGPU clipping is exact against pinned C++ and P04-C01 is 21/21; the preserved historical WebGL2 observation creates no live defect, child, or writer."
 [defect.cpp_result]
-status = "pending"
-reason = "The exact current-pin typed rounded-clip oracle remains required for any new WebGPU-only claim; the historical WebGL2 observation is not a current parity verdict."
+status = "pass"
+command = "make renderer-golden-same-runner at pinned d788e8ec6e8b598526607d6a1e8818e8b637b60c / Dawn 211333b2e3e429c3508f25c81c547f602adf448c"
+evidence = "The live C++ reference provides exact current clip outputs for the hashed GM streams and Rive assets in both final modes."
 [defect.rust_result]
-status = "pending"
-reason = "No WebGL2 rerun or repair is authorized; a current Rust result must use the supported WebGPU path and the exact typed rounded-clip stimulus."
+status = "pass"
+command = "make renderer-golden-same-runner && make browser-webgpu-only-check"
+evidence = "Runtime e494995c matches the pinned C++ same-runner corpus 1468/1468 with zero divergences; the focused clip rows are zero-delta in both final modes and browser gm-cliprects has zero differing pixels."
 [defect.editor_result]
-status = "pending"
-reason = "There are no current formal or candidate product children; the historical observation remains evidence-only pending any explicit WebGPU-only requalification."
+status = "pass"
+command = "PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor selection-strategies.spec.ts preview-interaction-alignment.spec.ts device-frame-bezel-drag.spec.ts scroll-view-wheel.spec.ts"
+evidence = "At Editor checkpoint 233552c13929b09666a62ddff541eb8620d1882b consuming runtime e72323c808b91d706ba3b745396beaca7accd69a, unchanged P04-C01 passes 21/21. No formal or candidate child remains linked to RT-ED-004."
 
 [[defect]]
 id = "RT-ED-005"
@@ -1522,27 +1550,27 @@ evidence = "Checkpoint 3a16e76c6f8461c573afff278176302bff5b08b1 on runtime ef9dc
 [[defect]]
 id = "LOC-013"
 title = "Authored variable-font weights collapse into one heavy Rust raster"
-source_class = "candidate"
-state = "reported"
-owner_class = "runtime"
-classification = "unqualified"
+source_class = "corrected-stale-characterization"
+state = "closed"
+owner_class = "editor"
+classification = "stale-oracle"
 ticket = "F-ED-09"
 fixture_id = "fed.loc_013.variable_font_pipeline"
-preliminary_disposition = "Text/font pipeline candidate with conflicting pixel counts."
-reproduction_sha256 = "d67a1e0784b9b69266147c22e5368cbf2e9909319d7d2a0130a6d1e9863f3099"
-rust_stimulus = "pending: F-ED-09 must minimize the direct Rust stimulus for LOC-013"
-cpp_stimulus = "pending: F-ED-09 must minimize the pinned-C++ stimulus or prove no equivalent for LOC-013"
-source_files = ["pending: F-ED-09 source-file correspondence"]
-source_members = ["pending: F-ED-09 state-bearing member correspondence"]
-lifecycle_phases = ["pending: F-ED-09 lifecycle qualification"]
-rust_owner = "pending: F-ED-09 exact Rust owner"
-displaced_mechanism = "pending: F-ED-09 displaced-mechanism inventory"
-dependencies = ["F-ED-00B","F-ED-09"]
-target_tests = ["cpp_probe/registry.cpp"]
-required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
-owning_ledger = "pending: F-ED-09 owning-ledger link"
-adaptation_rule = "pending: F-ED-09 rule citation"
-decision_row = "pending: F-ED-09 decision-row disposition"
+preliminary_disposition = "Closed as a stale historical raster oracle. The exact 879,708-byte Inter variable font, four wght values, glyph IDs, advances, outlines, typed .riv, draw streams, and 240x112 supported-WebGPU pixels are equivalent in pinned C++ and Rust. The retired WebGL2/old-baseline pixels do not describe the current supported runtime."
+reproduction_sha256 = "1008f032519c5dfa1b13b8dfad43e6a6999ad6253560bd5bf2814fc7f76ce36f"
+rust_stimulus = "tools/editor-next-runtime-defects/check-loc-013-variable-font.sh decodes the exact InterVariable.ttf with harfrust/skrifa, shapes face 0 at size 17 and line height 22 for wght 400/500/600/700, compares glyph IDs/advances/outlines, schema-encodes and imports one typed .riv from explicit AuthoringRecords, compares the complete recording stream, then replays Rust wgpu MSAA pixels."
+cpp_stimulus = "The same durable driver compiles tools/editor-next-runtime-defects/loc013/cpp_probe.cpp against clean pinned C++ d788e8ec6e8b598526607d6a1e8818e8b637b60c, decodes the identical Inter bytes through HBFont, applies the same four wght coordinates, shapes and extracts outlines, imports the same generated .riv through the ordinary golden runner, and replays the resulting stream with the live Dawn reference."
+source_files = ["include/rive/text/font_hb.hpp","include/rive/text_engine.hpp","src/text/font_hb.cpp","src/text/text_engine.cpp","crates/nuxie-runtime/src/text.rs","crates/nuxie-renderer/src/lib.rs","tools/editor-next-runtime-defects/check-loc-013-variable-font.sh","tools/editor-next-runtime-defects/loc013/Cargo.toml","tools/editor-next-runtime-defects/loc013/Cargo.lock","tools/editor-next-runtime-defects/loc013/compare.py","tools/editor-next-runtime-defects/loc013/cpp_probe.cpp","tools/editor-next-runtime-defects/loc013/src/main.rs","apps/nuxie-dashboard/tests/visual/style-parity/fonts/InterVariable.ttf"]
+source_members = ["HBFont::Decode","HBFont::makeAtCoord","Font::shapeText","Font::getPath","harfrust::ShaperInstance::from_variations","skrifa::outline_glyphs","TextStyleAxis tag/value import","schema-driven Text/TextStyle/TextStyleAxis AuthoringRecord encoding","RecordingFactory text path recording","renderer replay MSAA path"]
+lifecycle_phases = ["verify clean pinned source and exact font bytes","decode face 0","apply wght 400/500/600/700","shape 64 glyph occurrences","extract and compare 1507 outline commands","author and import typed .riv","compare 38-line recording programs and resources","replay pinned Dawn and Rust wgpu MSAA","compare 240x112 pixels at zero tolerance"]
+rust_owner = "No divergent Rust runtime owner exists for this input. crates/nuxie-runtime/src/text.rs owns current font decode, variation, shaping, outline extraction, and imported typed-record execution; the durable fixture schema-encodes explicit AuthoringRecords; crates/nuxie-renderer owns replay. All exercised stages are verified equivalent to pinned C++ for the exact stimulus."
+displaced_mechanism = "No live runtime mechanism is displaced. The retired WebGL2/old-baseline raster expectation is not the current supported WebGPU output; any current product red belongs first to Editor artifact, golden, or capture production."
+dependencies = []
+target_tests = ["RIVE_RUNTIME_DIR=/Users/levi/dev/oss/rive-runtime EDITOR_NEXT_REPO_DIR=/Users/levi/.codex/worktrees/7189/nuxie-dev/worktrees/editor-next-cutover-assembly tools/editor-next-runtime-defects/check-loc-013-variable-font.sh"]
+required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments","renderer_pixels"]
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#LOC-013"
+adaptation_rule = "No runtime adaptation: pinned C++ and Rust are equivalent through font variation, shaping, outlines, typed import, draw-stream construction, and supported-WebGPU pixels. Preserve the exact driver and reject golden, threshold, font, weight, or capture substitutions."
+decision_row = "The historical 10,199/11,019 retired-WebGL2 baseline differences are not current runtime evidence. The exact current input is zero-delta in pinned C++ Dawn and Rust wgpu, so LOC-013 closes as an Editor-owned stale oracle with no production writer or repair SHA. P08-C08 remains historical candidate linkage only."
 touch = []
 dont_touch = ["@active-fl-lease"]
 formal_children = []
@@ -1553,34 +1581,57 @@ proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
 runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
 parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
-original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
-editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
-investigation_head_sha = "a76ab59324fbe5b710f0560265ec11e97634d6f6"
-merged_repair_sha = { status = "pending", reason = "No merged F-ED repair exists yet." }
-consumed_runtime_sha = { status = "pending", reason = "Editor has not consumed an F-ED repair yet." }
-consumed_superproject_sha = { status = "pending", reason = "No consumed Editor superproject checkpoint exists yet." }
+original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
+editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+investigation_head_sha = "e494995cb941fc8fd74ea8a7395a6ba3402c1fa1"
+merged_repair_sha = { status = "pending", reason = "No repair exists because pinned C++ and Rust are exact for the authoritative input." }
+consumed_runtime_sha = { status = "pending", reason = "No runtime repair exists to consume." }
+consumed_superproject_sha = { status = "pending", reason = "Editor checkpoint 233552c1 is source and provenance evidence, not consumption of a runtime repair." }
 [defect.renderer_provenance]
-status = "not-applicable"
-reason = "This row does not qualify renderer output."
+status = "complete"
+backend = "pinned C++ ffi-dawn and Rust wgpu, both over Apple Metal"
+dawn_revision = "211333b2e3e429c3508f25c81c547f602adf448c"
+mode = "MSAA variable-font text replay"
+feature_flags = "native WebGPU text and MSAA; no browser, WebGL2, fallback, or retired backend"
+surface = "240x112 DPR-1 RGBA frame; face 0, size 17, line height 22, wght 400/500/600/700"
+reference_executable = "target/renderer-dawn-live-reference/renderer-replay sha256 af9be5d64d9757d42afc0eb15852b25bb5ab7ca39e06273fbcd15c581473d63b"
+reference_stamp_sha256 = "af9be5d64d9757d42afc0eb15852b25bb5ab7ca39e06273fbcd15c581473d63b"
+command = "RIVE_RUNTIME_DIR=/Users/levi/dev/oss/rive-runtime EDITOR_NEXT_REPO_DIR=/Users/levi/.codex/worktrees/7189/nuxie-dev/worktrees/editor-next-cutover-assembly tools/editor-next-runtime-defects/check-loc-013-variable-font.sh"
+evidence = "InterVariable.ttf is 879708 bytes at sha256 4989b125924991b90d05b2d16e0e388c48f7d5bb8b30539bbf9c755278d0ccaf. All 64 glyph IDs and 1507 outline commands match; maximum advance drift is 5.1e-7 and maximum outline-coordinate drift is 3.1e-8; all four weight outline hashes are distinct. Generated .riv is 880306 bytes at sha256 121965b51165b5ed6198189236fc992d5cd1013665c442bad3a42172a43efcf8. C++ and Rust streams share the same 38-line program/order/resources; nine of 6894 coordinate renderings differ by at most 1.9e-6. Direct result sha256 aada413fc5dc55a7498fe8d6733525117b4d67a924235d53562c12038a9ad7cd; stream result sha256 0a1b18c6520dd2ff30efd1fd5e53c71adef64722eee2c4cd98cef1ad4c2fcf21. Both PNGs are sha256 8e54706fb740e462e58046a9b396cb535e335c454a1c1d06b2a6a814c8662287 with zero differing pixels and zero maximum channel delta."
 [defect.executor_verification]
-status = "pending"
-reason = "F-ED-09 executor fixture has not run."
+status = "pass"
+command = "tools/editor-next-runtime-defects/check-loc-013-variable-font.sh"
+evidence = "The durable three-layer driver passed at runtime e494995cb941fc8fd74ea8a7395a6ba3402c1fa1 with exact pinned source, font, compiler, probe, archive, generated results, replay binaries, and zero-delta pixels."
 [defect.orchestrator_verification]
-status = "pending"
-reason = "F-ED-09 has no executor-green result to verify."
+status = "not-applicable"
+reason = "Stale-oracle closure promotes no runtime or renderer ownership and lands no production repair."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:LOC-013"
+[[defect.history]]
+state = "reproduced"
+actor = "f-ed-executor"
+evidence = "The exact 879708-byte Inter input and four wght values were run through pinned C++ and Rust at every font, stream, and pixel boundary."
+[[defect.history]]
+state = "stale-oracle"
+actor = "f-ed-executor"
+evidence = "Pinned C++ and Rust retain distinct weights and match through glyphs, outlines, commands, resources, and every 240x112 supported-WebGPU pixel; the retired WebGL2/old-baseline raster report is not current runtime behavior."
+[[defect.history]]
+state = "closed"
+actor = "f-ed-executor"
+evidence = "No runtime divergence, displaced live mechanism, production touch set, or repair SHA exists; current product discrepancies route first to Editor artifact/golden/capture production."
 [defect.cpp_result]
-status = "pending"
-reason = "Identical font bytes, axes, glyphs, advances, and outlines are not recorded."
+status = "pass"
+command = "check-loc-013-variable-font.sh C++ direct probe, ordinary golden runner, and ffi-dawn MSAA replay at d788e8ec"
+evidence = "Pinned C++ decodes the exact font, preserves wght 400/500/600/700, supplies the matching 64 glyph IDs and 1507 outlines, imports the generated typed .riv, emits the matching 38-line renderer program, and produces PNG sha256 8e54706fb740e462e58046a9b396cb535e335c454a1c1d06b2a6a814c8662287."
 [defect.rust_result]
-status = "pending"
-reason = "First differing font/shaping/raster stage is unproved."
+status = "pass"
+command = "check-loc-013-variable-font.sh Rust direct probe, schema-encoded typed-record import/recording, and rust-wgpu MSAA replay at e494995c"
+evidence = "Rust preserves all four distinct weight outlines, matches glyphs/advances/outlines within the fail-closed numeric limits, emits the same renderer program/resources, and produces the identical PNG with zero differing pixels."
 [defect.editor_result]
-status = "pending"
-reason = "P08-C08 awaits a mode-labeled direct font differential."
+status = "not-applicable"
+reason = "P08-C08 is preserved as historical candidate linkage. The runtime closeout proves no current C++/Rust defect; any present product red must first supply current Editor artifact, golden, backend, mode, surface, and capture provenance."
 
 [[defect]]
 id = "LOC-014"

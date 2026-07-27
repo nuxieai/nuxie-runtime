@@ -8,7 +8,8 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 ## Current state
 
 - phase: one quarantined Scene diagnostic, one landed additive Scene seam,
-  a closed Apple artifact family, qualified supported-WebGPU stale-golden
+  a closed Apple artifact family, closed historical WebGL2 support-matrix and
+  variable-font stale-oracle evidence, qualified supported-WebGPU stale-golden
   evidence awaiting user decision, parked authored-shader diagnosis, and
   deferred post-port verification;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
@@ -16,19 +17,19 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - Editor's last consumed runtime:
   `e72323c808b91d706ba3b745396beaca7accd69a`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
-- closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`,
-  `LOC-003`, `LOC-004`, `LOC-006`, `LOC-011`, `LOC-014`, `LOC-015`,
-  `LOC-016`, `LOC-017`, and `LOC-019`;
-- open rows: 12;
-- state counts: 13 `closed`, 3 `intake-needs-evidence`, 3 `mapped`, 1
-  `regression-reopened`, 1 `stale-oracle`, and 4 `reported`;
+- closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-004`,
+  `RT-ED-006`, `LOC-003`, `LOC-004`, `LOC-006`, `LOC-011`, `LOC-013`,
+  `LOC-014`, `LOC-015`, `LOC-016`, `LOC-017`, and `LOC-019`;
+- open rows: 10;
+- state counts: 15 `closed`, 3 `intake-needs-evidence`, 3 `mapped`, 1
+  `regression-reopened`, 1 `stale-oracle`, and 2 `reported`;
 - formal/structured product children in the landed Editor snapshot: 11;
 - candidate-linked product children: 10;
 - union: 21, with no formal/candidate overlap;
 - correction rows: 12.
 - fixture rows: 25 total, with `RT-ED-001`, `RT-ED-002`, `RT-ED-003`,
-  `LOC-003`, `LOC-011`, `LOC-014`, `LOC-015`, `LOC-016`, `LOC-017`, and
-  `LOC-019` directly qualified.
+  `RT-ED-004`, `LOC-003`, `LOC-011`, `LOC-013`, `LOC-014`, `LOC-015`,
+  `LOC-016`, `LOC-017`, and `LOC-019` directly qualified.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
 - latest control-plane landing: Editor inbox reconciliation PR #76
@@ -36,10 +37,11 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   `cb4e7748c5b4233375c388b433696ffd34a3c9de`; Apple artifact closeout PR
   #75 remains its direct predecessor at
   `f34e1fdec9c9dbd049576b9a6cbc6880ae51022b`;
-- active control-plane lane: record the lower-runtime boundary that
-  quarantined the Scene-only retained-ViewModel candidate and qualify the
-  supported-WebGPU stale-golden evidence without closing the row before an
-  explicit user decision;
+- active control-plane lane: preserve the lower-runtime boundary that
+  quarantined the Scene-only retained-ViewModel candidate and the
+  supported-WebGPU stale-golden evidence without closing `LOC-012` before an
+  explicit user decision; the historical WebGL2 and variable-font rows now
+  have complete no-production-change closeouts;
 - landed Scene-owned repair: `LOC-018` PR #66 exact head
   `2707280cb3507f8d5c2f48cfe58f1cf0990e9ed0` rebase-merged at
   `d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3`. It covers all four concrete
@@ -91,6 +93,35 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   omission. The unchanged browser page reports both prices empty, with
   inspection SHA-256
   `7c9a264d6803d9729197f3cce89d04192e0bd55c386558011be1aeb8e4b89be2`;
+- closed historical WebGL2 support-matrix row: `RT-ED-004` preserves the
+  original 402×874/radius-57 four-cubic fixture, frame asset, focused command,
+  and exact
+  `frame.surface.finish_failed: unsupported renderer feature: WebGL2 clip layer allocation or path construction`
+  failure as true historical evidence. The user decided on 2026-07-24 to
+  remove WebGL2/FemtoVG/fallback support and require WebGPU; runtime
+  `95027109c89f651835c76646ebf4d8734f032f07` is therefore a support-matrix
+  landing, not a WebGL2 repair. At current runtime
+  `e494995cb941fc8fd74ea8a7395a6ba3402c1fa1`, hosted run `30217608092`
+  proves the same-runner corpus 1,468/1,468 exact with 1,375 byte-exact and
+  zero divergences. `gm-clippedcubic2`, `riv-circle_clips` frame 0, and
+  `riv-clip_tests` frame 0 are zero-delta in both final modes; browser
+  `gm-cliprects` is zero-delta; unchanged Editor P04-C01 is 21/21. No live
+  mechanism, child, parity repair, or writer remains;
+- closed variable-font stale oracle: `LOC-013` now has a durable fail-closed
+  driver over the exact 879,708-byte Inter font (SHA-256
+  `4989b125924991b90d05b2d16e0e388c48f7d5bb8b30539bbf9c755278d0ccaf`),
+  face 0, size 17, line height 22, and `wght` 400/500/600/700. Pinned C++ and
+  Rust match all 64 glyph IDs and 1,507 outline commands; maximum advance
+  drift is `5.1e-7`, maximum outline-coordinate drift is `3.1e-8`, and the
+  four weight outline hashes remain distinct. The generated 880,306-byte
+  typed `.riv` has SHA-256
+  `121965b51165b5ed6198189236fc992d5cd1013665c442bad3a42172a43efcf8`;
+  both 38-line renderer programs retain identical order/resources, and C++
+  Dawn plus Rust wgpu produce the same 240×112 MSAA PNG SHA-256
+  `8e54706fb740e462e58046a9b396cb535e335c454a1c1d06b2a6a814c8662287`
+  with zero differing pixels. The retired WebGL2/old-baseline pixels are an
+  Editor-owned stale oracle, not a current runtime defect; `P08-C08` remains
+  historical candidate linkage, with no production touch set or repair SHA;
 - open Editor-owned supported-WebGPU stale-golden evidence: `LOC-012` is
   qualified at `stale-oracle`, but closing it requires an explicit user
   decision because the expected image changed. At Editor checkpoint
@@ -136,10 +167,12 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   d788 produces 0.200000003 at `advance(0)` and 0.5 after another 0.5 seconds.
   Non-main `dd3be99c` appears to implement the seam but is not an ancestor of
   fe0/main; the uncommitted Scene patch has no landing claim;
-- defects closed since the preceding Q0 report: 7;
+- defects closed since the preceding Q0 report: 10;
 - completed evidence dispositions in binding order: `LOC-006` on main, then
   batch rows `LOC-014`, `LOC-011`, `RT-ED-003`, and `LOC-019`, followed by
-  Apple artifact rows `LOC-015`, `LOC-016`, and `LOC-017`;
+  Apple artifact rows `LOC-015`, `LOC-016`, and `LOC-017`, then historical
+  support-matrix row `RT-ED-004` and variable-font stale-oracle row
+  `LOC-013`;
 - parked repair lane: resume `LOC-009` diagnosis only in a different reliable
   execution/model environment, then assign any production repair after a
   fresh coordinator review; do not close or consume the row without a reviewed
@@ -238,8 +271,9 @@ The same committed ledger has 11 unique structured runtime children, plus ten
 candidate-linked children, for 21 unique affected children. `P08-C06` is now a
 formal child of `LOC-008` and `LOC-018`; `LOC-011` has no active child after
 its Editor fix, while open `LOC-012` retains the `P19-C08` candidate link
-pending explicit user decision. It retains `RT-ED-004` only as historical
-WebGL2 evidence.
+pending explicit user decision. Closed `RT-ED-004` retains only historical
+WebGL2 evidence, and closed `LOC-013` retains `P08-C08` only as historical
+candidate linkage.
 
 ## Defect inbox
 

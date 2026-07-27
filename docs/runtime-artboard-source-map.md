@@ -24,8 +24,8 @@ The target convention is:
 | `advancing_component.hpp`, `advancing_component.cpp` | `advancing_component.rs` | retained advancing entry and schedule builder | extracted |
 | `resetting_component.hpp`, `resetting_component.cpp` | `resetting_component.rs` | retained reset entry, schedule, and reset dispatch | extracted |
 | `event.hpp`, `event.cpp` | `event.rs` | event/custom-property projection | active live-event work |
-| `artboard_component_list.hpp`, `artboard_component_list.cpp` | `artboard_component_list.rs` | retained rows, context, sync/create, advance/reset | active focus installation |
-| `virtualizing_component.hpp`, `virtualizing_component.cpp` | `virtualizing_component.rs` | component-list virtualization and layout position | extracted |
+| `artboard_component_list.hpp`, `artboard_component_list.cpp` | `artboard_component_list.rs` | retained rows, context, sync/create, advance/reset | virtualized mounted-item methods extracted; active focus installation remains |
+| `virtualizing_component.hpp`, `virtualizing_component.cpp` | `virtualizing_component.rs` | exact component-to-virtualizer adapter | extracted |
 | `nested_artboard.hpp`, `nested_artboard.cpp` | `nested_artboard.rs` | retained child occurrence, collection, replacement, context, advance | active nested/focus work |
 | `nested_artboard_layout.hpp`, `nested_artboard_layout.cpp` | `nested_artboard_layout.rs` | retained layout bounds/cache transfer | ready |
 | `nested_artboard_origin.hpp`, `nested_artboard_origin.cpp` | `nested_artboard_origin.rs` | origin callback and builder override | ready |

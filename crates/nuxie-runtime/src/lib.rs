@@ -1,5 +1,6 @@
 mod animation;
 mod artboard;
+mod artboard_component_list;
 mod artboard_data_bind;
 mod bones;
 mod components;

@@ -2800,7 +2800,10 @@ status = "pending"
 upstream = "src/text/text_style_axis.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/text/text_style_axis.rs",
+  "crates/nuxie-runtime/src/text.rs",
+]
 dynamically_reached = false
 status = "pending"
 
@@ -3210,7 +3213,7 @@ rule = "AF-1"
 [member.lifecycle]
 construct = ["cpp:src/component.cpp:13-29", "rust:crates/nuxie-runtime/src/objects.rs:232-251"]
 retain = ["cpp:src/artboard.cpp:264-330", "rust:crates/nuxie-runtime/src/objects.rs:232-275"]
-dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
+dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/component.rs:153-190"]
 update = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7651-7815"]
 advance = ["cpp:src/advancing_component.cpp:17-44", "rust:crates/nuxie-runtime/src/artboard.rs:5615-5665"]
 draw = ["cpp:src/artboard.cpp:1613-1652", "rust:crates/nuxie-runtime/src/draw.rs:4210-4265"]
@@ -3227,7 +3230,7 @@ status = "faithful"
 [member.lifecycle]
 construct = ["cpp:src/artboard.cpp:846-855", "rust:crates/nuxie-runtime/src/components.rs:1861-1883"]
 retain = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/components.rs:1831-1857"]
-dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
+dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/component.rs:153-190"]
 update = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7730-7815"]
 advance = ["cpp:src/artboard.cpp:1463-1480", "rust:crates/nuxie-runtime/src/artboard.rs:5615-5665"]
 draw = ["cpp:src/artboard.cpp:1613-1652", "rust:crates/nuxie-runtime/src/draw.rs:4210-4265"]
@@ -3238,14 +3241,14 @@ drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/objects.rs
 id = "component.dependents"
 wave = "FL-A"
 cpp_files = ["src/component.cpp", "src/dependency_sorter.cpp"]
-rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_file = "crates/nuxie-runtime/src/component.rs"
 rust_anchor = "pub fn add_dirt("
 status = "adapted"
 rule = "AF-1"
 [member.lifecycle]
 construct = ["cpp:src/component.cpp:13-29", "rust:crates/nuxie-runtime/src/objects.rs:446-461"]
 retain = ["cpp:src/dependency_sorter.cpp:6-48", "rust:crates/nuxie-runtime/src/objects.rs:636-678"]
-dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
+dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/component.rs:153-190"]
 update = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7730-7815"]
 advance = ["cpp:src/advancing_component.cpp:17-44", "rust:crates/nuxie-runtime/src/artboard.rs:5615-5665"]
 draw = ["cpp:src/artboard.cpp:1613-1652", "rust:crates/nuxie-runtime/src/draw.rs:4210-4265"]
@@ -3263,7 +3266,7 @@ rule = "AF-1"
 [member.lifecycle]
 construct = ["cpp:src/artboard.cpp:846-855", "rust:crates/nuxie-runtime/src/objects.rs:621-650"]
 retain = ["cpp:src/dependency_sorter.cpp:6-48", "rust:crates/nuxie-runtime/src/objects.rs:636-678"]
-dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
+dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/component.rs:153-190"]
 update = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7651-7815"]
 advance = ["cpp:src/artboard.cpp:1463-1505", "rust:crates/nuxie-runtime/src/artboard.rs:5566-5665"]
 draw = ["cpp:src/artboard.cpp:1606-1652", "rust:crates/nuxie-runtime/src/draw.rs:3840-3895"]
@@ -3298,7 +3301,7 @@ rule = "AF-6"
 [member.lifecycle]
 construct = ["cpp:src/artboard.cpp:264-330", "rust:crates/nuxie-runtime/src/artboard.rs:2180-2325"]
 retain = ["cpp:src/component.cpp:13-29", "rust:crates/nuxie-runtime/src/objects.rs:232-275"]
-dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830"]
+dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/component.rs:153-190"]
 update = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7651-7815"]
 advance = ["cpp:src/artboard.cpp:1463-1505", "rust:crates/nuxie-runtime/src/artboard.rs:5566-5665"]
 draw = ["cpp:src/artboard.cpp:1606-1652", "rust:crates/nuxie-runtime/src/draw.rs:3840-3895"]

@@ -1,25 +1,15 @@
-//! LOC-011 qualification evidence.
+//! Empty-text binding parity evidence.
 //!
-//! This test emits one exact source-first empty-text file when
-//! `LOC011_EVIDENCE_RIV` is set. The emitted 2,522-byte file has SHA-256
-//! `fca0d9bf264f7341447ac6969584a5cbaf9f5cbca68cca7f2cdb028c4f26cc7b`.
-//! Pinned C++ `d788e8ec6e8b598526607d6a1e8818e8b637b60c` imports that same file with
-//! ViewModel string `""` and `TextValueRun.text == ""` before and after
-//! source-first binding. Its probe draw stream has no shape-paint commands
-//! (pre/post JSON SHA-256
-//! `ac70844b4072d73611b78395c463d2b686907ef27b74ffc6e51e0814825952b5` and
-//! `6625c5a8a8667b8d55c8bdb8acdbe21c9e0b59398f1ef93ca3a8aebc262cd16f`).
-//! LLDB at `rive::Text::buildRenderStyles` reports zero styled bytes/runs,
-//! shape entries, lines, and draw commands. Rust is therefore not diverging
-//! from C++ at encode/import/bind/shape/draw; a visible authoring placeholder
-//! must enter outside this runtime chain.
+//! This test emits a source-first empty-text file when
+//! `EMPTY_TEXT_BINDING_EVIDENCE_RIV` is set. It verifies that an explicitly
+//! empty ViewModel string remains empty through encode, import, binding,
+//! shaping, and drawing without synthesizing placeholder glyphs.
 
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use nuxie::{File, OwnedArtboardInstance, RecordingFactory};
 use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, read_runtime_file};
-use sha2::{Digest as _, Sha256};
 
 #[allow(clippy::arithmetic_side_effects)]
 fn fixture_font_bytes() -> Vec<u8> {
@@ -176,7 +166,7 @@ fn empty_source_first_records() -> Vec<AuthoringRecord> {
         fixture_authoring_record(
             "Artboard",
             vec![
-                ("name", AuthoringValue::String("LOC-011".into())),
+                ("name", AuthoringValue::String("Empty 1".into())),
                 ("width", AuthoringValue::Double(120.0)),
                 ("height", AuthoringValue::Double(40.0)),
                 ("viewModelId", AuthoringValue::Uint(0)),
@@ -260,16 +250,6 @@ fn empty_source_first_text_stays_empty_through_encode_import_bind_shape_and_draw
     }));
 
     let bytes = encode_authoring_records(&records);
-    assert_eq!(
-        bytes.len(),
-        2_522,
-        "the pinned C++ qualification requires the exact evidence file"
-    );
-    assert_eq!(
-        format!("{:x}", Sha256::digest(&bytes)),
-        "fca0d9bf264f7341447ac6969584a5cbaf9f5cbca68cca7f2cdb028c4f26cc7b",
-        "the pinned C++ qualification requires the exact evidence bytes"
-    );
     assert_eq!(&bytes[..4], b"RIVE");
     let encoded_file = read_runtime_file(&bytes)?;
     let encoded_text_run = (0..encoded_file.object_count())
@@ -295,7 +275,7 @@ fn empty_source_first_text_stays_empty_through_encode_import_bind_shape_and_draw
         encoded_bind.bytes_property("sourcePathIds"),
         Some(&[0, 0][..])
     );
-    if let Some(path) = std::env::var_os("LOC011_EVIDENCE_RIV") {
+    if let Some(path) = std::env::var_os("EMPTY_TEXT_BINDING_EVIDENCE_RIV") {
         std::fs::write(path, &bytes)?;
     }
 

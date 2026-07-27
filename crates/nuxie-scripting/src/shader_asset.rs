@@ -341,8 +341,9 @@ mod tests {
     use super::*;
     use sha2::{Digest, Sha256};
 
-    const LOC_009_UBO_WGSL: &str = include_str!("../tests/fixtures/loc009-ubo-triangle.wgsl");
-    const LOC_009_BINDING_MAP: &[u8] = &[
+    const IMPORTED_GPU_CANVAS_UBO_WGSL: &str =
+        include_str!("../tests/fixtures/imported-gpu-canvas-ubo-triangle.wgsl");
+    const IMPORTED_GPU_CANVAS_BINDING_MAP: &[u8] = &[
         0x02, 0x01, 0x0e, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0xff, 0xff,
         0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00,
     ];
@@ -372,10 +373,10 @@ mod tests {
         source
     }
 
-    fn loc_009_source_container() -> Vec<u8> {
+    fn imported_gpu_canvas_source_container() -> Vec<u8> {
         source_container(
             &[(0, "vs_main", "vs_main"), (1, "fs_main", "fs_main")],
-            LOC_009_UBO_WGSL,
+            IMPORTED_GPU_CANVAS_UBO_WGSL,
         )
     }
 
@@ -407,16 +408,19 @@ mod tests {
         rstb_payload_with_blob(&descriptors, &blob_data)
     }
 
-    fn loc_009_webgpu_payload() -> Vec<u8> {
+    fn imported_gpu_canvas_webgpu_payload() -> Vec<u8> {
         rstb_payload(&[
-            (WGSL_SOURCE_TARGET, loc_009_source_container()),
-            (WGSL_BINDING_MAP_TARGET, LOC_009_BINDING_MAP.to_vec()),
+            (WGSL_SOURCE_TARGET, imported_gpu_canvas_source_container()),
+            (
+                WGSL_BINDING_MAP_TARGET,
+                IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+            ),
         ])
     }
 
     #[test]
     fn decodes_pinned_cpp_webgpu_whole_module_and_binding_map() {
-        let payload = loc_009_webgpu_payload();
+        let payload = imported_gpu_canvas_webgpu_payload();
         assert_eq!(
             format!("{:x}", Sha256::digest(&payload[1..])),
             "546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d",
@@ -424,7 +428,7 @@ mod tests {
         );
         let shader = decode_shader_asset("scene", &payload)
             .expect("WebGPU selects target-0 WGSL and mandatory target-16 binding map");
-        assert_eq!(shader.source, LOC_009_UBO_WGSL);
+        assert_eq!(shader.source, IMPORTED_GPU_CANVAS_UBO_WGSL);
         assert_eq!(
             shader
                 .entries
@@ -451,11 +455,11 @@ mod tests {
 
     #[test]
     fn rejects_out_of_bounds_variants_and_missing_entries() {
-        let mut payload = loc_009_webgpu_payload();
+        let mut payload = imported_gpu_canvas_webgpu_payload();
         payload[10..14].copy_from_slice(&u32::MAX.to_le_bytes());
         assert!(decode_shader_asset("scene", &payload).is_err());
 
-        let mut payload = loc_009_webgpu_payload();
+        let mut payload = imported_gpu_canvas_webgpu_payload();
         let blob_start = 1 + 8 + 2 * 9;
         payload[blob_start] = 0;
         assert!(decode_shader_asset("scene", &payload).is_err());
@@ -471,22 +475,25 @@ mod tests {
                 (11, b"retired GLSL binding map".to_vec()),
                 (WGSL_BINDING_MAP_TARGET, b"superseded binding map".to_vec()),
                 (14, b"retired vertex fixup".to_vec()),
-                (WGSL_SOURCE_TARGET, loc_009_source_container()),
+                (WGSL_SOURCE_TARGET, imported_gpu_canvas_source_container()),
                 (15, b"retired fragment fixup".to_vec()),
-                (WGSL_BINDING_MAP_TARGET, LOC_009_BINDING_MAP.to_vec()),
+                (
+                    WGSL_BINDING_MAP_TARGET,
+                    IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+                ),
             ]),
         )
         .expect("the final target-0 descriptor wins exactly as in ShaderAsset::decode");
-        assert_eq!(shader.source, LOC_009_UBO_WGSL);
+        assert_eq!(shader.source, IMPORTED_GPU_CANVAS_UBO_WGSL);
         assert_eq!(shader.bindings.len(), 1);
     }
 
     #[test]
     fn validates_only_final_last_wins_descriptors_like_cpp() {
-        let source = loc_009_source_container();
+        let source = imported_gpu_canvas_source_container();
         let mut blob_data = source.clone();
         let binding_map_offset = blob_data.len();
-        blob_data.extend_from_slice(LOC_009_BINDING_MAP);
+        blob_data.extend_from_slice(IMPORTED_GPU_CANVAS_BINDING_MAP);
         let payload = rstb_payload_with_blob(
             &[
                 (WGSL_SOURCE_TARGET, u32::MAX as usize, 1),
@@ -495,7 +502,7 @@ mod tests {
                 (
                     WGSL_BINDING_MAP_TARGET,
                     binding_map_offset,
-                    LOC_009_BINDING_MAP.len(),
+                    IMPORTED_GPU_CANVAS_BINDING_MAP.len(),
                 ),
             ],
             &blob_data,
@@ -503,7 +510,7 @@ mod tests {
 
         let shader = decode_shader_asset("scene", &payload)
             .expect("C++ overwrites duplicate targets before validating final ranges");
-        assert_eq!(shader.source, LOC_009_UBO_WGSL);
+        assert_eq!(shader.source, IMPORTED_GPU_CANVAS_UBO_WGSL);
         assert_eq!(shader.bindings.len(), 1);
     }
 
@@ -516,11 +523,14 @@ mod tests {
                 (1, "alternate_fragment", "fs_main"),
                 (1, "default_fragment", "fs_main"),
             ],
-            LOC_009_UBO_WGSL,
+            IMPORTED_GPU_CANVAS_UBO_WGSL,
         );
         let payload = rstb_payload(&[
             (WGSL_SOURCE_TARGET, source),
-            (WGSL_BINDING_MAP_TARGET, LOC_009_BINDING_MAP.to_vec()),
+            (
+                WGSL_BINDING_MAP_TARGET,
+                IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+            ),
         ]);
 
         let shader = decode_shader_asset("scene", &payload)
@@ -542,14 +552,14 @@ mod tests {
 
     #[test]
     fn accepts_cpp_descriptor_aliases_gaps_and_trailing_bytes() {
-        let mut source = loc_009_source_container();
+        let mut source = imported_gpu_canvas_source_container();
         source.extend_from_slice(b"source-extension");
         let source_offset = 3;
         let map_offset = source_offset + source.len() + 5;
         let mut blob_data = b"gap".to_vec();
         blob_data.extend_from_slice(&source);
         blob_data.extend_from_slice(b"gap!!");
-        blob_data.extend_from_slice(LOC_009_BINDING_MAP);
+        blob_data.extend_from_slice(IMPORTED_GPU_CANVAS_BINDING_MAP);
         blob_data.extend_from_slice(b"unreferenced-trailing-bytes");
         let payload = rstb_payload_with_blob(
             &[
@@ -560,7 +570,7 @@ mod tests {
                 (
                     WGSL_BINDING_MAP_TARGET,
                     map_offset,
-                    LOC_009_BINDING_MAP.len(),
+                    IMPORTED_GPU_CANVAS_BINDING_MAP.len(),
                 ),
             ],
             &blob_data,
@@ -568,15 +578,17 @@ mod tests {
 
         let shader = decode_shader_asset("scene", &payload)
             .expect("pinned C++ accepts aliases, gaps, and unreferenced trailing bytes");
-        assert_eq!(shader.source, LOC_009_UBO_WGSL);
+        assert_eq!(shader.source, IMPORTED_GPU_CANVAS_UBO_WGSL);
         assert_eq!(shader.bindings.len(), 1);
     }
 
     #[test]
     fn requires_wgsl_source_and_binding_map_targets() {
-        let source = loc_009_source_container();
-        let missing_source =
-            rstb_payload(&[(WGSL_BINDING_MAP_TARGET, LOC_009_BINDING_MAP.to_vec())]);
+        let source = imported_gpu_canvas_source_container();
+        let missing_source = rstb_payload(&[(
+            WGSL_BINDING_MAP_TARGET,
+            IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+        )]);
         assert!(
             decode_shader_asset("scene", &missing_source)
                 .expect_err("target 0 is mandatory")
@@ -595,7 +607,7 @@ mod tests {
 
     #[test]
     fn malformed_binding_maps_fail_closed() {
-        let source = loc_009_source_container();
+        let source = imported_gpu_canvas_source_container();
         for malformed in [
             vec![2, 1, 14, 0, 1, 0, 0, 0],
             vec![3, 1, 14, 0, 0, 0, 0, 0],
@@ -612,11 +624,11 @@ mod tests {
 
     #[test]
     fn accepts_append_only_binding_map_rows_and_trailing_extension_data() {
-        let mut extended_map = LOC_009_BINDING_MAP.to_vec();
+        let mut extended_map = IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec();
         extended_map[2..4].copy_from_slice(&15u16.to_le_bytes());
         extended_map.extend_from_slice(&[0xa5, 0x5a]);
         let payload = rstb_payload(&[
-            (WGSL_SOURCE_TARGET, loc_009_source_container()),
+            (WGSL_SOURCE_TARGET, imported_gpu_canvas_source_container()),
             (WGSL_BINDING_MAP_TARGET, extended_map),
         ]);
 

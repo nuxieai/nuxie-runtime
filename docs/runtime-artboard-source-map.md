@@ -16,6 +16,26 @@ The target convention is:
 - a file move is behavior-preserving. Semantic corrections remain in their
   mapped frame-loop owner-family slice.
 
+Status terms are deliberately strict:
+
+- **extracted** means the stated initial boundary now lives in the direct Rust
+  file on this structural branch;
+- **partial** means a direct Rust file exists, but named C++ members still live
+  elsewhere and are listed in the row;
+- **queued** means the destination and retention boundary are mapped but no
+  move has landed;
+- **active collision** means the current listener/action writer owns the same
+  code and the structural move waits for that family boundary.
+
+This branch is a staging branch, not a frame-loop promotion candidate. File
+paths in both mechanical ledgers are updated here, but every existing
+faithfulness/verification status remains unchanged. The active listener/action
+family must integrate these moves at its frozen boundary, rebuild the
+provenance-bound trace runners, refresh the source fingerprint/trace evidence,
+and make the canonical structural check green before the combined tree can
+land. The staging branch does not rewrite semantic trace evidence for
+behavior-preserving file moves.
+
 ## Direct file map
 
 | Pinned C++ owner | Rust destination | Initial extraction boundary | Current status or collision |
@@ -27,12 +47,12 @@ The target convention is:
 | `artboard_component_list.hpp`, `artboard_component_list.cpp` | `artboard_component_list.rs` | retained rows, context, sync/create, advance/reset | virtualized mounted-item methods extracted; active focus installation remains |
 | `virtualizing_component.hpp`, `virtualizing_component.cpp` | `virtualizing_component.rs` | exact component-to-virtualizer adapter | extracted |
 | `nested_artboard.hpp`, `nested_artboard.cpp` | `nested_artboard.rs` | retained child occurrence, collection, replacement, context, advance | active nested/focus work |
-| `nested_artboard_layout.hpp`, `nested_artboard_layout.cpp` | `nested_artboard_layout.rs` | retained layout bounds/cache transfer | ready |
-| `nested_artboard_origin.hpp`, `nested_artboard_origin.cpp` | `nested_artboard_origin.rs` | origin callback and builder override | ready |
+| `nested_artboard_layout.hpp`, `nested_artboard_layout.cpp` | `nested_artboard_layout.rs` | retained layout bounds/cache transfer and neutral Fixed/Fill/Hug override policy | partial: extracted; Taffy materialization remains renderer-owned, while exact `-1` and pinned height-via-width scale semantics remain for its semantic closure |
+| `nested_artboard_origin.hpp`, `nested_artboard_origin.cpp` | `nested_artboard_origin.rs` | origin callback and builder override | extracted |
 | `nested_animation.hpp`, `nested_animation.cpp` | `animation/nested_animation.rs` | common nested-animation occurrence and dispatch | active visibility change |
-| `nested_linear_animation.hpp`, `nested_linear_animation.cpp` | `animation/nested_linear_animation.rs` | retained mix owner | ready |
-| `nested_simple_animation.hpp`, `nested_simple_animation.cpp` | `animation/nested_simple_animation.rs` | speed/play owner and builder | ready |
-| `nested_remap_animation.hpp`, `nested_remap_animation.cpp` | `animation/nested_remap_animation.rs` | remap-time owner and builder | ready |
+| `nested_linear_animation.hpp`, `nested_linear_animation.cpp` | `animation/nested_linear_animation.rs` | retained mix owner | queued behind active listener/action integration |
+| `nested_simple_animation.hpp`, `nested_simple_animation.cpp` | `animation/nested_simple_animation.rs` | speed/play owner and builder | queued behind active listener/action integration |
+| `nested_remap_animation.hpp`, `nested_remap_animation.cpp` | `animation/nested_remap_animation.rs` | remap-time owner and builder | queued behind active listener/action integration |
 | `nested_input.hpp`, `nested_input.cpp` | `animation/nested_input.rs` | common nested-input target lookup | active nested listener actions |
 | `nested_bool.hpp`, `nested_bool.cpp` | `animation/nested_bool.rs` | nested bool forwarding | active nested listener actions |
 | `nested_number.hpp`, `nested_number.cpp` | `animation/nested_number.rs` | nested number forwarding | active nested listener actions |
@@ -47,18 +67,18 @@ The target convention is:
 | `cubic_weight.hpp` | `bones/cubic_weight.rs` | independent in/out retained translations | retained state extracted |
 | `vertex.hpp`, `vertex.cpp` | `shapes/vertex.rs` | weight attachment, render translation, base deformation dispatch | weight lookup/deformation shard extracted; property/render owner remains |
 | `cubic_vertex.hpp`, `cubic_vertex.cpp` | `shapes/cubic_vertex.rs` | in/out point cache and cubic deformation dispatch | weighted in/out deformation shard extracted; point cache/render owner remains |
-| `transform_component.hpp`, `transform_component.cpp` | `transform_component.rs` | transform facade, dirtying, and concrete update | ready |
-| `node.hpp`, `node.cpp` | `node.rs` | computed local transform | ready |
-| `world_transform_component.hpp`, `world_transform_component.cpp` | `world_transform_component.rs` | world transform and render-opacity propagation | ready |
-| `bone.hpp`, `bone.cpp` | `bones/bone.rs` | bone relation, length, and callback | ready |
-| `skin.hpp`, `skin.cpp` | `bones/skin.rs` | tendon/bone buffer ownership and dirty/update behavior | ready |
+| `transform_component.hpp`, `transform_component.cpp` | `transform_component.rs` | transform facade, dirtying, and concrete update | partial: initial owner shard extracted; generic property dispatch, dependency construction, and constraint orchestration remain |
+| `node.hpp`, `node.cpp` | `node.rs` | computed local transform | partial: computed-local owner extracted; generic property/dependency dispatch remains |
+| `world_transform_component.hpp`, `world_transform_component.cpp` | `world_transform_component.rs` | world transform and render-opacity propagation | partial: update shard extracted; ordered Artboard update dispatch remains |
+| `bone.hpp`, `bone.cpp` | `bones/bone.rs` | bone relation, length, and callback | partial: state/onDirty/update shard extracted; `tipWorldTranslation` remains in `constraints.rs` |
+| `skin.hpp`, `skin.cpp` | `bones/skin.rs` | tendon/bone buffer ownership and dirty/update behavior | partial: state/onDirty/update shard extracted; `deform` remains in `draw.rs` and buffer allocation remains in relation construction |
 | `component.hpp`, `component.cpp` | `component.rs` | component facade, dirt base, and collapse base | one active type-name accessor |
-| `container_component.hpp`, `container_component.cpp` | `container_component.rs` | parent/child relation and guarded subtree recursion | ready |
-| `drawable.hpp`, `drawable.cpp` | `drawable.rs` | drawable hit testing; renderer traversal remains renderer-owned | ready |
-| `layout_component.hpp`, `layout_component.cpp` | `layout_component.rs` | hit test, advance, dirt, update, collapse | ready before its semantic port |
-| `layout_component_style.hpp`, `layout_component_style.cpp` | `layout_component_style.rs` | style owner callbacks and interpolation | ready before its semantic port |
-| `text_input.hpp`, `text_input.cpp` | existing `text_input.rs` | move remaining Artboard advance/property/update fragments | ready |
-| `text_style.hpp`, `text_style.cpp` | `text/text_style.rs` | dependencies, font overrides, and shape dirt | ready before its semantic port |
+| `container_component.hpp`, `container_component.cpp` | `container_component.rs` | parent/child relation and guarded subtree recursion | queued |
+| `drawable.hpp`, `drawable.cpp` | `drawable.rs` | drawable hit testing; renderer traversal remains renderer-owned | queued |
+| `layout_component.hpp`, `layout_component.cpp` | `layout_component.rs` | hit test, advance, dirt, update, collapse | queued before its semantic port |
+| `layout_component_style.hpp`, `layout_component_style.cpp` | `layout_component_style.rs` | style owner callbacks and interpolation | queued before its semantic port |
+| `text_input.hpp`, `text_input.cpp` | `text_input.rs` | move remaining Artboard advance/property/update fragments | active collision |
+| `text_style.hpp`, `text_style.cpp` | `text/text_style.rs` | dependencies, font overrides, and shape dirt | queued before its semantic port |
 | `text_value_run.hpp`, `text_value_run.cpp` | `text/text_value_run.rs` | root run lookup/write and shape dirt | Artboard-facing shard extracted; full style/offset/hit owner remains for text wave |
 | `text_variation_helper.hpp`, `text_variation_helper.cpp` | `text/text_variation_helper.rs` | variation dependency and update helper | update extracted; authored-order construction/dependency insertion remains |
 | `linear_animation_instance.hpp`, `linear_animation_instance.cpp` | `animation/linear_animation_instance.rs` | instance construction, advance, apply, events | extracted |
@@ -99,5 +119,6 @@ renamed into another warehouse file.
    source-file correspondence in the structural checker.
 
 Each extraction branch starts at a frozen base, changes no behavior, runs its
-focused tests, and lands independently. Mapping/status ledgers are reconciled
-once by the integration owner at the frozen family boundary.
+focused tests, and lands independently. Direct file paths are reconciled on
+this aggregate branch; trace provenance and any status transition are
+reconciled once by the integration owner at the frozen family boundary.

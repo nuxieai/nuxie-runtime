@@ -96,16 +96,16 @@ use advancing_component::{RuntimeAdvancingComponent, build_runtime_advancing_com
 #[path = "resetting_component.rs"]
 mod resetting_component;
 use resetting_component::{RuntimeResettingComponent, build_runtime_resetting_components};
+#[path = "nested_artboard_layout.rs"]
+mod nested_artboard_layout;
+#[path = "nested_artboard_origin.rs"]
+mod nested_artboard_origin;
 #[path = "node.rs"]
 pub(crate) mod node;
 #[path = "transform_component.rs"]
 pub(crate) mod transform_component;
 #[path = "world_transform_component.rs"]
 mod world_transform_component;
-#[path = "nested_artboard_layout.rs"]
-mod nested_artboard_layout;
-#[path = "nested_artboard_origin.rs"]
-mod nested_artboard_origin;
 #[cfg(test)]
 use nested_artboard_layout::RuntimeNestedLayoutBoundsCacheKey;
 pub(crate) use nested_artboard_layout::{

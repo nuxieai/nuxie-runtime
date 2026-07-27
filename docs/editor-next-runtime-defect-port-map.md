@@ -159,6 +159,7 @@ The following work can proceed without waiting for an FL landing:
 | `F-ED-03` / `RT-ED-005` | independently verify and promote the exact PR #49 landing provenance | the production authoring repair is complete; do not reopen it or conflate the separate FL-E layout/TextStyle dependency |
 | `F-ED-04` / `RT-ED-007` | preserve the unchanged red acceptance and independently rerun it after the relevant state-machine port wave | deferred post-port verification; no direct Runtime Fix request, schedule, or active writer lease |
 | `F-ED-06` / `RT-ED-003` | preserve the independently closed PR #55 landing provenance | the production browser-presentation repair and promotion are complete; do not reopen it or mix it with historical `F-ED-07` |
+| `F-ED-10` / `LOC-012` | preserve the qualified required-WebGPU stale-golden evidence and request the explicit user decision | keep `P19-C08`, the registered executable fixture, and `COR-07` open; no runtime/renderer repair, C++ parity, or closure claim exists |
 | `F-ED-12` | complete: exact-runtime-identity `0.2.0` artifact and native corpus are qualified | no source repair survived qualification; public distribution is downstream and requires no defect writer |
 | `F-ED-13` | normalize and compare records and repair an Editor/lowering-only first divergence | identical records are required before any renderer attribution; no runtime edit |
 
@@ -174,8 +175,12 @@ immediately moves to the deferred set.
 ### Work that may be prepared but needs a landing handshake
 
 `F-ED-08` is independently closed as a no-repair stale characterization.
-`F-ED-10` may qualify the surviving `LOC-012` row now, and a resulting fix may
-be developed only when its exact production closure is renderer/backend-only.
+`F-ED-10` has qualified evidence that the supported WebGPU product mismatch
+is an Editor-owned stale golden rather than a runtime or renderer divergence,
+but changing the expected golden requires an explicit user decision. The row
+therefore remains open at `stale-oracle`, retains `P19-C08`, its registered
+executable fixture, and `COR-07`, and cannot claim pinned-C++ parity or closure
+without the exact historical input and provenance.
 `F-ED-11` and `LOC-019` are independently closed. PR #54's `LOC-009` consumer repair at
 `7f1450dc` remains historical evidence, but independent real-GPU verification
 reopened that row on an unresolved physical shader-module error-scope
@@ -193,9 +198,10 @@ other executor's floor.
 observation; it has no linked product scenario. An explicitly scheduled
 identical-input proof may requalify the same typed clip on supported WebGPU,
 but it
-authorizes no WebGL2 writer, fork, dependency, or fallback. The active browser
-writer order therefore begins only with a qualified open `F-ED-10` closure;
-landed `F-ED-06/11` and no-repair `F-ED-08` have no new writer. Overlap among
+authorizes no WebGL2 writer, fork, dependency, or fallback. There is no active
+browser writer from `F-ED-10` while its stale-golden evidence awaits the
+explicit user decision; landed `F-ED-06/11` and no-repair `F-ED-08` have no
+new writer. Overlap among
 `browser.rs` and WebGPU resource owners serializes any surviving open slices
 even though they are disjoint from FL.
 
@@ -209,7 +215,7 @@ translation waits for the named FL owner boundary:
 | `F-ED-05` (`LOC-007`) | preserve the exact path-dirt reproducer and d788 expected callback chain | rerun after the corresponding formal path/dirt port wave; no direct implementation request or schedule |
 | `LOC-008` in `F-ED-09` | preserve the exact intrinsic-measurement reproducer and pinned-C++ expected bounds behavior | rerun after the corresponding formal text-measurement port wave; no direct implementation request or schedule |
 | runtime side of remaining `F-ED-09` rows | text/bind/shaping stage localization | no edits to `text.rs`, `draw.rs`, `artboard.rs`, or another reserved runtime owner |
-| runtime side of `F-ED-10/11` | feather/GPU-canvas record and backend localization | a renderer-only result may use the landing-handshake lane; any runtime result waits for its FL owner |
+| runtime side of open `F-ED-11` work | GPU-canvas record and backend localization | a renderer-only result may use the landing-handshake lane; any runtime result waits for its FL owner; open `F-ED-10` authorizes no writer while the stale-golden decision is pending |
 | ABI/header/C-API repair | local ABI evidence | separate scope review after a current artifact proves a surviving ABI defect |
 
 If qualification first diverges inside a reserved module, the F-ED
@@ -222,13 +228,18 @@ before this table is revised.
 
 The safe next queue is therefore:
 
-1. retain intake reconciliation PR #67 at
-   `74368a874130a91c9837439b691f0cf44fa4c4a6` and additive `LOC-018` PR #66
-   at `d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3`; the implementation is landed
-   with only the +60/+60 (410 -> 530) authoring claim, while the incomplete
-   inbox row remains evidence-blocked;
-2. finish the Scene-only `LOC-001` retained ViewModel-instance owner repair,
-   with `LOC-002` and `LOC-005` as unchanged duplicate acceptance cases;
+1. retain latest intake reconciliation PR #76 at
+   `cb4e7748c5b4233375c388b433696ffd34a3c9de`, earlier intake provenance PR
+   #67 at `74368a874130a91c9837439b691f0cf44fa4c4a6`, and additive `LOC-018`
+   PR #66 at `d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3`; the implementation is
+   landed with only the +60/+60 (410 -> 530) authoring claim, while the
+   incomplete inbox row remains evidence-blocked;
+2. quarantine the Scene-only `LOC-001` candidate and preserve `LOC-001`,
+   `LOC-002`, and `LOC-005` as unchanged duplicate-family acceptances. The
+   retained schema/cell identity portion maps to FL-D `viewmodel.owner`; the
+   immutable live-`RuntimeFile` asset-catalog extension remains a separate
+   lower-runtime dependency pending exact ownership mapping. No writer is
+   active;
 3. keep `LOC-009` outside that shared tracking line, parked, and frozen while
    diagnosis waits for a different reliable execution/model environment;
 4. fan out read-only direct qualifications; treat `RT-ED-004` only as
@@ -236,9 +247,9 @@ The safe next queue is therefore:
    is scheduled;
 5. retain `F-ED-04` as deferred post-port verification of the narrow
    state-machine/bindables seam, with no direct Runtime Fix request, schedule,
-   Scene writer, or active runtime lease; activate a qualified
-   renderer-only `F-ED-10` closure only if it survives the atlas and
-   coordinator lease checks;
+   Scene writer, or active runtime lease; preserve `F-ED-10` as qualified
+   stale-golden evidence awaiting an explicit user decision, with no
+   runtime/renderer writer;
 6. perform record normalization for the remaining evidence/localization rows;
    the exact-runtime-identity `0.2.0` artifact qualification is complete;
 7. keep every runtime-owner result as evidence until the corresponding FL
@@ -374,17 +385,17 @@ fixture in `F-ED-00`.
 | `RT-ED-005` | changed intake needs evidence; historical landed generic number/color authoring repair remains preserved | PR #49 merge `08286481` is consumed by Editor and its P09-C01 primitive is green, but the changed inbox record omits separately labeled full Editor and Runtime SHAs; ordinary layout/TextStyle work is separate under P08-C01 / LOC-018 |
 | `RT-ED-006` | retracted | retain tombstone only; no source work |
 | `RT-ED-007` | confirmed runtime transition-duration binding defect | preserve the qualified-correct Scene bytes and unchanged red acceptance for deferred verification after the relevant state-machine port wave; no direct Runtime Fix request or schedule |
-| `LOC-001` | mapped structural Scene ownership mistranslation | active Scene-only repair preserves one retained ViewModel owner per authored identity; no type-specific scalar carry |
-| `LOC-002` | confirmed duplicate acceptance for LOC-001 | unchanged direct Scene/ProductHost/browser selected-product reproducers must pass the LOC-001 landing; no separate writer |
+| `LOC-001` | mapped retained-owner gap with one unmapped dependency | quarantined Scene diagnostics prove retained identity is necessary; in-place `RuntimeOwnedViewModelInstance` schema/cell migration maps to FL-D `viewmodel.owner`, while immutable live-`RuntimeFile` asset-catalog extension is a separate lower-runtime dependency pending exact ownership mapping. No repair landed or writer is active |
+| `LOC-002` | confirmed duplicate acceptance for LOC-001 | unchanged direct Scene/ProductHost/browser selected-product reproducers rerun after FL-D `viewmodel.owner`; no separate writer |
 | `LOC-003` | closed unlinked additive product feature | pinned C++ has no timed-hold primitive; the user decision authorizes no runtime port |
 | `LOC-004` | resolved editor-owned | no runtime work |
-| `LOC-005` | confirmed duplicate acceptance for LOC-001 | unchanged cross-artboard shared-boolean reproducer must pass the LOC-001 landing; no separate writer |
+| `LOC-005` | confirmed duplicate acceptance for LOC-001 | unchanged cross-artboard shared-boolean reproducers rerun after FL-D `viewmodel.owner`; no separate writer |
 | `LOC-006` | closed no-repair stale characterization | exact committed provenance plus the independent no-hover rerun prove the alleged retained-pixel defect was gesture contamination; the legal reproduced/stale-oracle/closed path is complete |
 | `LOC-007` | committed Editor evidence plus d788 source identifies a missing dirt chain | deferred post-port verification after the formal path/dirt wave; rerun the unchanged four-test product command and classify resolved/still open |
 | `LOC-008` | changed intake needs evidence; exact intrinsic-width/multiline-height product failure | checkpoint `233552c1` records runtime `e72323c8` and 166,969 differing pixels after the empty-value fix, but lacks a separately labeled full Editor SHA; preserve deferred post-port verification and the unchanged P08-C06 command without authorizing a writer |
 | `LOC-009` | historical structural WebGPU consumer repair with a confirmed real-GPU shader-module validation regression | preserve PR #54 / `7f1450dc` as history; keep the row parked and frozen until diagnosis resumes in a different reliable execution/model environment |
 | `LOC-011` | closed Editor-owned lowering defect | identical explicit-empty source-first bytes stay empty through import, bind, shaping, and draw in pinned C++ and Rust; Editor fix `fc1a7e40` repairs absent-versus-empty lowering and the browser reports both prices empty |
-| `LOC-012` | current renderer differential | compare the supported Rust WebGPU result with pinned C++ only after text/feather rows are separated |
+| `LOC-012` | open Editor-owned stale-golden evidence | the required-WebGPU visual/spacing gate is 2/2 after replacing only the obsolete expected image, but accepting that expected-image change requires an explicit user decision. Exact historical input is unavailable, so no C++/Rust parity, renderer repair, or closure is claimed; `P19-C08`, the registered fixture, and `COR-07` remain open |
 | `LOC-013` | text/font-pipeline candidate, exact stage unproven | same font bytes, axes, glyph IDs, advances, and outlines through C++ and Rust |
 | `LOC-014` | closed stale-oracle observation | exact 180x124 clockwise Feather replay matches pinned C++ and Rust in bounds, atlas plan, and every pixel; do not tune constants |
 | `LOC-015` | closed stale-binary artifact qualification | exact `0.2.0@b1f58004` framework draws the production corpus; no runtime repair remains |
@@ -413,11 +424,31 @@ when it is bound:
 - `src/viewmodel/viewmodel_instance.cpp:385-416`;
 - `src/data_bind/data_bind_container.cpp:86-154`.
 
-The Rust low-level runtime already has a shareable
-`RuntimeOwnedViewModelHandle`. The candidate structural slice is therefore a
-stable Scene-level handle per authored instance/default identity plus
-C++-ordered rebind, not one global instance and not an extension of the carry
-enum with five more value kinds.
+The quarantined Scene candidate established that a stable handle and
+generation-matched materialization are necessary, but it also found two
+distinct faithful lower-runtime boundaries. `RuntimeOwnedViewModelInstance`
+privately owns its property-name schema, scalar cells, parent relay,
+list/child edges, and aliases at
+`crates/nuxie-runtime/src/view_model.rs:1597-1618`; the in-place migration
+needed to preserve those identities maps to FL-D `viewmodel.owner`. Separately,
+a live artboard retains an immutable `RuntimeFile`, so a newly authored image
+is absent from its catalog and resolves to the private empty image in
+`crates/nuxie-runtime/src/artboard_data_bind.rs:7218-7224`. That live asset
+catalog extension is not covered solely by `viewmodel.owner`; it remains an
+unmapped lower-runtime dependency with no writer until exact ownership is
+established.
+
+The candidate fallback is not admissible: it remounted owner-sharing
+artboards/state machines and bumped the Scene epoch for a scalar image write,
+resetting live state, and it rejected retained schema edits that previously
+succeeded. Candidate `dcccdf4fb09275783f6910e5a4a01c028f2c817e` (parent
+`bd40c60a07bacfc991f3f070ba77de2041c5d978`) plus uncommitted correction diff
+SHA-256
+`5477057e14eab86a2d0b2b7c5e8e95e2c837bfa33624fa43c6dee9f24aeef981`
+are diagnostic only. The FL-D `viewmodel.owner` mapping for schema/cell
+identity plus the explicit pending-owner asset-catalog dependency supersede
+the historical Scene-only disposition without rewriting its evidence. No
+repair landed and no writer is active.
 
 ### Parametric path dirt — `LOC-007`
 
@@ -532,9 +563,10 @@ WebGPU. Its qualifying comparison:
 `LOC-006` is separately closed in the committed inbox as gesture-contaminated
 stale characterization and has no renderer writer.
 
-## Artifact corrections required before implementation
+## Artifact corrections recorded by F-ED-00
 
-`F-ED-00` corrects or explicitly versions these contradictions:
+`F-ED-00` corrected or explicitly versioned these contradictions; later
+closures below supersede their original scheduling implications:
 
 1. The handoff mixes C++ `f4bb3025` and `d788e8ec`; every source citation and
    fixture must be revalidated at `d788e8ec`.
@@ -547,8 +579,12 @@ stale characterization and has no renderer writer.
 5. P16 contains a stale current-runtime SHA.
 6. P18's exact inventory is now resolved as nine native screens, one signed
    GPU-canvas case, and 28 named animations at start, quarter, and end.
-7. `LOC-012` reports both 5,790 and 5,616 exact pixel differences without a
-   capture/mode label.
+7. `LOC-012` historically reported both 5,790 and 5,616 exact pixel
+   differences. `COR-07` remains open: each historical count still needs its
+   backend, mode, surface, capture, and artifact provenance before it may be
+   used even as optional characterization. Current supported-WebGPU evidence
+   qualifies a stale golden but does not close the row or authorize changing
+   the expected image without an explicit user decision.
 8. `LOC-013` reports both 10,199 and 11,019 baseline differences without a
    capture/mode label.
 9. `linkedRerun` is used inconsistently, especially for `P15-C01`.
@@ -670,18 +706,22 @@ the three source Editor artifacts are a separate Editor-owned commit: the
 runtime side supplies a versioned correction manifest, and the Editor cutover
 applies it without rewriting historical observations.
 
-### `F-ED-01` — Stable Scene ViewModel owner
+### `F-ED-01` — Stable ViewModel owner after FL-D
 
-Mapped owner family: `LOC-001`, with `LOC-002` and `LOC-005` as duplicate
-acceptance cases and no separate writers.
+Mapped runtime owner family: `LOC-001`, with `LOC-002` and `LOC-005` as
+duplicate acceptance cases and no separate writers.
 
 The direct current-pin differential and pinned d788 owner audit confirm the
-structural classification. Replace type-specific cross-remount carry with one
-retained handle per authored ViewModelInstance/default identity, shared by
-every artboard that references that identity. A Scene may own multiple such
-identities. Translate the complete bind, attached-container rebind, structural
-edit, clone, source removal, and drop lifecycle. Delete the displaced
-carry/replay mechanism in the same landing.
+structural classification. The quarantined Scene-only candidate proved one
+retained handle per authored ViewModelInstance/default identity is necessary.
+The atomic in-place schema/cell migration portion maps to FL-D
+`viewmodel.owner` and must preserve the same owner, compatible cells,
+child/list edges, aliases, dependents, state machines, and animation state.
+Live asset-catalog visibility is a second lower-runtime requirement: immutable
+live `RuntimeFile` catalog extension is not covered solely by
+`viewmodel.owner` and remains pending exact ownership mapping. A remount,
+scalar replay, or newly rejected schema edit is not a translation of either
+lifecycle.
 
 Acceptance must cover:
 
@@ -694,16 +734,18 @@ Acceptance must cover:
   value-independent;
 - detach/rebind/drop and deep-copy cases matching pinned C++.
 
-This is one structural slice. Do not land per-type carry extensions.
-`LOC-002` and `LOC-005` close only when their unchanged acceptances pass the
-same retained-owner landing.
+This is one defect/acceptance family with two lower-runtime dependencies. Do
+not land per-type carry extensions or the quarantined Scene fallback.
+`LOC-002` and `LOC-005` rerun after FL-D `viewmodel.owner`; complete
+`LOC-001` acceptance additionally waits for the separately mapped
+asset-catalog dependency. No repair or active writer is claimed here.
 
 ### `F-ED-02` — No separate writer
 
-`LOC-002` is now proven to share the `F-ED-01` Scene-lifecycle owner
-replacement. Preserve its exact retained/fresh relation and product
-reproducers as acceptance cases; do not create a second DataBind-container
-writer or add post-remount value replay.
+`LOC-002` is proven to share the `F-ED-01` retained-owner replacement.
+Preserve its exact retained/fresh relation and product reproducers as
+post-port acceptance cases; do not create a second DataBind-container writer
+or add post-remount value replay.
 
 ### `F-ED-03` — Generic visual-property binding
 
@@ -919,27 +961,34 @@ Every promoted owner family becomes a separate committed and floor-gated
 slice. Rows may share a writer only after exact closure proves a real module
 or lifecycle overlap.
 
-### `F-ED-10` — Feather translation: pinned C++ versus supported WebGPU
+### `F-ED-10` — Qualified supported-WebGPU stale-golden evidence
 
-Qualification target: `LOC-012`. `LOC-014` is already independently closed as
-the stale-oracle result recorded above and is not a current qualification or
-writer target.
+`LOC-012` remains open at `stale-oracle` pending the explicit user decision
+required to change the expected golden. At Editor checkpoint
+`3a16e76c6f8461c573afff278176302bff5b08b1` on runtime
+`ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9`, the unchanged required-WebGPU
+visual/spacing gate passes 2/2 in 2.7 seconds after replacing only the obsolete
+golden. Of the original 175,032 differing pixels, 173,764 were white in the
+old golden versus the authored `#13253d` background; the rest were authored
+border and clip-radius details omitted from the old expected image.
 
-Run the exact `LOC-012` scene through pinned C++ and the supported Rust WebGPU
-path only. Compare normalized records, relevant owner/resource lifecycles, and
-final pixels. If the current WebGPU path is the first divergence, classify the
-complete surrounding owner/resource lifecycle. A faithful owner permits an
-exact-site repair; a missing/divergent lifecycle requires the complete
-C++-corresponding ownership and translation. Do not tune sigma, offsets, or
-tolerances against screenshots.
+This qualifies the stale-golden diagnosis but is not a C++/Rust renderer
+parity result and does not authorize closure. The historical input is
+recorded as 882,146 bytes at SHA-256
+`563da6e08c413f76eb1b728ce2d998098ae7ec1fada9e383daa5f44bb6973d16`,
+but exact-checkpoint publisher Wasm SHA-256
+`a7877b243a7f82e5c562700d14b4d3374d470dcfd325c0c314469b286e299773`
+regenerated 882,277 different bytes at SHA-256
+`bf84207ebe120d9790ffb7871ef83c58abfa3fcbc60d5647ca23af8884bb870a`.
+The former WebGPU/WebGL2 comparison therefore remains optional historical
+characterization until that exact artifact and build provenance exist.
+`COR-07` remains open for its conflicting historical counts. `P19-C08` and
+the current executable registered fixture remain attached to the open row.
+No runtime/renderer writer is authorized while the user decision is pending.
 
-The proof covers creation, resize, nested feather/composite ordering, repeated
-frames, allocation/setup failure, context loss/reset, and teardown.
-
-`LOC-012` final attribution must account for the `F-ED-09` text result and the
-closed `LOC-014` feather result; neither is assumed to be a semantic
-prerequisite. Historical retired-backend counts are dated provenance only and
-do not participate in the current oracle.
+`LOC-014` remains separately closed after exact pinned-C++/Rust Feather pixel
+parity. Do not tune sigma, offsets, thresholds, renderer tolerances, or the
+`LOC-012` expected golden without the recorded decision.
 
 ### `F-ED-11` — WebGPU setup and GPU-canvas qualification
 
@@ -1098,7 +1147,7 @@ follows:
 |---|---|
 | `LOC-006` | `P09-C04` (historical source linkage retained after the stale characterization closed; it authorizes no writer) |
 | `LOC-009` | `P14-C01` |
-| `LOC-012` | `P19-C08` |
+| `LOC-012` | `P19-C08` (open stale-golden evidence awaiting the explicit expected-image decision) |
 | `LOC-013` | `P08-C08` |
 | `LOC-014` | `P08-C09` |
 | `LOC-015` | `P18-C01`, `P18-C04`, `P18-C05`, `P18-C07` |
@@ -1111,7 +1160,8 @@ children yields 21 unique directly affected child IDs with no
 formal/candidate overlap. The current Editor checkpoint retains `RT-ED-004`
 only as historical WebGL2 evidence and removes all five of its former formal
 child links. Structured linkage now makes `P08-C06` a formal child of both
-`LOC-008` and `LOC-018`; closed `LOC-011` has no active child. Broad
+`LOC-008` and `LOC-018`; closed `LOC-011` has no active child, and open
+`LOC-012` retains `P19-C08` until the explicit stale-golden decision. Broad
 aggregate gates such as `P08-C01` and `P11-C01` rerun after their focused
 children. The executable atlas owns the complete
 defect → child → aggregate-command matrix.
@@ -1141,8 +1191,10 @@ the atlas. A shared file is not proof of a semantic dependency.
   artifact lanes named by the live concurrency lease.
 - completed `F-ED-00B`, and therefore full `F-ED-00`, precedes every
   runtime-owner production translation.
-- `LOC-012` can be qualified immediately, but final attribution accounts for
-  both the text and feather differential results.
+- `LOC-012` remains open at `stale-oracle`: its current registered
+  required-WebGPU fixture and `P19-C08` stay live until the user explicitly
+  decides whether to accept the expected-image change. `COR-07` remains open;
+  optional historical characterization cannot substitute for that decision.
 - exact-runtime-identity `0.2.0` local qualification and the corrected native
   product rerun are complete; public distribution is not a defect-program
   dependency.
@@ -1151,9 +1203,12 @@ the atlas. A shared file is not proof of a semantic dependency.
 
 ### Semantic prerequisites
 
-- `LOC-001/002/005` are one mapped Scene-lifecycle retained-owner family.
-  `LOC-002` and `LOC-005` are unchanged acceptance cases and have no separate
-  writer.
+- `LOC-001/002/005` are one retained-owner acceptance family. Schema/cell
+  identity maps to FL-D `viewmodel.owner`; immutable live-`RuntimeFile`
+  asset-catalog extension remains a distinct lower-runtime dependency for
+  complete `LOC-001` acceptance pending exact ownership mapping. `LOC-002`
+  and `LOC-005` have no separate writer; the quarantined Scene candidate is
+  diagnostic only and no repair landed.
 - `LOC-006` is a no-repair stale characterization, semantically distinct from
   historical `RT-ED-004`; neither has a production writer.
 - `LOC-009` is not blocked by `LOC-019`.
@@ -1189,9 +1244,9 @@ scouts for the remaining open rows:
 1. Scene/ViewModel/DataBind/StateMachine:
    `LOC-001/002/005`, `RT-ED-007`, and `LOC-007`;
 2. browser/renderer:
-   historical-only `RT-ED-004` when explicitly requested, plus
-   `LOC-012`; closed `LOC-006` and `LOC-014` are historical no-repair evidence
-   only;
+   historical-only `RT-ED-004` when explicitly requested; closed `LOC-006`
+   and `LOC-014` are historical/no-repair evidence, while `LOC-012` retains
+   qualified stale-golden evidence and awaits the explicit user decision;
 3. text/records:
    `LOC-008/013/018`; `LOC-011` is a closed Editor-owned repair, not a remaining
    qualification scout.
@@ -1212,10 +1267,10 @@ ownership before activation.
 |---|---|---|
 | Scene/API | landed `F-ED-03` has no writer; `F-ED-04` grants no Scene lease because its recovered producer bytes are qualified correct | `scene.rs`, schema/export/import helpers, and public API work remain outside RT-ED-007's post-port verification |
 | post-port runtime verification | after the corresponding formal waves land, Defects Fix reruns RT-ED-007, LOC-007, LOC-008, and LOC-018's remaining runtime layout/TextStyle acceptances | evidence-only; no direct Runtime Fix request, schedule, or active writer lease |
-| browser | qualified open `F-ED-10`; landed `F-ED-06` and the `LOC-019` half of `F-ED-11` have no writer; reopened `LOC-009` is parked until diagnosis resumes in a different reliable execution/model environment and a fresh coordinator assignment follows; no-repair `F-ED-08` and historical-only `F-ED-07` have no writer | `browser.rs`, WebGPU GPU-canvas/scripting seams, and resource owners; no `webgl2.rs` writer |
+| browser | landed `F-ED-06` and the `LOC-019` half of `F-ED-11` have no writer; reopened `LOC-009` is parked until diagnosis resumes in a different reliable execution/model environment and a fresh coordinator assignment follows; no-repair `F-ED-08/10` and historical-only `F-ED-07` have no writer | `browser.rs`, WebGPU GPU-canvas/scripting seams, and resource owners; no `webgl2.rs` writer |
 | runtime dirt | qualified `F-ED-05` | waits for the exact FL-E Path/Shape owner lock |
 | text-derived | qualified `F-ED-09` rows split by discovered owner | Scene/import/binding, `text.rs`, font parser/shaper, or renderer |
-| renderer feather | qualified `F-ED-10` | exact renderer/backend owner closure |
+| renderer feather | open-decision `F-ED-10` | no writer; `LOC-012` is qualified Editor stale-golden evidence awaiting the explicit decision, and `LOC-014` is exact no-repair parity evidence |
 | evidence/artifact | closed `F-ED-12`; open `F-ED-13` | no F-ED-12 writer remains; F-ED-13 grants no runtime source edit until qualification promotes a survivor |
 
 Parallel read-only translations may inspect the same family. Parallel

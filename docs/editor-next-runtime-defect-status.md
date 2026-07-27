@@ -7,8 +7,9 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 
 ## Current state
 
-- phase: one Scene-owned production repair, one landed additive Scene seam,
-  a closed Apple artifact family, parked authored-shader diagnosis, and
+- phase: one quarantined Scene diagnostic, one landed additive Scene seam,
+  a closed Apple artifact family, qualified supported-WebGPU stale-golden
+  evidence awaiting user decision, parked authored-shader diagnosis, and
   deferred post-port verification;
 - pinned C++ runtime: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - investigation base: `b1f58004332a73564ffdd9f8585838209604c4d1`;
@@ -16,12 +17,11 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   `e72323c808b91d706ba3b745396beaca7accd69a`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
 - closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`,
-  `LOC-003`, `LOC-004`, `LOC-006`, `LOC-011`, `LOC-014`, `LOC-015`, `LOC-016`,
-  `LOC-017`, and `LOC-019`;
+  `LOC-003`, `LOC-004`, `LOC-006`, `LOC-011`, `LOC-014`, `LOC-015`,
+  `LOC-016`, `LOC-017`, and `LOC-019`;
 - open rows: 12;
-- state counts: 13 `closed`, 3
-  `intake-needs-evidence`, 3 `mapped`, 1 `regression-reopened`, and 5
-  `reported`;
+- state counts: 13 `closed`, 3 `intake-needs-evidence`, 3 `mapped`, 1
+  `regression-reopened`, 1 `stale-oracle`, and 4 `reported`;
 - formal/structured product children in the landed Editor snapshot: 11;
 - candidate-linked product children: 10;
 - union: 21, with no formal/candidate overlap;
@@ -31,11 +31,15 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   `LOC-019` directly qualified.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
-- latest control-plane landing: Apple artifact closeout PR #75 rebase-merged
-  at exact runtime main `f34e1fdec9c9dbd049576b9a6cbc6880ae51022b`;
-- active control-plane lane: consume exact Editor checkpoint
-  `233552c13929b09666a62ddff541eb8620d1882b`, close the Editor-owned
-  empty-text row, and keep the two incomplete layout/text records fail-closed;
+- latest control-plane landing: Editor inbox reconciliation PR #76
+  rebase-merged at exact runtime main
+  `cb4e7748c5b4233375c388b433696ffd34a3c9de`; Apple artifact closeout PR
+  #75 remains its direct predecessor at
+  `f34e1fdec9c9dbd049576b9a6cbc6880ae51022b`;
+- active control-plane lane: record the lower-runtime boundary that
+  quarantined the Scene-only retained-ViewModel candidate and qualify the
+  supported-WebGPU stale-golden evidence without closing the row before an
+  explicit user decision;
 - landed Scene-owned repair: `LOC-018` PR #66 exact head
   `2707280cb3507f8d5c2f48cfe58f1cf0990e9ed0` rebase-merged at
   `d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3`. It covers all four concrete
@@ -52,11 +56,23 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   `a2dbcd2c`, but does not separately label one full Editor assembly SHA.
   `P08-C06` is now its only structured formal child; the implementation is
   merged, but runtime execution and pixels cannot promote at this boundary;
-- active Scene-owned repair: `LOC-001` owns one retained ViewModel-instance
-  handle per authored `ViewModelInstanceId` across artboard rematerialization,
-  with `LOC-002` and `LOC-005` retained as duplicate acceptance cases. The
-  uncommitted `levi/loc-001-retained-viewmodel-instance` branch has no landing
-  claim yet and must not edit lower-level runtime owners;
+- deferred FL-D owner family: `LOC-001`, with `LOC-002` and `LOC-005` as
+  duplicate acceptance cases. The quarantined Scene-only candidate proved
+  that one retained ViewModel-instance handle and generation-matched
+  materialization are necessary, but it also exposed two missing lower-runtime
+  capabilities: extending a retained `RuntimeFile` asset catalog and migrating
+  a `RuntimeOwnedViewModelInstance` schema in place while preserving compatible
+  cells, child/list edges, aliases, and dependents. Schema migration maps to
+  FL-D `viewmodel.owner`; retained asset-catalog extension is a distinct
+  lower-runtime dependency still pending exact ownership mapping. Candidate
+  `dcccdf4fb09275783f6910e5a4a01c028f2c817e` plus uncommitted correction
+  diff SHA-256
+  `5477057e14eab86a2d0b2b7c5e8e95e2c837bfa33624fa43c6dee9f24aeef981`
+  are diagnostic only. The fallback remounted live owners and rejected
+  previously accepted schema edits, so it is quarantined; no repair landed,
+  no writer is active. `LOC-002/005` rerun after FL-D `viewmodel.owner`;
+  complete `LOC-001` acceptance also waits for the separate asset-catalog
+  owner to be mapped and landed;
 - closed Apple artifact family: `LOC-015`, `LOC-016`, and `LOC-017` qualify
   exact runtime identity
   `0.2.0@b1f58004332a73564ffdd9f8585838209604c4d1`, Editor correction
@@ -75,6 +91,20 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   omission. The unchanged browser page reports both prices empty, with
   inspection SHA-256
   `7c9a264d6803d9729197f3cce89d04192e0bd55c386558011be1aeb8e4b89be2`;
+- open Editor-owned supported-WebGPU stale-golden evidence: `LOC-012` is
+  qualified at `stale-oracle`, but closing it requires an explicit user
+  decision because the expected image changed. At Editor checkpoint
+  `3a16e76c6f8461c573afff278176302bff5b08b1` on runtime
+  `ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9`, the unchanged required-WebGPU
+  visual/spacing gate passes 2/2 in 2.7s with the reviewed image containing
+  the authored `#13253d` background, border, and clip-radius details instead
+  of the prior white-background expectation. `P19-C08` remains a candidate
+  link until the decision.
+  The former 882,146-byte artifact
+  `563da6e08c413f76eb1b728ce2d998098ae7ec1fada9e383daa5f44bb6973d16`
+  cannot be regenerated exactly; COR-07 remains open for its missing
+  backend/mode/surface/capture provenance, so no pinned-C++/Rust parity or
+  closure claim is made;
 - active production-repair lane: `LOC-009` is a confirmed physical
   shader-module error-scope defect requiring a new production landing; it is
   `regression-reopened`, with PR #54 / `7f1450dc` retained only as historical
@@ -159,8 +189,8 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   collision or a safety/data-loss issue, never merely because a formal port
   wave is in progress;
 - `LOC-002` and `LOC-005` are mapped duplicate acceptance cases for the active
-  Scene-only `LOC-001` retained-owner repair. They have no separate
-  qualification or writer lane.
+  `LOC-001` FL-D owner family. They have no separate qualification or writer
+  lane, and none of the three has an active production writer.
 
 Defects Fix owns intake, triage, pinned-C++ qualification, faithful repair
 orchestration, independent verification, PR/landing tracking, and immutable
@@ -207,7 +237,9 @@ the committed 171,784-byte machine report has SHA-256
 The same committed ledger has 11 unique structured runtime children, plus ten
 candidate-linked children, for 21 unique affected children. `P08-C06` is now a
 formal child of `LOC-008` and `LOC-018`; `LOC-011` has no active child after
-its Editor fix. It retains `RT-ED-004` only as historical WebGL2 evidence.
+its Editor fix, while open `LOC-012` retains the `P19-C08` candidate link
+pending explicit user decision. It retains `RT-ED-004` only as historical
+WebGL2 evidence.
 
 ## Defect inbox
 
@@ -391,23 +423,27 @@ relabeled green.
 
 ## Next queue
 
-1. complete and independently verify the `LOC-001` retained-owner repair,
-   including unchanged `LOC-002` / `LOC-005` acceptance, before publishing
-   any Scene production SHA;
-2. keep merged `LOC-018` in `intake-needs-evidence` until its committed source
+1. keep the quarantined Scene-only `LOC-001` candidate out of production and
+   preserve unchanged `LOC-002` / `LOC-005` acceptance for independent rerun
+   after FL-D `viewmodel.owner`; complete `LOC-001` acceptance additionally
+   waits for a separately mapped retained RuntimeFile asset-catalog owner;
+2. keep `LOC-012` open at `stale-oracle`, retain P19-C08 and COR-07, and ask
+   for the explicit user decision on the reviewed expected image; do not claim
+   pinned-C++ parity from the non-reproducible historical artifact;
+3. keep merged `LOC-018` in `intake-needs-evidence` until its committed source
    separately labels a full Editor assembly SHA, and keep `LOC-008` in the
    same fail-closed state for its missing full Editor SHA; preserve their exact
    evidence and do not conflate downstream product/runtime execution;
-3. keep `LOC-009` outside the shared tracking merge line, parked, and frozen
+4. keep `LOC-009` outside the shared tracking merge line, parked, and frozen
    until diagnosis resumes in a different reliable execution/model
    environment; do not close or consume it without a reviewed new production
    landing;
-4. retain `RT-ED-007`, `LOC-007`, `LOC-008`, and `LOC-018`'s remaining
+5. retain `RT-ED-007`, `LOC-007`, `LOC-008`, and `LOC-018`'s remaining
    runtime layout/TextStyle execution as deferred post-port verification only;
    after each relevant formal port wave lands, rerun the unchanged acceptance
    and classify it resolved or still open, with no direct Runtime Fix request,
    schedule, or active writer lease;
-5. keep PR #60 and the malformed embedded-font outline crash deferred/parked,
+6. keep PR #60 and the malformed embedded-font outline crash deferred/parked,
    then refill other disjoint qualification lanes from the reconciled
    ownership DAG.
 

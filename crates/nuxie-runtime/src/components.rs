@@ -1,6 +1,7 @@
 use crate::animation::RuntimeInterpolator;
 use crate::artboard::{RuntimeComponentListItemInstance, RuntimeComponentListLogicalItem};
 use crate::bones::bone::RuntimeBoneState;
+use crate::bones::skin::RuntimeSkinState;
 use crate::bones::weight::RuntimeWeightState;
 use crate::draw::RuntimePathMeasure;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
@@ -370,29 +371,6 @@ impl RuntimeNodeState {
 pub(crate) enum RuntimeSkinnableKind {
     PointsPath,
     Mesh,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeSkinState {
-    pub(crate) world_transform: Mat2D,
-    pub(crate) tendons: Vec<ComponentHandle>,
-    pub(crate) skinnable: Option<ComponentHandle>,
-    pub(crate) bone_transforms: Vec<Mat2D>,
-    #[cfg(test)]
-    pub(crate) buffer_rebuilds: usize,
-}
-
-impl Default for RuntimeSkinState {
-    fn default() -> Self {
-        Self {
-            world_transform: Mat2D::IDENTITY,
-            tendons: Vec::new(),
-            skinnable: None,
-            bone_transforms: Vec::new(),
-            #[cfg(test)]
-            buffer_rebuilds: 0,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -1479,7 +1457,10 @@ impl RuntimeConcreteComponentState {
                 .bone
                 .as_ref()
                 .map(RuntimeBoneState::clone_for_occurrence),
-            skin: self.skin.as_ref().map(|_| RuntimeSkinState::default()),
+            skin: self
+                .skin
+                .as_ref()
+                .map(RuntimeSkinState::clone_for_occurrence),
             tendon: self.tendon.as_ref().map(|_| RuntimeTendonState::default()),
             skinnable: self
                 .skinnable

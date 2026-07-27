@@ -42,10 +42,11 @@ use crate::artboard_data_bind::{
     reunite_artboard_shared_data_bind_converter_states,
 };
 use crate::bones::bone;
+use crate::bones::skin;
 use crate::components::{
     AuthoredTransform, ComponentDirt, ComponentHandle, Mat2D, RuntimeComponent,
-    RuntimeConstrainableListState, RuntimeIkChainLink, RuntimeSkinnableKind, TransformComponents,
-    TransformProperty, UpdateComponentsReport, retain_runtime_component_layout_topology,
+    RuntimeConstrainableListState, RuntimeIkChainLink, TransformComponents, TransformProperty,
+    UpdateComponentsReport, retain_runtime_component_layout_topology,
     retain_runtime_layout_component_styles, retain_runtime_text_input_scroll_constraints,
 };
 use crate::constraints::{
@@ -1326,41 +1327,7 @@ impl ArtboardInstance {
                 .context("authored Component handle is missing")?;
             match component.type_name {
                 "Skin" => {
-                    let parent = objects
-                        .component(handle)
-                        .and_then(|component| component.parent)
-                        .context("Skin is missing its parent Component")?;
-                    let parent_is_skinnable = objects
-                        .component(parent)
-                        .and_then(|parent| parent.concrete.skinnable.as_ref())
-                        .is_some();
-                    let world_transform = generated_mat2d(objects, component.local_id, "Skin");
-                    objects
-                        .component_mut(handle)
-                        .expect("Skin handle was validated")
-                        .concrete
-                        .skin
-                        .as_mut()
-                        .expect("Skin occurrence owns Skin state")
-                        .world_transform = world_transform;
-                    if parent_is_skinnable {
-                        objects
-                            .component_mut(handle)
-                            .expect("Skin handle was validated")
-                            .concrete
-                            .skin
-                            .as_mut()
-                            .expect("Skin occurrence owns Skin state")
-                            .skinnable = Some(parent);
-                        objects
-                            .component_mut(parent)
-                            .expect("Skinnable parent handle was validated")
-                            .concrete
-                            .skinnable
-                            .as_mut()
-                            .expect("Skin parent owns Skinnable state")
-                            .skin = Some(handle);
-                    }
+                    skin::on_added_dirty(objects, handle, component.local_id)?;
                     // `Skin::onAddedDirty` writes m_WorldTransform before
                     // checking the parent, then returns MissingObject for a
                     // non-Skinnable parent. Artboard::canContinue treats that
@@ -1735,34 +1702,7 @@ impl ArtboardInstance {
                 let skin = objects
                     .component_handle(component.local_id)
                     .context("Skin handle is missing during dependency construction")?;
-                let tendons = objects
-                    .component(skin)
-                    .and_then(|component| component.concrete.skin.as_ref())
-                    .map(|skin| skin.tendons.clone())
-                    .unwrap_or_default();
-                for tendon in tendons {
-                    let Some(bone) = objects
-                        .component(tendon)
-                        .and_then(|component| component.concrete.tendon.as_ref())
-                        .and_then(|tendon| tendon.bone)
-                    else {
-                        continue;
-                    };
-                    objects.add_dependent(bone, skin);
-                    let peer_constraints = objects
-                        .component(bone)
-                        .and_then(|component| component.concrete.bone.as_ref())
-                        .map(|bone| bone.peer_constraints.clone())
-                        .unwrap_or_default();
-                    for constraint in peer_constraints {
-                        if let Some(parent) = objects
-                            .component(constraint)
-                            .and_then(|component| component.parent)
-                        {
-                            objects.add_dependent(parent, skin);
-                        }
-                    }
-                }
+                skin::build_dependencies(objects, skin);
             }
 
             // Ordinary TargetedConstraint::buildDependencies makes the
@@ -1973,11 +1913,7 @@ impl ArtboardInstance {
             let handle = objects
                 .component_handle(component.local_id)
                 .context("Skin handle is missing")?;
-            let skin = objects
-                .component_mut(handle)
-                .and_then(|component| component.concrete.skin.as_mut())
-                .context("Skin occurrence is missing its concrete state")?;
-            skin.bone_transforms = vec![Mat2D::IDENTITY; skin.tendons.len() + 1];
+            skin::initialize_bone_transforms(objects, handle)?;
         }
         objects.sort_dependencies_from_root();
         retain_runtime_component_layout_topology(objects);
@@ -6326,7 +6262,7 @@ impl ArtboardInstance {
         self.add_component_dirt(handle, dirt, recurse)
     }
 
-    fn add_component_dirt(
+    pub(crate) fn add_component_dirt(
         &mut self,
         handle: ComponentHandle,
         dirt: ComponentDirt,
@@ -6393,11 +6329,6 @@ impl ArtboardInstance {
         let constraint_is_ik = component.concrete.constraint.is_some_and(|constraint| {
             constraint.kind == crate::components::RuntimeConstraintKind::Ik
         });
-        let skin_skinnable = component
-            .concrete
-            .skin
-            .as_ref()
-            .and_then(|skin| skin.skinnable);
         let path_has_deferred_dirt = component
             .concrete
             .path
@@ -6426,28 +6357,7 @@ impl ArtboardInstance {
             self.mark_transform_dirty_handle(parent);
         }
 
-        // Exact `Skin::onDirty`: call only the retained Skinnable, before the
-        // outer Skin reaches Artboard::onComponentDirty. PointsPath and Mesh
-        // intentionally consume different dirt families
-        // (`src/bones/skin.cpp:88-94`,
-        // `src/shapes/points_path.cpp:43-52`,
-        // `src/shapes/mesh.cpp:84-85`).
-        if let Some(skinnable) = skin_skinnable {
-            match self
-                .objects
-                .component(skinnable)
-                .and_then(|component| component.concrete.skinnable.as_ref())
-                .map(|skinnable| skinnable.kind)
-            {
-                Some(RuntimeSkinnableKind::PointsPath) => {
-                    self.add_component_dirt(skinnable, ComponentDirt::PATH, false);
-                }
-                Some(RuntimeSkinnableKind::Mesh) => {
-                    self.add_component_dirt(skinnable, ComponentDirt::VERTICES, false);
-                }
-                _ => {}
-            }
-        }
+        self.runtime_skin_on_dirty(handle);
 
         // A deferred C++ Path does not keep itself continuously dirty.
         // Instead, its next ordinary onDirty callback re-adds Path dirt,
@@ -7562,47 +7472,7 @@ impl ArtboardInstance {
             }
         }
         self.update_script_component_in_dependency_order(component_handle, dirt, script_mode);
-        if self
-            .objects
-            .component(component_handle)
-            .is_some_and(|component| component.concrete.skin.is_some())
-        {
-            let tendon_count = self
-                .objects
-                .component(component_handle)
-                .and_then(|component| component.concrete.skin.as_ref())
-                .map_or(0, |skin| skin.tendons.len());
-            for index in 0..tendon_count {
-                let transform = self
-                    .objects
-                    .component(component_handle)
-                    .and_then(|component| component.concrete.skin.as_ref())
-                    .and_then(|skin| skin.tendons.get(index))
-                    .and_then(|tendon| self.objects.component(*tendon))
-                    .and_then(|tendon| tendon.concrete.tendon.as_ref())
-                    .and_then(|tendon| {
-                        let bone = self.objects.component(tendon.bone?)?;
-                        Some(bone.transform.world_transform.multiply(tendon.inverse_bind))
-                    });
-                if let Some(transform) = transform
-                    && let Some(slot) = self
-                        .objects
-                        .component_mut(component_handle)
-                        .and_then(|component| component.concrete.skin.as_mut())
-                        .and_then(|skin| skin.bone_transforms.get_mut(index + 1))
-                {
-                    *slot = transform;
-                }
-            }
-            #[cfg(test)]
-            if let Some(skin) = self
-                .objects
-                .component_mut(component_handle)
-                .and_then(|component| component.concrete.skin.as_mut())
-            {
-                skin.buffer_rebuilds += 1;
-            }
-        }
+        self.update_runtime_skin(component_handle);
         if dirt.contains(ComponentDirt::DRAW_ORDER) {
             self.sort_runtime_draw_order();
         }

@@ -80,9 +80,10 @@ use, a repository administrator must:
 4. Protect the `apple-runtime-v*` tag pattern so only release maintainers can
    create matching tags.
 5. Assign the custom `nuxie-release` label to exactly one signed macOS release host.
-   Verify that host has the pinned Xcode version and build. Do not assign that
-   label to ordinary pull-request runners merely because they share the
-   `nuxie-signoff` label.
+   Verify that the Actions service on that host reports the workflow's pinned
+   Xcode 26.2 build `17C52`. Do not infer its toolchain from an interactive
+   shell, and do not assign the label to ordinary pull-request runners merely
+   because they share the `nuxie-signoff` label.
 6. Configure the `nuxie-macos` runner group's selected-workflow policy with
    both exact entries:
    - `nuxieai/nuxie-runtime/.github/workflows/apple-runtime-release.yml@refs/tags/apple-runtime-v0.2.0`

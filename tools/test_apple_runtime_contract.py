@@ -21,8 +21,8 @@ def valid_metadata() -> dict[str, object]:
         "luaurVersion": "0.1.8",
         "buildProfile": "release-apple",
         "rustToolchain": "1.94.1",
-        "xcodeVersion": "26.6",
-        "xcodeBuild": "17F113",
+        "xcodeVersion": "26.2",
+        "xcodeBuild": "17C52",
         "iphoneOSSDKVersion": "26.2",
         "iphoneOSSDKBuild": "23C53",
         "iphoneSimulatorSDKVersion": "26.2",
@@ -179,10 +179,10 @@ class ReleaseWorkflowSourcePolicyTests(unittest.TestCase):
         )
 
     def test_self_hosted_xcode_pin_is_current_without_changing_fallback(self) -> None:
-        self.assertIn('NUX_APPLE_XCODE_VERSION: "26.6"', self.release_workflow)
-        self.assertIn('NUX_APPLE_XCODE_BUILD: "17F113"', self.release_workflow)
-        self.assertNotIn('NUX_APPLE_XCODE_VERSION: "26.2"', self.release_workflow)
-        self.assertNotIn('NUX_APPLE_XCODE_BUILD: "17C52"', self.release_workflow)
+        self.assertIn('NUX_APPLE_XCODE_VERSION: "26.2"', self.release_workflow)
+        self.assertIn('NUX_APPLE_XCODE_BUILD: "17C52"', self.release_workflow)
+        self.assertNotIn('NUX_APPLE_XCODE_VERSION: "26.6"', self.release_workflow)
+        self.assertNotIn('NUX_APPLE_XCODE_BUILD: "17F113"', self.release_workflow)
 
         hosted = (
             "inputs.force_hosted || (github.event_name == 'pull_request' "
@@ -190,16 +190,16 @@ class ReleaseWorkflowSourcePolicyTests(unittest.TestCase):
         )
         version_mapping = (
             "NUX_APPLE_XCODE_VERSION: "
-            f"${{{{ ({hosted}) && '15.4' || '26.6' }}}}"
+            f"${{{{ ({hosted}) && '15.4' || '26.2' }}}}"
         )
         build_mapping = (
             "NUX_APPLE_XCODE_BUILD: "
-            f"${{{{ ({hosted}) && '15F31d' || '17F113' }}}}"
+            f"${{{{ ({hosted}) && '15F31d' || '17C52' }}}}"
         )
         self.assertEqual(self.trusted_macos_workflow.count(version_mapping), 2)
         self.assertEqual(self.trusted_macos_workflow.count(build_mapping), 2)
-        self.assertNotIn("'26.2'", self.trusted_macos_workflow)
-        self.assertNotIn("'17C52'", self.trusted_macos_workflow)
+        self.assertNotIn("'26.6'", self.trusted_macos_workflow)
+        self.assertNotIn("'17F113'", self.trusted_macos_workflow)
 
     def test_release_requires_the_single_qualified_runner_label(self) -> None:
         documentation_words = " ".join(self.release_documentation.split())

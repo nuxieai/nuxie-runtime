@@ -6,6 +6,7 @@ use crate::artboard::{RuntimeComponentListItemInstance, RuntimeComponentListLogi
 use crate::bones::bone::RuntimeBoneState;
 use crate::bones::skin::RuntimeSkinState;
 use crate::bones::weight::RuntimeWeightState;
+use crate::constraints::ik_constraint::RuntimeIkState;
 use crate::draw::RuntimePathMeasure;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::property_key_for_name;
@@ -617,29 +618,6 @@ pub(crate) struct RuntimeScrollBarConstraintState {
 }
 
 impl RuntimeScrollBarConstraintState {
-    fn clone_for_occurrence(&self) -> Self {
-        Self::default()
-    }
-}
-
-/// One retained C++ `IKConstraint::BoneChainLink`.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct RuntimeIkChainLink {
-    pub(crate) index: usize,
-    pub(crate) bone: ComponentHandle,
-    pub(crate) angle: f32,
-    pub(crate) transform_components: TransformComponents,
-    pub(crate) parent_world_inverse: Mat2D,
-}
-
-#[derive(Debug, Clone, Default)]
-pub(crate) struct RuntimeIkState {
-    pub(crate) chain: Vec<RuntimeIkChainLink>,
-    #[cfg(test)]
-    pub(crate) chain_builds: usize,
-}
-
-impl RuntimeIkState {
     fn clone_for_occurrence(&self) -> Self {
         Self::default()
     }

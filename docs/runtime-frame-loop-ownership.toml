@@ -1296,7 +1296,12 @@ status = "faithful"
 upstream = "src/constraints/ik_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = [
+    "crates/nuxie-runtime/src/constraints/ik_constraint.rs",
+    "crates/nuxie-runtime/src/constraints.rs",
+    "crates/nuxie-runtime/src/artboard.rs",
+    "crates/nuxie-runtime/src/components.rs",
+]
 dynamically_reached = false
 status = "faithful"
 

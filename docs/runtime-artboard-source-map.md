@@ -44,7 +44,7 @@ remain valid for behavior-preserving file moves.
 | `artboard.hpp`, `artboard.cpp` | `artboard.rs` | instance state, construction, clone, dimensions, ordered update/advance orchestration | retained orchestration; active listener/frame-loop work |
 | `advancing_component.hpp`, `advancing_component.cpp` | `advancing_component.rs` | retained advancing entry and schedule builder | extracted |
 | `resetting_component.hpp`, `resetting_component.cpp` | `resetting_component.rs` | retained reset entry, schedule, and reset dispatch | extracted |
-| `event.hpp`, `event.cpp` | `event.rs` | event/custom-property projection | active live-event work |
+| `event.hpp`, `event.cpp` | `event.rs` | event occurrence, trigger/report facade, and public event DTOs | active live-event work; custom-property projection belongs to the separate `CustomPropertyContainer` / `CustomProperty*` owners and must not be claimed as `event.cpp` |
 | `artboard_component_list.hpp`, `artboard_component_list.cpp` | `artboard_component_list.rs` | retained rows, context, sync/create, advance/reset | partial: virtualized mounted-item methods extracted; retained row storage, context, create/sync, advance, reset, and active focus installation remain in `artboard.rs` |
 | `virtualizing_component.hpp`, `virtualizing_component.cpp` | `virtualizing_component.rs` | exact component-to-virtualizer adapter | extracted |
 | `nested_artboard.hpp`, `nested_artboard.cpp` | `nested_artboard.rs` | retained child occurrence, collection, replacement, context, advance | active nested/focus work |
@@ -54,14 +54,16 @@ remain valid for behavior-preserving file moves.
 | `nested_linear_animation.hpp`, `nested_linear_animation.cpp` | `animation/nested_linear_animation.rs` | retained mix owner | queued behind active listener/action integration |
 | `nested_simple_animation.hpp`, `nested_simple_animation.cpp` | `animation/nested_simple_animation.rs` | speed/play owner and builder | queued behind active listener/action integration |
 | `nested_remap_animation.hpp`, `nested_remap_animation.cpp` | `animation/nested_remap_animation.rs` | remap-time owner and builder | queued behind active listener/action integration |
-| `nested_input.hpp`, `nested_input.cpp` | `animation/nested_input.rs` | common nested-input target lookup | active nested listener actions |
+| `nested_input.hpp` plus generated `nested_input_base.hpp/.cpp` | `animation/nested_input.rs` | common nested-input target lookup and generated occurrence fields | active nested listener actions; pinned C++ has no concrete `nested_input.cpp` |
 | `nested_bool.hpp`, `nested_bool.cpp` | `animation/nested_bool.rs` | nested bool forwarding | active nested listener actions |
 | `nested_number.hpp`, `nested_number.cpp` | `animation/nested_number.rs` | nested number forwarding | active nested listener actions |
 | `nested_trigger.hpp`, `nested_trigger.cpp` | `animation/nested_trigger.rs` | repeated trigger callback | active nested listener actions |
-| `scripted_object.hpp`, `scripted_object.cpp` | `scripted/scripted_object.rs` | occurrence attachment, context, input, init/retry lifecycle | active scripted-listener closure |
+| `nested_state_machine.hpp`, `nested_state_machine.cpp` | `state_machine/nested_state_machine.rs` | nullable child-machine occurrence, ordered nested inputs, forwarding, context, advance, and hit/pointer behavior | direct file exists; active listener/action integration owns its current changes |
+| `nested_artboard_leaf.hpp`, `nested_artboard_leaf.cpp` | `nested_artboard_leaf.rs` | leaf clone behavior, mounted-child identity, and world-transform forwarding | queued; current behavior is split across `artboard.rs` and `draw.rs`, which is not acceptable as the final basename correspondence |
+| `scripted_object.hpp`, `scripted_object.cpp` | `scripted_object.rs` | occurrence attachment, context, input, init/retry lifecycle | active scripted-listener closure; FL-C4 already established this direct root-level basename |
 | `scripted_drawable.hpp`, `scripted_drawable.cpp` | `scripted/scripted_drawable.rs` | update/advance lifecycle | active scripted-listener closure |
 | `scripted_path_effect.hpp`, `scripted_path_effect.cpp` | `scripted/scripted_path_effect.rs` | attachment, hydration, update/advance | active scripted-listener closure |
-| `scripted_data_converter.hpp`, `scripted_data_converter.cpp` | `scripted/scripted_data_converter.rs` | retained converter occurrence and advance entry | active scripted-listener closure |
+| `scripted_data_converter.hpp`, `scripted_data_converter.cpp` | `scripted_data_converter.rs` | retained converter occurrence and advance entry | active scripted-listener closure; FL-C4 already established this direct root-level basename |
 | `joystick.hpp`, `joystick.cpp` | `joystick.rs` | runtime joystick definition, builder, apply, axis time | extracted |
 | `solo.hpp`, `solo.cpp` | `solo.rs` | solo mapping, active child, and collapse propagation | extracted |
 | `weight.hpp`, `weight.cpp` | `bones/weight.rs` | retained weight state, `onAddedDirty`, and `Weight::deform` | extracted |
@@ -81,6 +83,7 @@ remain valid for behavior-preserving file moves.
 | `bone.hpp`, `bone.cpp` | `bones/bone.rs` | bone relation, length, and callback | partial: state/onDirty/update shard extracted; `tipWorldTranslation` remains in `constraints.rs` |
 | `root_bone.hpp`, `root_bone.cpp` | `bones/root_bone.rs` | TransformComponent clean-phase bypass plus x/y keys and dirt callbacks | extracted |
 | `skin.hpp`, `skin.cpp` | `bones/skin.rs` | tendon/bone buffer ownership and dirty/update behavior | partial: state/onDirty/update shard extracted; `deform` remains in `draw.rs` and buffer allocation remains in relation construction |
+| `constraints/ik_constraint.hpp`, `constraints/ik_constraint.cpp` plus generated `ik_constraint_base.hpp/.cpp` | `constraints/ik_constraint.rs` | generated property keys and clone state; FK-chain owner; clean lifecycle; dependency construction; property callbacks; dirt propagation; solver and IK-only math | extracted: `constraints.rs` retains only kind dispatch/shared constraint helpers, `artboard.rs` retains ordered lifecycle dispatch, and `components.rs` retains only the generic optional payload field/delegation |
 | `component.hpp`, `component.cpp` | `component.rs` | component facade, parent validation/link, dirt base, collapse base, and parent hit-test walk | partial: public occurrence/collapse facade, retained accessors, exact parent attachment, exact `addDirt`/base collapse, and base `hitTestPoint` extracted; concrete collapse/dirty dispatch and one active type-name accessor remain elsewhere |
 | `container_component.hpp`, `container_component.cpp` | `container_component.rs` | parent/child relation and guarded subtree recursion | partial: retained-child loop extracted; parent/child construction remains in `objects.rs`/`artboard.rs`, while the pre-existing unchanged-collapse continuation mismatch remains for semantic closure |
 | `drawable.hpp`, `drawable.cpp` | `drawable.rs` | drawable hit testing; renderer traversal remains renderer-owned | partial: base hit-test adapter extracted; LayoutComponent/ClippingShape virtual `isHidden` overrides remain for semantic closure |
@@ -126,6 +129,7 @@ commits. They are integration blockers for the owning semantic wave:
 | `src/container_component.cpp:9-20` | the Rust virtual adapter continues into concrete propagation when the base Collapsed bit is already equal; C++ returns immediately | add an owned component/layout gap and reopen the whole-file `faithful` row if the ledger cannot scope it to verified members |
 | `src/drawable.cpp`, `src/layout_component.cpp`, `include/rive/shapes/clipping_shape.hpp` | Rust hit testing applies the base hidden/collapsed check where C++ uses concrete virtual `isHidden` overrides | add an owned drawable/layout gap and reopen the whole-file `faithful` row if member scoping is unavailable |
 | `src/layout_component.cpp:233-250` | Rust propagates effective display collapse to children but does not perform C++'s post-loop `updateCollapsables()` with the virtual collapsed state | retain the layout row as pending until the semantic layout family closes it |
+| `src/constraints/ik_constraint.cpp:123-126` | Rust's `f32::clamp` propagates a NaN law-of-cosines ratio, while the pinned C++ `std::min`/`std::max` expression selects an endpoint according to its exact operand order | keep this move behavior-preserving, then close the IK arithmetic edge with a pinned differential in its semantic owner-family slice |
 
 The mechanical ledgers on this branch retain their previously published status
 labels so the staging branch does not masquerade as an acceptance/promotion

@@ -43,12 +43,15 @@ use crate::artboard_data_bind::{
 use crate::bones::bone;
 use crate::bones::root_bone;
 use crate::bones::skin;
+#[cfg(test)]
+use crate::components::TransformComponents;
 use crate::components::{
     ComponentDirt, ComponentHandle, Mat2D, RuntimeComponent, RuntimeConstrainableListState,
-    RuntimeIkChainLink, TransformComponents, TransformProperty, UpdateComponentsReport,
-    retain_runtime_component_layout_topology, retain_runtime_layout_component_styles,
-    retain_runtime_text_input_scroll_constraints,
+    TransformProperty, UpdateComponentsReport, retain_runtime_component_layout_topology,
+    retain_runtime_layout_component_styles, retain_runtime_text_input_scroll_constraints,
 };
+#[cfg(test)]
+use crate::constraints::ik_constraint::RuntimeIkChainLink;
 use crate::constraints::{
     apply_scroll_offset_changed, component_list_virtualization, retain_runtime_scroll_constraints,
     runtime_scroll_double_property, set_runtime_scroll_double_property,
@@ -1419,94 +1422,11 @@ impl ArtboardInstance {
             }
 
             if component.type_name == "IKConstraint" {
-                let tip = objects
-                    .component(handle)
-                    .and_then(|component| component.parent)
-                    .context("IKConstraint is missing its constrained parent")?;
-                if objects
-                    .component(tip)
-                    .and_then(|component| component.concrete.bone.as_ref())
-                    .is_none()
-                {
-                    anyhow::bail!("IKConstraint parent is not a Bone");
-                }
-
-                let mut reverse_chain = vec![tip];
-                let mut bone = tip;
-                let mut remaining = objects
-                    .uint_property(
-                        component.local_id,
-                        crate::constraints::IK_PARENT_BONE_COUNT_PROPERTY_KEY,
-                    )
-                    .unwrap_or(0);
-                while remaining > 0 {
-                    let Some(parent) = objects
-                        .component(bone)
-                        .and_then(|component| component.parent)
-                    else {
-                        break;
-                    };
-                    if objects
-                        .component(parent)
-                        .and_then(|component| component.concrete.bone.as_ref())
-                        .is_none()
-                    {
-                        break;
-                    }
-                    remaining -= 1;
-                    bone = parent;
-                    bone::add_peer_constraint(objects, bone, handle);
-                    reverse_chain.push(bone);
-                }
-
-                // C++ stores the FK chain root-to-tip after first collecting
-                // it tip-to-root (`ik_constraint.cpp:25-50`).
-                let chain = reverse_chain
-                    .iter()
-                    .rev()
-                    .copied()
-                    .enumerate()
-                    .map(|(index, bone)| RuntimeIkChainLink {
-                        index,
-                        bone,
-                        angle: 0.0,
-                        transform_components: TransformComponents::default(),
-                        parent_world_inverse: Mat2D::IDENTITY,
-                    })
-                    .collect();
-                let retained = objects
-                    .component_mut(handle)
-                    .expect("IKConstraint handle was validated")
-                    .concrete
-                    .ik
-                    .as_mut()
-                    .expect("IKConstraint owns retained chain state");
-                retained.chain = chain;
-                #[cfg(test)]
-                {
-                    retained.chain_builds += 1;
-                }
-
-                // `IKConstraint::onAddedClean` makes every first-level
-                // off-chain Transform child of each ancestor depend on the
-                // constrained tip (`ik_constraint.cpp:52-72`).
-                for index in 1..reverse_chain.len() {
-                    let ancestor = reverse_chain[index];
-                    let chain_child = reverse_chain[index - 1];
-                    let children = objects
-                        .component(ancestor)
-                        .map(|component| component.children.clone())
-                        .unwrap_or_default();
-                    for child in children {
-                        if child != chain_child
-                            && objects
-                                .component(child)
-                                .is_some_and(|component| component.capabilities.transform)
-                        {
-                            objects.add_dependent(tip, child);
-                        }
-                    }
-                }
+                crate::constraints::ik_constraint::on_added_clean(
+                    objects,
+                    handle,
+                    component.local_id,
+                )?;
             }
         }
 
@@ -1695,16 +1615,8 @@ impl ArtboardInstance {
                 }
             }
 
-            if component.type_name == "IKConstraint"
-                && let Some(target) = objects
-                    .component(handle)
-                    .and_then(|component| component.concrete.constraint)
-                    .and_then(|constraint| constraint.target)
-            {
-                // `IKConstraint::buildDependencies` runs TargetedConstraint
-                // first (above), then makes the constraint itself depend on
-                // the same target (`ik_constraint.cpp:8-19`).
-                objects.add_dependent(target, handle);
+            if component.type_name == "IKConstraint" {
+                crate::constraints::ik_constraint::build_dependencies(objects, handle);
             }
 
             // Mesh::buildDependencies adds Skin before its explicit parent
@@ -6910,10 +6822,13 @@ impl ArtboardInstance {
         {
             return self.mark_constraint_parent_transform_dirty(local_id);
         }
-        if crate::constraints::IK_INVERT_DIRECTION_PROPERTY_KEY == property_key
-            && constraint_kind == Some(crate::components::RuntimeConstraintKind::Ik)
-        {
-            return self.mark_ik_constraint_dirty(local_id);
+        if let Some(changed) = crate::constraints::ik_constraint::apply_bool_property_changed(
+            self,
+            local_id,
+            constraint_kind,
+            property_key,
+        ) {
+            return changed;
         }
         match self.slot(local_id).and_then(|slot| slot.type_name) {
             Some("Artboard") if property_key_for_name("Artboard", "clip") == Some(property_key) => {
@@ -7018,17 +6933,17 @@ impl ArtboardInstance {
         {
             return self.refresh_layout_component_animation_style(local_id);
         }
-        if self
+        let constraint_kind = self
             .component(local_id)
             .and_then(|component| component.concrete.constraint)
-            .is_some_and(|constraint| {
-                crate::constraints::constraint_is_ik_strength_property(
-                    constraint.kind,
-                    property_key,
-                )
-            })
-        {
-            return self.mark_ik_constraint_dirty(local_id);
+            .map(|constraint| constraint.kind);
+        if let Some(changed) = crate::constraints::ik_constraint::apply_double_property_changed(
+            self,
+            local_id,
+            constraint_kind,
+            property_key,
+        ) {
+            return changed;
         }
         if self
             .component(local_id)
@@ -7259,37 +7174,6 @@ impl ArtboardInstance {
             return false;
         };
         self.mark_transform_dirty_handle(parent)
-    }
-
-    fn mark_ik_constraint_dirty(&mut self, constraint_local_id: usize) -> bool {
-        let Some(constraint) = self.component_handle(constraint_local_id) else {
-            return false;
-        };
-        let Some(tip) = self
-            .objects
-            .component(constraint)
-            .and_then(|constraint| constraint.parent)
-        else {
-            return false;
-        };
-        let mut changed = self.mark_transform_dirty_handle(tip);
-        let chain_len = self
-            .objects
-            .component(constraint)
-            .and_then(|component| component.concrete.ik.as_ref())
-            .map_or(0, |ik| ik.chain.len());
-        for index in 0..chain_len.saturating_sub(1) {
-            let bone = self
-                .objects
-                .component(constraint)
-                .and_then(|component| component.concrete.ik.as_ref())
-                .and_then(|ik| ik.chain.get(index))
-                .map(|link| link.bone);
-            if let Some(bone) = bone {
-                changed |= self.mark_transform_dirty_handle(bone);
-            }
-        }
-        changed
     }
 
     fn mark_parent_gradient_stops_dirty(&mut self, stop_local_id: usize) -> bool {
@@ -12349,7 +12233,7 @@ mod tests {
         clear_chain(&mut instance);
         assert!(instance.set_bool_property(
             3,
-            crate::constraints::IK_INVERT_DIRECTION_PROPERTY_KEY,
+            crate::constraints::ik_constraint::IK_INVERT_DIRECTION_PROPERTY_KEY,
             true,
         ));
         assert_chain_dirty(&instance);
@@ -12357,7 +12241,7 @@ mod tests {
         clear_chain(&mut instance);
         assert!(instance.set_uint_property(
             3,
-            crate::constraints::IK_PARENT_BONE_COUNT_PROPERTY_KEY,
+            crate::constraints::ik_constraint::IK_PARENT_BONE_COUNT_PROPERTY_KEY,
             2,
         ));
         for local in 0..3 {

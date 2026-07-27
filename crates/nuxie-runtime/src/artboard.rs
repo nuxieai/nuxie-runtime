@@ -1389,23 +1389,7 @@ impl ArtboardInstance {
             let handle = objects
                 .component_handle(component.local_id)
                 .context("authored Component handle is missing")?;
-            if objects
-                .component(handle)
-                .is_some_and(|component| component.capabilities.transform)
-            {
-                let parent_transform = objects
-                    .component(handle)
-                    .and_then(|component| component.parent)
-                    .filter(|parent| {
-                        objects
-                            .component(*parent)
-                            .is_some_and(|parent| parent.capabilities.world_transform)
-                    });
-                objects
-                    .component_mut(handle)
-                    .expect("Transform handle was validated")
-                    .parent_transform = parent_transform;
-            }
+            transform_component::retain_parent_transform_component(objects, handle);
 
             // `Path::onAddedClean` walks the live parent chain to its Shape,
             // stores that pointer, and registers itself on the Shape in
@@ -7171,11 +7155,7 @@ impl ArtboardInstance {
             crate::constraints::update_follow_path_constraint(self, component_handle);
         }
         if dirt.contains(ComponentDirt::TRANSFORM) {
-            let authored = self.authored_transform(local_id);
-            self.objects
-                .component_mut(component_handle)
-                .expect("component handle must remain live")
-                .update_transform(authored);
+            self.update_authored_transform_component(component_handle, local_id);
         }
         if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
             if self
@@ -7260,42 +7240,7 @@ impl ArtboardInstance {
             crate::constraints::apply_constraints(self, component_handle);
         }
         if dirt.contains(ComponentDirt::RENDER_OPACITY) {
-            let previous_opacity = self
-                .objects
-                .component(component_handle)
-                .expect("component handle must remain live")
-                .transform
-                .render_opacity;
-            let opacity = self.authored_transform(local_id).opacity;
-            let parent_opacity = self
-                .objects
-                .component(component_handle)
-                .expect("component handle must remain live")
-                .parent_transform
-                .and_then(|parent| {
-                    let component = self.objects.component(parent)?;
-                    let key = component.transform_property_key(TransformProperty::Opacity)?;
-                    let authored_opacity = self
-                        .objects
-                        .double_property(component.local_id, key)
-                        .unwrap_or(1.0);
-                    Some(component.child_opacity(authored_opacity))
-                })
-                .unwrap_or(1.0);
-            self.objects
-                .component_mut(component_handle)
-                .expect("component handle must remain live")
-                .update_render_opacity(opacity, parent_opacity);
-            if self
-                .objects
-                .component(component_handle)
-                .expect("component handle must remain live")
-                .transform
-                .render_opacity
-                != previous_opacity
-            {
-                self.mark_render_opacity_changed();
-            }
+            self.update_render_opacity_component(component_handle, local_id);
         }
         if self
             .objects
@@ -8507,34 +8452,7 @@ impl ArtboardInstance {
                         visited,
                     );
                 }
-                // TransformComponent's collapse tail runs after
-                // ContainerComponent has propagated to children. Only
-                // dependent TransformComponents that actually own
-                // constraints receive recursive WorldTransform dirt
-                // (`src/transform_component.cpp:18-44`).
-                if self
-                    .objects
-                    .component(handle)
-                    .is_some_and(|component| component.capabilities.transform)
-                {
-                    let dependent_count = self.objects.dependent_len(handle);
-                    for index in 0..dependent_count {
-                        let dependent = self.objects.dependent_at(handle, index);
-                        let constrained_transform = dependent.is_some_and(|dependent| {
-                            self.objects.component(dependent).is_some_and(|component| {
-                                component.capabilities.transform
-                                    && !component.constraints.is_empty()
-                            })
-                        });
-                        if constrained_transform && let Some(dependent) = dependent {
-                            changed |= self.add_component_dirt(
-                                dependent,
-                                ComponentDirt::WORLD_TRANSFORM,
-                                true,
-                            );
-                        }
-                    }
-                }
+                changed |= self.collapse_constrained_transform_dependents(handle);
                 changed
             }
         }

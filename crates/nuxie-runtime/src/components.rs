@@ -1679,18 +1679,6 @@ impl RuntimeComponent {
         // manufacture a contract from indeterminate C++ storage (FLR-3).
         self.graph_order.map(GraphOrder::index)
     }
-
-    pub(crate) fn child_opacity(&self, authored_opacity: f32) -> f32 {
-        // `WorldTransformComponent::childOpacity` returns its authored
-        // opacity, while `TransformComponent` overrides it with settled
-        // render opacity (`src/world_transform_component.cpp:8`,
-        // `include/rive/transform_component.hpp:42`).
-        if self.capabilities.transform {
-            self.transform.render_opacity
-        } else {
-            authored_opacity
-        }
-    }
 }
 
 pub(crate) fn retain_runtime_component_layout_topology(objects: &mut InstanceObjectArena) {

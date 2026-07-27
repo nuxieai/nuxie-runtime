@@ -100,6 +100,8 @@ use resetting_component::{RuntimeResettingComponent, build_runtime_resetting_com
 pub(crate) mod node;
 #[path = "transform_component.rs"]
 pub(crate) mod transform_component;
+#[path = "world_transform_component.rs"]
+mod world_transform_component;
 
 fn generated_mat2d(
     objects: &InstanceObjectArena,
@@ -5901,11 +5903,6 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn mark_prepared_changed(&mut self) {
-        self.prepared_epoch = self.prepared_epoch.wrapping_add(1);
-        self.mark_tree_paint_preparation_changed();
-    }
-
-    fn mark_world_transform_changed(&mut self) {
         self.prepared_epoch = self.prepared_epoch.wrapping_add(1);
         self.mark_tree_paint_preparation_changed();
     }

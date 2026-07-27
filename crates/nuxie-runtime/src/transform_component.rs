@@ -254,7 +254,7 @@ impl ArtboardInstance {
 
         match property {
             TransformProperty::Opacity => {
-                self.add_dirt(local_id, ComponentDirt::RENDER_OPACITY, true);
+                self.mark_world_transform_opacity_dirty(local_id);
             }
             TransformProperty::X
             | TransformProperty::Y

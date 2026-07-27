@@ -546,7 +546,7 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_focus_tree_built_before_layer_entries"
 globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
-pattern = "pub\\(crate\\)\\s+fn\\s+new\\(\\s*state_machine_index[\\s\\S]{0,16000}(?:RuntimeFocusTree::from_artboard|focus\\.sync\\(artboard\\)|install_nested_external_focus_domain\\([^)]*\\))[\\s\\S]{0,6000}initialize_layers_in_authored_order"
+pattern = "pub\\(crate\\)\\s+fn\\s+new\\(\\s*state_machine_index(?:(?!self\\s*\\.initialize_layers_in_authored_order)[\\s\\S]){0,16000}(?:RuntimeFocusTree::from_artboard|focus\\.sync\\(artboard\\)|install_nested_external_focus_domain\\([^)]*\\))[\\s\\S]{0,6000}self\\s*\\.initialize_layers_in_authored_order"
 max_occurrences = 0
 
 [[ratchet]]

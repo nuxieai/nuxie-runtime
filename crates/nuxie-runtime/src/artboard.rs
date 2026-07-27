@@ -102,6 +102,8 @@ pub(crate) mod node;
 pub(crate) mod transform_component;
 #[path = "world_transform_component.rs"]
 mod world_transform_component;
+#[path = "nested_artboard_origin.rs"]
+mod nested_artboard_origin;
 
 fn generated_mat2d(
     objects: &InstanceObjectArena,
@@ -7914,39 +7916,7 @@ impl ArtboardInstance {
                     || property_key_for_name("NestedArtboardOrigin", "originY")
                         == Some(property_key) =>
             {
-                let Some(host_local_id) = self.component_parent_local(local_id) else {
-                    return false;
-                };
-                let Some(origin_x_key) = property_key_for_name("Artboard", "originX") else {
-                    return false;
-                };
-                let Some(origin_y_key) = property_key_for_name("Artboard", "originY") else {
-                    return false;
-                };
-                let Some(origin_x) = property_key_for_name("NestedArtboardOrigin", "originX")
-                    .and_then(|key| self.double_property(local_id, key))
-                else {
-                    return false;
-                };
-                let Some(origin_y) = property_key_for_name("NestedArtboardOrigin", "originY")
-                    .and_then(|key| self.double_property(local_id, key))
-                else {
-                    return false;
-                };
-                let changed = self
-                    .nested_artboards
-                    .get_mut(&host_local_id)
-                    .is_some_and(|nested| {
-                        let mut changed =
-                            nested.child.set_double_property(0, origin_x_key, origin_x);
-                        changed |= nested.child.set_double_property(0, origin_y_key, origin_y);
-                        changed
-                    });
-                if changed {
-                    self.add_dirt(host_local_id, ComponentDirt::TRANSFORM, false);
-                    self.add_dirt(host_local_id, ComponentDirt::WORLD_TRANSFORM, true);
-                }
-                changed
+                self.reapply_nested_artboard_origin(local_id)
             }
             Some("LinearGradient" | "RadialGradient")
                 if property_key_for_name("LinearGradient", "startX") == Some(property_key)
@@ -8991,7 +8961,11 @@ fn build_runtime_nested_artboard_instance(
         build_context,
         false,
     )?);
-    apply_nested_artboard_origin_override(parent_objects, host_local_id, &mut child);
+    nested_artboard_origin::apply_nested_artboard_origin_override(
+        parent_objects,
+        host_local_id,
+        &mut child,
+    );
     child.set_frame_origin(false);
     child.added_to_host();
     child.bind_default_view_model_artboard_list_context(file);
@@ -9088,44 +9062,6 @@ fn build_runtime_nested_artboard_instance(
         quantize,
         cumulated_seconds: 0.0,
     })
-}
-
-fn apply_nested_artboard_origin_override(
-    parent_objects: &InstanceObjectArena,
-    host_local_id: usize,
-    child: &mut ArtboardInstance,
-) -> bool {
-    let Some(host) = parent_objects.component_handle(host_local_id) else {
-        return false;
-    };
-    let origin_local = (0..parent_objects.child_len(host))
-        .filter_map(|index| parent_objects.child_at(host, index))
-        .filter_map(|child| parent_objects.component(child))
-        .find(|component| component.type_name == "NestedArtboardOrigin")
-        .map(|component| component.local_id);
-    let Some(origin_local) = origin_local else {
-        return false;
-    };
-    let Some(origin_x) = property_key_for_name("NestedArtboardOrigin", "originX")
-        .and_then(|key| parent_objects.double_property(origin_local, key))
-    else {
-        return false;
-    };
-    let Some(origin_y) = property_key_for_name("NestedArtboardOrigin", "originY")
-        .and_then(|key| parent_objects.double_property(origin_local, key))
-    else {
-        return false;
-    };
-    let Some(origin_x_key) = property_key_for_name("Artboard", "originX") else {
-        return false;
-    };
-    let Some(origin_y_key) = property_key_for_name("Artboard", "originY") else {
-        return false;
-    };
-
-    let mut changed = child.set_double_property(0, origin_x_key, origin_x);
-    changed |= child.set_double_property(0, origin_y_key, origin_y);
-    changed
 }
 
 fn child_has_state_machine_data_binds(file: &RuntimeFile, graph: &ArtboardGraph) -> bool {
@@ -12810,6 +12746,66 @@ mod tests {
 
         assert!(instance.cache_epoch() > initial_cache_epoch);
         assert_eq!(instance.prepared_epoch(), initial_prepared_epoch);
+    }
+
+    #[test]
+    fn nested_artboard_origin_reapplies_to_the_mounted_child() {
+        let mut parent = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "NestedArtboard"),
+                synthetic_component_for_type(1, "NestedArtboardOrigin"),
+            ],
+            vec![0, 1],
+        );
+        synthetic_link_parent(&mut parent, 1, 0);
+        let mut nested = synthetic_nested_artboard_instance(7);
+        nested.child = Box::new(synthetic_instance(
+            vec![synthetic_component_for_type(0, "Artboard")],
+            vec![0],
+        ));
+        parent.nested_artboards.insert(0, nested);
+
+        let origin_x =
+            property_key_for_name("NestedArtboardOrigin", "originX").expect("originX key");
+        let origin_y =
+            property_key_for_name("NestedArtboardOrigin", "originY").expect("originY key");
+        assert!(parent.set_double_property(1, origin_x, 0.25));
+        assert!(parent.set_double_property(1, origin_y, 0.75));
+
+        let child = &parent.nested_artboards[&0].child;
+        assert_eq!(child.origin_x, 0.25);
+        assert_eq!(child.origin_y, 0.75);
+        assert!(!parent.set_double_property(1, origin_y, 0.75));
+    }
+
+    #[test]
+    fn nested_artboard_origin_applies_when_the_child_is_mounted() {
+        let mut parent = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "NestedArtboard"),
+                synthetic_component_for_type(1, "NestedArtboardOrigin"),
+            ],
+            vec![0, 1],
+        );
+        synthetic_link_parent(&mut parent, 1, 0);
+        let origin_x =
+            property_key_for_name("NestedArtboardOrigin", "originX").expect("originX key");
+        let origin_y =
+            property_key_for_name("NestedArtboardOrigin", "originY").expect("originY key");
+        assert!(parent.objects.set_double_property(1, origin_x, 0.125));
+        assert!(parent.objects.set_double_property(1, origin_y, 0.875));
+        let mut child =
+            synthetic_instance(vec![synthetic_component_for_type(0, "Artboard")], vec![0]);
+
+        assert!(
+            nested_artboard_origin::apply_nested_artboard_origin_override(
+                &parent.objects,
+                0,
+                &mut child,
+            )
+        );
+        assert_eq!(child.origin_x, 0.125);
+        assert_eq!(child.origin_y, 0.875);
     }
 
     #[test]

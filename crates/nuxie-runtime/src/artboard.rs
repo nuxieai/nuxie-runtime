@@ -7616,7 +7616,7 @@ impl ArtboardInstance {
                         }
                     }
                     ComponentAddress::TextVariationHelper { text, .. } => {
-                        self.update_runtime_text_variation_helper(text, dirt);
+                        crate::text::text_variation_helper::update(self, text, dirt);
                     }
                 }
 
@@ -7984,21 +7984,6 @@ impl ArtboardInstance {
             if self.script_update_error.is_none() {
                 self.script_update_error = Some(error);
             }
-        }
-    }
-
-    fn update_runtime_text_variation_helper(&mut self, text: ComponentHandle, dirt: ComponentDirt) {
-        if !dirt.contains(ComponentDirt::TEXT_SHAPE) {
-            return;
-        }
-        if let Some(text_local) = self.component_local_id(text) {
-            // C++ rebuilds the variation-bearing Font on the helper update
-            // (`src/text/text_variation_helper.cpp:14-17`,
-            // `src/text/text_style.cpp:98-124`). Rust's retained text owner
-            // rebuilds lazily from the same live axis values, so invalidate
-            // precisely that Text occurrence here.
-            self.runtime_drawables
-                .mark_text_resource_dirty_for_local(text_local);
         }
     }
 

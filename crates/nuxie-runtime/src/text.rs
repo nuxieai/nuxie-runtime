@@ -32,6 +32,7 @@ use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPa
 use std::collections::BTreeMap;
 
 pub(crate) mod text_value_run;
+pub(crate) mod text_variation_helper;
 
 const TEXT_SHAPE_SCALE: i32 = 2048;
 const TEXT_SHAPE_SCALE_F32: f32 = TEXT_SHAPE_SCALE as f32;

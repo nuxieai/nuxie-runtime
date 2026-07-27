@@ -1400,25 +1400,7 @@ impl ArtboardInstance {
                     if definition_by_name(type_name)
                         .is_some_and(|definition| definition.is_a("Weight")) =>
                 {
-                    let parent = objects
-                        .component(handle)
-                        .and_then(|component| component.parent)
-                        .context("Weight is missing its parent Component")?;
-                    if objects
-                        .component(parent)
-                        .and_then(|parent| parent.concrete.vertex.as_ref())
-                        .is_none()
-                    {
-                        anyhow::bail!("Weight parent is not a Vertex");
-                    }
-                    objects
-                        .component_mut(parent)
-                        .expect("Vertex parent handle was validated")
-                        .concrete
-                        .vertex
-                        .as_mut()
-                        .expect("Weight parent owns Vertex state")
-                        .weight = Some(handle);
+                    crate::bones::weight::on_added_dirty(objects, handle)?;
                 }
                 _ => {}
             }

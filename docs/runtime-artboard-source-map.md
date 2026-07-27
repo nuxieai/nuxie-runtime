@@ -43,10 +43,10 @@ The target convention is:
 | `scripted_data_converter.hpp`, `scripted_data_converter.cpp` | `scripted/scripted_data_converter.rs` | retained converter occurrence and advance entry | active scripted-listener closure |
 | `joystick.hpp`, `joystick.cpp` | `joystick.rs` | runtime joystick definition, builder, apply, axis time | extracted |
 | `solo.hpp`, `solo.cpp` | `solo.rs` | solo mapping, active child, and collapse propagation | extracted |
-| `weight.hpp`, `weight.cpp` | `bones/weight.rs` | retained weight state and `Weight::deform` | state/deform extracted; `onAddedDirty` remains in Artboard construction |
+| `weight.hpp`, `weight.cpp` | `bones/weight.rs` | retained weight state, `onAddedDirty`, and `Weight::deform` | extracted |
 | `cubic_weight.hpp` | `bones/cubic_weight.rs` | independent in/out retained translations | retained state extracted |
-| `vertex.hpp`, `vertex.cpp` | `shapes/vertex.rs` | weight attachment, render translation, base deformation dispatch | ready |
-| `cubic_vertex.hpp`, `cubic_vertex.cpp` | `shapes/cubic_vertex.rs` | in/out point cache and cubic deformation dispatch | ready |
+| `vertex.hpp`, `vertex.cpp` | `shapes/vertex.rs` | weight attachment, render translation, base deformation dispatch | weight lookup/deformation shard extracted; property/render owner remains |
+| `cubic_vertex.hpp`, `cubic_vertex.cpp` | `shapes/cubic_vertex.rs` | in/out point cache and cubic deformation dispatch | weighted in/out deformation shard extracted; point cache/render owner remains |
 | `transform_component.hpp`, `transform_component.cpp` | `transform_component.rs` | transform facade, dirtying, and concrete update | ready |
 | `node.hpp`, `node.cpp` | `node.rs` | computed local transform | ready |
 | `world_transform_component.hpp`, `world_transform_component.cpp` | `world_transform_component.rs` | world transform and render-opacity propagation | ready |

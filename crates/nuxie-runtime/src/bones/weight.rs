@@ -1,8 +1,10 @@
-use crate::components::Mat2D;
-use crate::properties::property_key_for_name;
+use anyhow::{Context, Result};
 
-use super::cubic_weight::{RuntimeCubicWeightState, deform_runtime_cubic_weight};
-use crate::artboard::ArtboardInstance;
+use crate::components::ComponentHandle;
+use crate::components::Mat2D;
+use crate::objects::InstanceObjectArena;
+
+use super::cubic_weight::RuntimeCubicWeightState;
 
 /// Runtime-only fields owned by C++ `Weight`.
 ///
@@ -24,7 +26,34 @@ impl RuntimeWeightState {
     }
 }
 
-pub(super) fn deform_point_from_skin(
+/// Pinned `Weight::onAddedDirty`: retain the exact parent Vertex occurrence.
+pub(crate) fn on_added_dirty(
+    objects: &mut InstanceObjectArena,
+    weight: ComponentHandle,
+) -> Result<()> {
+    let parent = objects
+        .component(weight)
+        .and_then(|component| component.parent)
+        .context("Weight is missing its parent Component")?;
+    if objects
+        .component(parent)
+        .and_then(|parent| parent.concrete.vertex.as_ref())
+        .is_none()
+    {
+        anyhow::bail!("Weight parent is not a Vertex");
+    }
+    objects
+        .component_mut(parent)
+        .expect("Vertex parent handle was validated")
+        .concrete
+        .vertex
+        .as_mut()
+        .expect("Weight parent owns Vertex state")
+        .weight = Some(weight);
+    Ok(())
+}
+
+pub(crate) fn deform_point_from_skin(
     point: (f32, f32),
     indices: u32,
     weights: u32,
@@ -51,123 +80,6 @@ pub(super) fn deform_point_from_skin(
     }
     let skinned = skin_world.transform_point(point.0, point.1);
     Some(Mat2D(blended).transform_point(skinned.0, skinned.1))
-}
-
-impl ArtboardInstance {
-    pub(crate) fn runtime_vertex_weight_state(
-        &self,
-        vertex_local: usize,
-    ) -> Option<RuntimeWeightState> {
-        let vertex = self.component_handle(vertex_local)?;
-        let weight = self
-            .objects
-            .component(vertex)?
-            .concrete
-            .vertex
-            .as_ref()?
-            .weight?;
-        self.objects.component(weight)?.concrete.weight
-    }
-
-    /// Settle one retained Weight/CubicWeight from the Skin-owned transform
-    /// buffer. The caller supplies live Vertex points; packed indices/values
-    /// are always read from this occurrence's generated storage.
-    pub(crate) fn deform_runtime_vertex_weight(
-        &mut self,
-        vertex_local: usize,
-        point: (f32, f32),
-        cubic_points: Option<((f32, f32), (f32, f32))>,
-    ) -> bool {
-        let Some(vertex) = self.component_handle(vertex_local) else {
-            return false;
-        };
-        let Some(weight) = self
-            .objects
-            .component(vertex)
-            .and_then(|component| component.concrete.vertex.as_ref())
-            .and_then(|vertex| vertex.weight)
-        else {
-            return false;
-        };
-        let Some(skinnable) = self
-            .objects
-            .component(vertex)
-            .and_then(|component| component.parent)
-        else {
-            return false;
-        };
-        let Some(skin) = self
-            .objects
-            .component(skinnable)
-            .and_then(|component| component.concrete.skinnable.as_ref())
-            .and_then(|skinnable| skinnable.skin)
-        else {
-            return false;
-        };
-        let Some(weight_local) = self.objects.component_local_id(weight) else {
-            return false;
-        };
-        let Some(is_cubic_weight) = self
-            .objects
-            .component(weight)
-            .and_then(|component| component.concrete.weight.as_ref())
-            .map(|weight| weight.cubic.is_some())
-        else {
-            return false;
-        };
-        let values = property_key_for_name("Weight", "values")
-            .and_then(|key| self.uint_property(weight_local, key))
-            .and_then(|value| u32::try_from(value).ok())
-            .unwrap_or(255);
-        let indices = property_key_for_name("Weight", "indices")
-            .and_then(|key| self.uint_property(weight_local, key))
-            .and_then(|value| u32::try_from(value).ok())
-            .unwrap_or(1);
-
-        let Some(skin_state) = self
-            .objects
-            .component(skin)
-            .and_then(|component| component.concrete.skin.as_ref())
-        else {
-            return false;
-        };
-        let Some(translation) = deform_point_from_skin(
-            point,
-            indices,
-            values,
-            skin_state.world_transform,
-            &skin_state.bone_transforms,
-        ) else {
-            return false;
-        };
-        let cubic_state = if is_cubic_weight {
-            let (in_point, out_point) = cubic_points.unwrap_or((point, point));
-            let Some(cubic_state) = deform_runtime_cubic_weight(
-                self,
-                weight_local,
-                in_point,
-                out_point,
-                skin_state.world_transform,
-                &skin_state.bone_transforms,
-            ) else {
-                return false;
-            };
-            Some(cubic_state)
-        } else {
-            None
-        };
-
-        let state = self
-            .objects
-            .component_mut(weight)
-            .and_then(|component| component.concrete.weight.as_mut())
-            .expect("validated Weight handle owns Weight state");
-        state.translation = translation;
-        if let Some(cubic_state) = cubic_state {
-            state.cubic = Some(cubic_state);
-        }
-        true
-    }
 }
 
 #[cfg(test)]

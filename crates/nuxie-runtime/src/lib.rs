@@ -16,6 +16,7 @@ mod project_data_converter;
 mod properties;
 mod rectangles_to_contour;
 mod scripting;
+mod shapes;
 mod solo;
 mod state_machine;
 mod text;

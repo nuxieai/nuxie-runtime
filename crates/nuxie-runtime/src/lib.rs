@@ -19,6 +19,7 @@ mod solo;
 mod state_machine;
 mod text;
 mod view_model;
+mod virtualizing_component;
 // #RB-1: retained-identity view-model core (map Phase RB). Additive while
 // consumers migrate; the compensation family deletes when migration ends.
 pub mod retained_data_bind;

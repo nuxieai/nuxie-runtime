@@ -2587,6 +2587,8 @@ wave = "FL-E"
 rust_modules = [
   "crates/nuxie-runtime/src/shapes/vertex.rs",
   "crates/nuxie-runtime/src/shapes/path_vertex.rs",
+  "crates/nuxie-runtime/src/components.rs",
+  "crates/nuxie-runtime/src/bones/weight.rs",
   "crates/nuxie-runtime/src/draw.rs",
 ]
 dynamically_reached = true

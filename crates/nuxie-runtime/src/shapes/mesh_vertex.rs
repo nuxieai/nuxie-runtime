@@ -5,17 +5,32 @@ use crate::ArtboardInstance;
 use crate::components::{ComponentDirt, ComponentHandle};
 use crate::objects::InstanceObjectArena;
 use crate::properties::property_key_for_name;
+use nuxie_schema::definition_by_name;
+
+fn is_mesh_vertex(type_name: &str) -> bool {
+    definition_by_name(type_name).is_some_and(|definition| definition.is_a("MeshVertex"))
+}
 
 /// Direct `MeshVertex::onAddedDirty`: register this occurrence on its retained
-/// parent Mesh in authored object order.
+/// parent Mesh in authored object order. Generated subclasses such as
+/// `ContourMeshVertex` inherit this exact override in pinned C++.
 pub(crate) fn on_added_dirty(objects: &mut InstanceObjectArena, handle: ComponentHandle) -> bool {
     if objects
         .component(handle)
-        .is_none_or(|component| component.type_name != "MeshVertex")
+        .is_none_or(|component| !is_mesh_vertex(component.type_name))
     {
         return false;
     }
-    super::vertex::register_on_parent_skinnable(objects, handle);
+    let parent = objects
+        .component(handle)
+        .and_then(|component| component.parent);
+    if let Some(skinnable) = parent.and_then(|parent| {
+        objects
+            .component_mut(parent)
+            .and_then(|parent| parent.concrete.skinnable.as_mut())
+    }) {
+        skinnable.vertices.push(handle);
+    }
     true
 }
 
@@ -27,7 +42,7 @@ pub(crate) fn apply_position_property_changed(
     type_name: Option<&str>,
     property_key: u16,
 ) -> bool {
-    if type_name != Some("MeshVertex")
+    if !type_name.is_some_and(is_mesh_vertex)
         || !["x", "y"]
             .iter()
             .any(|name| property_key_for_name("Vertex", name) == Some(property_key))

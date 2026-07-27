@@ -19,7 +19,16 @@ pub(crate) fn on_added_dirty(objects: &mut InstanceObjectArena, handle: Componen
     }) {
         return false;
     }
-    super::vertex::register_on_parent_skinnable(objects, handle);
+    let parent = objects
+        .component(handle)
+        .and_then(|component| component.parent);
+    if let Some(skinnable) = parent.and_then(|parent| {
+        objects
+            .component_mut(parent)
+            .and_then(|parent| parent.concrete.skinnable.as_mut())
+    }) {
+        skinnable.vertices.push(handle);
+    }
     true
 }
 

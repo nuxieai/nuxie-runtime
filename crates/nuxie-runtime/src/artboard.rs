@@ -14,9 +14,8 @@ use nuxie_render_api::Factory as RenderFactory;
 use nuxie_schema::definition_by_name;
 
 use crate::animation::{
-    LinearAnimationInstance, RuntimeInterpolator, RuntimeJoystick, RuntimeKeyedCallback,
-    RuntimeLinearAnimation, RuntimeLinearAnimationHandle, build_linear_animations,
-    build_runtime_joysticks,
+    LinearAnimationInstance, RuntimeInterpolator, RuntimeKeyedCallback, RuntimeLinearAnimation,
+    RuntimeLinearAnimationHandle, build_linear_animations,
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardAuthoredDataBindStates, RuntimeArtboardContextSourceValue,
@@ -60,12 +59,11 @@ use crate::draw::{
     runtime_apply_component_list_item_layout_bounds, runtime_component_list_item_base_transforms,
     runtime_component_list_item_layout_size,
 };
+use crate::joystick::{RuntimeJoystick, build_runtime_joysticks};
 use crate::objects::{ComponentAddress, InstanceObjectArena, InstanceSlot};
 use crate::properties::{
-    JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
-    joystick_flags_property_key, joystick_x_property_key, joystick_y_property_key,
-    layout_component_style_display_value_property_key, property_key_for_name,
-    solid_color_value_property_key, solo_active_component_id_property_key,
+    RuntimeArtboardDimensions, layout_component_style_display_value_property_key,
+    property_key_for_name, solid_color_value_property_key, solo_active_component_id_property_key,
     transform_property_for_key,
 };
 use crate::scripting::{
@@ -8173,17 +8171,6 @@ impl ArtboardInstance {
         }
     }
 
-    pub(crate) fn apply_joysticks(&mut self, can_apply_before_update: bool) -> bool {
-        let mut changed = false;
-        let joystick_count = self.joysticks.len();
-        for joystick_index in 0..joystick_count {
-            if self.joysticks[joystick_index].can_apply_before_update == can_apply_before_update {
-                changed |= self.apply_joystick_at(joystick_index);
-            }
-        }
-        changed
-    }
-
     fn update_runtime_text_variation_helper(&mut self, text: ComponentHandle, dirt: ComponentDirt) {
         if !dirt.contains(ComponentDirt::TEXT_SHAPE) {
             return;
@@ -8197,63 +8184,6 @@ impl ArtboardInstance {
             self.runtime_drawables
                 .mark_text_resource_dirty_for_local(text_local);
         }
-    }
-
-    fn apply_joystick_at(&mut self, joystick_index: usize) -> bool {
-        // Mirrors C++ Artboard::updatePass / Joystick::apply: iterate retained
-        // joystick entries instead of cloning the joystick list per pass.
-        let Some(joystick) = self.joysticks.get(joystick_index) else {
-            return false;
-        };
-        let local_id = joystick.local_id;
-        let x_animation_index = joystick.x_animation_index;
-        let y_animation_index = joystick.y_animation_index;
-        let nested_remap_dependents_len = joystick.nested_remap_dependents.len();
-
-        let mut changed = false;
-        if let Some(animation_index) = x_animation_index {
-            if let Some(seconds) = self.joystick_axis_seconds(local_id, animation_index, true) {
-                changed |= self.apply_linear_animation(animation_index, seconds, 1.0);
-            }
-        }
-        if let Some(animation_index) = y_animation_index {
-            if let Some(seconds) = self.joystick_axis_seconds(local_id, animation_index, false) {
-                changed |= self.apply_linear_animation(animation_index, seconds, 1.0);
-            }
-        }
-        for dependent_index in 0..nested_remap_dependents_len {
-            let remap_local_id =
-                self.joysticks[joystick_index].nested_remap_dependents[dependent_index];
-            changed |= self.advance_nested_remap_animation(remap_local_id);
-        }
-        changed
-    }
-
-    pub(crate) fn joystick_axis_seconds(
-        &self,
-        local_id: usize,
-        animation_index: usize,
-        is_x_axis: bool,
-    ) -> Option<f32> {
-        let animation = self.linear_animation(animation_index)?;
-        let axis_key = if is_x_axis {
-            joystick_x_property_key()
-        } else {
-            joystick_y_property_key()
-        }?;
-        let flag = if is_x_axis {
-            JOYSTICK_FLAG_INVERT_X
-        } else {
-            JOYSTICK_FLAG_INVERT_Y
-        };
-        let mut axis = self.double_property(local_id, axis_key).unwrap_or(0.0);
-        let flags = joystick_flags_property_key()
-            .and_then(|key| self.uint_property(local_id, key))
-            .unwrap_or(0);
-        if flags & flag != 0 {
-            axis = -axis;
-        }
-        Some(((axis + 1.0) / 2.0) * animation.duration_seconds())
     }
 
     pub(crate) fn apply_uint_property_changed(
@@ -9337,7 +9267,7 @@ impl ArtboardInstance {
             .any(|nested| nested.set_simple_animation_is_playing(local_id, value))
     }
 
-    fn advance_nested_remap_animation(&mut self, remap_local_id: usize) -> bool {
+    pub(crate) fn advance_nested_remap_animation(&mut self, remap_local_id: usize) -> bool {
         self.nested_artboards
             .values_mut()
             .any(|nested| nested.advance_remap(remap_local_id))

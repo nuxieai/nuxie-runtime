@@ -6,6 +6,7 @@ mod constraints;
 mod data_bind_graph;
 mod draw;
 mod focus;
+mod joystick;
 mod math;
 mod objects;
 mod parent_traversal;

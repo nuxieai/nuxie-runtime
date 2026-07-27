@@ -238,10 +238,12 @@ The safe next queue is therefore:
    incomplete inbox row remains evidence-blocked;
 2. quarantine the Scene-only `LOC-001` candidate and preserve `LOC-001`,
    `LOC-002`, and `LOC-005` as unchanged duplicate-family acceptances. The
-   retained schema/cell identity portion maps to FL-D `viewmodel.owner`; the
-   immutable live-`RuntimeFile` asset-catalog extension remains a separate
-   lower-runtime dependency pending exact ownership mapping. No writer is
-   active;
+   reported-family dependency maps to FL-D `viewmodel.owner`. Pinned C++
+   disproves mutable live-`RuntimeFile` catalog growth, and the original
+   LOC-001 fixture authors both images before mounting. Preserve the distinct
+   dynamic-image source observation in the deferred post-port list and require
+   one identical C++/Rust/Editor stimulus, or an evidence-backed
+   Editor-not-applicable disposition, after FL-D before classifying it;
 3. keep `LOC-009` outside that shared tracking line, parked, and frozen while
    diagnosis waits for a different reliable execution/model environment;
 4. retain the completed `RT-ED-004` support-matrix and `LOC-013`
@@ -387,7 +389,7 @@ fixture in `F-ED-00`.
 | `RT-ED-005` | changed intake needs evidence; historical landed generic number/color authoring repair remains preserved | PR #49 merge `08286481` is consumed by Editor and its P09-C01 primitive is green, but the changed inbox record omits separately labeled full Editor and Runtime SHAs; ordinary layout/TextStyle work is separate under P08-C01 / LOC-018 |
 | `RT-ED-006` | retracted | retain tombstone only; no source work |
 | `RT-ED-007` | confirmed runtime transition-duration binding defect | preserve the qualified-correct Scene bytes and unchanged red acceptance for deferred verification after the relevant state-machine port wave; no direct Runtime Fix request or schedule |
-| `LOC-001` | mapped retained-owner gap with one unmapped dependency | quarantined Scene diagnostics prove retained identity is necessary; in-place `RuntimeOwnedViewModelInstance` schema/cell migration maps to FL-D `viewmodel.owner`, while immutable live-`RuntimeFile` asset-catalog extension is a separate lower-runtime dependency pending exact ownership mapping. No repair landed or writer is active |
+| `LOC-001` | mapped retained-owner gap | quarantined Scene diagnostics prove retained identity is necessary; in-place `RuntimeOwnedViewModelInstance` schema/cell migration maps to FL-D `viewmodel.owner`. Exact C++ disproves mutable file-catalog growth, and the original fixture already authors both images, so no second LOC-001 dependency or writer exists |
 | `LOC-002` | confirmed duplicate acceptance for LOC-001 | unchanged direct Scene/ProductHost/browser selected-product reproducers rerun after FL-D `viewmodel.owner`; no separate writer |
 | `LOC-003` | closed unlinked additive product feature | pinned C++ has no timed-hold primitive; the user decision authorizes no runtime port |
 | `LOC-004` | resolved editor-owned | no runtime work |
@@ -427,30 +429,54 @@ when it is bound:
 - `src/data_bind/data_bind_container.cpp:86-154`.
 
 The quarantined Scene candidate established that a stable handle and
-generation-matched materialization are necessary, but it also found two
-distinct faithful lower-runtime boundaries. `RuntimeOwnedViewModelInstance`
-privately owns its property-name schema, scalar cells, parent relay,
-list/child edges, and aliases at
+generation-matched materialization are necessary.
+`RuntimeOwnedViewModelInstance` privately owns its property-name schema,
+scalar cells, parent relay, list/child edges, and aliases at
 `crates/nuxie-runtime/src/view_model.rs:1597-1618`; the in-place migration
-needed to preserve those identities maps to FL-D `viewmodel.owner`. Separately,
-a live artboard retains an immutable `RuntimeFile`, so a newly authored image
-is absent from its catalog and resolves to the private empty image in
-`crates/nuxie-runtime/src/artboard_data_bind.rs:7218-7224`. That live asset
-catalog extension is not covered solely by `viewmodel.owner`; it remains an
-unmapped lower-runtime dependency with no writer until exact ownership is
-established.
+needed to preserve those identities maps to FL-D `viewmodel.owner`.
 
 The candidate fallback is not admissible: it remounted owner-sharing
 artboards/state machines and bumped the Scene epoch for a scalar image write,
-resetting live state, and it rejected retained schema edits that previously
-succeeded. Candidate `dcccdf4fb09275783f6910e5a4a01c028f2c817e` (parent
+resetting live state; rejected retained schema edits that previously
+succeeded; and invented append-only private catalogs and tombstones absent
+from C++. Candidate `dcccdf4fb09275783f6910e5a4a01c028f2c817e` (parent
 `bd40c60a07bacfc991f3f070ba77de2041c5d978`) plus uncommitted correction diff
 SHA-256
 `5477057e14eab86a2d0b2b7c5e8e95e2c837bfa33624fa43c6dee9f24aeef981`
-are diagnostic only. The FL-D `viewmodel.owner` mapping for schema/cell
-identity plus the explicit pending-owner asset-catalog dependency supersede
-the historical Scene-only disposition without rewriting its evidence. No
-repair landed and no writer is active.
+are diagnostic only. FL-D `viewmodel.owner` is the sole dependency of the
+reported family. No repair landed and no writer is active.
+
+### Dynamic image property source acceptance — unreported FL-D risk
+
+The same audit initially inferred a second mutable-file-catalog dependency,
+but exact pinned C++ disproves it:
+
+- `src/file.cpp:310-355,1423,1492-1498` populates assets only during import
+  and exposes the resulting catalog for lookup;
+- `src/importers/backboard_importer.cpp:31-59,76-100` collects and resolves
+  asset referencers during import;
+- `src/viewmodel/viewmodel_instance_asset_image.cpp:13-62` gives each
+  image-valued ViewModel property a private retained `ImageAsset`, swaps only
+  its `RenderImage`, uses sentinel `-1`, and dirties bindings;
+- `src/data_bind/context/context_value_asset_image.cpp:13-48` first tries the
+  immutable file ordinal and otherwise binds the target to the source
+  property's private image;
+- `tests/unit_tests/runtime/data_binding_images_test.cpp:179-233` writes a
+  newly decoded image, draws, and clears it through the same retained file,
+  ViewModel instance, state machine, and artboard.
+
+Rust currently stores only `AssetImage(u32)` in
+`crates/nuxie-runtime/src/view_model_cell.rs` and resolves only that ordinal in
+`crates/nuxie-runtime/src/artboard_data_bind.rs:7218-7224`. This source shape
+identifies an FL-D `viewmodel.owner` plus `databind.context` risk—not a reason
+to grow the file catalog—but it is not yet a confirmed defect because one
+identical C++/Rust/Editor dynamic-image stimulus, or an evidence-backed
+Editor-not-applicable disposition, has not run. Preserve that stimulus in the
+canonical deferred post-port list and classify it only after the two FL-D
+members land. The original LOC-001 fixture already authors both hero and
+alternate images before its first materialization, so this source-level risk
+is not part of the LOC-001/002/005 family and creates no current dependency or
+writer.
 
 ### Parametric path dirt — `LOC-007`
 
@@ -739,14 +765,16 @@ duplicate acceptance cases and no separate writers.
 The direct current-pin differential and pinned d788 owner audit confirm the
 structural classification. The quarantined Scene-only candidate proved one
 retained handle per authored ViewModelInstance/default identity is necessary.
-The atomic in-place schema/cell migration portion maps to FL-D
+The atomic in-place schema/cell migration maps to FL-D
 `viewmodel.owner` and must preserve the same owner, compatible cells,
 child/list edges, aliases, dependents, state machines, and animation state.
-Live asset-catalog visibility is a second lower-runtime requirement: immutable
-live `RuntimeFile` catalog extension is not covered solely by
-`viewmodel.owner` and remains pending exact ownership mapping. A remount,
-scalar replay, or newly rejected schema edit is not a translation of either
-lifecycle.
+Exact pinned C++ rejects the inferred second mutable-catalog requirement:
+imported file assets stay fixed, while the image-valued property privately
+owns the live image used as the binding fallback. The original LOC-001 fixture
+already authors both images before mounting, so the reported family waits only
+on `viewmodel.owner`. Under AF-1, AF-2, and AF-8, a remount, scalar replay,
+newly rejected schema edit, append-only catalog, or tombstone is not a
+translation of the C++ retained-owner lifecycle.
 
 Acceptance must cover:
 
@@ -759,11 +787,10 @@ Acceptance must cover:
   value-independent;
 - detach/rebind/drop and deep-copy cases matching pinned C++.
 
-This is one defect/acceptance family with two lower-runtime dependencies. Do
-not land per-type carry extensions or the quarantined Scene fallback.
-`LOC-002` and `LOC-005` rerun after FL-D `viewmodel.owner`; complete
-`LOC-001` acceptance additionally waits for the separately mapped
-asset-catalog dependency. No repair or active writer is claimed here.
+This is one defect/acceptance family with one lower-runtime dependency. Do not
+land per-type carry extensions or the quarantined Scene fallback.
+`LOC-001`, `LOC-002`, and `LOC-005` rerun after FL-D `viewmodel.owner`.
+No repair or active writer is claimed here.
 
 ### `F-ED-02` — No separate writer
 
@@ -771,6 +798,20 @@ asset-catalog dependency. No repair or active writer is claimed here.
 Preserve its exact retained/fresh relation and product reproducers as
 post-port acceptance cases; do not create a second DataBind-container writer
 or add post-remount value replay.
+
+### FL-D source acceptance — dynamic image property
+
+This is not an Editor-reported defect row and is not part of `F-ED-01`.
+Pinned d788 source and `data_binding_images_test.cpp:179-233` expect a newly
+decoded image to update the property-private asset while the same file,
+ViewModel instance, state machine, artboard, and immutable file catalog remain
+retained. Rust's ordinal-only source shape creates a concrete risk across
+FL-D `viewmodel.owner` plus `databind.context`, but no identical Rust stimulus
+has established a differential yet. After both members land, run one
+same-input C++/Rust/Editor differential, or record an evidence-backed
+Editor-not-applicable disposition, and only then classify it as resolved or
+import a new defect row. This observation authorizes no current implementation
+or writer.
 
 ### `F-ED-03` — Generic visual-property binding
 
@@ -1230,11 +1271,16 @@ the atlas. A shared file is not proof of a semantic dependency.
 ### Semantic prerequisites
 
 - `LOC-001/002/005` are one retained-owner acceptance family. Schema/cell
-  identity maps to FL-D `viewmodel.owner`; immutable live-`RuntimeFile`
-  asset-catalog extension remains a distinct lower-runtime dependency for
-  complete `LOC-001` acceptance pending exact ownership mapping. `LOC-002`
-  and `LOC-005` have no separate writer; the quarantined Scene candidate is
+  identity maps to FL-D `viewmodel.owner`; exact pinned C++ disproves mutable
+  live-`RuntimeFile` catalog growth, and the original fixture already authors
+  both images, so this family has no second dependency. `LOC-002` and
+  `LOC-005` have no separate writer; the quarantined Scene candidate is
   diagnostic only and no repair landed.
+- the unreported dynamic-image source acceptance waits for FL-D
+  `viewmodel.owner` plus `databind.context`, then one identical
+  C++/Rust/Editor stimulus or an evidence-backed Editor-not-applicable
+  disposition. It is not a LOC-001 dependency or confirmed defect before that
+  differential and authorizes no writer.
 - `LOC-006` is a no-repair stale characterization, semantically distinct from
   closed historical support-matrix row `RT-ED-004`; neither has a production
   writer.

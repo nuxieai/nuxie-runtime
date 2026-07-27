@@ -63,20 +63,27 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
 - deferred FL-D owner family: `LOC-001`, with `LOC-002` and `LOC-005` as
   duplicate acceptance cases. The quarantined Scene-only candidate proved
   that one retained ViewModel-instance handle and generation-matched
-  materialization are necessary, but it also exposed two missing lower-runtime
-  capabilities: extending a retained `RuntimeFile` asset catalog and migrating
-  a `RuntimeOwnedViewModelInstance` schema in place while preserving compatible
-  cells, child/list edges, aliases, and dependents. Schema migration maps to
-  FL-D `viewmodel.owner`; retained asset-catalog extension is a distinct
-  lower-runtime dependency still pending exact ownership mapping. Candidate
+  materialization are necessary. Migrating a
+  `RuntimeOwnedViewModelInstance` schema in place while preserving compatible
+  cells, child/list edges, aliases, and dependents maps to FL-D
+  `viewmodel.owner`. The exact pinned-C++ image audit disproves the candidate's
+  second premise: live `File` asset catalogs do not grow. Each
+  `ViewModelInstanceAssetImage` instead owns a private retained `ImageAsset`,
+  and `DataBindContextValueAssetImage` falls back to it when an immutable file
+  ordinal does not resolve. The original `LOC-001` fixture authors both image
+  assets before initial materialization, so the reported family waits only on
+  FL-D `viewmodel.owner`. A distinct source-level dynamic-image acceptance is
+  retained separately below for an identical post-FL-D C++/Rust/Editor
+  differential, or an evidence-backed Editor-not-applicable disposition; it
+  is not part of LOC-001 and is not yet promoted to a confirmed defect.
+  Candidate
   `dcccdf4fb09275783f6910e5a4a01c028f2c817e` plus uncommitted correction
   diff SHA-256
   `5477057e14eab86a2d0b2b7c5e8e95e2c837bfa33624fa43c6dee9f24aeef981`
   are diagnostic only. The fallback remounted live owners and rejected
-  previously accepted schema edits, so it is quarantined; no repair landed,
-  no writer is active. `LOC-002/005` rerun after FL-D `viewmodel.owner`;
-  complete `LOC-001` acceptance also waits for the separate asset-catalog
-  owner to be mapped and landed;
+  previously accepted schema edits, and its append-only catalogs/tombstones
+  invent lifecycle absent from C++, so it is quarantined; no repair landed,
+  no writer is active. `LOC-001/002/005` rerun after FL-D `viewmodel.owner`;
 - closed Apple artifact family: `LOC-015`, `LOC-016`, and `LOC-017` qualify
   exact runtime identity
   `0.2.0@b1f58004332a73564ffdd9f8585838209604c4d1`, Editor correction
@@ -212,6 +219,19 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
     LayoutComponentStyle/TextStyle changes to dirty and reflow the same
     retained layout. This is separate from the already landed and consumed
     `RT-ED-005` generic number/color authoring primitive.
+  - unreported FL-D dynamic-image source acceptance: pinned d788
+    `file.cpp:310-355,1423,1492-1498`,
+    `viewmodel_instance_asset_image.cpp:13-62`,
+    `context_value_asset_image.cpp:13-48`, and
+    `data_binding_images_test.cpp:179-233` keep the imported file catalog
+    fixed while one image-valued ViewModel property privately swaps a decoded
+    image and the same ViewModel instance, state machine, and artboard draw it.
+    Rust currently stores only `AssetImage(u32)` and resolves only the file
+    ordinal. After FL-D `viewmodel.owner` plus `databind.context`, build and
+    run one identical C++/Rust/Editor dynamic-image stimulus, or record an
+    evidence-backed Editor-not-applicable disposition, before classifying this
+    source-level risk as resolved or a confirmed new defect. It is not an
+    Editor-reported row, current dependency, implementation request, or writer.
   - `RT-ED-007` retains exact artifact SHA-256
     `b8e1696a3166959ab7afbca6d7e8ba4abaf99c9e04a15f144327699ce54ebe70`
     and unchanged
@@ -219,7 +239,9 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
     Pinned d788 produces opacity 0.200000003 at `advance(0)` and 0.5 after
     another 0.5s; fe0 keeps source=`None` and produces instant opacity 0.8.
   After each corresponding formal port wave lands, Defects Fix independently
-  reruns the unchanged acceptance and classifies it resolved or still open;
+  reruns each existing registered acceptance unchanged and classifies it
+  resolved or still open; the unreported dynamic-image source risk first
+  requires the three-layer differential described above;
 - post-port verification escalates only for an actual simultaneous file-writer
   collision or a safety/data-loss issue, never merely because a formal port
   wave is in progress;
@@ -460,9 +482,11 @@ relabeled green.
 ## Next queue
 
 1. keep the quarantined Scene-only `LOC-001` candidate out of production and
-   preserve unchanged `LOC-002` / `LOC-005` acceptance for independent rerun
-   after FL-D `viewmodel.owner`; complete `LOC-001` acceptance additionally
-   waits for a separately mapped retained RuntimeFile asset-catalog owner;
+   preserve unchanged `LOC-001` / `LOC-002` / `LOC-005` acceptance for
+   independent rerun after FL-D `viewmodel.owner`; keep the unreported
+   dynamic-image source acceptance in the deferred list for an identical
+   post-FL-D C++/Rust/Editor differential, or an evidence-backed
+   Editor-not-applicable disposition, before any defect classification;
 2. keep `LOC-012` open at `stale-oracle`, retain P19-C08 and COR-07, and ask
    for the explicit user decision on the reviewed expected image; do not claim
    pinned-C++ parity from the non-reproducible historical artifact;

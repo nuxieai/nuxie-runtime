@@ -674,21 +674,21 @@ owner_class = "runtime"
 classification = "structural-mistranslation"
 ticket = "F-ED-01"
 fixture_id = "fed.loc_001.extended_view_model_owner"
-preliminary_disposition = "Confirmed lower-runtime owner gap. The quarantined Scene-only candidate proves that one retained ViewModelInstance handle plus generation-matched materialization is necessary. Atomic in-place RuntimeOwnedViewModelInstance schema migration maps to FL-D viewmodel.owner; live RuntimeFile asset-catalog extension is a separate lower-runtime dependency whose exact ownership is not yet mapped. LOC-002 and LOC-005 remain duplicate acceptance cases for the retained ViewModel owner portion."
+preliminary_disposition = "Confirmed FL-D retained-owner gap. The quarantined Scene-only candidate proves that one retained ViewModelInstance handle plus generation-matched materialization is necessary, and atomic in-place RuntimeOwnedViewModelInstance schema migration maps to FL-D viewmodel.owner. The pinned-C++ image-owner audit disproves mutable RuntimeFile asset-catalog extension, and the original LOC-001 fixture authors both images before initial materialization, so LOC-001, LOC-002, and LOC-005 wait only on FL-D viewmodel.owner. A distinct source-level dynamic-image acceptance is tracked outside this row and requires an identical C++/Rust/Editor differential, or an evidence-backed Editor-not-applicable disposition, after FL-D before it can be classified as a defect."
 reproduction_sha256 = "2281423b29ebc3579c00554e4dd1ad2fff0efe1c0f5da25742d296973700e268"
 rust_stimulus = "CARGO_INCREMENTAL=0 CARGO_HOME=/private/tmp/nuxie-editor-cargo-home bash tools/nuxie-editor-next/scripts/cargo.sh test -p browser-host --test product_host runtime_retains_extended_view_model_hot_writes_across_structural_remount --offline -- --exact"
 cpp_stimulus = "pinned d788 source-owner audit of artboard.cpp:997-1008,2655-2692 and the caller-provided rcp<ViewModelInstance> lifecycle"
-source_files = ["src/artboard.cpp","include/rive/artboard.hpp","src/viewmodel/viewmodel_instance.cpp","src/viewmodel/runtime/viewmodel_instance_runtime.cpp","crates/nuxie/src/scene.rs","crates/nuxie-runtime/src/artboard_data_bind.rs","crates/nuxie-runtime/src/view_model.rs","crates/nuxie/tests/data_converter_authoring.rs"]
-source_members = ["Artboard::bindViewModelInstance","Scene::edit","Scene::instantiate","RuntimeFile asset catalog","RuntimeOwnedViewModelInstance property schema and retained cells","artboard_data_bind private empty-image fallback"]
+source_files = ["src/artboard.cpp","include/rive/artboard.hpp","src/viewmodel/viewmodel_instance.cpp","src/viewmodel/runtime/viewmodel_instance_runtime.cpp","crates/nuxie/src/scene.rs","crates/nuxie-runtime/src/view_model.rs","crates/nuxie/tests/data_converter_authoring.rs"]
+source_members = ["Artboard::bindViewModelInstance","Scene::edit","Scene::instantiate","RuntimeOwnedViewModelInstance property schema and retained cells"]
 lifecycle_phases = ["author one ViewModel graph","instantiate and mutate retained values","edit or rematerialize one or more artboards","reuse the identical retained owner","resolve nested/list/asset/artboard values without scalar replay","delete and recreate the authored top-level identity"]
-rust_owner = "Split lower-runtime dependency with no active writer: RuntimeOwnedViewModelInstance schema/identity retention maps to FL-D member viewmodel.owner; immutable live RuntimeFile asset-catalog extension remains pending exact ownership mapping and must not be attributed to viewmodel.owner."
-displaced_mechanism = "The quarantined Scene fallback remounted owner-sharing artboards/state machines and bumped the Scene epoch on a scalar image write, resetting live state; its schema fallback rejected retained changes that previously succeeded. Neither remount nor rejection may replace the missing lower-runtime ownership APIs."
-dependencies = ["F-ED-00B","FL-D:viewmodel.owner","pending-owner:retained-runtime-file-asset-catalog"]
-target_tests = ["focused retained-owner identity, cross-artboard catalog, unrelated-edit, nested/list/asset/artboard, delete/recreate, cycle-rejection, and DAG-alias Scene tests","unchanged LOC-001/LOC-002/LOC-005 Editor reproducers","cpp_probe/registry.cpp"]
+rust_owner = "One reported-family dependency with no active writer: RuntimeOwnedViewModelInstance schema/identity retention maps to FL-D member viewmodel.owner."
+displaced_mechanism = "The quarantined Scene fallback remounted owner-sharing artboards/state machines and bumped the Scene epoch on a scalar image write, resetting live state; its schema fallback rejected retained changes that previously succeeded. Its append-only private file catalogs, tombstones, and remount-on-image-write path also invent lifecycle absent from C++. Neither remount, rejection, nor file-catalog mutation may replace the retained ViewModel owner or property-private image semantics."
+dependencies = ["F-ED-00B","FL-D:viewmodel.owner"]
+target_tests = ["focused retained-owner identity, unrelated-edit, nested/list/asset/artboard, delete/recreate, cycle-rejection, and DAG-alias Scene tests","unchanged LOC-001/LOC-002/LOC-005 Editor reproducers","cpp_probe/registry.cpp"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
 owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#LOC-001"
-adaptation_rule = "PORTING.md prime directive: preserve the C++ retained owner, live file/catalog visibility, compatible property cells, child/list edges, aliases, and rebind lifecycle; do not approximate ownership with scalar replay, remount, owner replacement, or rejected schema edits."
-decision_row = "This current disposition supersedes the historical Scene-only mapping without rewriting its evidence. Candidate dcccdf4fb09275783f6910e5a4a01c028f2c817e (parent bd40c60a07bacfc991f3f070ba77de2041c5d978), uncommitted correction diff SHA-256 5477057e14eab86a2d0b2b7c5e8e95e2c837bfa33624fa43c6dee9f24aeef981, and corrected scene.rs SHA-256 3921a9786eadd70be79b01d6dcde16ebebadec72abeee48d9295506e1c2cfaa2 are diagnostic only and quarantined. No repair landed. LOC-002/005 rerun after FL-D viewmodel.owner; complete LOC-001 acceptance also waits for an exact owner mapping and landing for retained RuntimeFile asset-catalog extension."
+adaptation_rule = "PORTING.md prime directive plus AF-1, AF-2, and AF-8: preserve the C++ retained ViewModel owner, compatible property cells, child/list edges, aliases, and rebind lifecycle; do not approximate ownership with scalar replay, remount, owner replacement, rejected schema edits, or invented mutable file-catalog machinery."
+decision_row = "This current disposition supersedes the historical Scene-only mapping without rewriting its diagnostic identities. Candidate dcccdf4fb09275783f6910e5a4a01c028f2c817e (parent bd40c60a07bacfc991f3f070ba77de2041c5d978), uncommitted correction diff SHA-256 5477057e14eab86a2d0b2b7c5e8e95e2c837bfa33624fa43c6dee9f24aeef981, and corrected scene.rs SHA-256 3921a9786eadd70be79b01d6dcde16ebebadec72abeee48d9295506e1c2cfaa2 are diagnostic only and quarantined. The exact d788 image audit disproves its mutable RuntimeFile catalog/tombstone/remount model. The original LOC-001 fixture already authors both image assets before the first materialization, so LOC-001/002/005 rerun only after FL-D viewmodel.owner. A distinct source-level dynamic-image acceptance is listed separately for post-FL-D qualification and is not part of this row. No repair landed."
 touch = []
 dont_touch = ["@active-fl-lease"]
 formal_children = ["P13-C07"]
@@ -702,7 +702,7 @@ parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f875922
 original_localization_rust_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_head_sha = "fe0a0a07db302ce2f0282a2d919ea249e83144e5"
-merged_repair_sha = { status = "pending", reason = "No repair landed; the Scene-only candidate is quarantined pending FL-D viewmodel.owner and separate ownership mapping for retained RuntimeFile asset-catalog extension." }
+merged_repair_sha = { status = "pending", reason = "No repair landed; the Scene-only candidate is quarantined and the reported LOC-001/002/005 family waits only on FL-D viewmodel.owner." }
 consumed_runtime_sha = { status = "pending", reason = "No landed runtime repair exists for Editor to consume." }
 consumed_superproject_sha = { status = "pending", reason = "No Editor superproject checkpoint has consumed a repair for this open owner family." }
 [defect.renderer_provenance]
@@ -710,10 +710,10 @@ status = "not-applicable"
 reason = "This row does not qualify renderer output."
 [defect.executor_verification]
 status = "pending"
-reason = "No repair landed. Executor verification reruns LOC-002/005 after FL-D viewmodel.owner; complete LOC-001 acceptance additionally waits for a mapped and landed retained RuntimeFile asset-catalog owner."
+reason = "No repair landed. Executor verification reruns unchanged LOC-001/002/005 after FL-D viewmodel.owner."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "Independent verification reruns unchanged LOC-002/005 after FL-D viewmodel.owner; complete LOC-001 acceptance additionally waits for the separately mapped retained RuntimeFile asset-catalog landing. The quarantined Scene-only candidate is not a verification input."
+reason = "Independent verification reruns unchanged LOC-001/002/005 after FL-D viewmodel.owner. The quarantined Scene-only candidate is not a verification input."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"

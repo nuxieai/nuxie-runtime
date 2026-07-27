@@ -16,25 +16,26 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   `e72323c808b91d706ba3b745396beaca7accd69a`;
 - rows: 25 defects plus the reserved `LOC-010` tombstone;
 - closed rows: `RT-ED-001`, `RT-ED-002`, `RT-ED-003`, `RT-ED-006`,
-  `LOC-003`, `LOC-004`, `LOC-006`, `LOC-014`, `LOC-015`, `LOC-016`,
+  `LOC-003`, `LOC-004`, `LOC-006`, `LOC-011`, `LOC-014`, `LOC-015`, `LOC-016`,
   `LOC-017`, and `LOC-019`;
-- open rows: 13;
-- state counts: 12 `closed`, 1 `handoff-ready`, 2
-  `intake-needs-evidence`, 3 `mapped`, 1 `regression-reopened`, and 6
+- open rows: 12;
+- state counts: 13 `closed`, 3
+  `intake-needs-evidence`, 3 `mapped`, 1 `regression-reopened`, and 5
   `reported`;
-- formal/structured product children in the landed Editor snapshot: 10;
-- candidate-linked product children: 13;
-- union: 23, with no formal/candidate overlap;
+- formal/structured product children in the landed Editor snapshot: 11;
+- candidate-linked product children: 10;
+- union: 21, with no formal/candidate overlap;
 - correction rows: 12.
 - fixture rows: 25 total, with `RT-ED-001`, `RT-ED-002`, `RT-ED-003`,
   `LOC-003`, `LOC-011`, `LOC-014`, `LOC-015`, `LOC-016`, `LOC-017`, and
   `LOC-019` directly qualified.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
-- latest control-plane landing: intake reconciliation PR #67 rebase-merged at
-  exact runtime main `74368a874130a91c9837439b691f0cf44fa4c4a6`;
-- active control-plane lane: this post-landing reconciliation records the
-  additive Scene implementation without promoting its incomplete inbox row;
+- latest control-plane landing: Apple artifact closeout PR #75 rebase-merged
+  at exact runtime main `f34e1fdec9c9dbd049576b9a6cbc6880ae51022b`;
+- active control-plane lane: consume exact Editor checkpoint
+  `233552c13929b09666a62ddff541eb8620d1882b`, close the Editor-owned
+  empty-text row, and keep the two incomplete layout/text records fail-closed;
 - landed Scene-owned repair: `LOC-018` PR #66 exact head
   `2707280cb3507f8d5c2f48cfe58f1cf0990e9ed0` rebase-merged at
   `d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3`. It covers all four concrete
@@ -46,10 +47,11 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   records (410 -> 530). The remaining ten product records and retained product
   traversal/order are Editor-owned; layout execution, dirt, pixels, and final
   product closure remain deferred post-port verification;
-  the changed committed inbox record is currently `intake-needs-evidence`
-  because it does not separately label one full Editor SHA and one full
-  Runtime SHA. The implementation is merged, but the row cannot promote until
-  that committed-evidence gap is resolved;
+  the changed committed inbox record remains `intake-needs-evidence` because
+  it names producer `38f5170f`, runtime pin `e72323c8`, and Journey acceptance
+  `a2dbcd2c`, but does not separately label one full Editor assembly SHA.
+  `P08-C06` is now its only structured formal child; the implementation is
+  merged, but runtime execution and pixels cannot promote at this boundary;
 - active Scene-owned repair: `LOC-001` owns one retained ViewModel-instance
   handle per authored `ViewModelInstanceId` across artboard rematerialization,
   with `LOC-002` and `LOC-005` retained as duplicate acceptance cases. The
@@ -65,6 +67,14 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   start/quarter/end, behavior, archive, and framework validators. Clients
   bind runtime version plus source revision; no separately versioned ABI,
   public publication, or iOS-main consumption is claimed or required;
+- closed Editor-owned empty-text defect: `LOC-011` retains the independent
+  pinned-C++/Rust proof that explicit empty text stays empty and draws no
+  glyphs, while reviewed Editor fix
+  `fc1a7e406494ee970bd93e456d1f5cfae468bfd4`, landed tree-identically as
+  `3bc62bf82ac7d8518e89d093b46f92c727c5af7a`, repairs the actual lowering
+  omission. The unchanged browser page reports both prices empty, with
+  inspection SHA-256
+  `7c9a264d6803d9729197f3cce89d04192e0bd55c386558011be1aeb8e4b89be2`;
 - active production-repair lane: `LOC-009` is a confirmed physical
   shader-module error-scope defect requiring a new production landing; it is
   `regression-reopened`, with PR #54 / `7f1450dc` retained only as historical
@@ -125,7 +135,11 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
     `CARGO_HOME=/private/tmp/nuxie-editor-cargo-home rustup run stable cargo test --manifest-path tools/rive-compiler/scene-shared/Cargo.toml -p nuxie-scene-compiler --lib document_lowering::tests::lowers_list_alias_projection_value_to_a_name_resolved_text_run_binding --offline -- --exact && PAGE_PARITY_ASSERT=1 pnpm --dir apps/nuxie-dashboard run test:visual:page --grep 'Real-Data Paywall / Paywall'`.
     The pinned-C++ shaper expectation is exact intrinsic width and multiline
     height: the 354-wide subtitle occupies 47.59375 over two lines, and
-    intrinsic labels do not retain the 180-pixel fallback.
+    intrinsic labels do not retain the 180-pixel fallback. At checkpoint
+    `233552c1` on runtime `e72323c8`, the unchanged page is red by `166,969`
+    pixels after the empty-value correction. The row is
+    `intake-needs-evidence` because its changed source record does not
+    separately label a full Editor SHA; this does not authorize a writer.
   - `LOC-018`'s remaining assembled ordinary-layout/TextStyle execution retains
     the exact `P08-C01` command:
     `pnpm --dir apps/nuxie-dashboard run test:visual:style && PAGE_PARITY_ASSERT=1 pnpm --dir apps/nuxie-dashboard run test:visual:page && PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor outline-visual-consistency.spec.ts unit-conversion-matrix.spec.ts safe-area-env-guide.spec.ts design-token-layout.spec.ts && NUXIE_EDITOR_PERF_REQUIRE_HEALTHY_ENV=1 NUXIE_EDITOR_STREAMING_CAPACITY=1 PLAYWRIGHT_START_WEB_SERVER=1 pnpm --dir apps/nuxie-dashboard run test:editor:perf`.
@@ -190,10 +204,10 @@ or uncaptured errors. Draw count 34 returns only after the separate
 the committed 171,784-byte machine report has SHA-256
 `f78b93d7575c3543e57de49bd73dce5783648b4c5a258328cfdd1f5eeb2652b5`.
 
-The same committed ledger has ten unique structured runtime children across
-eleven `runtimeDependencies` / `runtimeDefects` links, plus 13 candidate
-links. It retains `RT-ED-004` only as historical WebGL2 evidence. This intake
-mirrors that source linkage without independently promoting any row state.
+The same committed ledger has 11 unique structured runtime children, plus ten
+candidate-linked children, for 21 unique affected children. `P08-C06` is now a
+formal child of `LOC-008` and `LOC-018`; `LOC-011` has no active child after
+its Editor fix. It retains `RT-ED-004` only as historical WebGL2 evidence.
 
 ## Defect inbox
 
@@ -203,17 +217,17 @@ The committed Editor repository is the mailbox:
 - inbox: `plans/nuxie-editor-next-runtime-defects.md`;
 - linkage: `plans/nuxie-editor-next-parity-ledger.json`;
 - last consumed checkpoint:
-  `c7e4f313e8cd9237186e83546566537a341e3cfa`;
+  `233552c13929b09666a62ddff541eb8620d1882b`;
 - newest known checkpoint:
-  `c7e4f313e8cd9237186e83546566537a341e3cfa`;
+  `233552c13929b09666a62ddff541eb8620d1882b`;
 - inbox SHA-256:
-  `6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a`;
+  `24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae`;
 - linkage SHA-256:
-  `3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1`;
+  `07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226`;
 - unconsumed inbox records: 0;
 - imported atlas rows: 25;
-- changed records consumed at this boundary: `LOC-001`, `LOC-002`,
-  `LOC-018`, and `RT-ED-005`.
+- changed records consumed at this boundary: `LOC-008`, `LOC-011`, and
+  `LOC-018`.
 
 Intake runs only after the current control-plane or scheduled batch reaches a
 merge/block boundary. Missing record evidence becomes
@@ -238,8 +252,8 @@ fresh fetch, exact tip equality, and zero unconsumed records.
 
 ## Editor source snapshot
 
-The last consumed Editor snapshot at intake cycle 3 is
-`c7e4f313e8cd9237186e83546566537a341e3cfa`. The pinned source checkout and
+The last consumed Editor snapshot at intake cycle 4 is
+`233552c13929b09666a62ddff541eb8620d1882b`. The pinned source checkout and
 committed blobs used by the checker resolve to that exact SHA, its runtime
 gitlink is `e72323c808b91d706ba3b745396beaca7accd69a`, and the three recorded
 source artifacts match the commit byte-for-byte. This statement does not claim
@@ -249,11 +263,11 @@ tip is fetched and reconciled only at the next explicit intake boundary.
 The landed snapshot hashes are:
 
 - proposal:
-  `4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e`;
+  `905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9`;
 - runtime defects:
-  `6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a`;
+  `24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae`;
 - parity ledger:
-  `3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1`.
+  `07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226`.
 
 The earlier reviewed hashes remain in this file's Git history, but their formal
 dependency map is stale and must not be used for qualification. Any later
@@ -334,7 +348,7 @@ encoded `File::import` behavior tests. Independent review found the missing
 converter-free direction surface; the follow-up now proves numeric
 `ToSource`, numeric source-first `TwoWay`, and color source-first `TwoWay`
 through exact re-import and reverse propagation. Clean Editor checkpoint
-`c7e4f313e8cd9237186e83546566537a341e3cfa` consumes descendant runtime
+`233552c13929b09666a62ddff541eb8620d1882b` consumes descendant runtime
 `e72323c808b91d706ba3b745396beaca7accd69a`, including the generic
 number/color paint primitive for existing `Stroke` and `SolidColor` targets.
 Historical executor evidence remains green, but the changed committed
@@ -381,8 +395,9 @@ relabeled green.
    including unchanged `LOC-002` / `LOC-005` acceptance, before publishing
    any Scene production SHA;
 2. keep merged `LOC-018` in `intake-needs-evidence` until its committed source
-   separately labels full Editor and Runtime SHAs; preserve the exact additive
-   claim and do not conflate downstream product/runtime execution;
+   separately labels a full Editor assembly SHA, and keep `LOC-008` in the
+   same fail-closed state for its missing full Editor SHA; preserve their exact
+   evidence and do not conflate downstream product/runtime execution;
 3. keep `LOC-009` outside the shared tracking merge line, parked, and frozen
    until diagnosis resumes in a different reliable execution/model
    environment; do not close or consume it without a reviewed new production

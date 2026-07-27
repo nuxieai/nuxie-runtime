@@ -4,13 +4,13 @@ upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 editor_consumed_runtime_ref = "e72323c808b91d706ba3b745396beaca7accd69a"
 investigation_base_ref = "b1f58004332a73564ffdd9f8585838209604c4d1"
 source_snapshot_status = "landed"
-source_snapshot_ref = "c7e4f313e8cd9237186e83546566537a341e3cfa"
+source_snapshot_ref = "233552c13929b09666a62ddff541eb8620d1882b"
 corrections_file = "docs/editor-next-runtime-defect-corrections.toml"
 fixtures_file = "tools/editor-next-runtime-defects/fixtures.toml"
 expected_defects = 25
-expected_formal_children = 10
-expected_candidate_children = 13
-expected_union_children = 23
+expected_formal_children = 11
+expected_candidate_children = 10
+expected_union_children = 21
 expected_overlap_children = []
 reserved_ids = ["LOC-010"]
 
@@ -28,18 +28,18 @@ editor_merge_blocks_program = false
 parallel_execution = true
 runtime_fix_assignment_requires_tracked_dependency = true
 terminal_state = "closed"
-intake_cycle = 3
+intake_cycle = 4
 
 [inbox]
 canonical_branch = "origin/levi/editor-next-cutover-assembly"
 runtime_defects_path = "plans/nuxie-editor-next-runtime-defects.md"
 parity_ledger_path = "plans/nuxie-editor-next-parity-ledger.json"
-last_consumed_editor_ref = "c7e4f313e8cd9237186e83546566537a341e3cfa"
-last_consumed_runtime_defects_sha256 = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-last_consumed_parity_ledger_sha256 = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
-newest_available_editor_ref = "c7e4f313e8cd9237186e83546566537a341e3cfa"
-newest_available_runtime_defects_sha256 = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-newest_available_parity_ledger_sha256 = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+last_consumed_editor_ref = "233552c13929b09666a62ddff541eb8620d1882b"
+last_consumed_runtime_defects_sha256 = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+last_consumed_parity_ledger_sha256 = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
+newest_available_editor_ref = "233552c13929b09666a62ddff541eb8620d1882b"
+newest_available_runtime_defects_sha256 = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+newest_available_parity_ledger_sha256 = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 unconsumed_records = 0
 imported_atlas_count = 25
 
@@ -86,17 +86,17 @@ shared_ledgers = [
 [[artifact]]
 id = "cutover-proposal"
 path = "nuxie-editor-next-cutover-proposal.md"
-sha256 = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
+sha256 = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
 
 [[artifact]]
 id = "runtime-defects"
 path = "nuxie-editor-next-runtime-defects.md"
-sha256 = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
+sha256 = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
 
 [[artifact]]
 id = "parity-ledger"
 path = "nuxie-editor-next-parity-ledger.json"
-sha256 = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+sha256 = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 
 [[defect]]
 id = "RT-ED-001"
@@ -128,9 +128,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "a5a606e7e78764e5d5f4e1421c1a5fe61df0ca22"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -206,9 +206,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "a5a606e7e78764e5d5f4e1421c1a5fe61df0ca22"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -284,9 +284,9 @@ formal_children = ["P04-C01", "P19-C03"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -392,9 +392,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-07 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -455,9 +455,9 @@ formal_children = ["P09-C01"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -526,9 +526,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -601,9 +601,9 @@ formal_children = ["P19-C09"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "No committed SHA contains bind_transition_duration_source. The exact recovered producer is e72323c808b91d706ba3b745396beaca7accd69a plus a dirty scene.rs patch with SHA-256 16492cda16a2f91da7d612c9348c6cca572b294d0d25b782c42ab686904ef57a." }
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -667,9 +667,9 @@ formal_children = ["P13-C07"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -745,9 +745,9 @@ formal_children = ["P04-C11", "P09-C01", "P09-C03", "P09-C06"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -823,9 +823,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -900,9 +900,9 @@ formal_children = []
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -986,9 +986,9 @@ formal_children = ["P09-C05"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -1064,9 +1064,9 @@ formal_children = []
 candidate_children = ["P09-C04"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -1142,9 +1142,9 @@ formal_children = ["P11-C12"]
 candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-05 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -1181,12 +1181,12 @@ evidence = "At committed checkpoint 7ca11e331a57cb3ea574848f8e93eb108878c40b, Ed
 id = "LOC-008"
 title = "Editor projection cannot request exact intrinsic text measurement"
 source_class = "candidate"
-state = "reported"
+state = "intake-needs-evidence"
 owner_class = "api"
 classification = "unqualified"
 ticket = "F-ED-09"
 fixture_id = "fed.loc_008.text_measurement_facade"
-preliminary_disposition = "Deferred post-port verification of intrinsic text measurement. Preserve the unchanged P08-C06 command and pinned-C++ shaper expectation; make no implementation request, schedule, or active writer lease. After the formal text-measurement port wave lands, Defects Fix reruns and classifies resolved/still open."
+preliminary_disposition = "Deferred post-port verification of intrinsic text measurement. At Editor checkpoint 233552c1, runtime e72323c8 remains red by 166,969 pixels after the separate empty-value repair; the subtitle still receives a one-line box and intrinsic labels retain 180-pixel fallback widths. Preserve the unchanged P08-C06 command and pinned-C++ shaper expectation, but keep this changed intake fail-closed because the source record does not separately label a full Editor SHA. No implementation request, schedule, or active writer lease is authorized."
 reproduction_sha256 = "5ca6af05d8ea339c9d2d8d0dc8c37fcc4116c05e544ac720ef564d5c383315e1"
 rust_stimulus = "CARGO_HOME=/private/tmp/nuxie-editor-cargo-home rustup run stable cargo test --manifest-path tools/rive-compiler/scene-shared/Cargo.toml -p nuxie-scene-compiler --lib document_lowering::tests::lowers_list_alias_projection_value_to_a_name_resolved_text_run_binding --offline -- --exact && PAGE_PARITY_ASSERT=1 pnpm --dir apps/nuxie-dashboard run test:visual:page --grep 'Real-Data Paywall / Paywall'"
 cpp_stimulus = "Pinned-C++ expected behavior: the same shaper that renders text supplies exact intrinsic width and multiline height; the 354-wide subtitle occupies 47.59375 over two lines and ordinary intrinsic labels do not retain the 180-pixel fallback width."
@@ -1198,18 +1198,18 @@ displaced_mechanism = "pending: F-ED-09 displaced-mechanism inventory"
 dependencies = ["F-ED-00B","F-ED-09"]
 target_tests = ["unchanged P08-C06 real-data paywall compiler plus visual command"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
-owning_ledger = "pending: F-ED-09 owning-ledger link"
+owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#LOC-008"
 adaptation_rule = "pending: F-ED-09 rule citation"
-decision_row = "pending: F-ED-09 decision-row disposition"
+decision_row = "Changed canonical intake 233552c1 makes P08-C06 a structured formal child, preserves deferred post-port verification, and remains intake-needs-evidence until the source record separately labels a full Editor SHA."
 touch = []
 dont_touch = ["@active-fl-lease"]
-formal_children = []
-candidate_children = ["P08-C06"]
+formal_children = ["P08-C06"]
+candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1230,6 +1230,10 @@ reason = "Defects Fix reruns unchanged P08-C06 after the formal text-measurement
 state = "reported"
 actor = "editor-cutover"
 evidence = "runtime-defects:LOC-008"
+[[defect.history]]
+state = "intake-needs-evidence"
+actor = "f-ed-executor"
+evidence = "Changed committed checkpoint 233552c13929b09666a62ddff541eb8620d1882b records runtime e72323c8 and the 166,969-pixel post-empty-fix failure, but the LOC-008 source record still lacks a separately labeled full Editor SHA."
 [defect.cpp_result]
 status = "pending"
 reason = "Exact runtime text measurement ownership has not been mapped."
@@ -1239,7 +1243,7 @@ reason = "Existing shaping/measurement path and missing public interface need se
 [defect.editor_result]
 status = "fail"
 command = "CARGO_HOME=/private/tmp/nuxie-editor-cargo-home rustup run stable cargo test --manifest-path tools/rive-compiler/scene-shared/Cargo.toml -p nuxie-scene-compiler --lib document_lowering::tests::lowers_list_alias_projection_value_to_a_name_resolved_text_run_binding --offline -- --exact && PAGE_PARITY_ASSERT=1 pnpm --dir apps/nuxie-dashboard run test:visual:page --grep 'Real-Data Paywall / Paywall'"
-evidence = "At the committed Editor checkpoint, the DOM subtitle is 354x47.59375 over two lines while Editor Next allocates 354x23.799995, and ordinary intrinsic labels retain 180-pixel fallback widths. The merged-runtime page remains red by 189,493 pixels (10.7131%)."
+evidence = "At committed Editor checkpoint 233552c13929b09666a62ddff541eb8620d1882b on runtime e72323c808b91d706ba3b745396beaca7accd69a, Editor fix fc1a7e406494ee970bd93e456d1f5cfae468bfd4 removes the empty-price placeholder contribution. The unchanged page remains red by 166,969 pixels: the DOM subtitle is 354x47.59375 over two lines while Editor Next allocates one line, and ordinary intrinsic labels retain 180-pixel fallback widths."
 
 [[defect]]
 id = "LOC-009"
@@ -1273,9 +1277,9 @@ formal_children = []
 candidate_children = ["P14-C01"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -1357,13 +1361,13 @@ evidence = "The sole authoritative browser observation is the canonical Chrome a
 [[defect]]
 id = "LOC-011"
 title = "Explicit empty projection text renders an authoring placeholder"
-source_class = "qualified-editor-owned"
-state = "handoff-ready"
+source_class = "resolved-editor-owned"
+state = "closed"
 owner_class = "editor"
 classification = "editor-integration-defect"
 ticket = "F-ED-09"
 fixture_id = "fed.loc_011.empty_text_pipeline"
-preliminary_disposition = "The product symptom remains real, but one identical explicit-empty source-first file stays empty through encode, import, bind, shaping, and draw in pinned C++ and Rust. The literal authoring placeholder must therefore enter in the Editor-produced artifact or an Editor overlay outside the runtime chain."
+preliminary_disposition = "Closed as an Editor-owned lowering defect. Independent pinned-C++/Rust evidence proves explicit empty text remains empty and emits no glyphs through the runtime chain; Editor fix fc1a7e406494ee970bd93e456d1f5cfae468bfd4 now distinguishes an authored empty literal from an absent child, and the unchanged browser page reports both prices empty."
 reproduction_sha256 = "8113f38d8767d087a81a840046dddfa3b5540fcd1c816c0bed4b949274f80a0b"
 rust_stimulus = "LOC011_EVIDENCE_RIV=/tmp/loc011-empty-text.riv cargo test -q -p nuxie --test loc011_empty_text_evidence -- --nocapture"
 cpp_stimulus = "Pinned d788e8ec6e8b598526607d6a1e8818e8b637b60c rive_cpp_probe runs the exact Rust-emitted /tmp/loc011-empty-text.riv before and after runtime default-ViewModel source-first binding, with LLDB stopped at rive::Text::buildRenderStyles."
@@ -1373,27 +1377,27 @@ lifecycle_phases = ["authored TextValueRun and ViewModel empty strings","binary 
 rust_owner = "not-applicable: Rust preserves the same explicit-empty contract as pinned C++ through the complete qualified runtime chain"
 displaced_mechanism = "not-applicable: no runtime mechanism is displaced; the visible placeholder must be authored or overlaid by the Editor outside the qualified runtime chain"
 dependencies = ["F-ED-09"]
-target_tests = ["crates/nuxie/tests/loc011_empty_text_evidence.rs"]
+target_tests = ["crates/nuxie/tests/loc011_empty_text_evidence.rs","scene_projection::mounted_scene::tests::empty_projected_text_child_stays_empty","P08-C06 real-data paywall browser command"]
 required_floors = ["runtime_tests","nuxie_tests","cpp_probe_tests","golden_entries","golden_segments","scripted_entries","scripted_segments"]
 owning_ledger = "docs/editor-next-runtime-defect-atlas.toml:LOC-011"
 adaptation_rule = "No runtime port is authorized when one identical authored file is exact through pinned C++ and Rust; route the first unqualified artifact/overlay boundary to its producing owner."
-decision_row = "Editor/artifact handoff: capture the original product artifact's TextValueRun.text plus any authoring overlay and repair the first boundary that introduces the literal placeholder."
+decision_row = "Editor fix fc1a7e406494ee970bd93e456d1f5cfae468bfd4 repairs the first divergent lowering boundary without a runtime change; retained/cold output and the unchanged browser page both preserve empty price text."
 touch = ["crates/nuxie/tests/loc011_empty_text_evidence.rs","docs/editor-next-runtime-defect-atlas.toml","docs/editor-next-runtime-defect-goal.md","docs/editor-next-runtime-defect-port-map.md","tools/editor-next-runtime-defects/fixtures.toml","tools/editor-next-runtime-defects/cpp_probe/registry.cpp"]
 dont_touch = ["@active-fl-lease"]
 formal_children = []
-candidate_children = ["P08-C06"]
+candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 investigation_head_sha = "fe0a0a07db302ce2f0282a2d919ea249e83144e5"
-merged_repair_sha = { status = "pending", reason = "No runtime repair exists or is authorized for this Editor-owned handoff." }
-consumed_runtime_sha = { status = "pending", reason = "The Editor artifact/overlay owner has not yet consumed this qualification." }
-consumed_superproject_sha = { status = "pending", reason = "The Editor artifact/overlay owner has not yet landed or consumed a repair." }
+merged_repair_sha = "3bc62bf82ac7d8518e89d093b46f92c727c5af7a"
+consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
+consumed_superproject_sha = "233552c13929b09666a62ddff541eb8620d1882b"
 [defect.renderer_provenance]
 status = "not-applicable"
 reason = "This row does not qualify renderer output."
@@ -1420,6 +1424,14 @@ evidence = "Pinned C++ and Rust both retain empty text and emit no glyph draw, p
 state = "handoff-ready"
 actor = "f-ed-executor"
 evidence = "Route the original product artifact and authoring overlay capture to the Editor owner; no runtime repair is authorized."
+[[defect.history]]
+state = "editor-consumed"
+actor = "editor-cutover"
+evidence = "Reviewed Editor fix fc1a7e406494ee970bd93e456d1f5cfae468bfd4 landed tree-identically as 3bc62bf82ac7d8518e89d093b46f92c727c5af7a, preserving explicit empty literal children; focused retained/cold and unchanged browser evidence are committed at checkpoint 233552c13929b09666a62ddff541eb8620d1882b."
+[[defect.history]]
+state = "closed"
+actor = "f-ed-executor"
+evidence = "The Editor-owned first divergence is repaired and independently consistent with the existing pinned-C++/Rust no-glyph proof; no runtime repair is claimed."
 [defect.cpp_result]
 status = "pass"
 command = "rive_cpp_probe --file /tmp/loc011-empty-text.riv --property-values --no-advance; rive_cpp_probe --file /tmp/loc011-empty-text.riv --property-values --runtime-bind-default-view-model-artboard-context --runtime-update-artboard-data-binds --runtime-advance-artboard-after-bind; LLDB breakpoint rive::Text::buildRenderStyles"
@@ -1429,8 +1441,9 @@ status = "pass"
 command = "LOC011_EVIDENCE_RIV=/tmp/loc011-empty-text.riv cargo test -q -p nuxie --test loc011_empty_text_evidence -- --nocapture"
 evidence = "The focused test passes 1/1: authored and binary-decoded TextValueRun text are empty, the imported ViewModel source is empty, resolved semantic text is empty, only caret offset zero exists, and the canonical recording contains no glyph drawPath."
 [defect.editor_result]
-status = "not-applicable"
-reason = "The exact original Editor artifact and overlay were not preserved in this runtime repository. Their capture is the handed-off next step and is required to split authored-byte production from authoring-overlay ownership."
+status = "pass"
+command = "CARGO_HOME=/private/tmp/nuxie-editor-cargo-home CARGO_TARGET_DIR=/private/tmp/nuxie-editor-next-target-root bash tools/nuxie-editor-next/scripts/cargo.sh test -p editor scene_projection::mounted_scene::tests::empty_projected_text_child_stays_empty --offline -- --exact; PAGE_PARITY_ASSERT=1 pnpm --dir apps/nuxie-dashboard run test:visual:page --grep 'Real-Data Paywall / Paywall' --workers=1"
+evidence = "Editor fix fc1a7e406494ee970bd93e456d1f5cfae468bfd4 turns three semantic placeholder values into three empty values and proves byte-identical retained/cold streams. The unchanged browser page reports both product prices as empty, paints no placeholder glyphs, and records runtime-inspection SHA-256 7c9a264d6803d9729197f3cce89d04192e0bd55c386558011be1aeb8e4b89be2. Remaining page pixels belong to LOC-008/LOC-018."
 
 [[defect]]
 id = "LOC-012"
@@ -1462,9 +1475,9 @@ formal_children = []
 candidate_children = ["P19-C08"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-10 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1525,9 +1538,9 @@ formal_children = []
 candidate_children = ["P08-C08"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = { status = "pending", reason = "F-ED-09 must recover the original localization Rust SHA" }
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1588,9 +1601,9 @@ formal_children = []
 candidate_children = ["P08-C09"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "bc139955c7e2d30d9cf611dd14c24606fd13520a"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1674,9 +1687,9 @@ formal_children = []
 candidate_children = ["P18-C01", "P18-C04", "P18-C05", "P18-C07"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1757,9 +1770,9 @@ formal_children = []
 candidate_children = ["P18-C01", "P18-C04"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1840,9 +1853,9 @@ formal_children = []
 candidate_children = ["P18-C07"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
 editor_last_consumed_runtime_sha = "13aedd6d92de0991eed8dc3fda085db2dff18d48"
@@ -1902,7 +1915,7 @@ owner_class = "api"
 classification = "api-surface-gap"
 ticket = "F-ED-13"
 fixture_id = "fed.loc_018.record_normalization"
-preliminary_disposition = "The additive public Scene-authoring repair landed at d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3. It owns stable LayoutComponent 409 / LayoutComponentStyle 420 hierarchy, owner IDs, all 75 style properties, every concrete interpolator record, and encode/import/export fixpoint only. Product-only records/traversal remain Editor-owned, while runtime execution/dirt/pixels remain deferred post-port verification. The changed inbox record still needs separately labeled full Editor and Runtime SHAs before promotion."
+preliminary_disposition = "The additive public Scene-authoring repair remains landed at d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3. Editor producer 38f5170f113805b6bc3dcde1c8da5e761a29aa41 preserves the typed plan, runtime pin e72323c808b91d706ba3b745396beaca7accd69a still cannot mount it through the then-public API, and Journey visuals were accepted at a2dbcd2c790deb400276de0fe0dbbc33ca55f851. P08-C06 is the only formal child in the changed structured ledger. Runtime execution/dirt/pixels remain deferred post-port verification, and the intake remains fail-closed because the source record does not separately label a full Editor assembly SHA."
 reproduction_sha256 = "c4cc8d29e09836c2ecedec11ddc25c7886f86244c1796c22af661d1c4d3113bf"
 rust_stimulus = "cargo test -p nuxie --test scene_authoring layout_style_ -- --nocapture plus Scene encode/import/export fixpoint tests"
 cpp_stimulus = "pinned d788 type/property/source audit of LayoutComponent 409, LayoutComponentStyle 420, and every concrete KeyFrameInterpolator accepted by LayoutComponentStyle::interpolatorId"
@@ -1919,13 +1932,13 @@ adaptation_rule = "PORTING.md prime directive: preserve the complete typed C++ r
 decision_row = "PR #66 exact reviewed head 2707280cb3507f8d5c2f48cfe58f1cf0990e9ed0 rebase-merged as d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3. Its product-stream claim is limited to +60 type409 and +60 type420 records (410 -> 530); the remaining ten records and product traversal/order stay Editor-owned, and runtime layout/dirt/text execution remains post-port verification."
 touch = ["crates/nuxie/build.rs","crates/nuxie/src/scene.rs","crates/nuxie/tests/scene_authoring.rs"]
 dont_touch = ["@active-fl-lease"]
-formal_children = []
-candidate_children = ["P04-C12", "P07-C04"]
+formal_children = ["P08-C06"]
+candidate_children = []
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"
@@ -1941,7 +1954,7 @@ status = "pending"
 reason = "PR #66 exact head 2707280c and merge d7cef0a8 have complete local executor evidence: runtime 414, nuxie 145, Scene authoring 178, C++ probes 721, probe-armed workspace, ordinary/scripted 317/317 entries and 647/647 segments, C API, lint/format/diff, size below 9 MiB, and clean Standards/Spec reviews. The verification table remains pending only because the changed committed inbox record is intake-needs-evidence and cannot legally enter executor-green."
 [defect.orchestrator_verification]
 status = "pending"
-reason = "Independent frozen-head Standards and Spec reviews are clean for the additive authoring/fixpoint claim. Formal orchestrator promotion waits for the changed committed inbox record to supply separately labeled full Editor and Runtime SHAs."
+reason = "Independent frozen-head Standards and Spec reviews are clean for the additive authoring/fixpoint claim. The changed committed inbox record already labels runtime e72323c808b91d706ba3b745396beaca7accd69a; formal orchestrator promotion waits only for a separately labeled full Editor assembly SHA."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
@@ -1960,8 +1973,8 @@ command = "cargo test -p nuxie --test scene_authoring layout_style_ -- --nocaptu
 evidence = "Runtime main d7cef0a8 contains the complete public typed 409/420 authoring surface. Exact head 2707280c proves all 75 properties, stable hierarchy/order, CubicEase type28, CubicValue type138, Elastic type174, Scripted type972, semantic FileAsset ordinals, explicit defaults/presence, unrestricted finite cubic controls, and binary encode/import/export fixpoint. Full local floors and both independent reviews are green."
 [defect.editor_result]
 status = "fail"
-command = "Editor LOC-018 normalized-record differential and authored-layout producer suites recorded at checkpoint c7e4f313e8cd9237186e83546566537a341e3cfa"
-evidence = "The Editor producer commit 38f5170f113805b6bc3dcde1c8da5e761a29aa41 is independently reviewed and green: 277 shared-lowering tests, 46 scene-compiler tests, and the focused adapter preserve ten artboards with 60 component/60 style plans. Checkpoint c7 predates runtime landing d7cef0a8, so retained/cold product streams have not consumed or rerun the new typed Scene seam; no raw records, postprocessor, remount shadow, or pixel-oracle change ships."
+command = "Editor LOC-018 normalized-record differential and authored-layout producer suites plus P08-C06 editor_document_adapter_preserves_authored_layout_owners_before_runtime_mount, recorded at checkpoint 233552c13929b09666a62ddff541eb8620d1882b"
+evidence = "Editor producer 38f5170f113805b6bc3dcde1c8da5e761a29aa41 is independently reviewed and green: 277 shared-lowering tests, 46 scene-compiler tests, and the focused adapter preserve ten artboards with 60 component/60 style plans. Runtime pin e72323c808b91d706ba3b745396beaca7accd69a predates additive authoring landing d7cef0a8, so retained/cold product streams have not consumed or rerun that typed Scene seam. Journey acceptance a2dbcd2c790deb400276de0fe0dbbc33ca55f851 removes P07-C04; P08-C06 is the sole structured formal child. No raw records, postprocessor, remount shadow, or pixel-oracle change ships."
 
 [[defect]]
 id = "LOC-019"
@@ -1993,9 +2006,9 @@ formal_children = []
 candidate_children = ["P14-C06"]
 disputed_children = []
 [defect.artifact_hashes]
-proposal = "4d004dfac07a96e7856f403505576c58c96e1d51185dcaaf38a1f29714c3450e"
-runtime_defects = "6f586546117d277d0469da3caeef5fedb4098c72fc152c46ba1f3037b370296a"
-parity_ledger = "3adcc814b4f3417de3c09e0a7c3da4fc15676eb97e7da152aedfcc9bffc428a1"
+proposal = "905bf599f2058828e678bff118261a60fdda4a1a09f4557693b7247409b5beb9"
+runtime_defects = "24e78816d3bafdd61903e4ea1b36ecb77e946accff847963b2ab886d9530b2ae"
+parity_ledger = "07d345c82b8dfd18a06201f08726bafd233f13eabd3cca16c3a8d833f8759226"
 [defect.revisions]
 original_localization_rust_sha = "95027109c89f651835c76646ebf4d8734f032f07"
 editor_last_consumed_runtime_sha = "e72323c808b91d706ba3b745396beaca7accd69a"

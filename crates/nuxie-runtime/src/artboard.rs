@@ -96,6 +96,8 @@ use advancing_component::{RuntimeAdvancingComponent, build_runtime_advancing_com
 #[path = "resetting_component.rs"]
 mod resetting_component;
 use resetting_component::{RuntimeResettingComponent, build_runtime_resetting_components};
+#[path = "node.rs"]
+pub(crate) mod node;
 
 fn generated_mat2d(
     objects: &InstanceObjectArena,
@@ -5926,17 +5928,6 @@ impl ArtboardInstance {
             .component(handle)
             .and_then(|component| component.concrete.skinnable.as_ref())
             .is_some_and(|skinnable| skinnable.skin.is_some())
-    }
-
-    pub(crate) fn runtime_node_computed_local_transform(&self, local_id: usize) -> Option<Mat2D> {
-        let handle = self.component_handle(local_id)?;
-        let component = self.objects.component(handle)?;
-        let node = component.concrete.node.as_ref()?;
-        let parent_world = component
-            .parent_transform
-            .and_then(|parent| self.objects.component(parent))
-            .map(|parent| parent.transform.world_transform);
-        Some(node.computed_local_transform(parent_world, component.transform.world_transform))
     }
 
     pub fn has_dirt(&self, dirt: ComponentDirt) -> bool {

@@ -7,11 +7,10 @@ use crate::bones::bone::RuntimeBoneState;
 use crate::bones::skin::RuntimeSkinState;
 use crate::bones::tendon::RuntimeTendonState;
 use crate::bones::weight::RuntimeWeightState;
+pub(crate) use crate::constraints::constraint::RuntimeConstraintKind;
+use crate::constraints::constraint::RuntimeConstraintState;
 use crate::constraints::follow_path_constraint::RuntimeFollowPathState;
 use crate::constraints::ik_constraint::RuntimeIkState;
-use crate::constraints::targeted_constraint::{
-    RuntimeTargetedConstraintState, state_for_type as targeted_constraint_state_for_type,
-};
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::property_key_for_name;
 use crate::solo::RuntimeSoloState;
@@ -211,39 +210,6 @@ impl RuntimeSkinnableState {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct RuntimeVertexState {
     pub(crate) weight: Option<ComponentHandle>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RuntimeConstraintKind {
-    Distance,
-    FollowPath,
-    ListFollowPath,
-    Ik,
-    Rotation,
-    Scale,
-    Scroll,
-    ScrollBar,
-    Transform,
-    Translation,
-    Other,
-}
-
-impl RuntimeConstraintKind {
-    fn for_type(type_name: &'static str) -> Self {
-        match type_name {
-            "DistanceConstraint" => Self::Distance,
-            "FollowPathConstraint" => Self::FollowPath,
-            "ListFollowPathConstraint" => Self::ListFollowPath,
-            "IKConstraint" => Self::Ik,
-            "RotationConstraint" => Self::Rotation,
-            "ScaleConstraint" => Self::Scale,
-            "ScrollConstraint" => Self::Scroll,
-            "ScrollBarConstraint" => Self::ScrollBar,
-            "TransformConstraint" => Self::Transform,
-            "TranslationConstraint" => Self::Translation,
-            _ => Self::Other,
-        }
-    }
 }
 
 /// Runtime-only fields owned by C++ `Path`.
@@ -1021,56 +987,6 @@ impl RuntimeConstraintScratch {
                 components_b: TransformComponents::default(),
             },
             _ => Self::None,
-        }
-    }
-}
-
-/// Runtime-only fields owned by C++ `Constraint` and its targeted/stateless
-/// transform subclasses.
-///
-/// Generated values remain in the occurrence's sole generated backing store.
-/// This payload retains only C++ runtime relations and scratch, plus the
-/// module-static generated property keys address that backing store without
-/// per-update schema/name lookup.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct RuntimeConstraintState {
-    pub(crate) kind: RuntimeConstraintKind,
-    targeted: Option<RuntimeTargetedConstraintState>,
-    pub(crate) scratch: RuntimeConstraintScratch,
-}
-
-impl RuntimeConstraintState {
-    fn new(type_name: &'static str) -> Self {
-        let kind = RuntimeConstraintKind::for_type(type_name);
-        Self {
-            kind,
-            targeted: targeted_constraint_state_for_type(type_name),
-            scratch: RuntimeConstraintScratch::for_kind(kind),
-        }
-    }
-
-    pub(crate) const fn targeted(self) -> Option<RuntimeTargetedConstraintState> {
-        self.targeted
-    }
-
-    pub(crate) fn target(self) -> Option<ComponentHandle> {
-        self.targeted
-            .and_then(RuntimeTargetedConstraintState::target)
-    }
-
-    pub(crate) fn set_target(&mut self, target: Option<ComponentHandle>) {
-        if let Some(targeted) = self.targeted.as_mut() {
-            targeted.set_target(target);
-        }
-    }
-
-    fn clone_for_occurrence(&self) -> Self {
-        Self {
-            kind: self.kind,
-            targeted: self
-                .targeted
-                .map(RuntimeTargetedConstraintState::clone_for_occurrence),
-            scratch: RuntimeConstraintScratch::for_kind(self.kind),
         }
     }
 }

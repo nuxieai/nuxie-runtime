@@ -3,9 +3,9 @@ use std::sync::OnceLock;
 
 use crate::components::{
     ComponentHandle, RuntimeConstraintBoundsKind, RuntimeConstraintKind, RuntimeConstraintScratch,
-    RuntimeConstraintState, RuntimeScrollAxis, RuntimeScrollAxisIntent,
-    RuntimeScrollConstraintState, RuntimeScrollPhysicsState, RuntimeScrollSpace,
-    RuntimeScrollVirtualizerState, TransformComponents, TransformProperty,
+    RuntimeScrollAxis, RuntimeScrollAxisIntent, RuntimeScrollConstraintState,
+    RuntimeScrollPhysicsState, RuntimeScrollSpace, RuntimeScrollVirtualizerState,
+    TransformComponents, TransformProperty,
 };
 use crate::draw::RuntimeLayoutBounds;
 use crate::objects::InstanceObjectArena;
@@ -15,10 +15,13 @@ use crate::{ArtboardInstance, Mat2D};
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::ArtboardGraph;
 
+pub(crate) mod constraint;
 pub(crate) mod follow_path_constraint;
 pub(crate) mod ik_constraint;
 pub(crate) mod list_follow_path_constraint;
 pub(crate) mod targeted_constraint;
+
+use self::constraint::RuntimeConstraintState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeScrollProperty {
@@ -467,7 +470,7 @@ struct RuntimeConstraintPropertyKeys {
 // lookups.
 const RUNTIME_CONSTRAINT_PROPERTY_KEYS: RuntimeConstraintPropertyKeys =
     RuntimeConstraintPropertyKeys {
-        strength: 172,
+        strength: constraint::CONSTRAINT_STRENGTH_PROPERTY_KEY,
         source_space: 179,
         dest_space: 180,
         min_max_space: 195,
@@ -793,7 +796,7 @@ pub(crate) fn constraint_double_change_marks_parent_dirty(
     property_key: u16,
 ) -> bool {
     let keys = RUNTIME_CONSTRAINT_PROPERTY_KEYS;
-    (keys.strength == property_key && kind != RuntimeConstraintKind::Ik)
+    constraint::double_change_marks_parent_dirty(kind, property_key)
         || (kind == RuntimeConstraintKind::Distance && keys.distance == property_key)
         || follow_path_constraint::double_change_marks_parent_dirty(kind, property_key)
         || list_follow_path_constraint::double_change_marks_parent_dirty(kind, property_key)
@@ -3397,7 +3400,7 @@ fn apply_distance_constraint(
     artboard: &mut ArtboardInstance,
     component_index: ComponentHandle,
     constraint: ComponentHandle,
-    state: crate::components::RuntimeConstraintState,
+    state: RuntimeConstraintState,
 ) -> bool {
     // Ported from C++ `src/constraints/distance_constraint.cpp`.
     let constraint_local = artboard.component_at(constraint).local_id;
@@ -3462,7 +3465,7 @@ fn apply_rotation_constraint(
     artboard: &mut ArtboardInstance,
     component_index: ComponentHandle,
     constraint: ComponentHandle,
-    state: crate::components::RuntimeConstraintState,
+    state: RuntimeConstraintState,
 ) -> bool {
     // Ported from C++ `src/constraints/rotation_constraint.cpp`.
     let constraint_local = artboard.component_at(constraint).local_id;
@@ -3578,7 +3581,7 @@ fn apply_scale_constraint(
     artboard: &mut ArtboardInstance,
     component_index: ComponentHandle,
     constraint: ComponentHandle,
-    state: crate::components::RuntimeConstraintState,
+    state: RuntimeConstraintState,
 ) -> bool {
     // Ported from C++ `src/constraints/scale_constraint.cpp`.
     let constraint_local = artboard.component_at(constraint).local_id;

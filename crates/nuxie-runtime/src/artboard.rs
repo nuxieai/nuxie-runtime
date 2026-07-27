@@ -1204,18 +1204,7 @@ impl ArtboardInstance {
                 .and_then(|component| component.concrete.constraint)
                 .is_some();
             if is_constraint {
-                let parent = objects
-                    .component(handle)
-                    .and_then(|component| component.parent)
-                    .context("Constraint is missing its parent Component")?;
-                if !objects
-                    .component(parent)
-                    .is_some_and(|parent| parent.capabilities.transform)
-                {
-                    anyhow::bail!("Constraint parent is not a TransformComponent");
-                }
-                objects.add_constraint(parent, handle);
-
+                crate::constraints::constraint::on_added_dirty(objects, handle)?;
                 crate::constraints::targeted_constraint::on_added_dirty(
                     objects,
                     handle,
@@ -5384,14 +5373,7 @@ impl ArtboardInstance {
             return;
         };
         let local_id = component.local_id;
-        let constraint_parent = component
-            .concrete
-            .constraint
-            .as_ref()
-            .and_then(|_| component.parent);
-        let constraint_is_ik = component.concrete.constraint.is_some_and(|constraint| {
-            constraint.kind == crate::components::RuntimeConstraintKind::Ik
-        });
+        let is_constraint = component.concrete.constraint.is_some();
         let path_has_deferred_dirt = component
             .concrete
             .path
@@ -5414,10 +5396,8 @@ impl ArtboardInstance {
         // concrete Constraint marks its retained constrained parent before
         // Artboard::onComponentDirty observes the Constraint itself
         // (`src/constraints/constraint.cpp:35-40`).
-        if constraint_is_ik {
-            self.mark_ik_constraint_dirty(local_id);
-        } else if let Some(parent) = constraint_parent {
-            self.mark_transform_dirty_handle(parent);
+        if is_constraint {
+            crate::constraints::constraint::on_dirty(self, handle);
         }
 
         self.runtime_skin_on_dirty(handle);
@@ -6568,7 +6548,7 @@ impl ArtboardInstance {
                 crate::constraints::constraint_uint_change_marks_parent_dirty(
                     constraint.kind,
                     property_key,
-                ) && self.mark_constraint_parent_transform_dirty(local_id)
+                ) && crate::constraints::constraint::mark_constraint_dirty(self, local_id)
             });
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("NestedArtboard")
             && property_key_for_name("NestedArtboard", "artboardId") == Some(property_key)
@@ -6654,7 +6634,7 @@ impl ArtboardInstance {
                 property_key,
             )
         }) {
-            return self.mark_constraint_parent_transform_dirty(local_id);
+            return crate::constraints::constraint::mark_constraint_dirty(self, local_id);
         }
         if let Some(changed) = crate::constraints::ik_constraint::apply_bool_property_changed(
             self,
@@ -6789,7 +6769,7 @@ impl ArtboardInstance {
                 )
             })
         {
-            return self.mark_constraint_parent_transform_dirty(local_id);
+            return crate::constraints::constraint::mark_constraint_dirty(self, local_id);
         }
         if self.apply_bone_double_property_changed(local_id, property_key) {
             return true;
@@ -6992,22 +6972,12 @@ impl ArtboardInstance {
                     property_key_for_name("ScrollConstraint", name) == Some(property_key)
                 }) =>
             {
-                apply_scroll_offset_changed(self, local_id, property_key, value)
-                    .unwrap_or_else(|| self.mark_constraint_parent_transform_dirty(local_id))
+                apply_scroll_offset_changed(self, local_id, property_key, value).unwrap_or_else(
+                    || crate::constraints::constraint::mark_constraint_dirty(self, local_id),
+                )
             }
             _ => false,
         }
-    }
-
-    fn mark_constraint_parent_transform_dirty(&mut self, constraint_local_id: usize) -> bool {
-        let Some(parent) = self
-            .component_handle(constraint_local_id)
-            .and_then(|constraint| self.objects.component(constraint))
-            .and_then(|constraint| constraint.parent)
-        else {
-            return false;
-        };
-        self.mark_transform_dirty_handle(parent)
     }
 
     fn mark_parent_gradient_stops_dirty(&mut self, stop_local_id: usize) -> bool {

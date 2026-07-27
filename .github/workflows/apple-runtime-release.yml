@@ -31,8 +31,8 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
       GH_TOKEN: ${{ github.token }}
-      NUX_APPLE_XCODE_VERSION: "26.6"
-      NUX_APPLE_XCODE_BUILD: "17F113"
+      NUX_APPLE_XCODE_VERSION: "26.2"
+      NUX_APPLE_XCODE_BUILD: "17C52"
       NUX_APPLE_RUST_TOOLCHAIN: "1.94.1"
       NUX_APPLE_DEPLOYMENT_TARGET: "15.0"
       NUX_APPLE_PROFILE: "release-apple"

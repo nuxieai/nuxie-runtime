@@ -99,8 +99,8 @@ jobs:
     runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
     env:
       DEVELOPER_DIR: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '/Applications/Xcode_15.4.app/Contents/Developer' || '/Applications/Xcode.app/Contents/Developer' }}
-      NUX_APPLE_XCODE_VERSION: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15.4' || '26.6' }}
-      NUX_APPLE_XCODE_BUILD: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15F31d' || '17F113' }}
+      NUX_APPLE_XCODE_VERSION: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15.4' || '26.2' }}
+      NUX_APPLE_XCODE_BUILD: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15F31d' || '17C52' }}
       RUSTUP_TOOLCHAIN: "1.94.1"
     defaults:
       run:
@@ -160,8 +160,8 @@ jobs:
     runs-on: ${{ fromJSON((inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '["macos-14"]' || '["self-hosted","macOS","ARM64","nuxie-pr"]') }}
     env:
       DEVELOPER_DIR: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '/Applications/Xcode_15.4.app/Contents/Developer' || '/Applications/Xcode.app/Contents/Developer' }}
-      NUX_APPLE_XCODE_VERSION: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15.4' || '26.6' }}
-      NUX_APPLE_XCODE_BUILD: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15F31d' || '17F113' }}
+      NUX_APPLE_XCODE_VERSION: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15.4' || '26.2' }}
+      NUX_APPLE_XCODE_BUILD: ${{ (inputs.force_hosted || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && '15F31d' || '17C52' }}
       RUSTUP_TOOLCHAIN: "1.94.1"
     defaults:
       run:

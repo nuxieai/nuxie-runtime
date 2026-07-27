@@ -84,7 +84,7 @@ remain valid for behavior-preserving file moves.
 | `component.hpp`, `component.cpp` | `component.rs` | component facade, dirt base, collapse base, and parent hit-test walk | partial: base `hitTestPoint` extracted; facade, dirt, collapse, and one active type-name accessor remain elsewhere |
 | `container_component.hpp`, `container_component.cpp` | `container_component.rs` | parent/child relation and guarded subtree recursion | partial: guarded retained-child collapse recursion extracted; parent/child relation construction remains in `objects.rs`/`artboard.rs` |
 | `drawable.hpp`, `drawable.cpp` | `drawable.rs` | drawable hit testing; renderer traversal remains renderer-owned | hit-test owner extracted |
-| `layout_component.hpp`, `layout_component.cpp` | `layout_component.rs` | hit test, advance, dirt, update, collapse | partial: hit-test owner extracted; advance, dirt, update, and collapse remain queued before the semantic port |
+| `layout_component.hpp`, `layout_component.cpp` | `layout_component.rs` | hit test, advance, dirt, update, collapse | partial: hit-test and display-collapse owners extracted; advance, dirt, and update remain queued before the semantic port |
 | `layout_component_style.hpp`, `layout_component_style.cpp` | `layout_component_style.rs` | style owner callbacks and interpolation | queued before its semantic port |
 | `text_input.hpp`, `text_input.cpp` | `text_input.rs` | move remaining Artboard advance/property/update fragments | active collision |
 | `text_style.hpp`, `text_style.cpp` | `text/text_style.rs` | dependencies, font overrides, and shape dirt | queued before its semantic port |

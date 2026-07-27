@@ -1424,7 +1424,10 @@ status = "faithful"
 upstream = "src/container_component.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/container_component.rs",
+  "crates/nuxie-runtime/src/lib.rs",
+]
 dynamically_reached = false
 status = "faithful"
 

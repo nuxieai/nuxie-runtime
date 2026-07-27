@@ -99,6 +99,8 @@ mod resetting_component;
 use resetting_component::{RuntimeResettingComponent, build_runtime_resetting_components};
 #[path = "component.rs"]
 mod component;
+#[path = "container_component.rs"]
+mod container_component;
 #[path = "drawable.rs"]
 mod drawable;
 #[path = "layout_component.rs"]
@@ -8066,87 +8068,6 @@ impl ArtboardInstance {
         self.nested_artboards
             .values_mut()
             .any(|nested| nested.advance_remap(remap_local_id))
-    }
-
-    pub(crate) fn collapse_component_tree(&mut self, local_id: usize, collapsed: bool) -> bool {
-        self.collapse_component_tree_with_ancestor(local_id, collapsed, false)
-    }
-
-    pub(crate) fn collapse_component_tree_with_ancestor(
-        &mut self,
-        local_id: usize,
-        collapsed: bool,
-        ancestor_changed: bool,
-    ) -> bool {
-        // Cycle guard entry point: see
-        // propagate_layout_component_display_collapse_with_ancestor.
-        let mut visited = BTreeSet::new();
-        let Some(handle) = self.component_handle(local_id) else {
-            return false;
-        };
-        self.collapse_component_tree_with_ancestor_guarded(
-            handle,
-            collapsed,
-            ancestor_changed,
-            &mut visited,
-        )
-    }
-
-    fn collapse_component_tree_with_ancestor_guarded(
-        &mut self,
-        handle: ComponentHandle,
-        collapsed: bool,
-        ancestor_changed: bool,
-        visited: &mut BTreeSet<ComponentHandle>,
-    ) -> bool {
-        // Cycle guard: see propagate_layout_component_display_collapse_with_
-        // ancestor. Skip a local already visited on this propagation walk.
-        if !visited.insert(handle) {
-            return false;
-        }
-        let changed_here = self.collapse_component_handle(handle, collapsed);
-        let mut changed = changed_here;
-        if ancestor_changed && !collapsed {
-            changed |= self.add_component_dirt(handle, ComponentDirt::FILTHY, false);
-        }
-        let type_name = self
-            .objects
-            .component(handle)
-            .map(|component| component.type_name);
-        match type_name {
-            // C++ Solo::collapse (src/solo.cpp) intentionally skips the blind
-            // ContainerComponent child walk: Solo::propagateCollapse (already
-            // triggered on change via collapse_component ->
-            // apply_component_collapse_changed) re-collapses inactive children
-            // even while the solo itself becomes visible.
-            Some("Solo") => changed,
-            // C++ LayoutComponent::collapse routes through
-            // LayoutComponent::propagateCollapse, folding the local
-            // display:none state into the value pushed onto children.
-            Some("Artboard" | "LayoutComponent") => {
-                changed
-                    | self.propagate_layout_component_display_collapse_with_ancestor_guarded(
-                        handle,
-                        ancestor_changed || changed_here,
-                        visited,
-                    )
-            }
-            _ => {
-                let children = (0..self.component_child_len(handle))
-                    .filter_map(|index| self.component_child_at(handle, index))
-                    .collect::<Vec<_>>();
-                for child in children {
-                    changed |= self.collapse_component_tree_with_ancestor_guarded(
-                        child,
-                        collapsed,
-                        ancestor_changed || changed_here,
-                        visited,
-                    );
-                }
-                changed |= self.collapse_constrained_transform_dependents(handle);
-                changed
-            }
-        }
     }
 }
 

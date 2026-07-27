@@ -82,7 +82,7 @@ remain valid for behavior-preserving file moves.
 | `root_bone.hpp`, `root_bone.cpp` | `bones/root_bone.rs` | TransformComponent clean-phase bypass plus x/y keys and dirt callbacks | extracted |
 | `skin.hpp`, `skin.cpp` | `bones/skin.rs` | tendon/bone buffer ownership and dirty/update behavior | partial: state/onDirty/update shard extracted; `deform` remains in `draw.rs` and buffer allocation remains in relation construction |
 | `component.hpp`, `component.cpp` | `component.rs` | component facade, dirt base, collapse base, and parent hit-test walk | partial: base `hitTestPoint` extracted; facade, dirt, collapse, and one active type-name accessor remain elsewhere |
-| `container_component.hpp`, `container_component.cpp` | `container_component.rs` | parent/child relation and guarded subtree recursion | queued |
+| `container_component.hpp`, `container_component.cpp` | `container_component.rs` | parent/child relation and guarded subtree recursion | partial: guarded retained-child collapse recursion extracted; parent/child relation construction remains in `objects.rs`/`artboard.rs` |
 | `drawable.hpp`, `drawable.cpp` | `drawable.rs` | drawable hit testing; renderer traversal remains renderer-owned | hit-test owner extracted |
 | `layout_component.hpp`, `layout_component.cpp` | `layout_component.rs` | hit test, advance, dirt, update, collapse | partial: hit-test owner extracted; advance, dirt, update, and collapse remain queued before the semantic port |
 | `layout_component_style.hpp`, `layout_component_style.cpp` | `layout_component_style.rs` | style owner callbacks and interpolation | queued before its semantic port |

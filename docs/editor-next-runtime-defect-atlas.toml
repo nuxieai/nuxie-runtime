@@ -1477,26 +1477,26 @@ evidence = "Editor fix fc1a7e406494ee970bd93e456d1f5cfae468bfd4 turns three sema
 id = "LOC-012"
 title = "Required-WebGPU visual contract used an obsolete white-background golden"
 source_class = "corrected-stale-characterization"
-state = "stale-oracle"
+state = "closed"
 owner_class = "editor"
 classification = "stale-oracle"
 ticket = "F-ED-10"
 fixture_id = "fed.loc_012.backend_raster_decomposition"
-preliminary_disposition = "Qualified Editor-owned stale-golden evidence pending explicit user decision. The required WebGPU scene renders the authored #13253d background, white two-pixel rounded card border, and ten-pixel image clipping radius, while the prior golden encoded a white background and omitted those details. Because accepting the changed expected image is a user checkpoint and the exact historical C++ input cannot be reproduced, LOC-012 remains open with P19-C08 linkage and COR-07."
-reproduction_sha256 = "10382048728bb5c73e04d8050dd161fb3932fca3c7717d7ab67f9e867bc6325e"
+preliminary_disposition = "Closed by the user's explicit acceptance of the reviewed required-WebGPU golden. The authored scene renders the #13253d background, white two-pixel rounded card border, and ten-pixel image clipping radius, while the obsolete golden encoded a white background and omitted those details. This is an Editor-owned stale-oracle closure with no runtime/renderer repair or pinned-C++ pixel-parity claim."
+reproduction_sha256 = "ae05e75bea96578f8e6b4dec4c88c0030527d68a4f18566c6bedd223bf24596f"
 rust_stimulus = "CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'visual-view-contract \\[auto\\]' --workers=1"
 cpp_stimulus = "not-applicable: the exact 882,146-byte historical artifact and build provenance are not available for a pinned-C++ replay, so this qualification makes no C++/Rust pixel-parity claim"
 source_files = ["tools/rive-compiler/fixtures/publish-path/visual-view-contract.json","apps/nuxie-dashboard/tests/visual/published-rive-conformance/baselines/visual-view-contract.png","apps/nuxie-dashboard/tests/visual/published-rive-conformance/published-rive-conformance.spec.ts"]
 source_members = ["authored #13253d artboard background","white two-pixel rounded card border","ten-pixel Image clipping radius","required-WebGPU visual golden"]
 lifecycle_phases = ["compile one production envelope","render required WebGPU frame","compare obsolete golden","review authored visual details","replace only the stale golden","rerun visual and spacing assertions"]
 rust_owner = "not-applicable: supported WebGPU product output is correct; the stale expected image was Editor-owned"
-displaced_mechanism = "The reviewed required-WebGPU capture is evidence for replacing the obsolete white-background golden only if the user explicitly approves that expected-image change. The former WebGPU/WebGL2 comparison remains optional, nonblocking historical characterization only."
-dependencies = ["COR-07","user-decision:LOC-012-expected-golden"]
+displaced_mechanism = "The user accepted the reviewed required-WebGPU capture as the expected image, displacing only the obsolete white-background golden. The former WebGPU/WebGL2 comparison and COR-07 remain optional, nonblocking historical characterization."
+dependencies = []
 target_tests = ["CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'visual-view-contract \\[auto\\]' --workers=1"]
 required_floors = ["nuxie_tests"]
 owning_ledger = "docs/editor-next-runtime-defect-atlas.toml#LOC-012"
-adaptation_rule = "No runtime adaptation: preserve authored scene values. Replace the Editor golden only after the user explicitly accepts the same-input supported-WebGPU stale-oracle evidence."
-decision_row = "User decision required before closure: whether to accept the changed expected image. Editor checkpoint 3a16e76c6f8461c573afff278176302bff5b08b1 on runtime ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9 passes the required-WebGPU visual/spacing gate 2/2 in 2.7s with the reviewed image. Of the old 175,032 differing pixels, 173,764 were obsolete white versus authored #13253d; the rest were omitted authored border/clip-radius detail. The source fixture SHA-256 is 0a41a13dde2a7ba9cf96c29ed2b587f48c4fbb7b4e41b0c42306419d65c2fca7; reviewed golden prefix is 975eddce and prior prefix is 319fc2e. COR-07 remains open: the former 882,146-byte artifact SHA-256 563da6e08c413f76eb1b728ce2d998098ae7ec1fada9e383daa5f44bb6973d16 lacks immutable build provenance, while exact-checkpoint publisher Wasm SHA-256 a7877b243a7f82e5c562700d14b4d3374d470dcfd325c0c314469b286e299773 regenerated 882,277 bytes at SHA-256 bf84207ebe120d9790ffb7871ef83c58abfa3fcbc60d5647ca23af8884bb870a. No C++/Rust parity or closure claim is made."
+adaptation_rule = "No runtime adaptation: preserve authored scene values and the user-approved required-WebGPU golden. The closure changes no runtime or renderer behavior and makes no pinned-C++ pixel-parity claim."
+decision_row = "User decision 2026-07-27: accept the reviewed required-WebGPU image as the expected visual contract and close LOC-012 as an Editor-owned stale golden. Editor checkpoint 3a16e76c6f8461c573afff278176302bff5b08b1 on runtime ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9 passes the visual/spacing gate 2/2 in 2.7s. Of the old 175,032 differing pixels, 173,764 were obsolete white versus authored #13253d; the rest were omitted authored border/clip-radius detail. The source fixture SHA-256 is 0a41a13dde2a7ba9cf96c29ed2b587f48c4fbb7b4e41b0c42306419d65c2fca7; reviewed golden SHA-256 is 975eddce6caedf1c43d885e7996cc5cd746cc748ff652e964f056eb264661e96 and prior SHA-256 is 319fc2eec8a7b27e397f159626d45de476529aa364b75c9ee87029391a29d67f. COR-07 remains open only for historical provenance: the former 882,146-byte artifact SHA-256 563da6e08c413f76eb1b728ce2d998098ae7ec1fada9e383daa5f44bb6973d16 lacks immutable build provenance, while exact-checkpoint publisher Wasm SHA-256 a7877b243a7f82e5c562700d14b4d3374d470dcfd325c0c314469b286e299773 regenerated 882,277 bytes at SHA-256 bf84207ebe120d9790ffb7871ef83c58abfa3fcbc60d5647ca23af8884bb870a. No C++/Rust pixel-parity claim is made."
 touch = []
 dont_touch = ["@active-fl-lease"]
 formal_children = []
@@ -1515,14 +1515,14 @@ consumed_runtime_sha = { status = "pending", reason = "No runtime repair exists 
 consumed_superproject_sha = { status = "pending", reason = "Checkpoint 3a16e76c is qualification evidence, not consumption of a runtime repair or a closure decision." }
 [defect.renderer_provenance]
 status = "not-applicable"
-reason = "The supported WebGPU evidence localizes the mismatch to the Editor golden seam but does not close it. The exact historical artifact cannot be regenerated, so no C++/Rust renderer parity is claimed."
+reason = "The supported WebGPU evidence localizes the mismatch to the Editor golden seam and supports the user-approved stale-golden closure. The exact historical artifact cannot be regenerated, so no C++/Rust renderer parity is claimed."
 [defect.executor_verification]
 status = "pass"
 command = "CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'visual-view-contract \\[auto\\]' --workers=1"
 evidence = "At Editor checkpoint 3a16e76c6f8461c573afff278176302bff5b08b1 consuming runtime ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9, the unchanged required-WebGPU visual and spacing cases pass 2/2 in 2.7s after replacing only the obsolete golden."
 [defect.orchestrator_verification]
 status = "not-applicable"
-reason = "The stale-oracle evidence promotes no runtime or renderer ownership. Closure remains a user decision about the expected image rather than a repair-verification action."
+reason = "The user-approved stale-oracle closure promotes no runtime or renderer ownership and requires no repair-verification action."
 [[defect.history]]
 state = "reported"
 actor = "editor-cutover"
@@ -1535,6 +1535,10 @@ evidence = "The 175,032-pixel required-WebGPU mismatch was decomposed: 173,764 p
 state = "stale-oracle"
 actor = "f-ed-executor"
 evidence = "The reviewed required-WebGPU image preserves the authored background, border, and clipping details and passes the visual/spacing gate 2/2; the row remains open because changing expected pixels requires explicit user approval and exact historical C++ input is unavailable."
+[[defect.history]]
+state = "closed"
+actor = "user"
+evidence = "User decision 2026-07-27: accept the reviewed required-WebGPU image and close LOC-012 as an Editor-owned stale golden without a runtime/renderer repair or C++ pixel-parity claim."
 [defect.cpp_result]
 status = "not-applicable"
 reason = "The exact historical 882,146-byte input cannot be regenerated with its build provenance, so this qualification makes no pinned-C++/Rust pixel-parity claim."
@@ -1545,7 +1549,7 @@ evidence = "The supported Rust WebGPU product output passes the unchanged visual
 [defect.editor_result]
 status = "pass"
 command = "CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'visual-view-contract \\[auto\\]' --workers=1"
-evidence = "Checkpoint 3a16e76c6f8461c573afff278176302bff5b08b1 on runtime ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9 passes 2/2 in 2.7s with reviewed golden SHA-256 prefix 975eddce. P19-C08 remains linked as the candidate product decision until the user accepts or rejects that expected-image change."
+evidence = "Checkpoint 3a16e76c6f8461c573afff278176302bff5b08b1 on runtime ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9 passes 2/2 in 2.7s with reviewed golden SHA-256 975eddce6caedf1c43d885e7996cc5cd746cc748ff652e964f056eb264661e96. The user accepted that expected image on 2026-07-27; P19-C08 remains historical candidate linkage only."
 
 [[defect]]
 id = "LOC-013"

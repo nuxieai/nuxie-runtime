@@ -214,8 +214,8 @@ stimulus_files = [
 [[fixture]]
 id = "fed.loc_012.backend_raster_decomposition"
 defect_id = "LOC-012"
-kind = "browser-renderer"
-status = "registered"
+kind = "editor-product"
+status = "qualified"
 driver = '''CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'visual-view-contract \[auto\]' --workers=1'''
 stimulus_files = [
   { root = "editor", path = "tools/rive-compiler/fixtures/publish-path/visual-view-contract.json", sha256 = "0a41a13dde2a7ba9cf96c29ed2b587f48c4fbb7b4e41b0c42306419d65c2fca7" },

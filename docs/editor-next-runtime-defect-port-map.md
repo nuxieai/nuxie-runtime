@@ -161,7 +161,7 @@ The following work can proceed without waiting for an FL landing:
 | `F-ED-03` / `RT-ED-005` | independently verify and promote the exact PR #49 landing provenance | the production authoring repair is complete; do not reopen it or conflate the separate FL-E layout/TextStyle dependency |
 | `F-ED-04` / `RT-ED-007` | preserve the unchanged red acceptance and independently rerun it after the relevant state-machine port wave | deferred post-port verification; no direct Runtime Fix request, schedule, or active writer lease |
 | `F-ED-06` / `RT-ED-003` | preserve the independently closed PR #55 landing provenance | the production browser-presentation repair and promotion are complete; do not reopen it or mix it with historical `F-ED-07` |
-| `F-ED-10` / `LOC-012` | preserve the qualified required-WebGPU stale-golden evidence and request the explicit user decision | keep `P19-C08`, the registered executable fixture, and `COR-07` open; no runtime/renderer repair, C++ parity, or closure claim exists |
+| `F-ED-10` / `LOC-012` | preserve the user-approved required-WebGPU stale-golden closure | keep `P19-C08` as historical linkage, the executable fixture qualified, and `COR-07` as optional historical provenance; no runtime/renderer repair or C++ pixel-parity claim exists |
 | `F-ED-12` | complete: exact-runtime-identity `0.2.0` artifact and native corpus are qualified | no source repair survived qualification; public distribution is downstream and requires no defect writer |
 | `F-ED-13` | normalize and compare records and repair an Editor/lowering-only first divergence | identical records are required before any renderer attribution; no runtime edit |
 
@@ -177,12 +177,10 @@ immediately moves to the deferred set.
 ### Work that may be prepared but needs a landing handshake
 
 `F-ED-08` is independently closed as a no-repair stale characterization.
-`F-ED-10` has qualified evidence that the supported WebGPU product mismatch
-is an Editor-owned stale golden rather than a runtime or renderer divergence,
-but changing the expected golden requires an explicit user decision. The row
-therefore remains open at `stale-oracle`, retains `P19-C08`, its registered
-executable fixture, and `COR-07`, and cannot claim pinned-C++ parity or closure
-without the exact historical input and provenance.
+`F-ED-10` is closed after the user accepted the qualified supported-WebGPU
+golden on 2026-07-27. The row retains `P19-C08` as historical linkage, its
+qualified executable fixture, and `COR-07` as optional historical provenance;
+it claims no runtime/renderer repair or pinned-C++ pixel parity.
 `F-ED-11` and `LOC-019` are independently closed. PR #54's `LOC-009` consumer repair at
 `7f1450dc` remains historical evidence, but independent real-GPU verification
 reopened that row on an unresolved physical shader-module error-scope
@@ -201,9 +199,8 @@ observation; it has no linked product scenario. An explicitly scheduled
 identical-input proof may requalify the same typed clip on supported WebGPU,
 but it
 authorizes no WebGL2 writer, fork, dependency, or fallback. There is no active
-browser writer from `F-ED-10` while its stale-golden evidence awaits the
-explicit user decision; landed `F-ED-06/11` and no-repair `F-ED-08` have no
-new writer. Overlap among
+browser writer from closed no-repair `F-ED-10`; landed `F-ED-06/11` and
+no-repair `F-ED-08` likewise have no new writer. Overlap among
 `browser.rs` and WebGPU resource owners serializes any surviving open slices
 even though they are disjoint from FL.
 
@@ -217,7 +214,7 @@ translation waits for the named FL owner boundary:
 | `F-ED-05` (`LOC-007`) | preserve the exact path-dirt reproducer and d788 expected callback chain | rerun after the corresponding formal path/dirt port wave; no direct implementation request or schedule |
 | `LOC-008` in `F-ED-09` | preserve the exact intrinsic-measurement reproducer and pinned-C++ expected bounds behavior | rerun after the corresponding formal text-measurement port wave; no direct implementation request or schedule |
 | runtime side of remaining `F-ED-09` rows | text/bind/shaping stage localization | no edits to `text.rs`, `draw.rs`, `artboard.rs`, or another reserved runtime owner |
-| runtime side of open `F-ED-11` work | GPU-canvas record and backend localization | a renderer-only result may use the landing-handshake lane; any runtime result waits for its FL owner; open `F-ED-10` authorizes no writer while the stale-golden decision is pending |
+| runtime side of open `F-ED-11` work | GPU-canvas record and backend localization | a renderer-only result may use the landing-handshake lane; any runtime result waits for its FL owner; closed no-repair `F-ED-10` authorizes no writer |
 | ABI/header/C-API repair | local ABI evidence | separate scope review after a current artifact proves a surviving ABI defect |
 
 If qualification first diverges inside a reserved module, the F-ED
@@ -251,9 +248,8 @@ The safe next queue is therefore:
    evidence and no writer;
 5. retain `F-ED-04` as deferred post-port verification of the narrow
    state-machine/bindables seam, with no direct Runtime Fix request, schedule,
-   Scene writer, or active runtime lease; preserve `F-ED-10` as qualified
-   stale-golden evidence awaiting an explicit user decision, with no
-   runtime/renderer writer;
+   Scene writer, or active runtime lease; preserve the user-approved
+   `F-ED-10` stale-golden closure, with no runtime/renderer writer;
 6. perform record normalization for the remaining evidence/localization rows;
    the exact-runtime-identity `0.2.0` artifact qualification is complete;
 7. keep every runtime-owner result as evidence until the corresponding FL
@@ -399,7 +395,7 @@ fixture in `F-ED-00`.
 | `LOC-008` | changed intake needs evidence; exact intrinsic-width/multiline-height product failure | checkpoint `233552c1` records runtime `e72323c8` and 166,969 differing pixels after the empty-value fix, but lacks a separately labeled full Editor SHA; preserve deferred post-port verification and the unchanged P08-C06 command without authorizing a writer |
 | `LOC-009` | historical structural WebGPU consumer repair with a confirmed real-GPU shader-module validation regression | preserve PR #54 / `7f1450dc` as history; keep the row parked and frozen until diagnosis resumes in a different reliable execution/model environment |
 | `LOC-011` | closed Editor-owned lowering defect | identical explicit-empty source-first bytes stay empty through import, bind, shaping, and draw in pinned C++ and Rust; Editor fix `fc1a7e40` repairs absent-versus-empty lowering and the browser reports both prices empty |
-| `LOC-012` | open Editor-owned stale-golden evidence | the required-WebGPU visual/spacing gate is 2/2 after replacing only the obsolete expected image, but accepting that expected-image change requires an explicit user decision. Exact historical input is unavailable, so no C++/Rust parity, renderer repair, or closure is claimed; `P19-C08`, the registered fixture, and `COR-07` remain open |
+| `LOC-012` | closed Editor-owned stale golden | the user accepted the reviewed required-WebGPU expected image on 2026-07-27 after the visual/spacing gate passed 2/2. Exact historical input remains unavailable, so no C++/Rust pixel-parity or renderer-repair claim is made; `P19-C08` is historical linkage, the fixture remains qualified, and `COR-07` is optional historical provenance |
 | `LOC-013` | closed Editor-owned variable-font stale oracle | exact Inter bytes and four `wght` values match through 64 glyph IDs, 1,507 outline commands, typed import, 38-line streams/resources, and every 240×112 C++ Dawn/Rust wgpu MSAA pixel; retain P08-C08 as historical linkage only |
 | `LOC-014` | closed stale-oracle observation | exact 180x124 clockwise Feather replay matches pinned C++ and Rust in bounds, atlas plan, and every pixel; do not tune constants |
 | `LOC-015` | closed stale-binary artifact qualification | exact `0.2.0@b1f58004` framework draws the production corpus; no runtime repair remains |
@@ -633,8 +629,9 @@ closures below supersede their original scheduling implications:
    differences. `COR-07` remains open: each historical count still needs its
    backend, mode, surface, capture, and artifact provenance before it may be
    used even as optional characterization. Current supported-WebGPU evidence
-   qualifies a stale golden but does not close the row or authorize changing
-   the expected image without an explicit user decision.
+   qualified the stale golden, and the user's 2026-07-27 decision accepted the
+   reviewed expected image and closed the row. The unresolved historical
+   counts make no C++/Rust pixel-parity claim and do not block closure.
 8. `LOC-013` historically reports both 10,199 and 11,019 baseline differences
    without a capture/mode label. The durable current-input driver supersedes
    those counts for runtime disposition: pinned C++ Dawn and Rust wgpu are
@@ -1029,10 +1026,10 @@ font instance/shaping/outline/raster, and a public measurement facade.
 Every promoted owner family becomes a separate committed and floor-gated
 slice. Closed no-repair rows create no writer.
 
-### `F-ED-10` — Qualified supported-WebGPU stale-golden evidence
+### `F-ED-10` — Closed supported-WebGPU stale golden
 
-`LOC-012` remains open at `stale-oracle` pending the explicit user decision
-required to change the expected golden. At Editor checkpoint
+The user accepted the reviewed required-WebGPU golden on 2026-07-27 and
+closed `LOC-012` as an Editor-owned stale oracle. At Editor checkpoint
 `3a16e76c6f8461c573afff278176302bff5b08b1` on runtime
 `ef9dcedd82265efc0184f4f59d5f6aaab0b56cd9`, the unchanged required-WebGPU
 visual/spacing gate passes 2/2 in 2.7 seconds after replacing only the obsolete
@@ -1040,8 +1037,8 @@ golden. Of the original 175,032 differing pixels, 173,764 were white in the
 old golden versus the authored `#13253d` background; the rest were authored
 border and clip-radius details omitted from the old expected image.
 
-This qualifies the stale-golden diagnosis but is not a C++/Rust renderer
-parity result and does not authorize closure. The historical input is
+This supports the user-approved stale-golden closure but is not a C++/Rust
+renderer-parity result. The historical input is
 recorded as 882,146 bytes at SHA-256
 `563da6e08c413f76eb1b728ce2d998098ae7ec1fada9e383daa5f44bb6973d16`,
 but exact-checkpoint publisher Wasm SHA-256
@@ -1050,9 +1047,10 @@ regenerated 882,277 different bytes at SHA-256
 `bf84207ebe120d9790ffb7871ef83c58abfa3fcbc60d5647ca23af8884bb870a`.
 The former WebGPU/WebGL2 comparison therefore remains optional historical
 characterization until that exact artifact and build provenance exist.
-`COR-07` remains open for its conflicting historical counts. `P19-C08` and
-the current executable registered fixture remain attached to the open row.
-No runtime/renderer writer is authorized while the user decision is pending.
+`COR-07` remains open for its conflicting historical counts but no longer
+blocks the defect disposition. `P19-C08` remains historical linkage and the
+current executable fixture remains qualified. No runtime/renderer writer is
+authorized by this no-repair closure.
 
 `LOC-014` remains separately closed after exact pinned-C++/Rust Feather pixel
 parity. Do not tune sigma, offsets, thresholds, renderer tolerances, or the
@@ -1215,7 +1213,7 @@ follows:
 |---|---|
 | `LOC-006` | `P09-C04` (historical source linkage retained after the stale characterization closed; it authorizes no writer) |
 | `LOC-009` | `P14-C01` |
-| `LOC-012` | `P19-C08` (open stale-golden evidence awaiting the explicit expected-image decision) |
+| `LOC-012` | `P19-C08` (historical linkage retained after the user-approved stale-golden closure) |
 | `LOC-013` | `P08-C08` |
 | `LOC-014` | `P08-C09` |
 | `LOC-015` | `P18-C01`, `P18-C04`, `P18-C05`, `P18-C07` |
@@ -1229,8 +1227,8 @@ formal/candidate overlap. The current Editor checkpoint retains `RT-ED-004`
 only as closed historical WebGL2 evidence and removes all five of its former
 formal child links. Closed `LOC-013` retains `P08-C08` only as historical
 candidate linkage. Structured linkage now makes `P08-C06` a formal child of
-both `LOC-008` and `LOC-018`; closed `LOC-011` has no active child, and open
-`LOC-012` retains `P19-C08` until the explicit stale-golden decision. Broad
+both `LOC-008` and `LOC-018`; closed `LOC-011` has no active child, and closed
+`LOC-012` retains `P19-C08` only as historical linkage. Broad
 aggregate gates such as `P08-C01` and `P11-C01` rerun after their focused
 children. The executable atlas owns the complete
 defect → child → aggregate-command matrix.
@@ -1260,10 +1258,10 @@ the atlas. A shared file is not proof of a semantic dependency.
   artifact lanes named by the live concurrency lease.
 - completed `F-ED-00B`, and therefore full `F-ED-00`, precedes every
   runtime-owner production translation.
-- `LOC-012` remains open at `stale-oracle`: its current registered
-  required-WebGPU fixture and `P19-C08` stay live until the user explicitly
-  decides whether to accept the expected-image change. `COR-07` remains open;
-  optional historical characterization cannot substitute for that decision.
+- `LOC-012` is closed by the user's 2026-07-27 acceptance of the reviewed
+  required-WebGPU golden. Its fixture remains qualified, `P19-C08` remains
+  historical linkage, and `COR-07` remains optional historical provenance;
+  no runtime/renderer repair or C++ pixel-parity claim is attached.
 - exact-runtime-identity `0.2.0` local qualification and the corrected native
   product rerun are complete; public distribution is not a defect-program
   dependency.
@@ -1322,8 +1320,8 @@ scouts for the remaining open rows:
    `LOC-001/002/005`, `RT-ED-007`, and `LOC-007`;
 2. browser/renderer:
    closed `RT-ED-004`, `LOC-006`, and `LOC-014` are historical/no-repair
-   evidence, while `LOC-012` retains qualified stale-golden evidence and
-   awaits the explicit user decision;
+   evidence, while `LOC-012` is also closed by the user-approved
+   stale-golden disposition;
 3. text/records:
    `LOC-008/018`; `LOC-011` and `LOC-013` are closed Editor-owned
    dispositions, not remaining qualification scouts.
@@ -1347,7 +1345,7 @@ ownership before activation.
 | browser | landed `F-ED-06` and the `LOC-019` half of `F-ED-11` have no writer; reopened `LOC-009` is parked until diagnosis resumes in a different reliable execution/model environment and a fresh coordinator assignment follows; no-repair `F-ED-08/10` and historical-only `F-ED-07` have no writer | `browser.rs`, WebGPU GPU-canvas/scripting seams, and resource owners; no `webgl2.rs` writer |
 | runtime dirt | qualified `F-ED-05` | waits for the exact FL-E Path/Shape owner lock |
 | text-derived | deferred `LOC-008`; closed `LOC-011` and `LOC-013` create no writer | after the formal text-measurement wave, rerun LOC-008 only; preserve the empty-text and variable-font no-repair evidence |
-| renderer feather | open-decision `F-ED-10` | no writer; `LOC-012` is qualified Editor stale-golden evidence awaiting the explicit decision, and `LOC-014` is exact no-repair parity evidence |
+| renderer feather | closed no-repair `F-ED-10` | no writer; `LOC-012` is a user-approved Editor stale golden, and `LOC-014` is exact no-repair parity evidence |
 | evidence/artifact | closed `F-ED-12`; open `F-ED-13` | no F-ED-12 writer remains; F-ED-13 grants no runtime source edit until qualification promotes a survivor |
 
 Parallel read-only translations may inspect the same family. Parallel

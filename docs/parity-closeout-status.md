@@ -1009,12 +1009,13 @@ historical unless it agrees with these sources.
 
 **Canonical NEXT:** publish the complete five-file layer/state-occurrence
 family implemented at semantic commit
-`0efeb8c709e3202237fe42371dbb2f63e4de4505` against
+`57d08cfcdb8e870602544e30af9c53d6f7ac34b7` against
 `docs/runtime-frame-loop-fl-c3-closure.md` (FL-C3), then obtain one independent
 whole-family verdict before any FL-C4 production edit. The exact source walk,
-adversarial differentials, 19 structural ratchets, and once-per-candidate
+adversarial differentials, 21 structural ratchets, and once-per-candidate
 non-performance battery are closed, including the rejected candidate's
-weighted-random, nullable-nested-owner, and serial-layer-initialization gaps.
+weighted-random, nullable-nested-owner, serial-layer-initialization,
+post-selection wait-latch, and entry-before-DataBind-construction gaps.
 The self-excluding trace file carries the exact candidate-source fingerprint
 and runner provenance; no partial layer/nested/reset/interruption slice is
 submitted and no row is self-promoted. The next action is independent

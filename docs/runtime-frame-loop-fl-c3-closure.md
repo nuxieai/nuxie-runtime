@@ -264,10 +264,10 @@ despite its green floor because it used a constant transition draw, dropped
 null-child NestedStateMachine owners, and constructed every layer before
 running entry callbacks. Corrected semantic commit
 `0efeb8c709e3202237fe42371dbb2f63e4de4505` closes all three findings and
-source-bound trace commit
-`2b5c0be3d7bd2e03ebc1c9e6f224ffac3909fa7e` records candidate-source SHA-256
-`ae067fb9bc8402bb852e0e52cc787895fe3e444b87a82d0eea028a481b622534`.
-The replacement candidate has the following gate receipt:
+the self-excluding `docs/runtime-frame-loop-trace.json` records the exact
+candidate-source fingerprint and runner provenance. Fingerprinted closure
+prose deliberately does not duplicate those self-referential values. The
+replacement candidate has the following gate receipt:
 
 - runtime 521 / 521;
 - probe-armed workspace and pinned-C++ probes 745 / 745;

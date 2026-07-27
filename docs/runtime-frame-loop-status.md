@@ -89,14 +89,14 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   its authored owner and ordered inputs when the child occurrence is null; and
   each layer constructs and runs entry callbacks before the next layer is
   constructed. Interruption/reset/advance/nested lifecycles and all 19
-  structural negative controls are closed. The source-bound trace was
-  refreshed at `2b5c0be3d7bd2e03ebc1c9e6f224ffac3909fa7e` with candidate-source
-  SHA-256
-  `ae067fb9bc8402bb852e0e52cc787895fe3e444b87a82d0eea028a481b622534`.
-  The exact next action is to freeze and publish one immutable proof packet,
-  run independent Standards and Spec review on that exact SHA, and request one
-  independent whole-family verdict. No FL-C3 row is promoted before that
-  verdict, and no FL-C4 production edit begins before it.
+  structural negative controls are closed. The self-excluding
+  `docs/runtime-frame-loop-trace.json` records the exact candidate-source
+  fingerprint and runner provenance; fingerprinted status prose deliberately
+  does not duplicate those self-referential values. The exact next action is
+  to freeze and publish one immutable proof packet, run independent Standards
+  and Spec review on that exact SHA, and request one independent whole-family
+  verdict. No FL-C3 row is promoted before that verdict, and no FL-C4
+  production edit begins before it.
 - FL-C3's once-per-candidate non-performance floor is green on the corrected
   semantic commit `0efeb8c709e3202237fe42371dbb2f63e4de4505`: runtime 521 / 521;
   probe-armed workspace and pinned-C++ probes 745 / 745; ordinary and scripted

@@ -32,18 +32,15 @@ of truth is `docs/editor-next-runtime-defect-atlas.toml`.
   `LOC-016`, `LOC-017`, and `LOC-019` directly qualified.
 - supported browser backend: WebGPU only, landed in runtime PR #47 at
   `95027109c89f651835c76646ebf4d8734f032f07`.
-- latest control-plane landing: historical clip/font evidence closeout PR #78
+- latest control-plane landing: retained-owner correction PR #80
   rebase-merged at exact runtime main
-  `98bf5de1f9dfc5d280d29d295dcdc4e418f74c9b`; retained-owner/raster
-  disposition PR #77 is its direct predecessor at
-  `e494995cb941fc8fd74ea8a7395a6ba3402c1fa1`, and Editor inbox
-  reconciliation PR #76 landed immediately before that at
-  `cb4e7748c5b4233375c388b433696ffd34a3c9de`;
-- active control-plane lane: preserve the lower-runtime boundary that
-  quarantined the Scene-only retained-ViewModel candidate and the
-  supported-WebGPU stale-golden evidence without closing `LOC-012` before an
-  explicit user decision; the historical WebGL2 and variable-font rows now
-  have complete no-production-change closeouts;
+  `22ba401a9f734eafe0fa3a5852e960e47a4c6121`; historical clip/font
+  evidence closeout PR #78 remains the previous recorded evidence landing at
+  `98bf5de1f9dfc5d280d29d295dcdc4e418f74c9b`;
+- no active control-plane writer: the retained-ViewModel boundary is
+  corrected and the historical WebGL2 and variable-font rows have complete
+  no-production-change closeouts. The next control-plane action is the
+  explicit user decision for `LOC-012`; do not close it before that decision;
 - landed Scene-owned repair: `LOC-018` PR #66 exact head
   `2707280cb3507f8d5c2f48cfe58f1cf0990e9ed0` rebase-merged at
   `d7cef0a8b80411b8ef16bf8b48452ea42f71fbe3`. It covers all four concrete

@@ -279,14 +279,18 @@ The first semantic translation was
 despite its green floor because it used a constant transition draw, dropped
 null-child NestedStateMachine owners, and constructed every layer before
 running entry callbacks. Corrected semantic commit
-`0efeb8c709e3202237fe42371dbb2f63e4de4505` closes all three findings and
-the self-excluding `docs/runtime-frame-loop-trace.json` records the exact
+`57d08cfcdb8e870602544e30af9c53d6f7ac34b7` closes all three findings plus
+the next review's two lifecycle findings: a successful random selection now
+clears a previously retained wait latch after changing state, and initial
+entry callbacks cannot observe DataBind facilities before C++ constructs
+them. Live pinned-C++ differentials cover both lifecycle boundaries. The
+self-excluding `docs/runtime-frame-loop-trace.json` records the exact
 candidate-source fingerprint and runner provenance. Fingerprinted closure
 prose deliberately does not duplicate those self-referential values. The
 replacement candidate has the following gate receipt:
 
 - runtime 521 / 521;
-- probe-armed workspace and pinned-C++ probes 745 / 745;
+- probe-armed workspace and pinned-C++ probes 746 / 746;
 - ordinary and scripted golden each 317 / 317 entries and 647 / 647 segments,
   zero divergences;
 - same-runner pixel corpus 1,468 / 1,468, 1,370 byte-exact, zero divergences;
@@ -294,7 +298,7 @@ replacement candidate has the following gate receipt:
 - committed-tree size 8,034,536 bytes without scripting and 8,935,640 bytes
   with scripting, both below the 9 MiB limit;
 - Apple XCFramework build/package/ABI/header/C/Swift checks, checksum
-  `363d426a4687ce984a25d9356ed332830a3e038b63b747c32011e778d1547976`;
+  `22a0309091624bd584566f529a5d52bcc19aa9f7e3d2e7c475f8c8e7f7b361cd`;
 - structural checker 39 / 39 and all 21 injected negative controls.
 
 Ordinary and scripted golden were rerun serially after a discarded concurrent
@@ -302,8 +306,11 @@ harness build replaced their shared executable. Native Apple was rerun with a
 fully isolated stable toolchain after a discarded mixed-cache run. The
 XCFramework's first invocation correctly refused a checker-created untracked
 Python bytecode cache; the cache was removed and the clean-tree package run
-above passed. These are discarded environment/harness attempts, not product
-failures. No performance measurement was run.
+above passed. A later invocation exhausted the generated Cargo target cache;
+`cargo clean` reclaimed only generated artifacts and unchanged source then
+passed the complete package verification. These are discarded
+environment/harness attempts, not product failures. No performance
+measurement was run.
 
 The review packet is this checklist plus its direct C++ citations, focused
 adversarial tests, structural ratchets, exact pushed candidate SHA, and the

@@ -80,7 +80,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   implementation provisionally under the coordinator override. FL-C2 is
   independently closed. The complete five-file layer/state family (FL-C3) is
   translated at semantic commit
-  `0efeb8c709e3202237fe42371dbb2f63e4de4505` against
+  `57d08cfcdb8e870602544e30af9c53d6f7ac34b7` against
   `docs/runtime-frame-loop-fl-c3-closure.md`. C++'s ordered state-definition
   collection and the occurrence-owned `any`, `current`, and transition-source
   triad now have direct Rust owners. The rejected candidate's three omissions
@@ -88,8 +88,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   random provider with exact `uint32_t` arithmetic; a NestedStateMachine keeps
   its authored owner and ordered inputs when the child occurrence is null; and
   each layer constructs and runs entry callbacks before the next layer is
-  constructed. Interruption/reset/advance/nested lifecycles and all 19
-  structural negative controls are closed. The self-excluding
+  constructed. The next review exposed two additional lifecycle differences,
+  now closed: a selected random transition clears an earlier candidate's
+  waiting-for-exit latch after changing state, and initial entry callbacks
+  cannot observe DataBind facilities that C++ constructs only after layer
+  initialization. Live pinned-C++ differentials cover both cases.
+  Interruption/reset/advance/nested lifecycles and all 21 structural negative
+  controls are closed. The self-excluding
   `docs/runtime-frame-loop-trace.json` records the exact candidate-source
   fingerprint and runner provenance; fingerprinted status prose deliberately
   does not duplicate those self-referential values. The exact next action is
@@ -98,19 +103,21 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   verdict. No FL-C3 row is promoted before that verdict, and no FL-C4
   production edit begins before it.
 - FL-C3's once-per-candidate non-performance floor is green on the corrected
-  semantic commit `0efeb8c709e3202237fe42371dbb2f63e4de4505`: runtime 521 / 521;
-  probe-armed workspace and pinned-C++ probes 745 / 745; ordinary and scripted
+  semantic commit `57d08cfcdb8e870602544e30af9c53d6f7ac34b7`: runtime 521 / 521;
+  probe-armed workspace and pinned-C++ probes 746 / 746; ordinary and scripted
   golden each 317 / 317 entries and 647 / 647 segments with zero divergences;
   same-runner pixels 1,468 / 1,468 with 1,370 byte-exact and zero divergences;
   C API, native Apple, browser build, lint, format, and diff checks; structural
   checker 37 / 37; committed-tree size 8,034,536 bytes without scripting and
   8,935,640 bytes with scripting, both below 9 MiB; and the full Apple
   XCFramework build/package/ABI/header/C/Swift floor with checksum
-  `363d426a4687ce984a25d9356ed332830a3e038b63b747c32011e778d1547976`.
+  `22a0309091624bd584566f529a5d52bcc19aa9f7e3d2e7c475f8c8e7f7b361cd`.
   Ordinary and scripted golden were rerun serially after a discarded
   concurrent harness build replaced the shared executable; native Apple was
   rerun with a fully isolated stable toolchain after a discarded mixed-cache
-  run. No performance measurement was run.
+  run. The first XCFramework attempt exhausted the generated Cargo target
+  cache; after `cargo clean` reclaimed generated artifacts, unchanged source
+  built and verified successfully. No performance measurement was run.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
   mutable occurrence. Each occurrence retains a handle into the one authored

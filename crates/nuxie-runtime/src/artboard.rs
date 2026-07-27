@@ -4103,28 +4103,13 @@ impl ArtboardInstance {
     /// `None` means no matching root text run exists. `Some(false)` means the
     /// existing run already contains `value`; `Some(true)` means it changed.
     pub fn set_root_text_value_run(&mut self, name: &str, value: Vec<u8>) -> Option<bool> {
-        let text_property_key = property_key_for_name("TextValueRun", "text")?;
-        let local_id = self.root_text_value_run_local_id(name)?;
-        if self.string_property(local_id, text_property_key) == Some(value.as_slice()) {
-            return Some(false);
-        }
-        Some(self.set_string_property(local_id, text_property_key, value))
+        crate::text::text_value_run::set_root_text_value_run(self, name, value)
     }
 
     /// Whether this root artboard contains an exactly named `TextValueRun`.
     /// Nested-artboard occurrences are deliberately outside this lookup.
     pub fn has_root_text_value_run(&self, name: &str) -> bool {
-        self.root_text_value_run_local_id(name).is_some()
-    }
-
-    fn root_text_value_run_local_id(&self, name: &str) -> Option<usize> {
-        self.slots
-            .iter()
-            .filter(|slot| {
-                slot.type_name == Some("TextValueRun") && slot.name.as_deref() == Some(name)
-            })
-            .min_by_key(|slot| slot.local_id)
-            .map(|slot| slot.local_id)
+        crate::text::text_value_run::has_root_text_value_run(self, name)
     }
 
     pub fn apply_linear_animation(&mut self, index: usize, seconds: f32, mix: f32) -> bool {
@@ -8169,14 +8154,7 @@ impl ArtboardInstance {
         local_id: usize,
         property_key: u16,
     ) -> bool {
-        match self.slot(local_id).and_then(|slot| slot.type_name) {
-            Some("TextValueRun")
-                if property_key_for_name("TextValueRun", "text") == Some(property_key) =>
-            {
-                self.mark_text_value_run_shape_dirty(local_id)
-            }
-            _ => false,
-        }
+        crate::text::text_value_run::apply_string_property_changed(self, local_id, property_key)
     }
 
     pub(crate) fn apply_color_property_changed(
@@ -8192,26 +8170,6 @@ impl ArtboardInstance {
             }
             _ => false,
         }
-    }
-
-    fn mark_text_value_run_shape_dirty(&mut self, run_local_id: usize) -> bool {
-        let Some(parent_key) = property_key_for_name("Component", "parentId") else {
-            return false;
-        };
-        let Some(text_local) = self
-            .uint_property(run_local_id, parent_key)
-            .and_then(|parent_id| usize::try_from(parent_id).ok())
-        else {
-            return false;
-        };
-        if self.slot(text_local).and_then(|slot| slot.type_name) != Some("Text") {
-            return false;
-        }
-
-        let mut changed = false;
-        changed |= self.add_dirt(text_local, ComponentDirt::TEXT_SHAPE, false);
-        changed |= self.add_dirt(text_local, ComponentDirt::WORLD_TRANSFORM, true);
-        changed
     }
 
     pub(crate) fn mark_text_style_shape_dirty(&mut self, style_local_id: usize) -> bool {

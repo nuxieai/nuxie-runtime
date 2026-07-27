@@ -31,6 +31,8 @@ use crate::{ArtboardInstance, Mat2D, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
 use std::collections::BTreeMap;
 
+pub(crate) mod text_value_run;
+
 const TEXT_SHAPE_SCALE: i32 = 2048;
 const TEXT_SHAPE_SCALE_F32: f32 = TEXT_SHAPE_SCALE as f32;
 const TEXT_SIZING_AUTO_WIDTH: u64 = 0;

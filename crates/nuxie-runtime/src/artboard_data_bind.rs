@@ -7215,8 +7215,8 @@ impl ArtboardInstance {
         })
     }
 
-    fn artboard_shape_length(&self, shape_local_id: usize, graph: &ArtboardGraph) -> Option<f32> {
-        self.runtime_shape_length_with_layout(shape_local_id, graph)
+    fn artboard_shape_length(&self, shape_local_id: usize, _graph: &ArtboardGraph) -> Option<f32> {
+        crate::shapes::shape::length_with_layout(self, shape_local_id)
     }
 
     fn update_artboard_layout_computed_bindings(&mut self, root_transform: Mat2D) -> bool {

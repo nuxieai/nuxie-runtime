@@ -42,6 +42,8 @@ use crate::properties::{
     solid_color_value_property_key,
 };
 use crate::scripting::{ScriptNode, script_paint_for_shape};
+use crate::shapes::path::{RuntimeOwnedPath, RuntimePathOwner};
+use crate::shapes::shape::RuntimeShape;
 use crate::text::{
     RuntimeTextLayoutConstraint, StaticTextClipBounds, runtime_text_input_shape_paint_commands,
     runtime_text_shape_paint_commands, static_text_caret_geometry, static_text_clip_bounds,
@@ -7589,27 +7591,7 @@ impl ArtboardInstance {
         Some(commands)
     }
 
-    pub(crate) fn runtime_shape_length_with_layout(
-        &self,
-        shape_local: usize,
-        _graph: &ArtboardGraph,
-    ) -> Option<f32> {
-        let shape = self.runtime_shapes.get(shape_local)?;
-        if let Some(length) = shape.world_length.get() {
-            return Some(length);
-        }
-        let world_path = shape.paint_paths
-            [runtime_shape_paint_path_kind_slot(RuntimeShapePaintPathKind::World)]
-        .retained
-        .borrow();
-        let world_path = world_path.as_ref()?;
-        let commands = runtime_path_commands_from_raw_path(world_path.raw_path.as_ref());
-        let length = RuntimePathMeasure::from_commands(&commands).length();
-        shape.world_length.set(Some(length));
-        Some(length)
-    }
-
-    fn runtime_shape_path_commands_from_owners(
+    pub(crate) fn runtime_shape_path_commands_from_owners(
         &self,
         shape_local: usize,
         path_kind: ShapePaintPathKind,
@@ -7723,86 +7705,23 @@ impl ArtboardInstance {
         commands
     }
 
-    /// Direct port of pinned C++ `Path::update`
-    /// (`src/shapes/path.cpp:336-380`). The source RawPath belongs to the
-    /// runtime Path occurrence and is settled before its PathComposer node.
-    pub(crate) fn update_runtime_path_owner(
-        &mut self,
-        path_handle: ComponentHandle,
-        dirt: ComponentDirt,
+    pub(crate) fn runtime_shape_has_nsliced_context(
+        &self,
+        shape_local: usize,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    ) {
-        let Some(path_local) = self.objects.component_local_id(path_handle) else {
-            return;
-        };
-        let Some(path) = graph.paths.iter().find(|path| path.local_id == path_local) else {
-            return;
-        };
-        let shape_local = self
-            .objects
-            .component(path_handle)
-            .and_then(|component| component.concrete.path.as_ref())
-            .and_then(|path| path.shape)
-            .and_then(|shape| self.objects.component_local_id(shape));
-        let has_deformer = shape_local.is_some_and(|shape_local| {
-            runtime_nsliced_node_context_for_shape(self, graph, shape_local, layout_bounds)
-                .is_some()
-        });
-        let Some((owner_dirty, owner_has_path)) = self
-            .runtime_shapes
-            .paths_by_local
-            .get(path_local)
-            .and_then(Option::as_ref)
-            .map(|owner| (owner.dirty.get(), owner.retained.borrow().is_some()))
-        else {
-            return;
-        };
-        let should_rebuild = !owner_has_path
-            || !(dirt & (ComponentDirt::PATH | ComponentDirt::N_SLICER)).is_empty()
-            || (has_deformer && dirt.contains(ComponentDirt::WORLD_TRANSFORM));
-        if !owner_dirty && !should_rebuild {
-            return;
-        }
-        if !should_rebuild {
-            if let Some(owner) = self
-                .runtime_shapes
-                .paths_by_local
-                .get(path_local)
-                .and_then(Option::as_ref)
-            {
-                owner.dirty.set(false);
-            }
-            return;
-        }
+    ) -> bool {
+        runtime_nsliced_node_context_for_shape(self, graph, shape_local, layout_bounds).is_some()
+    }
 
-        if self.runtime_path_can_defer_update(path_handle) {
-            if let Some(path) = self
-                .objects
-                .component_mut(path_handle)
-                .and_then(|component| component.concrete.path.as_mut())
-            {
-                path.deferred_path_dirt.set(true);
-            }
-            if let Some(owner) = self
-                .runtime_shapes
-                .paths_by_local
-                .get(path_local)
-                .and_then(Option::as_ref)
-            {
-                owner.dirty.set(false);
-            }
-            return;
-        }
-
-        if let Some(path) = self
-            .objects
-            .component_mut(path_handle)
-            .and_then(|component| component.concrete.path.as_mut())
-        {
-            path.deferred_path_dirt.set(false);
-        }
-
+    /// Build the renderer-facing geometry retained by one Path occurrence.
+    /// Dirt/defer/retention ownership remains in `shapes/path.rs`.
+    pub(crate) fn build_runtime_owned_path(
+        &mut self,
+        path_handle: ComponentHandle,
+        path: &PathGeometryNode,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> RuntimeOwnedPath {
         let runtime_path = self.runtime_path_geometry_with_layout_control(path, layout_bounds);
         if self.runtime_skinnable_handle_has_skin(path_handle) {
             for vertex in &runtime_path.vertices {
@@ -7823,117 +7742,10 @@ impl ArtboardInstance {
             weighted_context.as_ref(),
         );
         prune_empty_path_segments(&mut commands);
-        let owner = self
-            .runtime_shapes
-            .paths_by_local
-            .get(path_local)
-            .and_then(Option::as_ref)
-            .expect("Path owner must remain live during its update");
-        owner.retained.replace(Some(RuntimeOwnedPath {
+        RuntimeOwnedPath {
             path: Arc::new(runtime_path),
             raw_path: Arc::new(runtime_raw_path_from_commands(&commands)),
             has_weighted_context: weighted_context.is_some(),
-        }));
-        owner.dirty.set(false);
-    }
-
-    /// Literal `Path::canDeferPathUpdate` / `Shape::canDeferPathUpdate`.
-    ///
-    /// The decision reads only occurrence-owned Shape/Path pointers, flags,
-    /// opacity, and dependency relations. FollowPath and clipping producers
-    /// therefore prevent deferral at the same owner boundary as C++
-    /// (`src/shapes/path.cpp:111-125`; `src/shapes/shape.cpp:35-51`).
-    pub(crate) fn runtime_path_can_defer_update(&self, path_handle: ComponentHandle) -> bool {
-        let Some(path) = self
-            .objects
-            .component(path_handle)
-            .and_then(|component| component.concrete.path.as_ref())
-        else {
-            return false;
-        };
-        let Some(shape_handle) = path.shape else {
-            return false;
-        };
-        let Some(shape_component) = self.objects.component(shape_handle) else {
-            return false;
-        };
-        let Some(shape) = shape_component.concrete.shape.as_ref() else {
-            return false;
-        };
-        if shape_component.transform.render_opacity != 0.0
-            || shape.is_flagged(
-                crate::components::RuntimeShapeState::CLIPPING
-                    | crate::components::RuntimeShapeState::NEVER_DEFER_UPDATE,
-            )
-        {
-            return false;
-        }
-        if shape_component.dependents.iter().copied().any(|dependent| {
-            self.objects.component(dependent).is_some_and(|component| {
-                component.type_name == "PointsPath"
-                    && component
-                        .concrete
-                        .skinnable
-                        .as_ref()
-                        .and_then(|skinnable| skinnable.skin)
-                        .is_some()
-            })
-        }) {
-            return false;
-        }
-        !shape.is_flagged(crate::components::RuntimeShapeState::FOLLOW_PATH)
-            && !path.is_flagged(
-                crate::components::RuntimePathState::FOLLOW_PATH
-                    | crate::components::RuntimePathState::CLIPPING,
-            )
-    }
-
-    /// Pinned C++ `PathComposer::update` geometry composition
-    /// (`src/shapes/path_composer.cpp:38-112`). The embedded composer is a
-    /// real dependency node; all CPU geometry settles here, never in
-    /// `Shape::draw`. Its separate `m_deferredPathDirt` lifecycle remains in
-    /// the manifest's FL-E PathComposer slice (`path_composer.cpp:29-49`).
-    pub(crate) fn update_runtime_path_composer(
-        &self,
-        shape_local: usize,
-        dirt: ComponentDirt,
-        graph: &ArtboardGraph,
-        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    ) {
-        if (dirt & (ComponentDirt::PATH | ComponentDirt::N_SLICER | ComponentDirt::FILTHY))
-            .is_empty()
-        {
-            return;
-        }
-
-        let Some(shape) = self.runtime_shapes.get(shape_local) else {
-            return;
-        };
-        shape.world_bounds.set(None);
-        shape.world_length.set(None);
-        for (path_kind, runtime_kind) in [
-            (ShapePaintPathKind::Local, RuntimeShapePaintPathKind::Local),
-            (
-                ShapePaintPathKind::LocalClockwise,
-                RuntimeShapePaintPathKind::LocalClockwise,
-            ),
-            (ShapePaintPathKind::World, RuntimeShapePaintPathKind::World),
-        ] {
-            let mut commands = self.runtime_shape_path_commands_from_owners(
-                shape_local,
-                path_kind,
-                graph,
-                layout_bounds,
-            );
-            prune_empty_path_segments(&mut commands);
-            shape.paint_paths[runtime_shape_paint_path_kind_slot(runtime_kind)].replace_retained(
-                RuntimeShapePathState {
-                    raw_path: Arc::new(runtime_raw_path_from_commands(&commands)),
-                },
-            );
-        }
-        for paint in &shape.paint_owners {
-            paint.invalidate_all_effects();
         }
     }
 
@@ -8145,71 +7957,12 @@ impl Clone for RuntimeShapeList {
     }
 }
 
-#[derive(Debug, Clone)]
-struct RuntimeOwnedPath {
-    path: Arc<PathGeometryNode>,
-    raw_path: Arc<RawPath>,
-    has_weighted_context: bool,
-}
-
-#[derive(Debug)]
-struct RuntimePathOwner {
-    dirty: Cell<bool>,
-    retained: RefCell<Option<RuntimeOwnedPath>>,
-}
-
-impl Clone for RuntimePathOwner {
-    fn clone(&self) -> Self {
-        // Generated concrete Path clones copy only generated properties into
-        // a fresh object (`include/rive/generated/shapes/path_base.hpp:
-        // 62-67`); Path's custom `m_rawPath` and deferred dirt therefore start
-        // fresh and are rebuilt by `Artboard::initialize`
-        // (`include/rive/artboard.hpp:557-588`, `src/shapes/path.cpp:336-380`).
-        Self {
-            dirty: Cell::new(true),
-            retained: RefCell::new(None),
-        }
-    }
-}
-
-impl Default for RuntimePathOwner {
-    fn default() -> Self {
-        Self {
-            dirty: Cell::new(true),
-            retained: RefCell::new(None),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct RuntimeShape {
-    path_locals: Vec<usize>,
-    paint_container_index: Option<usize>,
-    paint_paths: [RuntimeShapePaintPathOwner; 3],
-    paint_owners: Vec<RuntimeShapePaintOwner>,
-    world_bounds: Cell<Option<RenderAabb>>,
-    world_length: Cell<Option<f32>>,
-}
-
-impl Clone for RuntimeShape {
-    fn clone(&self) -> Self {
-        Self {
-            path_locals: Vec::new(),
-            paint_container_index: self.paint_container_index,
-            paint_paths: std::array::from_fn(|_| RuntimeShapePaintPathOwner::default()),
-            paint_owners: self.paint_owners.clone(),
-            world_bounds: Cell::new(None),
-            world_length: Cell::new(None),
-        }
-    }
-}
-
 /// Clone-owned counterpart of C++ `ShapePaintPath`. RawPath is the sole CPU
 /// geometry source; the backend RenderPath remains in its one-to-one sidecar.
 #[derive(Debug)]
-struct RuntimeShapePaintPathOwner {
+pub(crate) struct RuntimeShapePaintPathOwner {
     dirty: Cell<bool>,
-    retained: RefCell<Option<RuntimeShapePathState>>,
+    pub(crate) retained: RefCell<Option<RuntimeShapePathState>>,
     backend: RuntimePathBackendSlot,
 }
 
@@ -8234,7 +7987,7 @@ impl RuntimeShapePaintPathOwner {
         self.dirty.set(true);
     }
 
-    fn replace_retained(&self, retained: RuntimeShapePathState) {
+    pub(crate) fn replace_retained(&self, retained: RuntimeShapePathState) {
         *self.retained.borrow_mut() = Some(retained);
         self.dirty.set(false);
     }
@@ -8369,7 +8122,7 @@ impl Default for RuntimeShapeEffectPathOwner {
 /// fixed at construction; mutator, feather, effect-path, and RenderPaint state
 /// live directly on this occurrence and are settled by component updates.
 #[derive(Debug)]
-struct RuntimeShapePaintOwner {
+pub(crate) struct RuntimeShapePaintOwner {
     paint_index: usize,
     paint_local: usize,
     paint_global_id: u32,
@@ -8486,7 +8239,7 @@ impl RuntimeShapePaintOwner {
         }
     }
 
-    fn invalidate_all_effects(&self) {
+    pub(crate) fn invalidate_all_effects(&self) {
         self.invalidate_effects_from(0);
     }
 
@@ -8695,24 +8448,12 @@ impl RuntimeShapeList {
         })
     }
 
-    fn get(&self, shape_local: usize) -> Option<&RuntimeShape> {
+    pub(crate) fn get(&self, shape_local: usize) -> Option<&RuntimeShape> {
         self.by_local.get(shape_local)?.as_ref()
     }
 
-    /// Borrow the concrete Path owner's retained RawPath representation.
-    /// FollowPath calls this only from its dependency-ordered update, after
-    /// the source Path has consumed its own dirt.
-    pub(crate) fn retained_follow_path_source(
-        &self,
-        path_local: usize,
-    ) -> Option<(Arc<RawPath>, bool)> {
-        let owner = self.paths_by_local.get(path_local)?.as_ref()?;
-        let retained = owner.retained.borrow();
-        let retained = retained.as_ref()?;
-        Some((
-            Arc::clone(&retained.raw_path),
-            retained.has_weighted_context,
-        ))
+    pub(crate) fn path_owner(&self, path_local: usize) -> Option<&RuntimePathOwner> {
+        self.paths_by_local.get(path_local)?.as_ref()
     }
 
     #[cfg(test)]
@@ -13454,7 +13195,7 @@ struct RuntimeCachedPathGeometryCommands {
     has_weighted_context: bool,
 }
 
-fn runtime_shape_paint_path_kind_slot(path_kind: RuntimeShapePaintPathKind) -> usize {
+pub(crate) fn runtime_shape_paint_path_kind_slot(path_kind: RuntimeShapePaintPathKind) -> usize {
     match path_kind {
         RuntimeShapePaintPathKind::Local => 0,
         RuntimeShapePaintPathKind::LocalClockwise => 1,
@@ -13463,8 +13204,8 @@ fn runtime_shape_paint_path_kind_slot(path_kind: RuntimeShapePaintPathKind) -> u
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct RuntimeShapePathState {
-    raw_path: Arc<RawPath>,
+pub(crate) struct RuntimeShapePathState {
+    pub(crate) raw_path: Arc<RawPath>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19891,7 +19632,7 @@ fn record_runtime_draw_path_command_replay() {
     RUNTIME_DRAW_PATH_COMMAND_REPLAYS.with(|calls| calls.set(calls.get() + 1));
 }
 
-fn runtime_raw_path_from_commands(commands: &[RuntimePathCommand]) -> RawPath {
+pub(crate) fn runtime_raw_path_from_commands(commands: &[RuntimePathCommand]) -> RawPath {
     let mut raw_path = RawPath::new();
     runtime_rebuild_raw_path_from_commands(&mut raw_path, commands);
     raw_path
@@ -22518,7 +22259,7 @@ fn path_commands_backwards(commands: &[RuntimePathCommand]) -> Vec<RuntimePathCo
 
 // Coarsely translated from:
 // /Users/levi/dev/oss/rive-runtime/src/math/raw_path.cpp RawPath::pruneEmptySegments
-fn prune_empty_path_segments(commands: &mut Vec<RuntimePathCommand>) {
+pub(crate) fn prune_empty_path_segments(commands: &mut Vec<RuntimePathCommand>) {
     prune_empty_path_segments_from(commands, 0);
 }
 

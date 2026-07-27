@@ -9,12 +9,11 @@
 use anyhow::{Context, Result};
 use nuxie_render_api::{Mat2D as RenderMat2D, RawPath};
 
-use crate::components::{
-    ComponentHandle, RuntimeConstraintKind, RuntimePathState, RuntimeShapeState,
-    TransformComponents,
-};
+use crate::components::{ComponentHandle, RuntimeConstraintKind, TransformComponents};
 use crate::draw::RuntimePathMeasure;
 use crate::objects::InstanceObjectArena;
+use crate::shapes::path::RuntimePathState;
+use crate::shapes::shape::RuntimeShapeState;
 use crate::{ArtboardInstance, Mat2D};
 
 use super::{
@@ -194,9 +193,8 @@ pub(crate) fn update(artboard: &mut ArtboardInstance, constraint: ComponentHandl
         let Some(path_local) = artboard.objects.component_local_id(path_handle) else {
             continue;
         };
-        let Some((raw_path, has_weighted_context)) = artboard
-            .runtime_shapes
-            .retained_follow_path_source(path_local)
+        let Some((raw_path, has_weighted_context)) =
+            crate::shapes::path::retained_follow_path_source(&artboard.runtime_shapes, path_local)
         else {
             continue;
         };

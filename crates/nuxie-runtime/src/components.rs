@@ -13,6 +13,8 @@ use crate::constraints::follow_path_constraint::RuntimeFollowPathState;
 use crate::constraints::ik_constraint::RuntimeIkState;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::property_key_for_name;
+use crate::shapes::path::RuntimePathState;
+use crate::shapes::shape::RuntimeShapeState;
 use crate::solo::RuntimeSoloState;
 use crate::view_model::RuntimeOwnedViewModelListHandle;
 use nuxie_binary::RuntimeFile;
@@ -210,70 +212,6 @@ impl RuntimeSkinnableState {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct RuntimeVertexState {
     pub(crate) weight: Option<ComponentHandle>,
-}
-
-/// Runtime-only fields owned by C++ `Path`.
-///
-/// `shape` is the occurrence-local `m_Shape` pointer rebuilt by
-/// `Path::onAddedClean`; its embedded composer is reached through that Shape.
-/// `deferred_path_dirt` and `flags` are the state read by
-/// `Path::{onDirty,canDeferPathUpdate,update}`
-/// (`src/shapes/path.cpp:76-125,300-372`).
-#[derive(Debug, Clone, Default)]
-pub(crate) struct RuntimePathState {
-    pub(crate) shape: Option<ComponentHandle>,
-    pub(crate) flags: Cell<u8>,
-    pub(crate) deferred_path_dirt: Cell<bool>,
-}
-
-impl RuntimePathState {
-    pub(crate) const CLIPPING: u8 = 1 << 3;
-    pub(crate) const FOLLOW_PATH: u8 = 1 << 4;
-
-    fn clone_for_occurrence(&self) -> Self {
-        Self::default()
-    }
-
-    pub(crate) fn add_flags(&self, flags: u8) -> bool {
-        let previous = self.flags.get();
-        self.flags.set(previous | flags);
-        previous & flags != flags
-    }
-
-    pub(crate) fn is_flagged(&self, flags: u8) -> bool {
-        self.flags.get() & flags != 0
-    }
-}
-
-/// Runtime-only fields owned by C++ `Shape`.
-///
-/// Paths register in authored order during `Path::onAddedClean`; flags are
-/// accumulated by clipping/follow-path/hit-test owners on this exact
-/// occurrence (`src/shapes/shape.cpp:20-51`).
-#[derive(Debug, Clone, Default)]
-pub(crate) struct RuntimeShapeState {
-    pub(crate) paths: Vec<ComponentHandle>,
-    pub(crate) flags: Cell<u8>,
-}
-
-impl RuntimeShapeState {
-    pub(crate) const CLIPPING: u8 = RuntimePathState::CLIPPING;
-    pub(crate) const FOLLOW_PATH: u8 = RuntimePathState::FOLLOW_PATH;
-    pub(crate) const NEVER_DEFER_UPDATE: u8 = 1 << 5;
-
-    fn clone_for_occurrence(&self) -> Self {
-        Self::default()
-    }
-
-    pub(crate) fn add_flags(&self, flags: u8) -> bool {
-        let previous = self.flags.get();
-        self.flags.set(previous | flags);
-        previous & flags != flags
-    }
-
-    pub(crate) fn is_flagged(&self, flags: u8) -> bool {
-        self.flags.get() & flags != 0
-    }
 }
 
 #[derive(Debug, Clone, Default)]

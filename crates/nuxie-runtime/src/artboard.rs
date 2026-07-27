@@ -1196,9 +1196,7 @@ impl ArtboardInstance {
                     crate::shapes::mesh_vertex::on_added_dirty(objects, handle);
                 }
             }
-            if let Some(composer) = objects.path_composer_handle(component.local_id) {
-                objects.link_parent(composer, root);
-            }
+            crate::shapes::shape::on_added_dirty(objects, component.local_id, root);
             let is_constraint = objects
                 .component(handle)
                 .and_then(|component| component.concrete.constraint)
@@ -1262,62 +1260,7 @@ impl ArtboardInstance {
                 transform_component::retain_parent_transform_component(objects, handle);
             }
 
-            // `Path::onAddedClean` walks the live parent chain to its Shape,
-            // stores that pointer, and registers itself on the Shape in
-            // authored order. The embedded PathComposer is then reached from
-            // that retained Shape, never rediscovered through immutable graph
-            // rows (`src/shapes/path.cpp:76-96`).
-            if objects
-                .component(handle)
-                .and_then(|component| component.concrete.path.as_ref())
-                .is_some()
-            {
-                let mut ancestor = objects
-                    .component(handle)
-                    .and_then(|component| component.parent);
-                let shape = loop {
-                    let Some(candidate) = ancestor else {
-                        anyhow::bail!("Path is missing its owning Shape");
-                    };
-                    if objects
-                        .component(candidate)
-                        .and_then(|component| component.concrete.shape.as_ref())
-                        .is_some()
-                    {
-                        break candidate;
-                    }
-                    ancestor = objects
-                        .component(candidate)
-                        .and_then(|component| component.parent);
-                };
-                let shape_local = objects
-                    .component_local_id(shape)
-                    .context("Shape handle is missing its object identity")?;
-                objects
-                    .path_composer_handle(shape_local)
-                    .context("Shape is missing its embedded PathComposer")?;
-                objects
-                    .component_mut(handle)
-                    .expect("Path handle was validated")
-                    .concrete
-                    .path
-                    .as_mut()
-                    .expect("Path occurrence owns Path state")
-                    .shape = Some(shape);
-                let paths = &mut objects
-                    .component_mut(shape)
-                    .expect("Shape handle was validated")
-                    .concrete
-                    .shape
-                    .as_mut()
-                    .expect("Shape occurrence owns Shape state")
-                    .paths;
-                assert!(
-                    !paths.contains(&handle),
-                    "C++ Shape::addPath requires unique Path registration"
-                );
-                paths.push(handle);
-            }
+            crate::shapes::path::on_added_clean(objects, handle)?;
 
             if bone_kind == Some(false) {
                 bone::on_added_clean(objects, handle)?;
@@ -1372,28 +1315,10 @@ impl ArtboardInstance {
             let handle = objects
                 .component_handle(component.local_id)
                 .context("authored Component handle is missing during dependency construction")?;
-            if let Some(composer_node) = graph.dependency_nodes.iter().position(|node| {
-                matches!(
-                    node.kind,
-                    DependencyNodeKind::PathComposer { shape_local, .. }
-                        if shape_local == component.local_id
-                )
-            }) {
-                for (edge_index, edge) in graph
-                    .dependency_node_edges_in_insertion_order
-                    .iter()
-                    .enumerate()
-                {
-                    if edge.dependent_node == composer_node
-                        && matches!(
-                            edge.kind,
-                            nuxie_graph::DependencyKind::PathComposerShape
-                                | nuxie_graph::DependencyKind::PathComposerPath
-                        )
-                    {
-                        push_edge(edge_index);
-                    }
-                }
+            for edge_index in
+                crate::shapes::path_composer::dependency_edge_indices(graph, component.local_id)
+            {
+                push_edge(edge_index);
             }
             if let Some(helper_node) = graph.dependency_nodes.iter().position(|node| {
                 matches!(
@@ -1717,23 +1642,7 @@ impl ArtboardInstance {
                     )
                 })?;
         }
-        for composer in &graph.path_composers {
-            objects
-                .attach_path_composer(
-                    composer.shape_local,
-                    RuntimeComponent::embedded(
-                        composer.shape_local,
-                        composer.shape_global,
-                        "PathComposer",
-                    ),
-                )
-                .with_context(|| {
-                    format!(
-                        "shape local id {} cannot own its PathComposer",
-                        composer.shape_local
-                    )
-                })?;
-        }
+        crate::shapes::path_composer::attach_occurrences(&mut objects, graph)?;
 
         Self::build_component_occurrence_relations(&mut objects, graph)?;
         retain_runtime_layout_component_styles(file, &slots, &mut objects);
@@ -1965,7 +1874,7 @@ impl ArtboardInstance {
                     .component_for_local_mut(shape_local)
                     .and_then(|component| component.concrete.shape.as_mut())
                 {
-                    shape.add_flags(crate::components::RuntimeShapeState::CLIPPING);
+                    shape.add_flags(crate::shapes::shape::RuntimeShapeState::CLIPPING);
                 }
             }
         }
@@ -1992,13 +1901,13 @@ impl ArtboardInstance {
                     .component(target)
                     .and_then(|component| component.concrete.shape.as_ref())
                 {
-                    shape.add_flags(crate::components::RuntimeShapeState::FOLLOW_PATH);
+                    shape.add_flags(crate::shapes::shape::RuntimeShapeState::FOLLOW_PATH);
                 } else if let Some(path) = self
                     .objects
                     .component(target)
                     .and_then(|component| component.concrete.path.as_ref())
                 {
-                    path.add_flags(crate::components::RuntimePathState::FOLLOW_PATH);
+                    path.add_flags(crate::shapes::path::RuntimePathState::FOLLOW_PATH);
                 }
             }
         }
@@ -2029,7 +1938,7 @@ impl ArtboardInstance {
                 // C++ sets neverDeferUpdate and recursively publishes Path
                 // dirt on the Shape at HitExpandable construction
                 // (`state_machine_instance.cpp:1651-1661`).
-                shape.add_flags(crate::components::RuntimeShapeState::NEVER_DEFER_UPDATE);
+                shape.add_flags(crate::shapes::shape::RuntimeShapeState::NEVER_DEFER_UPDATE);
                 self.add_component_dirt(shape_handle, ComponentDirt::PATH, true);
             }
         }
@@ -5374,11 +5283,8 @@ impl ArtboardInstance {
         };
         let local_id = component.local_id;
         let is_constraint = component.concrete.constraint.is_some();
-        let path_has_deferred_dirt = component
-            .concrete
-            .path
-            .as_ref()
-            .is_some_and(|path| path.deferred_path_dirt.get());
+        let path_has_deferred_dirt =
+            crate::shapes::path::has_deferred_path_dirt(&self.objects, handle);
         let Some(address) = self.objects.address(handle) else {
             return;
         };
@@ -5425,7 +5331,7 @@ impl ArtboardInstance {
         if accumulated.contains(ComponentDirt::LAYOUT_STYLE) {
             self.mark_layout_changed();
         }
-        if component_dirt_affects_path_epoch(accumulated) {
+        if crate::shapes::path::dirt_affects_path_epoch(accumulated) {
             self.mark_path_changed();
         } else if accumulated.contains(ComponentDirt::WORLD_TRANSFORM) {
             self.mark_world_transform_changed();
@@ -5442,15 +5348,7 @@ impl ArtboardInstance {
         // resource owner, but schedule the embedded Component itself through
         // the occurrence's one dependency graph (`path.cpp:327-350`,
         // `shape.cpp:99-108`).
-        for shape_local in self
-            .runtime_shapes
-            .on_component_dirty(local_id, accumulated)
-        {
-            if let Some(composer) = self.objects.path_composer_handle(shape_local) {
-                let composer_dirt = ComponentDirt::PATH | (accumulated & ComponentDirt::N_SLICER);
-                self.add_component_dirt(composer, composer_dirt, true);
-            }
-        }
+        crate::shapes::path_composer::on_component_dirty(self, local_id, accumulated);
 
         self.dispatch_text_style_on_dirty(handle, local_id, accumulated);
     }
@@ -5464,10 +5362,7 @@ impl ArtboardInstance {
         // base Component transition (`src/shapes/shape.cpp:64-71`). Giving
         // the composer its own Collapsed bit ensures Artboard skips it before
         // clearing pending Path dirt, exactly like the generic C++ traversal.
-        if let Some(composer) = self
-            .objects
-            .component_local_id(handle)
-            .and_then(|local_id| self.objects.path_composer_handle(local_id))
+        if let Some(composer) = crate::shapes::shape::embedded_path_composer(&self.objects, handle)
         {
             self.collapse_component_handle(composer, collapsed);
         }
@@ -5491,17 +5386,7 @@ impl ArtboardInstance {
         // explicitly dirties the composer's dependents even when the
         // composer already carries Path dirt, so do not route this through
         // the ordinary duplicate-dirt early return.
-        if let Some(shape_local) = self.runtime_shapes.path_collapse_changed(local_id)
-            && let Some(composer) = self.objects.path_composer_handle(shape_local)
-        {
-            self.add_component_dirt(composer, ComponentDirt::PATH, false);
-            let dependent_count = self.objects.dependent_len(composer);
-            for index in 0..dependent_count {
-                if let Some(dependent) = self.objects.dependent_at(composer, index) {
-                    self.add_component_dirt(dependent, ComponentDirt::PATH, true);
-                }
-            }
-        }
+        crate::shapes::path_composer::path_collapse_changed(self, local_id);
         self.mark_path_changed();
         self.mark_layout_changed();
         self.apply_component_collapse_changed(local_id);
@@ -6195,7 +6080,8 @@ impl ArtboardInstance {
                             root_transform,
                         );
                         if let Some((graphs, graph_index)) = graph_owner.as_ref() {
-                            self.update_runtime_path_owner(
+                            crate::shapes::path::update(
+                                self,
                                 component_handle,
                                 dirt,
                                 &graphs[*graph_index],
@@ -6235,7 +6121,8 @@ impl ArtboardInstance {
                             continue;
                         }
                         if let Some((graphs, graph_index)) = graph_owner.as_ref() {
-                            self.update_runtime_path_composer(
+                            crate::shapes::path_composer::update(
+                                self,
                                 shape_local,
                                 dirt,
                                 &graphs[*graph_index],
@@ -7986,19 +7873,6 @@ fn runtime_nested_animation_instances(
     animations
 }
 
-fn component_dirt_affects_path_epoch(dirt: ComponentDirt) -> bool {
-    // C++ `src/shapes/path.cpp::Path::update` rebuilds raw path geometry for
-    // path/nslicer dirt, and only for world-transform dirt when a deformer is
-    // present. Plain transform animation is applied at draw time through the
-    // shape/world transform and must not churn retained path-command storage.
-    !(dirt
-        & (ComponentDirt::PATH
-            | ComponentDirt::VERTICES
-            | ComponentDirt::LAYOUT_STYLE
-            | ComponentDirt::N_SLICER))
-        .is_empty()
-}
-
 fn property_affects_effect_path_epoch(type_name: Option<&str>, property_key: u16) -> bool {
     match type_name {
         Some("TrimPath") => ["start", "end", "offset", "modeValue"]
@@ -8810,7 +8684,7 @@ mod tests {
                 .component(0)
                 .and_then(|component| component.concrete.shape.as_ref())
                 .expect("shape state")
-                .is_flagged(crate::components::RuntimeShapeState::NEVER_DEFER_UPDATE),
+                .is_flagged(crate::shapes::shape::RuntimeShapeState::NEVER_DEFER_UPDATE),
             "listener initialization sets neverDeferUpdate with the same HitExpandable owner before returning the instance (`state_machine_instance.cpp:1651-1661,1827-1831`)"
         );
         assert!(artboard.update_components().did_update);
@@ -12368,7 +12242,7 @@ mod tests {
             .shape
             .as_ref()
             .unwrap()
-            .add_flags(crate::components::RuntimeShapeState::FOLLOW_PATH);
+            .add_flags(crate::shapes::shape::RuntimeShapeState::FOLLOW_PATH);
         assert!(instance.add_component_dirt(path, ComponentDirt::PATH, false));
         assert!(instance.update_components().did_update);
         assert_ne!(
@@ -12387,7 +12261,7 @@ mod tests {
                 .shape
                 .as_ref()
                 .unwrap()
-                .is_flagged(crate::components::RuntimeShapeState::FOLLOW_PATH),
+                .is_flagged(crate::shapes::shape::RuntimeShapeState::FOLLOW_PATH),
             "generated clone resets runtime flags before clean-phase producers rebuild them"
         );
         assert!(

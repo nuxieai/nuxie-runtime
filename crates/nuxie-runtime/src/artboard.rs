@@ -17688,12 +17688,24 @@ mod tests {
             push_synthetic_object(bytes, "Artboard", &[]);
             // Local 1 with active/inactive children 2 and 3.
             push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 2)]);
-            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
-            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            push_synthetic_object_with_properties(bytes, "Node", |bytes| {
+                push_synthetic_uint_property(bytes, "Node", "parentId", 1);
+                push_synthetic_bytes_property(bytes, "Node", "name", b"first");
+            });
+            push_synthetic_object_with_properties(bytes, "Node", |bytes| {
+                push_synthetic_uint_property(bytes, "Node", "parentId", 1);
+                push_synthetic_bytes_property(bytes, "Node", "name", b"second");
+            });
             // Local 4 with active/inactive children 5 and 6.
             push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 5)]);
-            push_synthetic_object(bytes, "Node", &[("parentId", 4)]);
-            push_synthetic_object(bytes, "Node", &[("parentId", 4)]);
+            push_synthetic_object_with_properties(bytes, "Node", |bytes| {
+                push_synthetic_uint_property(bytes, "Node", "parentId", 4);
+                push_synthetic_bytes_property(bytes, "Node", "name", b"third");
+            });
+            push_synthetic_object_with_properties(bytes, "Node", |bytes| {
+                push_synthetic_uint_property(bytes, "Node", "parentId", 4);
+                push_synthetic_bytes_property(bytes, "Node", "name", b"fourth");
+            });
         });
 
         reset_solo_mapping_work();
@@ -17722,12 +17734,16 @@ mod tests {
         assert_collapsed(&instance, 3, true);
         assert_collapsed(&instance, 5, false);
         assert_collapsed(&instance, 6, true);
+        assert_eq!(instance.solo_active_child_index(1), Some(0));
+        assert_eq!(instance.solo_active_child_name(1), Some("first"));
 
         assert!(instance.set_solo_active_child_by_index(1, 1.0));
         assert_collapsed(&instance, 2, true);
         assert_collapsed(&instance, 3, false);
         assert_collapsed(&instance, 5, false);
         assert_collapsed(&instance, 6, true);
+        assert_eq!(instance.solo_active_child_index(1), Some(1));
+        assert_eq!(instance.solo_active_child_name(1), Some("second"));
 
         assert!(instance.set_solo_active_child_by_index(4, 1.0));
         assert_collapsed(&instance, 2, true);

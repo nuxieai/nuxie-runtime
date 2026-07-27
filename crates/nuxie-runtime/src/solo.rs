@@ -173,6 +173,34 @@ fn runtime_local_by_cpp_artboard_local(
 }
 
 impl ArtboardInstance {
+    /// C++ `Solo::getActiveChildIndex`, adapted to `Option` so the existing
+    /// Rust data-bind path keeps its behavior for unresolved authored ids.
+    pub(crate) fn solo_active_child_index(&self, solo_local_id: usize) -> Option<usize> {
+        let solo = self.component_handle(solo_local_id)?;
+        let component = self.objects.component(solo)?;
+        let solo_state = component.concrete.solo.as_ref()?;
+        let active_component_id = usize::try_from(
+            self.uint_property(solo_local_id, solo_state.active_component_property_key?)?,
+        )
+        .ok()?;
+        solo_state
+            .cpp_local_ids
+            .iter()
+            .position(|cpp_local_id| *cpp_local_id == active_component_id)
+    }
+
+    /// C++ `Solo::getActiveChildName`, borrowing the retained child name from
+    /// this Artboard occurrence instead of rediscovering authored ownership.
+    pub(crate) fn solo_active_child_name(&self, solo_local_id: usize) -> Option<&str> {
+        let active_child_index = self.solo_active_child_index(solo_local_id)?;
+        let solo = self.component_handle(solo_local_id)?;
+        let component = self.objects.component(solo)?;
+        let active_local_id = self
+            .objects
+            .component_local_id(*component.children.get(active_child_index)?)?;
+        self.slot(active_local_id)?.name.as_deref()
+    }
+
     pub(crate) fn apply_component_collapse_changed(&mut self, local_id: usize) -> bool {
         let Some(solo) = self.component_handle(local_id) else {
             return false;

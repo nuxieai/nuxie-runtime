@@ -7945,24 +7945,7 @@ impl ArtboardInstance {
         target_local_id: usize,
         enum_value_names: &[Vec<u8>],
     ) -> Option<RuntimeDataBindGraphValue> {
-        let solo = self.component_handle(target_local_id)?;
-        let component = self.objects.component(solo)?;
-        let solo_state = component.concrete.solo.as_ref()?;
-        let active_component_id = usize::try_from(
-            self.uint_property(target_local_id, solo_state.active_component_property_key?)?,
-        )
-        .ok()?;
-        let active_child_index = solo_state
-            .cpp_local_ids
-            .iter()
-            .position(|cpp_local_id| *cpp_local_id == active_component_id)?;
-        let active_local_id = self
-            .objects
-            .component_local_id(*component.children.get(active_child_index)?)?;
-        let active_name = self
-            .slot(active_local_id)
-            .and_then(|slot| slot.name.as_deref())?
-            .as_bytes();
+        let active_name = self.solo_active_child_name(target_local_id)?.as_bytes();
         let index = enum_value_names
             .iter()
             .position(|name| name.as_slice() == active_name)?;

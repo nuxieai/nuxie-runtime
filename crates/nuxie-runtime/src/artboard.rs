@@ -6120,7 +6120,7 @@ impl ArtboardInstance {
     /// continuation after an unchanged base collapse. Pinned C++ returns
     /// before owner-specific propagation; that semantic correction remains a
     /// mapped layout/component closure rather than being hidden in a file move.
-    pub(super) fn collapse_component_tree_with_ancestor_guarded(
+    fn collapse_component_tree_with_ancestor_guarded(
         &mut self,
         handle: ComponentHandle,
         collapsed: bool,
@@ -7309,30 +7309,6 @@ impl ArtboardInstance {
             }
             _ => false,
         }
-    }
-
-    pub(crate) fn mark_text_style_shape_dirty(&mut self, style_local_id: usize) -> bool {
-        let Some(parent_key) = property_key_for_name("Component", "parentId") else {
-            return false;
-        };
-        let Some(text_local) = self
-            .uint_property(style_local_id, parent_key)
-            .and_then(|parent_id| usize::try_from(parent_id).ok())
-        else {
-            return false;
-        };
-        if !matches!(
-            self.slot(text_local).and_then(|slot| slot.type_name),
-            Some("Text" | "TextInput")
-        ) {
-            return false;
-        }
-
-        let mut changed = false;
-        changed |= self.add_dirt(style_local_id, ComponentDirt::TEXT_SHAPE, false);
-        changed |= self.add_dirt(text_local, ComponentDirt::TEXT_SHAPE, false);
-        changed |= self.add_dirt(text_local, ComponentDirt::WORLD_TRANSFORM, true);
-        changed
     }
 
     fn apply_initial_component_collapse_callbacks_in_authored_order(&mut self) -> bool {

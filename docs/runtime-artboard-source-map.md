@@ -87,7 +87,7 @@ remain valid for behavior-preserving file moves.
 | `layout_component.hpp`, `layout_component.cpp` | `layout_component.rs` | hit test, advance, dirt, update, collapse | partial: hit-test and display-collapse child loop extracted; virtual hidden state, post-loop Collapsable notification, advance, dirt, and update remain queued before the semantic port |
 | `layout/layout_component_style.hpp`, `layout/layout_component_style.cpp` | `layout_component_style.rs` | style owner callbacks and interpolation | partial: retained-parent display dirt and animation-style inheritance extracted; remaining layout/style callbacks stay queued for the semantic port |
 | `text_input.hpp`, `text_input.cpp` | `text_input.rs` | move remaining Artboard advance/property/update fragments | active collision |
-| `text_style.hpp`, `text_style.cpp` | `text/text_style.rs` | dependencies, font overrides, and shape dirt | queued before its semantic port |
+| `text/text_style.hpp`, `text/text_style.cpp` | `text/text_style.rs` | dependencies, font overrides, and shape dirt | partial: existing metric-to-shape dirt bridge extracted; retained dependencies, font overrides, and exact owner-local dirt remain for the text wave |
 | `text_value_run.hpp`, `text_value_run.cpp` | `text/text_value_run.rs` | root run lookup/write and shape dirt | Artboard-facing shard extracted; full style/offset/hit owner remains for text wave |
 | `text_variation_helper.hpp`, `text_variation_helper.cpp` | `text/text_variation_helper.rs` | variation dependency and update helper | update extracted; authored-order construction/dependency insertion remains |
 | `linear_animation_instance.hpp`, `linear_animation_instance.cpp` | `animation/linear_animation_instance.rs` | instance construction, advance, apply, events | extracted |
@@ -113,6 +113,23 @@ renamed into another warehouse file.
 | generated property callbacks | make a thin registry dispatcher to DrawRules, DrawTarget, Solo, LayoutStyle, constraints, nested owners, Text, Gradient, Mesh, Axis, and Artboard |
 | collapse dispatch | retain one guarded traversal adapter; delegate Component, ContainerComponent, Solo, LayoutComponent, and TransformComponent behavior |
 | epoch/property classifiers | dissolve during the owning semantic wave into C++-shaped dirt; retain only source-cited renderer-adapter state |
+
+## Semantic gaps exposed by the structural audit
+
+The staging branch deliberately does not fix these behaviors inside file-move
+commits. They are integration blockers for the owning semantic wave:
+
+| Pinned C++ owner | Existing Rust mismatch preserved by the move | Required integration action |
+|---|---|---|
+| `src/container_component.cpp:9-20` | the Rust virtual adapter continues into concrete propagation when the base Collapsed bit is already equal; C++ returns immediately | add an owned component/layout gap and reopen the whole-file `faithful` row if the ledger cannot scope it to verified members |
+| `src/drawable.cpp`, `src/layout_component.cpp`, `include/rive/shapes/clipping_shape.hpp` | Rust hit testing applies the base hidden/collapsed check where C++ uses concrete virtual `isHidden` overrides | add an owned drawable/layout gap and reopen the whole-file `faithful` row if member scoping is unavailable |
+| `src/layout_component.cpp:233-250` | Rust propagates effective display collapse to children but does not perform C++'s post-loop `updateCollapsables()` with the virtual collapsed state | retain the layout row as pending until the semantic layout family closes it |
+
+The mechanical ledgers on this branch retain their previously published status
+labels so the staging branch does not masquerade as an acceptance/promotion
+commit. The FL-C4 integration owner must reconcile the explicit gaps above into
+the canonical gap ledger and member/file status before the combined candidate
+can pass structural acceptance.
 
 ## Extraction order
 

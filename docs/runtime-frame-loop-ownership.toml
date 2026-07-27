@@ -2789,7 +2789,10 @@ status = "pending"
 upstream = "src/text/text_style.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/text.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/text/text_style.rs",
+  "crates/nuxie-runtime/src/text.rs",
+]
 dynamically_reached = true
 status = "pending"
 

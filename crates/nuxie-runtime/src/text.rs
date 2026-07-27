@@ -31,6 +31,7 @@ use crate::{ArtboardInstance, Mat2D, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
 use std::collections::BTreeMap;
 
+pub(crate) mod text_style;
 pub(crate) mod text_value_run;
 pub(crate) mod text_variation_helper;
 

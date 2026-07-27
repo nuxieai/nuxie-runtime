@@ -132,6 +132,25 @@ checked-out crate version, resolves to the checked-out commit, and is already
 reachable from `origin/main`. Artifact source is therefore always the immutable
 tag, never the workflow branch.
 
+The bounded retry does not run the old tag's identity verifier. The reviewed
+verifier is materialized at an unpredictable `mktemp` path under `RUNNER_TEMP`
+and removed when the step exits. For immutable workflow-source lookup, the
+workflow peels `GITHUB_WORKFLOW_SHA` to an exact commit, rejects any value that
+does not equal that peeled commit ID, and reads
+`tools/test-apple-runtime-build-identity.sh` with
+`git --no-replace-objects show`, so local replace refs cannot redirect the
+immutable workflow-source lookup. The verifier runs with the tagged
+workspace passed as its explicit repository root, runs Cargo from that root,
+and compares the exact embedded source revision after no-op, source-create,
+source-change, source-remove, and target-noise builds. It never depends on
+Cargo's human-readable `Fresh` or `Dirty` status words, and it rejects a
+caller-spoofed revision. The remaining `apple-runtime-check` component gates
+run explicitly in their original order, with their original commands. The
+workflow fails unless `HEAD` equals `NUX_RUNTIME_SOURCE_REVISION` and the whole
+worktree, including untracked files, is clean before and after the verifier.
+Tag-push runs use this same boundary; their workflow revision and artifact tag
+revision are the same commit.
+
 The workflow fails rather than changing an existing release or attaching
 replacement assets. If a run fails after draft creation, inspect and delete
 only that unpublished draft before retrying; a published immutable release

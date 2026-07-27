@@ -156,11 +156,50 @@ jobs:
 
       - name: Test the exact runtime contract and header
         run: |
-          # The identity test redirects Cargo output into phase logs. Trace its
-          # assertions once so a release-host-only failure names the exact
-          # boundary; the canonical aggregate target then reruns every gate.
-          bash -x tools/test-apple-runtime-build-identity.sh
-          make apple-runtime-check
+          set -euo pipefail
+
+          # Artifact source stays at the checked-out tag. Only the identity
+          # verifier comes from the exact revision that supplied this workflow,
+          # so a bounded retry does not execute the tagged flaky verifier.
+          workflow_revision="$(git --no-replace-objects rev-parse --verify "${GITHUB_WORKFLOW_SHA}^{commit}")"
+          if [[ "${workflow_revision}" != "${GITHUB_WORKFLOW_SHA}" ]]; then
+            echo "workflow source must be an exact commit: ${GITHUB_WORKFLOW_SHA}" >&2
+            exit 1
+          fi
+          reviewed_identity_verifier="$(mktemp "${RUNNER_TEMP}/test-apple-runtime-build-identity.XXXXXX")"
+          trap 'rm -f -- "${reviewed_identity_verifier}"' EXIT
+          git --no-replace-objects show "${workflow_revision}:tools/test-apple-runtime-build-identity.sh" > "${reviewed_identity_verifier}"
+          chmod 0700 "${reviewed_identity_verifier}"
+
+          assert_clean_tagged_worktree() {
+            local actual_head
+            local worktree_status
+
+            actual_head="$(git rev-parse --verify HEAD)"
+            if [[ "${actual_head}" != "${NUX_RUNTIME_SOURCE_REVISION}" ]]; then
+              echo "tagged worktree HEAD changed before release validation" >&2
+              echo "expected=${NUX_RUNTIME_SOURCE_REVISION}" >&2
+              echo "actual=${actual_head}" >&2
+              exit 1
+            fi
+            worktree_status="$(git status --porcelain --untracked-files=all)"
+            if [[ -n "${worktree_status}" ]]; then
+              echo "tagged worktree must be completely clean" >&2
+              printf '%s\n' "${worktree_status}" >&2
+              exit 1
+            fi
+          }
+
+          # Keep the component order and commands from apple-runtime-check,
+          # substituting only the reviewed portable identity verifier.
+          make apple-runtime-contract-test
+          assert_clean_tagged_worktree
+          bash -x "${reviewed_identity_verifier}" "${GITHUB_WORKSPACE}"
+          assert_clean_tagged_worktree
+          make apple-runtime-header-smoke
+          make apple-runtime-release-panic-smoke
+          cargo test --locked -p nux-apple-runtime --features apple-product
+          cargo clippy --locked -p nux-apple-runtime --lib --no-default-features --features apple-product --no-deps --quiet -- -D warnings
 
       - name: Reclaim product-check build output before packaging
         run: |

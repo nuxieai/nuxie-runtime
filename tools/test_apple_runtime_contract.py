@@ -115,6 +115,10 @@ class ReleaseWorkflowSourcePolicyTests(unittest.TestCase):
         self.release_documentation = (
             REPO_ROOT / "docs/apple-runtime-release.md"
         ).read_text()
+        self.identity_verifier = (
+            REPO_ROOT / "tools/test-apple-runtime-build-identity.sh"
+        ).read_text()
+        self.makefile = (REPO_ROOT / "Makefile").read_text()
 
     def test_manual_release_dispatch_checks_out_the_supplied_tag(self) -> None:
         self.assertRegex(
@@ -226,16 +230,196 @@ class ReleaseWorkflowSourcePolicyTests(unittest.TestCase):
             documentation_words,
         )
 
-    def test_release_traces_the_identity_gate_before_the_aggregate(self) -> None:
-        traced_gate = "bash -x tools/test-apple-runtime-build-identity.sh"
-        aggregate_gate = "make apple-runtime-check"
-        self.assertEqual(self.release_workflow.count(traced_gate), 1)
-        self.assertEqual(self.release_workflow.count(aggregate_gate), 1)
-        self.assertLess(
-            self.release_workflow.index(traced_gate),
-            self.release_workflow.index(aggregate_gate),
+    def test_identity_verifier_is_portable_and_ignores_cargo_ui_words(self) -> None:
+        self.assertIn('if [[ "$#" -gt 1 ]]', self.identity_verifier)
+        self.assertIn(
+            'repo_root="$(cd -P "${1}" && pwd -P)"',
+            self.identity_verifier,
+        )
+        self.assertIn(
+            '(cd "${repo_root}" && env -u NUX_RUNTIME_SOURCE_REVISION',
+            self.identity_verifier,
+        )
+        self.assertIn("expected_revision()", self.identity_verifier)
+        self.assertNotIn("Fresh nux-apple-runtime", self.identity_verifier)
+        self.assertNotIn("Dirty nux-apple-runtime", self.identity_verifier)
+
+    def test_release_runs_the_reviewed_identity_verifier_and_all_other_gates(
+        self,
+    ) -> None:
+        reviewed_verifier = (
+            'reviewed_identity_verifier="$(mktemp "${RUNNER_TEMP}/'
+            'test-apple-runtime-build-identity.XXXXXX")"'
+        )
+        cleanup_verifier = (
+            """trap 'rm -f -- "${reviewed_identity_verifier}"' EXIT"""
+        )
+        peel_workflow_revision = (
+            'workflow_revision="$(git --no-replace-objects rev-parse '
+            '--verify "${GITHUB_WORKFLOW_SHA}^{commit}")"'
+        )
+        materialize_verifier = (
+            'git --no-replace-objects show "${workflow_revision}:'
+            'tools/test-apple-runtime-build-identity.sh" '
+            '> "${reviewed_identity_verifier}"'
+        )
+        self.assertEqual(self.release_workflow.count(reviewed_verifier), 1)
+        self.assertEqual(self.release_workflow.count(cleanup_verifier), 1)
+        self.assertEqual(
+            self.release_workflow.count(peel_workflow_revision),
+            1,
+        )
+        self.assertEqual(
+            self.release_workflow.count(
+                'if [[ "${workflow_revision}" != "${GITHUB_WORKFLOW_SHA}" ]]'
+            ),
+            1,
+        )
+        self.assertEqual(self.release_workflow.count(materialize_verifier), 1)
+        self.assertEqual(
+            self.release_workflow.count(
+                'chmod 0700 "${reviewed_identity_verifier}"'
+            ),
+            1,
+        )
+        self.assertNotIn(
+            'git show "${GITHUB_WORKFLOW_SHA}:',
+            self.release_workflow,
         )
 
+        ordered_gates = [
+            "make apple-runtime-contract-test",
+            'bash -x "${reviewed_identity_verifier}" "${GITHUB_WORKSPACE}"',
+            "make apple-runtime-header-smoke",
+            "make apple-runtime-release-panic-smoke",
+            (
+                "cargo test --locked -p nux-apple-runtime "
+                "--features apple-product"
+            ),
+            (
+                "cargo clippy --locked -p nux-apple-runtime --lib "
+                "--no-default-features --features apple-product "
+                "--no-deps --quiet -- -D warnings"
+            ),
+        ]
+        for gate in ordered_gates:
+            self.assertEqual(self.release_workflow.count(gate), 1)
+        self.assertEqual(
+            sorted(self.release_workflow.index(gate) for gate in ordered_gates),
+            [self.release_workflow.index(gate) for gate in ordered_gates],
+        )
+        cleanliness_assertion = "assert_clean_tagged_worktree"
+        cleanliness_calls = [
+            match.start()
+            for match in re.finditer(
+                rf"^          {cleanliness_assertion}$",
+                self.release_workflow,
+                re.MULTILINE,
+            )
+        ]
+        self.assertEqual(len(cleanliness_calls), 2)
+        self.assertEqual(
+            self.release_workflow.count(
+                'actual_head="$(git rev-parse --verify HEAD)"'
+            ),
+            1,
+        )
+        self.assertEqual(
+            self.release_workflow.count(
+                'if [[ "${actual_head}" != '
+                '"${NUX_RUNTIME_SOURCE_REVISION}" ]]'
+            ),
+            1,
+        )
+        self.assertEqual(
+            self.release_workflow.count(
+                'worktree_status="$(git status --porcelain '
+                '--untracked-files=all)"'
+            ),
+            1,
+        )
+        self.assertEqual(
+            self.release_workflow.count(
+                'if [[ -n "${worktree_status}" ]]'
+            ),
+            1,
+        )
+        self.assertLess(
+            self.release_workflow.index(ordered_gates[0]),
+            cleanliness_calls[0],
+        )
+        self.assertLess(
+            cleanliness_calls[0],
+            self.release_workflow.index(ordered_gates[1]),
+        )
+        self.assertLess(
+            self.release_workflow.index(ordered_gates[1]),
+            cleanliness_calls[1],
+        )
+        self.assertLess(
+            cleanliness_calls[1],
+            self.release_workflow.index(ordered_gates[2]),
+        )
+        self.assertNotIn("git diff --exit-code -- .", self.release_workflow)
+        self.assertNotIn(
+            "bash -x tools/test-apple-runtime-build-identity.sh",
+            self.release_workflow,
+        )
+        self.assertNotIn(
+            "make apple-runtime-build-identity-test",
+            self.release_workflow,
+        )
+        self.assertNotIn("make apple-runtime-check", self.release_workflow)
+
+    def test_ordinary_apple_runtime_check_target_is_unchanged(self) -> None:
+        self.assertIn(
+            "apple-runtime-check: apple-runtime-contract-test "
+            "apple-runtime-build-identity-test apple-runtime-header-smoke "
+            "apple-runtime-release-panic-smoke\n"
+            "\tcargo test --locked -p nux-apple-runtime "
+            "--features apple-product\n"
+            "\tcargo clippy --locked -p nux-apple-runtime --lib "
+            "--no-default-features --features apple-product --no-deps "
+            "--quiet -- -D warnings",
+            self.makefile,
+        )
+
+    def test_release_documents_the_portable_retry_boundary(self) -> None:
+        documentation_words = " ".join(self.release_documentation.split())
+        self.assertIn("GITHUB_WORKFLOW_SHA", self.release_documentation)
+        self.assertIn(
+            "reviewed verifier is materialized at an unpredictable `mktemp` "
+            "path under `RUNNER_TEMP` and removed when the step exits",
+            documentation_words,
+        )
+        self.assertIn(
+            "runs with the tagged workspace passed as its explicit repository "
+            "root",
+            documentation_words,
+        )
+        self.assertIn(
+            "remaining `apple-runtime-check` component gates run explicitly "
+            "in their original order",
+            documentation_words,
+        )
+        self.assertIn(
+            "peels `GITHUB_WORKFLOW_SHA` to an exact commit",
+            documentation_words,
+        )
+        self.assertIn(
+            "`git --no-replace-objects show`",
+            documentation_words,
+        )
+        self.assertIn(
+            "local replace refs cannot redirect the immutable workflow-source "
+            "lookup",
+            documentation_words,
+        )
+        self.assertIn(
+            "whole worktree, including untracked files, is clean before and "
+            "after the verifier",
+            documentation_words,
+        )
     def test_apple_jobs_force_the_exact_rustup_toolchain_onto_path(self) -> None:
         toolchain_bin = (
             'toolchain_bin="$(dirname "$(rustup which '

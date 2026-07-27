@@ -1020,7 +1020,7 @@ target-scope/traversal differentials plus 22 structural ratchets. The complete
 C++ constructor availability table now covers inputs, reports, DataBinds,
 listeners, scripts, focus, and hit facilities rather than validating another
 single symptom. Its fresh non-performance battery and source-bound trace are
-green on committed source `6273b65a90aded079d0527f060e3e007f0ea0f1d`;
+green on committed source `6674aee34c07d95707bc0e2f737540a3b5633cb4`;
 the next action is the immutable evidence commit, explicit push, and
 independent review. No row is self-promoted. Active publication branch is
 `levi/fl-c`; there is no PR.

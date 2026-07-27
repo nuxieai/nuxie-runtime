@@ -15,7 +15,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.88 MiB OFF / 8.76 MiB ON vs user-approved 9 MiB budget (both variants green at `5901c1fe`) | #OR-9 |
 
 Regression floor (must stay green): runtime lib 521/521, nuxie lib 146/146,
-C++ probe 745/745, both runtime golden gates 317/317 exact / 647/647 segments;
+C++ probe 747/747, both runtime golden gates 317/317 exact / 647/647 segments;
 ordinary and scripted both have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
 the complete probe run rather than silently skipping it. Every remaining RB-1
@@ -1009,7 +1009,7 @@ historical unless it agrees with these sources.
 
 **Canonical NEXT:** close and publish the complete five-file
 layer/state-occurrence family at semantic commit
-`78be55ef52ab77a0722074a5224581b4ab51fba1` against
+`78be55ef845eb8e841d9d9ef99ba8e5732120f68` against
 `docs/runtime-frame-loop-fl-c3-closure.md` (FL-C3), then obtain one independent
 whole-family verdict before any FL-C4 production edit. Candidate
 `b8d1fd6f7222fcdf3f520896f1dc8e9423d69bb8` was rejected because it built
@@ -1019,9 +1019,11 @@ during those callbacks, builds the topology afterward, and carries live
 target-scope/traversal differentials plus 22 structural ratchets. The complete
 C++ constructor availability table now covers inputs, reports, DataBinds,
 listeners, scripts, focus, and hit facilities rather than validating another
-single symptom. The next action is one fresh non-performance battery, trace
-provenance refresh, immutable push, and independent review; no row is
-self-promoted. Active publication branch is `levi/fl-c`; there is no PR.
+single symptom. Its fresh non-performance battery and source-bound trace are
+green on committed source `6273b65a90aded079d0527f060e3e007f0ea0f1d`;
+the next action is the immutable evidence commit, explicit push, and
+independent review. No row is self-promoted. Active publication branch is
+`levi/fl-c`; there is no PR.
 Exact FL-C2 candidate
 `7546f4f15b05e582c62aa52ecc93430a7048e143` passed independent Standards and
 Spec review with no findings; its 12 mapped frame-loop files, three importer

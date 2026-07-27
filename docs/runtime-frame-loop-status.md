@@ -80,7 +80,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   implementation provisionally under the coordinator override. FL-C2 is
   independently closed. The complete five-file layer/state family (FL-C3) is
   translated at semantic commit
-  `78be55ef52ab77a0722074a5224581b4ab51fba1` against
+  `78be55ef845eb8e841d9d9ef99ba8e5732120f68` against
   `docs/runtime-frame-loop-fl-c3-closure.md`. C++'s ordered state-definition
   collection and the occurrence-owned `any`, `current`, and transition-source
   triad now have direct Rust owners. The rejected candidate's three omissions
@@ -102,30 +102,28 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   constructor availability audit now covers every entry-action facility.
   Interruption/reset/advance/nested lifecycles and all 22 structural negative
   controls are closed. The self-excluding
-  `docs/runtime-frame-loop-trace.json` records the exact candidate-source
-  fingerprint and runner provenance, which must be refreshed for the current
-  source before publication. The exact next action is the fresh
-  once-per-candidate non-performance floor, trace refresh, immutable
-  publication, and one independent whole-family verdict. No FL-C3 row is
-  promoted before that verdict, and no FL-C4 production edit begins before it.
-- FL-C3's previous once-per-candidate non-performance floor was green on
-  rejected candidate `b8d1fd6f`; it is historical and must be rerun for
-  semantic commit `78be55ef52ab77a0722074a5224581b4ab51fba1`. The prior receipt was:
-  semantic commit `57d08cfcdb8e870602544e30af9c53d6f7ac34b7`: runtime 521 / 521;
-  probe-armed workspace and pinned-C++ probes 746 / 746; ordinary and scripted
-  golden each 317 / 317 entries and 647 / 647 segments with zero divergences;
-  same-runner pixels 1,468 / 1,468 with 1,370 byte-exact and zero divergences;
-  C API, native Apple, browser build, lint, format, and diff checks; structural
-  checker 37 / 37; committed-tree size 8,034,536 bytes without scripting and
-  8,935,640 bytes with scripting, both below 9 MiB; and the full Apple
-  XCFramework build/package/ABI/header/C/Swift floor with checksum
-  `22a0309091624bd584566f529a5d52bcc19aa9f7e3d2e7c475f8c8e7f7b361cd`.
-  Ordinary and scripted golden were rerun serially after a discarded
-  concurrent harness build replaced the shared executable; native Apple was
-  rerun with a fully isolated stable toolchain after a discarded mixed-cache
-  run. The first XCFramework attempt exhausted the generated Cargo target
-  cache; after `cargo clean` reclaimed generated artifacts, unchanged source
-  built and verified successfully. No performance measurement was run.
+  `docs/runtime-frame-loop-trace.json` now records committed source
+  `6273b65a90aded079d0527f060e3e007f0ea0f1d`, candidate-source fingerprint
+  `8c27dc507c268491260b218e45c9d258a40a506f17d3053ded513ea3f90b8fc3`,
+  and exact runner provenance. The exact next action is the immutable evidence
+  commit, explicit publication, and one independent whole-family verdict. No
+  FL-C3 row is promoted before that verdict, and no FL-C4 production edit
+  begins before it.
+- FL-C3's fresh once-per-candidate non-performance floor is green on the
+  corrected source: runtime 521 / 521; public facade 146 / 146; probe-armed
+  workspace and pinned-C++ probes 747 / 747; ordinary and scripted golden each
+  317 / 317 entries and 647 / 647 segments with zero divergences, including
+  `data_viz_demo` and `db_health_tracker`; same-runner pixels 1,468 / 1,468
+  with 1,370 byte-exact, zero divergences, and zero gated rows; C API, native
+  Apple, browser build, lint, format, and diff checks; size 8,034,568 bytes
+  without scripting and 8,935,672 bytes with scripting, both below 9 MiB; and
+  the full Apple XCFramework build/package/ABI/header/C/Swift floor with
+  checksum
+  `ca1b605a66062dce9d1cff1d139fd4125fd30fe2323f661e84daa6223885d50d`.
+  The source-bound trace reports 103 / 341 reached C++ files, 29 Rust modules,
+  and all 18 frame landmarks. The structural checker is run after this receipt
+  is committed so its fingerprint validates the immutable source. No
+  performance measurement was run.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
   mutable occurrence. Each occurrence retains a handle into the one authored

@@ -328,41 +328,43 @@ entry callbacks. The current correction keeps only the focus-manager identity
 and lazily requested target nodes available during layer initialization,
 defers the full topology until afterward, and adds live target-scope and
 traversal differentials plus the twenty-second structural ratchet. It is not
-publishable until its fresh non-performance floor, trace provenance, and
-immutable replacement SHA are recorded.
+publishable until its immutable replacement SHA is recorded and explicitly
+pushed.
 
 The self-excluding `docs/runtime-frame-loop-trace.json` records the exact
 candidate-source fingerprint and runner provenance. Fingerprinted closure
 prose deliberately does not duplicate those self-referential values. The
-following gate receipt belongs only to rejected candidate `b8d1fd6f` and is
-historical, not evidence for the current correction:
+fresh gate receipt for corrected semantic commit
+`78be55ef845eb8e841d9d9ef99ba8e5732120f68` and committed source
+`6273b65a90aded079d0527f060e3e007f0ea0f1d` is:
 
 - runtime 521 / 521;
-- probe-armed workspace and pinned-C++ probes 746 / 746;
+- public facade 146 / 146;
+- probe-armed workspace and pinned-C++ probes 747 / 747;
 - ordinary and scripted golden each 317 / 317 entries and 647 / 647 segments,
-  zero divergences;
-- same-runner pixel corpus 1,468 / 1,468, 1,370 byte-exact, zero divergences;
+  zero divergences, including `data_viz_demo` and `db_health_tracker`;
+- same-runner pixel corpus 1,468 / 1,468, 1,370 byte-exact, zero divergences,
+  and zero gated rows;
 - C API, native Apple, browser build, lint, format, and diff checks;
-- committed-tree size 8,034,536 bytes without scripting and 8,935,640 bytes
+- committed-tree size 8,034,568 bytes without scripting and 8,935,672 bytes
   with scripting, both below the 9 MiB limit;
 - Apple XCFramework build/package/ABI/header/C/Swift checks, checksum
-  `22a0309091624bd584566f529a5d52bcc19aa9f7e3d2e7c475f8c8e7f7b361cd`;
-- structural checker 37 / 37 and all 21 injected negative controls.
+  `ca1b605a66062dce9d1cff1d139fd4125fd30fe2323f661e84daa6223885d50d`;
+- source-bound trace 103 / 341 reached C++ files, 29 Rust modules, and all 18
+  frame landmarks, with candidate-source fingerprint
+  `8c27dc507c268491260b218e45c9d258a40a506f17d3053ded513ea3f90b8fc3`;
+- structural checker 37 / 37 and all 22 injected negative controls, run after
+  the receipt commit.
 
-Ordinary and scripted golden were rerun serially after a discarded concurrent
-harness build replaced their shared executable. Native Apple was rerun with a
-fully isolated stable toolchain after a discarded mixed-cache run. The
-XCFramework's first invocation correctly refused a checker-created untracked
-Python bytecode cache; the cache was removed and the clean-tree package run
-above passed. A later invocation exhausted the generated Cargo target cache;
-`cargo clean` reclaimed only generated artifacts and unchanged source then
-passed the complete package verification. These are discarded
-environment/harness attempts, not product failures. No performance
-measurement was run.
+The first pixel invocation stopped before comparison because the generated
+current-runtime Dawn executable was absent. The exact pinned runtime/Dawn
+runner was rebuilt from the CI-provenance recipe; the unchanged 1,468-row
+comparison then passed. This was an environment prerequisite, not a product
+failure. No performance measurement was run.
 
-The replacement review packet will be this checklist plus its direct C++
-citations, focused adversarial tests, 22 structural ratchets, exact pushed
-candidate SHA, and a fresh gate receipt. All five layer/state family rows and
+The replacement review packet is this checklist plus its direct C++ citations,
+focused adversarial tests, 22 structural ratchets, exact pushed candidate SHA,
+and the fresh gate receipt above. All five layer/state family rows and
 `state_machine.layer` remain pending-verification until the independent
 verdict. The supporting `src/math/random.cpp` row remains pending after that
 verdict until its FL-D formula consumer is routed through the same provider.

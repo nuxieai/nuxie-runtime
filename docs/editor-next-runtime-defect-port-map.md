@@ -444,7 +444,9 @@ from C++. Candidate `dcccdf4fb09275783f6910e5a4a01c028f2c817e` (parent
 SHA-256
 `5477057e14eab86a2d0b2b7c5e8e95e2c837bfa33624fa43c6dee9f24aeef981`
 are diagnostic only. FL-D `viewmodel.owner` is the sole dependency of the
-reported family. No repair landed and no writer is active.
+reported family. The corrected mapping landed as control-plane-only PR #80 at
+exact runtime main `22ba401a9f734eafe0fa3a5852e960e47a4c6121`. No repair
+landed and no writer is active.
 
 ### Dynamic image property source acceptance — unreported FL-D risk
 

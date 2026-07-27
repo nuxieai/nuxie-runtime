@@ -208,6 +208,9 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   Editor-not-applicable disposition, after FL-D `viewmodel.owner` plus
   `databind.context`; it is not part of LOC-001 or a confirmed defect before
   that differential. No repair landed and no writer is active.
+- The corrected ownership map landed as control-plane-only PR #80 at exact
+  runtime main `22ba401a9f734eafe0fa3a5852e960e47a4c6121`; it changes no production
+  runtime or Scene code and does not claim a repair.
 - Deferred post-port verification: `LOC-007` path dirt, `LOC-008` intrinsic
   text measurement, and ordinary layout/TextStyle execution. `LOC-008` is
   additionally `intake-needs-evidence` because its changed source record lacks
